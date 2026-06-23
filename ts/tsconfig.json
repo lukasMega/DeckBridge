@@ -1,0 +1,24 @@
+{
+  "compilerOptions": {
+    "lib": ["esnext", "dom"],
+    "target": "esnext",
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "jsx": "react-jsx",
+    "jsxImportSource": "preact",
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "noImplicitReturns": true,
+    "noFallthroughCasesInSwitch": true,
+    "noImplicitOverride": true,
+    "verbatimModuleSyntax": true,
+    "noEmit": true,
+    "allowImportingTsExtensions": true,
+    "paths": {
+      "node:events": ["./src/platform/events-shim.ts"],
+      "events":      ["./src/platform/events-shim.ts"],
+      "node:buffer": ["./src/platform/buffer-shim.ts"]
+    }
+  },
+  "include": ["src", "test"]
+}

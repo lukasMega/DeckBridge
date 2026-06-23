@@ -1,0 +1,54 @@
+{
+    "version": "X.Y.Z",
+    "description": "Bridge a Mirabox/Ajazz USB stream deck to Elgato software over CORA",
+    "homepage": "https://github.com/OWNER/REPO",
+    "license": "MIT",
+    "architecture": {
+        "64bit": {
+            "url": "https://github.com/OWNER/REPO/releases/download/deckbridge-vX.Y.Z/deckbridge_X.Y.Z_x64-setup.exe#/dl.exe",
+            "hash": "REPLACE_WITH_SHA"
+        }
+    },
+    "installer": {
+        "script": [
+            "# Tauri NSIS installer (currentUser). /S = silent, /D = install dir.",
+            "# /D must be the LAST switch and unquoted (NSIS requirement).",
+            "Start-Process -Wait -FilePath \"$dir\\dl.exe\" -ArgumentList \"/S\", \"/D=$dir\"",
+            "Remove-Item \"$dir\\dl.exe\" -Force"
+        ]
+    },
+    "uninstaller": {
+        "script": [
+            "if (Test-Path \"$dir\\uninstall.exe\") {",
+            "    Start-Process -Wait -FilePath \"$dir\\uninstall.exe\" -ArgumentList \"/S\"",
+            "}"
+        ]
+    },
+    "bin": "deckbridge.exe",
+    "shortcuts": [
+        [
+            "deckbridge.exe",
+            "deckbridge"
+        ]
+    ],
+    "checkver": {
+        "url": "https://github.com/OWNER/REPO/releases/latest",
+        "regex": "deckbridge-v([\\d.]+)"
+    },
+    "autoupdate": {
+        "architecture": {
+            "64bit": {
+                "url": "https://github.com/OWNER/REPO/releases/download/deckbridge-v$version/deckbridge_$version_x64-setup.exe#/dl.exe"
+            }
+        },
+        "hash": {
+            "url": "https://github.com/OWNER/REPO/releases/download/deckbridge-v$version/SHA256SUMS.txt",
+            "regex": "$sha256\\s+deckbridge_$version_x64-setup.exe"
+        }
+    },
+    "notes": [
+        "deckbridge runs a system-tray supervisor that serves a web UI on http://localhost:3000,",
+        "runs CORA servers on ports 5343/5344, and advertises over mDNS so Elgato software finds it.",
+        "Launch it from the Start Menu / `deckbridge` shim; quit it from the tray icon."
+    ]
+}

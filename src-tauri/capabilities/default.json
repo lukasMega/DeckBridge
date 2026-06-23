@@ -1,0 +1,25 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Allow the supervisor to spawn the deckbridge relay and its deckbridge-tray sidecar (Windows + macOS). The app has no windows; the spawn happens in the Rust backend (setup), which is not gated by the IPC ACL, but we keep this allow-list so the same explicit, narrow scope covers both OSes if the spawn ever moves to a command.",
+  "local": true,
+  "windows": ["*"],
+  "platforms": ["windows", "macOS"],
+  "permissions": [
+    "core:default",
+    {
+      "identifier": "shell:allow-execute",
+      "allow": [
+        { "name": "binaries/deckbridge", "sidecar": true, "args": true },
+        { "name": "binaries/deckbridge-tray", "sidecar": true, "args": true }
+      ]
+    },
+    {
+      "identifier": "shell:allow-spawn",
+      "allow": [
+        { "name": "binaries/deckbridge", "sidecar": true, "args": true },
+        { "name": "binaries/deckbridge-tray", "sidecar": true, "args": true }
+      ]
+    }
+  ]
+}

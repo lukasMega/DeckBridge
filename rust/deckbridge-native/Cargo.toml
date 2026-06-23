@@ -1,0 +1,32 @@
+[package]
+name = "deckbridge-native"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "deckbridge_native"
+crate-type = ["cdylib"]
+
+[features]
+# Encoder backend — exactly one:
+#   jpeg-upstream (default) — crates.io jpeg-encoder, standard Huffman tables,
+#     single interleaved scan (device-safe; ~20% larger files).
+#   jpeg-fork — vendored ../jpeg-encoder: optimized Huffman kept interleaved
+#     (upstream goes non-interleaved when optimizing, which the K1 Pro decoder
+#     can't handle — see .claude/plans/K1Pro/jpeg-artifact-findings.md).
+#     Optional since the chunk-pad fix removed the size cap.
+#     Build: cargo build --release --no-default-features --features jpeg-fork
+default = ["jpeg-upstream", "usb"]
+jpeg-upstream = ["dep:jpeg-encoder"]
+jpeg-fork = ["dep:jpeg-encoder-fork"]
+usb = ["dep:hidapi"]
+
+[dependencies]
+image = { version = "0.25", default-features = false, features = ["jpeg", "bmp"] }
+jpeg-encoder = { version = "=0.6.1", optional = true, default-features = false, features = ["std"] }
+# Both deps expose lib name `jpeg_encoder`, so the features are mutually exclusive.
+jpeg-encoder-fork = { path = "../jpeg-encoder", optional = true, default-features = false, features = ["std"] }
+hidapi = { version = "2", optional = true }
+
+[lints]
+workspace = true

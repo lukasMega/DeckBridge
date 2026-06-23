@@ -1,0 +1,31 @@
+# Tauri v2 wrapper for the deckbridge standalone binary (Windows + macOS).
+# This crate is a thin tray-supervisor (plan Model A): it bundles the existing
+# `deckbridge` binary as a sidecar (externalBin) and `deckbridge-tray` alongside,
+# spawns the sidecar on startup, and kills the whole process tree on exit.
+# It deliberately contains NO relay/UI/USB logic — that all lives in the sidecar.
+[package]
+name = "deckbridge-tauri"
+version = "0.1.0"
+edition = "2021"
+description = "Installer/supervisor shell around the deckbridge relay binary (Windows NSIS + macOS dmg)"
+authors = ["Lukas"]
+# Windows (NSIS) and macOS (dmg) ship this crate; Linux ships via Homebrew.
+publish = false
+
+[lib]
+name = "deckbridge_tauri_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-shell = "2"
+
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true

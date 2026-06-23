@@ -1,0 +1,39 @@
+# cargo-deny config — advisory, license, ban, and source checks for the Rust crates.
+# Run: cargo deny --manifest-path rust/Cargo.toml check   (or `mise run rust-deny`)
+
+[advisories]
+db-urls = ["https://github.com/rustsec/advisory-db"]
+yanked = "deny"
+ignore = []
+
+[licenses]
+# All deps resolve to permissive licenses; option-ext (MPL-2.0, transitive via
+# tao/tray-icon's dirs family) is the one weak-copyleft exception. The vendored
+# jpeg-encoder fork carries the historic IJG license alongside MIT/Apache and is
+# only pulled under the `jpeg-fork` feature.
+confidence-threshold = 0.93
+allow = [
+    "MIT",
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-3-Clause",
+    "ISC",
+    "Zlib",
+    "0BSD",
+    "Unicode-3.0",
+    "Unlicense",
+]
+exceptions = [
+    { name = "option-ext", allow = ["MPL-2.0"] },
+    { name = "jpeg-encoder-fork", allow = ["IJG"] },
+]
+
+[bans]
+# tao/tray-icon pull legitimate duplicate transitive versions we don't control —
+# warn rather than fail. No wildcard version requirements are expected.
+multiple-versions = "warn"
+wildcards = "deny"
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"

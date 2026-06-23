@@ -1,0 +1,6 @@
+# Pin the toolchain so clippy results are reproducible: a new stable release can
+# add or rename lints and turn a green `-D warnings` build red unexpectedly.
+# Bump deliberately when adopting newer lints.
+[toolchain]
+channel = "1.95"
+components = ["clippy", "rustfmt"]

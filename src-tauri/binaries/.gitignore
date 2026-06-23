@@ -1,0 +1,8 @@
+# Sidecar binaries are produced by CI per target triple, never committed.
+#   deckbridge-x86_64-pc-windows-msvc.exe   (from `mise run compile`)
+#   deckbridge-tray-x86_64-pc-windows-msvc.exe     (from `deckbridge-tray` cargo build)
+# Local `cargo check` on a non-Windows host may create same-triple stubs here
+# (see README.md) — those are ignored too.
+*
+!.gitignore
+!README.md

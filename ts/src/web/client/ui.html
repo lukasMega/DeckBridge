@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>DeckBridge</title>
+    <link rel="stylesheet" href="/ui.css" />
+    <script>
+      // Resolve theme + mode before paint to avoid flash.
+      (function () {
+        var t = localStorage.getItem('deckbridge.theme');
+        var dark =
+          t === 'dark' ||
+          (t !== 'light' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+        document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
+        var m = localStorage.getItem('deckbridge.mode');
+        if (m === 'advanced') document.documentElement.setAttribute('data-mode', 'advanced');
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="simple-view"></div>
+    <div id="advanced-view"></div>
+    <script src="/ui.js"></script>
+  </body>
+</html>

@@ -1,0 +1,493 @@
+/**
+ * Infima CSS variable overrides for deckbridge docs.
+ * Primary: deep teal — communicates precision tooling without generic green.
+ */
+
+:root {
+  /* Periwinkle — matches the in-app web UI accent (oklch(0.655 0.168 258)) */
+  --ifm-color-primary: #4f63d2;
+  --ifm-color-primary-dark: #3a4fc9;
+  --ifm-color-primary-darker: #3549bd;
+  --ifm-color-primary-darkest: #2c3c9c;
+  --ifm-color-primary-light: #6577d8;
+  --ifm-color-primary-lighter: #7081db;
+  --ifm-color-primary-lightest: #95a2e5;
+  --ifm-code-font-size: 93%;
+  --ifm-heading-font-weight: 600;
+  --docusaurus-highlighted-code-line-bg: rgba(0, 0, 0, 0.08);
+
+  /* ---- index-page design tokens (oklch palette + fonts) ---- */
+  --ifm-font-family-base:
+    -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, Roboto, 'Helvetica Neue', Arial,
+    sans-serif;
+  --ifm-font-family-monospace: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace;
+
+  --ifm-background-color: oklch(0.974 0.006 75); /* --bg */
+  --ifm-background-surface-color: oklch(0.993 0.004 82); /* --surface */
+  --ifm-color-content: oklch(0.21 0.013 62); /* --fg */
+  --ifm-color-content-secondary: oklch(0.44 0.013 64); /* --fg-muted */
+  --ifm-heading-color: oklch(0.21 0.013 62);
+  --ifm-navbar-background-color: oklch(0.993 0.004 82);
+  --ifm-footer-background-color: oklch(0.955 0.008 73); /* --bg-2 */
+  --ifm-card-background-color: oklch(0.993 0.004 82);
+  --ifm-code-background: oklch(0.915 0.01 72); /* --inset */
+  --ifm-blockquote-color: oklch(0.44 0.013 64);
+  --ifm-toc-border-color: oklch(0.855 0.012 72); /* --border */
+  --ifm-color-emphasis-200: oklch(0.855 0.012 72);
+  --ifm-color-emphasis-300: oklch(0.8 0.014 70); /* --border-strong */
+  --ifm-global-radius: 10px; /* --r-sm */
+  --ifm-card-border-radius: 14px; /* --r-md */
+}
+
+/* Protocol Explainer: full-width page (override the centered .container max-width) */
+.protocol-explainer-page {
+  max-width: 100% !important;
+}
+
+/* Click-to-fit diagram lightbox (src/theme/Root.tsx) */
+.markdown img,
+.docusaurus-mermaid-container {
+  cursor: zoom-in;
+}
+
+/* Gray backdrop so the transparent SVG's dark text/lines stay readable in both
+   light and dark page themes (mermaid renders dark-on-light). */
+.docusaurus-mermaid-container {
+  background: #f4f4f4;
+  padding: 1rem;
+  border-radius: var(--ifm-global-radius);
+}
+
+/* Dark theme: invert the whole diagram (dark-on-light → light-on-dark) and its
+   gray backdrop in one filter; hue-rotate restores hues plain invert would skew. */
+[data-theme='dark'] .docusaurus-mermaid-container,
+[data-theme='dark'] .img-zoom-svg {
+  background: #dedede;
+  filter: invert(1) hue-rotate(180deg);
+}
+
+.img-zoom-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2.5vmin;
+  background: rgba(0, 0, 0, 0.85);
+  cursor: zoom-out;
+  animation: img-zoom-fade 0.15s ease-out;
+}
+
+@keyframes img-zoom-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.img-zoom-content {
+  max-width: 95vw;
+  max-height: 95vh;
+  object-fit: contain;
+}
+
+/* mermaid SVG: fill the viewport, viewBox keeps aspect ratio */
+.img-zoom-svg {
+  width: 95vw;
+  height: 95vh;
+  background: #f4f4f4;
+  padding: 1rem;
+  border-radius: var(--ifm-global-radius);
+}
+
+.img-zoom-svg svg {
+  width: 100%;
+  height: 100%;
+  max-width: none;
+}
+
+.img-zoom-close {
+  position: fixed;
+  top: 1rem;
+  right: 1.25rem;
+  width: 2.5rem;
+  height: 2.5rem;
+  font-size: 1.75rem;
+  line-height: 1;
+  color: #fff;
+  background: rgba(255, 255, 255, 0.12);
+  border: none;
+  border-radius: 50%;
+  cursor: pointer;
+}
+
+.img-zoom-close:hover {
+  background: rgba(255, 255, 255, 0.25);
+}
+
+[data-theme='dark'] {
+  /* Periwinkle — matches the in-app web UI dark accent (oklch(0.715 0.15 256)) */
+  --ifm-color-primary: #8b9bf0;
+  --ifm-color-primary-dark: #6b80ec;
+  --ifm-color-primary-darker: #5b72ea;
+  --ifm-color-primary-darkest: #3b56e3;
+  --ifm-color-primary-light: #abb6f4;
+  --ifm-color-primary-lighter: #bbc4f6;
+  --ifm-color-primary-lightest: #ebeefc;
+  --docusaurus-highlighted-code-line-bg: rgba(255, 255, 255, 0.07);
+
+  /* ---- index-page design tokens (dark) ---- */
+  --ifm-background-color: oklch(0.175 0.008 64); /* --bg */
+  --ifm-background-surface-color: oklch(0.248 0.009 64); /* --surface */
+  --ifm-color-content: oklch(0.97 0.006 78); /* --fg */
+  --ifm-color-content-secondary: oklch(0.79 0.01 72); /* --fg-muted */
+  --ifm-heading-color: oklch(0.97 0.006 78);
+  --ifm-navbar-background-color: oklch(0.175 0.008 64);
+  --ifm-footer-background-color: oklch(0.155 0.008 64); /* --bg-2 */
+  --ifm-card-background-color: oklch(0.248 0.009 64);
+  --ifm-code-background: rgba(72, 52, 41, 1); /* --inset */
+  --ifm-blockquote-color: oklch(0.79 0.01 72);
+  --ifm-toc-border-color: oklch(0.39 0.011 64); /* --border */
+  --ifm-color-emphasis-200: oklch(0.39 0.011 64);
+  --ifm-color-emphasis-300: oklch(0.46 0.013 64); /* --border-strong */
+}
+
+/* ---- Reader sidebar controls (src/theme/Root.tsx) ---- */
+:root {
+  --db-toc-width: 300px;
+}
+
+/* hide */
+html.db-hide-sidebar .theme-doc-sidebar-container {
+  display: none;
+}
+html.db-hide-toc .db-toc-col {
+  display: none;
+}
+html.db-hide-toc [class*='docItemCol'] {
+  max-width: 100% !important;
+}
+/* the content col lives in a centered .container capped at --ifm-container-width;
+   uncap it so hiding the TOC actually fills the main area */
+html.db-hide-toc [class*='docItemWrapper'] {
+  max-width: none !important;
+}
+
+/* resize: right TOC column (left uses native --doc-sidebar-width, set via JS) */
+@media (min-width: 997px) {
+  html:not(.db-hide-toc) .db-toc-col {
+    flex: 0 0 var(--db-toc-width);
+    max-width: var(--db-toc-width);
+  }
+  /* let the content col take the remaining width via flex-grow + min-width:0
+     (overrides the theme's 75% cap). Sizing it with calc(100% - toc) instead
+     ties content + toc to exactly 100%, which overflows the row padding at
+     narrow desktop widths and wraps the TOC underneath. */
+  html:not(.db-hide-toc) [class*='docItemCol'] {
+    min-width: 0;
+    max-width: 100% !important;
+  }
+}
+
+/* kill the left panel's width transition while dragging */
+html.db-resizing .theme-doc-sidebar-container {
+  transition: none;
+}
+
+/* drag handles (injected into each panel by Root.tsx) */
+.db-resizer {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 8px;
+  z-index: 5;
+  cursor: col-resize;
+}
+/* inner edge (0, not -4px): the left panel has clip-path:inset(0) that would
+   clip an outside handle */
+.db-resizer--right {
+  right: 0;
+}
+.db-resizer--left {
+  left: 0;
+}
+.db-resizer:hover,
+.db-resizer.db-active {
+  background: var(--ifm-color-primary);
+  opacity: 0.35;
+}
+@media (max-width: 996px) {
+  .db-resizer {
+    display: none;
+  }
+}
+
+/* rail + toggle buttons */
+.db-toggle-rail {
+  position: fixed;
+  top: calc(var(--ifm-navbar-height) + 0.75rem);
+  right: 0.75rem;
+  z-index: 200;
+  display: flex;
+  gap: 0.4rem;
+}
+@media (max-width: 996px) {
+  .db-toggle-rail {
+    display: none;
+  }
+}
+.db-toggle-btn {
+  font-size: 0.75rem;
+  padding: 0.25rem 0.5rem;
+  border: 1px solid var(--ifm-color-emphasis-300);
+  border-radius: var(--ifm-global-radius);
+  background: var(--ifm-background-surface-color);
+  color: var(--ifm-color-content);
+  cursor: pointer;
+}
+.db-toggle-btn.db-active {
+  background: var(--ifm-color-primary);
+  color: #fff;
+  border-color: var(--ifm-color-primary);
+}
+
+/* ---- Global animation toggle (src/theme/Root.tsx) ---- */
+/* Kill every CSS animation + transition site-wide. A tiny non-zero duration
+   (not `none`) lets animations snap to their final keyframe, so elements that
+   rely on a `both`/`forwards` end-state stay visible. */
+html.db-no-anim *,
+html.db-no-anim *::before,
+html.db-no-anim *::after {
+  animation-duration: 0.001ms !important;
+  animation-delay: 0ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.001ms !important;
+  transition-delay: 0ms !important;
+  scroll-behavior: auto !important;
+}
+
+/* floating round toggle, bottom-left so it clears the navbar theme switch and
+   the doc-page toggle rail (top-right) */
+.db-anim-toggle {
+  position: fixed;
+  bottom: 1rem;
+  left: 1rem;
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.5rem;
+  height: 2.5rem;
+  padding: 0;
+  border: 1px solid var(--ifm-color-emphasis-300);
+  border-radius: 50%;
+  background: var(--ifm-background-surface-color);
+  color: var(--ifm-color-content);
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.18);
+}
+.db-anim-toggle:hover {
+  border-color: var(--ifm-color-primary);
+  color: var(--ifm-color-primary);
+}
+.db-anim-toggle.db-active {
+  background: var(--ifm-color-primary);
+  border-color: var(--ifm-color-primary);
+  color: #fff;
+}
+.db-anim-toggle svg {
+  width: 1.25rem;
+  height: 1.25rem;
+}
+
+/* ---- Interactive pairing stepper (docs/features.md) ----
+   Pure-CSS, no JS: 4 hidden radios drive the SVG layers + controls through
+   `#db-sN:checked ~` sibling selectors. Prev/Next are <label>s pointing at the
+   adjacent radio; only the pair matching the current step is shown. */
+.db-stepper {
+  max-width: 760px;
+  margin: 1.25rem 0;
+}
+.db-stepper input[name='db-step'] {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+.db-stage svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+/* default (step 1) layer states */
+.db-stepper .db-cable,
+.db-stepper .db-elg,
+.db-stepper .db-dim,
+.db-stepper .db-status {
+  opacity: 0;
+}
+.db-stepper .db-btn {
+  fill: #3a3d44;
+}
+.db-stepper .db-sdot {
+  fill: #c7ccd8;
+}
+.db-stepper .db-cable,
+.db-stepper .db-elg,
+.db-stepper .db-dim,
+.db-stepper .db-status,
+.db-stepper .db-btn,
+.db-stepper .db-sdot {
+  transition:
+    opacity 0.25s ease,
+    fill 0.25s ease;
+}
+/* status line — step 1 is the baseline (no radio checked); later steps override.
+   Radios are uncontrolled (no `checked` attr) so React leaves them native. */
+.db-stepper .st1 {
+  opacity: 1;
+}
+#db-s2:checked ~ .db-stage .st2,
+#db-s3:checked ~ .db-stage .st3,
+#db-s4:checked ~ .db-stage .st4 {
+  opacity: 1;
+}
+#db-s2:checked ~ .db-stage .st1,
+#db-s3:checked ~ .db-stage .st1,
+#db-s4:checked ~ .db-stage .st1 {
+  opacity: 0;
+}
+/* cable appears from step 2 on */
+#db-s2:checked ~ .db-stage .db-cable,
+#db-s3:checked ~ .db-stage .db-cable,
+#db-s4:checked ~ .db-stage .db-cable {
+  opacity: 1;
+}
+/* deck lights up + status turns green from step 3 on */
+#db-s3:checked ~ .db-stage .db-btn,
+#db-s4:checked ~ .db-stage .db-btn {
+  fill: #6175d8;
+}
+#db-s3:checked ~ .db-stage .db-sdot,
+#db-s4:checked ~ .db-stage .db-sdot {
+  fill: #2bb673;
+}
+/* Elgato dialog + backdrop on step 4 */
+#db-s4:checked ~ .db-stage .db-elg {
+  opacity: 1;
+}
+#db-s4:checked ~ .db-stage .db-dim {
+  opacity: 0.2;
+}
+
+/* ---- controls ---- */
+.db-controls {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.6rem;
+  margin-top: 0.75rem;
+}
+.db-caption {
+  min-height: 1.6em;
+  font-weight: 600;
+  text-align: center;
+  color: var(--ifm-color-content);
+}
+.db-caption .db-cap {
+  display: none;
+}
+.db-caption .cap1 {
+  display: inline;
+}
+#db-s2:checked ~ .db-controls .cap2,
+#db-s3:checked ~ .db-controls .cap3,
+#db-s4:checked ~ .db-controls .cap4 {
+  display: inline;
+}
+#db-s2:checked ~ .db-controls .cap1,
+#db-s3:checked ~ .db-controls .cap1,
+#db-s4:checked ~ .db-controls .cap1 {
+  display: none;
+}
+.db-navrow {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+}
+.db-nav {
+  display: none;
+  width: 2.25rem;
+  height: 2.25rem;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--ifm-color-emphasis-300);
+  border-radius: 50%;
+  background: var(--ifm-background-surface-color);
+  color: var(--ifm-color-content);
+  font-size: 1.3rem;
+  line-height: 1;
+  cursor: pointer;
+  user-select: none;
+}
+.db-nav:hover {
+  border-color: var(--ifm-color-primary);
+  color: var(--ifm-color-primary);
+}
+/* show only the prev/next pair for the current step (step 1 = baseline) */
+.db-stepper .nav-p1,
+.db-stepper .nav-n1 {
+  display: inline-flex;
+}
+#db-s2:checked ~ .db-controls .nav-p2,
+#db-s2:checked ~ .db-controls .nav-n2,
+#db-s3:checked ~ .db-controls .nav-p3,
+#db-s3:checked ~ .db-controls .nav-n3,
+#db-s4:checked ~ .db-controls .nav-p4,
+#db-s4:checked ~ .db-controls .nav-n4 {
+  display: inline-flex;
+}
+#db-s2:checked ~ .db-controls .nav-p1,
+#db-s2:checked ~ .db-controls .nav-n1,
+#db-s3:checked ~ .db-controls .nav-p1,
+#db-s3:checked ~ .db-controls .nav-n1,
+#db-s4:checked ~ .db-controls .nav-p1,
+#db-s4:checked ~ .db-controls .nav-n1 {
+  display: none;
+}
+/* first-step prev + last-step next are dead ends */
+.db-stepper .nav-p1,
+.db-stepper .nav-n4 {
+  opacity: 0.35;
+  pointer-events: none;
+}
+.db-dots {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.db-dot {
+  width: 0.7rem;
+  height: 0.7rem;
+  padding: 0;
+  border: 1px solid var(--ifm-color-emphasis-300);
+  border-radius: 50%;
+  background: transparent;
+  cursor: pointer;
+}
+/* fill dots up to and including the current step (dot 1 always filled) */
+.db-stepper .dot1,
+#db-s2:checked ~ .db-controls .dot2,
+#db-s3:checked ~ .db-controls .dot2,
+#db-s3:checked ~ .db-controls .dot3,
+#db-s4:checked ~ .db-controls .dot2,
+#db-s4:checked ~ .db-controls .dot3,
+#db-s4:checked ~ .db-controls .dot4 {
+  background: var(--ifm-color-primary);
+  border-color: var(--ifm-color-primary);
+}

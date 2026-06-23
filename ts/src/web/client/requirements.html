@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>mira2el — Requirements</title>
+    <style>
+      *,
+      *::before,
+      *::after {
+        box-sizing: border-box;
+      }
+      body {
+        font-family:
+          system-ui,
+          -apple-system,
+          sans-serif;
+        background: #1a1a1a;
+        color: #e0e0e0;
+        margin: 0;
+        padding: 24px;
+      }
+      h1 {
+        font-size: 1.25rem;
+        font-weight: 600;
+        margin: 0 0 20px;
+        color: #fff;
+      }
+      .loading {
+        color: #888;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 0.875rem;
+      }
+      th {
+        text-align: left;
+        padding: 8px 12px;
+        color: #888;
+        font-weight: 500;
+        border-bottom: 1px solid #333;
+      }
+      td {
+        padding: 10px 12px;
+        border-bottom: 1px solid #2a2a2a;
+        vertical-align: top;
+      }
+      tr:last-child td {
+        border-bottom: none;
+      }
+      .status {
+        font-size: 1rem;
+      }
+      .ok {
+        color: #4ade80;
+      }
+      .fail {
+        color: #f87171;
+      }
+      .name {
+        font-weight: 500;
+        color: #d0d0d0;
+      }
+      .message {
+        color: #aaa;
+        word-break: break-all;
+      }
+      .hint {
+        margin-top: 4px;
+        font-family: monospace;
+        font-size: 0.8rem;
+        color: #888;
+        background: #2a2a2a;
+        padding: 4px 8px;
+        border-radius: 4px;
+        display: inline-block;
+      }
+      .reload {
+        margin-top: 20px;
+      }
+      button {
+        background: #333;
+        color: #ddd;
+        border: 1px solid #444;
+        border-radius: 6px;
+        padding: 6px 14px;
+        cursor: pointer;
+        font-size: 0.875rem;
+      }
+      button:hover {
+        background: #3a3a3a;
+      }
+      .summary {
+        margin-top: 16px;
+        font-size: 0.875rem;
+        color: #888;
+      }
+      .summary.all-ok {
+        color: #4ade80;
+      }
+      .summary.has-fail {
+        color: #f87171;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>System Requirements</h1>
+    <div id="root"><p class="loading">Checking…</p></div>
+    <script>
+      async function load() {
+        const root = document.getElementById('root');
+        try {
+          const res = await fetch('/api/requirements');
+          const reqs = await res.json();
+          const failCount = reqs.filter((r) => !r.ok).length;
+          const summaryClass = failCount === 0 ? 'all-ok' : 'has-fail';
+          const summaryText =
+            failCount === 0
+              ? 'All requirements satisfied.'
+              : `${failCount} requirement${failCount > 1 ? 's' : ''} not met.`;
+
+          let html =
+            '<table><thead><tr><th></th><th>Requirement</th><th>Status</th></tr></thead><tbody>';
+          for (const r of reqs) {
+            const icon = r.ok
+              ? '<span class="status ok">✓</span>'
+              : '<span class="status fail">✗</span>';
+            const hint =
+              !r.ok && r.installHint ? `<div class="hint">${escHtml(r.installHint)}</div>` : '';
+            html += `<tr>
+          <td>${icon}</td>
+          <td><span class="name">${escHtml(r.name.replace(/_/g, ' '))}</span></td>
+          <td><span class="message">${escHtml(r.message)}</span>${hint}</td>
+        </tr>`;
+          }
+          html += '</tbody></table>';
+          html += `<p class="summary ${summaryClass}">${summaryText}</p>`;
+          html += '<div class="reload"><button onclick="load()">Re-check</button></div>';
+          root.innerHTML = html;
+        } catch (e) {
+          root.innerHTML = `<p class="fail">Failed to load: ${e.message}</p><div class="reload"><button onclick="load()">Retry</button></div>`;
+        }
+      }
+
+      function escHtml(s) {
+        return s
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;');
+      }
+
+      load();
+    </script>
+  </body>
+</html>

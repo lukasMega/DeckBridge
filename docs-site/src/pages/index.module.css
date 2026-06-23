@@ -1,0 +1,867 @@
+/* ============================================================
+   deckbridge landing — design tokens ported from the in-app web UI
+   (ts/src/web/client/ui-base.css + ui-simple.css). Scoped to .landing
+   so the docs theme tokens are untouched. Follows Docusaurus's
+   data-theme toggle (light default + dark override).
+   ============================================================ */
+.landing {
+  --bg: oklch(0.974 0.006 75);
+  --bg-2: oklch(0.955 0.008 73);
+  --surface: oklch(0.993 0.004 82);
+  --surface-2: oklch(0.965 0.007 74);
+  --inset: oklch(0.915 0.01 72);
+  --border: oklch(0.855 0.012 72);
+  --border-strong: oklch(0.8 0.014 70);
+  --fg: oklch(0.21 0.013 62);
+  --fg-muted: oklch(0.44 0.013 64);
+  --fg-dim: oklch(0.555 0.011 66);
+  --accent: oklch(0.655 0.168 258);
+  --accent-2: oklch(0.58 0.17 268);
+  --accent-soft: oklch(0.655 0.168 258 / 0.12);
+  --ok: oklch(0.66 0.142 152);
+  --ok-soft: oklch(0.66 0.142 152 / 0.14);
+  --warn: oklch(0.6 0.18 32);
+  --warn-soft: oklch(0.6 0.18 32 / 0.12);
+  --shadow-1: 0 1px 2px oklch(0.3 0.03 60 / 0.06), 0 2px 4px oklch(0.3 0.03 60 / 0.04);
+  --shadow-2: 0 1px 2px oklch(0.3 0.03 60 / 0.05), 0 8px 22px oklch(0.3 0.03 60 / 0.08);
+  --shadow-3: 0 2px 4px oklch(0.3 0.03 60 / 0.06), 0 18px 48px oklch(0.3 0.03 60 / 0.14);
+  --r-lg: 20px;
+  --r-md: 14px;
+  --r-sm: 10px;
+  --font:
+    -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, Roboto, 'Helvetica Neue', Arial,
+    sans-serif;
+  --mono: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace;
+
+  position: relative;
+  overflow: hidden;
+  min-height: calc(100vh - var(--ifm-navbar-height, 60px));
+  color: var(--fg);
+  font-family: var(--font);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  background: radial-gradient(120% 90% at 50% -10%, var(--bg) 0%, var(--bg-2) 100%);
+}
+
+:global(html[data-theme='dark']) .landing {
+  --bg: oklch(0.175 0.008 64);
+  --bg-2: oklch(0.155 0.008 64);
+  --surface: oklch(0.248 0.009 64);
+  --surface-2: oklch(0.285 0.01 64);
+  --inset: oklch(0.15 0.008 64);
+  --border: oklch(0.39 0.011 64);
+  --border-strong: oklch(0.46 0.013 64);
+  --fg: oklch(0.97 0.006 78);
+  --fg-muted: oklch(0.79 0.01 72);
+  --fg-dim: oklch(0.65 0.011 70);
+  --accent: oklch(0.715 0.15 256);
+  --accent-2: oklch(0.6 0.16 266);
+  --accent-soft: oklch(0.715 0.15 256 / 0.18);
+  --ok: oklch(0.74 0.145 153);
+  --ok-soft: oklch(0.74 0.145 153 / 0.16);
+  --warn: oklch(0.7 0.165 35);
+  --warn-soft: oklch(0.7 0.165 35 / 0.16);
+  --shadow-1: 0 1px 2px oklch(0 0 0 / 0.3), 0 2px 6px oklch(0 0 0 / 0.24);
+  --shadow-2: 0 2px 4px oklch(0 0 0 / 0.32), 0 10px 26px oklch(0 0 0 / 0.4);
+  --shadow-3: 0 3px 6px oklch(0 0 0 / 0.36), 0 22px 56px oklch(0 0 0 / 0.52);
+}
+
+.inner {
+  position: relative;
+  z-index: 1;
+  max-width: 980px;
+  margin: 0 auto;
+  padding: clamp(48px, 9vw, 104px) 22px clamp(56px, 8vw, 96px);
+}
+
+/* ---- reveal-on-load (staggered) ---- */
+.reveal {
+  animation: rise 0.55s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+}
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* ============================================================
+   Hero
+   ============================================================ */
+.hero {
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+.hero > * {
+  animation: rise 0.55s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+}
+.hero > *:nth-child(1) {
+  animation-delay: 0.02s;
+}
+.hero > *:nth-child(2) {
+  animation-delay: 0.09s;
+}
+.hero > *:nth-child(3) {
+  animation-delay: 0.16s;
+}
+.hero > *:nth-child(4) {
+  animation-delay: 0.23s;
+}
+.hero > *:nth-child(5) {
+  animation-delay: 0.3s;
+}
+
+.mark {
+  width: 52px;
+  height: 52px;
+  border-radius: 14px;
+  display: grid;
+  place-items: center;
+  margin-bottom: 22px;
+  background: linear-gradient(160deg, var(--accent) 0%, var(--accent-2) 100%);
+  box-shadow:
+    var(--shadow-2),
+    inset 0 1px 0 oklch(1 0 0 / 0.28);
+}
+.mark svg {
+  width: 28px;
+  height: 28px;
+  color: oklch(0.99 0.01 258);
+}
+
+.title {
+  margin: 0;
+  font-size: clamp(2.1rem, 6vw, 3.6rem);
+  font-weight: 650;
+  letter-spacing: -0.03em;
+  line-height: 1.04;
+  text-wrap: balance;
+}
+.title .accent {
+  background: linear-gradient(120deg, var(--accent), var(--accent-2));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+.rotate {
+  display: inline-grid;
+  vertical-align: baseline;
+}
+/* Chrome won't propagate an ancestor's `background-clip: text` onto the glyphs
+   of an inline-grid descendant, so the gradient words inside .accent render
+   invisible. Paint the gradient on each word directly to bypass that. */
+.title .accent .rotateWord {
+  background: linear-gradient(120deg, var(--accent), var(--accent-2));
+  -webkit-background-clip: text;
+  background-clip: text;
+}
+.rotate > .rotateWord {
+  grid-area: 1 / 1;
+  text-align: left;
+  opacity: 0;
+  visibility: hidden;
+}
+.rotate > .rotateWord[data-active='true'] {
+  opacity: 1;
+  visibility: visible;
+  animation: wordIn 0.4s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+}
+@keyframes wordIn {
+  from {
+    opacity: 0;
+    transform: translateY(0.28em);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.rotate.fade > .rotateWord[data-active='true'] {
+  animation: wordFade 0.4s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+}
+@keyframes wordFade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.subtitle {
+  margin: 18px auto 0;
+  max-width: 52ch;
+  font-size: clamp(1rem, 2.2vw, 1.2rem);
+  line-height: 1.55;
+  color: var(--fg-muted);
+  text-wrap: pretty;
+}
+
+.cta {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 12px;
+  margin-top: 30px;
+}
+
+.ctabtn,
+.ghostbtn {
+  appearance: none;
+  cursor: pointer;
+  font-family: var(--font);
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 15px;
+  font-weight: 600;
+  padding: 11px 22px;
+  border-radius: var(--r-sm);
+  text-decoration: none;
+  transition:
+    filter 0.15s,
+    color 0.15s,
+    border-color 0.15s,
+    transform 0.08s;
+}
+.ctabtn {
+  color: oklch(0.99 0.01 258);
+  background: linear-gradient(160deg, var(--accent) 0%, var(--accent-2) 100%);
+  border: 1px solid transparent;
+  box-shadow:
+    var(--shadow-2),
+    inset 0 1px 0 oklch(1 0 0 / 0.2);
+}
+.ctabtn:hover {
+  filter: brightness(1.07);
+  color: oklch(0.99 0.01 258);
+}
+.ctabtn:active {
+  transform: translateY(1px);
+}
+.ghostbtn {
+  color: var(--fg-muted);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-1);
+}
+.ghostbtn:hover {
+  color: var(--fg);
+  border-color: var(--border-strong);
+}
+.ghostbtn:active {
+  transform: translateY(1px);
+}
+
+.trust {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: 8px 14px;
+  margin-top: 26px;
+  font-family: var(--mono);
+  font-size: 12.5px;
+  color: var(--fg-dim);
+  letter-spacing: 0.01em;
+}
+.trust > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.trust > span::before {
+  content: '·';
+  color: var(--border-strong);
+}
+.trust > span:first-child::before {
+  content: none;
+}
+
+/* ============================================================
+   Section scaffolding
+   ============================================================ */
+.section {
+  margin-top: clamp(56px, 9vw, 104px);
+  scroll-margin-top: calc(var(--ifm-navbar-height, 60px) + 16px);
+}
+.sectionLabel {
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent);
+  text-align: center;
+  margin: 0 0 10px;
+}
+.sectionTitle {
+  margin: 0 auto 8px;
+  text-align: center;
+  font-size: clamp(1.4rem, 3.4vw, 1.9rem);
+  font-weight: 650;
+  letter-spacing: -0.02em;
+  text-wrap: balance;
+}
+.sectionLead {
+  margin: 0 auto;
+  max-width: 56ch;
+  text-align: center;
+  color: var(--fg-muted);
+  line-height: 1.55;
+  text-wrap: pretty;
+}
+
+/* ============================================================
+   How it works — dataflow panel
+   ============================================================ */
+.panel {
+  margin: 26px auto 0;
+  max-width: 720px;
+  padding: clamp(20px, 4vw, 36px);
+  border-radius: var(--r-lg);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-3);
+}
+.flow {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+.flowBox {
+  fill: none;
+  stroke: var(--border-strong);
+  stroke-width: 2;
+}
+.flowBoxActive {
+  fill: var(--accent-soft);
+  stroke: var(--accent);
+  stroke-width: 2.5;
+}
+.flowTitle {
+  fill: var(--fg);
+  font: 600 14px var(--font);
+}
+.flowSub {
+  fill: var(--fg-dim);
+  font: 500 11px var(--font);
+}
+.flowAccent {
+  fill: var(--accent);
+  font: 600 12px var(--font);
+}
+.flowOk {
+  fill: var(--ok);
+  font: 600 11px var(--font);
+}
+.flowWire {
+  stroke: var(--border-strong);
+  stroke-width: 2;
+}
+.flowEdgeLabel {
+  fill: var(--fg-dim);
+  font: 500 10px var(--mono);
+}
+/* mini stream-deck glyph above the first node */
+.deckBody {
+  fill: var(--surface);
+  stroke: var(--border-strong);
+  stroke-width: 2;
+}
+.deckKey {
+  fill: var(--inset);
+}
+.deckKeyOn {
+  fill: var(--accent);
+}
+/* CSS-driven packets (reduced-motion can stop them) */
+.packet {
+  fill: var(--accent);
+  animation: packet 3s linear infinite;
+}
+.packet2 {
+  animation-name: packetReverse;
+  animation-delay: 1.5s;
+  opacity: 0.6;
+}
+@keyframes packet {
+  0% {
+    transform: translateX(0);
+    opacity: 0;
+  }
+  8% {
+    opacity: 1;
+  }
+  92% {
+    opacity: 1;
+  }
+  100% {
+    transform: translateX(300px);
+    opacity: 0;
+  }
+}
+@keyframes packetReverse {
+  0% {
+    transform: translateX(0);
+    opacity: 0;
+  }
+  8% {
+    opacity: 1;
+  }
+  92% {
+    opacity: 1;
+  }
+  100% {
+    transform: translateX(-300px);
+    opacity: 0;
+  }
+}
+.flowCaption {
+  margin: 22px auto 0;
+  max-width: 60ch;
+  text-align: center;
+  font-size: 14px;
+  color: var(--fg-muted);
+  line-height: 1.55;
+  text-wrap: pretty;
+}
+
+/* ============================================================
+   Feature row
+   ============================================================ */
+.features {
+  margin-top: 28px;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 14px;
+}
+.feature {
+  padding: 20px 18px;
+  border-radius: var(--r-md);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-1);
+}
+.featureIco {
+  width: 34px;
+  height: 34px;
+  border-radius: 9px;
+  display: grid;
+  place-items: center;
+  margin-bottom: 13px;
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.featureIco svg {
+  width: 18px;
+  height: 18px;
+}
+.featureTitle {
+  margin: 0 0 5px;
+  font-size: 14.5px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+}
+.featureText {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--fg-muted);
+  text-wrap: pretty;
+}
+
+/* ---- Learn more toggle + active card ---- */
+.learnBtn {
+  appearance: none;
+  cursor: pointer;
+  font-family: var(--font);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 12px;
+  padding: 0;
+  background: none;
+  border: none;
+  font-size: 12.5px;
+  font-weight: 650;
+  color: var(--accent);
+  letter-spacing: -0.01em;
+}
+.learnBtn:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.chev {
+  width: 14px;
+  height: 14px;
+  transition: transform 0.2s cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+.feature[data-open='true'] {
+  border-color: var(--accent);
+  box-shadow:
+    var(--shadow-1),
+    0 0 0 1px var(--accent);
+}
+.feature[data-open='true'] .chev {
+  transform: rotate(180deg);
+}
+
+/* ---- expanded detail panel (one open at a time) ---- */
+.featureDetail {
+  margin-top: 16px;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  gap: clamp(18px, 4vw, 34px);
+  padding: clamp(20px, 4vw, 30px);
+  border-radius: var(--r-lg);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-2);
+  animation: panelIn 0.4s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+}
+@keyframes panelIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+    clip-path: inset(0 0 35% 0);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+    clip-path: inset(0 0 0 0);
+  }
+}
+.detailAnim {
+  width: clamp(96px, 22vw, 128px);
+  height: clamp(96px, 22vw, 128px);
+  border-radius: var(--r-md);
+  display: grid;
+  place-items: center;
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.detailTitle {
+  margin: 0 0 8px;
+  font-size: clamp(1.05rem, 2.4vw, 1.25rem);
+  font-weight: 650;
+  letter-spacing: -0.02em;
+}
+.detailText {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--fg-muted);
+  text-wrap: pretty;
+}
+
+/* ---- animated icons (same shapes as the card icon, animated) ---- */
+.aWrap {
+  width: clamp(56px, 13vw, 72px);
+  height: clamp(56px, 13vw, 72px);
+}
+/* draw-on: pathLength=1 normalises any path */
+.adraw {
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  animation: adraw 0.8s ease forwards;
+}
+@keyframes adraw {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+/* wifi signal: arcs pulse outward, repeating */
+.sig {
+  transform-origin: 12px 12px;
+  animation: sig 1.8s ease-out infinite;
+}
+@keyframes sig {
+  0% {
+    opacity: 0;
+    transform: scale(0.4);
+  }
+  35% {
+    opacity: 1;
+  }
+  80%,
+  100% {
+    opacity: 0;
+    transform: scale(1.05);
+  }
+}
+.sigDot {
+  animation: sigDot 1.8s ease-in-out infinite;
+}
+@keyframes sigDot {
+  0%,
+  100% {
+    opacity: 0.5;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+/* pin: drops in once, base ripples forever */
+.pinBody {
+  transform-origin: 12px 21px;
+  animation: pinDrop 0.7s cubic-bezier(0.3, 1.4, 0.5, 1) both;
+}
+@keyframes pinDrop {
+  0% {
+    opacity: 0;
+    transform: translateY(-7px) scale(0.9);
+  }
+  100% {
+    opacity: 1;
+    transform: none;
+  }
+}
+.pinRipple {
+  transform-origin: 12px 21.5px;
+  animation: ripple 1.8s ease-out infinite;
+  animation-delay: 0.5s;
+}
+@keyframes ripple {
+  0% {
+    opacity: 0.5;
+    transform: scale(0.4);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.5);
+  }
+}
+/* grid: cells light up in sequence */
+.gCell {
+  opacity: 0.28;
+  animation: gCell 2s ease-in-out infinite;
+}
+@keyframes gCell {
+  0%,
+  60%,
+  100% {
+    opacity: 0.28;
+  }
+  25% {
+    opacity: 1;
+  }
+}
+
+/* ============================================================
+   Supported devices
+   ============================================================ */
+.devices {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px;
+  margin: 26px auto 0;
+  max-width: 640px;
+}
+.chip {
+  font-family: var(--mono);
+  font-size: 13px;
+  font-weight: 500;
+  padding: 8px 14px;
+  border-radius: 99px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--fg);
+  box-shadow: var(--shadow-1);
+}
+.devicesNote {
+  margin: 18px auto 0;
+  max-width: 60ch;
+  text-align: center;
+  font-size: 12.5px;
+  color: var(--fg-dim);
+  line-height: 1.5;
+  text-wrap: pretty;
+}
+
+/* ============================================================
+   Comparison cards (responsive — no table)
+   ============================================================ */
+.compareWrap {
+  margin: 28px auto 0;
+  max-width: 860px;
+}
+.compareGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 14px;
+}
+.compareCard {
+  padding: 16px 18px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+}
+/* highlight the DeckBridge card with an accent frame (no fill) */
+.compareCard.compareYou {
+  border-color: var(--accent);
+  border-width: 2px;
+  padding: 15px 17px;
+}
+.compareCardHead {
+  font-size: 14px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  color: var(--fg);
+  padding-bottom: 11px;
+  border-bottom: 1px solid var(--border);
+}
+.compareCard.compareYou .compareCardHead {
+  color: var(--accent);
+}
+.compareList {
+  margin: 0;
+}
+.compareItem {
+  padding: 10px 0;
+  border-top: 1px solid var(--border);
+}
+.compareItem:first-child {
+  border-top: none;
+}
+.compareItemLabel {
+  margin: 0;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--fg-dim);
+}
+.compareItemVal {
+  align-items: baseline;
+  margin: 4px 0 0;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--fg-muted);
+  text-wrap: pretty;
+}
+.compareCard.compareYou .compareItemVal {
+  color: var(--fg);
+}
+.cellMark {
+  flex: none;
+  width: 1.1em;
+  margin-right: 7px;
+  color: var(--fg-dim);
+}
+.cellYes {
+  color: var(--fg);
+}
+.cellWarn {
+  color: var(--warn);
+}
+.compareNote {
+  margin: 18px auto 0;
+  max-width: 720px;
+  font-size: 12.5px;
+  color: var(--fg-dim);
+  line-height: 1.55;
+  text-wrap: pretty;
+}
+.compareNote code {
+  font-family: var(--mono);
+  font-size: 0.92em;
+}
+
+/* ============================================================
+   Disclaimers (legal — kept, app fine-print style)
+   ============================================================ */
+.notices {
+  margin: clamp(56px, 8vw, 88px) auto 0;
+  max-width: 720px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.notice {
+  padding: 14px 18px;
+  border-radius: var(--r-md);
+  border: 1px solid color-mix(in oklch, var(--warn) 35%, transparent);
+  background: var(--warn-soft);
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--fg-muted);
+  text-wrap: pretty;
+}
+.noticeOk {
+  border-color: color-mix(in oklch, var(--ok) 35%, transparent);
+  background: var(--ok-soft);
+}
+.notice strong {
+  color: var(--fg);
+  font-weight: 650;
+}
+.notice a {
+  color: var(--accent);
+  font-weight: 600;
+  text-decoration: none;
+}
+.notice a:hover {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+/* ============================================================
+   Responsive
+   ============================================================ */
+@media (max-width: 760px) {
+  .features {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+@media (max-width: 460px) {
+  .features {
+    grid-template-columns: 1fr;
+  }
+  .featureDetail {
+    grid-template-columns: 1fr;
+    justify-items: center;
+    text-align: center;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .reveal,
+  .hero > *,
+  .rotateWord,
+  .packet,
+  .featureDetail,
+  .adraw,
+  .sig,
+  .sigDot,
+  .pinBody,
+  .pinRipple,
+  .gCell {
+    animation: none !important;
+  }
+  .packet {
+    opacity: 0;
+  }
+  /* show final, legible state of each animated icon */
+  .adraw {
+    stroke-dashoffset: 0;
+  }
+  .sig,
+  .sigDot,
+  .pinBody {
+    opacity: 1;
+    transform: none;
+  }
+  .pinRipple {
+    opacity: 0;
+  }
+  .gCell {
+    opacity: 0.6;
+  }
+}

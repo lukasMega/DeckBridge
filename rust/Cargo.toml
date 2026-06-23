@@ -1,0 +1,40 @@
+# Cargo workspace for the deckbridge native crates.
+#
+# The vendored jpeg-encoder fork is intentionally EXCLUDED (not a member): it keeps
+# its own profile and stays diff-clean against upstream, while deckbridge-native still
+# path-depends on it for the `jpeg-fork` feature.
+[workspace]
+resolver = "2"
+members = ["deckbridge-native", "deckbridge-tray"]
+exclude = ["jpeg-encoder"]
+
+# One release profile for the whole workspace. deckbridge-native requires
+# panic = "unwind" — it relies on std::panic::catch_unwind at the FFI boundary to
+# return -3 instead of aborting the host (txiki.js) process. A workspace shares a
+# single [profile.release], so deckbridge-tray — which previously set panic = "abort" —
+# now also unwinds. The size/behaviour delta for the tray binary is negligible and
+# it has no FFI surface.
+[profile.release]
+opt-level     = "z"
+lto           = true
+codegen-units = 1
+panic         = "unwind"
+strip         = true
+
+# Shared lint policy. Applied to a member crate via `[lints] workspace = true`.
+# (The excluded jpeg-encoder fork is unaffected.)
+[workspace.lints.rust]
+# Force explicit `unsafe {}` blocks inside `unsafe fn` bodies — the load-bearing
+# discipline for the FFI surface.
+unsafe_op_in_unsafe_fn = "warn"
+
+[workspace.lints.clippy]
+all        = { level = "warn", priority = -1 }
+suspicious = { level = "warn", priority = -1 }
+perf       = { level = "warn", priority = -1 }
+# FFI / unsafe safety net for the deckbridge-native cdylib:
+undocumented_unsafe_blocks    = "warn"
+missing_safety_doc            = "warn"
+not_unsafe_ptr_arg_deref      = "deny"
+ptr_as_ptr                    = "warn"
+cast_ptr_alignment            = "warn"

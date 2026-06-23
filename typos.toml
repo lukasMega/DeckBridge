@@ -1,0 +1,33 @@
+# typos spell-check allowlist — protocol/domain terms that are not misspellings.
+[files]
+extend-exclude = [
+  "ts/node_modules/",
+  "rust/target/",
+  "rust/jpeg-encoder/",
+  "vendor/",
+  "ts/package-lock.json",
+  "**/*.lock",
+  "graphify-out/",
+  "dist/",
+]
+
+[default]
+locale = "en-us"
+
+[default.extend-words]
+CORA = "CORA"
+Elgato = "Elgato"
+mira = "mira"
+txiki = "txiki"
+hidapi = "hidapi"
+mdns = "mdns"
+Mirabox = "Mirabox"
+Ajazz = "Ajazz"
+QuickJS = "QuickJS"
+libuv = "libuv"
+libffi = "libffi"
+cdylib = "cdylib"
+oxlint = "oxlint"
+oxfmt = "oxfmt"
+knip = "knip"
+tjs = "tjs"

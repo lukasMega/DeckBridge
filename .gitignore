@@ -1,0 +1,41 @@
+# Compiled binary
+deckbridge
+deckbridge-lite
+
+# Build outputs
+ts/dist/
+ts/node_modules/
+ts/coverage/
+
+# Cargo (all workspace members share rust/target/)
+rust/target/
+rust/deckbridge-native/target/
+rust/deckbridge-tray/target/
+src-tauri/target/
+
+# Docs site
+docs-site/build/
+docs-site/.docusaurus/
+docs-site/node_modules/
+
+# txiki.js runtime (downloaded/built by mise run tjs-setup)
+vendor/
+
+# Packaged release archives
+dist/
+
+# Tauri sidecar binaries (placed by CI or mise run bundle)
+src-tauri/binaries/deckbridge-*
+src-tauri/binaries/deckbridge-tray-*
+
+# macOS
+.DS_Store
+
+# Editor
+.idea/
+.vscode/
+*.iml
+
+# Tool state (never commit these)
+.codegraph/
+graphify-out/

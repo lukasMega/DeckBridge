@@ -1,0 +1,150 @@
+/* ============================================================
+   DeckBridge design tokens — light (default) + dark override.
+   Advanced view ignores these tokens (hard-coded dark values).
+   ============================================================ */
+:root {
+  --bg: oklch(0.974 0.006 75);
+  --bg-2: oklch(0.955 0.008 73);
+  --surface: oklch(0.993 0.004 82);
+  --surface-2: oklch(0.965 0.007 74);
+  --inset: oklch(0.935 0.009 72);
+  --border: oklch(0.895 0.01 72);
+  --border-strong: oklch(0.855 0.012 70);
+  --fg: oklch(0.285 0.012 62);
+  --fg-muted: oklch(0.505 0.012 64);
+  --fg-dim: oklch(0.625 0.01 66);
+  --accent: oklch(0.655 0.168 258);
+  --accent-ink: oklch(0.99 0.01 258);
+  --accent-soft: oklch(0.655 0.168 258 / 0.12);
+  --ok: oklch(0.66 0.142 152);
+  --ok-soft: oklch(0.66 0.142 152 / 0.14);
+  --wait: oklch(0.72 0.135 75);
+  --wait-soft: oklch(0.72 0.135 75 / 0.15);
+  --warn: oklch(0.6 0.18 32);
+  --warn-soft: oklch(0.6 0.18 32 / 0.12);
+  --shadow-1: 0 1px 2px oklch(0.3 0.03 60 / 0.06), 0 2px 4px oklch(0.3 0.03 60 / 0.04);
+  --shadow-2: 0 1px 2px oklch(0.3 0.03 60 / 0.05), 0 8px 22px oklch(0.3 0.03 60 / 0.08);
+  --shadow-3: 0 2px 4px oklch(0.3 0.03 60 / 0.06), 0 18px 48px oklch(0.3 0.03 60 / 0.14);
+  --inset-shadow: inset 0 1px 2px oklch(0.3 0.03 60 / 0.1);
+  --r-lg: 20px;
+  --r-md: 14px;
+  --r-sm: 10px;
+  --grain-opacity: 0.05;
+  --font:
+    -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, Roboto, 'Helvetica Neue', Arial,
+    sans-serif;
+  --mono: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace;
+}
+html[data-theme='dark'] {
+  --bg: oklch(0.205 0.008 64);
+  --bg-2: oklch(0.185 0.008 64);
+  --surface: oklch(0.248 0.009 64);
+  --surface-2: oklch(0.285 0.01 64);
+  --inset: oklch(0.175 0.008 64);
+  --border: oklch(0.33 0.01 64);
+  --border-strong: oklch(0.4 0.012 64);
+  --fg: oklch(0.935 0.006 78);
+  --fg-muted: oklch(0.73 0.01 72);
+  --fg-dim: oklch(0.595 0.01 70);
+  --accent: oklch(0.715 0.15 256);
+  --accent-ink: oklch(0.16 0.02 258);
+  --accent-soft: oklch(0.715 0.15 256 / 0.18);
+  --ok: oklch(0.74 0.145 153);
+  --ok-soft: oklch(0.74 0.145 153 / 0.16);
+  --wait: oklch(0.78 0.13 78);
+  --wait-soft: oklch(0.78 0.13 78 / 0.16);
+  --warn: oklch(0.7 0.165 35);
+  --warn-soft: oklch(0.7 0.165 35 / 0.16);
+  --shadow-1: 0 1px 2px oklch(0 0 0 / 0.3), 0 2px 6px oklch(0 0 0 / 0.24);
+  --shadow-2: 0 2px 4px oklch(0 0 0 / 0.32), 0 10px 26px oklch(0 0 0 / 0.4);
+  --shadow-3: 0 3px 6px oklch(0 0 0 / 0.36), 0 22px 56px oklch(0 0 0 / 0.52);
+  --inset-shadow: inset 0 1px 2px oklch(0 0 0 / 0.28);
+  --grain-opacity: 0.07;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+/* ---- body: simple mode (default, shows first) ---- */
+body {
+  font-family: var(--font);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  color: var(--fg);
+  background: radial-gradient(120% 90% at 50% -10%, var(--bg) 0%, var(--bg-2) 100%) fixed;
+  min-height: 100dvh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 28px 20px;
+}
+
+/* ---- body: advanced mode override ---- */
+html[data-mode='advanced'] body {
+  font-family: system-ui, sans-serif;
+  color: #ccc;
+  background: #111;
+  height: 100vh;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: flex-start;
+  padding: 0;
+  overflow: hidden;
+  text-rendering: auto;
+}
+
+/* ---- view visibility ---- */
+#simple-view {
+  display: contents;
+}
+#advanced-view {
+  display: none;
+}
+html[data-mode='advanced'] #simple-view {
+  display: none;
+}
+html[data-mode='advanced'] #advanced-view {
+  display: contents;
+}
+
+/* h1 color reset so advanced hard-coded white doesn't bleed into simple view */
+.stage h1,
+.help h1,
+.conflict h1 {
+  color: var(--fg);
+}
+
+/* ---- shared key preview grid (simple + advanced views) ---- */
+.key-grid {
+  display: grid;
+}
+.key-grid .key-cell {
+  aspect-ratio: 1;
+  position: relative;
+  overflow: hidden;
+  padding: 0;
+  border: none;
+  background: none;
+  cursor: default;
+  font: inherit;
+}
+.key-grid .key-cell img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  transform: rotate(180deg);
+}
+/* Single source of truth for per-model preview orientation. The browser shows
+   desktop-oriented bytes, so each model's physical rotation is undone here. */
+.key-grid[data-model='mini'] .key-cell img {
+  transform: rotate(270deg) rotateY(180deg);
+}
+.key-grid[data-model='mirabox-k1pro'] .key-cell img {
+  transform: rotate(90deg) rotateX(180deg);
+}

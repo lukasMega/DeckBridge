@@ -1,0 +1,20 @@
+# lefthook — fast pre-commit gate (format + lint + typecheck on staged files).
+# Install once:  cd deckbridge && lefthook install
+# The full compile/test stay out (too slow for a hook) — CI + `mise run beforeCommit`
+# cover those.
+pre-commit:
+  parallel: true
+  jobs:
+    - name: oxfmt (autoformat staged)
+      glob: 'ts/{src,test}/**/*.{ts,mts,mjs}'
+      run: ./ts/node_modules/.bin/oxfmt {staged_files}
+      stage_fixed: true
+
+    - name: oxlint (staged)
+      glob: 'ts/{src,test}/**/*.ts'
+      run: ./ts/node_modules/.bin/oxlint {staged_files}
+
+    - name: typecheck
+      glob: 'ts/**/*.ts'
+      # tsgo is project-wide (no per-file mode); runs when any .ts is staged.
+      run: cd ts && npx tsgo --noEmit

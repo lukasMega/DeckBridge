@@ -1,0 +1,14 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "ignorePatterns": ["src/assets/**", "src/**/*.d.ts"],
+  "plugins": ["eslint", "unicorn", "typescript", "oxc", "import", "promise"],
+  "categories": {
+    "correctness": "error",
+    "suspicious": "warn"
+  },
+  "rules": {
+    "complexity": ["warn", { "max": 14 }],
+    "no-underscore-dangle": "off",
+    "promise/no-callback-in-promise": "warn"
+  }
+}

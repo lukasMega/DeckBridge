@@ -1,0 +1,5 @@
+# Default rustfmt style. Only the edition is pinned; the `ignore` option is
+# nightly-only, so the vendored jpeg-encoder fork is kept out of formatting by
+# scoping the fmt command to the member crates instead:
+#   cargo fmt -p deckbridge-native -p deckbridge-tray
+edition = "2021"

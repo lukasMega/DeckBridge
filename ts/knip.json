@@ -1,0 +1,16 @@
+{
+  "$schema": "https://unpkg.com/knip@6/schema.json",
+  "entry": [
+    "src/app.ts",
+    "src/hid-worker.ts",
+    "src/web/client/ui-entry.ts",
+    "src/mirabox-smoke.ts",
+    "src/k1pro-probe.ts",
+    "test/**/*.test.ts",
+    "scripts/*.mjs"
+  ],
+  "project": ["src/**/*.ts", "src/**/*.tsx", "test/**/*.ts", "scripts/*.mjs"],
+  "ignoreBinaries": ["mise"],
+  "ignoreDependencies": ["tjs", "@typescript/native-preview"],
+  "ignoreExportsUsedInFile": true
+}
