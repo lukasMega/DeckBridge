@@ -1,0 +1,70 @@
+name: Deploy docs to Pages
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'docs/**'
+      - 'docs-site/**'
+      - '.github/workflows/deploy-docs.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# One deployment at a time; let an in-flight deploy finish.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: docs-site
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: docs-site/package-lock.json
+
+      - name: Install Chrome (for mermaid prerender)
+        id: chrome
+        uses: browser-actions/setup-chrome@v1
+
+      - name: Puppeteer config (--no-sandbox for CI Chrome)
+        run: echo '{"args":["--no-sandbox","--disable-setuid-sandbox"]}' > puppeteer.json
+
+      - name: Install deps
+        run: npm ci
+        env:
+          # Chrome comes from setup-chrome; skip puppeteer's own download.
+          PUPPETEER_SKIP_DOWNLOAD: 'true'
+
+      - name: Build
+        run: npm run build
+        env:
+          PUPPETEER_EXECUTABLE_PATH: ${{ steps.chrome.outputs.chrome-path }}
+          MMDC_PUPPETEER_CONFIG: ${{ github.workspace }}/docs-site/puppeteer.json
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: docs-site/build
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

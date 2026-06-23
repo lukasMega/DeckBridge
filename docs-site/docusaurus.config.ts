@@ -16,8 +16,12 @@ const config: Config = {
     faster: true,
   },
 
-  url: 'https://your-docusaurus-site.example.com',
-  baseUrl: '/',
+  url: 'https://lukasmega.github.io',
+  baseUrl: '/DeckBridge/',
+
+  // GitHub Pages project site: https://lukasmega.github.io/DeckBridge/
+  organizationName: 'lukasMega',
+  projectName: 'DeckBridge',
 
   onBrokenLinks: 'warn',
 
@@ -112,7 +116,7 @@ const config: Config = {
       links: [
         {
           label: 'GitHub',
-          href: 'https://github.com/lukasMega/deckbridge',
+          href: 'https://github.com/lukasMega/DeckBridge',
         },
       ],
       copyright: `deckbridge — Stream Deck relay, no Node runtime required`,

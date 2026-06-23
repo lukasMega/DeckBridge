@@ -41,7 +41,13 @@ function replaceMermaid(node, chromePath) {
     if (chromePath && existsSync(chromePath)) {
       env.PUPPETEER_EXECUTABLE_PATH = chromePath;
     }
-    execFileSync(MMDC, ['-i', mmdPath, '-o', svgPath, '-b', 'transparent'], {
+    const args = ['-i', mmdPath, '-o', svgPath, '-b', 'transparent'];
+    // CI: pass a puppeteer config (e.g. {"args":["--no-sandbox"]}) so headless
+    // Chrome launches on Linux runners. Unset locally → behaviour unchanged.
+    if (process.env.MMDC_PUPPETEER_CONFIG) {
+      args.push('-p', process.env.MMDC_PUPPETEER_CONFIG);
+    }
+    execFileSync(MMDC, args, {
       env,
       stdio: 'pipe',
     });

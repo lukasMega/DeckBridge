@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 
-export const GITHUB_URL = 'https://github.com/lukasMega/deckbridge';
+export const GITHUB_URL = 'https://github.com/lukasMega/DeckBridge';
 
 export const BRANDS: ReactNode[] = [
   'Elgato',

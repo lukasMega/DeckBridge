@@ -15,7 +15,7 @@ Network Dock on your LAN. Two ways to get it: **run a packaged release** (easies
 ### Option A — Packaged release (recommended)
 
 Download the build for your OS from the
-[project releases](https://github.com/lukasMega/deckbridge), unzip, and run. The release
+[project releases](https://github.com/lukasMega/DeckBridge), unzip, and run. The release
 is self-contained — the txiki.js runtime and the native libraries (`libhidapi`,
 `libdeckbridge_native`) are embedded and auto-extract on first run. **No Node.js, no extra
 installs.**
