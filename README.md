@@ -13,6 +13,8 @@ Standalone binary — no Node.js required.
 
 **Runtime:** [txiki.js](https://github.com/saghul/txiki.js) (QuickJS-ng + libuv + libffi)
 
+**📖 Documentation:** <https://lukasmega.github.io/DeckBridge/>
+
 ## Quick start
 
 ```bash
