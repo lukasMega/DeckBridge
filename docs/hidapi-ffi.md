@@ -8,21 +8,15 @@ that loading works at runtime.
 
 txiki.js (QuickJS-ng + libuv + libffi) has **no built-in USB/HID support**. To talk to a
 USB Stream Deck the relay binds to the OS's `libhidapi` shared library at runtime via
-**FFI (`dlopen`)**. The canonical place that library lives on macOS is wherever Homebrew
-put it — `/opt/homebrew/lib/libhidapi.dylib` (Apple Silicon) or
-`/usr/local/lib/libhidapi.dylib` (Intel) — so those paths are hard-coded as **search
-candidates**, not as a Homebrew dependency. That is why the install hint is
+**FFI (`dlopen`)**. The Homebrew paths (`/opt/homebrew/lib/libhidapi.dylib` on Apple
+Silicon, `/usr/local/lib/libhidapi.dylib` on Intel) are just well-known **search
+candidates** in a fallback chain, not a Homebrew dependency — hence the install hint
 `brew install hidapi`.
-
-There is nothing Homebrew-*specific* in the logic: `/opt/homebrew/...` is simply the
-well-known install location, included in a fallback chain.
 
 ## Why FFI at all
 
-`deckbridge` ships as a single self-contained binary (QuickJS bytecode embedded). USB HID
-I/O is a native-OS capability QuickJS cannot perform. Rather than compile a C extension
-into the binary, the project keeps the binary portable and **borrows the OS's `libhidapi`
-at runtime**:
+Rather than compile a C extension into the self-contained binary, the project keeps it
+portable and **borrows the OS's `libhidapi` at runtime**:
 
 - `import FFI from 'tjs:ffi'` — txiki.js's foreign-function interface (libffi under the hood).
 - `FFI.dlopen(path, { ...signatures })` opens the shared library and declares each C
@@ -120,6 +114,6 @@ mirabox_hid_find_path(uint16 vid, uint16 usagePage, uint16 usage,
 
 ## Related docs
 
-- `README.md` → **libhidapi loading** / **deckbridge-native HID export** sections (the canonical short reference).
+- `ARCHITECTURE.md` → **libhidapi loading** / **HID path enumeration** sections (the canonical short reference).
 - `rust/README.md` → how `DECKBRIDGE_NATIVE_LIB` is wired and the open-fallback flow.
-- `docs/adding-a-device.md` → using `loadHidapi` / `findHidPath` from a new device driver.
+- [Adding a Device](./adding-a-device.md) → using `loadHidapi` / `findHidPath` from a new device driver.

@@ -6,7 +6,7 @@ Documents how a key image travels from the Elgato software to the USB device and
 
 ![Image flow diagram](./image-flow-diagram.svg)
 
-The Elgato desktop sends image data to the CORA child server in the format it believes matches the connected hardware. Because the relay advertises device-accurate capabilities (geometry, PID, product name) via `model.cora`, the CORA format depends on what's physically plugged in. **Everything device-specific is read from the active `DeviceModel`** (`model.image`, `model.keyMap`, `model.cora`) — there is no per-brand branching in the pipeline.
+The Elgato desktop sends image data to the CORA child server in the format matching the capabilities the relay advertises via `model.cora` (geometry, PID, product name) — so the CORA format depends on what's physically plugged in. **Everything device-specific is read from the active `DeviceModel`** (`model.image`, `model.keyMap`, `model.cora`) — there is no per-brand branching in the pipeline.
 
 | Connected device | Advertised caps (`model.cora`) | CORA format | Sidecar | `model.image` transform |
 |-----------------|-----------------|-------------|---------|-----------|
@@ -16,7 +16,7 @@ The Elgato desktop sends image data to the CORA child server in the format it be
 | Stream Deck MK.2 (`elgato-gen2`) | real MK.2 (PID `0x0080`) | gen2 JPEG 72×72 | No | `passthrough` (rotate 0) |
 | Stream Deck Mini (`elgato-gen1`) | real Mini (6 key, 3×2, PID `0x0063`) | gen1 BMP 80×80 BGR | No | `passthrough` (BMP short-circuit) |
 
-Each **Mirabox** model advertises as an Elgato device whose CORA profile the desktop already knows: the **293V3/293S** spoof a Stream Deck **MK.2** (`cora.productId = ELGATO_MK2_PID = 0x00a5`, `advertiseGeometry = MK2_CHILD_GEOMETRY`), so the desktop sends a 72×72 gen2 JPEG, while the **K1 Pro** spoofs a Stream Deck **Mini** (`productId 0x0063`, `MINI_CHILD_GEOMETRY`), so the desktop sends an 80×80 gen1 BMP. In every case the sidecar resizes/rotates — and for the K1 Pro re-encodes BMP→JPEG — to the device's native key size per `model.image`. For **Elgato devices**, the relay advertises the real device geometry and forwards the desktop's device-native data with no transform — the desktop pre-applies all orientation/color work itself.
+Each **Mirabox** model advertises as an Elgato device whose CORA profile the desktop already knows (MK.2 for the 293V3/293S, Mini for the K1 Pro — see table), and the sidecar resizes/rotates — for the K1 Pro re-encodes BMP→JPEG — to the device's native key size per `model.image`. **Elgato devices** advertise their real geometry and the desktop's device-native data is forwarded with no transform — the desktop pre-applies all orientation/color work itself.
 
 The path splits into two tracks on image arrival (`setupImageHandler` in `image-pipeline.ts`), running on **different threads**:
 
@@ -98,13 +98,11 @@ sequenceDiagram
     HOST-->>WEB: notifyStats({ imagesSent }) via driver-manager
 ```
 
-The worker's single FIFO message queue serializes every `'image'` message, so per-key (and overall) ordering holds **without any main-thread write queue**.
-
 Key behaviours (the format/cache/remap logic now lives in `renderImage` in `image-render.ts`, on the worker; `setupImageHandler` on the main thread only broadcasts to the WebUI and calls `renderCoraImage`):
 
 - **No per-brand branching.** The native format is chosen purely from `format` and the effective image spec: BMP input whose device format is also BMP (true gen1 Mini) → forward as-is; `transform === 'passthrough'` → forward the CORA JPEG as-is; otherwise (`transform === 'sidecar'`) → `transformImageForDevice(data, applyOverride(model.image, override))` (resize/pad + `rotate`/`flipH`/`flipV`, re-encode). The K1 Pro takes the sidecar path even though its input is BMP, because its device format is JPEG (BMP→JPEG).
 - **WebUI image-fit override.** The WebUI can switch the fit mode at runtime (`ImageModeOverride`: `resize` ⇄ `pad-black`/`pad-average`/`pad-edge`, `null` = model default). The main thread forwards it with `WorkerHidDriver.setImageOverride()`; the worker stores it (`imageOverride`, ordered on its serial queue w.r.t. `'image'` messages) and `renderImage` overlays it onto `model.image` via `applyOverride()`. The override discriminator is part of the cache key, so flipping modes never serves a stale entry.
-- **WebUI shows the CORA arrival image.** The pipeline no longer writes device-native bytes back to `imageState` (the old `setImageState(nativeBytes)` step was dropped with P1): the native bytes live only on the worker and go straight to the device. The upright CORA image is the better preview anyway (native bytes are rotated/flipped for the hardware).
+- **WebUI shows the CORA arrival image.** Device-native bytes live only on the worker and go straight to the device (the old `setImageState(nativeBytes)` step was dropped with P1); the upright CORA image is the better preview anyway.
 - **Device key remap:** `deviceKeyIndex = (model.keyMap.coraToWireImage || model.keyMap.imageOffset != null) ? mk2IndexToDeviceImgId(keyIndex, model) : keyIndex`. Elgato models (empty `keyMap`) use identity; Mirabox models remap via their `coraToWireImage` array. An out-of-range key (`-1`) is skipped (warn).
 - **Wire chunk padding (K1 Pro):** inside `MiraboxDriver.sendImage`, models with `wire.chunkPadByte` get the JPEG wire-encoded by `padChunkBoundaries()` — one sacrificial `0x00` after every 1023 payload bytes, because the K1 Pro firmware drops the last byte of every full 1024-byte chunk (see `.claude/plans/K1Pro/jpeg-artifact-findings.md`). The BAT length is the padded wire length.
 
@@ -125,11 +123,11 @@ Orientation is fully described by the active model: `model.image` for live CORA 
 
 </details>
 
-The Rust deckbridge-native cdylib applies rotations CW first, then flips. To re-calibrate a device, change `model.image` (live) or `model.splash.transformOverride` (splash) — see `docs/adding-a-device.md` Phase 4.
+The Rust deckbridge-native cdylib applies rotations CW first, then flips. To re-calibrate a device, change `model.image` (live) or `model.splash.transformOverride` (splash) — see [Adding a Device, Phase 4](./adding-a-device.md#phase-4--measure-image-orientation-on-hardware).
 
 ### Web preview orientation
 
-The browser shows the **received CORA bytes** immediately (72×72 JPEG for the 293/293S and MK.2, native 80×80 BMP for the Mini and the K1 Pro), then on reconnect re-fetches the stored bytes via `/api/image/{key}`. Since the transform moved to the worker (P1), `imageState` holds the **CORA arrival image** (not device-native bytes), so live and reconnect previews are consistent. Because the preview shows desktop-oriented bytes rather than device-oriented ones, the web UI corrects orientation with **per-model CSS** keyed on a `data-model` attribute (set via `KeyPreview.setModel()` from `status.modelId`):
+The browser shows the **received CORA bytes** immediately (72×72 JPEG for the 293/293S and MK.2, native 80×80 BMP for the Mini and the K1 Pro), then on reconnect re-fetches the stored bytes via `/api/image/{key}` — both are the CORA arrival image, so live and reconnect previews are consistent. Because the preview shows desktop-oriented bytes rather than device-oriented ones, the web UI corrects orientation with **per-model CSS** keyed on a `data-model` attribute (set via `KeyPreview.setModel()` from `status.modelId`):
 
 ```css
 /* ui-base.css — single source of truth for BOTH views */
@@ -142,12 +140,10 @@ Both views render through the shared `KeyPreview` class (`key-preview.ts`), whic
 
 ## Threading & ordering
 
-Since P1 there is **no main-thread image queue**. The main thread does two cheap things per image — broadcast the base64 frame to the WebUI, then `renderCoraImage()` → one `postMessage` — and returns to the CORA ACK loop. All heavy work runs on the **USB worker**:
+Since P1 there is **no main-thread image queue** — the main thread only does the two cheap steps from the Overview (WebUI broadcast, `renderCoraImage()` → one `postMessage`) and returns to the CORA ACK loop. All heavy work runs on the **USB worker**:
 
-- **One FIFO message queue** (`hid-worker.ts`) — the worker processes `'image'` messages in arrival order, each fully completing (transform → cache → `hid_write`) before the next. This preserves per-key (and overall) ordering for free; the old per-key `imageWriteQueue` and the `SIDECAR_CONCURRENCY` round-trip queue were deleted.
+- **One FIFO message queue** (`hid-worker.ts`) — the worker processes `'image'` messages in arrival order, each fully completing (transform → cache → `hid_write`) before the next. This preserves per-key (and overall) ordering for free, **without any main-thread write queue**; the old per-key `imageWriteQueue` and the `SIDECAR_CONCURRENCY` round-trip queue were deleted.
 - **LRU cache** (`image-render.ts`, holding the `image-cache.ts` singleton, max `IMAGE_CACHE_SIZE` = 100) — keyed by `makeCacheKey(model.id, FNV-1a-32(full data), override)`. The model id and the image-fit override are part of the key, so the same CORA frame yields separate entries per device and per fit mode. (The hash covers the **whole** buffer — an earlier first/last-4 KB sampling collided a small centred icon with a blank frame for gen1 BMP.) On a hit the Rust transform is skipped entirely (reconnect / static deck → 0 transform calls).
-- The Rust transform runs for `transform === 'sidecar'` models, except when the input is BMP **and** the device's native format is also BMP. Today the sidecar models are Mirabox 293 / 293S (JPEG→JPEG) and K1 Pro (BMP→JPEG); only true gen1 BMP (Mini, BMP→BMP) and passthrough JPEG (MK.2) are forwarded unchanged.
-- The CORA key index is remapped to the device wire image id via `mk2IndexToDeviceImgId(keyIndex, model)` before the write (identity for Elgato, `coraToWireImage` lookup for Mirabox).
 
 ## State stored in WebUIServer
 
@@ -157,7 +153,7 @@ Since P1 there is **no main-thread image queue**. The main thread does two cheap
 | `imageFormat` | `notifyImageUpdate` | Per-key wire format (`'jpeg'`/`'bmp'`) of the last CORA frame, so a later repaint uses the right MIME |
 | `imageModeOverride` | `notifyImageMode` | Current WebUI fit override (`ImageModeOverride`); mirrored to the worker via the `setImageOverride` event |
 
-`notifyImageUpdate(mk2Index, data, format = 'jpeg')` stores `data` (and `format` in `imageFormat`), bumps the per-key version, and broadcasts a WebSocket `image` event (`{ mk2Index, v, data: b64, format }`). Since P1 the image pipeline no longer overwrites this with device-native bytes — the transform happens on the worker and its output goes straight to the device, so `imageState` always holds the upright CORA frame. `setImageState(mk2Index, jpeg)` (updates `imageState` + bumps the version, no WS broadcast) is retained on `WebUIServer` as a capability but is **no longer called by the live image path**.
+`notifyImageUpdate(mk2Index, data, format = 'jpeg')` stores `data` (and `format` in `imageFormat`), bumps the per-key version, and broadcasts a WebSocket `image` event (`{ mk2Index, v, data: b64, format }`). `setImageState(mk2Index, jpeg)` (updates `imageState` + bumps the version, no WS broadcast) is retained on `WebUIServer` as a capability but is **no longer called by the live image path** (see "WebUI shows the CORA arrival image" above).
 
 On browser reconnect the browser re-fetches `/api/state` and per-key `/api/image/{key}?v=` to rehydrate previews.
 

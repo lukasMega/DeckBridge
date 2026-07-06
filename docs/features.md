@@ -8,8 +8,7 @@ description: What DeckBridge does, who it's for, the permissions it needs, and t
 # Features & Use Cases
 
 DeckBridge turns a USB Stream Deck into a network device the Elgato app can use over
-WiFi. This page covers what it does, who it's for, the permissions it asks for, and
-exactly which files and ports it touches.
+WiFi.
 
 ## Use a budget deck with the Elgato app
 
@@ -78,28 +77,22 @@ hardware.
 </div>
 </div>
 
-1. **Run DeckBridge** on the PC.
-2. **Plug the Stream Deck into USB.**
-3. **DeckBridge detects it** and advertises it on the network.
-4. **Open the Elgato app** and pair it as a Network device — IP `localhost`.
-
 ## Feature overview
 
-- **Network Dock emulation** — speaks the Elgato CORA protocol on TCP 
-  and advertises over mDNS as `_elg._tcp` ("Network Stream Deck"). The app discovers it
-  like real Elgato hardware.
-- **Works with non-Elgato decks** — a Mirabox 293V3/Ajazz, 293S, or K1 Pro presents
-  itself to the app as an Elgato model the app already knows, so nothing changes app-side.
+- **Network Dock emulation** — Elgato CORA protocol over TCP, advertised via mDNS
+  `_elg._tcp` ("Network Stream Deck"); the app discovers it like real hardware.
+- **Works with non-Elgato decks** — [supported](./introduction.md#supported-devices)
+  Mirabox / Ajazz decks present themselves to the app as an Elgato model it already
+  knows, so nothing changes app-side.
 - **Per-device image pipeline** — resizes, rotates, and (for the K1 Pro) re-encodes every
   button image to the device's native format via a Rust native library, with a cache
   to skip repeat work.
 - **Non-blocking by design** — USB HID and the 50–200 ms image transforms run on a
   separate worker thread, so the network ACK loop and web UI never stall.
 - **Live web UI** — `http://localhost:3000` shows the key grid and a log feed in real time.
-- **System tray + diagnostics** — installer builds add a tray icon (gray / yellow / green
-  status) and a `/requirements` self-check page.
-- **Standalone binary** — one **&lt;5 MB** file built on txiki.js; no Node.js. The native
-  libraries are embedded and auto-extract on first run.
+- **System tray + diagnostics** — installer builds add a status tray icon
+  ([states](./getting-started.md#3-run-it)) and a `/requirements` self-check page.
+- **Standalone binary** — one **&lt;5 MB** file built on txiki.js; no Node.js.
 
 ## Use cases
 
@@ -114,13 +107,10 @@ flowchart LR
     dbx <-->|"WiFi / LAN"| elg
 ```
 
-- **Use a budget deck with the official app** — drive a Mirabox / Ajazz / K1 Pro from the
-  Elgato Stream Deck app as if it were Elgato hardware.
 - **Put the deck on another computer** — plug the deck into a laptop or mini-PC, run
-  DeckBridge there, and control the Elgato app on your streaming PC across the LAN. The
-  deck no longer has to sit at the main machine.
-- **Skip the Network Dock** — get network-dock behaviour for hobby setups without buying
-  the Elgato Network Dock.
+  DeckBridge there, and control the Elgato app on your streaming PC across the LAN.
+- **Skip the Network Dock** — network-dock behaviour for hobby setups without buying
+  the hardware.
 - **Use a real Stream Deck wirelessly** — a Stream Deck Mini or MK.2 works the same way,
   over WiFi instead of a cable.
 - **Bitfocus Companion** — Companion also speaks the dock protocol and discovers
@@ -133,8 +123,7 @@ DeckBridge is for personal and hobby use, and does not replace the Elgato Networ
 
 ## Permissions
 
-DeckBridge needs a few OS permissions, each requested the first time it's used. No
-admin / root rights are required.
+Each permission is requested on first use; no admin / root rights are required.
 
 | Permission | Platform | Why |
 |---|---|---|
@@ -159,8 +148,7 @@ only case that needs a system libhidapi installed.
 
 ## Files, ports & data
 
-**DeckBridge stores no personal data and sends no telemetry.** It reads and writes only
-what it needs to run.
+**DeckBridge stores no personal data and sends no telemetry.**
 
 ### Reads
 
@@ -199,9 +187,8 @@ UI is always localhost-only.
   Neo, and similar are out of scope).
 - **Fixed ports** — CORA is hard-wired to **5343 / 5344**; conflicts with a real Elgato
   Network Dock or a second DeckBridge instance on the same machine.
-- **No auth or encryption** — the CORA ports trust the LAN. Use `DECKBRIDGE_BIND=127.0.0.1`
-  to keep them local.
-- **Hobby use** — not a reliability or support replacement for the Elgato Network Dock.
+- **No auth or encryption** — the CORA ports trust the LAN; see
+  [Network ports](#network-ports).
 
 ### Environment variables
 

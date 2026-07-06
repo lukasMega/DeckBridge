@@ -1,8 +1,7 @@
 # Adding a New Device
 
-This guide covers everything needed to add support for a new USB stream-deck-style
-device — from a known brand using an existing wire protocol, all the way to a brand-new
-USB device with a protocol you have to reverse-engineer from scratch.
+Everything needed to add support for a new USB stream-deck-style device — from a known
+brand on an existing wire protocol to a device whose protocol you must reverse-engineer.
 
 **The short version: fill in one `DeviceModel` config file.** Geometry, image transform,
 wire framing, key-index mapping, CORA advertisement, and splash overrides are all just
@@ -27,34 +26,8 @@ USB device
               └─ calls driver.sendImage(deviceKeyIndex, nativeBytes)
 ```
 
-```mermaid
-flowchart TD
-    EL[Elgato Software / Companion]
-    CS[ElgatoChildServer<br/>CORA TCP 5343/5344]
-    PIPE[image-pipeline.ts<br/>main thread]
-    WEB[WebUIServer<br/>HTTP/WS :3000]
-    BR[Browser]
-    HOST[WorkerHidDriver<br/>hid-worker-host.ts]
-    REND[image-render.ts<br/>USB worker thread]
-    RS[deckbridge-native<br/>Rust cdylib FFI]
-    DRV[HID Driver<br/>ElgatoHidDriver / MiraboxDriver]
-    DEV[USB Device<br/>Stream Deck / Mirabox]
-
-    EL -- CORA TCP --> CS
-    CS -- emit image --> PIPE
-    PIPE -- base64 WS --> WEB
-    WEB -- WebSocket --> BR
-    PIPE -- renderCoraImage --> HOST
-    HOST -- postMessage --> REND
-    REND -- transform sidecar --> RS
-    RS -- resized/rotated bytes --> REND
-    REND -- sendImage --> DRV
-    DRV -- hid_write --> DEV
-    DEV -- key events --> DRV
-    DRV -- emit key --> HOST
-    HOST -- postMessage --> CS
-    CS -- CORA key report --> EL
-```
+Full image-pipeline diagram (threads, cache, transform): see
+[Image Flow](./image-flow.md).
 
 **What you'll touch for any new device:**
 
@@ -124,9 +97,8 @@ Record:
 
 ## Step 1 — write the `DeviceModel`
 
-Create `ts/src/devices/<brand>/<model>.ts`. Everything device-specific lives here:
-geometry, VID/PID, image transform, wire framing, key index mapping, CORA identity,
-and splash overrides.
+Create `ts/src/devices/<brand>/<model>.ts` — the single source of truth described
+above.
 
 ```typescript
 // ts/src/devices/acme/acme-x5.ts
@@ -269,9 +241,9 @@ see Phase 5 for how to measure and fill these in from hardware.
 export type DeviceVendor = 'mirabox' | 'elgato' | 'acme';  // add your brand
 ```
 
-`vendor` is informational/diagnostic today — all behavior that used to switch on
-`vendor` (CORA product ID, advertised geometry, physical-identity forwarding) now lives
-explicitly in `model.cora`. No other code changes are required for a new vendor.
+`vendor` is informational/diagnostic only — behavior that used to switch on it (CORA
+product ID, advertised geometry, physical-identity forwarding) lives in `model.cora`.
+No other code changes needed for a new vendor.
 
 ---
 
@@ -558,9 +530,8 @@ export const DEVICE_MODELS: DeviceModel[] = [
 ```
 
 **Order matters**: `probeAndOpen()` in `driver-manager.ts` tries each model in order and
-stops at the first successful `hid_open`. Put well-known / specific devices before catch-all
-entries. Put Elgato models first so they take priority over third-party devices that might
-share a VID/PID range.
+stops at the first successful `hid_open`. Put Elgato / specific devices before catch-all
+entries so they take priority over third-party devices that might share a VID/PID range.
 
 `DEFAULT_MODEL` (also exported from `registry.ts`) is the fallback used when nothing is
 connected — it stays `MK2_MODEL` unless you have a reason to change it.
@@ -659,10 +630,8 @@ set `-1` for unused physical keys in `wireInputToCora`.
 ensure `findHidPath` in `ffi/hidapi.ts` resolves to the correct path.
 
 **Images appear but with wrong colors (red/blue swapped)**
-→ `colorMode` does **not** fix this today — it is not wired through the JPEG path
-(see "Color order is not implemented"). You must add a channel swap to the Rust
-sidecar and forward it from `translator.ts` first. For `bmp` devices the byte order
-is handled by the BMP encoder, not this field.
+→ `colorMode` does **not** fix this — see
+[Color order is not implemented](#color-order-is-not-implemented-known-limitation).
 
 **Key presses not registered**
 → Check your protocol's `parseInput` — does the report ID guard (`data[0] !== 0x01`)
@@ -677,6 +646,5 @@ separate model entries and specific PIDs in each `usbProductIds` array.
 Check your driver's `_write()` prepends the report ID byte correctly.
 
 **macOS: crash or SIGBUS on reconnect**
-→ Never call `hid_exit()` + `dlclose()` (lib.close()) when no device was successfully
-opened. The module-level `_workerHidLib` singleton avoids premature dlclose; see the
-comment at the top of `mirabox.ts` for why this matters.
+→ See the `hid_exit()` / `_workerHidLib` rules under
+[Key design rules](#step-3--implement-the-driver).

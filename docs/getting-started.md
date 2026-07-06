@@ -6,9 +6,8 @@ description: Install or build DeckBridge, run it, and pair a USB deck with the E
 
 # Getting Started
 
-DeckBridge runs on your computer, speaks USB to your deck, and looks like an Elgato
-Network Dock on your LAN. Two ways to get it: **run a packaged release** (easiest) or
-**build from source**.
+Two ways to get DeckBridge ([what it is](./introduction.md)): **run a packaged
+release** (easiest) or **build from source**.
 
 ## 1. Get DeckBridge
 
@@ -46,9 +45,9 @@ the common path.
 
 ## 2. Plug in your deck
 
-Connect a supported USB device — Mirabox 293V3/Ajazz, Mirabox 293S, Mirabox K1 Pro,
-Stream Deck MK.2, or Stream Deck Mini. DeckBridge probes on start and retries every 2 s
-until one opens. On **macOS**, grant **Input Monitoring** if prompted — HID reads need it.
+Connect a [supported device](./introduction.md#supported-devices). DeckBridge probes on
+start and retries every 2 s until one opens. On **macOS**, grant **Input Monitoring** if
+prompted — HID reads need it (see [Permissions](./features.md#permissions)).
 
 ## 3. Run it
 
@@ -70,23 +69,21 @@ In installer builds the tray icon shows status at a glance:
 ## 4. Pair with the Elgato app
 
 Open the Elgato Stream Deck app (or Companion) on any machine on the **same LAN**. It
-discovers DeckBridge like real Elgato hardware. Your key presses and button images now
-travel over WiFi — no physical Network Dock required.
+discovers DeckBridge like real Elgato hardware.
 
 ## Verify your setup
 
 - Open **http://localhost:3000** for the live key grid and log feed.
-- Or use the tray's **Check Requirements** → the `/requirements` diagnostics page, which
-  reports libhidapi, the native library, and port status.
+- Or use the tray's **Check Requirements** → the `/requirements` diagnostics page (what
+  it checks: [Requirements](./features.md#requirements)).
 
 ## Troubleshooting
 
 - **`port in use` (5343/5344)** — another DeckBridge, a real Network Dock, or the ESP32
   bridge holds the CORA port. Stop it; DeckBridge keeps retrying every few seconds.
 - **No device found** — check the cable/port; on macOS grant Input Monitoring. DeckBridge
-  retries every 3 s.
-- **libhidapi missing (source build only)** — install it: `brew install hidapi` /
-  `sudo apt install libhidapi-dev`.
-- **Restrict network access** — the CORA ports bind all interfaces with no auth
-  (protocol-inherent — the real dock has none either). Set `DECKBRIDGE_BIND=127.0.0.1` to
-  limit it. The web UI is always localhost-only.
+  retries every 2 s.
+- **libhidapi missing (source build only)** — install it as in
+  [Build from source](#option-b--build-from-source).
+- **Restrict network access** — set `DECKBRIDGE_BIND=127.0.0.1`; see
+  [Network ports](./features.md#network-ports).

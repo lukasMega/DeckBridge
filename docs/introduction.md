@@ -14,15 +14,14 @@ keys and button images work over WiFi — no
 It's a free, community-built tool for personal and hobby use, shipped as a **standalone
 binary** (<5MB, no Node.js runtime needed).
 
-> New here? The [landing page](/) covers what it does and why; head to
-> **[Getting Started](/getting-started)** to install and connect a deck.
+> New here? Head to **[Getting Started](/getting-started)** to install and connect a deck.
 
 ## How it works
 
-Your USB deck plugs into the computer. DeckBridge speaks USB HID to the device and emulates
-an Elgato Network Dock on the LAN (TCP/CORA, advertised over mDNS). The Elgato app discovers
-it like real Elgato hardware — key presses travel up, button images travel down. DeckBridge
-resizes/rotates each image to match the device before writing it over USB.
+DeckBridge speaks USB HID to the plugged-in deck and emulates an Elgato Network Dock on
+the LAN (TCP/CORA, advertised over mDNS). The Elgato app discovers it like real hardware —
+key presses travel up, button images travel down, each image resized/rotated to match the
+device before the USB write.
 
 ## Supported devices
 
@@ -42,5 +41,5 @@ DeckBridge is not affiliated with, endorsed by, or supported by Elgato / Corsair
 
 <div style="border-left:4px solid #25c2a0;background:rgba(37,194,160,0.1);padding:12px 16px;border-radius:6px;margin:20px 0">
 <strong>ℹ Nothing reverse-engineered</strong><br/>
-DeckBridge contains <strong>no reverse-engineered code</strong>. The USB HID and Elgato CORA protocol handling is <strong>reused from existing open-source projects</strong> — DeckBridge only wires that prior work together.
+DeckBridge contains <strong>no reverse-engineered code</strong>. The USB HID and Elgato CORA protocol handling is <strong>reused from existing open-source projects</strong> — DeckBridge only wires that prior work together. Full credits: <a href="/references">References</a>.
 </div>
