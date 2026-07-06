@@ -104,11 +104,6 @@ const config: Config = {
           label: 'Technical Details',
           position: 'right',
         },
-        {
-          label: 'Protocol Explainer',
-          to: '/protocol-explainer',
-          position: 'right',
-        },
       ],
     },
     footer: {

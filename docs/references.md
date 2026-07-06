@@ -34,10 +34,10 @@ The matching source lives in the repo under `reference-elgato/` (CORA / Elgato s
 
 ## Runtime & build
 
-| Project | What it gave us |
-|---|---|
-| [saghul/txiki.js](https://github.com/saghul/txiki.js) | The JS runtime DeckBridge compiles to — QuickJS-ng + libuv + libffi, no Node. |
-| [@julusian/image-rs](https://github.com/Julusian/image-rs) | Reference for the Rust JPEG resize/rotate path (`deckbridge-native`). |
+| Project                                                              | What it gave us                                                               |
+|----------------------------------------------------------------------|-------------------------------------------------------------------------------|
+| [saghul/txiki.js](https://github.com/saghul/txiki.js)                | The JS runtime DeckBridge compiles to — QuickJS-ng + libuv + libffi, no Node. |
+| [@julusian/node-image-rs](https://github.com/Julusian/node-image-rs) | Reference for the Rust JPEG resize/rotate path (`deckbridge-native`).         |
 
 ---
 

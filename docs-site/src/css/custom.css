@@ -39,11 +39,6 @@
   --ifm-card-border-radius: 14px; /* --r-md */
 }
 
-/* Protocol Explainer: full-width page (override the centered .container max-width) */
-.protocol-explainer-page {
-  max-width: 100% !important;
-}
-
 /* Click-to-fit diagram lightbox (src/theme/Root.tsx) */
 .markdown img,
 .docusaurus-mermaid-container {
