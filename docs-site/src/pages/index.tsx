@@ -6,8 +6,9 @@ import { RotatingWord } from './_home/RotatingWord';
 import { BridgeMark } from './_home/BridgeMark';
 import { Flow } from './_home/Flow';
 import { Comparison } from './_home/Comparison';
+import { Quickstart } from './_home/Quickstart';
 import { FEATURES } from './_home/features';
-import { GITHUB_URL, BRANDS, NETWORKS, DEVICES, STACK, HIGHLIGHTS } from './_home/content';
+import { GITHUB_URL, BRANDS, DEVICES, HIGHLIGHTS } from './_home/content';
 
 export default function Home(): ReactNode {
   const [open, setOpen] = useState<number | null>(null);
@@ -36,15 +37,12 @@ export default function Home(): ReactNode {
               <BridgeMark />
             </div>
             <h1 className={styles.title}>
-              USB buttons/keys:{' '}
+              Your{' '}
               <span className={styles.accent}>
                 <RotatingWord words={BRANDS} />
-              </span>
-              <br /> Stream D<RotatingWord words={['e', 'o']} fade />
-              ck,{' '}
-              <span className={styles.accent}>
-                over <RotatingWord words={NETWORKS} interval={1_500} />.
-              </span>
+              </span>{' '}
+              stream deck,
+              <br /> <span className={styles.accent}>over WiFi.</span>
             </h1>
             <p className={styles.subtitle}>
               <strong>DeckBridge</strong> runs on your computer and appears to the Elgato app as a
@@ -60,15 +58,22 @@ export default function Home(): ReactNode {
             </div>
             <div className={styles.trust}>
               <span>free</span>
-              <span>&lt; 5 MB binary</span>
-              <span>TypeScript + Rust</span>
+              <span>open source</span>
+              <span>single &lt; 5 MB binary</span>
               <span>
-                no <RotatingWord words={['Node.js', 'Bun', 'Deno']} />
-              </span>
-              <span>
-                no <code>sudo</code> required
+                no <code>sudo</code>
               </span>
             </div>
+          </section>
+
+          {/* ---- quick start ---- */}
+          <section className={`${styles.section} ${styles.reveal}`}>
+            <p className={styles.sectionLabel}>Quick start</p>
+            <h2 className={styles.sectionTitle}>Running in two minutes</h2>
+            <Quickstart />
+            <p className={styles.stepsMore}>
+              <Link to="/getting-started">Full guide →</Link>
+            </p>
           </section>
 
           {/* ---- how it works ---- */}
@@ -155,32 +160,35 @@ export default function Home(): ReactNode {
             <Comparison />
           </section>
 
+          {/* ---- supported devices ---- */}
+          <section className={`${styles.section} ${styles.reveal}`}>
+            <p className={styles.sectionLabel}>Hardware</p>
+            <h2 className={styles.sectionTitle}>Supported devices</h2>
+            <div className={styles.devices}>
+              {DEVICES.map((d) => (
+                <span className={styles.chip} key={d.name}>
+                  {d.name}{' '}
+                  <span
+                    className={`${styles.chipBadge} ${d.tested ? styles.chipBadgeOk : styles.chipBadgeMuted}`}
+                  >
+                    {d.tested ? '✓ tested' : 'untested'}
+                  </span>
+                </span>
+              ))}
+            </div>
+            <p className={styles.devicesNote}>
+              Tested on macOS — the Linux / Windows builds are implemented but not
+              hardware-verified.
+            </p>
+            <p className={styles.devicesNote}>
+              No other models planned. <Link to="/adding-a-device">Wire up your own →</Link>
+            </p>
+          </section>
+
           {/* ---- under the hood ---- */}
           <section className={`${styles.section} ${styles.reveal}`}>
             <p className={styles.sectionLabel}>Under the hood</p>
             <h2 className={styles.sectionTitle}>Built with</h2>
-            <p className={styles.sectionLead}>
-              One standalone binary: TypeScript logic and Rust image code compiled onto the txiki.js
-              runtime. Nothing to install — no Node.js.
-            </p>
-            <div className={styles.compareWrap}>
-              <div className={styles.compareGrid}>
-                {STACK.map((s) => (
-                  <div className={styles.compareCard} key={s.name}>
-                    <div className={styles.compareCardHead}>
-                      {s.href ? (
-                        <a href={s.href} target="_blank" rel="noreferrer">
-                          {s.name} ↗
-                        </a>
-                      ) : (
-                        s.name
-                      )}
-                    </div>
-                    <p className={styles.compareItemVal}>{s.role}</p>
-                  </div>
-                ))}
-              </div>
-            </div>
             <div className={styles.devices}>
               {HIGHLIGHTS.map((h) => (
                 <span className={styles.chip} key={h}>
@@ -188,28 +196,8 @@ export default function Home(): ReactNode {
                 </span>
               ))}
             </div>
-          </section>
-
-          {/* ---- supported devices ---- */}
-          <section className={`${styles.section} ${styles.reveal}`}>
-            <p className={styles.sectionLabel}>Hardware</p>
-            <h2 className={styles.sectionTitle}>Supported devices</h2>
-            <div className={styles.devices}>
-              {DEVICES.map((d) => (
-                <span className={styles.chip} key={d}>
-                  {d}
-                </span>
-              ))}
-            </div>
             <p className={styles.devicesNote}>
-              Hardware-tested on macOS: 293V3, 293S, K1 Pro, and Stream Deck Mini. MK.2 and the
-              Linux / Windows builds are implemented but not hardware-verified.
-            </p>
-            <p className={styles.devicesNote}>
-              No plans to add support for other Stream Deck-like devices (Mirabox, Ajazz, etc.).
-            </p>
-            <p className={styles.devicesNote}>
-              Want to wire up your own device? <Link to="/adding-a-device">Adding a device →</Link>
+              <Link to="/introduction">How it's built →</Link>
             </p>
           </section>
 

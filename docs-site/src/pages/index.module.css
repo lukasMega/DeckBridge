@@ -182,18 +182,6 @@
     transform: none;
   }
 }
-.rotate.fade > .rotateWord[data-active='true'] {
-  animation: wordFade 0.4s cubic-bezier(0.2, 0.7, 0.2, 1) both;
-}
-@keyframes wordFade {
-  from {
-    opacity: 0;
-  }
-  to {
-    opacity: 1;
-  }
-}
-
 .subtitle {
   margin: 18px auto 0;
   max-width: 52ch;
@@ -315,6 +303,75 @@
   color: var(--fg-muted);
   line-height: 1.55;
   text-wrap: pretty;
+}
+
+/* ============================================================
+   Quick start
+   ============================================================ */
+.steps {
+  margin-top: 28px;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 14px;
+}
+.step {
+  padding: 20px 18px;
+  border-radius: var(--r-md);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-1);
+}
+.stepNum {
+  display: inline-grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  margin-bottom: 12px;
+  border-radius: 50%;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 13px;
+  font-weight: 700;
+}
+.stepTitle {
+  margin: 0 0 5px;
+  font-size: 14.5px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+}
+.stepText {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--fg-muted);
+  text-wrap: pretty;
+}
+.stepText code {
+  font-family: var(--mono);
+  font-size: 0.92em;
+}
+.stepText a {
+  color: var(--accent);
+  font-weight: 600;
+  text-decoration: none;
+}
+.stepText a:hover {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.stepsMore {
+  margin: 18px auto 0;
+  text-align: center;
+  font-size: 13.5px;
+}
+.stepsMore a {
+  color: var(--accent);
+  font-weight: 600;
+  text-decoration: none;
+}
+.stepsMore a:hover {
+  text-decoration: underline;
+  text-underline-offset: 2px;
 }
 
 /* ============================================================
@@ -676,6 +733,23 @@
   color: var(--fg);
   box-shadow: var(--shadow-1);
 }
+.chipBadge {
+  display: inline-block;
+  margin-left: 2px;
+  padding: 2px 7px;
+  border-radius: 99px;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+.chipBadgeOk {
+  color: var(--ok);
+  background: var(--ok-soft);
+}
+.chipBadgeMuted {
+  color: var(--fg-dim);
+  background: var(--inset);
+}
 .devicesNote {
   margin: 18px auto 0;
   max-width: 60ch;
@@ -815,6 +889,11 @@
 /* ============================================================
    Responsive
    ============================================================ */
+@media (max-width: 900px) {
+  .steps {
+    grid-template-columns: 1fr;
+  }
+}
 @media (max-width: 760px) {
   .features {
     grid-template-columns: repeat(2, 1fr);

@@ -8,42 +8,17 @@ export const BRANDS: ReactNode[] = [
   'Ajazz',
 ];
 
-export const NETWORKS: ReactNode[] = [
-  <span style={{ fontStretch: 'expanded' }}>Wi-Fi</span>,
-  <span style={{ fontStretch: 'condensed' }}>network</span>,
-  <span style={{ fontWeight: 'lighter', fontStretch: 'extra-condensed' }}>localhost</span>,
-];
-
-export const DEVICES = [
-  'Mirabox 293V3 / Ajazz',
-  'Mirabox 293S',
-  'Mirabox K1 Pro',
-  'Stream Deck MK.2',
-  'Stream Deck Mini',
-];
-
-export const STACK: { name: string; role: ReactNode; href?: string }[] = [
-  {
-    name: 'TypeScript',
-    role: 'All the relay logic — the CORA/Elgato TCP servers, device drivers, and local web UI.',
-  },
-  {
-    name: 'Rust',
-    role: (
-      <>
-        A small <code>cdylib</code>, loaded over FFI, for JPEG resize/rotate and HID enumeration.
-      </>
-    ),
-  },
-  {
-    name: 'txiki.js',
-    role: 'The runtime it compiles to — QuickJS-ng + libuv + libffi. No Node.js, no Bun.',
-    href: 'https://github.com/saghul/txiki.js',
-  },
+export const DEVICES: { name: string; tested: boolean }[] = [
+  { name: 'Mirabox 293V3 / Ajazz', tested: true },
+  { name: 'Mirabox 293S', tested: true },
+  { name: 'Mirabox K1 Pro', tested: true },
+  { name: 'Stream Deck MK.2', tested: false },
+  { name: 'Stream Deck Mini', tested: true },
 ];
 
 export const HIGHLIGHTS = [
-  'Single < 5 MB binary',
+  'TypeScript + Rust',
+  'txiki.js runtime — no Node.js',
   'Dedicated USB worker thread',
   'JPEG resize + rotate per model',
   'mDNS auto-discovery',

@@ -2,15 +2,7 @@ import { useEffect, useState, type ReactNode } from 'react';
 import styles from '../index.module.css';
 import { ANIM_EVENT, animationsDisabled } from '../../animPref';
 
-export function RotatingWord({
-  words,
-  interval = 3_000,
-  fade = false,
-}: {
-  words: ReactNode[];
-  interval?: number;
-  fade?: boolean;
-}): ReactNode {
+export function RotatingWord({ words }: { words: ReactNode[] }): ReactNode {
   const [i, setI] = useState(0);
   const [frozen, setFrozen] = useState(false);
 
@@ -24,11 +16,11 @@ export function RotatingWord({
 
   useEffect(() => {
     if (frozen) return; // hold on the current word while animations are off
-    const id = setInterval(() => setI((n) => (n + 1) % words.length), interval);
+    const id = setInterval(() => setI((n) => (n + 1) % words.length), 3_000);
     return () => clearInterval(id);
-  }, [words.length, interval, frozen]);
+  }, [words.length, frozen]);
   return (
-    <span className={`${styles.rotate}${fade ? ` ${styles.fade}` : ''}`}>
+    <span className={styles.rotate}>
       {words.map((w, idx) => (
         <span
           key={idx}
