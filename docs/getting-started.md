@@ -14,7 +14,7 @@ release** (easiest) or **build from source**.
 ### Option A — Packaged release (recommended)
 
 Download the build for your OS from the
-[project releases](https://github.com/lukasMega/DeckBridge), unzip, and run. The release
+[project releases](https://github.com/lukasMega/DeckBridge/releases), unzip, and run. The release
 is self-contained — the txiki.js runtime and the native libraries (`libhidapi`,
 `libdeckbridge_native`) are embedded and auto-extract on first run. **No Node.js, no extra
 installs.**
@@ -41,7 +41,9 @@ mise run compile    # produce a standalone ./deckbridge binary
 ```
 
 The txiki.js runtime is fetched automatically by mise — no C/C++ toolchain needed for
-the common path.
+the common path. That's true on macOS and Windows only; on Linux there's no prebuilt
+runtime yet, so mise builds it from source, which needs a C/C++ toolchain (cmake, make,
+libffi).
 
 ## 2. Plug in your deck
 
@@ -58,7 +60,7 @@ Start DeckBridge. It then:
 - listens on TCP **5343 / 5344** (CORA protocol),
 - serves a web UI at **http://localhost:3000**.
 
-In installer builds the tray icon shows status at a glance:
+In packaged releases (installers and release zips) the tray icon shows status at a glance:
 
 |                   Tray icon                    | State      | Meaning                                              |
 |:----------------------------------------------:|------------|------------------------------------------------------|
@@ -85,5 +87,7 @@ discovers DeckBridge like real Elgato hardware.
   retries every 2 s.
 - **libhidapi missing (source build only)** — install it as in
   [Build from source](#option-b--build-from-source).
+- **Permission denied opening the deck (Linux)** — add a udev rule; see
+  [Permissions](./features.md#permissions).
 - **Restrict network access** — set `DECKBRIDGE_BIND=127.0.0.1`; see
   [Network ports](./features.md#network-ports).

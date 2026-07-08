@@ -4,9 +4,6 @@ DeckBridge wires together prior open-source work — nothing here was reverse-en
 from scratch. The USB HID framing and the Elgato CORA network protocol both come from the
 projects below. This page credits them and points to where each one helped.
 
-The matching source lives in the repo under `reference-elgato/` (CORA / Elgato side) and
-`reference-other/` (Mirabox / Ajazz side).
-
 ---
 
 ## Elgato CORA protocol & Stream Deck

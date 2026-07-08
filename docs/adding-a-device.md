@@ -17,13 +17,19 @@ byte framing, or a fundamentally different driver).
 USB device
   └─ libhidapi (via FFI, worker thread)
        └─ Driver class  ←  implements DeviceDriver (EventEmitter)
-            ├─ emits 'key'        → driver-manager → CORA child server → Elgato software
-            ├─ receives sendImage → translate key index → hid_write
+            ├─ emits 'key' (worker) → postMessage → WorkerHidDriver (main thread)
+            │    → driver-manager → CORA child server → Elgato software
+            ├─ receives sendImage(deviceKeyIndex, nativeBytes) → hid_write
             └─ receives setBrightness / clearKey
-                        │
-            image-pipeline.ts (main thread)
-              ├─ routes CORA JPEG → deckbridge-native cdylib (in-process FFI: resize / rotate / flip)
-              └─ calls driver.sendImage(deviceKeyIndex, nativeBytes)
+
+image-pipeline.ts (main thread) — on each CORA image:
+  ├─ pushes the CORA bytes to the WebUI (base64 over WebSocket), immediately
+  └─ WorkerHidDriver.renderCoraImage(keyIndex, data, format) → postMessage → worker
+
+image-render.ts (worker thread) — on each forwarded image:
+  ├─ transforms via the deckbridge-native cdylib (in-process FFI: resize / rotate / flip) + LRU cache
+  ├─ remaps CORA key index → device wire key index
+  └─ calls driver.sendImage(deviceKeyIndex, nativeBytes)
 ```
 
 Full image-pipeline diagram (threads, cache, transform): see
@@ -181,6 +187,13 @@ export const ACME_X5_MODEL: DeviceModel = {
 | `colorMode` | RGB vs BGR byte order | ⚠️ **Not implemented for JPEG** (see "Color order" below). For `bmp` the byte order is implied by the format, not this field. |
 | `maxBytes` | JPEG size cap (0 = none) | Match what the official client sends, or 0 for uncapped |
 | `quality` | JPEG quality 0–1 | Start at 0.95; reduce if bandwidth is tight |
+| `crop` | Optional. Pixels trimmed from every side of the source image before rotate/flip/resize (or pad) — `0`/undefined = none. Ignored when it would leave a non-positive dimension. | Needed if the source has a dead border — e.g. the K1 Pro is fed an 80×80 Mini BMP and uses `crop: 6` to cut the outer edge before its 64×64 resize |
+| `resizeFilter` | `'triangle'` (default) \| `'nearest'` \| `'lanczos3'` — the resize filter used for `resizeMode: 'resize'` | `'lanczos3'` for quality up/downscales (Mirabox 293: 72→112 upscale; K1 Pro: 68→64) |
+| `resizeMode` | `'resize'` (default — interpolate to `width`×`height`) or `'pad'` (keep source pixels 1:1, centre them top-left-biased in the canvas, fill the border per `padFill`; falls back to `'resize'` if the source is larger than the canvas) | Use `'pad'` when the device's native key size is larger than the CORA source and you don't want upscale blur — e.g. the 293S pads 72→85 |
+| `padFill` | Border fill for `resizeMode: 'pad'`: `'black'` \| `'average'` (mean source colour) \| `'edge'` (default — clamp/replicate the nearest source pixel) | Ignored when `resizeMode` isn't `'pad'` |
+| `blur` | Optional. Gaussian blur sigma applied before JPEG/BMP encode (undefined/`0` = none) | Rarely needed; leave unset unless the source needs softening |
+| `sharpen` | Optional. Unsharp-mask sigma applied after resize (undefined/`0` = none); recovers crispness lost to upscaling | Keep modest (~0.4–0.8) — higher values add high-frequency detail and grow the JPEG. The 293S leaves this at `0` (no upscale, so moot) |
+| `bmpPpm` | BMP output only. Pixels-per-meter written into the BMP header — cosmetic metadata, does not affect pixel data | `2835` for the Mini; irrelevant unless `format: 'bmp'` |
 | `transform` | `'passthrough'` (forward CORA JPEG unchanged) or `'sidecar'` (resize/rotate/flip via Rust) | `'passthrough'` only valid when `rotate: 0`, no flips, no `maxBytes` cap, and the device consumes CORA-native resolution (gen2-style). Everything else needs `'sidecar'`. |
 
 ### Color order is not implemented (known limitation)
@@ -363,8 +376,16 @@ export const PROTOCOL_STRATEGY: Partial<Record<DeviceProtocol, ProtocolStrategy>
 If the device has a fundamentally different communication pattern (different handshake,
 heartbeat, multi-step init, bulk transfer instead of interrupt, etc.) write a standalone
 driver class, set `driverKind: 'custom'`, and add it to the factory in `hid-worker.ts`
-(Step 5). Use `MiraboxDriver` as the reference — it is the most feature-complete example
-of a custom driver, and reads its wire framing from `model.wire` rather than hardcoding it.
+(Step 5). Use `MiraboxDriver` (`ts/src/mirabox.ts`) as the reference — it is the most
+feature-complete example of a custom driver, and reads its wire framing from `model.wire`
+rather than hardcoding it. Prefer **extending `HidDeviceBase`**
+(`ts/src/devices/hid-connection.ts`) rather than writing the hidapi plumbing standalone —
+it's the shared base class both `MiraboxDriver` and `ElgatoHidDriver` extend, and it
+already owns the lib singleton, device handle, polling read loop, and teardown (see its
+`_acquireLib`/`_startReadLoop`/`_closeDevice`/`_teardownLib`/`_releaseLibAfterFailedOpen`).
+The sample below is written standalone (no base class) purely to show the minimum
+`DeviceDriver` surface explicitly — for a real Path C driver, extend `HidDeviceBase`
+instead of reimplementing this.
 
 Minimum interface (must match `DeviceDriver` in `devices/driver.ts`):
 
@@ -377,7 +398,8 @@ import type { DeviceModel } from '../driver.js';
 // Module-level singleton — loaded once per worker thread, reused across reconnects.
 // hid_init() registers IOKit callbacks that reference library code; letting the lib
 // get dlclose()'d (via GC or a premature lib.close()) while they're live causes
-// SIGBUS on the next dlopen(). Both real drivers do this — see the top of mirabox.ts.
+// SIGBUS on the next dlopen(). Both real drivers get this for free by extending
+// HidDeviceBase, which owns this singleton — see devices/hid-connection.ts.
 let _workerHidLib: ReturnType<typeof loadHidapi> | null = null;
 
 export class AcmeDriver extends EventEmitter {
@@ -409,9 +431,18 @@ export class AcmeDriver extends EventEmitter {
       }
     }
     if (!dev || isNullPtr(dev)) {
-      // Detach but do NOT hid_exit()/close the lib here: on macOS that crashes
-      // after a failed open. Leave _workerHidLib loaded for the next attempt.
+      // Release after a FAILED open: call hid_exit() (unschedules the IOHIDManager
+      // so a later worker.terminate() won't SIGBUS) but deliberately skip dlclose() —
+      // dlclose() churn on macOS HID libs is itself SIGBUS-prone. Null the singleton
+      // so the next open() attempt reloads fresh. See HidDeviceBase
+      // ._releaseLibAfterFailedOpen (devices/hid-connection.ts) for the reference.
+      try {
+        hid.hid_exit();
+      } catch {
+        /* best-effort: terminate-safety is the goal, not a clean exit code */
+      }
       this.hidLib = null;
+      _workerHidLib = null;
       throw new Error(`${this.model.name}: device not found`);
     }
 
@@ -505,7 +536,8 @@ export class AcmeDriver extends EventEmitter {
 - `hid_write` requires `report-ID byte + payload`. Prepend `0x00` if the device uses report ID 0.
 - `hid_read_timeout` with ≤5ms is safe on the single-threaded worker event loop.
 - Always emit `'error'` then `'disconnect'` on read failure so `driver-manager` can reconnect.
-- Never call `hid_exit()` + `dlclose()` after a failed open (macOS IOKit bug — see comment in `mirabox.ts`).
+- After a failed open, call `hid_exit()` but never `dlclose()` (macOS IOKit bug — see
+  `_releaseLibAfterFailedOpen` in `devices/hid-connection.ts`).
 - Load `hidapi` through a module-level `_workerHidLib` singleton (as the sample and both real drivers do) so a GC or premature `dlclose()` can't unload it mid-callback. Only clear it in `_cleanup()` after a successful open was closed.
 - If the device needs a heartbeat, use `setInterval` and cancel it in `_cleanup`.
 - Read byte-level framing constants (packet size, heartbeat interval, quirks) from
@@ -525,6 +557,7 @@ export const DEVICE_MODELS: DeviceModel[] = [
   MINI_MODEL,
   MIRABOX_293_MODEL,
   MIRABOX_293S_MODEL,
+  MIRABOX_K1PRO_MODEL,
   ACME_X5_MODEL,   // ← add here
 ];
 ```

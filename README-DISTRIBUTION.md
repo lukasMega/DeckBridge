@@ -190,9 +190,8 @@ The menu offers **Open Web UI**, **Check Requirements** (opens http://localhost:
 ### libhidapi not found
 
 ```
-[mirabox] hidapi not found (tried: /opt/homebrew/lib/libhidapi.dylib, ...).
-          Install with: brew install hidapi  (macOS)
-                    or: sudo apt install libhidapi-dev  (Linux)
+hidapi not found (tried: /opt/homebrew/lib/libhidapi.dylib, /usr/local/lib/libhidapi.dylib, ...).
+Install with: brew install hidapi (macOS) | sudo apt install libhidapi-dev (Linux)
 ```
 
 The app keeps running and retrying every few seconds. Install libhidapi and the device connects automatically — no restart needed.
@@ -202,18 +201,18 @@ The app keeps running and retrying every few seconds. Install libhidapi and the 
 ### USB device not found (Mirabox/Ajazz not plugged in)
 
 ```
-[mirabox] device not found - retrying in 3s
+[hid] no device found — retrying in 2s
 ```
 
-Normal when the device is unplugged. The app auto-reconnects within 3 seconds of plugging in. No restart needed.
+Normal when the device is unplugged. The app auto-reconnects within 2 seconds of plugging in. No restart needed.
 
 ---
 
 ### mDNS not working on Linux (avahi missing)
 
 ```
-[mdns] mDNS subprocess failed to start (avahi-publish-service: command not found);
-       running without mDNS discovery
+[elgato] mDNS subprocess failed to start (spawn avahi-publish-service ENOENT);
+         running without mDNS discovery
 ```
 
 The app keeps running without mDNS. Either install avahi (`sudo apt install avahi-daemon avahi-utils`) or manually enter your machine's IP and port 5343 in Elgato software.
@@ -223,7 +222,7 @@ The app keeps running without mDNS. Either install avahi (`sudo apt install avah
 ### deckbridge-native library missing or fails to load
 
 ```
-deckbridge: failed to extract/load libdeckbridge_native at /path/to/cache/libdeckbridge_native.dylib
+[native-libs] extraction failed: <underlying filesystem error, e.g. permission denied>
 ```
 
 The native libraries are embedded in the binary and extracted to a per-version cache directory at

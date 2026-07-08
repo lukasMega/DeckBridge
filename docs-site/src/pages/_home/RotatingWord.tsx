@@ -1,18 +1,10 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import styles from '../index.module.css';
-import { ANIM_EVENT, animationsDisabled } from '../../animPref';
+import { useAnimationsDisabled } from '../../useAnimationsDisabled';
 
 export function RotatingWord({ words }: { words: ReactNode[] }): ReactNode {
   const [i, setI] = useState(0);
-  const [frozen, setFrozen] = useState(false);
-
-  // Track the global animations-disabled preference (toggled in src/theme/Root).
-  useEffect(() => {
-    const sync = () => setFrozen(animationsDisabled());
-    sync();
-    window.addEventListener(ANIM_EVENT, sync);
-    return () => window.removeEventListener(ANIM_EVENT, sync);
-  }, []);
+  const frozen = useAnimationsDisabled();
 
   useEffect(() => {
     if (frozen) return; // hold on the current word while animations are off

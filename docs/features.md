@@ -13,9 +13,9 @@ WiFi.
 ## Use a budget deck with the Elgato app
 
 DeckBridge lets the **official Elgato Stream Deck app** drive cheap, non-Elgato decks —
-Mirabox, Ajazz, and similar 15-key (3×5) boards — on the same PC that runs the app. The
-app sees a regular **Network device** at `localhost`; the deck behaves like Elgato
-hardware.
+Mirabox, Ajazz, and similar boards, from 6-key minis to 15-key (3×5) decks — on the same
+PC that runs the app. The app sees a regular **Network device** at `localhost`; the deck
+behaves like Elgato hardware.
 
 <div class="db-stepper" role="group" aria-label="Pairing a budget Stream Deck with DeckBridge in four steps">
 <input type="radio" name="db-step" id="db-s1" />
@@ -90,8 +90,9 @@ hardware.
 - **Non-blocking by design** — USB HID and the 50–200 ms image transforms run on a
   separate worker thread, so the network ACK loop and web UI never stall.
 - **Live web UI** — `http://localhost:3000` shows the key grid and a log feed in real time.
-- **System tray + diagnostics** — installer builds add a status tray icon
-  ([states](./getting-started.md#3-run-it)) and a `/requirements` self-check page.
+- **System tray + diagnostics** — packaged releases (installers and release zips) include
+  a status tray icon ([states](./getting-started.md#3-run-it)) and a `/requirements`
+  self-check page.
 - **Standalone binary** — one **&lt;5 MB** file built on txiki.js; no Node.js.
 
 ## Use cases
@@ -130,6 +131,19 @@ Each permission is requested on first use; no admin / root rights are required.
 | **Input Monitoring** | macOS | Reading HID reports (key presses) from the deck. Grant it to the app or terminal running DeckBridge, then restart it. |
 | **Local Network** | macOS 15+ | Advertising over Bonjour / mDNS and serving the CORA ports on the LAN. macOS may prompt on first run. |
 | **Firewall allow** | macOS / Windows | Inbound TCP on 5343 / 5344 so the Elgato app can connect. Allow it if your firewall prompts. |
+| **udev rule** | Linux | Opening the deck's `hidraw` device as a non-root user needs a udev rule; without it, DeckBridge fails with `Permission denied`. |
+
+On Linux, add a udev rule (once), then unplug/replug the device:
+
+```bash
+sudo tee /etc/udev/rules.d/99-mirabox.rules <<'EOF'
+SUBSYSTEM=="hidraw", ATTRS{idVendor}=="6603", MODE="0666"
+SUBSYSTEM=="hidraw", ATTRS{idVendor}=="5548", MODE="0666"
+EOF
+sudo udevadm control --reload-rules && sudo udevadm trigger
+```
+
+(`6603` = Mirabox 293V3 / K1 Pro, `5548` = Mirabox 293S.)
 
 ## Requirements
 
@@ -202,3 +216,6 @@ UI is always localhost-only.
 | `DECKBRIDGE_MOCK` | Run with a mock device (no hardware) |
 | `DECKBRIDGE_DUMP_DIR` | Write each transformed device image here (debug) |
 | `DECKBRIDGE_RAW_DUMP_DIR` | Write paired raw + transformed images here (debug) |
+
+Console/web UI log verbosity is fixed at **build time** (`LOG_LEVEL`, default `info`) —
+there is no runtime environment variable to change it after the binary is built.

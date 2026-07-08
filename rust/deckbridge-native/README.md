@@ -22,9 +22,10 @@ env var is otherwise an optional override for dev/power-user use.
 ```bash
 cd rust/deckbridge-native
 cargo build --release
-# Output: target/release/libdeckbridge_native.dylib  (macOS)
-#         target/release/libdeckbridge_native.so      (Linux)
-#         target/release/deckbridge_native.dll        (Windows)
+# Cargo workspace (rust/Cargo.toml) — output lands in the shared workspace target dir:
+# Output: ../target/release/libdeckbridge_native.dylib  (macOS)
+#         ../target/release/libdeckbridge_native.so      (Linux)
+#         ../target/release/deckbridge_native.dll        (Windows)
 ```
 
 Default build (no `usb` feature) is pure Rust — no C/system library dependencies. Cross-compiles
@@ -45,8 +46,8 @@ single interleaved scan — the only format every supported device decodes (K1 P
   (= `cargo build --release --no-default-features --features jpeg-fork`).
 
 Upstream's `set_optimized_huffman_tables(true)` must never be used directly: it emits one scan per
-component, which the K1 Pro firmware renders as chroma garbage. See
-`.claude/plans/K1Pro/jpeg-artifact-findings.md`.
+component, which the K1 Pro firmware renders as chroma garbage. See internal probe notes
+(K1 Pro JPEG artifact investigation).
 
 ## Exported C function: image_proc_transform
 
@@ -144,9 +145,9 @@ parameters are unaffected and work normally.
 If a future use-case requires EXIF auto-rotation, re-add `kamadak-exif = "0.5"` to `Cargo.toml`
 and restore the `read_exif_orientation` + orientation-match logic in `lib.rs`.
 
-## Exported C function (usb feature): mirabox_hid_find_path
+## Exported C functions (usb feature): mirabox_hid_find_path, mirabox_hid_present
 
-Behind the `usb` Cargo feature, the crate also exports HID device-path enumeration (source in
+Behind the `usb` Cargo feature, the crate also exports HID device enumeration (source in
 `src/hid.rs`):
 
 ```c
@@ -167,7 +168,18 @@ the data interface. `mirabox_hid_find_path` wraps the full `hid_enumerate()` loo
 TypeScript side can filter by `usage_page` and `usage` before opening, then opens by path via
 `hid_open_path()`.
 
-`ts/src/ffi/hidapi.ts` (`loadHidEnum()` / `findHidPath()`) loads this symbol from the same
-`DECKBRIDGE_NATIVE_LIB`. If the lib is unavailable, `findHidPath()` returns `null` and the caller falls
-back to plain `hid_open(VID, PID)` with retries. See `rust/README.md` for the full open-fallback
-flow.
+```c
+int32_t mirabox_hid_present(uint16_t vid, uint16_t pid);
+// Returns 1 if a HID interface matching vid + (pid==0 or pid) is enumerated, 0 otherwise.
+// Enumeration only — never opens the device.
+```
+
+`mirabox_hid_present` checks device presence via `hid_enumerate()` without ever calling
+`hid_open()` — used by the host's probe to pick the connected model before spawning a worker,
+so it never opens an absent device (which corrupts IOKit state on macOS) or loads hidapi in a
+throwaway worker (whose teardown SIGBUSes while IOKit run-loop callbacks are live).
+
+`ts/src/ffi/hidapi.ts` (`loadHidEnum()` / `findHidPath()` / `hidDevicePresent()`) loads both
+symbols from the same `DECKBRIDGE_NATIVE_LIB`. If the lib is unavailable, `findHidPath()` returns
+`null` and the caller falls back to plain `hid_open(VID, PID)` — one attempt per PID, off macOS
+only. See `rust/README.md` for the full open-fallback flow.

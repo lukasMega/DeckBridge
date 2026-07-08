@@ -1,13 +1,13 @@
 # HID via FFI: why `libhidapi` is loaded from Homebrew
 
-Documents `ts/src/ffi/hidapi.ts` — why the relay reaches out to a system-installed
+Documents `ts/src/ffi/hidapi.ts` — why DeckBridge reaches out to a system-installed
 `libhidapi` (the Homebrew `dylib` on macOS) instead of bundling HID support, and how
 that loading works at runtime.
 
 ## TL;DR
 
 txiki.js (QuickJS-ng + libuv + libffi) has **no built-in USB/HID support**. To talk to a
-USB Stream Deck the relay binds to the OS's `libhidapi` shared library at runtime via
+USB Stream Deck DeckBridge binds to the OS's `libhidapi` shared library at runtime via
 **FFI (`dlopen`)**. The Homebrew paths (`/opt/homebrew/lib/libhidapi.dylib` on Apple
 Silicon, `/usr/local/lib/libhidapi.dylib` on Intel) are just well-known **search
 candidates** in a fallback chain, not a Homebrew dependency — hence the install hint
@@ -66,7 +66,7 @@ Do not conflate the two `dlopen`s in this file — they serve different roles:
 | Library | Loaded by | Source | Role |
 |---------|-----------|--------|------|
 | **`libhidapi`** | `loadHidapi()` | OS / Homebrew (or bundled `HIDAPI_LIB`) | The real HID driver: open device, read/write reports. Drives the Stream Deck. |
-| **`deckbridge-native`** (HID export) | `loadHidEnum()` | Project's own Rust cdylib via `DECKBRIDGE_NATIVE_LIB` | Device **enumeration only** — `mirabox_hid_find_path(vid, usagePage, usage)` returns a single device-path string. |
+| **`deckbridge-native`** (HID export) | `loadHidEnum()` | Project's own Rust cdylib via `DECKBRIDGE_NATIVE_LIB` | Device **enumeration only** — `mirabox_hid_find_path(vid, pid, usagePage, usage)` returns a single device-path string (`pid=0` matches any PID). |
 
 ### Why a Rust helper just for enumeration
 
@@ -77,9 +77,13 @@ which the driver opens with `hid_open_path()`. Opening by path avoids claiming
 system-owned interfaces on macOS (the OS typically grants the first `hid_open(VID,PID)`
 caller exclusive access).
 
-If `DECKBRIDGE_NATIVE_LIB` is unset or fails to load, `findHidPath()` returns `null` and the driver
-falls straight through to plain `hid_open(VID, PID)` with retries. Only the Mirabox model
-sets `usagePage`/`usage`; Elgato models skip path-based open entirely.
+If `DECKBRIDGE_NATIVE_LIB` is unset or fails to load, `findHidPath()` returns `null`. Off
+macOS, the driver then falls through to plain `hid_open(VID, PID)` — one attempt per PID,
+no retry loop. On macOS this fallback is skipped entirely: there, `hid_open(VID, PID)`
+opens the device's first IOKit interface, and a permission-denied open on it SIGBUSes the
+whole process; reconnect retries instead happen at a higher level, in `driver-manager`.
+Three Mirabox models set `usagePage`/`usage` (293V3, 293S, K1 Pro — all `0xffa0`/`1`);
+Elgato models skip path-based open entirely.
 
 ## FFI type signatures
 
@@ -95,9 +99,10 @@ hid_get_feature_report(pointer dev, buffer, size_t len)          → int
 hid_close(pointer dev)             → void
 hid_error(pointer dev)             → string
 
-// deckbridge-native HID export:
-mirabox_hid_find_path(uint16 vid, uint16 usagePage, uint16 usage,
-                      buffer out, size_t bufLen)   → int  (1=found, 0=not)
+// deckbridge-native HID exports:
+mirabox_hid_find_path(uint16 vid, uint16 pid, uint16 usagePage, uint16 usage,
+                      buffer out, size_t bufLen)   → int  (1=found, 0=not; pid=0 matches any PID)
+mirabox_hid_present(uint16 vid, uint16 pid)        → int  (1=found, 0=not; presence via enumeration, never opens)
 ```
 
 `isNullPtr()` guards returns from `hid_open` / `hid_open_path` — an FFI pointer that
@@ -114,6 +119,6 @@ mirabox_hid_find_path(uint16 vid, uint16 usagePage, uint16 usage,
 
 ## Related docs
 
-- `ARCHITECTURE.md` → **libhidapi loading** / **HID path enumeration** sections (the canonical short reference).
+- The development repo's `ARCHITECTURE.md` → **libhidapi loading** / **HID path enumeration** sections (the canonical reference; not part of this public docs site).
 - `rust/README.md` → how `DECKBRIDGE_NATIVE_LIB` is wired and the open-fallback flow.
 - [Adding a Device](./adding-a-device.md) → using `loadHidapi` / `findHidPath` from a new device driver.

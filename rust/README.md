@@ -14,16 +14,19 @@ Three Rust crates that extend the TypeScript runtime with OS-level capabilities 
 
 A single cdylib loaded in-process over txiki.js FFI (it replaced the former subprocess sidecar
 and its TCP/JSON protocol, and merged what used to be two separate cdylibs — `image-proc` and
-`hid-enum` — into one). It exports two C-ABI symbols:
+`hid-enum` — into one). It exports three C-ABI symbols:
 
 - `image_proc_transform()` — decode JPEG/BMP → resize (`triangle` or `nearest`) → rotate/flip →
   re-encode as JPEG (iterative quality step-down to fit `max_bytes`) or BMP. See
   `rust/deckbridge-native/README.md` for the full FFI contract.
 - `mirabox_hid_find_path()` (behind the `usb` Cargo feature) — enumerate HID devices by
   usage page/usage and return a device path.
+- `mirabox_hid_present()` (behind the `usb` Cargo feature) — enumerate HID devices by VID/PID
+  to check presence, without opening the device. Used by the TS side (`ts/src/ffi/hidapi.ts`)
+  to probe which model is connected.
 
 ```
-DECKBRIDGE_NATIVE_LIB = "{{config_root}}/rust/deckbridge-native/target/release/libdeckbridge_native.dylib"
+DECKBRIDGE_NATIVE_LIB = "{{config_root}}/rust/target/release/libdeckbridge_native.dylib"
 ```
 
 Build via `mise run deckbridge-native` (expands to `cargo build --release` inside `rust/deckbridge-native/`).
@@ -72,7 +75,7 @@ mirabox.ts  MiraboxDriver.open()
   └─ hid_open_path(path)          ← opens the correct interface
 ```
 
-If `DECKBRIDGE_NATIVE_LIB` is unset or the dylib fails to load, `findHidPath` returns `null` and `MiraboxDriver` falls back to `hid_open(VID, PID)` with retries.
+If `DECKBRIDGE_NATIVE_LIB` is unset or the dylib fails to load, `findHidPath` returns `null` and `MiraboxDriver` falls back to `hid_open(VID, PID)` — one attempt per PID, off macOS only (see below).
 
 > Since the worker-thread refactor, `MiraboxDriver` — and therefore this whole `findHidPath` → `hid_open_path` call path, plus the read/write loops — runs inside the **USB worker thread** (`hid-worker.ts`), not on the main thread. The dylib is `dlopen`ed from within the worker, which has its own `tjs.env` access.
 
@@ -84,10 +87,12 @@ flowchart TD
     B -->|yes| C[mirabox_hid_find_path<br/>filter by usage_page+usage]
     C --> D{path found?}
     D -->|yes| E[hid_open_path]
-    B -->|no| F[hid_open VID+PID<br/>with 5 retries × 150 ms]
+    B -->|no| F{macOS?}
     D -->|no| F
+    F -->|no| H[hid_open VID+PID<br/>one attempt per PID]
+    F -->|yes, skip fallback| I[fail — scheduleReconnect<br/>retries on a fresh worker every 2s]
     E --> G[device handle]
-    F --> G
+    H --> G
 ```
 
 ---
@@ -136,7 +141,7 @@ Release binary is ~806 KB (stripped, LTO, `opt-level = "z"`).
 - `jpeg-upstream` (default) — crates.io `jpeg-encoder 0.6.1`, standard Huffman tables, single interleaved baseline scan. Device-safe everywhere.
 - `jpeg-fork` — the vendored `rust/jpeg-encoder` fork, which keeps **optimized Huffman tables in a single interleaved scan** (~20 % smaller files at identical pixels; upstream switches to one scan per component when optimizing, which the K1 Pro firmware cannot decode — probe round 5).
 
-Build the fork variant with `JPEG_FORK=1 mise run build` (expands to `cargo build --release --no-default-features --features jpeg-fork`). Both deps expose lib name `jpeg_encoder`; `compile_error!` guards enforce the choice. Background: `.claude/plans/K1Pro/jpeg-artifact-findings.md`.
+Build the fork variant with `JPEG_FORK=1 mise run build` (expands to `cargo build --release --no-default-features --features jpeg-fork`). Both deps expose lib name `jpeg_encoder`; `compile_error!` guards enforce the choice. Background: internal probe notes (K1 Pro JPEG artifact investigation, round 5).
 
 ---
 
