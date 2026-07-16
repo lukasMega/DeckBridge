@@ -115,6 +115,10 @@ const config: Config = {
           label: 'GitHub',
           href: 'https://github.com/lukasMega/DeckBridge',
         },
+        {
+          label: 'Privacy',
+          to: '/privacy',
+        },
       ],
       copyright: `deckbridge — Stream Deck relay, no Node runtime required`,
     },

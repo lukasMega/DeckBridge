@@ -17,6 +17,7 @@ const sidebars: SidebarsConfig = {
     'introduction',
     'getting-started',
     'features',
+    'privacy',
   ],
 
   // Technical Details — reached via its own navbar item (docusaurus.config.ts)
