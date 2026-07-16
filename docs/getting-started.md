@@ -73,6 +73,11 @@ In packaged releases (installers and release zips) the tray icon shows status at
 Open the Elgato Stream Deck app (or Companion) on any machine on the **same LAN**. It
 discovers DeckBridge like real Elgato hardware.
 
+Connected a **second deck** (different model)? It appears as its **own** network device
+with its **own port** (5345, 5347, …) — pair each one separately. The web UI shows a
+card per deck with the exact address and port to enter; see
+[Multiple decks](./features.md#multiple-decks).
+
 ## Verify your setup
 
 - Open **http://localhost:3000** for the live key grid and log feed.

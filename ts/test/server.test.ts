@@ -1,6 +1,7 @@
 import assert from 'tjs:assert';
 import { ElgatoServer, ElgatoChildServer } from '../src/elgato.js';
 import { ELGATO_VID, ELGATO_PKT_SIZE_RX, NETWORK_DOCK_PID } from '../src/types.js';
+import type { DockStatus } from '../src/types.js';
 import { MK2_CHILD_GEOMETRY, MINI_CHILD_GEOMETRY } from '../src/capabilities.js';
 import {
   CORA_MAGIC,
@@ -347,6 +348,18 @@ try {
     childServer.setChildGeometry(MK2_CHILD_GEOMETRY);
   });
 
+  await runTest('hasClient reflects child client attach/detach', async () => {
+    assert.equal(childServer.hasClient, false);
+
+    const f = await connect(TEST_CHILD_PORT);
+    await f.recv(); // drain keepalive
+
+    assert.equal(childServer.hasClient, true);
+
+    await closeAndWait(childServer, f);
+    assert.equal(childServer.hasClient, false);
+  });
+
   await runTest('GET_REPORT 0x0B returns device info', async () => {
     const f = await connect(TEST_CHILD_PORT);
     await f.recv(); // drain keepalive
@@ -426,6 +439,51 @@ console.log('\nelgato child server: takeover race (E3)');
     await takeoverChildServer.stop();
   }
 }
+
+// ── Multi-device identity plumbing ────────────────────────────────────────────
+
+console.log('\nelgato server: multi-device identity');
+
+await runTest('two instances on distinct port pairs start and stop cleanly', async () => {
+  const a = new ElgatoServer(15351, true, { childPort: 15352 });
+  const b = new ElgatoServer(15353, true, { childPort: 15354 });
+  try {
+    await a.start();
+    await b.start();
+    assert.equal(a.childPort, 15352);
+    assert.equal(b.childPort, 15354);
+  } finally {
+    await a.stop();
+    await b.stop();
+  }
+});
+
+await runTest('opts.childPort is written into capabilities packet at offset 126', async () => {
+  const CUSTOM_CHILD_PORT = 25344;
+  const s = new ElgatoServer(15355, true, { childPort: CUSTOM_CHILD_PORT });
+  s.keepaliveIntervalMs = 100;
+  await s.start();
+  try {
+    const f = await connect(15355);
+    await f.recv(); // drain keepalive
+    await sendPkt(f, 0x03, 0x1c);
+    let frame = await f.recv();
+    while (frame.payload[0] === 0x01 && frame.payload[1] === 0x0a) frame = await f.recv();
+    await closeAndWait(s, f);
+    assert.equal(frame.payload.readUInt16LE(126), CUSTOM_CHILD_PORT);
+  } finally {
+    await s.stop();
+  }
+});
+
+await runTest('opts.dockSerial and opts.childSerial land in deviceConfig', () => {
+  const s = new ElgatoServer(15357, true, {
+    dockSerial: 'DOCK123ABCDEF',
+    childSerial: 'CHILD456ABCDEF',
+  });
+  assert.equal(s.deviceConfig.serialNumber, 'DOCK123ABCDEF');
+  assert.equal(s.deviceConfig.childSerialNumber, 'CHILD456ABCDEF');
+});
 
 // ── startCoraWithRetry (H3) ──────────────────────────────────────────────────
 
@@ -546,8 +604,47 @@ import { WebUIServer } from '../src/web/server/index.js';
 import { startCoraWithRetry, type CoraStartable } from '../src/cora-startup.js';
 
 const WEBUI_TEST_PORT = 13001;
-const webui = new WebUIServer(WEBUI_TEST_PORT);
+// Isolate settings.json writes from the real user cache dir — brightness
+// mutations now auto-save to disk (see settings-store.ts).
+const WEBUI_TEST_SETTINGS_ROOT = `${tjs.tmpDir}/server-test-settings-${tjs.pid}`;
+const webui = new WebUIServer(WEBUI_TEST_PORT, [], 'real', WEBUI_TEST_SETTINGS_ROOT);
 await webui.start();
+
+function fakeMultiDockStatus(index: number): DockStatus {
+  return {
+    index,
+    modelId: 'mk2',
+    modelName: 'Stream Deck MK.2',
+    keyCount: 15,
+    columns: 5,
+    rows: 3,
+    primaryPort: 5343 + index * 2,
+    primaryConnected: true,
+    elgatoConnected: true,
+    brightness: 100,
+    dockFirmwareVersion: '1.01.016',
+    childFirmwareVersion: '1.01.000',
+    serialNumber: `A7FZA519${index}ILSAA`,
+    childSerialNumber: `A7FZA519${index}ILSNQ`,
+    productId: 0x0080,
+    macAddress: '02:00:00:00:00:01',
+    mdnsServiceName: 'Network Stream Deck',
+    deviceKey: `fake-device-${index}`,
+  };
+}
+
+// brightness is per-device now: snapshot().brightness reflects the SELECTED
+// dock's live brightness. Simulate DriverManager — apply a setBrightness event
+// to the dock it targets and re-push docks, the same path production uses.
+let simDocks: DockStatus[] = [];
+function pushSimDocks(docks: DockStatus[]): void {
+  simDocks = docks;
+  webui.notifyDocks(simDocks);
+}
+webui.on('setBrightness', (level: number, dock = 0) => {
+  simDocks = simDocks.map((d) => (d.index === dock ? { ...d, brightness: level } : d));
+  webui.notifyDocks(simDocks);
+});
 
 console.log('\nwebui: POST /api/brightness');
 
@@ -555,6 +652,7 @@ try {
   const webuiBase = `http://127.0.0.1:${webui.port}`;
 
   await runTest('valid level → 200 ok, brightness reflected in snapshot', async () => {
+    pushSimDocks([{ ...fakeMultiDockStatus(0), brightness: 100 }]);
     const r = await fetch(`${webuiBase}/api/brightness`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -613,6 +711,40 @@ try {
     });
     assert.equal(r.status, 400);
   });
+
+  await runTest('brightness for the selected dock is reflected in snapshot', async () => {
+    pushSimDocks([
+      { ...fakeMultiDockStatus(0), brightness: 22 },
+      { ...fakeMultiDockStatus(1), brightness: 100 },
+    ]);
+    webui.selectDock(1);
+
+    const r = await fetch(`${webuiBase}/api/brightness`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ level: 65, dock: 1 }),
+    });
+    assert.equal(r.status, 200);
+    assert.equal(webui.snapshot().brightness, 65, 'dock 1 is selected — snapshot follows it');
+  });
+
+  await runTest(
+    "brightness for a non-selected dock does not change the selected dock's reading",
+    async () => {
+      // Still selected on dock 1 (brightness 65) from the previous test.
+      const r = await fetch(`${webuiBase}/api/brightness`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ level: 5, dock: 0 }),
+      });
+      assert.equal(r.status, 200);
+      assert.equal(
+        webui.snapshot().brightness,
+        65,
+        'unrelated dock 0 change must not overwrite the selected dock (1) reading',
+      );
+    },
+  );
 } finally {
   await webui.stop().catch(() => undefined);
 }

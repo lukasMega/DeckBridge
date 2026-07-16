@@ -19,6 +19,8 @@ const config: Config = {
   url: 'https://lukasmega.github.io',
   baseUrl: '/DeckBridge/',
 
+  clientModules: ['./src/analytics.ts'],
+
   // GitHub Pages project site: https://lukasmega.github.io/DeckBridge/
   organizationName: 'lukasMega',
   projectName: 'DeckBridge',

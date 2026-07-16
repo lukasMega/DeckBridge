@@ -1,7 +1,8 @@
 import type { Status, Stats, MockConfig, KeyEvent, ServerLog, CommLog } from './ui-types.js';
 import { error } from './log.js';
-import { applyImage, clearImage, flashKey } from './key-preview.js';
+import { applyImage, clearImage, flashKey, resetPreviews } from './key-preview.js';
 import * as store from './store.js';
+import type { StoreState } from './store.js';
 
 interface ImageEvt {
   mk2Index: number;
@@ -12,7 +13,15 @@ interface ImageEvt {
 
 const handlers: Record<string, (d: unknown) => void> = {
   status: (d) => {
-    store.setStatus(d as Status);
+    const next = d as Status;
+    // Selected preview dock changed: blank the grids + drop cached images; the
+    // server replays the new dock's frames right after this broadcast.
+    const prev = store.getSnapshot().status.selectedDock ?? 0;
+    if ((next.selectedDock ?? 0) !== prev) {
+      resetPreviews();
+      store.patch({ images: {} });
+    }
+    store.setStatus(next);
   },
   image: (d) => {
     const e = d as ImageEvt;
@@ -35,6 +44,9 @@ const handlers: Record<string, (d: unknown) => void> = {
   },
   brightness: (d) => {
     store.setBrightness((d as { level: number }).level);
+  },
+  extraKeys: (d) => {
+    store.patch({ extraKeys: (d as { configs: StoreState['extraKeys'] }).configs });
   },
   keyEvent: (d) => {
     const e = d as KeyEvent;

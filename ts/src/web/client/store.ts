@@ -7,6 +7,8 @@ import type {
   ServerLog,
   CommLog,
   DeviceModel,
+  DeviceIdentity,
+  ExtraKeyCfg,
 } from './ui-types.js';
 
 // Cap constants matching ui-logs.ts / ui-logs.ts KE_MAX
@@ -32,6 +34,9 @@ export interface StoreState {
   resizeEnabled: boolean;
   imageMode: string | null;
   deviceModels: DeviceModel[];
+  deviceIdentity?: DeviceIdentity;
+  /** SELECTED dock's extra-key assignments, keyed by device wire id. */
+  extraKeys: Record<string, ExtraKeyCfg>;
 }
 
 let state: StoreState = {
@@ -47,6 +52,8 @@ let state: StoreState = {
   resizeEnabled: true,
   imageMode: null,
   deviceModels: [],
+  deviceIdentity: undefined,
+  extraKeys: {},
 };
 
 const listeners = new Set<() => void>();

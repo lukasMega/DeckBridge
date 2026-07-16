@@ -4,6 +4,11 @@ export const ELGATO_TCP_PORT = 5343;
 export const ELGATO_PKT_SIZE_RX = 1024;
 export const ELGATO_PKT_SIZE_TX = 512;
 export const ELGATO_CHILD_PORT = 5344;
+// Multi-device: extra docks use a fixed port stride off the primary pair, so
+// session i listens on primary ELGATO_TCP_PORT+2i and child ELGATO_CHILD_PORT+2i.
+export const CORA_PORT_STRIDE = 2;
+// Session 0 (primary singleton) + up to 3 extra docks of distinct models.
+export const MAX_DEVICE_SESSIONS = 4;
 export const ELGATO_KEEPALIVE_MS = 2000;
 export const ELGATO_IMAGE_HEADER_SIZE = 8;
 
@@ -156,6 +161,11 @@ export const REPORT_DEVICE_INFO = 0x0b;
 
 export type KeyState = 'down' | 'up';
 
+// Which CORA client we detected on the current session — 'elgato' and
+// 'bitfocus' are only set once a client-specific query is observed (see
+// elgato-server.ts / elgato-child-server.ts), 'unknown' otherwise.
+export type ClientApp = 'elgato' | 'bitfocus' | 'unknown';
+
 export interface KeyEvent {
   keyIndex: number;
   state: KeyState;
@@ -187,3 +197,112 @@ export interface LogObject {
  *  'resize' / 'pad-black' / 'pad-average' / 'pad-edge' force a fit mode;
  *  null = use the model's own resizeMode/padFill (see DeviceImageSpec). */
 export type ImageModeOverride = 'resize' | 'pad-black' | 'pad-average' | 'pad-edge' | null;
+
+// ── Extra keys (physical keys outside the emulated CORA grid) ──────────────
+// 293S: the 6th column (wire ids 16/17/18) never maps to an MK.2 index, so
+// DeckBridge binds its own actions to it. Config is persisted per device in
+// settings.json (DeviceIdentitySettings.extraKeys, keyed by wire id).
+
+// The extra keys are display-only (293S 6th column has no switches — verified
+// on hardware 2026-07-16), so each is a small server-rendered widget, not an
+// action trigger.
+export const EXTRA_KEY_WIDGETS = [
+  'none',
+  'clock',
+  'date',
+  'text',
+  'weather',
+  'command',
+  'plugin',
+] as const;
+export type ExtraKeyWidget = (typeof EXTRA_KEY_WIDGETS)[number];
+
+/** Cap on the widget param (text content / weather "lat,lon" / shell command /
+ *  plugin file name) and on the plugin per-key argument (pluginArg). */
+export const EXTRA_KEY_PARAM_MAX = 128;
+
+// Plugin widget: user JS run in an isolated Worker (see plugin-host.ts). Poll
+// interval reuses ExtraKeyConfig.intervalMs as an override; the worker enforces
+// the floor and default. Value strings are capped before rendering.
+export const PLUGIN_INTERVAL_DEFAULT_MS = 5 * 1000;
+export const PLUGIN_INTERVAL_MIN_MS = 1000;
+export const PLUGIN_VALUE_MAX = 256;
+
+// Command widget re-run interval / kill-timeout — user-configurable within
+// these bounds (see extra-key-config popup), default when unset.
+export const COMMAND_INTERVAL_DEFAULT_MS = 10 * 1000;
+export const COMMAND_INTERVAL_MIN_MS = 1000;
+export const COMMAND_INTERVAL_MAX_MS = 60 * 60 * 1000;
+export const COMMAND_TIMEOUT_DEFAULT_MS = 5 * 1000;
+export const COMMAND_TIMEOUT_MIN_MS = 1000;
+export const COMMAND_TIMEOUT_MAX_MS = 60 * 1000;
+
+export interface ExtraKeyConfig {
+  widget: ExtraKeyWidget;
+  /** text: the content to show; weather: "lat,lon"; command: the shell command;
+   *  plugin: the plugin file name (in the plugins dir). */
+  param?: string;
+  /** command/plugin widget: how often (ms) to re-run/poll. Command default
+   *  COMMAND_INTERVAL_DEFAULT_MS; plugin default PLUGIN_INTERVAL_DEFAULT_MS. */
+  intervalMs?: number;
+  /** command widget only: kill the process after this many ms. Default COMMAND_TIMEOUT_DEFAULT_MS. */
+  timeoutMs?: number;
+  /** plugin widget only: the per-key argument passed to the plugin (ctx.param). */
+  pluginArg?: string;
+}
+
+const inRange = (n: number, min: number, max: number): boolean => n >= min && n <= max;
+
+/** Shape guard for one persisted/imported extra-key entry. */
+// oxlint-disable-next-line complexity
+export function isExtraKeyConfig(v: unknown): v is ExtraKeyConfig {
+  if (typeof v !== 'object' || v === null) return false;
+  const r = v as Record<string, unknown>;
+  return (
+    typeof r.widget === 'string' &&
+    (EXTRA_KEY_WIDGETS as readonly string[]).includes(r.widget) &&
+    (r.param === undefined ||
+      (typeof r.param === 'string' && r.param.length <= EXTRA_KEY_PARAM_MAX)) &&
+    (r.intervalMs === undefined ||
+      (typeof r.intervalMs === 'number' &&
+        inRange(r.intervalMs, COMMAND_INTERVAL_MIN_MS, COMMAND_INTERVAL_MAX_MS))) &&
+    (r.timeoutMs === undefined ||
+      (typeof r.timeoutMs === 'number' &&
+        inRange(r.timeoutMs, COMMAND_TIMEOUT_MIN_MS, COMMAND_TIMEOUT_MAX_MS))) &&
+    (r.pluginArg === undefined ||
+      (typeof r.pluginArg === 'string' && r.pluginArg.length <= EXTRA_KEY_PARAM_MAX))
+  );
+}
+
+/** One dock's status as shown in the WebUI (primary index 0 + extras). */
+export interface DockStatus {
+  index: number; // 0 = primary
+  modelId: string;
+  modelName: string;
+  keyCount: number;
+  columns: number;
+  rows: number;
+  primaryPort: number; // the port the user enters in the Elgato app
+  primaryConnected: boolean; // primary (Network Dock) CORA client attached = app discovered us
+  elgatoConnected: boolean; // child CORA client attached = paired & active
+  brightness: number; // last level applied to this dock's panel (0-100)
+  // The identifiers this dock actually sends to the Elgato app (mDNS advert +
+  // CORA device-info/capabilities frames) — shown read-only under Settings,
+  // per-dock so a multi-device setup shows the currently selected dock's own
+  // identity rather than always the primary's.
+  dockFirmwareVersion: string;
+  childFirmwareVersion: string;
+  serialNumber: string;
+  childSerialNumber: string;
+  productId: number;
+  macAddress: string;
+  mdnsServiceName: string;
+  // Stable per-physical-device key (see device-identity.ts) this dock's
+  // identity was generated/looked-up from. Empty for mock-mode docks, which
+  // have no persisted identity. Used by the WebUI to edit mdnsServiceName.
+  deviceKey: string;
+  // Device wire ids of physical keys outside the emulated CORA grid (293S 6th
+  // column). Present only when the model has any — the WebUI renders the
+  // extra-keys panel off this.
+  extraKeys?: readonly number[];
+}

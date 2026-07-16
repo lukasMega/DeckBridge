@@ -7,26 +7,62 @@
  */
 import { useState } from 'preact/hooks';
 import { useStore } from './store.js';
-import { deriveState } from './ui-helpers.js';
+import {
+  deriveState,
+  deriveDocks,
+  isMultiDockView,
+  getTheme,
+  setTheme as persistTheme,
+  type ThemePref,
+} from './ui-helpers.js';
 import { switchToAdvanced } from './simple/handlers.js';
-import { AboutPopover, HelpScreen } from './simple/overlays.js';
-import { StageReady, StageDeviceNoElgato, StageNoDevice, StageConflict } from './simple/stages.js';
+import { AboutPopover, SettingsPage, HelpScreen } from './simple/overlays.js';
+import { ICON } from './ui-icons.js';
+import {
+  StageReady,
+  StageDeviceNoElgato,
+  StageNoDevice,
+  StageConflict,
+  StageMultiPairing,
+} from './simple/stages.js';
+
+const THEME_CYCLE: readonly ThemePref[] = ['light', 'dark', 'auto'];
+const THEME_ICON: Record<ThemePref, string> = { light: ICON.sun, dark: ICON.moon, auto: ICON.auto };
+const THEME_LABEL: Record<ThemePref, string> = { light: 'Light', dark: 'Dark', auto: 'Auto' };
 
 export function SimpleApp(): preact.JSX.Element {
   const status = useStore((s) => s.status);
   const [activeHelp, setActiveHelp] = useState<string | null>(null);
   const [aboutOpen, setAboutOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [theme, setTheme] = useState<ThemePref>(() => getTheme());
 
   const deviceState = deriveState(status);
+  const docks = deriveDocks(status);
 
   const openAbout = (): void => setAboutOpen(true);
   const closeAbout = (): void => setAboutOpen(false);
+  const openSettings = (): void => setSettingsOpen(true);
+  const closeSettings = (): void => setSettingsOpen(false);
   const handleHelp = (id: string): void => setActiveHelp(id);
   const handleBack = (): void => setActiveHelp(null);
+  const cycleTheme = (): void => {
+    const next = THEME_CYCLE[(THEME_CYCLE.indexOf(theme) + 1) % THEME_CYCLE.length]!;
+    persistTheme(next);
+    setTheme(next);
+  };
 
   let stageContent: preact.JSX.Element;
-  if (activeHelp !== null) {
+  if (settingsOpen) {
+    stageContent = <SettingsPage onBack={closeSettings} />;
+  } else if (activeHelp !== null) {
     stageContent = <HelpScreen topicId={activeHelp} onBack={handleBack} />;
+  } else if (isMultiDockView(docks)) {
+    stageContent = docks.every((d) => d.elgatoConnected) ? (
+      <StageReady docks={docks} onHelp={handleHelp} />
+    ) : (
+      <StageMultiPairing docks={docks} onHelp={handleHelp} />
+    );
   } else if (deviceState === 'ready') {
     stageContent = <StageReady />;
   } else if (deviceState === 'device-no-elgato') {
@@ -76,12 +112,34 @@ export function SimpleApp(): preact.JSX.Element {
                 />
               </svg>
             </button>
+            <button
+              class="iconbtn"
+              id="settingsBtn"
+              aria-label="Settings"
+              title="Settings"
+              type="button"
+              onClick={openSettings}
+              // eslint-disable-next-line @eslint-react/dom-no-dangerously-set-innerhtml -- static trusted SVG icon markup
+              dangerouslySetInnerHTML={{ __html: ICON.gear }}
+            />
           </div>
-          {!__SIMPLE_ONLY__ && (
-            <button class="ghostbtn" id="advancedBtn" type="button" onClick={switchToAdvanced}>
-              Advanced <span>›</span>
-            </button>
-          )}
+          <div class="topbar-actions">
+            <button
+              class="iconbtn"
+              id="themeBtn"
+              aria-label={`Theme: ${THEME_LABEL[theme]}. Click to change.`}
+              title={`Theme: ${THEME_LABEL[theme]}`}
+              type="button"
+              onClick={cycleTheme}
+              // eslint-disable-next-line @eslint-react/dom-no-dangerously-set-innerhtml -- static trusted SVG icon markup
+              dangerouslySetInnerHTML={{ __html: THEME_ICON[theme] }}
+            />
+            {!__SIMPLE_ONLY__ && (
+              <button class="ghostbtn" id="advancedBtn" type="button" onClick={switchToAdvanced}>
+                Advanced <span>›</span>
+              </button>
+            )}
+          </div>
         </div>
         <section class="stage" id="stage" aria-live="polite">
           {stageContent}

@@ -2,100 +2,32 @@ import { findHidPath, isNullPtr, IS_MACOS } from './ffi/hidapi.js';
 import { HidDeviceBase } from './devices/hid-connection.js';
 import { debug, info, warn } from './logger.js';
 import { formatCommHex } from './comm-format.js';
-import {
-  CLEAR_ALL_KEYS,
-  DEFAULT_BRIGHTNESS,
-  HID_REPORT_ID_BYTE,
-  BAT_PADDING_BYTES,
-  LIG_PADDING_BYTES,
-  CLE_PADDING_BYTES,
-} from './types.js';
+import { CLEAR_ALL_KEYS, DEFAULT_BRIGHTNESS, HID_REPORT_ID_BYTE } from './types.js';
 import type { KeyEvent, KeyState } from './types.js';
 import type { DeviceModel } from './devices/driver.js';
+import {
+  CMD_DIS,
+  CMD_HAN,
+  CMD_STP,
+  CMD_CONNECT,
+  CRT_DESCRIBERS,
+  buildCrt,
+  buildBat,
+  padChunkBoundaries,
+  buildLig,
+  buildCle,
+  buildCleDc,
+  parseAckReport,
+} from './devices/mirabox-protocol.js';
 
-const CRT = [0x43, 0x52, 0x54, 0x00, 0x00];
-const CMD_DIS = [0x44, 0x49, 0x53];
-const CMD_HAN = [0x48, 0x41, 0x4e];
-const CMD_STP = [0x53, 0x54, 0x50];
-const CMD_CONNECT = [0x43, 0x4f, 0x4e, 0x4e, 0x45, 0x43, 0x54];
-const ACK = [0x41, 0x43, 0x4b];
-
-// Maps a CRT command tag to a human-readable describer; `b(i)` reads packet byte i.
-// Commands not listed here (e.g. CONNECT) fall through to default handling.
-const CRT_DESCRIBERS: Record<string, (b: (i: number) => number) => string> = {
-  DIS: () => 'CRT DIS',
-  LIG: (b) => `CRT LIG brightness=${b(10)}`,
-  CLE: (b) =>
-    b(10) === 0x44 && b(11) === 0x43 ? 'CRT CLE-DC (disconnect)' : `CRT CLE keyId=${b(11)}`,
-  BAT: (b) => `CRT BAT jpegLen=${(b(10) << 8) | b(11)} keyId=${b(12)}`,
-  STP: () => 'CRT STP',
-  HAN: () => 'CRT HAN',
-};
-
-// hidapi prepends the report-id byte to reads when reportId != 0, shifting offsets by 1.
-export function parseAckReport(
-  data: Buffer,
-  reportId: number,
-): { keyIndex: number; stateByte: number } | null {
-  const off = reportId !== 0 ? 1 : 0;
-  if (data[off] !== ACK[0] || data[off + 1] !== ACK[1] || data[off + 2] !== ACK[2]) return null;
-  return { keyIndex: data[9 + off] ?? 0, stateByte: data[10 + off] ?? 0 };
-}
-
-function zeroPad(len: number): number[] {
-  return Array.from({ length: len }, () => 0);
-}
-
-export function buildCrt(cmd: number[], extra: number[] = [], pktSize = 1024): Buffer {
-  const buf = Buffer.alloc(pktSize, 0);
-  let off = 0;
-  for (const b of CRT) buf[off++] = b;
-  for (const b of cmd) buf[off++] = b;
-  for (const b of extra) buf[off++] = b;
-  return buf;
-}
-
-export function buildBat(jpegLen: number, keyId: number, pktSize = 1024): Buffer {
-  return buildCrt(
-    [0x42, 0x41, 0x54],
-    [...zeroPad(BAT_PADDING_BYTES), (jpegLen >> 8) & 0xff, jpegLen & 0xff, keyId],
-    pktSize,
-  );
-}
-
-/** Wire-encode an image for firmware that drops the last byte of every full
- *  pktSize chunk (K1 Pro): insert one sacrificial 0x00 after every
- *  (pktSize - 1) payload bytes, so no full chunk ever ends in payload and the
- *  device's drop reconstructs the original byte stream exactly. */
-export function padChunkBoundaries(data: Uint8Array, pktSize = 1024): Buffer {
-  const payload = pktSize - 1;
-  if (data.length < payload) return Buffer.from(data);
-  const groups = Math.floor(data.length / payload);
-  const out = Buffer.alloc(data.length + groups);
-  for (let g = 0; g < groups; g++) {
-    out.set(data.subarray(g * payload, (g + 1) * payload), g * pktSize);
-    // out[g * pktSize + payload] is already 0x00 — the sacrificial byte
-  }
-  out.set(data.subarray(groups * payload), groups * pktSize);
-  return out;
-}
-
-export function buildLig(brightness: number, pktSize = 1024): Buffer {
-  return buildCrt([0x4c, 0x49, 0x47], [...zeroPad(LIG_PADDING_BYTES), brightness], pktSize);
-}
-
-export function buildCle(keyId: number, pktSize = 1024): Buffer {
-  return buildCrt([0x43, 0x4c, 0x45], [...zeroPad(CLE_PADDING_BYTES), keyId], pktSize);
-}
-
-// CLE carrying the "DC" (disconnect) marker at bytes 10–11 ('D','C') — tells the
-// device the host is detaching so it returns to idle instead of holding stale
-// images. Distinct from buildCle(keyId), which clears a single key.
-export function buildCleDc(pktSize = 1024): Buffer {
-  return buildCrt([0x43, 0x4c, 0x45], [...zeroPad(CLE_PADDING_BYTES - 1), 0x44, 0x43], pktSize);
-}
+export { parseAckReport, buildCrt, buildBat, padChunkBoundaries, buildLig, buildCle, buildCleDc };
 
 export class MiraboxDriver extends HidDeviceBase {
+  /** HID path this instance was opened with (path-based open only — see
+   *  open()). Undefined on the VID/PID-fallback path (off-macOS only), or
+   *  before open() completes. Used to derive a stable per-device identity
+   *  (device-identity.ts) — NOT just for the open() call itself. */
+  hidPath: string | undefined = undefined;
   private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
   private lastHeartbeatAt = 0;
   private pktSize = 1024;
@@ -145,7 +77,7 @@ export class MiraboxDriver extends HidDeviceBase {
     return null;
   }
 
-  async open(): Promise<void> {
+  async open(hidPath?: string): Promise<void> {
     this.pktSize = this.model.wire!.packetSize;
     this.reportId = this.model.wire?.reportId ?? HID_REPORT_ID_BYTE;
     this._chunkScratch = Buffer.alloc(this.pktSize);
@@ -160,13 +92,17 @@ export class MiraboxDriver extends HidDeviceBase {
 
     // Prefer path-based open (filters by usage_page/usage, same as node-hid).
     // hid_open(VID, PID) picks the first IOKit interface which may be system-claimed on macOS.
+    // Explicit hidPath (multi-device: a specific unit) skips enumeration and
+    // opens that exact interface. Absent → enumerate + open the first
+    // usage-matched path (primary probe / single device).
     let dev: unknown = null;
-    const path = this.findDevicePath(vid, pids, usagePage, usage);
+    const path = hidPath ?? this.findDevicePath(vid, pids, usagePage, usage);
     if (path) {
       debug('hid', `hid_open_path(${path})`);
       dev = hid.hid_open_path(path);
       if (!isNullPtr(dev)) {
         debug('hid', 'hid_open_path succeeded');
+        this.hidPath = path;
       } else if (IS_MACOS) {
         // Device is present (enumeration matched the vendor interface) but the
         // open was refused (e.g. half-seated cable, missing Input Monitoring).
@@ -192,7 +128,9 @@ export class MiraboxDriver extends HidDeviceBase {
     // segfaults on a denied/absent open, so the path-based open above is the
     // only safe route there; elsewhere it's a useful fallback when enumeration
     // found no usage-matched path. scheduleReconnect() in app.ts handles retries.
-    if (isNullPtr(dev) && !IS_MACOS) {
+    // Only for the no-explicit-path case: with a targeted hidPath, a VID/PID
+    // open could grab the WRONG (or the primary's) unit, so let it fail instead.
+    if (isNullPtr(dev) && !IS_MACOS && hidPath === undefined) {
       for (const pid of pids) {
         debug('hid', `hid_open(vid=0x${vid.toString(16)}, pid=0x${pid.toString(16)})`);
         dev = hid.hid_open(vid, pid, null);
@@ -247,6 +185,9 @@ export class MiraboxDriver extends HidDeviceBase {
         if (wire.sendStpAfterImage) {
           this.write(this._buildCrt(CMD_STP));
         }
+        // The CLE ALL above wiped everything on the panel — let the main
+        // thread repaint what it owns (extra-key icons; see extra-keys.ts).
+        this.emit('reinit');
       }
       this.write(this._buildCrt(CMD_CONNECT));
     }, heartbeatMs);

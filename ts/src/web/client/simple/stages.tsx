@@ -2,14 +2,47 @@
 import { useState, useEffect } from 'preact/hooks';
 import { useStore } from '../store.js';
 import { ICON } from '../ui-icons.js';
+import type { DockUi } from '../ui-types.js';
 import { Icon } from './Icon.js';
 import { Step, KeyGridPreview, Brightness, ManualAddPanel } from './controls.js';
-import { openSdApp, quitElgatoApp } from './handlers.js';
+import { ExtraKeysPanel } from './extra-keys-panel.js';
+import { DockList } from './dock-cards.js';
+import { openSdApp, quitElgatoApp, restartElgatoApp } from './handlers.js';
+import { isMultiDockView, clientAppName } from '../ui-helpers.js';
 
-export function StageReady(): preact.JSX.Element {
+export function StageReady({
+  docks,
+  onHelp,
+}: Readonly<{ docks?: DockUi[]; onHelp?: (id: string) => void }> = {}): preact.JSX.Element {
   const keyCount = useStore((s) => s.status.keyCount ?? 15);
   const columns = useStore((s) => s.status.columns ?? 5);
   const modelId = useStore((s) => s.status.modelId);
+  const selectedDock = useStore((s) => s.status.selectedDock ?? 0);
+  const appName = useStore((s) => clientAppName(s.status.clientApp));
+
+  if (docks !== undefined && isMultiDockView(docks) && onHelp !== undefined) {
+    const sel = docks.find((d) => d.index === selectedDock) ?? docks[0]!;
+    const summary =
+      docks.length > 1
+        ? `All ${docks.length} decks are connected${appName} and ready to use.`
+        : `${sel.modelName} is connected${appName} and ready to use.`;
+    return (
+      <>
+        <div class="hero">
+          {/* eslint-disable-next-line @eslint-react/dom-no-dangerously-set-innerhtml -- static trusted SVG icon markup */}
+          <div class="hero-badge" dangerouslySetInnerHTML={{ __html: ICON.check }} />
+          <h1>Everything&apos;s working</h1>
+          <p>{summary}</p>
+        </div>
+        <DockList docks={docks} onHelp={onHelp} />
+        {docks.length > 1 && (
+          <p class="step-sub">Click a deck to see its live preview and adjust its brightness.</p>
+        )}
+        <Brightness dock={sel.index} level={sel.brightness} deviceName={sel.modelName} />
+        <ExtraKeysPanel />
+      </>
+    );
+  }
 
   return (
     <>
@@ -17,10 +50,30 @@ export function StageReady(): preact.JSX.Element {
         {/* eslint-disable-next-line @eslint-react/dom-no-dangerously-set-innerhtml -- static trusted SVG icon markup */}
         <div class="hero-badge" dangerouslySetInnerHTML={{ __html: ICON.check }} />
         <h1>Everything&apos;s working</h1>
-        <p>Your Stream Deck is connected to the Elgato app and ready to use.</p>
+        <p>Your Stream Deck is connected{appName} and ready to use.</p>
       </div>
       <KeyGridPreview keyCount={keyCount} columns={columns} dimmed={false} modelId={modelId} />
       <Brightness />
+      <ExtraKeysPanel />
+    </>
+  );
+}
+
+export function StageMultiPairing({
+  docks,
+  onHelp,
+}: Readonly<{ docks: DockUi[]; onHelp: (id: string) => void }>): preact.JSX.Element {
+  const left = docks.filter((d) => !d.elgatoConnected).length;
+
+  return (
+    <>
+      <h1 class="stage-title">
+        {docks.length} decks connected — {left} left to pair
+      </h1>
+      <DockList docks={docks} onHelp={onHelp} />
+      <p class="step-sub">
+        Each deck appears as its own Network Dock in the Elgato app — pair them one at a time.
+      </p>
     </>
   );
 }
@@ -60,6 +113,13 @@ export function StageDeviceNoElgato({
             </a>
           </div>
           <ManualAddPanel onHelp={onHelp} />
+          <p class="dock-pairing-note">
+            Paired before?{' '}
+            <button class="link-btn" type="button" onClick={restartElgatoApp}>
+              Restart the Elgato app
+            </button>{' '}
+            to reconnect.
+          </p>
         </Step>
       </div>
       <KeyGridPreview keyCount={keyCount} columns={columns} dimmed={true} modelId={modelId} />

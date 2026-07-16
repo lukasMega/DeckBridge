@@ -3,6 +3,7 @@
   "entry": [
     "src/app.ts",
     "src/hid-worker.ts",
+    "src/plugin-worker.ts",
     "src/web/client/ui-entry.ts",
     "src/mirabox-smoke.ts",
     "src/k1pro-probe.ts",

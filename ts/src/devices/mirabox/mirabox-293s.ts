@@ -29,7 +29,7 @@ export const MIRABOX_293S_MODEL: DeviceModel = {
     flipV: false,
     colorMode: 'rgb',
     maxBytes: 5120,
-    quality: 0.6,
+    quality: 0.7,
     // App sends MK.2-native 72×72; panel is 85×85. Keep pixels 1:1 (no upscale blur)
     // and edge-clamp the 13px border. Centred 6/7 (top-left bias) in the source frame.
     resizeMode: 'pad',
@@ -50,6 +50,10 @@ export const MIRABOX_293S_MODEL: DeviceModel = {
     coraToWireImage: [13, 10, 7, 4, 1, 14, 11, 8, 5, 2, 15, 12, 9, 6, 3],
     // device input wire code (1-based) → mk2 index; -1 = unused 6th column. Index 0 unused.
     wireInputToCora: [-1, 4, 9, 14, 3, 8, 13, 2, 7, 12, 1, 6, 11, 0, 5, 10, -1, -1, -1],
+    // 6th column, top→bottom. Derived from the opendeck-akp153 wire-id namespace
+    // (left 15 hardware-verified; 16–18 derived — verify: press the right column
+    // in a debug build and look for ACK key=0x10/0x11/0x12 in the comm log).
+    extraKeys: [16, 17, 18],
   },
   cora: {
     productId: ELGATO_MK2_PID,

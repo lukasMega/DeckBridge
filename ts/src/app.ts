@@ -4,30 +4,20 @@ import { ElgatoServer, ElgatoChildServer } from './elgato.js';
 import { WebUIServer } from './web/server';
 import type { MockDeviceConfig } from './web/server';
 import { MockDriver } from './devices/mock.js';
-import type { CommEntry, ImageModeOverride, LogObject } from './types.js';
+import type { ClientApp, CommEntry, ImageModeOverride, LogObject } from './types.js';
 import { ELGATO_CHILD_PORT, ELGATO_TCP_PORT, WEBUI_PORT } from './types.js';
 import { DEVICE_MODELS } from './devices/registry.js';
 import { log, setWebUILog } from './logger.js';
 import { setupNativeLibs } from './native-libs.js';
 import { setupImageHandler } from './image-pipeline.js';
 import { DriverManager, getInitialDriverMode } from './driver-manager.js';
+import type { SessionServersFactory } from './device-session.js';
 import { startCoraWithRetry } from './cora-startup.js';
-import { platformName } from './mdns-advertiser.js';
+import { openPathInOS, platformName } from './os-utils.ts';
 
 const [MAC_OS, WIN] = ['macOS', 'Windows'];
 
-async function openBrowser(url: string): Promise<void> {
-  try {
-    const platform = platformName();
-    let cmd: string[];
-    if (platform === MAC_OS) cmd = ['open', url];
-    else if (platform === WIN) cmd = ['cmd', '/c', 'start', '', url];
-    else cmd = ['xdg-open', url]; // Linux: no-op on headless (exits non-zero, caught below)
-    await tjs.spawn(cmd, { stdout: 'ignore', stderr: 'ignore' }).wait();
-  } catch {
-    // best-effort — silently ignored on headless Linux or missing opener
-  }
-}
+const openBrowser = openPathInOS;
 
 async function isElgatoAppRunning(): Promise<boolean> {
   // platformName() returns 'macOS', 'Windows', 'Linux', etc. (or '' if unavailable).
@@ -114,12 +104,32 @@ function pushTrayState(): void {
   tray?.push(buildTrayState());
 }
 
+// Extra-dock CORA server pair builder (multi-device). Mirrors the primary
+// wiring above: the childServer gets the SAME server.deviceConfig reference, and
+// each server's serverLog is piped to the shared logger (DeviceSession wires the
+// driver's events but not the servers' — extras would otherwise be silent). No
+// WebUI/comm mirror: the WebUI stays single-device (primary only).
+const sessionServersFactory: SessionServersFactory = (identity) => {
+  const s = new ElgatoServer(identity.primaryPort, false, {
+    childPort: identity.childPort,
+    mdnsServiceName: identity.mdnsServiceName,
+    dockSerial: identity.dockSerial,
+    childSerial: identity.childSerial,
+  });
+  const cs = new ElgatoChildServer(identity.childPort, s.deviceConfig, false);
+  s.on('serverLog', ({ level, component: c, message: m }: LogObject) => log(level, c, m));
+  cs.on('serverLog', ({ level, component: c, message: m }: LogObject) => log(level, c, m));
+  return { server: s, childServer: cs };
+};
+
 const driverManager = new DriverManager({
   webui,
   server,
   childServer,
   onTrayChange: pushTrayState,
   getShuttingDown: () => shuttingDown,
+  sessionServersFactory,
+  onDocksChanged: () => webui.notifyDocks(driverManager.getDockStatuses()),
 });
 
 setupImageHandler(childServer, webui, () => driverManager.getCurrentDriver());
@@ -128,29 +138,40 @@ server.on('serverLog', ({ level, component: c, message: m }: LogObject) => log(l
 server.on('comm', (entry: Omit<CommEntry, 'ts'>) => webui.notifyComm(entry));
 server.on('clientConnected', (addr: string) => log('info', 'elgato', `primary connected: ${addr}`));
 server.on('clientDisconnected', () => log('info', 'elgato', 'primary disconnected'));
+server.on('clientAppDetected', (app: ClientApp) => webui.notifyClientApp(app));
 
 childServer.on('comm', (entry: Omit<CommEntry, 'ts'>) => webui.notifyComm(entry));
 childServer.on('serverLog', ({ level, component: c, message: m }: LogObject) => log(level, c, m));
+childServer.on('clientAppDetected', (app: ClientApp) => webui.notifyClientApp(app));
 
 childServer.on('clientConnected', (addr: string) => {
   log('info', 'elgato', `child connected: ${addr}`);
   webui.notifyElgatoStatus(true, addr);
   pushTrayState();
+  webui.notifyDocks(driverManager.getDockStatuses());
+  // Re-push the saved brightness once the Elgato app has settled after
+  // pairing — the app's own default-brightness handshake would otherwise
+  // stomp the user's setting.
+  setTimeout(() => {
+    if (shuttingDown) return;
+    driverManager.setDockBrightness(0, webui.brightnessForDock(0));
+  }, 1000);
 });
 
 childServer.on('clientDisconnected', () => {
   log('info', 'elgato', 'child disconnected');
   webui.notifyElgatoStatus(false);
   pushTrayState();
+  webui.notifyDocks(driverManager.getDockStatuses());
 });
 
 childServer.on('brightness', (level: number) => {
-  if (webui.brightnessOverride) {
+  if (webui.isBrightnessOverrideForDock(0)) {
     log('debug', 'elgato', `brightness ${level} from Elgato ignored (override on)`);
     return;
   }
   log('info', 'elgato', `brightness set to ${level}`);
-  driverManager.getCurrentDriver()?.setBrightness(level);
+  driverManager.setDockBrightness(0, level);
   webui.notifyBrightness(level);
   webui.notifyRepaint();
 });
@@ -161,15 +182,16 @@ webui.on('regenPreviews', (_resizeOn: boolean) => {
   }
 });
 
-webui.on('setBrightness', (level: number) => {
-  driverManager.getCurrentDriver()?.setBrightness(level);
+webui.on('setBrightness', (level: number, dock?: number) => {
+  driverManager.setDockBrightness(dock ?? 0, level);
 });
 
-webui.on('setImageOverride', (mode: ImageModeOverride) => {
-  const d = driverManager.getCurrentDriver();
+webui.on('setImageOverride', (mode: ImageModeOverride, dock?: number) => {
+  const d = driverManager.getDriverForDock(dock ?? 0);
   d?.setImageOverride?.(mode);
-  // The Elgato app won't resend on a mode flip — repaint from the stored
-  // CORA frames so the change is visible immediately.
+  // The Elgato app won't resend on a mode flip — repaint from the stored CORA
+  // frames (imageState = the selected dock's live frames) so the change is
+  // visible immediately.
   for (const [k, data] of webui.imageState) {
     d?.renderCoraImage?.(k, data, webui.imageFormat.get(k) ?? 'jpeg');
   }
@@ -202,6 +224,26 @@ webui.on('setModel', (modelId: string) => {
   }
 });
 
+// An extra-key assignment changed (WebUI) — repaint that dock's key icons.
+// Dispatch needs no re-wire: it resolves the config per press.
+webui.on('extraKeyChanged', (dock: number) => {
+  driverManager.repaintExtraKeysForDock(dock);
+});
+
+// WebUI "Run now" on a command-widget extra key — force an immediate re-run.
+webui.on('extraKeyRunNow', (dock: number, wireId: number) => {
+  driverManager.forceRunExtraKey(dock, wireId);
+});
+
+webui.on('setDeviceMdnsName', (deviceKey: string, name: string) => {
+  const ok = webui.updateDeviceMdnsName(deviceKey, name);
+  if (!ok) {
+    log('warn', 'deckBr', `setDeviceMdnsName: no persisted identity for deviceKey=${deviceKey}`);
+    return;
+  }
+  driverManager.applyMdnsNameForDeviceKey(deviceKey, name);
+});
+
 webui.on('mockConfig', (cfg: MockDeviceConfig) => {
   const macParts = cfg.macAddress.split(':');
   const macBytes = macParts.length === 6 ? macParts.map((p) => parseInt(p, 16)) : [];
@@ -228,6 +270,8 @@ async function shutdown(): Promise<void> {
     tjs.removeSignalListener('SIGHUP', sigHup);
   } catch {}
   log('info', 'deckBr', 'shutting down...');
+  driverManager.stopScan();
+  await driverManager.stopAllExtraSessions().catch(() => undefined);
   const prev = driverManager.getCurrentDriver();
   if (prev) prev.removeAllListeners();
   await prev?.close().catch(() => undefined);
@@ -341,5 +385,10 @@ if (driverManager.getDriverMode() === 'mock') {
 } else {
   driverManager.tryRealConnect().catch((e: unknown) => log('error', 'hid', String(e)));
 }
+
+// Begin polling for extra distinct-model docks. Safe in mock mode: scanExtras()
+// guards on driverMode==='real' and a connected primary, so it's a no-op until
+// a real primary is up.
+driverManager.startScan();
 
 log('info', 'deckBr', 'startup complete — entering event loop');

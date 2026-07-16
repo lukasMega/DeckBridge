@@ -112,6 +112,7 @@ function makePassthroughModel(): DeviceModel {
 }
 
 interface NotifyCall {
+  dock: number;
   keyIndex: number;
   data: Uint8Array;
   format?: string;
@@ -119,15 +120,15 @@ interface NotifyCall {
 
 interface FakeWebUI {
   notifyImageUpdateCalls: NotifyCall[];
-  notifyImageUpdate(keyIndex: number, data: Buffer, format?: string): void;
+  notifyDockImage(dock: number, keyIndex: number, data: Buffer, format?: string): void;
 }
 
 function makeFakeWebUI(): FakeWebUI {
   return {
     notifyImageUpdateCalls: [],
-    notifyImageUpdate(keyIndex, data, format) {
+    notifyDockImage(dock, keyIndex, data, format) {
       // capture a copy of the bytes at call time
-      this.notifyImageUpdateCalls.push({ keyIndex, data: Uint8Array.from(data), format });
+      this.notifyImageUpdateCalls.push({ dock, keyIndex, data: Uint8Array.from(data), format });
     },
   };
 }

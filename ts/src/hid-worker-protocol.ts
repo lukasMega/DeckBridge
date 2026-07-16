@@ -6,7 +6,10 @@ import type { LogLevel } from './logger.js';
 export type WorkerComm = Omit<CommEntry, 'ts'>;
 
 export type MainToWorker =
-  | { type: 'open'; modelId: DeviceModelId }
+  // `hidPath` targets a SPECIFIC unclaimed HID interface (multi-device: two
+  // units of the same model). Absent → the driver enumerates + opens the first
+  // usage-matched path itself (primary probe).
+  | { type: 'open'; modelId: DeviceModelId; hidPath?: string }
   // Raw CORA image: the worker transforms (resize/rotate/encode) + caches it,
   // then writes it to the device. Off the main thread so the 50–200 ms FFI
   // transform never stalls the CORA ACK loop (see P1).
@@ -24,7 +27,7 @@ export type MainToWorker =
   | { type: 'close' };
 
 export type WorkerToMain =
-  | { type: 'opened'; ok: true; deviceSerial?: string; deviceFirmware?: string }
+  | { type: 'opened'; ok: true; deviceSerial?: string; deviceFirmware?: string; hidPath?: string }
   | { type: 'opened'; ok: false; error: string }
   | { type: 'key'; keyIndex: number; state: KeyState }
   | { type: 'comm'; entry: WorkerComm }
@@ -32,5 +35,8 @@ export type WorkerToMain =
   | { type: 'error'; message: string }
   // One image finished writing to the device — drives the WebUI imagesSent stat.
   | { type: 'imageSent'; keyIndex: number }
+  // The driver re-initialized the device (sleep/wake CLE ALL) — the main
+  // thread repaints what it owns (extra-key icons).
+  | { type: 'reinit' }
   | { type: 'disconnect' }
   | { type: 'closed' };

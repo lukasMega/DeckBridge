@@ -4,10 +4,11 @@
 #advanced-view header {
   background: #1a1a1a;
   border-bottom: 1px solid #333;
-  padding: 10px 16px;
+  padding: 8px 12px;
   display: flex;
   align-items: center;
-  gap: 16px;
+  flex-wrap: wrap;
+  gap: 6px 10px;
   flex-shrink: 0;
 }
 #advanced-view h1 {
@@ -57,7 +58,7 @@
   margin-left: auto;
 }
 .bri-bar {
-  width: 80px;
+  width: 60px;
   height: 6px;
   background: #2a2a2a;
   border-radius: 3px;
@@ -84,7 +85,7 @@
   cursor: pointer;
 }
 #mode-toggle {
-  padding: 6px 14px;
+  padding: 4px 10px;
   border-radius: 6px;
   border: 1px solid #444;
   background: #2a2a2a;
@@ -175,7 +176,7 @@ body.no-anim * {
 #stats-in-header {
   margin-left: auto;
   display: flex;
-  gap: 14px;
+  gap: 10px;
   align-items: center;
   flex-shrink: 0;
 }

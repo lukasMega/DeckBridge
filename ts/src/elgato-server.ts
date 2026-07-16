@@ -15,7 +15,10 @@ import {
   FEATURE_KEEPALIVE_ACK,
   FEATURE_GET_CAPABILITIES,
   FEATURE_GET_DEVICE_INFO,
+  FEATURE_GET_CHILD_FW,
+  FEATURE_GET_QUICK_PROBE,
   DEFAULT_MAC_ADDRESS,
+  MDNS_SERVICE_NAME,
 } from './types.js';
 import { CORA_FLAG_RESULT } from './cora-frame.js';
 import { CoraServerBase } from './cora-server-base.js';
@@ -27,9 +30,24 @@ import { MdnsAdvertiser } from './mdns-advertiser.js';
 
 export type { DeviceConfig };
 
+function nonVerbFeatureLabel(byte1: number): string {
+  if (byte1 === 0x08) return '0x08 GetUnitInfo FALLTHROUGH';
+  if (byte1 === 0x0b) return '0x0B devinfo FALLTHROUGH';
+  return `non-VERB feature GET 0x${byte1.toString(16).padStart(2, '0')}`;
+}
+
+export interface ElgatoServerOptions {
+  childPort?: number; // default ELGATO_CHILD_PORT
+  mdnsServiceName?: string; // default MDNS_SERVICE_NAME
+  dockSerial?: string; // default DEFAULT_DOCK_SERIAL_NUMBER
+  childSerial?: string; // default DEFAULT_CHILD_SERIAL_NUMBER
+}
+
 export class ElgatoServer extends CoraServerBase {
   private mdnsAdvertiser: MdnsAdvertiser | null = null;
   private readonly skipMdns: boolean;
+  readonly childPort: number;
+  private mdnsServiceName: string;
   private childGeometry: ChildGeometry = MK2_CHILD_GEOMETRY;
   private lastAdvertisedPid = -1;
   private lastAdvertisedSerial = '';
@@ -68,16 +86,43 @@ export class ElgatoServer extends CoraServerBase {
     void this.mdnsAdvertiser.start();
   }
 
-  constructor(port = ELGATO_TCP_PORT, skipMdns = false) {
+  /** Live-rename the mDNS service name (WebUI "Device Identity" edit) — the
+   *  advertiser process bakes the name in at spawn (dns-sd/avahi-publish-service
+   *  take it as an argv, not something updatable in place), so this stops the
+   *  old advertiser and spawns a fresh one under the new name. No-op if the
+   *  server hasn't start()ed yet (the new name is picked up by start() itself). */
+  setMdnsServiceName(name: string): void {
+    if (name === this.mdnsServiceName) return;
+    this.mdnsServiceName = name;
+    if (!this.mdnsAdvertiser) return;
+    this.mdnsAdvertiser.stop();
+    this.mdnsAdvertiser = new MdnsAdvertiser(
+      this.port,
+      (level, message) => this.emitLog(level, message),
+      this.mdnsServiceName,
+    );
+    this.mdnsAdvertiser.updateIdentity(this.deviceConfig.productId, this.deviceConfig.serialNumber);
+    this.lastAdvertisedPid = this.deviceConfig.productId;
+    this.lastAdvertisedSerial = this.deviceConfig.serialNumber;
+    void this.mdnsAdvertiser.start();
+  }
+
+  constructor(port = ELGATO_TCP_PORT, skipMdns = false, opts: ElgatoServerOptions = {}) {
     super(port);
     this.skipMdns = skipMdns;
+    this.childPort = opts.childPort ?? ELGATO_CHILD_PORT;
+    this.mdnsServiceName = opts.mdnsServiceName ?? MDNS_SERVICE_NAME;
+    if (opts.dockSerial !== undefined) this.deviceConfig.serialNumber = opts.dockSerial;
+    if (opts.childSerial !== undefined) this.deviceConfig.childSerialNumber = opts.childSerial;
   }
 
   async start(): Promise<void> {
     await this.startServer();
     if (!this.skipMdns) {
-      this.mdnsAdvertiser = new MdnsAdvertiser(this.port, (level, message) =>
-        this.emitLog(level, message),
+      this.mdnsAdvertiser = new MdnsAdvertiser(
+        this.port,
+        (level, message) => this.emitLog(level, message),
+        this.mdnsServiceName,
       );
       this.mdnsAdvertiser.updateIdentity(
         this.deviceConfig.productId,
@@ -109,7 +154,7 @@ export class ElgatoServer extends CoraServerBase {
       0,
       0,
       0,
-      `CORA push child-caps PID=0x${this.deviceConfig.productId.toString(16).padStart(4, '0')} port=${ELGATO_CHILD_PORT}`,
+      `CORA push child-caps PID=0x${this.deviceConfig.productId.toString(16).padStart(4, '0')} port=${this.childPort}`,
     );
   }
 
@@ -123,7 +168,7 @@ export class ElgatoServer extends CoraServerBase {
   }
 
   private buildChildDeviceInfo(): Buffer {
-    return buildCapabilitiesPacket(this.deviceConfig, ELGATO_CHILD_PORT, this.childGeometry);
+    return buildCapabilitiesPacket(this.deviceConfig, this.childPort, this.childGeometry);
   }
 
   protected handleCoraPacket(
@@ -156,28 +201,26 @@ export class ElgatoServer extends CoraServerBase {
 
     if (byte0 === PAYLOAD_TYPE_FEATURE && byte1 === FEATURE_GET_CAPABILITIES) {
       const pid = this.deviceConfig.productId.toString(16).padStart(4, '0');
-      this.emitLog('info', `0x1c handler fired — PID=0x${pid} port=${ELGATO_CHILD_PORT}`);
+      this.emitLog('info', `0x1c handler fired — PID=0x${pid} port=${this.childPort}`);
       const r = this.buildChildDeviceInfo();
       this.sendFrame(
         r,
         CORA_FLAG_RESULT,
         hidOp,
         messageId,
-        `CORA 0x1c child-device-info PID=0x${pid} port=${ELGATO_CHILD_PORT} [msgId=${messageId}]`,
+        `CORA 0x1c child-device-info PID=0x${pid} port=${this.childPort} [msgId=${messageId}]`,
       );
       return;
     }
 
     if (byte0 === PAYLOAD_TYPE_FEATURE) {
-      let label: string;
-      if (byte1 === 0x08) {
-        label = '0x08 GetUnitInfo FALLTHROUGH';
-      } else if (byte1 === 0x0b) {
-        label = '0x0B devinfo FALLTHROUGH';
-      } else {
-        label = `non-VERB feature GET 0x${byte1.toString(16).padStart(2, '0')}`;
+      // 0x87/0x8f are only ever queried by the genuine Elgato desktop app —
+      // Bitfocus Companion's CORA client never asks for them (see
+      // .claude/plans/2026-07-14_try-distinguish-bitfocus-companion-connection.md).
+      if (byte1 === FEATURE_GET_CHILD_FW || byte1 === FEATURE_GET_QUICK_PROBE) {
+        this.emit('clientAppDetected', 'elgato');
       }
-      this.emitLog('info', `primary ${label} msgId=${messageId}`);
+      this.emitLog('info', `primary ${nonVerbFeatureLabel(byte1)} msgId=${messageId}`);
       const r = buildFeatureResponse(byte1, this.deviceConfig, ELGATO_PKT_SIZE_RX);
       this.sendFrame(
         r,

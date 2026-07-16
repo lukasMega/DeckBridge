@@ -14,7 +14,8 @@ const SPLASH_KEY_COUNT_SMALL = 6;
 // model.image is calibrated for CORA images (pre-rotated by desktop software).
 // Splash source images are upright (natural canvas orientation).
 // model.splash.transformOverride corrects for the orientation difference measured on hardware.
-function splashSpec(model: DeviceDriver['model']): DeviceImageSpec {
+// Exported for extra-keys.ts — extra-key icons are upright sources too.
+export function splashSpec(model: DeviceDriver['model']): DeviceImageSpec {
   const t = model.splash?.transformOverride;
   if (!t) return model.image;
   return {

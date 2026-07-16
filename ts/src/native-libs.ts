@@ -12,7 +12,8 @@
 import { NATIVE_LIBS, NATIVE_LIBS_HASH } from 'virtual:native-libs';
 import type { EmbeddedNativeLib } from 'virtual:native-libs';
 import { log } from './logger.js';
-import { platformName } from './mdns-advertiser.js';
+
+import { platformName } from './os-utils.ts';
 
 const ENV_BY_PREFIX: Array<[string, string]> = [
   ['libdeckbridge_native', 'DECKBRIDGE_NATIVE_LIB'],

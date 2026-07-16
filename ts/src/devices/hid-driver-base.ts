@@ -22,6 +22,9 @@ export class ElgatoHidDriver extends HidDeviceBase {
   private lastKeyState: boolean[] = [];
   deviceSerial: string | undefined = undefined;
   deviceFirmware: string | undefined = undefined;
+  /** HID path this instance was opened with (path-based open only). Used to
+   *  derive a stable per-device identity (device-identity.ts). */
+  hidPath: string | undefined = undefined;
 
   constructor(model: DeviceModel) {
     super();
@@ -29,22 +32,31 @@ export class ElgatoHidDriver extends HidDeviceBase {
     this.strategy = PROTOCOL_STRATEGY[model.protocol]!;
   }
 
+  /** Open the device by path. An explicit `hidPath` (multi-device: a specific
+   *  unit) opens that exact interface; otherwise enumerate + open the first
+   *  usage-matched path. Records this.hidPath on success. Null if not opened. */
+  private _openByPath(hid: HidapiSymbols, hidPath?: string): unknown {
+    const path =
+      hidPath ??
+      (this.model.usagePage !== undefined && this.model.usage !== undefined
+        ? findHidPath(this.model.usbVendorId, this.model.usagePage, this.model.usage)
+        : null);
+    if (!path) return null;
+    const opened = hid.hid_open_path(path);
+    if (isNullPtr(opened)) return null;
+    this.hidPath = path;
+    return opened;
+  }
+
   // eslint-disable-next-line @typescript-eslint/require-await
-  async open(): Promise<void> {
+  async open(hidPath?: string): Promise<void> {
     const hid = this._acquireLib();
 
-    let dev: unknown = null;
+    let dev = this._openByPath(hid, hidPath);
 
-    // Prefer path-based open (avoids system-claimed interfaces on macOS).
-    if (this.model.usagePage !== undefined && this.model.usage !== undefined) {
-      const path = findHidPath(this.model.usbVendorId, this.model.usagePage, this.model.usage);
-      if (path) {
-        dev = hid.hid_open_path(path);
-        if (isNullPtr(dev)) dev = null;
-      }
-    }
-
-    if (!dev) {
+    // Only for the no-explicit-path case: with a targeted hidPath, a VID/PID
+    // open could grab the WRONG unit, so let it fail instead.
+    if (!dev && hidPath === undefined) {
       for (const pid of this.model.usbProductIds) {
         const d = hid.hid_open(this.model.usbVendorId, pid, null);
         if (!isNullPtr(d)) {

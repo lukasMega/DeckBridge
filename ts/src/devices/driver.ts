@@ -90,6 +90,10 @@ export interface DeviceKeyMap {
   wireInputToCora?: readonly number[]; // -1 entry = ignored key (293S 6th column)
   inputOffset?: number;
   imageOffset?: number;
+  /** Physical keys outside the emulated CORA grid (device wire ids). They still
+   *  emit key events but map to no mk2 index; DeckBridge-native actions bind to
+   *  them (see extra-keys.ts). 293S right column = [16, 17, 18]. */
+  extraKeys?: readonly number[];
 }
 
 /** How this device advertises itself to the Elgato desktop over CORA. */
@@ -145,7 +149,10 @@ export interface DeviceModel {
 /** Common interface satisfied by every driver (real USB and mock). */
 export interface DeviceDriver extends EventEmitter {
   readonly model: DeviceModel;
-  open(): Promise<void>;
+  /** `hidPath` (optional) opens a SPECIFIC HID interface — used to drive a second
+   *  unit of the same model. Omitted → enumerate + open the first usage-matched
+   *  path (primary probe). Ignored by MockDriver. */
+  open(hidPath?: string): Promise<void>;
   close(): Promise<void>;
   /** keyIndex: CORA logical index (0-based).
    *  bytes: native image format for the device (JPEG for MK.2, BMP for Mini, JPEG for Mirabox). */

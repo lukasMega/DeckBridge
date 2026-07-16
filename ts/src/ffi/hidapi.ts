@@ -70,6 +70,15 @@ interface HidEnumSymbols {
     bufLen: number,
   ): number;
   mirabox_hid_present(vid: number, pid: number): number;
+  mirabox_hid_serial_for_path(path: string, buf: Uint8Array, bufLen: number): number;
+  mirabox_hid_list_paths(
+    vid: number,
+    pid: number,
+    usagePage: number,
+    usage: number,
+    buf: Uint8Array,
+    bufLen: number,
+  ): number;
 }
 
 // Cached deckbridge-native handle, kept open for the process lifetime: dlclose() churn
@@ -92,6 +101,14 @@ function loadHidEnum(): { symbols: HidEnumSymbols; close(): void } | null {
       },
       mirabox_hid_present: {
         args: [UINT16, UINT16],
+        returns: INT,
+      },
+      mirabox_hid_serial_for_path: {
+        args: [STRING, BUFFER, SIZE_T],
+        returns: INT,
+      },
+      mirabox_hid_list_paths: {
+        args: [UINT16, UINT16, UINT16, UINT16, BUFFER, SIZE_T],
         returns: INT,
       },
     }) as unknown as { symbols: HidEnumSymbols; close(): void };
@@ -128,6 +145,28 @@ export function findHidPath(vid: number, usagePage: number, usage: number, pid =
   }
 }
 
+/** Every HID device path matching this VID+usagePage+usage (+optional PID),
+ *  from deckbridge-native enumeration (never hid_open). Used to drive N units of
+ *  the SAME model as separate docks: the coordinator opens each distinct path via
+ *  hid_open_path. Returns [] when the enum lib is missing or nothing matches.
+ *  Param order mirrors findHidPath. */
+export function listHidPaths(vid: number, usagePage: number, usage: number, pid = 0): string[] {
+  _hidEnumLib ??= loadHidEnum();
+  const lib = _hidEnumLib;
+  if (!lib) return [];
+  try {
+    const buf = new Uint8Array(4096);
+    const count = lib.symbols.mirabox_hid_list_paths(vid, pid, usagePage, usage, buf, buf.length);
+    if (count <= 0) return [];
+    const end = buf.indexOf(0);
+    const text = new TextDecoder().decode(buf.subarray(0, end >= 0 ? end : buf.length));
+    return text.split('\n').filter((s) => s.length > 0);
+  } catch (e) {
+    warn('ffi', `mirabox_hid_list_paths threw: ${String(e)}`);
+    return [];
+  }
+}
+
 /** True if a HID device with this VID+PID is connected, via deckbridge-native
  *  enumeration (never hid_open). Used by the host's probe to pick the connected
  *  model before spawning a worker — so we never hid_open an absent device or
@@ -142,6 +181,26 @@ export function hidDevicePresent(vid: number, pid: number): boolean {
   } catch (e) {
     warn('ffi', `mirabox_hid_present threw: ${String(e)}`);
     return false;
+  }
+}
+
+/** USB serial-number string of the device at `hidPath` (from deckbridge-native
+ *  enumeration, never hid_open), or null when unavailable — no match, empty
+ *  serial, or the enum lib is missing. Used to build a stable per-device key
+ *  (VID:PID:serial) that survives reboot/replug, unlike the IOKit path. */
+export function hidSerialForPath(hidPath: string): string | null {
+  _hidEnumLib ??= loadHidEnum();
+  const lib = _hidEnumLib;
+  if (!lib) return null;
+  try {
+    const buf = new Uint8Array(256);
+    const found = lib.symbols.mirabox_hid_serial_for_path(hidPath, buf, buf.length);
+    if (!found) return null;
+    const end = buf.indexOf(0);
+    return new TextDecoder().decode(buf.subarray(0, end >= 0 ? end : buf.length));
+  } catch (e) {
+    warn('ffi', `mirabox_hid_serial_for_path threw: ${String(e)}`);
+    return null;
   }
 }
 

@@ -43,7 +43,7 @@ function createDriver(model: DeviceModel): AnyRealDriver {
   }
 }
 
-async function handleOpen(modelId: string): Promise<void> {
+async function handleOpen(modelId: string, hidPath?: string): Promise<void> {
   const model = DEVICE_MODELS.find((m) => m.id === modelId);
   if (!model) {
     post({ type: 'opened', ok: false, error: `Unknown modelId: ${modelId}` });
@@ -57,12 +57,19 @@ async function handleOpen(modelId: string): Promise<void> {
   d.on('key', (e: KeyEvent) => post({ type: 'key', keyIndex: e.keyIndex, state: e.state }));
   d.on('error', (err: Error) => post({ type: 'error', message: err.message }));
   d.on('disconnect', () => post({ type: 'disconnect' }));
+  d.on('reinit', () => post({ type: 'reinit' }));
 
   try {
-    await d.open();
+    await d.open(hidPath);
     const serial = d instanceof ElgatoHidDriver ? d.deviceSerial : undefined;
     const firmware = d instanceof ElgatoHidDriver ? d.deviceFirmware : undefined;
-    post({ type: 'opened', ok: true, deviceSerial: serial, deviceFirmware: firmware });
+    post({
+      type: 'opened',
+      ok: true,
+      deviceSerial: serial,
+      deviceFirmware: firmware,
+      hidPath: d.hidPath,
+    });
   } catch (err) {
     post({ type: 'opened', ok: false, error: (err as Error).message });
   }
@@ -100,7 +107,7 @@ function handleSplashImage(
 async function handle(msg: MainToWorker): Promise<void> {
   switch (msg.type) {
     case 'open':
-      await handleOpen(msg.modelId);
+      await handleOpen(msg.modelId, msg.hidPath);
       break;
     case 'image':
       await handleImage(msg.keyIndex, msg.bytes, msg.format);

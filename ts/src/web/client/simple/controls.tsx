@@ -104,7 +104,8 @@ export function CopyChip({
 
 export function ManualAddPanel({
   onHelp,
-}: Readonly<{ onHelp: (id: string) => void }>): preact.JSX.Element {
+  port = CORA_PORT,
+}: Readonly<{ onHelp: (id: string) => void; port?: string }>): preact.JSX.Element {
   const ip = useStore((s) => s.status.localIp ?? '');
   const pending = !ip;
 
@@ -150,7 +151,7 @@ export function ManualAddPanel({
         <span class="step-sub">Or use local IP if everything is on the same machine:</span>
         <CopyChip label="IP" value="127.0.0.1" cls="addr-port-chip" />
         <span> : </span>
-        <CopyChip label="Port" value={CORA_PORT} cls="addr-port-chip" />
+        <CopyChip label="Port" value={port} cls="addr-port-chip" />
       </div>
     </div>
   );
@@ -206,9 +207,20 @@ export function KeyGridPreview({
 
 let _brightnessDebounce: ReturnType<typeof setTimeout> | null = null;
 
-export function Brightness(): preact.JSX.Element {
-  const brightness = useStore((s) => s.brightness);
+export function Brightness({
+  dock = 0,
+  level,
+}: Readonly<{
+  /** Dock index the slider drives (0 = primary). */
+  dock?: number;
+  /** Dock-specific level (multi-device); falls back to the store's primary value. */
+  level?: number;
+  /** Shown in the label when set (multi-device: the selected dock's model). */
+  deviceName?: string;
+}> = {}): preact.JSX.Element {
+  const storeBrightness = useStore((s) => s.brightness);
   const brightnessOverride = useStore((s) => s.brightnessOverride);
+  const brightness = level ?? storeBrightness;
 
   // Local slider value so the UI feels snappy while debouncing
   const [localVal, setLocalVal] = useState(brightness);
@@ -227,7 +239,7 @@ export function Brightness(): preact.JSX.Element {
       fetch('/api/brightness', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ level: v }),
+        body: JSON.stringify({ level: v, dock }),
       }).catch(() => undefined);
     }, 100);
   };

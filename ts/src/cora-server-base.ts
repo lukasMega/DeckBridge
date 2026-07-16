@@ -38,6 +38,13 @@ export abstract class CoraServerBase extends EventEmitter {
     this.server = net.createServer((socket) => this.acceptConnection(socket));
   }
 
+  /** True while a CORA client socket is attached. On the primary server this
+   *  means the Elgato app discovered + connected to the Network Dock; on the
+   *  child server it means a panel is paired & actively streaming. */
+  get hasClient(): boolean {
+    return this.client !== null;
+  }
+
   protected startServer(): Promise<void> {
     return new Promise((resolve, reject) => {
       let started = false;

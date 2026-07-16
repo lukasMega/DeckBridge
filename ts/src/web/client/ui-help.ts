@@ -135,6 +135,10 @@ export const HELP: Record<string, HelpTopic> = {
         html: `Enter the address <b>${CORA_ADDR}</b> (copy it from the card on the previous screen).`,
       },
       { you: false, html: 'The app connects over the network and your keys come to life.' },
+      {
+        you: true,
+        html: "Got more than one deck? Each one shows up as its own network device with its own port — take the port from that deck's card. The Elgato app remembers paired docks across restarts, so you only do this once per deck.",
+      },
     ],
     docs: {
       href: 'https://www.elgato.com/us/en/explorer/products/stream-deck/how-to-set-up-stream-deck-network-dock#p-data-block-keysud1bbstream-deck-software-setupbp',

@@ -46,6 +46,14 @@ export function clearImageStore(): void {
   imageStore.clear();
 }
 
+/** Wipe every cached image and blank all mounted grids — used when the
+ *  selected preview dock changes (the server replays the new dock's frames
+ *  right after the status broadcast). */
+export function resetPreviews(): void {
+  imageStore.clear();
+  broadcast((p) => p.refreshAll());
+}
+
 export function flashKey(index: number): void {
   broadcast((p) => p.flash(index));
 }
@@ -87,6 +95,10 @@ export class KeyPreview {
 
   setModel(modelId?: string): void {
     if (modelId) this.root.dataset['model'] = modelId;
+  }
+
+  refreshAll(): void {
+    for (let i = 0; i < this.keyCount; i++) this.refreshKey(i);
   }
 
   setClickable(clickable: boolean): void {

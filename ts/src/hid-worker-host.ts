@@ -10,10 +10,21 @@ import type { ImageModeOverride, KeyEvent } from './types.js';
 const OPEN_TIMEOUT_MS = 10_000;
 const CLOSE_GRACE_MS = 1_000;
 
+/** Detach listeners and close a driver, swallowing close errors. */
+export async function closeDriver(d: {
+  removeAllListeners(): void;
+  close(): Promise<void>;
+}): Promise<void> {
+  d.removeAllListeners();
+  await d.close().catch(() => undefined);
+}
+
 export class WorkerHidDriver extends EventEmitter implements DeviceDriver {
   readonly model: DeviceModel;
   deviceSerial: string | undefined = undefined;
   deviceFirmware: string | undefined = undefined;
+  /** HID path the worker opened this device with — see device-identity.ts. */
+  hidPath: string | undefined = undefined;
   private worker: Worker | null = null;
   private objectUrl: string | null = null;
   private openResolve: (() => void) | null = null;
@@ -26,7 +37,10 @@ export class WorkerHidDriver extends EventEmitter implements DeviceDriver {
     this.model = model;
   }
 
-  open(): Promise<void> {
+  /** `hidPath` (optional) targets a specific unclaimed HID interface — used to
+   *  open a second unit of the same model. Omitted for the primary probe, which
+   *  lets the driver enumerate + open the first usage-matched path. */
+  open(hidPath?: string): Promise<void> {
     if (this.openReject) {
       return Promise.reject(new Error('open already in flight'));
     }
@@ -56,7 +70,7 @@ export class WorkerHidDriver extends EventEmitter implements DeviceDriver {
         this.settleOpen(null, new Error('worker open timed out'));
         this.cleanupWorker();
       }, OPEN_TIMEOUT_MS);
-      this.post({ type: 'open', modelId: this.model.id });
+      this.post({ type: 'open', modelId: this.model.id, hidPath });
     });
   }
 
@@ -113,6 +127,7 @@ export class WorkerHidDriver extends EventEmitter implements DeviceDriver {
         if (msg.ok) {
           this.deviceSerial = msg.deviceSerial;
           this.deviceFirmware = msg.deviceFirmware;
+          this.hidPath = msg.hidPath;
           this.settleOpen(this.openResolve, null);
         } else {
           // Failed open: reject but KEEP the worker alive for reuse. Terminating
@@ -134,6 +149,9 @@ export class WorkerHidDriver extends EventEmitter implements DeviceDriver {
       case 'imageSent':
         this.emit('imageSent', msg.keyIndex);
         break;
+      case 'reinit':
+        this.emit('reinit');
+        break;
       case 'log':
         this.emit('log', { level: msg.level, component: msg.component, message: msg.message });
         break;
@@ -142,7 +160,10 @@ export class WorkerHidDriver extends EventEmitter implements DeviceDriver {
         break;
       case 'disconnect':
         this.emit('disconnect');
-        this.cleanupWorker();
+        // Same grace as explicit close(): a physical unplug can race an
+        // in-flight worker-thread FFI transform (50-200ms), and terminating
+        // the thread mid native call SIGBUS/SIGSEGVs the whole process.
+        this.cleanupWorker(CLOSE_GRACE_MS);
         break;
       case 'closed': {
         this.cleanupWorker();
@@ -170,13 +191,17 @@ export class WorkerHidDriver extends EventEmitter implements DeviceDriver {
     this.worker?.postMessage(msg);
   }
 
-  private cleanupWorker(): void {
-    // Null the refs synchronously (open()'s reject path is observed immediately
-    // by callers), but defer the native terminate() off the current tick. Calling
-    // Worker.terminate() synchronously from inside an onmessage/onerror callback —
-    // e.g. the throwaway "unknown modelId" worker that posts an error then is torn
-    // down at once — races txiki's worker libuv loop mid-flush and SIGSEGVs. A
-    // macrotask lets the worker thread settle to idle before it's killed.
+  /** Null the refs synchronously (open()'s reject path is observed immediately
+   *  by callers), but defer the native terminate(). Calling Worker.terminate()
+   *  synchronously from inside an onmessage/onerror callback — e.g. the
+   *  throwaway "unknown modelId" worker that posts an error then is torn down
+   *  at once — races txiki's worker libuv loop mid-flush and SIGSEGVs.
+   *  `delayMs` lets the worker thread settle to idle before it's killed: 0 (a
+   *  bare macrotask) is enough when the worker can't be mid native call (open
+   *  failure, graceful close already drained via 'close'), but a physical
+   *  disconnect can land mid an in-flight FFI image transform (50-200ms), so
+   *  that path passes CLOSE_GRACE_MS instead. */
+  private cleanupWorker(delayMs = 0): void {
     const w = this.worker;
     this.worker = null;
     if (w) {
@@ -186,7 +211,7 @@ export class WorkerHidDriver extends EventEmitter implements DeviceDriver {
         } catch {
           /* gone */
         }
-      }, 0);
+      }, delayMs);
     }
     if (this.objectUrl) {
       try {

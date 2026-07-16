@@ -194,6 +194,6 @@ return entry.data ? `data:${mime};base64,${entry.data}` : `/api/image/${index}?v
 | `ts/src/web/server/web-ui-server.ts` | `notifyImageUpdate()` · `notifyImageMode()` · `imageState`/`imageFormat` maps (`setImageState()` retained but unused by the image path) |
 | `ts/src/web/client/key-preview.ts` | Shared `KeyPreview` grid + image store + `imageSrc()` — single render path for both views |
 | `ts/src/web/client/ui-base.css` | Per-model `.key-grid[data-model] .key-cell img` rotation (single source of truth) |
-| `ts/src/web/client/ui-status.ts` | Calls `advancedGrid.rebuild/setModel/setClickable` from `status` events |
-| `ts/src/web/client/ui-advanced-grid.ts` | `advancedGrid` — persistent `KeyPreview` bound to `#btn-grid` (advanced view) |
-| `ts/src/web/client/ui-components.ts` | `buildPreview()` — creates a `KeyPreview` per render for the simple view |
+| `ts/src/web/client/advanced-key-grid.tsx` | Advanced view — Preact component owning a persistent `KeyPreview`; `rebuild/setModel/setClickable` on `status` changes |
+| `ts/src/web/client/simple/controls.tsx` | Simple view — Preact component creating its `KeyPreview` on mount, rebuilding on prop changes |
+| `ts/src/web/client/ui-ws.ts` | WS message handler — `applyImage`/`clearImage`/`flashKey` into the shared image store |

@@ -1,25 +1,13 @@
 import {
+  MDNS_PROTOCOL,
   MDNS_SERVICE_NAME,
   MDNS_SERVICE_TYPE,
-  MDNS_PROTOCOL,
   MDNS_TXT_DEVICE_TYPE,
   MDNS_TXT_VID,
 } from './types.js';
+import { platformName } from './os-utils.ts';
 
 type LogFn = (level: 'debug' | 'info' | 'warn' | 'error', message: string) => void;
-
-/**
- * Best-effort `navigator.userAgentData.platform` read. A txiki build lacking
- * `userAgentData` must not throw — fall through to the dns-sd default branch
- * in `buildArgs` via an empty string.
- */
-export function platformName(): string {
-  try {
-    return navigator.userAgentData?.platform ?? '';
-  } catch {
-    return '';
-  }
-}
 
 export function buildArgs(
   platform: string,
@@ -54,12 +42,14 @@ export class MdnsAdvertiser {
   private proc: TjsProcess | null = null;
   private readonly log: LogFn;
   readonly port: number;
+  private readonly serviceName: string;
   private productId = 0;
   private serialNumber = '';
 
-  constructor(port: number, log: LogFn) {
+  constructor(port: number, log: LogFn, serviceName: string = MDNS_SERVICE_NAME) {
     this.port = port;
     this.log = log;
+    this.serviceName = serviceName;
   }
 
   updateIdentity(productId: number, serialNumber: string): void {
@@ -76,9 +66,9 @@ export class MdnsAdvertiser {
         pid: String(this.productId),
         sn: this.serialNumber,
       };
-      const args = buildArgs(platform, MDNS_SERVICE_NAME, this.port, txt);
+      const args = buildArgs(platform, this.serviceName, this.port, txt);
 
-      this.log('info', `mDNS: spawning ${args[0]} for ${MDNS_SERVICE_NAME} on port ${this.port}`);
+      this.log('info', `mDNS: spawning ${args[0]} for ${this.serviceName} on port ${this.port}`);
 
       const proc = tjs.spawn(args, { stderr: 'inherit' });
       this.proc = proc;

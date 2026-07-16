@@ -2,14 +2,20 @@ import assert from 'tjs:assert';
 import { EventEmitter } from '../src/platform/events-shim.js';
 import { DriverManager } from '../src/driver-manager.js';
 import { DEFAULT_MODEL, DEVICE_MODELS } from '../src/devices/registry.js';
+import { MIRABOX_293_MODEL } from '../src/devices/mirabox/mirabox-293.js';
 import { MIRABOX_293S_MODEL } from '../src/devices/mirabox/mirabox-293s.js';
+import { MIRABOX_K1PRO_MODEL } from '../src/devices/mirabox/mirabox-k1pro.js';
+import type { SessionIdentity, SessionServers } from '../src/device-session.js';
 import type { DeviceModel } from '../src/devices/driver.js';
 import type { CommEntry, KeyState } from '../src/types.js';
+import { ELGATO_TCP_PORT } from '../src/types.js';
 import type { ChildGeometry } from '../src/capabilities.js';
 import type { DeviceConfig } from '../src/elgato-types.js';
 import type { ElgatoServer, ElgatoChildServer } from '../src/elgato.js';
 import type { WebUIServer } from '../src/web/server/index.js';
 import type { WorkerHidDriver } from '../src/hid-worker-host.js';
+import { generateDeviceIdentity } from '../src/device-identity.js';
+import type { DeviceIdentitySettings } from '../src/settings-store.js';
 
 // ── Test harness ─────────────────────────────────────────────────────────────
 
@@ -35,6 +41,7 @@ function makeFakeServer() {
     setChildGeometryCalls: [] as ChildGeometry[],
     restartMdnsCalls: [] as number[],
     pushChildCapabilitiesCalls: 0,
+    setMdnsServiceNameCalls: [] as string[],
     setDeviceConfig(config: Partial<DeviceConfig>) {
       this.setDeviceConfigCalls.push(config);
     },
@@ -47,6 +54,9 @@ function makeFakeServer() {
     pushChildCapabilities() {
       this.pushChildCapabilitiesCalls++;
     },
+    setMdnsServiceName(name: string) {
+      this.setMdnsServiceNameCalls.push(name);
+    },
   };
 }
 
@@ -54,6 +64,7 @@ function makeFakeChildServer() {
   return {
     setChildGeometryCalls: [] as ChildGeometry[],
     sendKeyEventCalls: [] as { keyIndex: number; state: KeyState }[],
+    hasClient: false,
     setChildGeometry(geo: ChildGeometry) {
       this.setChildGeometryCalls.push(geo);
     },
@@ -94,8 +105,39 @@ function makeFakeWebUI() {
     notifyDriverStatus(mode: string, connected: boolean) {
       this.notifyDriverStatusCalls.push({ mode, connected });
     },
+    notifyElgatoDevicePresentCalls: [] as boolean[],
+    notifyElgatoDevicePresent(present: boolean) {
+      this.notifyElgatoDevicePresentCalls.push(present);
+    },
     notifyComm(entry: Omit<CommEntry, 'ts'>) {
       this.notifyCommCalls.push(entry);
+    },
+    devices: [] as DeviceIdentitySettings[],
+    // Per-device brightness override, resolved by the coordinator per dock. No
+    // dock has a persisted override in these tests → default.
+    isBrightnessOverride(_deviceKey: string): boolean {
+      return false;
+    },
+    getOrCreateDeviceIdentityCalls: [] as { deviceKey: string; defaultMdnsName: string }[],
+    // Mirrors WebUIServer.getOrCreateDeviceIdentity: lookup-or-generate + memoize,
+    // so tests exercising a reconnect/rescan see a stable identity like production.
+    getOrCreateDeviceIdentity(deviceKey: string, defaultMdnsName: string): DeviceIdentitySettings {
+      this.getOrCreateDeviceIdentityCalls.push({ deviceKey, defaultMdnsName });
+      const existing = this.devices.find((d) => d.deviceKey === deviceKey);
+      if (existing) return existing;
+      const identity = generateDeviceIdentity(deviceKey, defaultMdnsName);
+      this.devices.push(identity);
+      return identity;
+    },
+    // Raw per-dock CORA frame cache the app pushed; dockFramesSnapshot reads it
+    // (as WebUIServer does) so a test can simulate frames present at disconnect.
+    dockFrames: new Map<number, Map<number, { data: Uint8Array; format: 'jpeg' | 'bmp' }>>(),
+    dockFramesSnapshot(dock: number) {
+      return new Map(this.dockFrames.get(dock) ?? []);
+    },
+    notifyDockImageCalls: [] as { dock: number; key: number; format: string }[],
+    notifyDockImage(dock: number, key: number, _data: unknown, format: 'jpeg' | 'bmp' = 'jpeg') {
+      this.notifyDockImageCalls.push({ dock, key, format });
     },
   };
 }
@@ -166,6 +208,39 @@ class ControllableRealDriver extends EventEmitter {
   setBrightness(): void {}
 }
 
+/** A fake "real" driver that records renderCoraImage/sendSplashImage calls, so a
+ *  test can assert the deck is repainted from the app's cached frames on replug. */
+class RepaintFakeDriver extends EventEmitter {
+  readonly model: DeviceModel;
+  deviceSerial: string | undefined = 'SNIMG';
+  deviceFirmware: string | undefined = '1.0';
+  hidPath: string | undefined = undefined;
+  renderCoraImageCalls: { key: number; format: string }[] = [];
+  sendSplashImageCalls = 0;
+
+  constructor(model: DeviceModel) {
+    super();
+    this.model = model;
+  }
+
+  open(): Promise<void> {
+    return Promise.resolve();
+  }
+  close(): Promise<void> {
+    return Promise.resolve();
+  }
+  sendImage(): void {}
+  clearKey(): void {}
+  setBrightness(): void {}
+  setImageOverride(): void {}
+  renderCoraImage(key: number, _bytes: unknown, format: 'jpeg' | 'bmp'): void {
+    this.renderCoraImageCalls.push({ key, format });
+  }
+  sendSplashImage(): void {
+    this.sendSplashImageCalls++;
+  }
+}
+
 function setup() {
   const server = makeFakeServer();
   const childServer = makeFakeChildServer();
@@ -230,6 +305,56 @@ await test('6. getReconnectAttemptCount increments across failed tryRealConnect,
       driverManager.getReconnectAttemptCount(),
       0,
       'attempt count resets to 0 on successful connect',
+    );
+  } finally {
+    driverManager.__resetRealDriverFactory();
+  }
+});
+
+await test("7. replug repaints the deck from the app's last CORA frames (over the splash)", async () => {
+  const { webui, driverManager } = setup();
+  const created: RepaintFakeDriver[] = [];
+  driverManager.__setRealDriverFactory((model) => {
+    const d = new RepaintFakeDriver(model);
+    created.push(d);
+    return d as unknown as WorkerHidDriver;
+  });
+  try {
+    // First connect: no frames captured yet, so nothing is replayed.
+    await driverManager.tryRealConnect();
+    const first = created[0]!;
+    assert.equal(first.renderCoraImageCalls.length, 0, 'no replay on the first connect');
+
+    // The Elgato app pushed frames for two keys (cached on dock 0).
+    webui.dockFrames.set(
+      0,
+      new Map([
+        [0, { data: new Uint8Array([1]), format: 'jpeg' }],
+        [3, { data: new Uint8Array([2]), format: 'bmp' }],
+      ]),
+    );
+
+    // USB unplug: the disconnect handler snapshots the frames before the wipe.
+    first.emit('disconnect');
+    assert.equal(driverManager.getCurrentDriver(), null, 'driver cleared on disconnect');
+
+    // USB replug: the same model reconnects.
+    await driverManager.tryRealConnect();
+    const second = created[1]!;
+    assert.notEqual(second, first, 'a fresh driver instance after replug');
+
+    // The deck is repainted with the app's last frames (the app never re-pushes).
+    assert.equal(second.renderCoraImageCalls.length, 2, 'both cached frames replayed to the deck');
+    assert.deepEqual(
+      second.renderCoraImageCalls.map((c) => c.key).toSorted((a, b) => a - b),
+      [0, 3],
+      'the exact cached keys were repainted',
+    );
+    // The WebUI preview cache is repopulated too.
+    assert.equal(
+      webui.notifyDockImageCalls.filter((c) => c.dock === 0).length,
+      2,
+      'the WebUI preview is restored on replug',
     );
   } finally {
     driverManager.__resetRealDriverFactory();
@@ -523,6 +648,385 @@ await test('9. E1-b: in-flight guard — a second tryRealConnect() during a prob
   } finally {
     driverManager.__resetRealDriverFactory();
   }
+});
+
+// ── Multi-device coordinator (extra docks) ─────────────────────────────────
+
+/** Fake driver whose open() always succeeds — models a present, openable extra
+ *  (or primary) device. Records disconnect wiring via the EventEmitter base. */
+class CoordFakeDriver extends EventEmitter {
+  readonly model: DeviceModel;
+  deviceSerial: string | undefined = 'SN';
+  deviceFirmware: string | undefined = '1.0';
+  /** Set by open(): the specific unit's path (multi-device), mirroring the real
+   *  driver. setupCoord's factory overrides open() to also default the primary's
+   *  path from the enumerated list. */
+  hidPath: string | undefined = undefined;
+  closeCalls = 0;
+  brightnessCalls: number[] = [];
+  constructor(model: DeviceModel) {
+    super();
+    this.model = model;
+  }
+  open(hidPath?: string): Promise<void> {
+    this.hidPath = hidPath;
+    return Promise.resolve();
+  }
+  close(): Promise<void> {
+    this.closeCalls++;
+    return Promise.resolve();
+  }
+  renderCoraImage(): void {}
+  sendSplashImage(): void {}
+  sendImage(): void {}
+  clearKey(): void {}
+  setBrightness(level: number): void {
+    this.brightnessCalls.push(level);
+  }
+}
+
+class FactoryServer {
+  startCalls = 0;
+  stopCalls = 0;
+  start(): Promise<void> {
+    this.startCalls++;
+    return Promise.resolve();
+  }
+  stop(): Promise<void> {
+    this.stopCalls++;
+    return Promise.resolve();
+  }
+  setDeviceConfig(): void {}
+  setChildGeometry(): void {}
+  restartMdns(): void {}
+  pushChildCapabilities(): void {}
+  setMdnsServiceName(): void {}
+}
+
+class FactoryChildServer extends EventEmitter {
+  startCalls = 0;
+  stopCalls = 0;
+  hasClient = false;
+  start(): Promise<void> {
+    this.startCalls++;
+    return Promise.resolve();
+  }
+  stop(): Promise<void> {
+    this.stopCalls++;
+    return Promise.resolve();
+  }
+  setChildGeometry(): void {}
+  sendKeyEvent(): void {}
+}
+
+/** Build a coordinator-enabled DriverManager: a session-servers factory (records
+ *  identities + servers), a presence set the test can mutate, and a driver
+ *  factory that records every driver made (so tests can emit 'disconnect'). */
+function setupCoord() {
+  const server = makeFakeServer();
+  const childServer = makeFakeChildServer();
+  const webui = makeFakeWebUI();
+
+  const identities: SessionIdentity[] = [];
+  const serversByIndex = new Map<
+    number,
+    { server: FactoryServer; childServer: FactoryChildServer }
+  >();
+  const drivers = new Map<string, CoordFakeDriver>();
+  const driversByPath = new Map<string, CoordFakeDriver>();
+  const present = new Set<string>();
+  // Per-model HID paths override; defaults to one synthetic path per present
+  // model. Tests wanting same-model duplicates set N paths for one model id.
+  const pathsByModel = new Map<string, string[]>();
+  const resolvePaths = (m: DeviceModel): string[] =>
+    pathsByModel.get(m.id) ?? (present.has(m.id) ? [`hid:${m.id}`] : []);
+  let docksChangedCalls = 0;
+
+  const driverManager = new DriverManager({
+    webui: webui as unknown as WebUIServer,
+    server: server as unknown as ElgatoServer,
+    childServer: childServer as unknown as ElgatoChildServer,
+    onTrayChange: () => {},
+    getShuttingDown: () => false,
+    onDocksChanged: () => {
+      docksChangedCalls++;
+    },
+    sessionServersFactory: (identity: SessionIdentity): SessionServers => {
+      identities.push(identity);
+      const s = new FactoryServer();
+      const c = new FactoryChildServer();
+      serversByIndex.set(identity.index, { server: s, childServer: c });
+      return {
+        server: s as unknown as ElgatoServer,
+        childServer: c as unknown as ElgatoChildServer,
+      };
+    },
+  });
+  driverManager.__setPresenceCheck((m) => present.has(m.id));
+  driverManager.__setListModelPaths(resolvePaths);
+  driverManager.__setRealDriverFactory((m) => {
+    const d = new CoordFakeDriver(m);
+    // Mirror the real driver: the primary probe opens with no explicit path and
+    // adopts the first enumerated one; an extra is opened at a targeted path.
+    d.open = (hidPath?: string) => {
+      d.hidPath = hidPath ?? resolvePaths(m)[0];
+      if (d.hidPath) driversByPath.set(d.hidPath, d);
+      return Promise.resolve();
+    };
+    drivers.set(m.id, d);
+    return d as unknown as WorkerHidDriver;
+  });
+
+  return {
+    driverManager,
+    identities,
+    serversByIndex,
+    drivers,
+    driversByPath,
+    present,
+    pathsByModel,
+    getDocksChangedCalls: () => docksChangedCalls,
+  };
+}
+
+// Let queued teardown microtasks (onDisconnect → teardownExtraSession → stop) run.
+const flush = () => new Promise<void>((r) => setTimeout(r, 0));
+
+await test('C1. one scan after primary connects creates exactly one extra (index 1, ports 5345/5346)', async () => {
+  const { driverManager, identities, present } = setupCoord();
+  present.add(DEFAULT_MODEL.id); // primary (MK.2)
+  present.add(MIRABOX_293_MODEL.id);
+  present.add(MIRABOX_293S_MODEL.id);
+
+  await driverManager.tryRealConnect(); // primary claims MK.2
+  assert.equal(identities.length, 0, 'no extras before a scan');
+
+  await driverManager.__scanOnce();
+  assert.equal(identities.length, 1, 'exactly one extra created per scan tick');
+  assert.equal(identities[0]?.index, 1, 'first extra uses index 1');
+  assert.equal(identities[0]?.primaryPort, 5345, 'primary port = 5343 + 2*1');
+  assert.equal(identities[0]?.childPort, 5346, 'child port = 5344 + 2*1');
+});
+
+await test('C2. extras are NOT created while realDriver is null', async () => {
+  const { driverManager, identities, present } = setupCoord();
+  present.add(DEFAULT_MODEL.id);
+  present.add(MIRABOX_293_MODEL.id);
+
+  // No tryRealConnect — primary never connected, realDriver stays null.
+  await driverManager.__scanOnce();
+  assert.equal(identities.length, 0, 'scan is a no-op until the primary is connected');
+});
+
+await test('C3. an extra model going absent does not tear its session down (disconnect-driven)', async () => {
+  const { driverManager, identities, serversByIndex, present } = setupCoord();
+  present.add(DEFAULT_MODEL.id);
+  present.add(MIRABOX_293_MODEL.id);
+
+  await driverManager.tryRealConnect();
+  await driverManager.__scanOnce();
+  assert.equal(identities.length, 1, 'extra 293 created');
+
+  present.delete(MIRABOX_293_MODEL.id); // device "unplugged" per enumeration
+  await driverManager.__scanOnce();
+  assert.equal(identities.length, 1, 'no new extra created');
+  assert.equal(serversByIndex.get(1)?.server.stopCalls, 0, 'session NOT stopped by absence alone');
+});
+
+await test('C4. extra driver disconnect frees its index; a third model reuses index 1', async () => {
+  const { driverManager, identities, serversByIndex, drivers, present } = setupCoord();
+  present.add(DEFAULT_MODEL.id);
+  present.add(MIRABOX_293_MODEL.id);
+
+  await driverManager.tryRealConnect();
+  await driverManager.__scanOnce();
+  assert.equal(identities[0]?.index, 1, 'extra 293 took index 1');
+
+  // Device disconnects → session teardown frees index 1.
+  drivers.get(MIRABOX_293_MODEL.id)!.emit('disconnect');
+  await flush();
+  assert.equal(serversByIndex.get(1)?.server.stopCalls, 1, 'disconnected session stopped');
+
+  // A different distinct model now appears — it should reuse the freed index 1.
+  present.delete(MIRABOX_293_MODEL.id);
+  present.add(MIRABOX_K1PRO_MODEL.id);
+  await driverManager.__scanOnce();
+  assert.equal(identities.length, 2, 'second extra created');
+  assert.equal(identities[1]?.index, 1, 'freed index 1 is reused (lowest free wins)');
+});
+
+await test("C5. switchMode('mock') tears down all extra sessions", async () => {
+  const { driverManager, identities, serversByIndex, present } = setupCoord();
+  present.add(DEFAULT_MODEL.id);
+  present.add(MIRABOX_293_MODEL.id);
+
+  await driverManager.tryRealConnect();
+  await driverManager.__scanOnce();
+  assert.equal(identities.length, 1, 'one extra up before switch');
+
+  await driverManager.switchMode('mock');
+  assert.equal(serversByIndex.get(1)?.server.stopCalls, 1, 'extra primary server stopped on mock');
+  assert.equal(
+    serversByIndex.get(1)?.childServer.stopCalls,
+    1,
+    'extra child server stopped on mock',
+  );
+});
+
+await test('C6. getDockStatuses(): scanOnce creating an extra returns 2 sorted entries and fires onDocksChanged', async () => {
+  const { driverManager, present, getDocksChangedCalls } = setupCoord();
+  present.add(DEFAULT_MODEL.id);
+  present.add(MIRABOX_293_MODEL.id);
+
+  await driverManager.tryRealConnect();
+  const callsAfterConnect = getDocksChangedCalls();
+  assert.ok(callsAfterConnect > 0, 'onDocksChanged fired for the primary connect');
+
+  const soloStatuses = driverManager.getDockStatuses();
+  assert.equal(soloStatuses.length, 1, 'primary only before any extra is created');
+  assert.equal(soloStatuses[0]?.index, 0, 'primary is index 0');
+  assert.equal(
+    soloStatuses[0]?.modelId,
+    DEFAULT_MODEL.id,
+    'primary modelId matches connected model',
+  );
+  assert.equal(
+    soloStatuses[0]?.primaryPort,
+    ELGATO_TCP_PORT,
+    'primary primaryPort is ELGATO_TCP_PORT',
+  );
+  assert.equal(soloStatuses[0]?.elgatoConnected, false, 'no child client attached yet');
+
+  await driverManager.__scanOnce();
+  assert.ok(
+    getDocksChangedCalls() > callsAfterConnect,
+    'onDocksChanged fired again after the extra dock came up',
+  );
+
+  const statuses = driverManager.getDockStatuses();
+  assert.equal(statuses.length, 2, 'primary + one extra');
+  assert.equal(statuses[0]?.index, 0, 'sorted: primary (index 0) first');
+  assert.equal(statuses[1]?.index, 1, 'sorted: extra (index 1) second');
+  assert.equal(
+    statuses[1]?.modelId,
+    MIRABOX_293_MODEL.id,
+    'extra modelId matches its device model',
+  );
+  assert.equal(
+    statuses[1]?.primaryPort,
+    ELGATO_TCP_PORT + 2,
+    'extra primaryPort is strided off ELGATO_TCP_PORT',
+  );
+});
+
+await test('C7. getDockStatuses(): tearing down the extra drops back to 1 entry and fires onDocksChanged again', async () => {
+  const { driverManager, drivers, present, getDocksChangedCalls } = setupCoord();
+  present.add(DEFAULT_MODEL.id);
+  present.add(MIRABOX_293_MODEL.id);
+
+  await driverManager.tryRealConnect();
+  await driverManager.__scanOnce();
+  assert.equal(driverManager.getDockStatuses().length, 2, 'primary + extra up');
+
+  const callsBeforeTeardown = getDocksChangedCalls();
+  drivers.get(MIRABOX_293_MODEL.id)!.emit('disconnect');
+  await flush();
+
+  assert.ok(
+    getDocksChangedCalls() > callsBeforeTeardown,
+    'onDocksChanged fired again after the extra tore down',
+  );
+  const statuses = driverManager.getDockStatuses();
+  assert.equal(statuses.length, 1, 'back to primary only after the extra disconnects');
+  assert.equal(statuses[0]?.index, 0, 'remaining entry is the primary');
+});
+
+await test('C8. setDockBrightness routes to the right dock and shows in getDockStatuses', async () => {
+  const { driverManager, drivers, present, getDocksChangedCalls } = setupCoord();
+  present.add(DEFAULT_MODEL.id);
+  present.add(MIRABOX_293_MODEL.id);
+
+  await driverManager.tryRealConnect();
+  await driverManager.__scanOnce();
+
+  const before = getDocksChangedCalls();
+  driverManager.setDockBrightness(0, 30);
+  assert.deepEqual(
+    drivers.get(DEFAULT_MODEL.id)!.brightnessCalls,
+    [30],
+    'primary driver got the level',
+  );
+  assert.equal(
+    drivers.get(MIRABOX_293_MODEL.id)!.brightnessCalls.length,
+    0,
+    'extra driver untouched by a primary change',
+  );
+  assert.ok(getDocksChangedCalls() > before, 'primary change fires onDocksChanged');
+
+  driverManager.setDockBrightness(1, 70);
+  assert.deepEqual(
+    drivers.get(MIRABOX_293_MODEL.id)!.brightnessCalls,
+    [70],
+    'extra driver got the level',
+  );
+
+  const statuses = driverManager.getDockStatuses();
+  assert.equal(statuses[0]?.brightness, 30, 'primary status carries its level');
+  assert.equal(statuses[1]?.brightness, 70, 'extra status carries its level');
+});
+
+await test('D1. two units of the SAME model → primary claims one path, extra opens the other', async () => {
+  const { driverManager, identities, drivers, driversByPath, present, pathsByModel } = setupCoord();
+  present.add(DEFAULT_MODEL.id); // only one model present…
+  pathsByModel.set(DEFAULT_MODEL.id, ['hid:mk2:a', 'hid:mk2:b']); // …but two physical units
+
+  await driverManager.tryRealConnect(); // primary opens the first path (lowest)
+  const primary = drivers.get(DEFAULT_MODEL.id);
+  assert.equal(primary?.hidPath, 'hid:mk2:a', 'primary adopted the first enumerated path');
+
+  await driverManager.__scanOnce();
+  assert.equal(identities.length, 1, 'the second same-model unit opens as one extra');
+  assert.equal(identities[0]?.index, 1, 'extra uses index 1');
+
+  const extra = driversByPath.get('hid:mk2:b');
+  assert.ok(extra != null, "extra opened the primary's OTHER path, not a re-open of hid:mk2:a");
+  assert.notEqual(extra, primary, 'extra is a distinct driver instance from the primary');
+  assert.notEqual(
+    identities[0]?.deviceKey,
+    'hid:mk2:a',
+    "extra's deviceKey is not the primary's path",
+  );
+  assert.equal(identities[0]?.deviceKey, 'hid:mk2:b', "extra's deviceKey is its own path");
+
+  // Idempotent: no third session (both paths now claimed).
+  await driverManager.__scanOnce();
+  assert.equal(identities.length, 1, 'no further extra — both units claimed');
+});
+
+await test('D2. disconnecting one same-model extra tears down only that unit; the other survives', async () => {
+  const { driverManager, identities, serversByIndex, driversByPath, present, pathsByModel } =
+    setupCoord();
+  present.add(DEFAULT_MODEL.id);
+  pathsByModel.set(DEFAULT_MODEL.id, ['hid:mk2:a', 'hid:mk2:b', 'hid:mk2:c']); // three units
+
+  await driverManager.tryRealConnect(); // primary claims hid:mk2:a
+  await driverManager.__scanOnce(); // extra b → index 1
+  await driverManager.__scanOnce(); // extra c → index 2
+  assert.equal(identities.length, 2, 'two same-model extras up');
+  assert.equal(driverManager.getDockStatuses().length, 3, 'primary + two extras');
+
+  // Unit b disconnects.
+  driversByPath.get('hid:mk2:b')!.emit('disconnect');
+  await flush();
+
+  assert.equal(serversByIndex.get(1)?.server.stopCalls, 1, 'unit b (index 1) session stopped');
+  assert.equal(serversByIndex.get(2)?.server.stopCalls, 0, 'unit c (index 2) session survives');
+  assert.equal(driverManager.getDockStatuses().length, 2, 'primary + surviving extra c');
+
+  // The freed path can be re-docked on the next scan (unit b replugged).
+  await driverManager.__scanOnce();
+  assert.equal(identities.length, 3, 'unit b re-docks into the freed index');
+  assert.equal(identities[2]?.index, 1, 'freed index 1 reused');
 });
 
 // ── Summary ───────────────────────────────────────────────────────────────────

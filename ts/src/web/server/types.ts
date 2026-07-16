@@ -1,4 +1,22 @@
-import type { KeyState, CommEntry, ImageModeOverride } from '../../types.js';
+import type {
+  KeyState,
+  CommEntry,
+  ExtraKeyConfig,
+  ImageModeOverride,
+  DockStatus,
+  ClientApp,
+} from '../../types.js';
+import type { PluginStatus } from '../../plugin-host.js';
+
+/** Payload for GET /api/plugins — the extra-key plugin widget's WebUI data:
+ *  the plugins dir (for the empty-state hint), the *.js files found there
+ *  (dropdown), and the live status of each plugin-widget key on the selected
+ *  dock (keyed by wire id). */
+export interface PluginsInfo {
+  dir: string;
+  files: string[];
+  status: Record<string, PluginStatus>;
+}
 
 export interface Stats {
   uptimeMs: number;
@@ -14,6 +32,18 @@ export interface MockDeviceConfig {
   childSerialNumber: string;
   productId: number;
   macAddress: string;
+}
+
+/** The identifiers actually sent to the Elgato Stream Deck app over the
+ *  network (mDNS advertisement + CORA device-info/capabilities frames) for
+ *  whichever device is currently active — `mockConfig` while driverMode is
+ *  'mock', the real dock's fixed identity otherwise. Read-only, shown under
+ *  Settings for reference. */
+export interface DeviceIdentity extends MockDeviceConfig {
+  mdnsServiceName: string;
+  // Present only for a real (non-mock) dock with a persisted identity — lets
+  // the WebUI edit mdnsServiceName via POST /api/device-identity/mdns-name.
+  deviceKey?: string;
 }
 
 export type LogLevel = 'debug' | 'info' | 'warn' | 'error';
@@ -43,6 +73,7 @@ export interface StatusSnapshot {
   driverConnected: boolean;
   elgatoConnected: boolean;
   elgatoRemoteAddr: string | null;
+  clientApp: ClientApp;
   brightness: number;
   modelId: string;
   modelName: string;
@@ -50,8 +81,14 @@ export interface StatusSnapshot {
   columns: number;
   rows: number;
   elgatoAppRunning: boolean;
+  /** True when an Elgato-branded device (MK.2/Mini) is enumerated on USB —
+   *  independent of whether we could open it. Gates the "Elgato app is
+   *  blocking access" screen so it doesn't fire for non-Elgato hardware. */
+  elgatoDevicePresent: boolean;
   localIp: string;
   imageModeOverride: ImageModeOverride;
+  docks: DockStatus[];
+  selectedDock: number;
 }
 
 export interface StateResponse extends StatusSnapshot {
@@ -64,6 +101,9 @@ export interface StateResponse extends StatusSnapshot {
   resizeEnabled: boolean;
   brightnessOverride: boolean;
   deviceModels: DeviceModelInfo[];
+  deviceIdentity: DeviceIdentity;
+  // The SELECTED dock's extra-key assignments, keyed by device wire id.
+  extraKeys: Record<string, ExtraKeyConfig>;
 }
 
 /**
@@ -76,6 +116,7 @@ export interface WebUIController {
   readonly resizeEnabled: boolean;
   readonly brightnessOverride: boolean;
   readonly imageModeOverride: ImageModeOverride;
+  readonly selectedDock: number;
   fullState(): StateResponse;
   getImage(key: number): Buffer | undefined;
   notifyBrightness(level: number): void;
@@ -84,4 +125,11 @@ export interface WebUIController {
   notifyImageMode(mode: ImageModeOverride): void;
   applyMockConfig(parsed: Partial<MockDeviceConfig>): MockDeviceConfig;
   trySimulateKey(n: number): { error: string; status: number } | null;
+  trySelectDock(index: unknown): { error: string; status: number } | null;
+  trySetExtraKey(wireId: number, cfg: ExtraKeyConfig): { error: string; status: number } | null;
+  tryRunExtraKeyNow(wireId: number): { error: string; status: number } | null;
+  pluginsInfo(): Promise<PluginsInfo>;
+  getSettingsJson(): string;
+  applySettingsJson(raw: string): void;
+  openSettingsFile(): Promise<void>;
 }

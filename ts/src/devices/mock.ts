@@ -11,7 +11,7 @@ export class MockDriver extends EventEmitter implements DeviceDriver {
     this.model = model;
   }
 
-  async open(): Promise<void> {}
+  async open(_hidPath?: string): Promise<void> {}
   async close(): Promise<void> {}
   sendImage(_keyIndex: number, _bytes: Uint8Array): void {}
   clearKey(_keyIndex: number): void {}

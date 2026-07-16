@@ -158,7 +158,7 @@ struct TrayHandles {
 fn build_tray(icons: &Icons) -> TrayHandles {
     let tray_menu = Menu::new();
 
-    let header_item = MenuItem::new("mira2el", false, None);
+    let header_item = MenuItem::new("DeckBridge", false, None);
     let status_item = MenuItem::new("Status: \u{2014}", false, None);
     let open_ui_item = MenuItem::new("Open Web UI", true, None);
     let check_req_item = MenuItem::new("Check Requirements", true, None);
@@ -182,7 +182,7 @@ fn build_tray(icons: &Icons) -> TrayHandles {
 
     let tray = TrayIconBuilder::new()
         .with_menu(Box::new(tray_menu))
-        .with_tooltip("mira2el")
+        .with_tooltip("DeckBridge")
         .with_icon(icons.disconnected.clone())
         .build()
         .expect("failed to build tray icon");

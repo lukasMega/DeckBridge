@@ -6,7 +6,7 @@ export const MIRABOX_293_MODEL: DeviceModel = {
   id: 'mirabox-293',
   vendor: 'mirabox',
   protocol: 'mirabox-cora',
-  name: 'Mirabox 293V3/Ajazz Stream Deck',
+  name: 'Mirabox 293V3/Ajazz',
   usbVendorId: 0x6603,
   usbProductIds: [0x1005, 0x1006, 0x1010],
   usagePage: 0xffa0,

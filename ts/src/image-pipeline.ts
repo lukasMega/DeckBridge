@@ -43,8 +43,9 @@ export function setupImageHandler(
   childServer.on('image', ({ keyIndex, data, format }: ImageEvent) => {
     perfOnArrival();
 
-    // WebUI gets the original CORA image immediately — it never waits on the device.
-    webui.notifyImageUpdate(keyIndex, Buffer.from(data), format);
+    // WebUI gets the original CORA image immediately — it never waits on the
+    // device. Dock 0 = primary; the WebUI broadcasts only the selected dock.
+    webui.notifyDockImage(0, keyIndex, Buffer.from(data), format);
     perfOnWebUI();
 
     // Hand the raw CORA image to the device driver. The worker-backed real driver

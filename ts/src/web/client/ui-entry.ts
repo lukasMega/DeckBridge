@@ -6,6 +6,8 @@ import type {
   ServerLog,
   CommLog,
   DeviceModel,
+  DeviceIdentity,
+  ExtraKeyCfg,
 } from './ui-types.js';
 import { applyImage } from './key-preview.js';
 import { connectWS } from './ui-ws.js';
@@ -24,6 +26,8 @@ interface InitialState extends Status {
   brightnessOverride?: boolean;
   imageModeOverride?: string | null;
   deviceModels?: DeviceModel[];
+  deviceIdentity?: DeviceIdentity;
+  extraKeys?: Record<string, ExtraKeyCfg>;
 }
 
 void fetch('/api/state')
@@ -39,6 +43,8 @@ void fetch('/api/state')
       brightnessOverride: st.brightnessOverride ?? true,
       imageMode: st.imageModeOverride ?? null,
       deviceModels: st.deviceModels ?? [],
+      deviceIdentity: st.deviceIdentity,
+      extraKeys: st.extraKeys ?? {},
       serverLogs: st.logs ?? [],
       commLogs: st.commLogs ?? [],
       keyEvents: st.keyEvents ?? [],

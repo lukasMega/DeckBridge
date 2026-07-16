@@ -140,6 +140,12 @@ export default defineConfig([
         unresolvableAlias: true,
         customSourcePatterns: ['tjs', 'tjs:*', 'virtual:*'],
       },
+      // `mode: 'full'` is deprecated in v7 (its replacement, `partialMatch`, only
+      // classifies folders), but it is the only way to keep single-file element types
+      // (worker, worker-host, app, cora globs, …). The v7-native alternative —
+      // `boundaries/files` descriptors + file selectors in every policy — would mean
+      // rewriting all policies below. Revisit if v8 removes `mode`.
+      'boundaries/legacy-warnings': false,
       'boundaries/elements': [
         { type: 'web-client', mode: 'full', pattern: 'src/web/client/**' },
         { type: 'web-server', mode: 'full', pattern: 'src/web/server/**' },
@@ -150,11 +156,14 @@ export default defineConfig([
         { type: 'worker', mode: 'full', pattern: 'src/hid-worker.ts' },
         { type: 'worker-host', mode: 'full', pattern: 'src/hid-worker-host.ts' },
         { type: 'worker-ipc', mode: 'full', pattern: 'src/hid-worker-protocol.ts' },
+        { type: 'plugin-worker', mode: 'full', pattern: 'src/plugin-worker.ts' },
+        { type: 'plugin-worker-host', mode: 'full', pattern: 'src/plugin-host.ts' },
+        { type: 'plugin-worker-ipc', mode: 'full', pattern: 'src/plugin-worker-protocol.ts' },
         { type: 'transform', mode: 'full', pattern: ['src/translator.ts', 'src/image-render.ts', 'src/splash-sender.ts'] },
         { type: 'image-main', mode: 'full', pattern: ['src/image-pipeline.ts', 'src/image-cache.ts', 'src/image-assembler.ts'] },
         { type: 'cora', mode: 'full', pattern: ['src/cora-*.ts', 'src/elgato*.ts', 'src/feature-response.ts'] },
-        { type: 'infra', mode: 'full', pattern: ['src/native-libs.ts', 'src/mdns-advertiser.ts', 'src/tray.ts'] },
-        { type: 'app', mode: 'full', pattern: ['src/app.ts', 'src/driver-manager.ts', 'src/cora-startup.ts'] },
+        { type: 'infra', mode: 'full', pattern: ['src/native-libs.ts', 'src/mdns-advertiser.ts', 'src/tray.ts', 'src/settings-store.ts', 'src/device-identity.ts', 'src/os-utils.ts'] },
+        { type: 'app', mode: 'full', pattern: ['src/app.ts', 'src/driver-manager.ts', 'src/driver-manager-extras.ts', 'src/cora-startup.ts', 'src/device-session.ts', 'src/extra-keys.ts'] },
         { type: 'dev-entry', mode: 'full', pattern: ['src/mirabox-smoke.ts', 'src/k1pro-probe.ts'] },
         { type: 'shared', mode: 'full', pattern: ['src/types.ts', 'src/logger.ts', 'src/capabilities.ts', 'src/comm-format.ts']
         },
@@ -162,97 +171,145 @@ export default defineConfig([
     },
     rules: {
       'boundaries/no-unknown-files': 'error',
-      'boundaries/no-unknown': 'error',
+      'boundaries/no-unknown-dependencies': 'error',
       'boundaries/dependencies': [
         'error',
         {
           default: 'disallow',
-          rules: [
+          policies: [
             // same-element internal imports always allowed
             { allow: { dependency: { relationship: { to: 'internal' } } } },
             // Multi-file element types: same-type imports are always allowed (e.g. one
             // web-client module importing another, one cora server importing another).
             // No `capture` is configured, so `relationship: internal` (same element
             // *instance*) doesn't cover cross-file same-type imports — these do.
-            { from: { type: 'web-client' }, allow: { to: { type: 'web-client' } } },
-            { from: { type: 'web-server' }, allow: { to: { type: 'web-server' } } },
-            { from: { type: 'devices' }, allow: { to: { type: 'devices' } } },
-            { from: { type: 'cora' }, allow: { to: { type: 'cora' } } },
-            { from: { type: 'transform' }, allow: { to: { type: 'transform' } } },
-            { from: { type: 'infra' }, allow: { to: { type: 'infra' } } },
-            { from: { type: 'app' }, allow: { to: { type: 'app' } } },
-            { from: { type: 'ffi' }, allow: { to: { type: 'ffi' } } },
+            { from: { element: { type: 'web-client' } }, allow: { to: { element: { type: 'web-client' } } } },
+            { from: { element: { type: 'web-server' } }, allow: { to: { element: { type: 'web-server' } } } },
+            { from: { element: { type: 'devices' } }, allow: { to: { element: { type: 'devices' } } } },
+            { from: { element: { type: 'cora' } }, allow: { to: { element: { type: 'cora' } } } },
+            { from: { element: { type: 'transform' } }, allow: { to: { element: { type: 'transform' } } } },
+            { from: { element: { type: 'infra' } }, allow: { to: { element: { type: 'infra' } } } },
+            { from: { element: { type: 'app' } }, allow: { to: { element: { type: 'app' } } } },
+            { from: { element: { type: 'ffi' } }, allow: { to: { element: { type: 'ffi' } } } },
 
             // ── universal leaves (excluding web-client: G1 keeps the browser tier importing
             //    only web-client — see the dedicated web-client rule below) ──
-            { from: { type: '!web-client' }, allow: { to: { type: ['shared', 'worker-ipc'] } } },
+            {
+              from: { element: { type: '!web-client' } },
+              allow: { to: { element: { type: ['shared', 'worker-ipc'] } } },
+            },
             // `devices/driver.ts` defines the cross-tier DeviceDriver/DeviceModel contract types;
             // any non-browser tier may depend on it for *types only*, never for runtime device code.
             {
-              from: { type: '!web-client' },
-              allow: { to: { type: 'devices' }, dependency: { kind: 'type' } },
+              from: { element: { type: '!web-client' } },
+              allow: { to: { element: { type: 'devices' } }, dependency: { kind: 'type' } },
             },
             {
-              from: { type: ['platform', 'ffi', 'shared', 'worker-ipc'] },
-              allow: { to: { type: 'platform' } },
+              from: { element: { type: ['platform', 'ffi', 'shared', 'worker-ipc'] } },
+              allow: { to: { element: { type: 'platform' } } },
             },
 
             // ── tier A (main thread) ──
             {
-              from: { type: 'app' },
+              from: { element: { type: 'app' } },
               allow: {
                 to: {
-                  type: [
-                    'cora',
-                    'web-server',
-                    'infra',
-                    'image-main',
-                    'worker-host',
-                    'devices',
-                    'transform',
-                    'ffi',
-                  ],
+                  element: {
+                    type: [
+                      'cora',
+                      'web-server',
+                      'infra',
+                      'image-main',
+                      'worker-host',
+                      'devices',
+                      'transform',
+                      'ffi',
+                      // extra-keys.ts composes widget key images from the packed bitmap font
+                      'assets',
+                      // extra-keys.ts reads plugin-widget values via the plugin-worker host
+                      'plugin-worker-host',
+                    ],
+                  },
                 },
               },
             },
             {
-              from: { type: 'cora' },
-              allow: { to: { type: ['image-main', 'infra', 'platform'] } },
+              from: { element: { type: 'cora' } },
+              allow: { to: { element: { type: ['image-main', 'infra', 'platform'] } } },
             },
             // capabilities.ts (shared) needs the DeviceConfig type from elgato-types.ts (cora) —
             // type-only, defines the shared CORA child-device capability shape.
             {
-              from: { type: 'shared' },
-              allow: { to: { type: 'cora' }, dependency: { kind: 'type' } },
+              from: { element: { type: 'shared' } },
+              allow: { to: { element: { type: 'cora' } }, dependency: { kind: 'type' } },
             },
             // web-server may read FFI capability candidates (path enumeration only — no device I/O),
             // and the device registry (for DEFAULT_MODEL) — never live device I/O.
             {
-              from: { type: 'web-server' },
-              allow: { to: { type: ['ffi', 'devices'] } },
+              from: { element: { type: 'web-server' } },
+              allow: { to: { element: { type: ['ffi', 'devices', 'infra'] } } },
               message:
-                'web-server may import ffi ONLY for capability/requirements checks (getHidapiSystemCandidates) and devices ONLY for the static registry (e.g. DEFAULT_MODEL), never for device I/O.',
+                'web-server may import ffi ONLY for capability/requirements checks (getHidapiSystemCandidates), devices ONLY for the static registry (e.g. DEFAULT_MODEL), and infra for settings persistence (settings-store.ts) — never for device I/O.',
+            },
+            // web-server reads the plugin dir listing + per-key plugin status for the
+            // extra-key WebUI popup — read-only queries (listPluginFiles/pluginKeyStatus),
+            // never to drive the plugin worker.
+            {
+              from: { element: { type: 'web-server' } },
+              allow: { to: { element: { type: 'plugin-worker-host' } } },
+              message:
+                'web-server may import plugin-host ONLY for the read-only WebUI surface (listPluginFiles, pluginKeyStatus, PluginStatus type) — never to drive the plugin worker.',
             },
             // image-main (image-pipeline.ts) takes type-only references to the cora and web-server
             // composition surfaces it's wired into (ElgatoChildServer, WebUIServer) — orchestration
             // typing only, no runtime dependency.
             {
-              from: { type: 'image-main' },
-              allow: { to: { type: ['cora', 'web-server'] }, dependency: { kind: 'type' } },
+              from: { element: { type: 'image-main' } },
+              allow: { to: { element: { type: ['cora', 'web-server'] } }, dependency: { kind: 'type' } },
             },
 
             // ── bridge ──
-            { from: { type: 'worker-host' }, allow: { to: { type: 'worker-ipc' } } },
+            {
+              from: { element: { type: 'worker-host' } },
+              allow: { to: { element: { type: 'worker-ipc' } } },
+            },
+
+            // ── plugin worker (crash/CPU isolation for user plugin JS) ──
+            // The worker entry talks to its own IPC types; the host proxies to it
+            // and reads the plugins-dir location from infra (settings-store).
+            {
+              from: { element: { type: 'plugin-worker' } },
+              allow: { to: { element: { type: 'plugin-worker-ipc' } } },
+            },
+            {
+              from: { element: { type: 'plugin-worker-host' } },
+              allow: { to: { element: { type: 'plugin-worker-ipc' } } },
+            },
+            {
+              from: { element: { type: 'plugin-worker-host' } },
+              allow: { to: { element: { type: 'infra' } } },
+              message:
+                'plugin-host may import infra ONLY for the plugins-dir location (settings-store.pluginsDir) — never device I/O.',
+            },
 
             // ── tier B (USB worker) ──
-            { from: { type: 'worker' }, allow: { to: { type: ['devices', 'transform'] } } },
-            { from: { type: 'devices' }, allow: { to: { type: ['ffi', 'transform'] } } },
-            { from: { type: 'transform' }, allow: { to: { type: ['ffi', 'image-main', 'assets'] } } },
+            {
+              from: { element: { type: 'worker' } },
+              allow: { to: { element: { type: ['devices', 'transform'] } } },
+            },
+            {
+              from: { element: { type: 'devices' } },
+              allow: { to: { element: { type: ['ffi', 'transform'] } } },
+            },
+            {
+              from: { element: { type: 'transform' } },
+              allow: { to: { element: { type: ['ffi', 'image-main', 'assets'] } } },
+            },
 
             // ── dev entries can reach worker-tier code directly ──
             {
-              from: { type: 'dev-entry' },
-              allow: { to: { type: ['devices', 'transform', 'ffi', 'image-main'] } },
+              from: { element: { type: 'dev-entry' } },
+              allow: { to: { element: { type: ['devices', 'transform', 'ffi', 'image-main'] } } },
             },
 
             // ── tier C (browser): web-client is isolated; only same-element (internal) above. ──
