@@ -7,6 +7,7 @@
  * .claude/plans/2026-07-15_per-device-settings.md.
  */
 import { useState } from 'preact/hooks';
+import { Collapsible } from './components/Collapsible.js';
 
 async function loadSettingsText(): Promise<string> {
   const r = await fetch('/api/settings');
@@ -16,15 +17,12 @@ async function loadSettingsText(): Promise<string> {
 }
 
 export function SettingsPanel(): preact.JSX.Element {
-  const [open, setOpen] = useState(false);
   const [text, setText] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState<string | null>(null);
 
-  function toggle(): void {
-    const next = !open;
-    setOpen(next);
-    if (next) {
+  function handleToggle(open: boolean): void {
+    if (open) {
       setError(null);
       setStatus(null);
       void loadSettingsText().then(setText);
@@ -54,24 +52,25 @@ export function SettingsPanel(): preact.JSX.Element {
   }
 
   return (
-    <div class="panel collapsible" id="settings-panel">
-      <h3 class={`collapse-header${open ? '' : ' collapsed'}`} onClick={toggle}>
-        <span>Settings (raw JSON)</span>
-        <span class="collapse-arrow">▼</span>
-      </h3>
-      <div id="settings-body" class={`collapse-body${open ? ' open' : ''}`}>
-        <textarea
-          id="settings-textarea"
-          rows={10}
-          value={text}
-          onInput={(e) => setText((e.target as HTMLTextAreaElement).value)}
-        />
-        {error && <div class="settings-error">{error}</div>}
-        {status && !error && <div class="settings-status">{status}</div>}
-        <button id="settings-save" type="button" onClick={() => void handleSave()}>
-          Save
-        </button>
-      </div>
-    </div>
+    <Collapsible
+      class="panel"
+      id="settings-panel"
+      bodyId="settings-body"
+      title="Settings (raw JSON)"
+      onToggle={handleToggle}
+    >
+      <textarea
+        id="settings-textarea"
+        class="input"
+        rows={10}
+        value={text}
+        onInput={(e) => setText((e.target as HTMLTextAreaElement).value)}
+      />
+      {error && <div class="settings-error">{error}</div>}
+      {status && !error && <div class="settings-status">{status}</div>}
+      <button id="settings-save" class="ghostbtn" type="button" onClick={() => void handleSave()}>
+        Save
+      </button>
+    </Collapsible>
   );
 }

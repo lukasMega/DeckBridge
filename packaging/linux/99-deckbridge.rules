@@ -1,0 +1,38 @@
+# udev rule for DeckBridge — grants non-root access to supported stream deck
+# devices via /dev/hidraw*.
+#
+# GENERATED FROM ts/src/devices/registry.ts (DEVICE_MODELS) — if you add or
+# change a VID/PID in a device model file under ts/src/devices/, update this
+# file to match. Not built by a script; keep it in sync by hand.
+#
+# Two grants per device, so it works both with and without systemd-logind:
+#   - TAG+="uaccess"            — logind ACL grants access to the active
+#                                 seat's session user (systemd-based systems,
+#                                 including most Raspberry Pi OS / DietPi).
+#   - MODE="0660", GROUP="plugdev" — fallback for minimal/non-logind setups
+#                                 (some DietPi images); add the deckbridge
+#                                 user to the `plugdev` group (install.sh
+#                                 does this).
+
+# Stream Deck MK.2 (Elgato, vendor 0x0fd9)
+KERNEL=="hidraw*", ATTRS{idVendor}=="0fd9", ATTRS{idProduct}=="0080", TAG+="uaccess", MODE="0660", GROUP="plugdev"
+KERNEL=="hidraw*", ATTRS{idVendor}=="0fd9", ATTRS{idProduct}=="006d", TAG+="uaccess", MODE="0660", GROUP="plugdev"
+KERNEL=="hidraw*", ATTRS{idVendor}=="0fd9", ATTRS{idProduct}=="00a5", TAG+="uaccess", MODE="0660", GROUP="plugdev"
+
+# Stream Deck Mini (Elgato, vendor 0x0fd9)
+KERNEL=="hidraw*", ATTRS{idVendor}=="0fd9", ATTRS{idProduct}=="0063", TAG+="uaccess", MODE="0660", GROUP="plugdev"
+KERNEL=="hidraw*", ATTRS{idVendor}=="0fd9", ATTRS{idProduct}=="0090", TAG+="uaccess", MODE="0660", GROUP="plugdev"
+KERNEL=="hidraw*", ATTRS{idVendor}=="0fd9", ATTRS{idProduct}=="00b3", TAG+="uaccess", MODE="0660", GROUP="plugdev"
+KERNEL=="hidraw*", ATTRS{idVendor}=="0fd9", ATTRS{idProduct}=="00b8", TAG+="uaccess", MODE="0660", GROUP="plugdev"
+
+# Mirabox 293V3 / Ajazz (vendor 0x6603)
+KERNEL=="hidraw*", ATTRS{idVendor}=="6603", ATTRS{idProduct}=="1005", TAG+="uaccess", MODE="0660", GROUP="plugdev"
+KERNEL=="hidraw*", ATTRS{idVendor}=="6603", ATTRS{idProduct}=="1006", TAG+="uaccess", MODE="0660", GROUP="plugdev"
+KERNEL=="hidraw*", ATTRS{idVendor}=="6603", ATTRS{idProduct}=="1010", TAG+="uaccess", MODE="0660", GROUP="plugdev"
+
+# Mirabox K1 Pro (vendor 0x6603)
+KERNEL=="hidraw*", ATTRS{idVendor}=="6603", ATTRS{idProduct}=="1015", TAG+="uaccess", MODE="0660", GROUP="plugdev"
+KERNEL=="hidraw*", ATTRS{idVendor}=="6603", ATTRS{idProduct}=="1019", TAG+="uaccess", MODE="0660", GROUP="plugdev"
+
+# Mirabox 293S Stream Deck (vendor 0x5548)
+KERNEL=="hidraw*", ATTRS{idVendor}=="5548", ATTRS{idProduct}=="6670", TAG+="uaccess", MODE="0660", GROUP="plugdev"

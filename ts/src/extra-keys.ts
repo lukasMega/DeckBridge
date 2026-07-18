@@ -23,20 +23,7 @@ const BG = [0x14, 0x10, 0x10] as const; // BGR of #101014
 const FG = [0xec, 0xe8, 0xe8] as const; // BGR of #e8e8ec
 
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] as const;
-const MONTHS = [
-  'Jan',
-  'Feb',
-  'Mar',
-  'Apr',
-  'May',
-  'Jun',
-  'Jul',
-  'Aug',
-  'Sep',
-  'Oct',
-  'Nov',
-  'Dec',
-] as const;
+const MONTHS = 'Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec'.split(' ');
 
 /** One rendered line of a widget; big = FONT_BIG (16×32), else FONT_SMALL (8×16). */
 export interface WidgetLine {
@@ -86,13 +73,10 @@ export function renderWidgetLines(cfg: ExtraKeyConfig, ctx: WidgetContext): Widg
       ];
     case 'text':
       return textLines(cfg.param ?? '');
-    case 'weather':
-      return [
-        {
-          text: ctx.weatherTemp === undefined ? '--' : `${Math.round(ctx.weatherTemp)}\xb0`,
-          big: true,
-        },
-      ];
+    case 'weather': {
+      const t = ctx.weatherTemp;
+      return [{ text: t === undefined ? '--' : `${Math.round(t)}\xb0`, big: true }];
+    }
     case 'command':
       // Not run yet → a single dot placeholder; empty stdout → clear.
       return ctx.commandOut === undefined ? [{ text: '…', big: true }] : textLines(ctx.commandOut);
@@ -192,17 +176,55 @@ export function composeWidgetBmp(lines: readonly WidgetLine[], size: number): Ui
   return new Uint8Array(buf);
 }
 
-// ── Weather (Open-Meteo, no API key) ─────────────────────────────────────────
+// ── Shared background-refresh cache (weather + command) ─────────────────────
 
-const WEATHER_REFRESH_MS = 10 * 60 * 1000;
-
-interface WeatherEntry {
-  temp?: number;
+interface CacheEntry<T> {
+  value?: T;
   lastAttempt: number;
   inflight: boolean;
 }
-// Module-level: locations are shared across docks, one fetch serves all.
-const weatherByParam = new Map<string, WeatherEntry>();
+
+/** Cached value for `key` (module-level caches: the same param — location or
+ *  command string — is fetched once and shared across keys and docks). Kicks
+ *  off a background `fetchValue` at most every `refreshMs`, one in flight per
+ *  key; `onUpdate` repaints on completion. Failures log a warning, not debug —
+ *  an invisible failure leaves the key stale with no clue (exactly how the
+ *  missing-TLS build bit us). */
+function cachedValue<T>(
+  cache: Map<string, CacheEntry<T>>,
+  key: string,
+  refreshMs: number,
+  fetchValue: () => Promise<T | undefined>,
+  onUpdate: () => void,
+): T | undefined {
+  let entry = cache.get(key);
+  if (!entry) {
+    entry = { lastAttempt: 0, inflight: false };
+    cache.set(key, entry);
+  }
+  if (entry.inflight || Date.now() - entry.lastAttempt < refreshMs) return entry.value;
+  const e = entry;
+  e.inflight = true;
+  e.lastAttempt = Date.now();
+  fetchValue()
+    .then((v) => {
+      if (v !== undefined) e.value = v;
+      onUpdate();
+      return undefined;
+    })
+    .catch((err: unknown) =>
+      log('warn', 'widget', `refresh failed (${key}): ${(err as Error).message}`),
+    )
+    .finally(() => {
+      e.inflight = false;
+    });
+  return e.value;
+}
+
+// ── Weather (Open-Meteo, no API key) ─────────────────────────────────────────
+
+const WEATHER_REFRESH_MS = 10 * 60 * 1000;
+const weatherCache = new Map<string, CacheEntry<number>>();
 
 /** "lat,lon" → [lat, lon], or null when unparseable/out of range. */
 export function parseLatLon(param: string | undefined): [number, number] | null {
@@ -212,41 +234,24 @@ export function parseLatLon(param: string | undefined): [number, number] | null 
   return Math.abs(lat) <= 90 && Math.abs(lon) <= 180 ? [lat, lon] : null;
 }
 
-/** Current cached temperature for a weather param; kicks off a background
- *  refresh (at most every 10 min, one in flight per location). */
+async function fetchWeatherTemp(lat: number, lon: number): Promise<number | undefined> {
+  // Plain HTTP on purpose: the slim txiki build has no TLS ("HTTPS not
+  // supported in this build") — only the location coordinates go cleartext.
+  const url = `http://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current_weather=true`;
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const data = (await res.json()) as { current_weather?: { temperature?: number } };
+  const t = data.current_weather?.temperature;
+  return typeof t === 'number' ? t : undefined;
+}
+
+/** Current cached temperature for a weather param; refreshes at most every 10 min. */
 function weatherTempFor(param: string | undefined, onUpdate: () => void): number | undefined {
-  const [lat, long] = parseLatLon(param) ?? [null, null];
-  if (!lat || !long) return undefined;
-  const key = `${lat},${long}`;
-  let entry = weatherByParam.get(key);
-  if (!entry) {
-    entry = { lastAttempt: 0, inflight: false };
-    weatherByParam.set(key, entry);
-  }
-  if (!entry.inflight && Date.now() - entry.lastAttempt >= WEATHER_REFRESH_MS) {
-    entry.inflight = true;
-    entry.lastAttempt = Date.now();
-    // Plain HTTP on purpose: the slim txiki build has no TLS ("HTTPS not
-    // supported in this build") — only the location coordinates go cleartext.
-    const url = `http://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${long}&current_weather=true`;
-    fetch(url)
-      .then((res) => (res.ok ? res.json() : Promise.reject(new Error(`HTTP ${res.status}`))))
-      .then((data: { current_weather?: { temperature?: number } }) => {
-        const t = data.current_weather?.temperature;
-        if (typeof t === 'number') entry.temp = t;
-        onUpdate();
-        return undefined;
-      })
-      .catch((e: unknown) =>
-        // warn, not debug — an invisible failure here leaves the key on '--'
-        // with no clue (that's exactly how the missing-TLS build bit us).
-        log('warn', 'widget', `weather fetch failed: ${(e as Error).message}`),
-      )
-      .finally(() => {
-        entry.inflight = false;
-      });
-  }
-  return entry.temp;
+  const coords = parseLatLon(param);
+  if (!coords) return undefined;
+  const [lat, lon] = coords;
+  const fetchTemp = (): Promise<number | undefined> => fetchWeatherTemp(lat, lon);
+  return cachedValue(weatherCache, `${lat},${lon}`, WEATHER_REFRESH_MS, fetchTemp, onUpdate);
 }
 
 // ── Custom command (runs the param via the shell, shows its stdout) ───────────
@@ -257,13 +262,7 @@ function weatherTempFor(param: string | undefined, onUpdate: () => void): number
 // opt-in per key and meant for a trusted personal LAN — the same local-tool
 // pragmatism as the weather widget's cleartext HTTP.
 
-interface CommandEntry {
-  output?: string;
-  lastAttempt: number;
-  inflight: boolean;
-}
-// Module-level: the same command string is fetched once and shared across keys.
-const commandByParam = new Map<string, CommandEntry>();
+const commandCache = new Map<string, CacheEntry<string>>();
 
 /** Read a spawned process' stdout to a string, killing it after `timeoutMs` so
  *  a hung command can't wedge the entry on inflight forever. */
@@ -287,28 +286,7 @@ async function runCommand(cmd: string, timeoutMs: number): Promise<string> {
   }
 }
 
-function runAndCache(
-  cmd: string,
-  entry: CommandEntry,
-  timeoutMs: number,
-  onUpdate: () => void,
-): void {
-  entry.inflight = true;
-  entry.lastAttempt = Date.now();
-  runCommand(cmd, timeoutMs)
-    .then((out) => {
-      entry.output = out;
-      onUpdate();
-      return undefined;
-    })
-    .catch((e: unknown) => log('warn', 'widget', `command failed: ${(e as Error).message}`))
-    .finally(() => {
-      entry.inflight = false;
-    });
-}
-
-/** Cached stdout of the command widget's command; kicks off a background run
- *  (at most every `intervalMs`, one in flight per command string). */
+/** Cached stdout of the command widget's command; re-runs at most every `intervalMs`. */
 function commandOutputFor(
   param: string | undefined,
   intervalMs: number,
@@ -317,15 +295,7 @@ function commandOutputFor(
 ): string | undefined {
   const cmd = param?.trim();
   if (!cmd) return undefined;
-  let entry = commandByParam.get(cmd);
-  if (!entry) {
-    entry = { lastAttempt: 0, inflight: false };
-    commandByParam.set(cmd, entry);
-  }
-  if (!entry.inflight && Date.now() - entry.lastAttempt >= intervalMs) {
-    runAndCache(cmd, entry, timeoutMs, onUpdate);
-  }
-  return entry.output;
+  return cachedValue(commandCache, cmd, intervalMs, () => runCommand(cmd, timeoutMs), onUpdate);
 }
 
 /** Force an immediate re-run of a command widget's command, bypassing the
@@ -333,12 +303,7 @@ function commandOutputFor(
 function forceRunCommand(param: string | undefined, timeoutMs: number, onUpdate: () => void): void {
   const cmd = param?.trim();
   if (!cmd) return;
-  let entry = commandByParam.get(cmd);
-  if (!entry) {
-    entry = { lastAttempt: 0, inflight: false };
-    commandByParam.set(cmd, entry);
-  }
-  if (!entry.inflight) runAndCache(cmd, entry, timeoutMs, onUpdate);
+  cachedValue(commandCache, cmd, 0, () => runCommand(cmd, timeoutMs), onUpdate);
 }
 
 // ── Per-dock scheduler ────────────────────────────────────────────────────────

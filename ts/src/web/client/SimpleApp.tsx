@@ -7,17 +7,11 @@
  */
 import { useState } from 'preact/hooks';
 import { useStore } from './store.js';
-import {
-  deriveState,
-  deriveDocks,
-  isMultiDockView,
-  getTheme,
-  setTheme as persistTheme,
-  type ThemePref,
-} from './ui-helpers.js';
+import { deriveState, deriveDocks, isMultiDockView } from './ui-helpers.js';
 import { switchToAdvanced } from './simple/handlers.js';
 import { AboutPopover, SettingsPage, HelpScreen } from './simple/overlays.js';
 import { ICON } from './ui-icons.js';
+import { ThemeButton } from './components/ThemeButton.js';
 import {
   StageReady,
   StageDeviceNoElgato,
@@ -26,16 +20,11 @@ import {
   StageMultiPairing,
 } from './simple/stages.js';
 
-const THEME_CYCLE: readonly ThemePref[] = ['light', 'dark', 'auto'];
-const THEME_ICON: Record<ThemePref, string> = { light: ICON.sun, dark: ICON.moon, auto: ICON.auto };
-const THEME_LABEL: Record<ThemePref, string> = { light: 'Light', dark: 'Dark', auto: 'Auto' };
-
 export function SimpleApp(): preact.JSX.Element {
   const status = useStore((s) => s.status);
   const [activeHelp, setActiveHelp] = useState<string | null>(null);
   const [aboutOpen, setAboutOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [theme, setTheme] = useState<ThemePref>(() => getTheme());
 
   const deviceState = deriveState(status);
   const docks = deriveDocks(status);
@@ -46,11 +35,6 @@ export function SimpleApp(): preact.JSX.Element {
   const closeSettings = (): void => setSettingsOpen(false);
   const handleHelp = (id: string): void => setActiveHelp(id);
   const handleBack = (): void => setActiveHelp(null);
-  const cycleTheme = (): void => {
-    const next = THEME_CYCLE[(THEME_CYCLE.indexOf(theme) + 1) % THEME_CYCLE.length]!;
-    persistTheme(next);
-    setTheme(next);
-  };
 
   let stageContent: preact.JSX.Element;
   if (settingsOpen) {
@@ -75,7 +59,6 @@ export function SimpleApp(): preact.JSX.Element {
 
   return (
     <>
-      <div class="grain" aria-hidden="true" />
       <div class="app">
         <div class="topbar">
           <div class="brand">
@@ -94,7 +77,7 @@ export function SimpleApp(): preact.JSX.Element {
             </span>
             <span class="wordmark">DeckBridge</span>
             <button
-              class="iconbtn"
+              class="iconbtn circle"
               id="aboutBtn"
               aria-label="About DeckBridge"
               title="About DeckBridge"
@@ -113,7 +96,7 @@ export function SimpleApp(): preact.JSX.Element {
               </svg>
             </button>
             <button
-              class="iconbtn"
+              class="iconbtn circle"
               id="settingsBtn"
               aria-label="Settings"
               title="Settings"
@@ -124,16 +107,7 @@ export function SimpleApp(): preact.JSX.Element {
             />
           </div>
           <div class="topbar-actions">
-            <button
-              class="iconbtn"
-              id="themeBtn"
-              aria-label={`Theme: ${THEME_LABEL[theme]}. Click to change.`}
-              title={`Theme: ${THEME_LABEL[theme]}`}
-              type="button"
-              onClick={cycleTheme}
-              // eslint-disable-next-line @eslint-react/dom-no-dangerously-set-innerhtml -- static trusted SVG icon markup
-              dangerouslySetInnerHTML={{ __html: THEME_ICON[theme] }}
-            />
+            <ThemeButton id="themeBtn" />
             {!__SIMPLE_ONLY__ && (
               <button class="ghostbtn" id="advancedBtn" type="button" onClick={switchToAdvanced}>
                 Advanced <span>›</span>

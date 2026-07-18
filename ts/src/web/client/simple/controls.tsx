@@ -1,13 +1,36 @@
 // Reusable stage controls: checklist step, copy chip, manual-add panel,
-// live key-grid preview, and the brightness fader.
+// and the brightness fader. (Live key-grid preview moved to
+// components/KeyGridPreview.tsx — shared with the advanced view.)
 import { useState, useEffect, useRef } from 'preact/hooks';
 import type { ComponentChildren } from 'preact';
 import { useStore } from '../store.js';
 import { ICON } from '../ui-icons.js';
 import { CORA_PORT } from '../ui-state.js';
-import { KeyPreview } from '../key-preview.js';
 import { Icon, HelpButton } from './Icon.js';
-import { openSdApp, postBrightnessOverride } from './handlers.js';
+import { openSdApp, postBrightnessOverride, restartElgatoApp } from './handlers.js';
+
+/** "Back" pill used by the settings and help screens. */
+export function BackButton({ onClick }: Readonly<{ onClick: () => void }>): preact.JSX.Element {
+  return (
+    <button class="ghostbtn help-back" type="button" onClick={onClick}>
+      <Icon html={ICON.back} />
+      <span>Back</span>
+    </button>
+  );
+}
+
+/** "Paired before? Restart the Elgato app" reconnect hint. */
+export function RestartNote(): preact.JSX.Element {
+  return (
+    <p class="dock-pairing-note">
+      Paired before?{' '}
+      <button class="linkbtn accent" type="button" onClick={restartElgatoApp}>
+        Restart the Elgato app
+      </button>{' '}
+      to reconnect.
+    </p>
+  );
+}
 
 type StepKind = 'done' | 'active' | 'pending';
 
@@ -27,7 +50,7 @@ export function Step({
   return (
     <div class={`step ${kind}`}>
       <div class="step-ico">
-        {kind === 'done' && <Icon class="ico-done" html={ICON.check} />}
+        {kind === 'done' && <Icon class="ico-done circle" html={ICON.check} />}
         {kind === 'active' && <span class="ico-spin" />}
         {kind === 'pending' && <span class="ico-pending" />}
       </div>
@@ -110,11 +133,8 @@ export function ManualAddPanel({
   const pending = !ip;
 
   return (
-    <div class="manual-add">
-      <div
-        class="manual-add-head"
-        style="display:flex;align-items:center;justify-content:space-between;gap:8px;"
-      >
+    <div class="manual-add panel-inset">
+      <div class="manual-add-head">
         <span>Not showing up?</span>
         <HelpButton
           helpId="network-device"
@@ -153,54 +173,6 @@ export function ManualAddPanel({
         <span> : </span>
         <CopyChip label="Port" value={port} cls="addr-port-chip" />
       </div>
-    </div>
-  );
-}
-
-export function KeyGridPreview({
-  keyCount,
-  columns,
-  dimmed,
-  modelId,
-}: Readonly<{
-  keyCount: number;
-  columns: number;
-  dimmed: boolean;
-  modelId?: string;
-}>): preact.JSX.Element {
-  const isCompact = keyCount === 6;
-  const gridRef = useRef<HTMLDivElement>(null);
-  const previewRef = useRef<KeyPreview | null>(null);
-
-  /* eslint-disable @eslint-react/exhaustive-deps -- intentional mount-only: creates KeyPreview once; prop changes handled by the effect below */
-  useEffect(() => {
-    const el = gridRef.current;
-    if (!el) return;
-    // Create the KeyPreview instance once; broadcast() auto-prunes on disconnect
-    const kp = new KeyPreview(el, {});
-    previewRef.current = kp;
-    kp.setModel(modelId);
-    kp.rebuild(keyCount, columns);
-  }, []);
-  /* eslint-enable @eslint-react/exhaustive-deps */
-
-  // Update model + rebuild on prop changes
-  useEffect(() => {
-    const kp = previewRef.current;
-    if (!kp) return;
-    kp.setModel(modelId);
-    kp.rebuild(keyCount, columns);
-  }, [keyCount, columns, modelId]);
-
-  const cls = 'preview' + (isCompact ? ' compact' : '') + (dimmed ? ' dimmed' : '');
-
-  return (
-    <div class={cls}>
-      <div class="preview-head">
-        <span class="preview-label">Live preview</span>
-        <span class="live-dot">{dimmed ? 'Paused' : 'Live'}</span>
-      </div>
-      <div ref={gridRef} />
     </div>
   );
 }

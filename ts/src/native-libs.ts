@@ -54,9 +54,19 @@ export async function gunzip(data: Uint8Array): Promise<Uint8Array> {
   return out;
 }
 
-export function defaultCacheRoot(): string {
+// `platform` defaults to the real platformName() — tests pass it explicitly so
+// each branch is exercised deterministically regardless of the host OS running
+// the suite.
+export function defaultCacheRoot(platform: string = platformName()): string {
+  // --cache-dir / DECKBRIDGE_CACHE_DIR overrides everything below (settings.json,
+  // plugins dir, native-lib extraction — all resolve their cache root through here).
+  if (tjs.env.DECKBRIDGE_CACHE_DIR) return tjs.env.DECKBRIDGE_CACHE_DIR;
   const home = tjs.homeDir;
-  if (platformName() === 'macOS') return `${home}/Library/Caches/deckbridge`;
+  if (platform === 'macOS') return `${home}/Library/Caches/deckbridge`;
+  if (platform === 'Windows') {
+    const localAppData = tjs.env.LOCALAPPDATA ?? `${home}/AppData/Local`;
+    return `${localAppData}/deckbridge`;
+  }
   const xdg = tjs.env.XDG_CACHE_HOME ?? `${home}/.cache`;
   return `${xdg}/deckbridge`;
 }

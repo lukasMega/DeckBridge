@@ -1,0 +1,18 @@
+[Unit]
+Description=DeckBridge — stream deck to Elgato network bridge
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+ExecStart=/opt/deckbridge/deckbridge run --headless
+Restart=on-failure
+RestartSec=3
+User=deckbridge
+SupplementaryGroups=plugdev
+Environment=XDG_CACHE_HOME=/var/lib/deckbridge
+
+# StandardOutput=journal is the default; deckbridge's log lines are
+# single-line and journald-friendly. View with: journalctl -u deckbridge -f
+
+[Install]
+WantedBy=multi-user.target

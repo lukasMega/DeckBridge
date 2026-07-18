@@ -1,6 +1,9 @@
 #[cfg(feature = "usb")]
 mod hid;
 
+#[cfg(target_os = "windows")]
+mod mdns_windows;
+
 mod bmp;
 mod jpeg;
 mod pad;

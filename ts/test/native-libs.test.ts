@@ -5,6 +5,7 @@ import {
   extractLibs,
   cleanupOldHashDirs,
   envVarFor,
+  defaultCacheRoot,
 } from '../src/native-libs.js';
 import type { EmbeddedNativeLib } from 'virtual:native-libs';
 
@@ -67,6 +68,69 @@ await test('maps lib names to env vars', () => {
   assert.equal(envVarFor('libdeckbridge_native.dylib'), 'DECKBRIDGE_NATIVE_LIB');
   assert.equal(envVarFor('libhidapi.dylib'), 'HIDAPI_LIB');
   assert.equal(envVarFor('libunknown.dylib'), undefined);
+});
+
+await test('maps lib names to env vars (Windows .dll names)', () => {
+  // Same prefix match, just a different extension — the embedded name keeps the
+  // `libdeckbridge_native`/`libhidapi` prefix on every platform (ts/build.mjs
+  // renames the prefix-less Windows cargo artifact at embed time).
+  assert.equal(envVarFor('libdeckbridge_native.dll'), 'DECKBRIDGE_NATIVE_LIB');
+  assert.equal(envVarFor('libhidapi.dll'), 'HIDAPI_LIB');
+});
+
+// ── defaultCacheRoot ──────────────────────────────────────────────────────────
+
+console.log('\ndefaultCacheRoot');
+
+// DECKBRIDGE_CACHE_DIR short-circuits every branch — clear it around these tests
+// so the platform branch under test actually runs, then restore whatever was there.
+async function withoutCacheDirOverride(fn: () => void | Promise<void>): Promise<void> {
+  const prev = tjs.env.DECKBRIDGE_CACHE_DIR;
+  delete tjs.env.DECKBRIDGE_CACHE_DIR;
+  try {
+    await fn();
+  } finally {
+    if (prev === undefined) delete tjs.env.DECKBRIDGE_CACHE_DIR;
+    else tjs.env.DECKBRIDGE_CACHE_DIR = prev;
+  }
+}
+
+await test('macOS branch is unchanged (Library/Caches)', async () => {
+  await withoutCacheDirOverride(() => {
+    assert.equal(defaultCacheRoot('macOS'), `${tjs.homeDir}/Library/Caches/deckbridge`);
+  });
+});
+
+await test('Linux branch is unchanged (XDG_CACHE_HOME or ~/.cache)', async () => {
+  await withoutCacheDirOverride(() => {
+    const xdg = tjs.env.XDG_CACHE_HOME ?? `${tjs.homeDir}/.cache`;
+    assert.equal(defaultCacheRoot('Linux'), `${xdg}/deckbridge`);
+  });
+});
+
+await test('Windows branch uses LOCALAPPDATA when set', async () => {
+  const prevLocalAppData = tjs.env.LOCALAPPDATA;
+  tjs.env.LOCALAPPDATA = 'C:/Users/x/AppData/Local';
+  try {
+    await withoutCacheDirOverride(() => {
+      assert.equal(defaultCacheRoot('Windows'), 'C:/Users/x/AppData/Local/deckbridge');
+    });
+  } finally {
+    if (prevLocalAppData === undefined) delete tjs.env.LOCALAPPDATA;
+    else tjs.env.LOCALAPPDATA = prevLocalAppData;
+  }
+});
+
+await test('Windows branch falls back to home/AppData/Local when LOCALAPPDATA unset', async () => {
+  const prevLocalAppData = tjs.env.LOCALAPPDATA;
+  delete tjs.env.LOCALAPPDATA;
+  try {
+    await withoutCacheDirOverride(() => {
+      assert.equal(defaultCacheRoot('Windows'), `${tjs.homeDir}/AppData/Local/deckbridge`);
+    });
+  } finally {
+    if (prevLocalAppData !== undefined) tjs.env.LOCALAPPDATA = prevLocalAppData;
+  }
 });
 
 // ── gzip roundtrip ────────────────────────────────────────────────────────────

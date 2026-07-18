@@ -11,13 +11,43 @@
  * The subcomponents below live in sibling files (file-size refactor, no
  * behavior change): advanced-header.tsx, advanced-key-grid.tsx,
  * advanced-mock-config.tsx, advanced-key-events.tsx, advanced-log-panel.tsx.
+ * The key grid itself is the shared components/KeyGridPreview.tsx (same
+ * component as the simple view's live preview, with the debug extras on).
  */
+import { useStore } from './store.js';
 import { AdvHeader } from './advanced-header.js';
-import { AdvKeyGrid, DragResizer } from './advanced-key-grid.js';
+import { DragResizer } from './advanced-key-grid.js';
 import { MockConfigForm } from './advanced-mock-config.js';
 import { KeyEventsPanel } from './advanced-key-events.js';
 import { LogConsolePanel } from './advanced-log-panel.js';
 import { SettingsPanel } from './advanced-settings-panel.js';
+import { KeyGridPreview } from './components/KeyGridPreview.js';
+import { Brightness } from './simple/controls.js';
+
+function postKey(index: number): void {
+  void fetch(`/api/key/${index}`, { method: 'POST' });
+}
+
+// Thin layout wrapper so only this subtree re-renders on status changes;
+// #grid-section stays because DragResizer targets it by id.
+function AdvGridSection(): preact.JSX.Element {
+  const status = useStore((s) => s.status);
+  return (
+    <div class="grid-section" id="grid-section">
+      <KeyGridPreview
+        keyCount={status.keyCount ?? 15}
+        columns={status.columns ?? 5}
+        dimmed={false}
+        modelId={status.modelId}
+        label="Key grid"
+        showIndex
+        flash
+        onKeyClick={postKey}
+        clickable={status.driverMode === 'mock'}
+      />
+    </div>
+  );
+}
 
 // ---------------------------------------------------------------------------
 // AdvancedApp — top-level component
@@ -28,9 +58,12 @@ export function AdvancedApp(): preact.JSX.Element {
     <>
       <AdvHeader />
       <main>
-        <AdvKeyGrid />
+        <AdvGridSection />
         <DragResizer />
         <aside class="panels">
+          <div class="panel">
+            <Brightness />
+          </div>
           <MockConfigForm />
           <SettingsPanel />
           <KeyEventsPanel />

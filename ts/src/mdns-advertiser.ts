@@ -1,3 +1,4 @@
+import FFI from 'tjs:ffi';
 import {
   MDNS_PROTOCOL,
   MDNS_SERVICE_NAME,
@@ -6,6 +7,7 @@ import {
   MDNS_TXT_VID,
 } from './types.js';
 import { platformName } from './os-utils.ts';
+import { mdnsAdvertiseStart, mdnsAdvertiseStop } from './ffi/mdns.ts';
 
 type LogFn = (level: 'debug' | 'info' | 'warn' | 'error', message: string) => void;
 
@@ -40,6 +42,7 @@ export function buildArgs(
 
 export class MdnsAdvertiser {
   private proc: TjsProcess | null = null;
+  private usingNative = false;
   private readonly log: LogFn;
   readonly port: number;
   private readonly serviceName: string;
@@ -58,14 +61,34 @@ export class MdnsAdvertiser {
   }
 
   start(): Promise<void> {
+    const txt = {
+      dt: MDNS_TXT_DEVICE_TYPE,
+      vid: MDNS_TXT_VID,
+      pid: String(this.productId),
+      sn: this.serialNumber,
+    };
+
+    // Windows: prefer the native Dnsapi advertise (no Bonjour dependency) — a
+    // synchronous dlopen+call, not a subprocess, so it can't block the CORA hot
+    // path any longer than a single fire-and-forget FFI call already does.
+    if (FFI.suffix === 'dll') {
+      const serviceType = `_${MDNS_SERVICE_TYPE}._${MDNS_PROTOCOL}`;
+      const txtKv = Object.entries(txt)
+        .map(([k, v]) => `${k}=${v}`)
+        .join('\n');
+      if (mdnsAdvertiseStart(this.serviceName, serviceType, this.port, txtKv)) {
+        this.usingNative = true;
+        this.log(
+          'info',
+          `mDNS: native advertise started for ${this.serviceName} on port ${this.port}`,
+        );
+        return Promise.resolve();
+      }
+      this.log('warn', 'mDNS: native advertise failed, falling back to dns-sd subprocess');
+    }
+
     try {
       const platform = platformName();
-      const txt = {
-        dt: MDNS_TXT_DEVICE_TYPE,
-        vid: MDNS_TXT_VID,
-        pid: String(this.productId),
-        sn: this.serialNumber,
-      };
       const args = buildArgs(platform, this.serviceName, this.port, txt);
 
       this.log('info', `mDNS: spawning ${args[0]} for ${this.serviceName} on port ${this.port}`);
@@ -89,6 +112,11 @@ export class MdnsAdvertiser {
   }
 
   stop(): void {
+    if (this.usingNative) {
+      mdnsAdvertiseStop();
+      this.usingNative = false;
+      return;
+    }
     if (this.proc) {
       try {
         this.proc.kill('SIGTERM');

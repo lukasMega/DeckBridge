@@ -163,9 +163,10 @@ export default defineConfig([
         { type: 'image-main', mode: 'full', pattern: ['src/image-pipeline.ts', 'src/image-cache.ts', 'src/image-assembler.ts'] },
         { type: 'cora', mode: 'full', pattern: ['src/cora-*.ts', 'src/elgato*.ts', 'src/feature-response.ts'] },
         { type: 'infra', mode: 'full', pattern: ['src/native-libs.ts', 'src/mdns-advertiser.ts', 'src/tray.ts', 'src/settings-store.ts', 'src/device-identity.ts', 'src/os-utils.ts'] },
-        { type: 'app', mode: 'full', pattern: ['src/app.ts', 'src/driver-manager.ts', 'src/driver-manager-extras.ts', 'src/cora-startup.ts', 'src/device-session.ts', 'src/extra-keys.ts'] },
+        { type: 'app', mode: 'full', pattern: ['src/app.ts', 'src/driver-manager*.ts', 'src/cora-startup.ts', 'src/device-session.ts', 'src/extra-keys.ts'] },
         { type: 'dev-entry', mode: 'full', pattern: ['src/mirabox-smoke.ts', 'src/k1pro-probe.ts'] },
-        { type: 'shared', mode: 'full', pattern: ['src/types.ts', 'src/logger.ts', 'src/capabilities.ts', 'src/comm-format.ts']
+        { type: 'cli', mode: 'full', pattern: 'src/cli-devices.ts' },
+        { type: 'shared', mode: 'full', pattern: ['src/types.ts', 'src/logger.ts', 'src/capabilities.ts', 'src/comm-format.ts', 'src/cli.ts']
         },
       ],
     },
@@ -191,6 +192,16 @@ export default defineConfig([
             { from: { element: { type: 'infra' } }, allow: { to: { element: { type: 'infra' } } } },
             { from: { element: { type: 'app' } }, allow: { to: { element: { type: 'app' } } } },
             { from: { element: { type: 'ffi' } }, allow: { to: { element: { type: 'ffi' } } } },
+            // mdns-advertiser.ts (infra) needs the native Windows mDNS advertise
+            // (ffi/mdns.ts) — a fire-and-forget dlopen call (register) / a blocking
+            // dlopen call only on stop(), never device I/O. Other infra files gain
+            // no new capability from this edge; they simply don't import ffi.
+            {
+              from: { element: { type: 'infra' } },
+              allow: { to: { element: { type: 'ffi' } } },
+              message:
+                "infra may import ffi ONLY for mdns-advertiser.ts's native Windows mDNS advertise (ffi/mdns.ts) — fire-and-forget dlopen, never device I/O.",
+            },
 
             // ── universal leaves (excluding web-client: G1 keeps the browser tier importing
             //    only web-client — see the dedicated web-client rule below) ──
@@ -228,10 +239,22 @@ export default defineConfig([
                       'assets',
                       // extra-keys.ts reads plugin-widget values via the plugin-worker host
                       'plugin-worker-host',
+                      // the `devices` subcommand (cli-devices.ts)
+                      'cli',
                     ],
                   },
                 },
               },
+            },
+            // cli-devices.ts (the `devices` subcommand) needs native-lib setup (infra),
+            // HID enumeration (ffi — enumeration only, never hid_open), and the device
+            // registry to match VID/PID against known models (devices).
+            {
+              from: { element: { type: 'cli' } },
+              allow: { to: { element: { type: ['ffi', 'devices', 'infra'] } } },
+              message:
+                'cli-devices.ts may import ffi/devices/infra for enumeration-only HID listing ' +
+                '(never hid_open) and native-lib setup — mirrors the devices tier\'s own ffi access.',
             },
             {
               from: { element: { type: 'cora' } },

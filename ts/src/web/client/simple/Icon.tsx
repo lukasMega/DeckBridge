@@ -24,7 +24,7 @@ export function HelpButton({
 }>): preact.JSX.Element {
   return (
     <button
-      class="step-help"
+      class="step-help circle"
       type="button"
       data-help={helpId}
       aria-label={ariaLabel}

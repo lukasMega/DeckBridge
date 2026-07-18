@@ -279,7 +279,7 @@ export function LogConsolePanel(): preact.JSX.Element {
       <div class="log-header">
         <div class="log-tabs">
           <button
-            class={`tab-btn${isServer ? ' active' : ''}`}
+            class={`ghostbtn tab-btn${isServer ? ' active' : ''}`}
             id="tab-server"
             type="button"
             onClick={() => setActiveTab('server')}
@@ -287,7 +287,7 @@ export function LogConsolePanel(): preact.JSX.Element {
             Server
           </button>
           <button
-            class={`tab-btn${!isServer ? ' active' : ''}`}
+            class={`ghostbtn tab-btn${!isServer ? ' active' : ''}`}
             id="tab-comm"
             type="button"
             onClick={() => setActiveTab('comm')}
@@ -296,7 +296,7 @@ export function LogConsolePanel(): preact.JSX.Element {
           </button>
           <button
             id="copy-logs"
-            class="tab-btn"
+            class="ghostbtn"
             type="button"
             style="margin-left: 8px"
             onClick={handleCopyLogs}
@@ -307,6 +307,7 @@ export function LogConsolePanel(): preact.JSX.Element {
         <div id="server-filters" class="filter-row" style={{ display: isServer ? '' : 'none' }}>
           <select
             id="log-level-filter"
+            class="input"
             value={sfLevel}
             onChange={(e) => setSfLevel((e.target as HTMLSelectElement).value)}
           >
@@ -317,19 +318,21 @@ export function LogConsolePanel(): preact.JSX.Element {
           </select>
           <input
             id="log-comp-filter"
+            class="input"
             type="text"
             placeholder="component"
             maxLength={20}
             value={sfComponent}
             onInput={(e) => setSfComponent((e.target as HTMLInputElement).value)}
           />
-          <button id="clr-log" type="button" onClick={handleClearServer}>
+          <button id="clr-log" class="ghostbtn" type="button" onClick={handleClearServer}>
             Clear
           </button>
         </div>
         <div id="comm-filters" class="filter-row" style={{ display: isServer ? 'none' : '' }}>
           <select
             id="comm-proto-filter"
+            class="input"
             value={cfProtocol}
             onChange={(e) => setCfProtocol((e.target as HTMLSelectElement).value)}
           >
@@ -339,6 +342,7 @@ export function LogConsolePanel(): preact.JSX.Element {
           </select>
           <select
             id="comm-dir-filter"
+            class="input"
             value={cfDirection}
             onChange={(e) => setCfDirection((e.target as HTMLSelectElement).value)}
           >
@@ -373,7 +377,7 @@ export function LogConsolePanel(): preact.JSX.Element {
             />{' '}
             hex
           </label>
-          <button id="clr-comm" type="button" onClick={handleClearComm}>
+          <button id="clr-comm" class="ghostbtn" type="button" onClick={handleClearComm}>
             Clear
           </button>
         </div>

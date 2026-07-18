@@ -250,7 +250,11 @@ interface TjsServeServer {
 
 interface TjsServeOptions {
   port?: number;
-  host?: string;
+  // The txiki.js native option is `listenIp`, not `host` (verified against
+  // src/js/core/httpserver.js in the txiki.js source: it destructures
+  // `listenIp = '0.0.0.0'` from the options object and never reads `host`) —
+  // a `host` key here is silently ignored and the server always binds 0.0.0.0.
+  listenIp?: string;
   websocket?: WebSocketHandlers;
   fetch(
     request: Request,

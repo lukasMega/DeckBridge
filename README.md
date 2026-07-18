@@ -21,6 +21,11 @@ else to install.
 Hardware-tested on macOS: 293V3, 293S, K1 Pro, and Stream Deck Mini. MK.2 and the
 Linux/Windows builds are implemented but not hardware-verified.
 
+> **Platform status:** DeckBridge is currently **tested on macOS only**, and the
+> GitHub releases currently ship **macOS builds only**. Linux and Windows support
+> exists in the code but is untested and not yet released — build from source at
+> your own risk.
+
 ## Quick start
 
 1. Download the release for your OS, unzip, and run `deckbridge`.
@@ -32,6 +37,34 @@ A web page at <http://localhost:3000> shows your deck's keys and a live log.
 
 Full install and troubleshooting steps:
 [Getting Started](https://lukasmega.github.io/DeckBridge/getting-started).
+
+## CLI usage
+
+```
+deckbridge [command] [flags]
+
+Commands:
+  run                 Start the bridge (default when no command given)
+  devices             List detected stream deck HID devices, then exit
+  version             Print version/build info, then exit
+  help                Print usage, then exit
+
+Flags (for run):
+  --mock                    Start with the mock driver (no hardware)
+  --bind <addr>             Listen address for CORA + WebUI  [default 0.0.0.0]
+  --webui-port <n>          WebUI HTTP/WS port               [default 3000]
+  --no-webui                Do not start the WebUI server
+  --open                    Auto-open browser (desktop convenience)
+  --headless                Shorthand: no tray, no browser open, skip Elgato-app poll
+  --log-level <lvl>         debug|info|warn|error|silent (runtime override)
+  --cache-dir <path>        Settings + native-lib extraction root (default: XDG cache dir)
+  -h, --help                Show this help
+  -V, --version             Show version
+```
+
+For unattended Linux (Raspberry Pi / DietPi) under systemd, see
+[Headless Linux](https://lukasmega.github.io/DeckBridge/headless-linux) and
+`packaging/linux/`.
 
 ## ⚠ Hobby use only
 

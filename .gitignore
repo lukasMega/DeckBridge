@@ -1,22 +1,28 @@
+# mise local overrides (personal env/tool overrides, not for CI/other contributors)
+mise.local.toml
+
+# Node.js
+ts/node_modules/
+docs-site/node_modules/
+
+# Build outputs
+ts/dist/
+ts/coverage/
+# Cargo workspace target (all member crates share one target dir)
+rust/target/
+# Vendored fork is a non-member crate with its own target dir
+rust/jpeg-encoder/target/
+src-tauri/target/
+
 # Compiled binary
 deckbridge
 deckbridge-lite
 
-# Build outputs
-ts/dist/
-ts/node_modules/
-ts/coverage/
-
-# Cargo (all workspace members share rust/target/)
-rust/target/
-rust/deckbridge-native/target/
-rust/deckbridge-tray/target/
-src-tauri/target/
-
-# Docs site
-docs-site/build/
-docs-site/.docusaurus/
-docs-site/node_modules/
+# Tauri sidecar binaries (placed by CI or mise run bundle)
+src-tauri/binaries/deckbridge-*
+src-tauri/binaries/deckbridge-tray-*
+src-tauri/binaries/mira-tray-*
+src-tauri/binaries/mira2el-tjs-*
 
 # txiki.js runtime (downloaded/built by mise run tjs-setup)
 vendor/
@@ -24,9 +30,9 @@ vendor/
 # Packaged release archives
 dist/
 
-# Tauri sidecar binaries (placed by CI or mise run bundle)
-src-tauri/binaries/deckbridge-*
-src-tauri/binaries/deckbridge-tray-*
+# Docs site — generated outputs (source of truth is docs-site/src + docs/)
+docs-site/build/
+docs-site/.docusaurus/
 
 # macOS
 .DS_Store
@@ -36,6 +42,14 @@ src-tauri/binaries/deckbridge-tray-*
 .vscode/
 *.iml
 
-# Tool state (never commit these)
+# Internal tooling / working files — live locally, never published
+.claude/
+.mcp.json
 .codegraph/
 graphify-out/
+tmp/
+**/.cmd-history.txt
+bundle-sizes*.csv
+PERFORMANCE_ANALYSIS.md
+CLAUDE.md
+ARCHITECTURE.md

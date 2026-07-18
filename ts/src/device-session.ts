@@ -15,10 +15,6 @@ import {
   DEFAULT_DOCK_FIRMWARE_VERSION,
   DEFAULT_CHILD_FIRMWARE_VERSION,
   DEFAULT_BRIGHTNESS,
-  DEFAULT_DOCK_SERIAL_NUMBER,
-  DEFAULT_CHILD_SERIAL_NUMBER,
-  DEFAULT_MAC_ADDRESS_STRING,
-  MDNS_SERVICE_NAME,
 } from './types.js';
 import type {
   ExtraKeyConfig,
@@ -91,6 +87,42 @@ function hasInputKeyMap(model: DeviceModel): boolean {
   return model.keyMap.wireInputToCora != null || model.keyMap.inputOffset != null;
 }
 
+/** Wire the driver events shared by the primary (DriverManager) and every
+ *  extra session: key dispatch (wire→mk2 mapping + logging), error/log
+ *  forwarding, reinit repaint. 'disconnect' differs per owner and stays with
+ *  the caller, as do the primary-only WebUI mirrors (comm/imageSent). */
+export function wireCommonDriverEvents(
+  driver: WorkerHidDriver,
+  model: DeviceModel,
+  opts: {
+    onKey: (mk2Index: number, state: KeyEvent['state']) => void;
+    /** Sleep/wake re-init sent CLE ALL — repaint the extra-key widgets it wiped. */
+    onReinit: () => void;
+  },
+): void {
+  driver.on('key', (e: KeyEvent) => {
+    let index = e.keyIndex;
+    if (hasInputKeyMap(model)) {
+      index = deviceInputToMk2Index(e.keyIndex, model);
+      // Outside the emulated grid (293S 6th column) — display-only keys
+      // with no switches; nothing to dispatch.
+      if (index < 0) return;
+      const wire = e.keyIndex.toString(16).padStart(2, '0');
+      log('info', 'key', `${model.id} wire=0x${wire} → mk2=${index} ${e.state}`);
+    } else {
+      log('info', 'key', `${model.id} key=${e.keyIndex} ${e.state}`);
+    }
+    opts.onKey(index, e.state);
+  });
+  driver.on('error', (err: Error) => log('error', model.id, err.message));
+  driver.on('reinit', opts.onReinit);
+  driver.on(
+    'log',
+    ({ level, component, message }: { level: LogLevel; component: string; message: string }) =>
+      log(level, component, message),
+  );
+}
+
 /** Server-facing half of DriverManager.applyDeviceModel (no WebUI). Advertises
  *  the model's PID/geometry/identity to the desktop over both CORA ports. Shared
  *  by the primary (via DriverManager) and every extra session so there is ONE
@@ -113,44 +145,6 @@ export function applyModelToServers(
   server.restartMdns(pid);
   childServer.setChildGeometry(geo);
   server.pushChildCapabilities();
-}
-
-/** Primary dock (index 0) status. Mirrors DeviceSession.status() but with the
- *  primary's fixed port + hardcoded-default fallbacks (identity is undefined
- *  before the first connect). */
-// oxlint-disable-next-line complexity -- flat fallback chain, not branching logic
-export function buildPrimaryDockStatus(args: {
-  model: DeviceModel;
-  brightness: number;
-  deviceInfo?: DeviceInfo;
-  identity?: DeviceIdentitySettings;
-  primaryConnected: boolean;
-  elgatoConnected: boolean;
-}): DockStatus {
-  const { model, brightness, deviceInfo, identity } = args;
-  const usePhysical = model.cora.usePhysicalIdentity;
-  return {
-    index: 0,
-    ...(model.keyMap.extraKeys ? { extraKeys: model.keyMap.extraKeys } : {}),
-    modelId: model.id,
-    modelName: model.name,
-    keyCount: model.keyCount,
-    columns: model.columns,
-    rows: model.rows,
-    primaryPort: ELGATO_TCP_PORT,
-    primaryConnected: args.primaryConnected,
-    elgatoConnected: args.elgatoConnected,
-    brightness,
-    dockFirmwareVersion: DEFAULT_DOCK_FIRMWARE_VERSION,
-    childFirmwareVersion: (usePhysical && deviceInfo?.firmware) || DEFAULT_CHILD_FIRMWARE_VERSION,
-    serialNumber: identity?.dockSerial ?? DEFAULT_DOCK_SERIAL_NUMBER,
-    childSerialNumber:
-      (usePhysical && deviceInfo?.serial) || identity?.childSerial || DEFAULT_CHILD_SERIAL_NUMBER,
-    productId: model.cora.productId,
-    macAddress: identity?.macAddress ?? DEFAULT_MAC_ADDRESS_STRING,
-    mdnsServiceName: identity?.mdnsServiceName ?? MDNS_SERVICE_NAME,
-    deviceKey: identity?.deviceKey ?? '',
-  };
 }
 
 export interface DeviceSessionOptions {
@@ -308,33 +302,10 @@ export class DeviceSession {
 
   /** Mirror DriverManager.attachRealDriverListeners minus every WebUI hook. */
   private wireListeners(): void {
-    this.driver.on('key', (e: KeyEvent) => {
-      if (hasInputKeyMap(this.model)) {
-        const mk2 = deviceInputToMk2Index(e.keyIndex, this.model);
-        if (mk2 < 0) {
-          // Outside the emulated grid (293S 6th column) — display-only keys
-          // with no switches; nothing to dispatch.
-          return;
-        }
-        log(
-          'info',
-          'key',
-          `${this.model.id} wire=0x${e.keyIndex.toString(16).padStart(2, '0')} → mk2=${mk2} ${e.state}`,
-        );
-        this.childServer.sendKeyEvent(mk2, e.state);
-      } else {
-        log('info', 'key', `${this.model.id} key=${e.keyIndex} ${e.state}`);
-        this.childServer.sendKeyEvent(e.keyIndex, e.state);
-      }
+    wireCommonDriverEvents(this.driver, this.model, {
+      onKey: (index, state) => this.childServer.sendKeyEvent(index, state),
+      onReinit: () => this.repaintExtraKeys(),
     });
-    this.driver.on('error', (err: Error) => log('error', this.model.id, err.message));
-    // Sleep/wake re-init sent CLE ALL — repaint the extra-key widgets it wiped.
-    this.driver.on('reinit', () => this.repaintExtraKeys());
-    this.driver.on(
-      'log',
-      ({ level, component, message }: { level: LogLevel; component: string; message: string }) =>
-        log(level, component, message),
-    );
     this.driver.on('disconnect', () => {
       log('info', this.model.id, 'disconnected');
       this.onDisconnect();

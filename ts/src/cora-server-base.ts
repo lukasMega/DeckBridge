@@ -7,7 +7,7 @@ import {
   KEEPALIVE_SUBTYPE,
   PKT_EVENT,
   EVENT_SUBTYPE_KEEPALIVE,
-  SERVER_LISTEN_ADDRESS,
+  bindAddr,
   CLIENT_EVICTION_GRACE_MS,
 } from './types.js';
 import {
@@ -58,7 +58,7 @@ export abstract class CoraServerBase extends EventEmitter {
       if (this.serverErrorHandler) this.server.removeListener('error', this.serverErrorHandler);
       this.serverErrorHandler = onError;
       this.server.on('error', onError);
-      this.server.listen(this.port, SERVER_LISTEN_ADDRESS, () => {
+      this.server.listen(this.port, bindAddr(), () => {
         started = true;
         resolve();
       });

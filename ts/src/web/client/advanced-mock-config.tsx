@@ -5,6 +5,7 @@
  */
 import { useState, useEffect } from 'preact/hooks';
 import { useStore } from './store.js';
+import { Collapsible } from './components/Collapsible.js';
 
 // ---------------------------------------------------------------------------
 // MockConfigForm — collapsible device config panel
@@ -22,7 +23,6 @@ export function MockConfigForm(): preact.JSX.Element {
     () => `0x${(mockConfig?.productId ?? 0).toString(16).padStart(4, '0')}`,
   );
   const [mac, setMac] = useState(mockConfig?.macAddress ?? '02:00:00:00:00:01');
-  const [open, setOpen] = useState(false);
 
   // Sync from store when mockConfig arrives / changes
   useEffect(() => {
@@ -58,121 +58,137 @@ export function MockConfigForm(): preact.JSX.Element {
   }
 
   return (
-    <div class="panel collapsible" id="mock-cfg-panel">
-      <h3 class={`collapse-header${open ? '' : ' collapsed'}`} onClick={() => setOpen((o) => !o)}>
-        <span>
-          Device Config <span class="cfg-subtitle-hdr">(all modes)</span>
+    <Collapsible
+      class="panel"
+      id="mock-cfg-panel"
+      bodyId="mock-cfg-body"
+      title="Device Config"
+      subtitle="(all modes)"
+    >
+      <div class="cfg-grid">
+        <strong>Dock (Network Dock)</strong>
+        <label>Dock FW</label>
+        <span class="cfg-inp-group">
+          <input
+            id="cfg-dock-fw"
+            type="text"
+            class="input"
+            maxLength={8}
+            placeholder="1.01.014"
+            value={dockFw}
+            onInput={(e) => setDockFw((e.target as HTMLInputElement).value)}
+          />
+          <button class="ghostbtn cfg-preset" type="button" onClick={() => setDockFw('1.01.014')}>
+            1.01.014
+          </button>
         </span>
-        <span class="collapse-arrow">▼</span>
-      </h3>
-      <div id="mock-cfg-body" class={`collapse-body${open ? ' open' : ''}`}>
-        <div class="cfg-grid">
-          <strong>Dock (Network Dock)</strong>
-          <label>Dock FW</label>
-          <span class="cfg-inp-group">
-            <input
-              id="cfg-dock-fw"
-              type="text"
-              maxLength={8}
-              placeholder="1.01.014"
-              value={dockFw}
-              onInput={(e) => setDockFw((e.target as HTMLInputElement).value)}
-            />
-            <button class="cfg-preset" type="button" onClick={() => setDockFw('1.01.014')}>
-              1.01.014
-            </button>
-          </span>
-          <label>Dock Serial</label>
-          <span class="cfg-inp-group">
-            <input
-              id="cfg-dock-serial"
-              type="text"
-              maxLength={20}
-              placeholder="CL21K1A00001"
-              value={dockSerial}
-              onInput={(e) => setDockSerial((e.target as HTMLInputElement).value)}
-            />
-            <button class="cfg-preset" type="button" onClick={() => setDockSerial('CL21K1A00001')}>
-              CL21K1A00001
-            </button>
-          </span>
-          <strong>
-            Child (<span id="cfg-child-model-label">{status.modelName ?? 'Stream Deck MK.2'}</span>)
-          </strong>
-          <label>Child FW</label>
-          <span class="cfg-inp-group">
-            <input
-              id="cfg-child-fw"
-              type="text"
-              maxLength={8}
-              placeholder="1.03.000"
-              value={childFw}
-              onInput={(e) => setChildFw((e.target as HTMLInputElement).value)}
-            />
-            <button class="cfg-preset" type="button" onClick={() => setChildFw('1.03.000')}>
-              1.03.000
-            </button>
-            <button class="cfg-preset" type="button" onClick={() => setChildFw('2.00.026')}>
-              2.00.026
-            </button>
-          </span>
-          <label>Child Serial</label>
-          <span class="cfg-inp-group">
-            <input
-              id="cfg-child-serial"
-              type="text"
-              maxLength={20}
-              placeholder="A7FZA5191ILSNQ"
-              value={childSerial}
-              onInput={(e) => setChildSerial((e.target as HTMLInputElement).value)}
-            />
-            <button
-              class="cfg-preset"
-              type="button"
-              onClick={() => setChildSerial('A7FZA5191ILSNQ')}
-            >
-              A7FZA5191ILSNQ
-            </button>
-            <button class="cfg-preset" type="button" onClick={() => setChildSerial('CL21K1A00001')}>
-              CL21K1A00001
-            </button>
-          </span>
-          <label>Child PID (hex)</label>
-          <span class="cfg-inp-group">
-            <input
-              id="cfg-child-pid"
-              type="text"
-              maxLength={6}
-              placeholder="0x00a5"
-              value={childPid}
-              onInput={(e) => setChildPid((e.target as HTMLInputElement).value)}
-            />
-            <button class="cfg-preset" type="button" onClick={() => setChildPid('0x00a5')}>
-              0x00a5
-            </button>
-            <button class="cfg-preset" type="button" onClick={() => setChildPid('0x0080')}>
-              0x0080
-            </button>
-          </span>
-          <label>Dock MAC</label>
-          <span class="cfg-inp-group">
-            <input
-              id="cfg-mac"
-              type="text"
-              maxLength={17}
-              placeholder="02:00:00:00:00:01"
-              value={mac}
-              onInput={(e) => setMac((e.target as HTMLInputElement).value)}
-            />
-            <button class="cfg-preset" type="button" onClick={() => setMac('02:00:00:00:00:01')}>
-              default
-            </button>
-          </span>
-        </div>
-        <button id="cfg-apply" type="button" onClick={handleApply}>
-          Apply
-        </button>
+        <label>Dock Serial</label>
+        <span class="cfg-inp-group">
+          <input
+            id="cfg-dock-serial"
+            type="text"
+            class="input"
+            maxLength={20}
+            placeholder="CL21K1A00001"
+            value={dockSerial}
+            onInput={(e) => setDockSerial((e.target as HTMLInputElement).value)}
+          />
+          <button
+            class="ghostbtn cfg-preset"
+            type="button"
+            onClick={() => setDockSerial('CL21K1A00001')}
+          >
+            CL21K1A00001
+          </button>
+        </span>
+        <strong>
+          Child (<span id="cfg-child-model-label">{status.modelName ?? 'Stream Deck MK.2'}</span>)
+        </strong>
+        <label>Child FW</label>
+        <span class="cfg-inp-group">
+          <input
+            id="cfg-child-fw"
+            type="text"
+            class="input"
+            maxLength={8}
+            placeholder="1.03.000"
+            value={childFw}
+            onInput={(e) => setChildFw((e.target as HTMLInputElement).value)}
+          />
+          <button class="ghostbtn cfg-preset" type="button" onClick={() => setChildFw('1.03.000')}>
+            1.03.000
+          </button>
+          <button class="ghostbtn cfg-preset" type="button" onClick={() => setChildFw('2.00.026')}>
+            2.00.026
+          </button>
+        </span>
+        <label>Child Serial</label>
+        <span class="cfg-inp-group">
+          <input
+            id="cfg-child-serial"
+            type="text"
+            class="input"
+            maxLength={20}
+            placeholder="A7FZA5191ILSNQ"
+            value={childSerial}
+            onInput={(e) => setChildSerial((e.target as HTMLInputElement).value)}
+          />
+          <button
+            class="ghostbtn cfg-preset"
+            type="button"
+            onClick={() => setChildSerial('A7FZA5191ILSNQ')}
+          >
+            A7FZA5191ILSNQ
+          </button>
+          <button
+            class="ghostbtn cfg-preset"
+            type="button"
+            onClick={() => setChildSerial('CL21K1A00001')}
+          >
+            CL21K1A00001
+          </button>
+        </span>
+        <label>Child PID (hex)</label>
+        <span class="cfg-inp-group">
+          <input
+            id="cfg-child-pid"
+            type="text"
+            class="input"
+            maxLength={6}
+            placeholder="0x00a5"
+            value={childPid}
+            onInput={(e) => setChildPid((e.target as HTMLInputElement).value)}
+          />
+          <button class="ghostbtn cfg-preset" type="button" onClick={() => setChildPid('0x00a5')}>
+            0x00a5
+          </button>
+          <button class="ghostbtn cfg-preset" type="button" onClick={() => setChildPid('0x0080')}>
+            0x0080
+          </button>
+        </span>
+        <label>Dock MAC</label>
+        <span class="cfg-inp-group">
+          <input
+            id="cfg-mac"
+            type="text"
+            class="input"
+            maxLength={17}
+            placeholder="02:00:00:00:00:01"
+            value={mac}
+            onInput={(e) => setMac((e.target as HTMLInputElement).value)}
+          />
+          <button
+            class="ghostbtn cfg-preset"
+            type="button"
+            onClick={() => setMac('02:00:00:00:00:01')}
+          >
+            default
+          </button>
+        </span>
       </div>
-    </div>
+      <button id="cfg-apply" class="ghostbtn" type="button" onClick={handleApply}>
+        Apply
+      </button>
+    </Collapsible>
   );
 }

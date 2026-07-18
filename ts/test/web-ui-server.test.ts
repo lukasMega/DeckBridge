@@ -134,6 +134,52 @@ test('bare host, bare origin → true', () => {
   assert.ok(isAllowedWebRequest('127.0.0.1', 'http://127.0.0.1', 3000));
 });
 
+// ── isAllowedWebRequest — own-interface IP literals (--bind 0.0.0.0 LAN access) ─
+
+console.log('\nisAllowedWebRequest — own-interface IP literals');
+
+const ownIp = tjs.system.networkInterfaces.find(
+  (i) => !i.internal && !i.address.includes(':'),
+)?.address;
+
+test('this machine’s own non-internal IPv4 as Host → true', () => {
+  if (!ownIp) {
+    console.log('  (skipped: no non-internal IPv4 interface on this machine)');
+    return;
+  }
+  assert.ok(isAllowedWebRequest(`${ownIp}:3000`, null, 3000));
+});
+
+test('own IP, matching origin → true', () => {
+  if (!ownIp) {
+    console.log('  (skipped: no non-internal IPv4 interface on this machine)');
+    return;
+  }
+  assert.ok(isAllowedWebRequest(`${ownIp}:3000`, `http://${ownIp}:3000`, 3000));
+});
+
+test('own IP with wrong port → false', () => {
+  if (!ownIp) {
+    console.log('  (skipped: no non-internal IPv4 interface on this machine)');
+    return;
+  }
+  assert.ok(!isAllowedWebRequest(`${ownIp}:9999`, null, 3000));
+});
+
+test('foreign IP literal (TEST-NET-3, never a real interface) → false', () => {
+  assert.ok(!isAllowedWebRequest('203.0.113.5:3000', null, 3000));
+});
+
+test('DNS-rebinding domain still rejected (own-IP addition does not allow-any-Host)', () => {
+  assert.ok(!isAllowedWebRequest('evil.example:3000', null, 3000));
+});
+
+test('localhost/127.0.0.1/[::1] still allowed alongside own-IP support', () => {
+  assert.ok(isAllowedWebRequest('localhost:3000', null, 3000));
+  assert.ok(isAllowedWebRequest('127.0.0.1:3000', null, 3000));
+  assert.ok(isAllowedWebRequest('[::1]:3000', null, 3000));
+});
+
 // ── pickFallbackPort ──────────────────────────────────────────────────────────
 
 console.log('\npickFallbackPort');

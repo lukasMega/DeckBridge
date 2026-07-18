@@ -1,55 +1,11 @@
 /**
- * AdvKeyGrid / DragResizer — advanced key grid and the resize handle beside it.
- *
- * Split out of AdvancedApp.tsx (file-size refactor, no behavior change).
+ * DragResizer — the resize handle between the grid section and the panels.
+ * (The key grid itself is the shared components/KeyGridPreview.tsx now,
+ * rendered by AdvancedApp inside #grid-section.)
  */
 import { useEffect, useRef } from 'preact/hooks';
-import { useStore } from './store.js';
-import { KeyPreview } from './key-preview.js';
 
 const GRID_WIDTH_KEY = 'mira2el-grid-width';
-
-// ---------------------------------------------------------------------------
-// AdvKeyGrid — advanced key grid (clickable in mock mode, shows index, flash)
-// ---------------------------------------------------------------------------
-
-export function AdvKeyGrid(): preact.JSX.Element {
-  const status = useStore((s) => s.status);
-  const gridRef = useRef<HTMLDivElement>(null);
-  const previewRef = useRef<KeyPreview | null>(null);
-
-  useEffect(() => {
-    const el = gridRef.current;
-    if (!el) return;
-    const kp = new KeyPreview(el, {
-      showIndex: true,
-      flash: true,
-      onKeyClick: (i) => {
-        void fetch(`/api/key/${i}`, { method: 'POST' });
-      },
-    });
-    previewRef.current = kp;
-    kp.rebuild(15, 5);
-  }, []);
-
-  useEffect(() => {
-    const kp = previewRef.current;
-    if (!kp) return;
-    if (status.keyCount && status.columns) kp.rebuild(status.keyCount, status.columns);
-    kp.setModel(status.modelId);
-    kp.setClickable(status.driverMode === 'mock');
-  }, [status.keyCount, status.columns, status.modelId, status.driverMode]);
-
-  return (
-    <div class="grid-section" id="grid-section">
-      <div class="btn-grid" id="btn-grid" ref={gridRef} />
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// DragResizer — the resize handle between grid section and panels
-// ---------------------------------------------------------------------------
 
 export function DragResizer(): preact.JSX.Element {
   const resizerRef = useRef<HTMLDivElement>(null);

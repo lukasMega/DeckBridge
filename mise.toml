@@ -12,14 +12,21 @@ windows-x64 = { asset_pattern = "txiki-windows-x86_64-slim.zip", bin = "tjs.exe"
 #postinstall = "chmod +x \"$(mise where github:lukasMega/txiki.js)/tjs\" 2>/dev/null || true"
 
 [env]
+# rustup installs cargo here; CI (dtolnay/rust-toolchain) adds it to PATH itself,
+# but a plain interactive shell may not (no `source $HOME/.cargo/env` in rc files
+# — confirmed missing here). mise's `_.path` prepends it with the OS-correct
+# separator, so tasks can call plain `cargo` on every platform without
+# hardcoding a POSIX-only ${HOME}/.cargo/bin/cargo path (broken on Windows).
+_.path = ["~/.cargo/bin"]
 _TXIKI_MISE_V  = "26.5.1"
 TXIKI_VERSION  = "v26.5.0"
-# TJS            = "{{config_root}}/vendor/txiki.js/build/tjs"
-TJS            = "{{ xdg_data_home }}/mise/installs/github-lukas-mega-txiki-js/{{ env._TXIKI_MISE_V }}/tjs"
-DECKBRIDGE_NATIVE_LIB = "{{config_root}}/rust/target/release/libdeckbridge_native.dylib"
-DECKBRIDGE_TRAY_BIN        = "{{config_root}}/rust/target/release/deckbridge-tray"
+# Portable default: vendored build/download destination, per-platform exe suffix.
+# Local overrides (a pre-built $TJS path, TJS_FROM_SOURCE=1) go in mise.local.toml
+# (gitignored) — see that file's comment.
+TJS             = "{{config_root}}/vendor/txiki.js/build/tjs{% if os() == 'windows' %}.exe{% endif %}"
+DECKBRIDGE_NATIVE_LIB = "{{config_root}}/rust/target/release/{% if os() == 'windows' %}deckbridge_native.dll{% elif os() == 'macos' %}libdeckbridge_native.dylib{% else %}libdeckbridge_native.so{% endif %}"
+DECKBRIDGE_TRAY_BIN        = "{{config_root}}/rust/target/release/deckbridge-tray{% if os() == 'windows' %}.exe{% endif %}"
 DECKBRIDGE_RAW_DUMP_DIR="{{config_root}}/tmp/mira2el-raw"
-TJS_FROM_SOURCE=1
 
 [tasks.checkTjs]
 run = '''
@@ -45,9 +52,8 @@ depends = ["build-simple"]
 run = "DECKBRIDGE_NATIVE_LIB=$DECKBRIDGE_NATIVE_LIB DECKBRIDGE_TRAY_BIN=$DECKBRIDGE_TRAY_BIN $TJS run ts/dist/bundle.js"
 
 [tasks.d]
-description = "Build and run"
-depends = ["build"]
-run = "DECKBRIDGE_LOG=debug DECKBRIDGE_NATIVE_LIB=$DECKBRIDGE_NATIVE_LIB DECKBRIDGE_TRAY_BIN=$DECKBRIDGE_TRAY_BIN $TJS run ts/dist/bundle.js"
+description = "Rebuild at debug log level and run"
+run = "LOG_LEVEL=debug mise run build && DECKBRIDGE_NATIVE_LIB=$DECKBRIDGE_NATIVE_LIB DECKBRIDGE_TRAY_BIN=$DECKBRIDGE_TRAY_BIN $TJS run ts/dist/bundle.js"
 
 
 [tasks.gen-splash]
@@ -63,13 +69,7 @@ quiet = true
 # Opt in to the size-optimized slim runtime (sqlite3 + wasm/WAMR removed,
 # symbols stripped) by exporting TJS_FROM_SOURCE=1. Release CI sets this.
 # `mise run tjs-build` builds the slim runtime unconditionally.
-run = '''
-if [ "${TJS_FROM_SOURCE:-0}" = "1" ]; then
-  node scripts/tjs-build.mjs
-else
-  node scripts/tjs-download.mjs
-fi
-'''
+run = "node scripts/tjs-setup.mjs"
 
 [tasks.tjs-build]
 description = "Build slim txiki.js from source (drops sqlite3 + wasm/WAMR, strips symbols); needs cmake + C/C++ toolchain"
@@ -79,24 +79,20 @@ run = "node scripts/tjs-build.mjs"
 description = "Build Rust native cdylib: image transform + HID enumeration (JPEG_FORK=1 = vendored optimized-Huffman jpeg-encoder fork, ~20% smaller files)"
 quiet = true
 dir = "rust/deckbridge-native"
-run = """
-FLAGS=""
-if [ "${JPEG_FORK:-}" = "1" ]; then FLAGS="--no-default-features --features jpeg-fork,usb"; fi
-${HOME}/.cargo/bin/cargo build --release $FLAGS
-"""
+run = "node ../../scripts/build-deckbridge-native.mjs"
 
 [tasks.tray-rs]
 description = "Build Rust system tray binary"
 quiet = true
 dir = "{{config_root}}/rust/deckbridge-tray"
 depends = ["deckbridge-native"]
-run = "${HOME}/.cargo/bin/cargo build --release"
+run = "cargo build --release"
 
 [tasks.ts-install]
 description = "Install TypeScript/esbuild dev dependencies"
 quiet = true
 dir = "ts"
-run = "npm i --no-fund --package-lock-only >/dev/null 2>&1 && echo 'npm install OK'"
+run = "npm i --no-fund --package-lock-only --silent && echo npm install OK"
 
 [tasks.ts]
 description = "Bundle TypeScript with esbuild"
@@ -113,7 +109,7 @@ depends = ["tjs-setup", "deckbridge-native", "tray-rs", "ts"]
 [tasks.compile]
 description = "Compile to standalone binary"
 depends = ["build"]
-run = "$TJS compile ts/dist/bundle.js deckbridge"
+run = "node scripts/compile.mjs"
 
 [tasks.ts-simple]
 description = "Bundle TypeScript (simple-only: excludes advanced view + its CSS)"
@@ -154,30 +150,25 @@ run = "./ts/node_modules/.bin/oxlint ts && ./ts/node_modules/.bin/eslint ts"
 [tasks.rust-fmt]
 description = "Check Rust formatting (member crates; vendored jpeg-encoder fork excluded)"
 dir = "rust"
-run = "${HOME}/.cargo/bin/cargo fmt --check -p deckbridge-native -p deckbridge-tray"
+run = "cargo fmt --check -p deckbridge-native -p deckbridge-tray"
 
 [tasks.rust-clippy]
 description = "Clippy with -D warnings for both JPEG backends (features are mutually exclusive)"
 dir = "rust"
 run = """
-${HOME}/.cargo/bin/cargo clippy --workspace --all-targets -- -D warnings
-${HOME}/.cargo/bin/cargo clippy -p deckbridge-native --no-default-features --features jpeg-fork,usb --all-targets -- -D warnings
+cargo clippy --workspace --all-targets -- -D warnings
+cargo clippy -p deckbridge-native --no-default-features --features jpeg-fork,usb --all-targets -- -D warnings
 """
 
 [tasks.rust-test]
 description = "Run Rust unit tests (image transform + decompression-bomb defense)"
 dir = "rust"
-run = "${HOME}/.cargo/bin/cargo test --workspace"
+run = "cargo test --workspace"
 
 [tasks.tauri-build]
 description = "Build Windows NSIS installer via Tauri (runs: compile + tray + copy sidecars + cargo tauri build)"
 depends = ["compile", "tray-rs"]
-run = """
-mkdir -p src-tauri/binaries
-cp deckbridge              src-tauri/binaries/deckbridge-x86_64-pc-windows-msvc.exe
-cp rust/target/release/deckbridge-tray.exe src-tauri/binaries/deckbridge-tray-x86_64-pc-windows-msvc.exe
-${HOME}/.cargo/bin/cargo tauri build --manifest-path src-tauri/Cargo.toml
-"""
+run = "node scripts/tauri-build.mjs"
 
 [tasks.tauri-build-macos]
 description = "Build macOS .app + .dmg via Tauri (compile + tray + sidecars renamed to apple-darwin triple + cargo tauri build --bundles app,dmg)"
@@ -210,17 +201,17 @@ cp deckbridge                                  "src-tauri/binaries/deckbridge-${
 cp rust/target/release/deckbridge-tray                "src-tauri/binaries/deckbridge-tray-${TRIPLE}"
 chmod +x "src-tauri/binaries/deckbridge-${TRIPLE}" "src-tauri/binaries/deckbridge-tray-${TRIPLE}"
 codesign --force --sign - --timestamp=none "src-tauri/binaries/deckbridge-tray-${TRIPLE}"
-cd src-tauri && CI=true ${HOME}/.cargo/bin/cargo tauri build --bundles app,dmg
+cd src-tauri && CI=true cargo tauri build --bundles app,dmg
 open target/release/bundle/macos
 """
 
 [tasks.tauri-check]
 description = "Cargo check the Tauri crate (cross-platform, no sidecars needed)"
 dir = "src-tauri"
-run = "${HOME}/.cargo/bin/cargo check"
+run = "cargo check"
 #description = "cargo-deny: advisories, licenses, bans, sources (needs: cargo install cargo-deny --locked)"
 #dir = "rust"
-#run = "${HOME}/.cargo/bin/cargo deny check"
+#run = "cargo deny check"
 
 [tasks.rust-lint]
 description = "Rust fmt-check + clippy + tests"
@@ -297,7 +288,7 @@ run = "npm install --no-fund"
 description = "Start Docusaurus dev server (docs-site)"
 dir = "docs-site"
 # --port pins 3000 so an ambient PORT (e.g. PORT=/dev/cu.usbserial-* from idf.py flash) can't make Docusaurus parse port NaN
-run = "npm run start -- --port 3000"
+run = "npm run start -- --port 3001 --host 0.0.0.0"
 
 [tasks.docs-build]
 description = "Build Docusaurus static HTML (docs-site/build/)"
@@ -322,3 +313,14 @@ run = """
   node scripts/coverage-report.mjs
 """
 timeout = "120s"
+
+[tasks.largeFiles]
+description = "top 15 large files"
+run = """
+find . -type f -name "*.ts" \
+-not -path "*/node_modules/*" \
+-not -path "*/vendor/*" \
+-not -path "*/test/*" \
+-print0 \
+| xargs -0 wc -l | grep -v "total$" | sort -rn | head -n 15
+"""

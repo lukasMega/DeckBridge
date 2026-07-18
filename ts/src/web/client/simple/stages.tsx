@@ -4,10 +4,11 @@ import { useStore } from '../store.js';
 import { ICON } from '../ui-icons.js';
 import type { DockUi } from '../ui-types.js';
 import { Icon } from './Icon.js';
-import { Step, KeyGridPreview, Brightness, ManualAddPanel } from './controls.js';
+import { Step, Brightness, ManualAddPanel, RestartNote } from './controls.js';
+import { KeyGridPreview } from '../components/KeyGridPreview.js';
 import { ExtraKeysPanel } from './extra-keys-panel.js';
 import { DockList } from './dock-cards.js';
-import { openSdApp, quitElgatoApp, restartElgatoApp } from './handlers.js';
+import { openSdApp, quitElgatoApp } from './handlers.js';
 import { isMultiDockView, clientAppName } from '../ui-helpers.js';
 
 export function StageReady({
@@ -30,7 +31,7 @@ export function StageReady({
       <>
         <div class="hero">
           {/* eslint-disable-next-line @eslint-react/dom-no-dangerously-set-innerhtml -- static trusted SVG icon markup */}
-          <div class="hero-badge" dangerouslySetInnerHTML={{ __html: ICON.check }} />
+          <div class="hero-badge circle" dangerouslySetInnerHTML={{ __html: ICON.check }} />
           <h1>Everything&apos;s working</h1>
           <p>{summary}</p>
         </div>
@@ -48,7 +49,7 @@ export function StageReady({
     <>
       <div class="hero">
         {/* eslint-disable-next-line @eslint-react/dom-no-dangerously-set-innerhtml -- static trusted SVG icon markup */}
-        <div class="hero-badge" dangerouslySetInnerHTML={{ __html: ICON.check }} />
+        <div class="hero-badge circle" dangerouslySetInnerHTML={{ __html: ICON.check }} />
         <h1>Everything&apos;s working</h1>
         <p>Your Stream Deck is connected{appName} and ready to use.</p>
       </div>
@@ -113,13 +114,7 @@ export function StageDeviceNoElgato({
             </a>
           </div>
           <ManualAddPanel onHelp={onHelp} />
-          <p class="dock-pairing-note">
-            Paired before?{' '}
-            <button class="link-btn" type="button" onClick={restartElgatoApp}>
-              Restart the Elgato app
-            </button>{' '}
-            to reconnect.
-          </p>
+          <RestartNote />
         </Step>
       </div>
       <KeyGridPreview keyCount={keyCount} columns={columns} dimmed={true} modelId={modelId} />
@@ -188,7 +183,7 @@ export function StageConflict(): preact.JSX.Element {
   return (
     <div class="conflict">
       {/* eslint-disable-next-line @eslint-react/dom-no-dangerously-set-innerhtml -- static trusted SVG icon markup */}
-      <div class="conflict-badge" dangerouslySetInnerHTML={{ __html: ICON.warn }} />
+      <div class="conflict-badge circle" dangerouslySetInnerHTML={{ __html: ICON.warn }} />
       <h1>Elgato app is blocking access</h1>
       <p class="conflict-body">
         The Elgato Stream Deck app is running and has claimed the USB device. Quit it so DeckBridge

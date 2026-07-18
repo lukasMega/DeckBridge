@@ -1,10 +1,14 @@
 /**
- * AdvHeader — pills, brightness row, mode/model/resize/image-mode/anim, stats.
+ * AdvHeader — back button, status chips, mode/model/resize/image-mode/anim
+ * controls, stats, theme button. Brightness moved to a panels-column card
+ * (simple Brightness component) in AdvancedApp.
  *
  * Split out of AdvancedApp.tsx (file-size refactor, no behavior change).
  */
 import { useState, useEffect, useRef } from 'preact/hooks';
 import { useStore } from './store.js';
+import { StatusChip, type StatusChipVariant } from './components/StatusChip.js';
+import { ThemeButton } from './components/ThemeButton.js';
 import type { DeviceModel } from './ui-types.js';
 
 // ---------------------------------------------------------------------------
@@ -48,23 +52,13 @@ function handleModelChange(e: Event): void {
   });
 }
 
-function handleBriIgnore(e: Event): void {
-  void fetch('/api/brightness-override', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ enabled: (e.target as HTMLInputElement).checked }),
-  });
-}
-
 // ---------------------------------------------------------------------------
-// AdvHeader — pills, brightness row, mode/model/resize/image-mode/anim, stats
+// AdvHeader
 // ---------------------------------------------------------------------------
 
 export function AdvHeader(): preact.JSX.Element {
   const status = useStore((s) => s.status);
   const stats = useStore((s) => s.stats);
-  const brightness = useStore((s) => s.brightness);
-  const brightnessOverride = useStore((s) => s.brightnessOverride);
   const resizeEnabled = useStore((s) => s.resizeEnabled);
   const imageMode = useStore((s) => s.imageMode);
   const deviceModels = useStore((s) => s.deviceModels);
@@ -112,64 +106,52 @@ export function AdvHeader(): preact.JSX.Element {
     localStorage.setItem('animEnabled', String(next));
   }
 
-  // MB pill derivation (mirrors ui-status.ts applyStatus)
-  let mbPillClass = 'pill disconnected';
-  let mbPillText = 'REAL · DISCONNECTED';
+  // MB chip derivation (mirrors ui-status.ts applyStatus)
+  let mbVariant: StatusChipVariant = 'dim';
+  let mbText = 'REAL · DISCONNECTED';
   let modeBtnText = 'Switch to Mock';
-  let modeBtnExtraClass = '';
+  let modeBtnActive = false;
   if (status.driverMode === 'mock') {
-    mbPillClass = 'pill mock-mode-pill';
-    mbPillText = 'MOCK · ACTIVE';
+    mbVariant = 'accent';
+    mbText = 'MOCK · ACTIVE';
     modeBtnText = 'Switch to Real Device';
-    modeBtnExtraClass = 'mock-active';
+    modeBtnActive = true;
   } else if (status.driverConnected) {
-    mbPillClass = 'pill connected';
-    mbPillText = 'REAL · CONNECTED';
+    mbVariant = 'ok';
+    mbText = 'REAL · CONNECTED';
   }
 
-  const elPillClass = status.elgatoConnected ? 'pill connected' : 'pill disconnected';
-  const elPillText = status.elgatoConnected
+  const elVariant: StatusChipVariant = status.elgatoConnected ? 'ok' : 'dim';
+  const elText = status.elgatoConnected
     ? `ELGATO · ${status.elgatoRemoteAddr ?? 'CONNECTED'}`
     : 'ELGATO · WAITING';
 
-  const resizeBtnClass = resizeEnabled ? 'badge-on' : 'badge-off';
-  const animBtnClass = animEnabled ? 'badge-on' : 'badge-off';
   const modelDisabled = status.driverMode === 'real' && status.driverConnected;
 
   return (
     <header>
-      <button class="simple-back-btn" id="simpleBtn" type="button" onClick={switchToSimple}>
+      <button class="ghostbtn" id="simpleBtn" type="button" onClick={switchToSimple}>
         ← Simple
       </button>
       <h1>DeckBr: advanced</h1>
-      <span id="mb-pill" class={mbPillClass}>
-        {mbPillText}
-      </span>
-      <span id="el-pill" class={elPillClass}>
-        {elPillText}
-      </span>
-      <div class="bri-row">
-        brightness
-        <div class="bri-bar">
-          <div class="bri-fill" id="bri-fill" style={{ width: `${brightness}%` }} />
-        </div>
-        <span id="bri-val">{brightness}%</span>
-        <label class="bri-ignore">
-          <input
-            type="checkbox"
-            id="bri-ignore-toggle"
-            checked={brightnessOverride}
-            onChange={handleBriIgnore}
-          />
-          <span>Ignore Elgato brightness</span>
-        </label>
-      </div>
-      <button id="mode-toggle" type="button" class={modeBtnExtraClass} onClick={toggleMode}>
+      <StatusChip id="mb-pill" variant={mbVariant}>
+        {mbText}
+      </StatusChip>
+      <StatusChip id="el-pill" variant={elVariant}>
+        {elText}
+      </StatusChip>
+      <button
+        id="mode-toggle"
+        type="button"
+        class={modeBtnActive ? 'ghostbtn active' : 'ghostbtn'}
+        onClick={toggleMode}
+      >
         {modeBtnText}
       </button>
       {deviceModels.length > 0 && (
         <select
           id="model-select"
+          class="input"
           onChange={handleModelChange}
           disabled={modelDisabled}
           value={status.modelId ?? ''}
@@ -181,11 +163,17 @@ export function AdvHeader(): preact.JSX.Element {
           ))}
         </select>
       )}
-      <button id="resize-toggle" type="button" class={resizeBtnClass} onClick={toggleResize}>
+      <button
+        id="resize-toggle"
+        type="button"
+        class={resizeEnabled ? 'ghostbtn active' : 'ghostbtn'}
+        onClick={toggleResize}
+      >
         {resizeEnabled ? 'R' : '1:1'}
       </button>
       <select
         id="image-mode"
+        class="input"
         title="Image fit (experimental, applies to active driver)"
         onChange={handleImageModeChange}
         value={imageMode ?? 'default'}
@@ -196,10 +184,15 @@ export function AdvHeader(): preact.JSX.Element {
         <option value="pad-average">Fit: Pad · Avg</option>
         <option value="pad-edge">Fit: Pad · Edge</option>
       </select>
-      <button id="anim-toggle" type="button" class={animBtnClass} onClick={toggleAnim}>
+      <button
+        id="anim-toggle"
+        type="button"
+        class={animEnabled ? 'ghostbtn active' : 'ghostbtn'}
+        onClick={toggleAnim}
+      >
         FX
       </button>
-      <div id="stats-in-header" class="stats-row">
+      <div id="stats-in-header">
         <div class="si">
           <span class="sl">UPTIME</span>
           <span class="sv" id="s-up-hdr">
@@ -225,6 +218,7 @@ export function AdvHeader(): preact.JSX.Element {
           </span>
         </div>
       </div>
+      <ThemeButton />
     </header>
   );
 }

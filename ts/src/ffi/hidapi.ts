@@ -209,7 +209,14 @@ export function getHidapiSystemCandidates(): string[] {
     return ['/opt/homebrew/lib/libhidapi.dylib', '/usr/local/lib/libhidapi.dylib'];
   }
   if (FFI.suffix === 'dll') {
-    return ['hidapi.dll', 'C:\\Windows\\System32\\hidapi.dll'];
+    // Stock Windows ships no system hidapi.dll — the embedded-extract path
+    // (HIDAPI_LIB, set at boot from the bundle) is what actually loads it. These
+    // are last-resort candidates: next to the running executable (packaging may
+    // drop hidapi.dll there), then a bare name (DLL search path / PATH lookup).
+    const exePath = typeof tjs !== 'undefined' ? tjs.exePath : '';
+    const lastSep = Math.max(exePath.lastIndexOf('/'), exePath.lastIndexOf('\\'));
+    const exeDir = lastSep >= 0 ? exePath.slice(0, lastSep + 1) : '';
+    return exeDir ? [`${exeDir}hidapi.dll`, 'hidapi.dll'] : ['hidapi.dll'];
   }
   return ['/usr/lib/x86_64-linux-gnu/libhidapi-hidraw.so.0', '/usr/lib/libhidapi-hidraw.so.0'];
 }

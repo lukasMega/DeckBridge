@@ -101,10 +101,25 @@ export const IMAGE_CHUNK_LEN_OFFSET = 4;
 export const IMAGE_CHUNK_LAST_FLAG = 1;
 
 // Server listen address — override with DECKBRIDGE_BIND (e.g. "127.0.0.1") to restrict
-// the CORA servers (5343/5344) to a single interface. WebUI is unaffected (always
-// WEBUI_LISTEN_ADDRESS, localhost-only).
-export const SERVER_LISTEN_ADDRESS =
-  (typeof tjs !== 'undefined' ? tjs.env['DECKBRIDGE_BIND'] : undefined) ?? '0.0.0.0';
+// the CORA servers (5343/5344) to a single interface. WebUI honors the same override
+// (see webuiBindAddr() below) — unset, it stays WEBUI_LISTEN_ADDRESS (localhost-only).
+// A function, not a module-load constant: the CLI's --bind flag writes DECKBRIDGE_BIND
+// into tjs.env from app.ts's body, which runs AFTER this module's imports (hence its
+// top-level code) have already evaluated — a plain constant would freeze in the
+// pre-flag value.
+export function bindAddr(): string {
+  return (typeof tjs !== 'undefined' ? tjs.env['DECKBRIDGE_BIND'] : undefined) ?? '0.0.0.0';
+}
+
+// WebUI listen address — same DECKBRIDGE_BIND override as bindAddr(), but defaults to
+// WEBUI_LISTEN_ADDRESS (127.0.0.1) rather than 0.0.0.0: unset, the WebUI stays
+// loopback-only exactly as before --bind existed; an explicit --bind (e.g. 0.0.0.0)
+// exposes it on the LAN too, since on a headless box it's the only config surface.
+export function webuiBindAddr(): string {
+  return (
+    (typeof tjs !== 'undefined' ? tjs.env['DECKBRIDGE_BIND'] : undefined) ?? WEBUI_LISTEN_ADDRESS
+  );
+}
 
 // Active CORA client cannot be evicted by a newcomer within this window of its last
 // received data, see S2. ELGATO_KEEPALIVE_MS (2s) means a live desktop sends data at

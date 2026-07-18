@@ -7,17 +7,42 @@ import { MockDriver } from './devices/mock.js';
 import type { ClientApp, CommEntry, ImageModeOverride, LogObject } from './types.js';
 import { ELGATO_CHILD_PORT, ELGATO_TCP_PORT, WEBUI_PORT } from './types.js';
 import { DEVICE_MODELS } from './devices/registry.js';
-import { log, setWebUILog } from './logger.js';
+import { log, setWebUILog, setLogLevel } from './logger.js';
 import { setupNativeLibs } from './native-libs.js';
 import { setupImageHandler } from './image-pipeline.js';
 import { DriverManager, getInitialDriverMode } from './driver-manager.js';
 import type { SessionServersFactory } from './device-session.js';
 import { startCoraWithRetry } from './cora-startup.js';
 import { openPathInOS, platformName } from './os-utils.ts';
+import { parseCli, userArgs, applyFlagsToEnv, versionText, USAGE_TEXT } from './cli.js';
+import { runDevicesCommand } from './cli-devices.js';
 
 const [MAC_OS, WIN] = ['macOS', 'Windows'];
 
 const openBrowser = openPathInOS;
+
+// CLI parsing is the very first thing that happens: version/help/devices exit
+// immediately, and the flags must land in tjs.env before anything below reads it
+// (setupNativeLibs, WebUIServer's port, getInitialDriverMode, etc).
+const cli = parseCli(userArgs());
+if (cli.command === 'version') {
+  console.log(versionText());
+  tjs.exit(0);
+}
+if (cli.command === 'help') {
+  console.log(USAGE_TEXT);
+  tjs.exit(0);
+}
+if (cli.command === 'devices') {
+  await runDevicesCommand();
+  tjs.exit(0);
+}
+applyFlagsToEnv(cli.flags);
+// setLogLevel(), not a plain env read: logger.ts's own module-load env read already
+// happened (as one of this file's imports, above) before this line runs.
+if (tjs.env.DECKBRIDGE_LOG_LEVEL) setLogLevel(tjs.env.DECKBRIDGE_LOG_LEVEL);
+const headless = cli.flags.headless;
+const noWebui = cli.flags.noWebui;
 
 async function isElgatoAppRunning(): Promise<boolean> {
   // platformName() returns 'macOS', 'Windows', 'Linux', etc. (or '' if unavailable).
@@ -54,8 +79,13 @@ async function isElgatoAppRunning(): Promise<boolean> {
 // No-op when env vars are already set (dev) or in --no-embed builds.
 await setupNativeLibs();
 
+// tjs.env.DECKBRIDGE_WEBUI_PORT already reflects --webui-port (applyFlagsToEnv, above)
+// or a pre-existing env var — falls back to the WEBUI_PORT default.
+const webuiPort = tjs.env.DECKBRIDGE_WEBUI_PORT
+  ? Number(tjs.env.DECKBRIDGE_WEBUI_PORT)
+  : WEBUI_PORT;
 const webui = new WebUIServer(
-  WEBUI_PORT,
+  webuiPort,
   DEVICE_MODELS.map((m) => ({ id: m.id, name: m.name, keyCount: m.keyCount })),
   getInitialDriverMode(),
 );
@@ -303,6 +333,7 @@ log(
   `cpus         : ${tjs.system.cpus.length}x ${tjs.system.cpus[0]?.model ?? '?'}`,
 );
 log('info', 'deckBr', `txiki.js     : ${tjs.version}`);
+log('debug', 'deckBr', `platform     : ${platformName() || '(unknown)'}`);
 log(
   'info',
   'deckBr',
@@ -323,43 +354,55 @@ log('info', 'deckBr', '═══════════════════
 // conflict is irrelevant; only check when the device slot is free. Skip the
 // spawn entirely when no WebUI client is connected — nobody is looking at
 // `elgatoAppRunning`, and a fresh poll happens on the next tick once a client
-// connects.
+// connects. --headless skips this timer entirely: no WebUI client is ever
+// expected to be watching on a headless box.
 let _elgatoAppRunning = false;
-setInterval(async () => {
-  if (!webui.hasClients()) return;
-  const connected = webui.snapshot().driverConnected;
-  const next = connected ? false : await isElgatoAppRunning();
-  if (next !== _elgatoAppRunning) {
-    _elgatoAppRunning = next;
-    webui.notifyElgatoAppRunning(next);
-  }
-}, 2000);
+if (!headless) {
+  setInterval(async () => {
+    if (!webui.hasClients()) return;
+    const connected = webui.snapshot().driverConnected;
+    const next = connected ? false : await isElgatoAppRunning();
+    if (next !== _elgatoAppRunning) {
+      _elgatoAppRunning = next;
+      webui.notifyElgatoAppRunning(next);
+    }
+  }, 2000);
+}
 
-await webui.start();
-log('info', 'web', `WebUI: http://localhost:${webui.port}`);
+// --no-webui: settings still load (see WebUIServer.start), the HTTP/WS listener doesn't.
+await webui.start(!noWebui);
+if (noWebui) {
+  log('info', 'web', 'WebUI disabled (--no-webui)');
+} else {
+  log('info', 'web', `WebUI: http://localhost:${webui.port}`);
+}
 
-if (tjs.env.DECKBRIDGE_OPEN) {
+if (!headless && tjs.env.DECKBRIDGE_OPEN) {
   log('info', 'web', 'auto-opening browser (DECKBRIDGE_OPEN)');
   void openBrowser(`http://localhost:${webui.port}`);
 }
 
-let trayBin = tjs.env.DECKBRIDGE_TRAY_BIN ?? '';
-if (!trayBin) {
-  // No run.sh anymore: look for a deckbridge-tray sidecar next to the executable.
-  const exeDir = tjs.exePath.slice(0, tjs.exePath.lastIndexOf('/'));
-  const candidate = `${exeDir}/deckbridge-tray`;
-  try {
-    const st = await tjs.stat(candidate);
-    if (st.isFile) trayBin = candidate;
-  } catch {}
-}
-if (trayBin) {
-  tray = startTray(trayBin, () => {
-    void shutdown().catch(() => tjs.exit(1));
-  });
-  log('info', 'tray', tray ? `started: ${trayBin}` : `failed to spawn: ${trayBin}`);
+if (headless) {
+  log('info', 'tray', 'skipped (--headless)');
 } else {
-  log('info', 'tray', 'DECKBRIDGE_TRAY_BIN not set — running without tray');
+  let trayBin = tjs.env.DECKBRIDGE_TRAY_BIN ?? '';
+  if (!trayBin) {
+    // No run.sh anymore: look for a deckbridge-tray sidecar next to the executable.
+    const exeDir = tjs.exePath.slice(0, tjs.exePath.lastIndexOf('/'));
+    const candidate = `${exeDir}/deckbridge-tray`;
+    try {
+      const st = await tjs.stat(candidate);
+      if (st.isFile) trayBin = candidate;
+    } catch {}
+  }
+  if (trayBin) {
+    tray = startTray(trayBin, () => {
+      void shutdown().catch(() => tjs.exit(1));
+    });
+    log('info', 'tray', tray ? `started: ${trayBin}` : `failed to spawn: ${trayBin}`);
+  } else {
+    log('info', 'tray', 'DECKBRIDGE_TRAY_BIN not set — running without tray');
+  }
 }
 
 const _ifaces = tjs.system.networkInterfaces.filter((i) => !i.internal && !i.address.includes(':'));

@@ -4,7 +4,20 @@ import { useEffect, useRef, useState } from 'preact/hooks';
 import { ICON } from '../ui-icons.js';
 import { HELP } from '../ui-help.js';
 import { Icon } from './Icon.js';
+import { BackButton } from './controls.js';
+import { Collapsible } from '../components/Collapsible.js';
 import type { DeviceIdentity } from '../ui-types.js';
+
+/** Run `onEscape` when the Escape key is pressed. */
+function useEscape(onEscape: () => void): void {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent): void => {
+      if (e.key === 'Escape') onEscape();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onEscape]);
+}
 
 /** Labels for the identifiers DeckBridge actually sends to the Elgato app,
  *  in the order they're most useful for troubleshooting/pairing. mDNS service
@@ -80,7 +93,7 @@ function MdnsNameEditor({
         <span class="identity-label">mDNS service name</span>
         <span class="identity-edit-row">
           <input
-            class="identity-edit-input"
+            class="input"
             type="text"
             value={value}
             disabled={saving}
@@ -106,14 +119,7 @@ function MdnsNameEditor({
 }
 
 export function AboutPopover({ onClose }: Readonly<{ onClose: () => void }>): preact.JSX.Element {
-  // Close on Escape key
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent): void => {
-      if (e.key === 'Escape') onClose();
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [onClose]);
+  useEscape(onClose);
 
   const handleScrimClick = (e: MouseEvent): void => {
     if (e.target === e.currentTarget) onClose();
@@ -123,7 +129,7 @@ export function AboutPopover({ onClose }: Readonly<{ onClose: () => void }>): pr
     <div class="scrim" onClick={handleScrimClick}>
       <div class="popover">
         <button
-          class="pop-close"
+          class="pop-close circle"
           aria-label="Close"
           type="button"
           onClick={onClose}
@@ -172,14 +178,7 @@ export function SettingsPage({ onBack }: Readonly<{ onBack: () => void }>): prea
     return () => ctrl.abort();
   }, []);
 
-  // Close on Escape key
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent): void => {
-      if (e.key === 'Escape') onBack();
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [onBack]);
+  useEscape(onBack);
 
   async function refreshSettingsText(): Promise<void> {
     try {
@@ -252,10 +251,7 @@ export function SettingsPage({ onBack }: Readonly<{ onBack: () => void }>): prea
 
   return (
     <div class="help">
-      <button class="help-back" type="button" onClick={onBack}>
-        <Icon html={ICON.back} />
-        <span>Back</span>
-      </button>
+      <BackButton onClick={onBack} />
       <h1>Settings</h1>
       <p class="help-lead">
         Save your DeckBridge settings to a file, or load a previously saved file.
@@ -283,7 +279,7 @@ export function SettingsPage({ onBack }: Readonly<{ onBack: () => void }>): prea
 
       <p class="help-section-label">Device identity sent to the Elgato app</p>
       {identity ? (
-        <ul class="identity-list">
+        <ul class="identity-list panel-inset">
           <MdnsNameEditor
             // Remount (resetting the local edit buffer) when the underlying
             // device changes — not on every rename, which would clobber
@@ -307,8 +303,9 @@ export function SettingsPage({ onBack }: Readonly<{ onBack: () => void }>): prea
         <p class="help-lead">Loading…</p>
       )}
 
-      <p class="help-section-label">Saved settings (JSON)</p>
-      <pre class="settings-json-preview">{settingsText ?? 'Loading…'}</pre>
+      <Collapsible title="Saved settings (JSON)">
+        <pre class="settings-json-preview panel-inset">{settingsText ?? 'Loading…'}</pre>
+      </Collapsible>
     </div>
   );
 }
@@ -329,12 +326,9 @@ export function HelpScreen({
   let n = 0;
   return (
     <div class="help">
-      <button class="help-back" type="button" onClick={onBack}>
-        <Icon html={ICON.back} />
-        <span>Back</span>
-      </button>
+      <BackButton onClick={onBack} />
       {/* eslint-disable-next-line @eslint-react/dom-no-dangerously-set-innerhtml -- static trusted SVG from HELP data */}
-      <div class="help-stage" dangerouslySetInnerHTML={{ __html: topic.svg() }} />
+      <div class="help-stage panel-inset" dangerouslySetInnerHTML={{ __html: topic.svg() }} />
       <h1>{topic.title}</h1>
       <p class="help-lead">{topic.lead}</p>
       <p class="help-section-label">What happens — and what you do</p>

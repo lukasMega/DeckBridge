@@ -1,3 +1,9 @@
+// No console window on Windows (this is a GUI tray app, not a CLI tool) — a
+// plain `#[cfg(windows)]` attribute on the crate isn't valid syntax for this;
+// windows_subsystem is a crate-level attribute that must be unconditionally
+// present, so it's cfg_attr'd instead. No-op on macOS/Linux.
+#![cfg_attr(windows, windows_subsystem = "windows")]
+
 use serde::{Deserialize, Serialize};
 use std::io::{BufRead, BufReader, Write};
 use std::net::TcpListener;

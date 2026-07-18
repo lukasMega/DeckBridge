@@ -128,6 +128,7 @@ function CommandConfigPopover({
       <label class="xkey-popover-field">
         <span>Run every (s)</span>
         <input
+          class="input"
           type="number"
           min={INTERVAL_MIN_S}
           max={INTERVAL_MAX_S}
@@ -138,6 +139,7 @@ function CommandConfigPopover({
       <label class="xkey-popover-field">
         <span>Timeout (s)</span>
         <input
+          class="input"
           type="number"
           min={TIMEOUT_MIN_S}
           max={TIMEOUT_MAX_S}
@@ -217,6 +219,7 @@ function PluginConfigPopover({
       <label class="xkey-popover-field xkey-popover-arg">
         <span>Argument</span>
         <input
+          class="input"
           type="text"
           maxLength={PARAM_MAX}
           value={arg}
@@ -228,6 +231,7 @@ function PluginConfigPopover({
       <label class="xkey-popover-field">
         <span>Run every (s)</span>
         <input
+          class="input"
           type="number"
           min={INTERVAL_MIN_S}
           max={INTERVAL_MAX_S}
@@ -276,7 +280,7 @@ function ParamInput({
   };
   return (
     <input
-      class="xkey-select xkey-param"
+      class="input xkey-select xkey-param"
       type="text"
       maxLength={PARAM_MAX}
       value={isText ? param.replaceAll('\n', '\\n') : param}
@@ -326,7 +330,7 @@ function PluginPicker({
   return (
     <>
       <select
-        class={customActive ? 'xkey-select' : 'xkey-select xkey-param'}
+        class={customActive ? 'input xkey-select' : 'input xkey-select xkey-param'}
         value={customActive ? PLUGIN_CUSTOM : param}
         title={`plugins dir: ${pluginsDir}`}
         aria-label={`${label} side key plugin file`}
@@ -349,7 +353,7 @@ function PluginPicker({
       </select>
       {customActive && (
         <input
-          class="xkey-select xkey-param"
+          class="input xkey-select xkey-param"
           type="text"
           maxLength={PARAM_MAX}
           value={isCustomParam ? param : ''}
@@ -443,7 +447,7 @@ function ExtraKeyRow({
     <div class="xkey-row">
       <span class="xkey-pos">{label}</span>
       <select
-        class="xkey-select"
+        class="input xkey-select"
         value={widget}
         aria-label={`${label} side key widget`}
         onChange={handleWidget}

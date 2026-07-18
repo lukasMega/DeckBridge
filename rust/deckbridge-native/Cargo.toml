@@ -30,3 +30,6 @@ hidapi = { version = "2", optional = true }
 
 [lints]
 workspace = true
+
+[target."cfg(windows)".dependencies]
+windows = { version = "0.62.2", features = ["Win32_NetworkManagement_Dns", "Win32_Foundation", "Win32_Networking_WinSock"] }

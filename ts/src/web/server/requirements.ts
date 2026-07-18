@@ -1,5 +1,6 @@
 import FFI from 'tjs:ffi';
 import { getHidapiSystemCandidates } from '../../ffi/hidapi';
+import { isNativeMdnsAvailable } from '../../ffi/mdns';
 
 export interface RequirementResult {
   name: string;
@@ -70,6 +71,16 @@ function checkLibhidapi(): Promise<RequirementResult> {
   });
 }
 
+async function dnsSdOnPath(): Promise<boolean> {
+  try {
+    const p = tjs.spawn(['cmd', '/c', 'where dns-sd'], { stdout: 'ignore', stderr: 'ignore' });
+    const { exit_status } = await p.wait();
+    return exit_status === 0;
+  } catch {
+    return false;
+  }
+}
+
 // mDNS: built-in on macOS (Bonjour) and Windows (native since Win10 1803),
 // requires avahi-daemon on Linux
 async function checkMdns(): Promise<RequirementResult> {
@@ -77,7 +88,24 @@ async function checkMdns(): Promise<RequirementResult> {
     return { name: 'mdns', ok: true, message: 'Built into macOS (Bonjour)' };
   }
   if (FFI.suffix === 'dll') {
-    return { name: 'mdns', ok: true, message: 'Built into Windows (native mDNS)' };
+    if (isNativeMdnsAvailable()) {
+      return {
+        name: 'mdns',
+        ok: true,
+        message: 'Native mDNS advertise available (Windows Dnsapi)',
+      };
+    }
+    const dnsSd = await dnsSdOnPath();
+    return {
+      name: 'mdns',
+      ok: dnsSd,
+      message: dnsSd
+        ? 'Native mDNS unavailable — using dns-sd (Bonjour) fallback'
+        : 'No mDNS advertise path available (native failed, dns-sd/Bonjour not found)',
+      installHint: dnsSd
+        ? undefined
+        : 'Install Bonjour Print Services for Windows for the dns-sd fallback',
+    };
   }
   try {
     const p = tjs.spawn(['pgrep', 'avahi-daemon'], { stdout: 'ignore', stderr: 'ignore' });

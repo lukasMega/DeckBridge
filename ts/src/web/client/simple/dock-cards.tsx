@@ -5,9 +5,9 @@
 import { useStore } from '../store.js';
 import type { DockUi } from '../ui-types.js';
 import { ICON } from '../ui-icons.js';
-import { Icon } from './Icon.js';
-import { KeyGridPreview, ManualAddPanel } from './controls.js';
-import { restartElgatoApp } from './handlers.js';
+import { ManualAddPanel, RestartNote } from './controls.js';
+import { KeyGridPreview } from '../components/KeyGridPreview.js';
+import { StatusChip } from '../components/StatusChip.js';
 
 function postSelectDock(index: number): void {
   fetch('/api/select-dock', {
@@ -25,7 +25,7 @@ function StaticKeyGrid({
   for (let i = 0; i < keyCount; i++) cells.push(<div class="key-cell" key={i} />);
 
   return (
-    <div class="preview dimmed">
+    <div class="preview panel-inset dimmed">
       <div class="preview-head">
         <span class="preview-label">Preview</span>
         <span class="live-dot">Click to view</span>
@@ -40,25 +40,22 @@ function StaticKeyGrid({
 function DockChip({ dock }: Readonly<{ dock: DockUi }>): preact.JSX.Element {
   if (dock.elgatoConnected) {
     return (
-      <span class="dock-chip dock-chip--paired">
-        <Icon html={ICON.check} />
+      <StatusChip variant="ok" icon={ICON.check}>
         Paired
-      </span>
+      </StatusChip>
     );
   }
   if (dock.primaryConnected) {
     return (
-      <span class="dock-chip dock-chip--pairing">
-        <span class="ico-spin" />
+      <StatusChip variant="accent" spin>
         Elgato app connected
-      </span>
+      </StatusChip>
     );
   }
   return (
-    <span class="dock-chip dock-chip--waiting">
-      <span class="ico-spin" />
+    <StatusChip variant="wait" spin>
       Waiting for Elgato app
-    </span>
+    </StatusChip>
   );
 }
 
@@ -112,13 +109,7 @@ export function DockCard({
           </p>
         ) : (
           <>
-            <p class="dock-pairing-note">
-              Paired before?{' '}
-              <button class="link-btn" type="button" onClick={restartElgatoApp}>
-                Restart the Elgato app
-              </button>{' '}
-              to reconnect.
-            </p>
+            <RestartNote />
             <ManualAddPanel port={String(dock.primaryPort)} onHelp={onHelp} />
           </>
         ))}
