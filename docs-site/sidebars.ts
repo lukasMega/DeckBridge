@@ -17,12 +17,14 @@ const sidebars: SidebarsConfig = {
     'introduction',
     'getting-started',
     'features',
+    'headless-linux',
     'privacy',
   ],
 
   // Technical Details — reached via its own navbar item (docusaurus.config.ts)
   technicalSidebar: [
     'adding-a-device',
+    'side-keys',
     'plugin-widgets',
     'hidapi-ffi',
     'image-flow',

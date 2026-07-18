@@ -1,0 +1,60 @@
+name: Bug report
+description: Report a defect in the deckbridge binary
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to file a bug. Please fill out the fields
+        below. Do **not** report security vulnerabilities here — see
+        [SECURITY.md](../blob/main/.github/SECURITY.md).
+  - type: input
+    id: hardware
+    attributes:
+      label: Device model
+      description: e.g. Mirabox 293V3, Mirabox 293S, K1 Pro, Stream Deck Mini, Stream Deck MK.2
+      placeholder: Mirabox 293S
+    validations:
+      required: false
+  - type: input
+    id: version
+    attributes:
+      label: Version / commit
+      description: Binary version or git commit hash
+      placeholder: 40048e7
+    validations:
+      required: true
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: What did you observe, and what did you expect instead?
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      description: Minimal, exact steps.
+      placeholder: |
+        1. Run ./deckbridge ...
+        2. Connect Elgato software ...
+        3. Press key ...
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs / output
+      description: Console output or errors. Quote verbatim.
+      render: shell
+    validations:
+      required: false
+  - type: input
+    id: os
+    attributes:
+      label: Host OS
+      description: e.g. macOS 15.5, Windows 11, Ubuntu 24.04
+    validations:
+      required: false

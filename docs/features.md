@@ -94,6 +94,9 @@ behaves like Elgato hardware.
   to skip repeat work.
 - **Non-blocking by design** — USB HID and the 50–200 ms image transforms run on a
   separate worker thread, so the network ACK loop and web UI never stall.
+- **Side-key widgets** — decks with display-only keys outside the grid (e.g. the 293S
+  sixth column) show server-rendered clock / date / text / weather / command / plugin
+  widgets; see [Side-key widgets](./side-keys.md).
 - **Live web UI** — `http://localhost:3000` shows the key grid and a log feed in real time.
 - **System tray + diagnostics** — packaged releases (installers and release zips) include
   a status tray icon ([states](./getting-started.md#3-run-it)) and a `/requirements`

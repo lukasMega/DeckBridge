@@ -29,7 +29,8 @@ function computeFlags(): Record<string, string> {
     const newSession = !localStorage.getItem('da_sid') || now - last > 30 * 60 * 1000;
     if (newSession) {
       // report whether the PRIOR session bounced (exactly 1 pageview)
-      if (localStorage.getItem('da_sid') && +(localStorage.getItem('da_prevPv') || 0) === 1) flags.b = '1';
+      if (localStorage.getItem('da_sid') && +(localStorage.getItem('da_prevPv') || 0) === 1)
+        flags.b = '1';
       localStorage.setItem('da_sid', Math.random().toString(36).slice(2));
       localStorage.setItem('da_prevPv', '0');
       flags.s = '1';

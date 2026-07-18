@@ -13,6 +13,11 @@ release** (easiest) or **build from source**.
 
 ### Option A — Packaged release (recommended)
 
+:::caution
+Releases are currently **built and tested for macOS only**. On Linux or Windows,
+build from source (Option B) — those builds are implemented but untested.
+:::
+
 Download the build for your OS from the
 [project releases](https://github.com/lukasMega/DeckBridge/releases), unzip, and run. The release
 is self-contained — the txiki.js runtime and the native libraries (`libhidapi`,

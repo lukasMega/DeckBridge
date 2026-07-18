@@ -34,6 +34,12 @@ device before the USB write.
 Hardware-tested on macOS: 293V3, 293S, K1 Pro, and Stream Deck Mini; MK.2 and the
 Linux/Windows builds are implemented but not hardware-verified.
 
+:::caution Platform status
+DeckBridge is currently **tested on macOS only**, and the GitHub releases currently
+ship **macOS builds only**. Linux and Windows support exists in the code but is
+untested and not yet released.
+:::
+
 <div style="border-left:4px solid #e6a700;background:rgba(230,167,0,0.12);padding:12px 16px;border-radius:6px;margin:20px 0">
 <strong>⚠ Disclaimer</strong><br/>
 DeckBridge is not affiliated with, endorsed by, or supported by Elgato / Corsair. &ldquo;Stream Deck&rdquo; and &ldquo;Elgato&rdquo; are trademarks of their respective owners. DeckBridge is intended for <strong>hobby and personal use only — not for professional use</strong> — and it <strong>does not replace the Elgato Network Dock</strong>. For professional or reliable setups, use officially supported Elgato hardware.
