@@ -1,0 +1,514 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>docs-analytics · test dashboard</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 24px; max-width: 1100px; margin-inline: auto;
+    font: 14px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+    background: #0e1116; color: #d8dee9;
+  }
+  h1 { font-size: 18px; margin: 0 0 4px; }
+  h2 { font-size: 14px; margin: 28px 0 10px; color: #88c0d0; }
+  .sub { color: #6b7684; margin: 0 0 20px; }
+  section { background: #161b22; border: 1px solid #262d38; border-radius: 8px; padding: 16px; }
+  label { display: block; margin: 8px 0 3px; color: #9aa5b1; font-size: 12px; }
+  input {
+    width: 100%; padding: 7px 9px; background: #0e1116; color: #d8dee9;
+    border: 1px solid #2a323d; border-radius: 5px; font: inherit;
+  }
+  .row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  button {
+    margin-top: 12px; padding: 8px 16px; background: #2e7d5b; color: #fff;
+    border: 0; border-radius: 5px; font: inherit; cursor: pointer;
+  }
+  button.alt { background: #30425c; }
+  button:active { transform: translateY(1px); }
+  .msg { margin-top: 10px; min-height: 18px; font-size: 12px; }
+  .ok { color: #a3be8c; } .err { color: #bf616a; }
+  table { border-collapse: collapse; width: 100%; margin: 6px 0 14px; }
+  th, td { text-align: left; padding: 4px 10px 4px 0; border-bottom: 1px solid #20262f; }
+  th { color: #6b7684; font-weight: normal; }
+  td.n { text-align: right; color: #ebcb8b; }
+  .dim { color: #88c0d0; margin: 14px 0 4px; font-size: 13px; }
+  .hint { color: #6b7684; font-size: 11px; margin-top: 6px; }
+  .periods { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+  .periods button { margin-top: 0; padding: 6px 12px; background: #1c2330; color: #9aa5b1; font-size: 12px; }
+  .periods button.active { background: #2e7d5b; color: #fff; }
+  .kpiRow { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 16px; margin: 16px 0 10px; }
+  .kpiTile { background: #10151c; border: 1px solid #20262f; border-radius: 6px; padding: 8px 14px; min-width: 92px; }
+  .kpiVal { font-size: 28px; color: #88c0d0; line-height: 1; }
+  .kpiLabel { color: #6b7684; font-size: 11px; margin-top: 2px; }
+  .kpiDelta { font-size: 11px; margin-top: 4px; }
+  .kpiDelta.up { color: #a3be8c; }
+  .kpiDelta.down { color: #bf616a; }
+  .kpiDelta.flat { color: #6b7684; }
+  .rangeLabel { color: #6b7684; font-size: 12px; margin-left: auto; }
+  #chartWrap { background: #10151c; border: 1px solid #20262f; border-radius: 6px; padding: 8px; margin-bottom: 16px; }
+  #chart { width: 100%; height: 180px; }
+  .search { margin: 4px 0 14px; }
+  .bdGroup { margin-bottom: 18px; }
+  .barRow { position: relative; display: flex; justify-content: space-between; padding: 5px 8px; margin-bottom: 2px; border-radius: 4px; overflow: hidden; font-size: 12.5px; }
+  .barFill { position: absolute; inset: 0; background: #243244; z-index: 0; }
+  .barLabel, .barCount { position: relative; z-index: 1; }
+  .barLabel { color: #d8dee9; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .barCount { color: #ebcb8b; padding-left: 10px; }
+</style>
+</head>
+<body>
+  <h1>docs-analytics — test dashboard</h1>
+  <p class="sub">Fires real beacons at <code>GET /e?v=…</code> and reads <code>GET /stats</code> on this same server. Simulates the deployed Deno collector locally.</p>
+
+  <section>
+    <h2>1 · Send a beacon</h2>
+    <details><summary>open</summary>
+      <div class="row">
+        <div><label>path (p)</label><input id="p" value="/docs/intro"></div>
+        <div><label>referrer host (r)</label><input id="r" value="google.com"></div>
+      </div>
+      <div class="row">
+        <div><label>language (l)</label><input id="l" value="en-US"></div>
+        <div><label>timezone (tz)</label><input id="tz" value="Europe/Berlin"></div>
+      </div>
+      <div class="row">
+        <div><label>languages (ls)</label><input id="ls" value="en-US,en"></div>
+        <div><label>host (h)</label><input id="h" value="docs.deckbridge.app"></div>
+      </div>
+      <button id="fire">Send beacon</button>
+      <button id="seed" class="alt">Seed 30 random</button>
+      <div class="msg" id="fireMsg"></div>
+      <p class="hint">gated by the stats token (section 2) — enter the correct token to fire beacons. browser/os come from the request User-Agent (this browser) — the server ignores any client-sent UA. To test other UAs use curl (see README).</p>
+    </details>
+  </section>
+
+  <section style="margin-top:20px">
+    <h2>2 · Analytics</h2>
+    <div class="row">
+      <div><label>token</label><input id="token" value="devtoken"></div>
+      <div><label>day (YYYY-MM-DD, overrides period below)</label><input id="day" placeholder="blank = use period"></div>
+    </div>
+    <div class="periods" id="periods">
+      <button data-period="today">Today</button>
+      <button data-period="7d">Last 7 days</button>
+      <button data-period="14d">Last 14 days</button>
+      <button data-period="30d">Last 30 days</button>
+      <button data-period="thisMonth">This month</button>
+      <button data-period="lastMonth">Last month</button>
+      <button data-period="thisYear">This year</button>
+      <button data-period="lastYear">Last year</button>
+      <button data-period="all">All time</button>
+    </div>
+    <button id="load" class="alt">Load</button>
+    <div class="msg" id="loadMsg"></div>
+
+    <div id="analytics" style="display:none">
+      <div class="kpiRow">
+        <div class="kpiTile">
+          <div class="kpiVal" id="kpiPv">0</div>
+          <div class="kpiLabel">pageviews</div>
+          <div class="kpiDelta" id="kpiPvDelta"></div>
+        </div>
+        <div class="kpiTile">
+          <div class="kpiVal" id="kpiUv">0</div>
+          <div class="kpiLabel">unique visitors</div>
+          <div class="kpiDelta" id="kpiUvDelta"></div>
+        </div>
+        <div class="kpiTile">
+          <div class="kpiVal" id="kpiSessions">0</div>
+          <div class="kpiLabel">sessions</div>
+          <div class="kpiDelta" id="kpiSessionsDelta"></div>
+        </div>
+        <div class="kpiTile">
+          <div class="kpiVal" id="kpiViewsPerVisit">0</div>
+          <div class="kpiLabel">views / visit</div>
+          <div class="kpiDelta" id="kpiViewsPerVisitDelta"></div>
+        </div>
+        <div class="kpiTile">
+          <div class="kpiVal" id="kpiBounce">0%</div>
+          <div class="kpiLabel">bounce rate</div>
+          <div class="kpiDelta" id="kpiBounceDelta"></div>
+        </div>
+        <div class="rangeLabel" id="rangeLabel"></div>
+      </div>
+      <div id="chartWrap"><div id="chart"></div></div>
+      <input id="search" class="search" placeholder="Filter breakdowns…">
+      <button id="exportCsv" class="alt" style="margin-top:2px">Export CSV</button>
+      <div id="breakdowns"></div>
+    </div>
+  </section>
+
+<script>
+const $ = (id) => document.getElementById(id);
+
+async function fire(over) {
+  // mirror the client: opaque base64 token on GET /e, like the gif-pixel beacon
+  const payload = {
+    p:  over?.p  ?? $("p").value,
+    r:  over?.r  ?? $("r").value,
+    l:  over?.l  ?? $("l").value,
+    ls: over?.ls ?? $("ls").value,
+    tz: over?.tz ?? $("tz").value,
+    h:  over?.h  ?? $("h").value,
+  };
+  // optional extras: viewport/UTM/visitor-session flags/custom events
+  if (over?.vw) payload.vw = over.vw;
+  if (over?.us) payload.us = over.us;
+  if (over?.um) payload.um = over.um;
+  if (over?.uc) payload.uc = over.uc;
+  if (over?.u) payload.u = over.u;
+  if (over?.s) payload.s = over.s;
+  if (over?.b) payload.b = over.b;
+  if (over?.ev) { payload.ev = over.ev; if (over.t) payload.t = over.t; }
+  const v = btoa(encodeURIComponent(JSON.stringify(payload)));
+  const res = await fetch("/e?" + new URLSearchParams({ v }));
+  return res.status;
+}
+
+// beacon controls are gated by the stats token: /stats returns 401 on a bad
+// token, so a single probe tells us whether firing is allowed. (/e itself is
+// public — it must accept real beacons — this only gates the dev dashboard UI.)
+async function tokenOk() {
+  const token = encodeURIComponent($("token").value);
+  try {
+    const res = await fetch("/stats?token=" + token + "&day=" + todayIso());
+    return res.status !== 401;
+  } catch { return false; }
+}
+
+$("fire").onclick = async () => {
+  const m = $("fireMsg");
+  if (!(await tokenOk())) {
+    m.className = "msg err"; m.textContent = "401 unauthorized — enter the correct token in section 2 to fire beacons";
+    return;
+  }
+  try {
+    const s = await fire();
+    m.className = "msg " + (s === 200 ? "ok" : "err");
+    m.textContent = "GET /e → " + s + (s === 200 ? " ✓" : "");
+  } catch (e) { m.className = "msg err"; m.textContent = String(e); }
+};
+
+const PATHS = ["/", "/docs/intro", "/docs/setup", "/docs/protocol", "/faq"];
+const REFS  = ["google.com", "github.com", "direct", "duckduckgo.com"];
+const LANGS = ["en-US", "de-DE", "fr-FR", "es-ES", "en-GB"];
+const TZS   = ["Europe/Berlin", "America/New_York", "Asia/Tokyo", "UTC"];
+const HOSTS = ["docs.deckbridge.app", "localhost:3000", "deckbridge.app"];
+const VWS   = ["<640", "640-1024", ">1024"];
+const UTM_SOURCES   = ["newsletter", "twitter", "github"];
+const UTM_MEDIUMS   = ["email", "social", "referral"];
+const UTM_CAMPAIGNS = ["launch", "summer26"];
+const EVENTS = [
+  { ev: "outbound", t: "github.com" },
+  { ev: "outbound", t: "twitter.com" },
+  { ev: "download", t: "deckbridge-v1.2.3.zip" },
+];
+const pick  = (a) => a[Math.floor(Math.random() * a.length)];
+
+$("seed").onclick = async () => {
+  const m = $("fireMsg");
+  if (!(await tokenOk())) {
+    m.className = "msg err"; m.textContent = "401 unauthorized — enter the correct token in section 2 to seed";
+    return;
+  }
+  m.className = "msg"; m.textContent = "seeding…";
+  let ok = 0;
+  for (let i = 0; i < 30; i++) {
+    const over = { p: pick(PATHS), r: pick(REFS), l: pick(LANGS), ls: "", tz: pick(TZS), h: pick(HOSTS), vw: pick(VWS) };
+    if (Math.random() < 0.3) over.us = pick(UTM_SOURCES);
+    if (Math.random() < 0.3) over.um = pick(UTM_MEDIUMS);
+    if (Math.random() < 0.15) over.uc = pick(UTM_CAMPAIGNS);
+    if (Math.random() < 0.4) over.u = "1";
+    if (Math.random() < 0.3) over.s = "1";
+    const s = await fire(over);
+    if (s === 200) ok++;
+  }
+  for (let i = 0; i < 5; i++) {
+    const ev = pick(EVENTS);
+    const s = await fire({ ev: ev.ev, t: ev.t });
+    if (s === 200) ok++;
+  }
+  m.className = "msg ok"; m.textContent = "seeded " + ok + "/35 ✓";
+};
+
+const esc = (s) => String(s).replace(/[<>&]/g, (c) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;" }[c]));
+
+// --- period math (UTC, matches server) ---
+const LAUNCH = "2026-06-23";
+const iso = (d) => d.toISOString().slice(0, 10);
+const todayIso = () => iso(new Date());
+function addDays(dayStr, n) {
+  const d = new Date(dayStr + "T00:00:00Z");
+  d.setUTCDate(d.getUTCDate() + n);
+  return iso(d);
+}
+const clampFrom = (from) => (from < LAUNCH ? LAUNCH : from);
+
+function periodRange(period) {
+  const t = todayIso();
+  const now = new Date(t + "T00:00:00Z");
+  const y = now.getUTCFullYear(), m = now.getUTCMonth();
+  let from, to = t;
+  switch (period) {
+    case "today":     from = t; break;
+    case "7d":        from = addDays(t, -6); break;
+    case "14d":       from = addDays(t, -13); break;
+    case "30d":       from = addDays(t, -29); break;
+    case "thisMonth": from = iso(new Date(Date.UTC(y, m, 1))); break;
+    case "lastMonth": from = iso(new Date(Date.UTC(y, m - 1, 1))); to = iso(new Date(Date.UTC(y, m, 0))); break;
+    case "thisYear":  from = iso(new Date(Date.UTC(y, 0, 1))); break;
+    case "lastYear":  from = iso(new Date(Date.UTC(y - 1, 0, 1))); to = iso(new Date(Date.UTC(y - 1, 11, 31))); break;
+    case "all":       from = LAUNCH; break;
+    default:          from = t;
+  }
+  from = clampFrom(from);
+  if (to < from) to = from;
+  return { from, to };
+}
+
+// --- uPlot, loaded once from CDN on first render ---
+let uplotReady = null;
+function loadUplot() {
+  if (uplotReady) return uplotReady;
+  uplotReady = new Promise((resolve, reject) => {
+    const link = document.createElement("link");
+    link.rel = "stylesheet";
+    link.href = "https://unpkg.com/uplot@1.6.31/dist/uPlot.min.css";
+    document.head.appendChild(link);
+    const script = document.createElement("script");
+    script.src = "https://unpkg.com/uplot@1.6.31/dist/uPlot.iife.min.js";
+    script.onload = () => resolve();
+    script.onerror = () => reject(new Error("failed to load uPlot"));
+    document.head.appendChild(script);
+  });
+  return uplotReady;
+}
+
+let chart = null;
+async function renderChart(series) {
+  await loadUplot();
+  const el = $("chart");
+  if (chart) { chart.destroy(); chart = null; }
+  el.innerHTML = "";
+  if (!series.length) return;
+  const xs = series.map(([day]) => Date.parse(day + "T00:00:00Z") / 1000);
+  const ys = series.map(([, v]) => v);
+  const width = el.parentElement.clientWidth;
+  chart = new uPlot({
+    width,
+    height: 180,
+    padding: [10, 10, 0, 0],
+    legend: { show: false },
+    cursor: { show: true },
+    scales: { x: { time: true } },
+    axes: [
+      { stroke: "#6b7684", grid: { stroke: "#20262f" }, ticks: { stroke: "#20262f" } },
+      { stroke: "#6b7684", grid: { stroke: "#20262f" }, ticks: { stroke: "#20262f" } },
+    ],
+    series: [
+      {},
+      {
+        label: "pageviews",
+        stroke: "#88c0d0",
+        width: 2,
+        fill: "rgba(136,192,208,0.15)",
+        points: { show: series.length < 60 },
+      },
+    ],
+  }, [xs, ys], el);
+}
+window.addEventListener("resize", () => {
+  if (!chart) return;
+  chart.setSize({ width: $("chart").parentElement.clientWidth, height: 180 });
+});
+
+const DIM_ORDER = [
+  "path", "host", "ref", "browser", "os", "device", "lang", "tz", "viewport",
+  "utm_source", "utm_medium", "utm_campaign", "event", "event_target",
+];
+
+function renderBreakdowns(data) {
+  const wrap = $("breakdowns");
+  let h = "";
+  const keys = [];
+  for (const dim of DIM_ORDER) {
+    const obj = data[dim];
+    if (!obj) continue;
+    const rows = Object.entries(obj).sort((a, b) => b[1] - a[1]);
+    const max = rows.length ? rows[0][1] : 1;
+    h += '<div class="bdGroup"><div class="dim">' + dim + "</div>";
+    for (const [k, v] of rows) {
+      const pct = max ? Math.round((v / max) * 100) : 0;
+      h += '<div class="barRow"><div class="barFill" style="width:' + pct + '%"></div>' +
+        '<span class="barLabel">' + esc(k) + '</span>' +
+        '<span class="barCount">' + v + "</span></div>";
+      keys.push(k);
+    }
+    h += "</div>";
+  }
+  wrap.innerHTML = h || '<p class="hint">no data for this range — send a beacon first</p>';
+  wrap.querySelectorAll(".barRow").forEach((el, i) => { el.dataset.label = keys[i].toLowerCase(); });
+  applyFilter();
+}
+
+function applyFilter() {
+  const q = $("search").value.trim().toLowerCase();
+  for (const row of document.querySelectorAll(".barRow")) {
+    row.style.display = !q || row.dataset.label.includes(q) ? "" : "none";
+  }
+}
+$("search").oninput = applyFilter;
+
+function fmtRange(from, to) { return from === to ? from : from + " → " + to; }
+
+// prior period = same length, immediately before `from` (UTC, clamped by caller)
+function priorRange(from, to) {
+  const days = Math.round((Date.parse(to) - Date.parse(from)) / 86400000) + 1;
+  const pTo = addDays(from, -1);
+  const pFrom = addDays(pTo, -(days - 1));
+  return { from: pFrom, to: pTo };
+}
+
+function fmtDelta(cur, prev) {
+  if (!prev) return { text: "—", cls: "flat" };
+  const pct = ((cur - prev) / prev) * 100;
+  const arrow = pct > 0 ? "▲" : pct < 0 ? "▼" : "–";
+  const cls = pct > 0 ? "up" : pct < 0 ? "down" : "flat";
+  return { text: arrow + " " + Math.abs(pct).toFixed(0) + "%", cls };
+}
+
+function setDelta(id, cur, prev) {
+  const el = $(id);
+  const { text, cls } = fmtDelta(cur, prev);
+  el.className = "kpiDelta " + cls;
+  el.textContent = text;
+}
+
+const DELTA_IDS = ["kpiPvDelta", "kpiUvDelta", "kpiSessionsDelta", "kpiViewsPerVisitDelta", "kpiBounceDelta"];
+
+function renderKpis(data, prior) {
+  const pv = data.pv?._ ?? 0;
+  const uv = data.uv?._ ?? 0;
+  const sessions = data.sessions?._ ?? 0;
+  const bounce = data.bounce?._ ?? 0;
+  const viewsPerVisit = uv ? pv / uv : 0;
+  const bouncePct = sessions ? (bounce / sessions) * 100 : 0;
+
+  $("kpiPv").textContent = pv;
+  $("kpiUv").textContent = uv;
+  $("kpiSessions").textContent = sessions;
+  $("kpiViewsPerVisit").textContent = viewsPerVisit.toFixed(1);
+  $("kpiBounce").textContent = bouncePct.toFixed(0) + "%";
+
+  if (!prior) {
+    for (const id of DELTA_IDS) { $(id).className = "kpiDelta flat"; $(id).textContent = "—"; }
+    return;
+  }
+  const ppv = prior.pv?._ ?? 0;
+  const puv = prior.uv?._ ?? 0;
+  const psessions = prior.sessions?._ ?? 0;
+  const pbounce = prior.bounce?._ ?? 0;
+  const pViewsPerVisit = puv ? ppv / puv : 0;
+  const pBouncePct = psessions ? (pbounce / psessions) * 100 : 0;
+  setDelta("kpiPvDelta", pv, ppv);
+  setDelta("kpiUvDelta", uv, puv);
+  setDelta("kpiSessionsDelta", sessions, psessions);
+  setDelta("kpiViewsPerVisitDelta", viewsPerVisit, pViewsPerVisit);
+  setDelta("kpiBounceDelta", bouncePct, pBouncePct);
+}
+
+async function renderAnalytics(data, prior, from, to) {
+  $("analytics").style.display = "";
+  $("rangeLabel").textContent = fmtRange(from, to);
+  renderKpis(data, prior);
+  await renderChart(data.series || []);
+  renderBreakdowns(data);
+}
+
+let activePeriod = "7d";
+function setActivePeriodButton() {
+  for (const b of document.querySelectorAll("#periods button")) {
+    b.classList.toggle("active", b.dataset.period === activePeriod);
+  }
+}
+for (const b of document.querySelectorAll("#periods button")) {
+  b.onclick = () => {
+    activePeriod = b.dataset.period;
+    $("day").value = "";
+    setActivePeriodButton();
+    loadStats();
+  };
+}
+$("day").oninput = () => {
+  if ($("day").value.trim()) { activePeriod = null; setActivePeriodButton(); }
+};
+
+let lastData = null;
+
+async function loadStats() {
+  const m = $("loadMsg");
+  const dayVal = $("day").value.trim();
+  let from, to;
+  if (dayVal) { from = to = dayVal; }
+  else ({ from, to } = periodRange(activePeriod || "7d"));
+
+  m.className = "msg"; m.textContent = "loading…";
+  const token = encodeURIComponent($("token").value);
+  const url = "/stats?token=" + token + "&series=1&from=" + from + "&to=" + to;
+  try {
+    const res = await fetch(url);
+    if (res.status === 401) {
+      m.className = "msg err"; m.textContent = "401 unauthorized — check token";
+      $("analytics").style.display = "none";
+      return;
+    }
+    const data = await res.json();
+    m.className = "msg ok"; m.textContent = "loaded " + fmtRange(from, to);
+
+    // best-effort comparison vs the equal-length immediately-prior period
+    let prior = null;
+    const { from: pFrom, to: pTo } = priorRange(from, to);
+    if (pTo >= LAUNCH) {
+      try {
+        const pRes = await fetch("/stats?token=" + token + "&from=" + clampFrom(pFrom) + "&to=" + pTo);
+        if (pRes.ok) prior = await pRes.json();
+      } catch { /* comparison is best-effort */ }
+    }
+
+    lastData = data;
+    await renderAnalytics(data, prior, from, to);
+  } catch (e) { m.className = "msg err"; m.textContent = String(e); }
+}
+$("load").onclick = loadStats;
+
+function csvCell(v) {
+  const s = String(v);
+  return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+}
+
+$("exportCsv").onclick = () => {
+  if (!lastData) return;
+  const rows = [["dim", "value", "count"]];
+  for (const dim of DIM_ORDER) {
+    const obj = lastData[dim];
+    if (!obj) continue;
+    for (const [v, c] of Object.entries(obj)) rows.push([dim, v, c]);
+  }
+  const csv = rows.map((r) => r.map(csvCell).join(",")).join("\n");
+  const blob = new Blob([csv], { type: "text/csv" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "docs-analytics.csv";
+  a.click();
+  URL.revokeObjectURL(url);
+};
+
+setActivePeriodButton();
+loadStats();
+</script>
+</body>
+</html>

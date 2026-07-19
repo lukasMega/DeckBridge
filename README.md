@@ -83,3 +83,9 @@ Technical guides:
 [Adding a device](https://lukasmega.github.io/DeckBridge/adding-a-device) ·
 [Image flow](https://lukasmega.github.io/DeckBridge/image-flow) ·
 [HID via FFI](https://lukasmega.github.io/DeckBridge/hidapi-ffi)
+
+## License
+
+[MIT](LICENSE). The vendored [`rust/jpeg-encoder`](rust/jpeg-encoder) fork keeps its
+upstream license ((MIT OR Apache-2.0) AND IJG); third-party notices in
+[`scripts/LICENSE-hidapi.txt`](scripts/LICENSE-hidapi.txt).

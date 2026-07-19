@@ -12,6 +12,10 @@ Bridges a Mirabox/Ajazz USB stream deck to Elgato Stream Deck software over TCP/
 | Linux | Homebrew tap (`brew install`) |
 | Windows | NSIS installer (`-setup.exe`) or Scoop |
 
+> **Current status:** DeckBridge is tested on **macOS only**, and the GitHub releases
+> currently ship **macOS builds only**. The Linux and Windows channels described below
+> are the planned distribution design — not yet live.
+
 > **Note:** `OWNER`/`REPO` below are placeholders — the real tap/bucket URLs are filled in when they go live.
 
 ### macOS & Linux — Homebrew
@@ -129,6 +133,8 @@ cd deckbridge-vX.Y.Z-linux-x86_64
 ### Windows
 
 Windows is not distributed as a zip. Download the **`deckbridge_X.Y.Z_x64-setup.exe`** NSIS installer from the [Releases page](../../releases) and run it (per-user; one-click SmartScreen on the unsigned `.exe`), or use Scoop (no SmartScreen — see the Install section above). The installer bundles the relay binary and the `deckbridge-tray` sidecar; everything else (libhidapi, deckbridge-native) is embedded as on the other platforms.
+
+**Firewall:** Windows Defender Firewall blocks inbound connections to new apps by default. The first time deckbridge listens on its CORA ports (5343/5344, plus 5345+ for additional simultaneous devices) and the web UI port (3000), expect a **"Windows Defender Firewall has blocked some features"** prompt — click **Allow access** (Private networks is enough; the Elgato app and browser both connect from the same machine or local network). If the prompt was dismissed or didn't appear, add a rule manually: Windows Security → Firewall & network protection → Allow an app through firewall → add `deckbridge.exe`. Without this, the Elgato app never discovers deckbridge and the web UI is unreachable from other devices on the network.
 
 ---
 

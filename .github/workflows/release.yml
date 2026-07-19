@@ -1,0 +1,403 @@
+name: Release deckbridge
+
+# Trigger: push a tag like deckbridge-v1.2.3
+# Or dispatch manually for a smoke-test dry run (skips GitHub Release by default).
+on:
+  push:
+    tags:
+      - 'deckbridge-v*'
+  workflow_dispatch:
+    inputs:
+      skip_release:
+        description: 'Skip creating GitHub Release (dry run)'
+        required: false
+        default: 'true'
+        type: choice
+        options: ['true', 'false']
+
+jobs:
+  build:
+    name: Build ${{ matrix.platform }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest       # Apple Silicon (arm64)
+            platform: macos-arm64
+          - os: macos-15-intel     # Intel (x86_64)
+            platform: macos-x86_64
+          - os: ubuntu-22.04       # Linux x86_64
+            platform: linux-x86_64
+          - os: ubuntu-24.04-arm   # Linux arm64
+            platform: linux-arm64
+
+    runs-on: ${{ matrix.os }}
+
+    # Release builds use the SLIM txiki.js runtime: built from source with
+    # sqlite3 + wasm/WAMR compiled out and symbols stripped (~2.3 MB smaller).
+    # tjs-setup reads this flag and runs scripts/tjs-build.mjs instead of
+    # downloading the prebuilt runtime. (Dev/local builds without the flag still
+    # use the no-toolchain download path.)
+    env:
+      TJS_FROM_SOURCE: '1'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            rust/target
+          key: rust-${{ matrix.platform }}-${{ hashFiles('rust/**/Cargo.lock', 'rust/deckbridge-tray/**') }}
+          restore-keys: rust-${{ matrix.platform }}-
+
+      # Cache the slim txiki.js runtime so it builds once per platform per patch
+      # change (the from-source build clones + compiles txiki.js, which is slow).
+      # On a hit the binary is restored to $TJS and tjs-setup skips the rebuild.
+      # Key is invalidated by the pinned version (mise.toml) or the patch itself.
+      - name: Cache slim txiki.js runtime
+        uses: actions/cache@v4
+        with:
+          path: vendor/txiki.js/build/tjs
+          key: tjs-slim-${{ matrix.platform }}-${{ hashFiles('mise.toml', 'patches/txiki-slim.patch') }}
+
+      - name: Install libhidapi (macOS)
+        if: startsWith(matrix.os, 'macos')
+        run: brew install hidapi
+
+      # Linux: libhidapi for the app, plus the slim txiki.js build's system deps
+      # (TJS_FROM_SOURCE=1 compiles txiki from source). cmake + build-essential are
+      # normally preinstalled on the runner; libffi-dev (ffi.h) is the real gap —
+      # txiki's CMake find_path(ffi.h) is REQUIRED. macOS uses the preinstalled
+      # cmake + the Command Line Tools SDK libffi, so it needs no extra step.
+      - name: Install libhidapi + slim-build deps (Linux)
+        if: startsWith(matrix.os, 'ubuntu')
+        run: sudo apt-get update && sudo apt-get install -y libhidapi-dev libffi-dev cmake build-essential libgtk-3-dev libxdo-dev libayatana-appindicator3-dev
+
+      - uses: jdx/mise-action@v2
+
+      - name: Compile
+        run: mise run compile
+
+      # Ad-hoc sign deckbridge-tray only. The relay (deckbridge) is NOT re-signed:
+      # `tjs compile` appends the bytecode payload after the Mach-O and ships a
+      # linker-signed ad-hoc signature the kernel runs leniently; `codesign
+      # --force` would replace it and fail strict validation on the trailing data
+      # ("main executable failed strict validation"). The as-compiled signature is
+      # what ships.
+      - name: Ad-hoc sign deckbridge-tray (macOS)
+        if: startsWith(matrix.os, 'macos')
+        run: |
+          codesign --force --sign - --timestamp=none rust/target/release/deckbridge-tray
+          codesign -dv deckbridge 2>&1 | head -3
+
+      - name: Package
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/deckbridge-v* ]]; then
+            VERSION="${GITHUB_REF_NAME#deckbridge-}"
+          else
+            VERSION="dev"
+          fi
+          node scripts/package.mjs "$VERSION"
+
+      - name: Smoke-test deps (Linux)
+        if: startsWith(matrix.os, 'ubuntu')
+        run: sudo apt-get install -y netcat-openbsd unzip curl
+
+      - name: Smoke test (boots cleanly, serves, shuts down)
+        run: ./scripts/e2e-smoke.sh "$(ls -t dist/*.zip | head -1)"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.platform }}
+          path: dist/*.zip
+          if-no-files-found: error
+
+  # Windows is packaged differently: instead of a raw zip, the binary is wrapped
+  # in a Tauri v2 supervisor shell (src-tauri/) and shipped as an NSIS installer
+  # (Scoop/winget-friendly, no Gatekeeper/SmartScreen friction via Scoop). The
+  # relay binary + deckbridge-tray ride along as Tauri sidecars (externalBin), so they
+  # must be renamed to the MSVC target triple before `cargo tauri build` (G2).
+  build-windows:
+    name: Build windows-x86_64 (Tauri NSIS)
+    runs-on: windows-latest
+    # No TJS_FROM_SOURCE here (unlike the Unix jobs above): the slim from-source
+    # build's Windows branch (scripts/tjs-build.mjs, mingw32-make + npm.cmd) is
+    # unverified against MSVC-only runners. tjs-setup instead downloads the
+    # official saghul/txiki.js prebuilt `txiki-windows-x86_64.zip` (confirmed to
+    # exist for the pinned TXIKI_VERSION — see the plan's Phase 0 findings) via
+    # scripts/tjs-download.mjs's win32 branch. Working beats slim for v1.
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            rust/target
+            src-tauri/target
+          key: rust-windows-x86_64-${{ hashFiles('rust/**/Cargo.lock', 'rust/deckbridge-tray/**', 'src-tauri/Cargo.lock') }}
+          restore-keys: rust-windows-x86_64-
+
+      - name: Cache txiki.js runtime
+        uses: actions/cache@v4
+        with:
+          path: vendor/txiki.js/build/tjs.exe
+          key: tjs-windows-x86_64-${{ hashFiles('mise.toml') }}
+
+      # Windows ships no system hidapi.dll (B3) — build it from source and point
+      # HIDAPI_LIB at the result so ts/build.mjs's embed step (Phase 2) can find
+      # it; without this the compile step below hard-errors by design (a
+      # Windows binary with no HID backend would silently fail at runtime).
+      - name: Build hidapi.dll
+        shell: pwsh
+        run: |
+          git clone --depth 1 --branch hidapi-0.15.0 https://github.com/libusb/hidapi C:\hidapi-src
+          cmake -B C:\hidapi-build -S C:\hidapi-src
+          cmake --build C:\hidapi-build --config Release
+          $dll = Get-ChildItem -Path C:\hidapi-build -Filter hidapi.dll -Recurse | Select-Object -First 1
+          if (-not $dll) { Write-Error "hidapi.dll not found after build"; exit 1 }
+          echo "HIDAPI_LIB=$($dll.FullName)" >> $env:GITHUB_ENV
+
+      - uses: jdx/mise-action@v2
+
+      # Produces the Windows relay binary (deckbridge[.exe]) via the same build
+      # chain the other platforms use. txiki's `compile` emits a PE executable.
+      - name: Compile relay binary
+        run: mise run compile
+
+      # Boot the just-compiled binary in mock mode (no HID device needed),
+      # poll the WebUI until it responds, then kill it — mirrors the
+      # boot/serve/shutdown checks in scripts/e2e-smoke.sh (bash, POSIX-only)
+      # for the platform that script can't run on.
+      - name: Smoke test (mock mode, poll WebUI, then kill)
+        shell: pwsh
+        run: |
+          $relay = if (Test-Path "deckbridge.exe") { "deckbridge.exe" } else { "deckbridge" }
+          $env:DECKBRIDGE_MOCK = "1"
+          $proc = Start-Process -FilePath ".\$relay" -PassThru `
+            -RedirectStandardOutput "smoke-stdout.log" -RedirectStandardError "smoke-stderr.log"
+          $ready = $false
+          for ($i = 0; $i -lt 60; $i++) {
+            try {
+              $resp = Invoke-WebRequest -Uri "http://localhost:3000" -UseBasicParsing -TimeoutSec 2
+              if ($resp.StatusCode -eq 200) { $ready = $true; break }
+            } catch {}
+            if ($proc.HasExited) {
+              Write-Host "FAIL: process exited before becoming ready"
+              Get-Content smoke-stderr.log -ErrorAction SilentlyContinue
+              exit 1
+            }
+            Start-Sleep -Milliseconds 500
+          }
+          if (-not $ready) {
+            Write-Host "FAIL: WebUI never responded with 200 after 30s"
+            Get-Content smoke-stderr.log -ErrorAction SilentlyContinue
+            Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
+            exit 1
+          }
+          Write-Host "Smoke test OK: WebUI responded 200"
+          Stop-Process -Id $proc.Id -Force
+
+      # deckbridge-tray.exe — the system-tray sidecar (same Rust crate as macOS/Linux).
+      - name: Build deckbridge-tray
+        run: mise run tray-rs
+
+      # Tauri's bundler only picks up the sidecar whose filename matches the
+      # build's target triple (G2), so copy both binaries into src-tauri/binaries/
+      # with the -x86_64-pc-windows-msvc.exe suffix. `mise run compile` writes
+      # either deckbridge or deckbridge.exe depending on txiki; handle both.
+      - name: Stage sidecars for Tauri (target-triple names)
+        shell: pwsh
+        run: |
+          $relay = if (Test-Path "deckbridge.exe") { "deckbridge.exe" } else { "deckbridge" }
+          Copy-Item $relay "src-tauri/binaries/deckbridge-x86_64-pc-windows-msvc.exe" -Force
+          Copy-Item "rust/target/release/deckbridge-tray.exe" "src-tauri/binaries/deckbridge-tray-x86_64-pc-windows-msvc.exe" -Force
+          Get-ChildItem "src-tauri/binaries/"
+
+      - name: Install Tauri CLI
+        run: cargo install tauri-cli --version "^2" --locked
+
+      # Inject the real version (the crate hard-codes 0.1.0). On a tag, parse
+      # X.Y.Z out of deckbridge-vX.Y.Z; otherwise (manual dispatch) use 0.0.0.
+      # NSIS is fetched by the bundler; WebView2 is preinstalled on the runner.
+      - name: Build Tauri NSIS installer
+        shell: pwsh
+        working-directory: src-tauri
+        run: |
+          if ($env:GITHUB_REF -like "refs/tags/deckbridge-v*") {
+            $ver = $env:GITHUB_REF_NAME -replace '^deckbridge-v', ''
+          } else {
+            $ver = "0.0.0"
+          }
+          Write-Host "Building Tauri bundle version $ver"
+          cargo tauri build -c "{`"version`": `"$ver`"}"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-x86_64
+          path: src-tauri/target/release/bundle/nsis/*-setup.exe
+          if-no-files-found: error
+
+  # macOS Tauri .dmg (ADDITIVE — the zip artifacts in the `build` job above stay
+  # the Homebrew/manual path). Model A: the relay binary + deckbridge-tray ride along as
+  # Tauri sidecars (externalBin), renamed to the apple-darwin target triple (G2),
+  # ad-hoc signed (no Apple Developer ID). The macOS bundle config lives in
+  # src-tauri/tauri.macos.conf.json (targets app,dmg; signingIdentity "-";
+  # hardenedRuntime false — keeps the relay's extract+dlopen of native libs
+  # working, plan gotcha G3). Downloads are unsigned vs Gatekeeper → right-click
+  # "Open" or `xattr -dr com.apple.quarantine` (documented in README-DISTRIBUTION).
+  build-macos-tauri:
+    name: Build ${{ matrix.platform }} (Tauri dmg)
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest      # Apple Silicon (arm64)
+            platform: macos-arm64
+            triple: aarch64-apple-darwin
+          - os: macos-15-intel    # Intel (x86_64)
+            platform: macos-x86_64
+            triple: x86_64-apple-darwin
+
+    runs-on: ${{ matrix.os }}
+    env:
+      TJS_FROM_SOURCE: '1'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            rust/target
+            src-tauri/target
+          key: rust-tauri-${{ matrix.platform }}-${{ hashFiles('rust/**/Cargo.lock', 'rust/deckbridge-tray/**', 'src-tauri/Cargo.lock') }}
+          restore-keys: rust-tauri-${{ matrix.platform }}-
+
+      - name: Cache slim txiki.js runtime
+        uses: actions/cache@v4
+        with:
+          path: vendor/txiki.js/build/tjs
+          key: tjs-slim-${{ matrix.platform }}-${{ hashFiles('mise.toml', 'patches/txiki-slim.patch') }}
+
+      - name: Install libhidapi (macOS)
+        run: brew install hidapi
+
+      - uses: jdx/mise-action@v2
+
+      - name: Compile relay binary
+        run: mise run compile
+
+      - name: Build deckbridge-tray
+        run: mise run tray-rs
+
+      # Tauri's bundler only picks up the sidecar whose filename matches the
+      # build's target triple (G2). `mise run compile` writes `deckbridge`.
+      - name: Stage sidecars for Tauri (apple-darwin triple)
+        run: |
+          mkdir -p src-tauri/binaries
+          cp deckbridge                             "src-tauri/binaries/deckbridge-${{ matrix.triple }}"
+          cp rust/target/release/deckbridge-tray "src-tauri/binaries/deckbridge-tray-${{ matrix.triple }}"
+          # cp can leave a non-executable file if the dest already exists; ensure
+          # both sidecars are executable so they spawn from inside the .app.
+          chmod +x "src-tauri/binaries/deckbridge-${{ matrix.triple }}" "src-tauri/binaries/deckbridge-tray-${{ matrix.triple }}"
+          ls -la src-tauri/binaries/
+
+      # Ad-hoc sign deckbridge-tray only. The relay is left with its as-compiled
+      # linker-signed signature — re-signing a `tjs compile` binary (payload
+      # appended after the Mach-O) fails strict validation. The Tauri bundler does
+      # NOT codesign the app either (tauri.macos.conf.json sets no signingIdentity),
+      # since its deep-sign pass would hit the same wall on the relay sidecar; each
+      # Mach-O ships its own ad-hoc signature instead.
+      - name: Ad-hoc sign deckbridge-tray sidecar
+        run: |
+          codesign --force --sign - --timestamp=none "src-tauri/binaries/deckbridge-tray-${{ matrix.triple }}"
+
+      - name: Install Tauri CLI
+        run: cargo install tauri-cli --version "^2" --locked
+
+      # Inject the real version (the crate hard-codes 0.1.0). On a tag, parse
+      # X.Y.Z out of deckbridge-vX.Y.Z; otherwise (manual dispatch) use 0.0.0.
+      # --bundles dmg is belt-and-suspenders; tauri.macos.conf.json already sets
+      # targets app,dmg (its array REPLACES the base ["nsis"] via RFC 7396 merge).
+      - name: Build Tauri dmg
+        working-directory: src-tauri
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/deckbridge-v* ]]; then
+            VER="${GITHUB_REF_NAME#deckbridge-v}"
+          else
+            VER="0.0.0"
+          fi
+          echo "Building Tauri macOS bundle version $VER"
+          cargo tauri build --bundles dmg -c "{\"version\": \"$VER\"}"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.platform }}-dmg
+          path: src-tauri/target/release/bundle/dmg/*.dmg
+          if-no-files-found: error
+
+  release:
+    name: Publish GitHub Release
+    needs: [build, build-windows, build-macos-tauri]
+    if: github.event_name == 'push' || inputs.skip_release == 'false'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: Generate SHA256SUMS
+        run: |
+          cd artifacts
+          sha256sum *.zip *-setup.exe *.dmg > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+
+      - name: Create release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          name: "deckbridge ${{ github.ref_name }}"
+          body: |
+            ## Install
+
+            See [README-DISTRIBUTION.md](https://github.com/${{ github.repository }}/blob/main/README-DISTRIBUTION.md) for full setup instructions.
+
+            **macOS (Apple Silicon):** `deckbridge.app` via `*_aarch64.dmg` (drag-install) — or Homebrew, or `deckbridge-*-macos-arm64.zip`
+            **macOS (Intel):** `deckbridge.app` via `*_x64.dmg` (drag-install) — or Homebrew, or `deckbridge-*-macos-x86_64.zip`
+            **Linux x86_64:** download `deckbridge-*-linux-x86_64.zip`
+            **Linux arm64:** download `deckbridge-*-linux-arm64.zip`
+            **Windows (x86_64):** download `deckbridge_*-setup.exe` (NSIS installer)
+
+            macOS: open the `.dmg` and drag the app to Applications. The build is **unsigned** (no Apple Developer ID), so the first launch needs **right-click → Open** (or `xattr -dr com.apple.quarantine /Applications/deckbridge.app`). Homebrew (`brew install`) avoids this entirely.
+            macOS/Linux zips: extract and run `./run.sh`. libhidapi is bundled — no prerequisite installs.
+            Windows: run the `-setup.exe` installer (or `scoop install deckbridge`).
+          files: |
+            artifacts/*.zip
+            artifacts/*-setup.exe
+            artifacts/*.dmg
+            artifacts/SHA256SUMS.txt
+          fail_on_unmatched_files: true

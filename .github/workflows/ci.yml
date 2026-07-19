@@ -1,0 +1,184 @@
+name: CI deckbridge
+
+# Fast feedback on every PR and push to main: lint, types, tests, knip (TS) plus
+# rustfmt/clippy/tests + cargo-deny (Rust), workflow lint, secret scan, and spelling.
+# The 4-platform build + e2e matrix lives in release.yml (tag-triggered) — CI stays
+# single-OS for speed since these checks are platform-independent.
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+# Cancel superseded runs on the same ref (e.g. rapid PR pushes).
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  # ── TS: lint (oxlint + eslint) • types (tsgo) • test (tjs) • knip • format ──
+  checks:
+    name: TS lint • types • test • knip
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # ci-checks builds deckbridge-native (the TS bundle FFI-loads libdeckbridge_native), so the
+      # Rust toolchain + libhidapi are needed even though CI doesn't compile the binary.
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust (workspace target)
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            rust/target
+          key: ci-rust-${{ hashFiles('rust/**/Cargo.lock') }}
+          restore-keys: ci-rust-
+
+      # No TJS_FROM_SOURCE → tjs-setup downloads the prebuilt runtime (fast, no
+      # toolchain). The slow slim from-source build is release-only.
+      - name: Install system deps (libhidapi + libffi)
+        run: sudo apt-get update && sudo apt-get install -y libhidapi-dev libffi-dev
+
+      - uses: jdx/mise-action@v2
+
+      - name: Cache npm (ts/node_modules)
+        uses: actions/cache@v4
+        with:
+          path: ts/node_modules
+          key: ci-npm-${{ hashFiles('ts/package-lock.json') }}
+          restore-keys: ci-npm-
+
+      - name: ci-checks (lint, types, test, knip)
+        run: mise run ci-checks
+
+      # oxfmt has no --check flag; run it and fail if it rewrote any tracked source.
+      - name: Format check (oxfmt)
+        run: |
+          mise run format
+          if ! git diff --quiet -- ts/src ts/test; then
+            echo "::error::oxfmt produced changes — run 'mise run format' and commit."
+            git --no-pager diff --stat -- ts/src ts/test
+            exit 1
+          fi
+
+  # ── Rust: rustfmt + clippy (-D warnings, both JPEG backends) + unit tests ──
+  rust-lint:
+    name: Rust fmt + clippy + test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust (rust-toolchain.toml pins 1.95 + clippy/rustfmt)
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+
+      - name: Cache Rust (workspace target)
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            rust/target
+          key: ci-rustlint-${{ hashFiles('rust/**/Cargo.lock') }}
+          restore-keys: ci-rustlint-
+
+      # clippy compiles the whole workspace incl. deckbridge-tray (gtk/xdo/appindicator).
+      - name: Install Rust system deps
+        run: sudo apt-get update && sudo apt-get install -y libhidapi-dev libffi-dev libgtk-3-dev libxdo-dev libayatana-appindicator3-dev
+
+      - uses: jdx/mise-action@v2
+
+      - name: rustfmt + clippy + test
+        run: mise run rust-lint
+
+  # ── Windows: cheap sanity check (bundle + cargo check both crates + tauri
+  # check). NOT the full test suite (that needs $TJS + a built hidapi.dll —
+  # covered by release.yml's build-windows job instead) ──
+  windows:
+    name: Windows bundle + cargo check
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust (workspace target)
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            rust/target
+            src-tauri/target
+          key: ci-rust-windows-${{ hashFiles('rust/**/Cargo.lock', 'src-tauri/Cargo.lock') }}
+          restore-keys: ci-rust-windows-
+
+      - uses: jdx/mise-action@v2
+
+      # No hidapi.dll built here (that's release.yml's job) — EMBED_NATIVE_LIBS=0
+      # skips ts/build.mjs's native-lib embed step (and its hard-fail-if-missing
+      # HIDAPI_LIB check), so bundling doesn't need it. deckbridge-native.dll
+      # still gets a real `cargo build --release` via the `ts` task's dependency
+      # chain (Windows SDK headers are present natively on this runner, unlike
+      # cross-compiling from macOS).
+      - name: Bundle TypeScript (mise run ts, no native-lib embed)
+        env:
+          EMBED_NATIVE_LIBS: '0'
+        run: mise run ts
+
+      - name: cargo check (both native crates)
+        run: |
+          cargo check --manifest-path rust/Cargo.toml -p deckbridge-native
+          cargo check --manifest-path rust/Cargo.toml -p deckbridge-tray
+
+      - name: tauri-check
+        run: mise run tauri-check
+
+  # ── Supply-chain: advisories, licenses, bans, sources ──
+  cargo-deny:
+    name: cargo-deny
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: EmbarkStudios/cargo-deny-action@v2
+        with:
+          manifest-path: rust/Cargo.toml
+          command: check advisories licenses bans sources
+
+  # ── Lint the GitHub Actions YAML itself (release.yml + this file) ──
+  actionlint:
+    name: actionlint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: raven-actions/actionlint@v2
+
+  # ── Secret scan across full history (free for personal/public repos) ──
+  gitleaks:
+    name: gitleaks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # ── Spell-check source + docs (allowlist in typos.toml) ──
+  typos:
+    name: typos
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: crate-ci/typos@master
+        with:
+          config: typos.toml

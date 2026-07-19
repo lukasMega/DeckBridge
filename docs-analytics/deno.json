@@ -1,0 +1,12 @@
+{
+  "tasks": {
+    "dev": "STATS_TOKEN=${STATS_TOKEN:-devtoken} deno run -A --watch main.ts",
+    "start": "deno run -A main.ts"
+  },
+  "unstable": ["kv", "cron"],
+  "deploy": {
+    "org": "lukasmega",
+    "app": "tst"
+  }
+}
+

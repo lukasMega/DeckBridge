@@ -3,6 +3,7 @@
   "version": "0.8.0",
   "description": "DeckBridge: an alternative to a \"Network Dock\" device (>70 USD). Bridges a USB stream deck to Elgato Stream Deck software over TCP/CORA.",
   "private": true,
+  "license": "MIT",
   "type": "module",
   "scripts": {
     "build": "node build.mjs",
