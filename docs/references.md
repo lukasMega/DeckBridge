@@ -1,8 +1,7 @@
 # References: existing projects
 
-DeckBridge wires together prior open-source work — nothing here was reverse-engineered
-from scratch. The USB HID framing and the Elgato CORA network protocol both come from the
-projects below. This page credits them and points to where each one helped.
+DeckBridge wires together prior open-source work — nothing reverse-engineered. The USB
+HID framing and Elgato CORA protocol come from the projects below, credited here.
 
 ---
 

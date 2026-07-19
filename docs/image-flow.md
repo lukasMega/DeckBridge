@@ -16,12 +16,12 @@ The Elgato desktop sends image data to the CORA child server in the format match
 | Stream Deck MK.2 (`elgato-gen2`) | real MK.2 (PID `0x0080`) | gen2 JPEG 72×72 | No | `passthrough` (rotate 0) |
 | Stream Deck Mini (`elgato-gen1`) | real Mini (6 key, 3×2, PID `0x0063`) | gen1 BMP 80×80 BGR | No | `passthrough` (BMP short-circuit) |
 
-Each **Mirabox** model advertises as an Elgato device whose CORA profile the desktop already knows (MK.2 for the 293V3/293S, Mini for the K1 Pro — see table), and the sidecar resizes/rotates — for the K1 Pro re-encodes BMP→JPEG — to the device's native key size per `model.image`. **Elgato devices** advertise their real geometry and the desktop's device-native data is forwarded with no transform — the desktop pre-applies all orientation/color work itself.
+Each **Mirabox** model advertises as an Elgato device the desktop already knows (MK.2 for the 293V3/293S, Mini for the K1 Pro), and the sidecar resizes/rotates to the device's native key size per `model.image` (K1 Pro also re-encodes BMP→JPEG). **Elgato devices** advertise their real geometry and forward device-native data with no transform — the desktop pre-applies all orientation/color work itself.
 
-The path splits into two tracks on image arrival (`setupImageHandler` in `image-pipeline.ts`), running on **different threads**:
+On image arrival (`setupImageHandler` in `image-pipeline.ts`) the path splits into two tracks on **different threads**:
 
-- **WebUI path (main thread)** — fires immediately. The received CORA bytes are pushed **inline (base64) over WebSocket** so the browser renders at arrival time with no follow-up request.
-- **Transform + USB path (USB worker thread)** — the main thread forwards the raw CORA bytes to the worker via `WorkerHidDriver.renderCoraImage()`; the worker (`image-render.ts`) transforms through the Rust deckbridge-native cdylib (with an LRU cache to skip redundant work), then writes to the device. Running on the worker keeps the 50–200 ms transform off the CORA ACK loop (P1).
+- **WebUI path (main thread)** — fires immediately: the CORA bytes are pushed **inline (base64) over WebSocket**, so the browser renders at arrival with no follow-up request.
+- **Transform + USB path (USB worker thread)** — the main thread forwards raw CORA bytes via `WorkerHidDriver.renderCoraImage()`; the worker (`image-render.ts`) transforms through the Rust deckbridge-native cdylib (LRU-cached), then writes to the device. Running on the worker keeps the 50–200 ms transform off the CORA ACK loop (P1).
 
 ## Image format by device
 

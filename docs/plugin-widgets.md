@@ -1,10 +1,8 @@
 # Plugin widgets
 
-A **plugin widget** shows the value returned by a small JavaScript file you write on
-one of a deck's display-only side keys (the 293S sixth column). The plugin runs on a
-poll loop, fetches or computes whatever it wants, and returns a short string;
-DeckBridge renders that string on the key as centered text and refreshes it every
-interval.
+A **plugin widget** shows the value returned by a small JavaScript file you write, on one
+of a deck's display-only side keys (the 293S sixth column). The plugin polls, fetches or
+computes a short string, and DeckBridge renders it on the key as centered text.
 
 Plugins run in a **dedicated worker thread**, isolated from the network ACK loop, so a
 slow, looping, or throwing plugin can never stall image delivery or the web UI.
@@ -112,13 +110,12 @@ Failure handling:
 
 ## Security
 
-A plugin is **arbitrary code with the same trust level as the command widget** — it runs
-with full filesystem, process-spawn, and native-library access via the runtime. The
-worker is a crash/CPU isolation boundary, **not a capability sandbox**. The web UI has no
-authentication and binds all interfaces by default, so anyone who can reach it could, in
-principle, point a key at a plugin file on the host. Plugin widgets are **opt-in per key**
-and meant for a **trusted personal LAN** — the same local-tool pragmatism as the command
-widget and the weather widget's cleartext HTTP. Only run plugin files you wrote or trust.
+A plugin is **arbitrary code with the same trust level as the command widget** — full
+filesystem, process-spawn, and native-library access via the runtime. The worker is a
+crash/CPU isolation boundary, **not a capability sandbox**. The web UI has no auth and
+binds all interfaces by default, so anyone who can reach it could point a key at a plugin
+file on the host. Plugin widgets are **opt-in per key** and meant for a **trusted personal
+LAN**. Only run plugin files you wrote or trust.
 
 ## Examples
 

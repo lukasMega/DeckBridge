@@ -6,17 +6,16 @@ that loading works at runtime.
 
 ## TL;DR
 
-txiki.js (QuickJS-ng + libuv + libffi) has **no built-in USB/HID support**. To talk to a
-USB Stream Deck DeckBridge binds to the OS's `libhidapi` shared library at runtime via
-**FFI (`dlopen`)**. The Homebrew paths (`/opt/homebrew/lib/libhidapi.dylib` on Apple
-Silicon, `/usr/local/lib/libhidapi.dylib` on Intel) are just well-known **search
-candidates** in a fallback chain, not a Homebrew dependency — hence the install hint
-`brew install hidapi`.
+txiki.js (QuickJS-ng + libuv + libffi) has **no built-in USB/HID support**, so DeckBridge
+binds the OS's `libhidapi` shared library at runtime via **FFI (`dlopen`)**. The Homebrew
+paths (`/opt/homebrew/lib/libhidapi.dylib` on Apple Silicon,
+`/usr/local/lib/libhidapi.dylib` on Intel) are just well-known **search candidates** in a
+fallback chain, not a hard dependency — hence the hint `brew install hidapi`.
 
 ## Why FFI at all
 
-Rather than compile a C extension into the self-contained binary, the project keeps it
-portable and **borrows the OS's `libhidapi` at runtime**:
+Rather than compile a C extension into the binary, the project **borrows the OS's
+`libhidapi` at runtime**:
 
 - `import FFI from 'tjs:ffi'` — txiki.js's foreign-function interface (libffi under the hood).
 - `FFI.dlopen(path, { ...signatures })` opens the shared library and declares each C
@@ -70,12 +69,12 @@ Do not conflate the two `dlopen`s in this file — they serve different roles:
 
 ### Why a Rust helper just for enumeration
 
-`loadHidapi`'s binding list **deliberately omits** `hid_enumerate`: it returns a
-linked-list of C structs that is painful to marshal across this FFI. Instead the
-`deckbridge-native` cdylib walks the device list natively and hands back one null-terminated path,
-which the driver opens with `hid_open_path()`. Opening by path avoids claiming
-system-owned interfaces on macOS (the OS typically grants the first `hid_open(VID,PID)`
-caller exclusive access).
+`loadHidapi`'s binding list **deliberately omits** `hid_enumerate` — it returns a
+linked-list of C structs painful to marshal across this FFI. Instead the
+`deckbridge-native` cdylib walks the device list natively and returns one null-terminated
+path, which the driver opens with `hid_open_path()`. Opening by path avoids claiming
+system-owned interfaces on macOS (the OS grants the first `hid_open(VID,PID)` caller
+exclusive access).
 
 If `DECKBRIDGE_NATIVE_LIB` is unset or fails to load, `findHidPath()` returns `null`. Off
 macOS, the driver then falls through to plain `hid_open(VID, PID)` — one attempt per PID,

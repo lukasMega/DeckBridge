@@ -13,9 +13,8 @@ WiFi.
 ## Use a budget deck with the Elgato app
 
 DeckBridge lets the **official Elgato Stream Deck app** drive cheap, non-Elgato decks —
-Mirabox, Ajazz, and similar boards, from 6-key minis to 15-key (3×5) decks — on the same
-PC that runs the app. The app sees a regular **Network device** at `localhost`; the deck
-behaves like Elgato hardware.
+Mirabox, Ajazz, and similar boards, from 6-key minis to 15-key (3×5) decks. The app sees
+a regular **Network device** at `localhost`; the deck behaves like Elgato hardware.
 
 <div class="db-stepper" role="group" aria-label="Pairing a budget Stream Deck with DeckBridge in four steps">
 <input type="radio" name="db-step" id="db-s1" />
@@ -136,16 +135,15 @@ Plug in a second deck (a **different model** — see [Limitations](#limitations)
 becomes its own network dock: own mDNS name, own CORA port pair
 (see [Network ports](#network-ports)). The web UI lists every connected deck as a card:
 
-1. **Pair one at a time.** Each deck shows up in the Elgato app as a separate Network
-   Dock. An unpaired card shows an amber "Waiting for Elgato app" chip and the exact
-   `IP : port` copy-chips to enter in the app's **Add Network Device…** dialog — the
-   port differs per deck (5343, 5345, …), so always copy it from that deck's card.
-2. **Card flips green** ("Paired") as soon as the app connects — no reload needed. The
-   app remembers paired docks across restarts.
-3. **Click a card to select it** — the selected deck gets the live key preview, and the
-   brightness slider below drives the selected deck. Each deck keeps its own brightness
-   level, and brightness set from the Elgato app is applied per deck too (unless
-   "Ignore brightness from Elgato app" is on).
+1. **Pair one at a time.** Each deck shows in the Elgato app as a separate Network Dock.
+   An unpaired card shows an amber "Waiting for Elgato app" chip and the exact
+   `IP : port` copy-chips for the app's **Add Network Device…** dialog — the port differs
+   per deck (5343, 5345, …), so copy it from that deck's card.
+2. **Card flips green** ("Paired") when the app connects — no reload. The app remembers
+   paired docks across restarts.
+3. **Click a card to select it** — the selected deck gets the live preview and the
+   brightness slider. Each deck keeps its own brightness (also applied per deck from the
+   Elgato app, unless "Ignore brightness from Elgato app" is on).
 
 Unplugging an extra deck removes its card; replugging brings it back automatically.
 
@@ -223,12 +221,11 @@ UI is always localhost-only.
 
 ## Limitations
 
-- **Multiple decks: distinct models only** — extra connected decks are bridged too, but
-  each must be a **different model**; a second deck of the same model is ignored. Up to
-  4 devices total (primary + 3 extras). Each extra appears in the Elgato app as its own
-  network dock (own mDNS name and port pair — see
+- **Multiple decks: distinct models only** — each extra deck must be a **different
+  model**; a second deck of the same model is ignored. Up to 4 devices total (primary +
+  3 extras), each its own network dock (own mDNS name and port pair — see
   [Network ports](#network-ports)). The web UI shows a live preview for **one selected
-  deck at a time** (click its card); the other cards stay static.
+  deck at a time** (click its card); the others stay static.
 - **Keys only** — no dials, encoders, touchscreens, or LCD strips (Stream Deck +/Plus,
   Neo, and similar are out of scope).
 - **Fixed ports** — CORA is hard-wired to **5343 / 5344** (extra decks add a fixed +2

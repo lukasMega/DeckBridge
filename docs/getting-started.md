@@ -19,8 +19,8 @@ build from source (Option B) — those builds are implemented but untested.
 :::
 
 Download the build for your OS from the
-[project releases](https://github.com/lukasMega/DeckBridge/releases), unzip, and run. The release
-is self-contained — the txiki.js runtime and the native libraries (`libhidapi`,
+[project releases](https://github.com/lukasMega/DeckBridge/releases), unzip, and run. It's
+self-contained — the txiki.js runtime and native libraries (`libhidapi`,
 `libdeckbridge_native`) are embedded and auto-extract on first run. **No Node.js, no extra
 installs.**
 
@@ -45,10 +45,9 @@ mise run start      # build everything + run
 mise run compile    # produce a standalone ./deckbridge binary
 ```
 
-The txiki.js runtime is fetched automatically by mise — no C/C++ toolchain needed for
-the common path. That's true on macOS and Windows only; on Linux there's no prebuilt
-runtime yet, so mise builds it from source, which needs a C/C++ toolchain (cmake, make,
-libffi).
+mise fetches the txiki.js runtime automatically — no C/C++ toolchain needed on macOS or
+Windows. Linux has no prebuilt runtime yet, so mise builds it from source (needs cmake,
+make, libffi).
 
 ## 2. Plug in your deck
 
@@ -78,10 +77,9 @@ In packaged releases (installers and release zips) the tray icon shows status at
 Open the Elgato Stream Deck app (or Companion) on any machine on the **same LAN**. It
 discovers DeckBridge like real Elgato hardware.
 
-Connected a **second deck** (different model)? It appears as its **own** network device
-with its **own port** (5345, 5347, …) — pair each one separately. The web UI shows a
-card per deck with the exact address and port to enter; see
-[Multiple decks](./features.md#multiple-decks).
+A **second deck** (different model) appears as its **own** network device on its **own
+port** (5345, 5347, …) — pair each separately. The web UI shows a card per deck with the
+exact address and port; see [Multiple decks](./features.md#multiple-decks).
 
 ## Verify your setup
 

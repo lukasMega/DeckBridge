@@ -1,13 +1,13 @@
 # Adding a New Device
 
-Everything needed to add support for a new USB stream-deck-style device — from a known
-brand on an existing wire protocol to a device whose protocol you must reverse-engineer.
+Adding support for a new USB stream-deck-style device — from a known brand on an existing
+wire protocol to one whose protocol you must reverse-engineer.
 
-**The short version: fill in one `DeviceModel` config file.** Geometry, image transform,
-wire framing, key-index mapping, CORA advertisement, and splash overrides are all just
-fields on that one object — `devices/registry.ts` and the rest of the pipeline read them
-generically. You only touch other files when the device needs *new code* (a new protocol's
-byte framing, or a fundamentally different driver).
+**Short version: fill in one `DeviceModel` config file.** Geometry, image transform, wire
+framing, key-index mapping, CORA advertisement, and splash overrides are all fields on
+that one object, read generically by `devices/registry.ts` and the pipeline. You touch
+other files only when the device needs *new code* (a new protocol's byte framing, or a
+fundamentally different driver).
 
 ---
 
@@ -27,13 +27,12 @@ image-pipeline.ts (main thread) — on each CORA image:
   └─ WorkerHidDriver.renderCoraImage(keyIndex, data, format) → postMessage → worker
 
 image-render.ts (worker thread) — on each forwarded image:
-  ├─ transforms via the deckbridge-native cdylib (in-process FFI: resize / rotate / flip) + LRU cache
+  ├─ transforms via deckbridge-native cdylib (FFI: resize/rotate/flip) + LRU cache
   ├─ remaps CORA key index → device wire key index
-  └─ calls driver.sendImage(deviceKeyIndex, nativeBytes)
+  └─ driver.sendImage(deviceKeyIndex, nativeBytes)
 ```
 
-Full image-pipeline diagram (threads, cache, transform): see
-[Image Flow](./image-flow.md).
+Full pipeline diagram (threads, cache, transform): [Image Flow](./image-flow.md).
 
 **What you'll touch for any new device:**
 
@@ -43,32 +42,29 @@ Full image-pipeline diagram (threads, cache, transform): see
 | Wire protocol (only if new) | `devices/protocol/<proto>.ts` + `PROTOCOL_STRATEGY` table | Packet framing for image send + key input parsing |
 | Driver class (only if new pattern) | `devices/hid-driver-base.ts` or new file + `driverKind` | HID open/read/write loop |
 
-Everything else — `translator.ts`, `image-pipeline.ts`, `splash-sender.ts`,
-`driver-manager.ts` — reads `model.keyMap`, `model.image`, `model.cora`, `model.splash`,
-and `model.driverKind` generically. You do not edit them for a config-only device.
+Everything else (`translator.ts`, `image-pipeline.ts`, `splash-sender.ts`,
+`driver-manager.ts`) reads `model.keyMap` / `image` / `cora` / `splash` / `driverKind`
+generically — not edited for a config-only device.
 
 ---
 
 ## Phase 0 — gather device info before writing any code
 
-You need the following before touching TypeScript:
+Gather all of this before touching TypeScript.
 
 ### USB identifiers
 
 ```bash
-# macOS
-system_profiler SPUSBDataType | grep -A5 "Stream Deck\|Mirabox\|Your Brand"
-
-# Linux
-lsusb
+system_profiler SPUSBDataType | grep -A5 "Stream Deck\|Mirabox\|Your Brand"  # macOS
+lsusb  # Linux
 ```
 
-Note: **VID** (Vendor ID) and **PID** (Product ID), both hex.
+Note the **VID** (Vendor ID) and **PID** (Product ID), both hex.
 
 ### HID usage page / usage
 
-Devices with multiple HID interfaces need `usagePage` + `usage` to select the right one.
-On macOS, `hidapi` defaults to the first interface, which is often system-claimed.
+Devices with multiple HID interfaces need `usagePage` + `usage` to select the right one
+(on macOS `hidapi` defaults to the first interface, often system-claimed).
 
 ```bash
 # macOS — show all HID devices with usage info
@@ -79,32 +75,24 @@ for d in hid.enumerate():
           f"UP={d['usage_page']:#06x} U={d['usage']:#06x} path={d['path']}")
 EOF
 ```
-
-If the device has only one HID interface, `usagePage` / `usage` are optional in the model.
+(Single-HID-interface devices can omit `usagePage` / `usage`.)
 
 ### Packet format
 
-Use a HID sniffer to capture traffic between the device and its official software:
+Sniff traffic between the device and its official software — **macOS**:
+[Wireshark](https://www.wireshark.org/)+USBPcap or
+[hidapitester](https://github.com/todbot/hidapitester); **Linux**: `usbmon`+Wireshark;
+**Windows VM**: USBPcap/Wireshark (often easiest for proprietary drivers).
 
-- **macOS**: [Wireshark](https://www.wireshark.org/) with USBPcap, or
-  [hidapitester](https://github.com/todbot/hidapitester) for manual probing
-- **Linux**: `usbmon` + Wireshark
-- **Windows VM**: USBPcap / Wireshark on a VM is often easiest for proprietary drivers
-
-Capture: open → send an image → press a key → set brightness → close.
-
-Record:
-- Button input report layout (which bytes, 0/1-based key index)
-- Image packet format (header bytes, payload size, chunking scheme)
-- Brightness command format
-- Any handshake or heartbeat the device requires
+Capture open → send image → press key → set brightness → close, and record: input report
+layout (bytes, 0/1-based key index), image packet format (header, payload size, chunking),
+brightness command, and any required handshake/heartbeat.
 
 ---
 
 ## Step 1 — write the `DeviceModel`
 
-Create `ts/src/devices/<brand>/<model>.ts` — the single source of truth described
-above.
+Create `ts/src/devices/<brand>/<model>.ts` — the single source of truth:
 
 ```typescript
 // ts/src/devices/acme/acme-x5.ts
@@ -144,33 +132,20 @@ export const ACME_X5_MODEL: DeviceModel = {
     transform: 'sidecar',     // 'passthrough' only valid for rotate:0/no-flip/no-cap gen2-style devices
   },
 
-  // Mirabox-only: byte-level wire framing. Omit entirely for elgato-hid devices —
-  // their framing lives in PROTOCOL_STRATEGY (see Step 3).
-  // wire: { packetSize: 1024, inSize: 512, heartbeatMs: 8000,
-  //         synthesizeKeyUp: false, sendStpAfterImage: true,
-  //         chunkPadByte: false },  // true only for firmware that drops the
-  //                                 // last byte of every full image chunk (K1 Pro)
+  // wire: {…}  // Mirabox-only byte-level framing; omit for elgato-hid (see Step 3).
 
-  // CORA key index (MK.2, 0-based row-major) ↔ device wire ids.
-  // Precedence per direction: explicit array > offset > identity.
-  // Leave both empty for an identity mapping (e.g. Elgato devices, which already
-  // use MK.2-native indices). See Step 4 for how to fill these in from hardware.
-  keyMap: {
-    // coraToWireImage: [ /* mk2 index → device wire image id */ ],
-    // wireInputToCora: [ /* device wire code → mk2 index, -1 = unused */ ],
-    // imageOffset: 0,
-    // inputOffset: 0,
-  },
+  // CORA (MK.2, 0-based row-major) ↔ device wire ids; empty = identity. See Step 4.
+  // keyMap: { coraToWireImage: [...], wireInputToCora: [...], imageOffset, inputOffset }
+  keyMap: {},
 
   // What this device advertises to the Elgato desktop over CORA.
   cora: {
-    productId: ELGATO_MK2_PID,        // PID the desktop sees; non-Elgato devices spoof MK.2
-    advertiseGeometry: MK2_CHILD_GEOMETRY, // omit to derive geometry from this model
-    usePhysicalIdentity: false,       // true = forward the device's real serial/firmware (Elgato only)
+    productId: ELGATO_MK2_PID,        // PID the desktop sees; non-Elgato spoof MK.2
+    advertiseGeometry: MK2_CHILD_GEOMETRY, // omit to derive from this model
+    usePhysicalIdentity: false,       // true = forward real serial/firmware (Elgato only)
   },
 
-  // Optional: splash-screen orientation differs from live CORA images on some hardware.
-  // splash: { transformOverride: { rotate: 180 } },
+  // splash: { transformOverride: { rotate: 180 } },  // when splash orientation differs from live
 
   driverKind: 'elgato-hid',   // 'elgato-hid' | 'mirabox' | 'custom' — see Step 4
 };
@@ -198,20 +173,15 @@ export const ACME_X5_MODEL: DeviceModel = {
 
 ### Color order is not implemented (known limitation)
 
-> ⚠️ **`colorMode` is currently a no-op for JPEG devices.** Nothing in the pipeline
-> reads it: `translator.ts:transformImageForDevice` does not forward a `color_mode`
-> field, and `image_proc_transform` (`rust/deckbridge-native/src/lib.rs`, the in-process FFI
-> cdylib) has no such parameter. For `format: 'bmp'` (gen1/Mini) the output is BGR because
-> `encode_bmp` writes BGR unconditionally — not because of this field. **So toggling
-> `colorMode: 'bgr'` will not fix swapped red/blue on a JPEG device.**
+> ⚠️ **`colorMode` is a no-op for JPEG devices.** Nothing reads it —
+> `translator.ts:transformImageForDevice` doesn't forward a `color_mode` field, and
+> `image_proc_transform` (`rust/deckbridge-native/src/lib.rs`) has no such parameter. For
+> `format: 'bmp'` (gen1/Mini) the output is BGR only because `encode_bmp` writes BGR
+> unconditionally. **So `colorMode: 'bgr'` will not fix swapped red/blue on a JPEG device.**
 >
-> **Fix task — if a JPEG device needs a channel swap, build it first:**
-> 1. Add a `color_mode` (or `swap_rb`) parameter to `image_proc_transform` in
->    `rust/deckbridge-native/src/lib.rs` and swap the R/B channels before encoding.
-> 2. Forward `color_mode: spec.colorMode` from `transformImageForDevice` in
->    `ts/src/translator.ts`.
->
-> Until that exists, leave `colorMode: 'rgb'` and treat the field as descriptive only.
+> **To add a channel swap, build it first:** add a `color_mode`/`swap_rb` param to
+> `image_proc_transform` (swap R/B before encode) and forward `spec.colorMode` from
+> `transformImageForDevice`. Until then, leave `colorMode: 'rgb'` (descriptive only).
 
 ### `cora` field reference — what CORA advertises to the Elgato desktop
 
@@ -223,25 +193,20 @@ export const ACME_X5_MODEL: DeviceModel = {
 
 ### `keyMap` field reference — translating between CORA and device key indices
 
-The CORA protocol (and this app's internal logic) always uses **MK.2 indices**:
-0-based, row-major, top-left to bottom-right. Your device's physical wire protocol may
-number keys differently (1-based, column-major, non-contiguous, etc).
+CORA (and this app's internal logic) always uses **MK.2 indices**: 0-based, row-major,
+top-left to bottom-right. Your device's wire protocol may number keys differently (1-based,
+column-major, non-contiguous, etc). Two independent translations may be needed — fill in
+only the ones your device requires:
 
-Two independent translations may be needed — fill in only the ones your device requires:
+- **Image** (`sendImage`): CORA key index → device wire image id — `coraToWireImage`
+  (explicit array) or `imageOffset` (constant), else identity.
+- **Input** (`parseInput`): device wire key code → CORA (MK.2) index — `wireInputToCora`
+  (explicit array, `-1` = unused) or `inputOffset` (constant), else identity.
 
-- **Image** (`sendImage`): CORA key index → device wire image id.
-  Set `coraToWireImage` (explicit lookup array) or `imageOffset` (constant offset),
-  or leave both unset for an identity mapping.
-- **Input** (`parseInput`): device wire key code → CORA (MK.2) key index.
-  Set `wireInputToCora` (explicit lookup array, `-1` = unused/ignored key) or
-  `inputOffset` (constant offset), or leave both unset for identity.
-
-Precedence is **explicit array > offset > identity**, resolved independently per
-direction — e.g. `mirabox-293` uses an explicit `coraToWireImage` array for images
-but a simple `inputOffset` for input, because the two wire encodings differ.
-
-Start with everything unset (identity mapping) if you don't know the layout yet —
-see Phase 5 for how to measure and fill these in from hardware.
+Precedence is **explicit array > offset > identity**, resolved independently per direction
+(e.g. `mirabox-293` uses an explicit `coraToWireImage` array but a simple `inputOffset`).
+Start with everything unset (identity) if you don't know the layout — Phase 5 measures it
+from hardware.
 
 ---
 
@@ -254,9 +219,8 @@ see Phase 5 for how to measure and fill these in from hardware.
 export type DeviceVendor = 'mirabox' | 'elgato' | 'acme';  // add your brand
 ```
 
-`vendor` is informational/diagnostic only — behavior that used to switch on it (CORA
-product ID, advertised geometry, physical-identity forwarding) lives in `model.cora`.
-No other code changes needed for a new vendor.
+`vendor` is diagnostic only — behavior that once switched on it (CORA product ID,
+geometry, identity forwarding) now lives in `model.cora`. No other changes needed.
 
 ---
 
@@ -274,25 +238,25 @@ export type DeviceProtocol =
   | 'acme-v1';       // add your protocol
 ```
 
-**Skip this step if your device reuses an existing protocol** (e.g., it speaks the same
-HID packet format as gen2 with different VID/PID — just point `protocol` at `'elgato-gen2'`).
+**Skip if your device reuses an existing protocol** (e.g. same packet format as gen2 with
+a different VID/PID — just set `protocol: 'elgato-gen2'`).
 
 ---
 
 ## Step 3 — implement the driver
 
-Choose one of three paths, matching `driverKind` on the model to the implementation:
+Choose one of three paths, matching the model's `driverKind` to the implementation.
 
 ### Path A — reuse `ElgatoHidDriver` (gen1 / gen2 compatible)
 
-Set `driverKind: 'elgato-hid'` and `protocol: 'elgato-gen1'` or `'elgato-gen2'`.
-`ElgatoHidDriver` looks up its byte-framing functions from `PROTOCOL_STRATEGY` keyed
-on `model.protocol` — no new driver code needed.
+Set `driverKind: 'elgato-hid'` and `protocol: 'elgato-gen1'`/`'elgato-gen2'`.
+`ElgatoHidDriver` looks up byte-framing from `PROTOCOL_STRATEGY` by `model.protocol` — no
+new driver code.
 
 ### Path B — new HID packet format, same open/read/write pattern
 
-Set `driverKind: 'elgato-hid'` with a new `protocol` value, write the framing functions,
-and **add one entry to the `PROTOCOL_STRATEGY` table** in `devices/protocol/index.ts`:
+Set `driverKind: 'elgato-hid'` with a new `protocol`, write the framing functions, and
+**add one `PROTOCOL_STRATEGY` entry** in `devices/protocol/index.ts`:
 
 ```typescript
 // ts/src/devices/protocol/acme-v1.ts
@@ -303,52 +267,33 @@ const PAYLOAD_SIZE = PACKET_SIZE - HEADER_SIZE;
 /** Encode a JPEG for key `keyIndex` into output report buffers. */
 export function acmePackImage(keyIndex: number, jpegBytes: Uint8Array): Uint8Array[] {
   const packets: Uint8Array[] = [];
-  let offset = 0;
-  let part = 0;
-  while (offset < jpegBytes.length || part === 0) {
+  for (let offset = 0, part = 0; offset < jpegBytes.length || part === 0; offset += PAYLOAD_SIZE, part++) {
     const chunk = jpegBytes.subarray(offset, offset + PAYLOAD_SIZE);
     const isLast = offset + PAYLOAD_SIZE >= jpegBytes.length;
-
     const pkt = new Uint8Array(PACKET_SIZE);
-    // --- fill your header here ---
-    pkt[0] = 0x02;
-    pkt[1] = keyIndex;
-    pkt[2] = isLast ? 1 : 0;
-    pkt[3] = part & 0xff;
+    pkt[0] = 0x02; pkt[1] = keyIndex; pkt[2] = isLast ? 1 : 0; pkt[3] = part & 0xff; // header
     pkt.set(chunk, HEADER_SIZE);
-
     packets.push(pkt);
-    offset += PAYLOAD_SIZE;
-    part++;
     if (isLast) break;
   }
   return packets;
 }
 
 /** Parse an input report into key states. Return null if not a button report. */
-export function acmeParseInput(
-  data: Uint8Array,
-  keyCount: number,
-): Array<{ keyIndex: number; pressed: boolean }> | null {
+export function acmeParseInput(data: Uint8Array, keyCount: number):
+  Array<{ keyIndex: number; pressed: boolean }> | null {
   if (data[0] !== 0x01) return null;  // report ID guard
-  const result = [];
-  for (let i = 0; i < keyCount; i++) {
-    result.push({ keyIndex: i, pressed: data[1 + i] !== 0 });
-  }
-  return result;
+  return Array.from({ length: keyCount }, (_, i) => ({ keyIndex: i, pressed: data[1 + i] !== 0 }));
 }
 
 export function acmeBrightnessReport(pct: number): Uint8Array {
   const buf = new Uint8Array(32);
-  buf[0] = 0x03;
-  buf[1] = Math.max(0, Math.min(100, pct));
+  buf[0] = 0x03; buf[1] = Math.max(0, Math.min(100, pct));
   return buf;
 }
 
 export function acmeResetReport(): Uint8Array {
-  const buf = new Uint8Array(32);
-  buf[0] = 0x04;
-  return buf;
+  const buf = new Uint8Array(32); buf[0] = 0x04; return buf;
 }
 ```
 
@@ -367,27 +312,25 @@ export const PROTOCOL_STRATEGY: Partial<Record<DeviceProtocol, ProtocolStrategy>
 };
 ```
 
-`ElgatoHidDriver` resolves its strategy once in the constructor
-(`PROTOCOL_STRATEGY[model.protocol]!`) and calls `this.strategy.packImage(...)`,
-`this.strategy.parseInput(...)`, etc. — no per-call branching to update.
+`ElgatoHidDriver` resolves the strategy once in its constructor
+(`PROTOCOL_STRATEGY[model.protocol]!`) and calls `this.strategy.*` — no per-call branching.
 
 ### Path C — completely different driver (new protocol class)
 
 If the device has a fundamentally different communication pattern (different handshake,
 heartbeat, multi-step init, bulk transfer instead of interrupt, etc.) write a standalone
 driver class, set `driverKind: 'custom'`, and add it to the factory in `hid-worker.ts`
-(Step 5). Use `MiraboxDriver` (`ts/src/mirabox.ts`) as the reference — it is the most
-feature-complete example of a custom driver, and reads its wire framing from `model.wire`
-rather than hardcoding it. Prefer **extending `HidDeviceBase`**
-(`ts/src/devices/hid-connection.ts`) rather than writing the hidapi plumbing standalone —
-it's the shared base class both `MiraboxDriver` and `ElgatoHidDriver` extend, and it
-already owns the lib singleton, device handle, polling read loop, and teardown (see its
-`_acquireLib`/`_startReadLoop`/`_closeDevice`/`_teardownLib`/`_releaseLibAfterFailedOpen`).
-The sample below is written standalone (no base class) purely to show the minimum
-`DeviceDriver` surface explicitly — for a real Path C driver, extend `HidDeviceBase`
-instead of reimplementing this.
+(Step 5). Reference: `MiraboxDriver` (`ts/src/mirabox.ts`), the most feature-complete
+custom driver — it reads wire framing from `model.wire` instead of hardcoding it. Prefer
+**extending `HidDeviceBase`** (`ts/src/devices/hid-connection.ts`), the shared base both
+real drivers extend: it already owns the lib singleton, device handle, polling read loop,
+and teardown. The sample below is standalone purely to show the minimum `DeviceDriver`
+surface — for a real Path C driver, extend `HidDeviceBase` instead.
 
-Minimum interface (must match `DeviceDriver` in `devices/driver.ts`):
+Minimum `DeviceDriver` surface (see `devices/driver.ts`). The sample below is standalone
+for clarity, but a real Path C driver should **extend `HidDeviceBase`** — it already owns
+the lib singleton, device handle, poll loop, and SIGBUS-safe teardown described in the
+rules below.
 
 ```typescript
 // ts/src/devices/acme/acme-driver.ts
@@ -395,139 +338,71 @@ import { EventEmitter } from 'node:events';
 import { loadHidapi, findHidPath, isNullPtr } from '../../ffi/hidapi.js';
 import type { DeviceModel } from '../driver.js';
 
-// Module-level singleton — loaded once per worker thread, reused across reconnects.
-// hid_init() registers IOKit callbacks that reference library code; letting the lib
-// get dlclose()'d (via GC or a premature lib.close()) while they're live causes
-// SIGBUS on the next dlopen(). Both real drivers get this for free by extending
-// HidDeviceBase, which owns this singleton — see devices/hid-connection.ts.
-let _workerHidLib: ReturnType<typeof loadHidapi> | null = null;
+let _workerHidLib: ReturnType<typeof loadHidapi> | null = null; // per-worker singleton
 
 export class AcmeDriver extends EventEmitter {
-  readonly model: DeviceModel;
   private device: unknown = null;
   private hidLib: ReturnType<typeof loadHidapi> | null = null;
   private readTimer: ReturnType<typeof setInterval> | null = null;
-
-  constructor(model: DeviceModel) {
-    super();
-    this.model = model;
-  }
+  constructor(readonly model: DeviceModel) { super(); }
 
   async open(): Promise<void> {
     if (!_workerHidLib) _workerHidLib = loadHidapi();
     this.hidLib = _workerHidLib;
     const hid = this.hidLib.symbols;
 
-    // Prefer path-based open for macOS (avoids system-claimed interfaces).
+    // Path-based open first (macOS-safe), then hid_open(VID, PID) per PID.
     let dev: unknown = null;
     if (this.model.usagePage !== undefined) {
-      const path = findHidPath(this.model.usbVendorId, this.model.usagePage!, this.model.usage!);
+      const path = findHidPath(this.model.usbVendorId, this.model.usagePage, this.model.usage!);
       if (path) dev = hid.hid_open_path(path);
     }
-    if (!dev || isNullPtr(dev)) {
+    if (!dev || isNullPtr(dev))
       for (const pid of this.model.usbProductIds) {
         dev = hid.hid_open(this.model.usbVendorId, pid, null);
         if (!isNullPtr(dev)) break;
       }
-    }
     if (!dev || isNullPtr(dev)) {
-      // Release after a FAILED open: call hid_exit() (unschedules the IOHIDManager
-      // so a later worker.terminate() won't SIGBUS) but deliberately skip dlclose() —
-      // dlclose() churn on macOS HID libs is itself SIGBUS-prone. Null the singleton
-      // so the next open() attempt reloads fresh. See HidDeviceBase
-      // ._releaseLibAfterFailedOpen (devices/hid-connection.ts) for the reference.
-      try {
-        hid.hid_exit();
-      } catch {
-        /* best-effort: terminate-safety is the goal, not a clean exit code */
-      }
-      this.hidLib = null;
-      _workerHidLib = null;
+      try { hid.hid_exit(); } catch {}     // release after FAILED open — never dlclose() (macOS SIGBUS)
+      this.hidLib = _workerHidLib = null;
       throw new Error(`${this.model.name}: device not found`);
     }
 
     this.device = dev;
-
-    // Device-specific init sequence — send whatever your protocol requires.
-    this._sendInit();
-
-    // Polling read loop. 5ms timeout is safe: hid_read_timeout blocks ≤5ms.
-    // Size IN_SIZE to your device's input report (both real drivers use 512).
-    const IN_SIZE = 512;
-    const readBuf = new Uint8Array(IN_SIZE);
+    this._sendInit();                       // handshake / brightness / clear / heartbeat
+    // 5ms poll — hid_read_timeout blocks ≤5ms; emit 'error'+'disconnect' on failure.
+    const buf = new Uint8Array(512);
     this.readTimer = setInterval(() => {
-      if (!this.device || !this.hidLib) return;
-      const n = hid.hid_read_timeout(this.device, readBuf, IN_SIZE, 5) as number;
-      if (n < 0) {
-        const msg = String(hid.hid_error(this.device) ?? 'unknown HID error');
-        this._cleanup();
-        this.emit('error', new Error(msg));
-        this.emit('disconnect');
-        return;
-      }
-      if (n > 0) this._parseInput(readBuf.subarray(0, n));
+      if (!this.device) return;
+      const n = hid.hid_read_timeout(this.device, buf, 512, 5) as number;
+      if (n < 0) { const e = String(hid.hid_error(this.device)); this._cleanup(); this.emit('error', new Error(e)); this.emit('disconnect'); return; }
+      if (n > 0) this._parseInput(buf.subarray(0, n));
     }, 5);
   }
 
-  async close(): Promise<void> {
-    this._cleanup();
-  }
+  async close(): Promise<void> { this._cleanup(); }
 
-  sendImage(keyIndex: number, bytes: Uint8Array): void {
-    if (!this.device || !this.hidLib) return;
-    // Build packets from `bytes` (already transformed to native format by image-pipeline).
-    const packets = acmePackImage(keyIndex, bytes);
-    for (const pkt of packets) this._write(pkt);
+  sendImage(keyIndex: number, bytes: Uint8Array): void {   // `bytes` already native-format
+    for (const pkt of acmePackImage(keyIndex, bytes)) this._write(pkt);
   }
-
-  clearKey(keyIndex: number): void {
-    // Send a device-specific clear command, or a *valid* tiny black image.
-    // NOTE: an all-zero buffer is not a decodable JPEG. Use a real black-JPEG
-    // constant (see ElgatoHidDriver.clearKey) or a CLE-style command (see MiraboxDriver.clearKey).
-    this.sendImage(keyIndex, /* TINY_BLACK_JPEG or device clear cmd */ new Uint8Array(0));
-  }
-
+  clearKey(_k: number): void { /* device clear cmd or a real black JPEG — never an all-zero buffer */ }
   setBrightness(level: number): void {
-    if (!this.device || !this.hidLib) return;
-    this.hidLib.symbols.hid_send_feature_report(
-      this.device, acmeBrightnessReport(level), 32
-    );
+    if (this.device) this.hidLib!.symbols.hid_send_feature_report(this.device, acmeBrightnessReport(level), 32);
   }
 
-  private _sendInit(): void {
-    // Send handshake, brightness, clear, heartbeat start — whatever your protocol needs.
+  private _sendInit(): void { /* protocol-specific handshake */ }
+  private _write(buf: Uint8Array): void {                  // hid_write needs report-ID byte at index 0
+    const arr = new Uint8Array(buf.length + 1); arr.set(buf, 1);
+    if (this.device) this.hidLib!.symbols.hid_write(this.device, arr, arr.length);
   }
-
-  private _write(buf: Uint8Array): void {
-    if (!this.device || !this.hidLib) return;
-    // hid_write requires report ID prepended as byte 0.
-    const arr = new Uint8Array(buf.length + 1);
-    arr[0] = 0x00;
-    arr.set(buf, 1);
-    this.hidLib.symbols.hid_write(this.device, arr, arr.length);
-  }
-
   private _parseInput(data: Uint8Array): void {
-    const states = acmeParseInput(data, this.model.keyCount);
-    if (!states) return;
-    for (const { keyIndex, pressed } of states) {
+    for (const { keyIndex, pressed } of acmeParseInput(data, this.model.keyCount) ?? [])
       this.emit('key', { keyIndex, state: pressed ? 'down' : 'up' });
-    }
   }
-
   private _cleanup(): void {
     if (this.readTimer) { clearInterval(this.readTimer); this.readTimer = null; }
-    if (this.device && this.hidLib) {
-      this.hidLib.symbols.hid_close(this.device);
-      this.device = null;
-    }
-    if (this.hidLib) {
-      // Safe to exit/close here: a device was opened, so IOKit state is consistent.
-      this.hidLib.symbols.hid_exit();
-      this.hidLib.close();
-      this.hidLib = null;
-      _workerHidLib = null; // allow a fresh load on the next open()
-    }
+    if (this.device) { this.hidLib!.symbols.hid_close(this.device); this.device = null; }
+    if (this.hidLib) { this.hidLib.symbols.hid_exit(); this.hidLib.close(); this.hidLib = _workerHidLib = null; }
   }
 }
 ```
@@ -562,20 +437,16 @@ export const DEVICE_MODELS: DeviceModel[] = [
 ];
 ```
 
-**Order matters**: `probeAndOpen()` in `driver-manager.ts` tries each model in order and
-stops at the first successful `hid_open`. Put Elgato / specific devices before catch-all
-entries so they take priority over third-party devices that might share a VID/PID range.
-
-`DEFAULT_MODEL` (also exported from `registry.ts`) is the fallback used when nothing is
-connected — it stays `MK2_MODEL` unless you have a reason to change it.
+**Order matters**: `probeAndOpen()` tries models in order and stops at the first
+successful `hid_open` — put specific/Elgato devices before catch-alls that share a VID/PID
+range. `DEFAULT_MODEL` (the no-device fallback) stays `MK2_MODEL` unless you need otherwise.
 
 ---
 
 ## Step 5 — wire up `hid-worker.ts` (Path C only)
 
-The worker thread instantiates the right driver class via `createDriver()`, which
-switches on `model.driverKind`. Path A and B devices use `driverKind: 'elgato-hid'`
-and need **no changes here**. For a Path C device, add a case:
+`createDriver()` switches on `model.driverKind`. Path A/B (`'elgato-hid'`) need **no
+changes here**; for Path C add a case:
 
 ```typescript
 // ts/src/hid-worker.ts
@@ -595,18 +466,15 @@ function createDriver(model: DeviceModel): AnyRealDriver {
 }
 ```
 
-Then set `driverKind: 'custom'` (or introduce a more specific `DriverKind` value if you
-have several Path-C device families) on your model.
+Then set `driverKind: 'custom'` on your model.
 
 ---
 
 ## Phase 4 — measure image orientation on hardware
 
-Run with `DECKBRIDGE_MOCK=0` and a real device connected. Use the web UI (http://localhost:3000)
-or Elgato software to push a known asymmetric image (e.g., a right-pointing arrow) to key 0.
-
-Adjust `image.rotate` and `image.flipH` / `image.flipV` in the model until the image appears
-upright and un-mirrored on the physical device:
+Run with `DECKBRIDGE_MOCK=0` and a real device connected. Push a known asymmetric image
+(e.g. a right-pointing arrow) to key 0 from the web UI or Elgato software, then adjust
+`image.rotate` / `image.flipH` / `image.flipV` until it appears upright and un-mirrored:
 
 | What you see | Fix |
 |---|---|
@@ -617,24 +485,22 @@ upright and un-mirrored on the physical device:
 | Image mirrored top-bottom | `flipV: true` |
 | Colors swapped (red/blue) | ⚠️ not auto-handled — see "Color order is not implemented" |
 
-Rotations are applied CW before flips. If the device also needs a different orientation
-for splash images than for live CORA frames (some hardware does), set
-`splash.transformOverride` on the model rather than changing `image` itself.
+Rotations apply CW before flips. If splash images need a different orientation than live
+frames (some hardware does), set `splash.transformOverride` rather than changing `image`.
 
 ---
 
 ## Phase 5 — measure key index mappings on hardware
 
-If you started with an empty `keyMap` (identity mapping), verify it now.
+If you started with an empty `keyMap` (identity), verify it now:
 
-1. Push image "key 0" (a big "0" label) to all 15 keys from the web UI mock, then switch to real.
-2. Press each physical key and check the key index logged in the web UI comm panel.
-3. Fill in `keyMap.coraToWireImage` / `keyMap.wireInputToCora` (or the simpler
-   `imageOffset` / `inputOffset` if the mapping is a constant shift) based on your
-   observations.
+1. Push a labelled image to all 15 keys from the web UI mock, then switch to real.
+2. Press each physical key and check the index logged in the web UI comm panel.
+3. Fill in `keyMap.coraToWireImage` / `wireInputToCora` (or `imageOffset` / `inputOffset`
+   for a constant shift) from your observations.
 
-For an N-key device where N > 15, decide which keys to expose as "keys 0–14" and
-set `-1` for unused physical keys in `wireInputToCora`.
+For an N-key device with N > 15, pick which keys map to "keys 0–14" and set `-1` for
+unused physical keys in `wireInputToCora`.
 
 ---
 
@@ -658,26 +524,20 @@ set `-1` for unused physical keys in `wireInputToCora`.
 
 ## Common pitfalls
 
-**hid_open succeeds but reads are all zeros / wrong data**
-→ You opened the wrong HID interface. Set `usagePage` and `usage` on the model and
-ensure `findHidPath` in `ffi/hidapi.ts` resolves to the correct path.
+**hid_open succeeds but reads are all zeros / wrong data** → wrong HID interface. Set
+`usagePage`/`usage` and confirm `findHidPath` resolves the correct path.
 
-**Images appear but with wrong colors (red/blue swapped)**
-→ `colorMode` does **not** fix this — see
+**Wrong colors (red/blue swapped)** → `colorMode` does **not** fix this; see
 [Color order is not implemented](#color-order-is-not-implemented-known-limitation).
 
-**Key presses not registered**
-→ Check your protocol's `parseInput` — does the report ID guard (`data[0] !== 0x01`)
-match your device? Capture a real key press with hidapitester and inspect the raw bytes.
+**Key presses not registered** → check your `parseInput` report-ID guard
+(`data[0] !== 0x01`) against a real key press captured with hidapitester.
 
-**Multiple devices detected as the same model**
-→ Ensure `usbProductIds` is a precise list. Two different models with overlapping PIDs need
-separate model entries and specific PIDs in each `usbProductIds` array.
+**Multiple devices detected as the same model** → make `usbProductIds` a precise list;
+overlapping PIDs need separate model entries with specific PIDs.
 
-**hid_write always returns -1**
-→ The HID report must be `pktSize + 1` bytes with report ID `0x00` at index 0.
-Check your driver's `_write()` prepends the report ID byte correctly.
+**hid_write always returns -1** → the report must be `pktSize + 1` bytes with report ID
+`0x00` at index 0; check `_write()` prepends it.
 
-**macOS: crash or SIGBUS on reconnect**
-→ See the `hid_exit()` / `_workerHidLib` rules under
-[Key design rules](#step-3--implement-the-driver).
+**macOS: crash or SIGBUS on reconnect** → see the `hid_exit()` / `_workerHidLib` rules
+under [Key design rules](#step-3--implement-the-driver).

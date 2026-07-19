@@ -8,9 +8,9 @@ description: What this docs site measures — cookieless, first-party, no person
 
 # Privacy & Analytics
 
-This site uses **first-party, self-hosted analytics**: no cookies, no stored IP
-addresses, no fingerprinting, no third-party trackers, nothing sold or shared. Data
-is aggregate daily counts only — we cannot identify you or follow you across sites.
+This site uses **first-party, self-hosted analytics**: no cookies, no stored IPs, no
+fingerprinting, no third-party trackers, nothing sold or shared. Data is aggregate daily
+counts only — we cannot identify you or follow you across sites.
 
 ## What is measured
 
@@ -29,15 +29,10 @@ Individual visits are never stored as rows, so a single page view cannot be reco
 
 To count visitors and sessions **without cookies**, your browser keeps a random,
 non-personal id in `localStorage`. It never leaves the browser — only a "first visit
-today" / "new session" flag is sent, never the id. Not linked to your identity, not
-usable for cross-site tracking. Clearing browser storage resets it.
+today" / "new session" flag is sent, never the id. Clearing browser storage resets it.
 
 ## Opting out
 
 The beacon is a plain image request. Block it with any content blocker, disable
-JavaScript for this site, or clear `localStorage`. The docs work fully either way.
-
-## No consent banner
-
-Only a random, non-personal id is stored locally and no personal data server-side, so
-no tracking-consent banner is needed. 
+JavaScript for this site, or clear `localStorage` — the docs work fully either way. No
+consent banner is needed, since nothing personal is stored locally or server-side.
