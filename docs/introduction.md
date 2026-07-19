@@ -34,7 +34,7 @@ device before the USB write.
 Hardware-tested on macOS: 293V3, 293S, K1 Pro, and Stream Deck Mini; MK.2 and the
 Linux/Windows builds are implemented but not hardware-verified.
 
-:::caution Platform status
+:::caution[Platform status]
 DeckBridge is currently **tested on macOS only**, and the GitHub releases currently
 ship **macOS builds only**. Linux and Windows support exists in the code but is
 untested and not yet released.

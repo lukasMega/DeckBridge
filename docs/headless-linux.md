@@ -4,7 +4,7 @@ title: Headless Linux (Raspberry Pi / DietPi)
 description: Run DeckBridge unattended on a headless Raspberry Pi / DietPi box under systemd.
 ---
 
-:::caution Linux builds are upcoming
+:::caution[Linux builds are upcoming]
 This page documents the intended setup for a headless Linux install. **Prebuilt
 Linux release binaries do not exist yet** — the GitHub releases currently ship
 macOS builds only (see [Getting Started](./getting-started.md)). Until a
