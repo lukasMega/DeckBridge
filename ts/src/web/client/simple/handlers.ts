@@ -29,6 +29,6 @@ export function postBrightnessOverride(e: Event): void {
   fetch('/api/brightness-override', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ enabled: (e.target as HTMLInputElement).checked }),
+    body: JSON.stringify({ enabled: (e.target as HTMLSelectElement).value === 'ignore' }),
   }).catch(() => undefined);
 }

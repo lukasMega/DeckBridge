@@ -160,7 +160,6 @@
 .manual-add-head,
 .brightness,
 .fader,
-.b-ignore,
 .xkey-row,
 .xkey-popover-field,
 .status-line,
@@ -288,7 +287,7 @@
   padding: 12px;
 
   .key-grid {
-    gap: 12px;
+    gap: 17px;
   }
   .key-cell {
     max-width: 80px;
@@ -442,6 +441,17 @@
   color: var(--fg-dim);
   flex: none;
 }
+.b-mode-select {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--fg-muted);
+  flex: none;
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  cursor: pointer;
+}
 .fader {
   position: relative;
   flex: 1;
@@ -486,6 +496,10 @@ input[type='range'].range {
     box-shadow: var(--shadow-2);
   }
 }
+input[type='range'].range:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
 .b-val {
   font-size: 13px;
   font-weight: 650;
@@ -494,19 +508,6 @@ input[type='range'].range {
   width: 42px;
   text-align: right;
   flex: none;
-}
-.b-ignore {
-  gap: 8px;
-  margin-top: 10px;
-  font-size: 12px;
-  color: var(--fg-muted);
-  cursor: pointer;
-}
-.b-ignore input[type='checkbox'] {
-  cursor: pointer;
-}
-.b-ignore-label {
-  line-height: 1.3;
 }
 
 /* ---- extra keys panel (293S side column) ---- */

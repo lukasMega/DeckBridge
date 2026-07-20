@@ -229,12 +229,21 @@ export function Brightness({
   return (
     <div class="brightness-block">
       <div class="brightness">
-        <span class="b-label">Brightness</span>
+        <select
+          class="b-mode-select"
+          value={brightnessOverride ? 'ignore' : 'control'}
+          aria-label="Brightness source"
+          onChange={postBrightnessOverride}
+        >
+          <option value="ignore">🔆 Manual</option>
+          <option value="control">🔗 Elgato app</option>
+        </select>
         <Icon class="b-ico" html={ICON.sun} />
         <div class="fader">
           <input
             type="range"
             class="range"
+            disabled={!brightnessOverride}
             id="simple-brightness"
             min="0"
             max="100"
@@ -251,15 +260,6 @@ export function Brightness({
           {localVal}%
         </span>
       </div>
-      <label class="b-ignore">
-        <input
-          type="checkbox"
-          id="simple-brightness-ignore"
-          checked={brightnessOverride}
-          onChange={postBrightnessOverride}
-        />
-        <span class="b-ignore-label">Ignore brightness from Elgato app</span>
-      </label>
     </div>
   );
 }
