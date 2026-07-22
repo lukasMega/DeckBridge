@@ -63,33 +63,11 @@
   <h1>docs-analytics — test dashboard</h1>
   <p class="sub">Fires real beacons at <code>GET /e?v=…</code> and reads <code>GET /stats</code> on this same server. Simulates the deployed Deno collector locally.</p>
 
-  <section>
-    <h2>1 · Send a beacon</h2>
-    <details><summary>open</summary>
-      <div class="row">
-        <div><label>path (p)</label><input id="p" value="/docs/intro"></div>
-        <div><label>referrer host (r)</label><input id="r" value="google.com"></div>
-      </div>
-      <div class="row">
-        <div><label>language (l)</label><input id="l" value="en-US"></div>
-        <div><label>timezone (tz)</label><input id="tz" value="Europe/Berlin"></div>
-      </div>
-      <div class="row">
-        <div><label>languages (ls)</label><input id="ls" value="en-US,en"></div>
-        <div><label>host (h)</label><input id="h" value="docs.deckbridge.app"></div>
-      </div>
-      <button id="fire">Send beacon</button>
-      <button id="seed" class="alt">Seed 30 random</button>
-      <div class="msg" id="fireMsg"></div>
-      <p class="hint">gated by the stats token (section 2) — enter the correct token to fire beacons. browser/os come from the request User-Agent (this browser) — the server ignores any client-sent UA. To test other UAs use curl (see README).</p>
-    </details>
-  </section>
-
   <section style="margin-top:20px">
     <h2>2 · Analytics</h2>
     <div class="row">
       <div><label>token</label><input id="token" value="devtoken"></div>
-      <div><label>day (YYYY-MM-DD, overrides period below)</label><input id="day" placeholder="blank = use period"></div>
+      <div><label>day (overrides period below)</label><input id="day" type="date"></div>
     </div>
     <div class="periods" id="periods">
       <button data-period="today">Today</button>
@@ -141,6 +119,28 @@
     </div>
   </section>
 
+  <section>
+    <h2>1 · Send a beacon</h2>
+    <details><summary>open</summary>
+      <div class="row">
+        <div><label>path (p)</label><input id="p" value="/docs/intro"></div>
+        <div><label>referrer host (r)</label><input id="r" value="google.com"></div>
+      </div>
+      <div class="row">
+        <div><label>language (l)</label><input id="l" value="en-US"></div>
+        <div><label>timezone (tz)</label><input id="tz" value="Europe/Berlin"></div>
+      </div>
+      <div class="row">
+        <div><label>languages (ls)</label><input id="ls" value="en-US,en"></div>
+        <div><label>host (h)</label><input id="h" value="docs.deckbridge.app"></div>
+      </div>
+      <button id="fire">Send beacon</button>
+      <button id="seed" class="alt">Seed 30 random</button>
+      <div class="msg" id="fireMsg"></div>
+      <p class="hint">gated by the stats token (section 2) — enter the correct token to fire beacons. browser/os come from the request User-Agent (this browser) — the server ignores any client-sent UA. To test other UAs use curl (see README).</p>
+    </details>
+  </section>
+
 <script>
 const $ = (id) => document.getElementById(id);
 
@@ -171,10 +171,15 @@ async function fire(over) {
 // beacon controls are gated by the stats token: /stats returns 401 on a bad
 // token, so a single probe tells us whether firing is allowed. (/e itself is
 // public — it must accept real beacons — this only gates the dev dashboard UI.)
+// stats fetch with the token in an Authorization header (keeps the secret out
+// of the URL / access logs; server also accepts ?token= for curl).
+function statsFetch(path) {
+  return fetch(path, { headers: { authorization: "Bearer " + $("token").value } });
+}
+
 async function tokenOk() {
-  const token = encodeURIComponent($("token").value);
   try {
-    const res = await fetch("/stats?token=" + token + "&day=" + todayIso());
+    const res = await statsFetch("/stats?day=" + todayIso());
     return res.status !== 401;
   } catch { return false; }
 }
@@ -274,12 +279,13 @@ let uplotReady = null;
 function loadUplot() {
   if (uplotReady) return uplotReady;
   uplotReady = new Promise((resolve, reject) => {
+    // vendored & served by this same collector — no CDN dependency
     const link = document.createElement("link");
     link.rel = "stylesheet";
-    link.href = "https://unpkg.com/uplot@1.6.31/dist/uPlot.min.css";
+    link.href = "/vendor/uPlot.min.css";
     document.head.appendChild(link);
     const script = document.createElement("script");
-    script.src = "https://unpkg.com/uplot@1.6.31/dist/uPlot.iife.min.js";
+    script.src = "/vendor/uPlot.iife.min.js";
     script.onload = () => resolve();
     script.onerror = () => reject(new Error("failed to load uPlot"));
     document.head.appendChild(script);
@@ -289,19 +295,29 @@ function loadUplot() {
 
 let chart = null;
 async function renderChart(series) {
-  await loadUplot();
   const el = $("chart");
+  try {
+    await loadUplot();
+  } catch {
+    // chart is optional — never let it block KPIs / breakdowns
+    el.innerHTML = '<p class="hint">chart unavailable (uPlot failed to load — check /vendor/)</p>';
+    return;
+  }
   if (chart) { chart.destroy(); chart = null; }
   el.innerHTML = "";
   if (!series.length) return;
-  const xs = series.map(([day]) => Date.parse(day + "T00:00:00Z") / 1000);
-  const ys = series.map(([, v]) => v);
+  // rows are [day, pv, uv, sessions] (older single-metric rows still plot pv)
+  const xs = series.map((r) => Date.parse(r[0] + "T00:00:00Z") / 1000);
+  const pv = series.map((r) => r[1] ?? 0);
+  const uv = series.map((r) => r[2] ?? 0);
+  const ss = series.map((r) => r[3] ?? 0);
+  const points = { show: series.length < 60 };
   const width = el.parentElement.clientWidth;
   chart = new uPlot({
     width,
     height: 180,
     padding: [10, 10, 0, 0],
-    legend: { show: false },
+    legend: { show: true },
     cursor: { show: true },
     scales: { x: { time: true } },
     axes: [
@@ -310,15 +326,11 @@ async function renderChart(series) {
     ],
     series: [
       {},
-      {
-        label: "pageviews",
-        stroke: "#88c0d0",
-        width: 2,
-        fill: "rgba(136,192,208,0.15)",
-        points: { show: series.length < 60 },
-      },
+      { label: "pageviews", stroke: "#88c0d0", width: 2, fill: "rgba(136,192,208,0.15)", points },
+      { label: "unique visitors", stroke: "#a3be8c", width: 2, points },
+      { label: "sessions", stroke: "#ebcb8b", width: 2, points },
     ],
-  }, [xs, ys], el);
+  }, [xs, pv, uv, ss], el);
 }
 window.addEventListener("resize", () => {
   if (!chart) return;
@@ -326,8 +338,9 @@ window.addEventListener("resize", () => {
 });
 
 const DIM_ORDER = [
-  "path", "host", "ref", "browser", "os", "device", "lang", "tz", "viewport",
-  "utm_source", "utm_medium", "utm_campaign", "event", "event_target",
+  "path", "host", "ref", "browser", "os", "device", "country", "lang", "tz",
+  "hour", "viewport", "utm_source", "utm_medium", "utm_campaign",
+  "event", "event_target",
 ];
 
 function renderBreakdowns(data) {
@@ -442,8 +455,10 @@ for (const b of document.querySelectorAll("#periods button")) {
     loadStats();
   };
 }
-$("day").oninput = () => {
+$("day").onchange = () => {
   if ($("day").value.trim()) { activePeriod = null; setActivePeriodButton(); }
+  else { activePeriod = "7d"; setActivePeriodButton(); }
+  loadStats();
 };
 
 let lastData = null;
@@ -456,10 +471,9 @@ async function loadStats() {
   else ({ from, to } = periodRange(activePeriod || "7d"));
 
   m.className = "msg"; m.textContent = "loading…";
-  const token = encodeURIComponent($("token").value);
-  const url = "/stats?token=" + token + "&series=1&from=" + from + "&to=" + to;
+  const url = "/stats?series=1&from=" + from + "&to=" + to;
   try {
-    const res = await fetch(url);
+    const res = await statsFetch(url);
     if (res.status === 401) {
       m.className = "msg err"; m.textContent = "401 unauthorized — check token";
       $("analytics").style.display = "none";
@@ -473,7 +487,7 @@ async function loadStats() {
     const { from: pFrom, to: pTo } = priorRange(from, to);
     if (pTo >= LAUNCH) {
       try {
-        const pRes = await fetch("/stats?token=" + token + "&from=" + clampFrom(pFrom) + "&to=" + pTo);
+        const pRes = await statsFetch("/stats?from=" + clampFrom(pFrom) + "&to=" + pTo);
         if (pRes.ok) prior = await pRes.json();
       } catch { /* comparison is best-effort */ }
     }
@@ -506,6 +520,9 @@ $("exportCsv").onclick = () => {
   a.click();
   URL.revokeObjectURL(url);
 };
+
+$("day").min = LAUNCH;
+$("day").max = todayIso();
 
 setActivePeriodButton();
 loadStats();

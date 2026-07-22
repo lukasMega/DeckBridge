@@ -9,7 +9,9 @@ in Deno KV. Runs on the **new** Deno Deploy (`console.deno.com`).
 | file             | what                                                     |
 |------------------|----------------------------------------------------------|
 | `main.ts`        | collector: `GET /e?v=…`, `GET /stats`, `GET /dashboard`  |
+| `main_test.ts`   | round-trip tests over in-memory KV (`deno task test`)    |
 | `dashboard.html` | manual test UI, served at `/dashboard`                   |
+| `uPlot.*`        | vendored uPlot js+css (flat, sibling of `main.ts` — see below), served at `/vendor/*` |
 | `deno.json`      | tasks + `unstable: [kv, cron]`                            |
 
 ## Local run (real KV, SQLite-backed)
@@ -32,12 +34,19 @@ Set a different token: `STATS_TOKEN=xyz deno task dev`.
   `/i.gif?` pixel rule. Browser/OS derived from the request `user-agent` header
   **server-side** (client UA ignored). Bots
   (`/bot|crawl|spider|preview|monitor/i`) skipped. → **1×1 gif** (`image/gif`).
-- **`GET /stats?token=…&day=YYYY-MM-DD`** — JSON counts. `day` defaults to today
-  (UTC). Range: `?token=…&from=YYYY-MM-DD&to=YYYY-MM-DD` (inclusive) merges into
-  totals. Add `&series=1` to also get a per-day pageview series
-  (`series: [[day, pv], …]`) for trend charts. **401** on bad/missing token.
+- **`GET /stats?day=YYYY-MM-DD`** — JSON counts. Auth via
+  `Authorization: Bearer <token>` (dashboard — keeps the secret out of access
+  logs) **or** `?token=…` (curl convenience). `day` defaults to today (UTC).
+  Range: `&from=YYYY-MM-DD&to=YYYY-MM-DD` (inclusive) merges into totals; days
+  are read in parallel. Add `&series=1` to also get a per-day series
+  (`series: [[day, pv, uv, sessions], …]`) for the multi-line trend chart.
+  **401** on bad/missing token.
 - **`GET /dashboard`** — the test UI (period selector, uPlot trend chart, KPI tiles,
-  breakdowns, CSV export). `GET /` — `ok`.
+  breakdowns, CSV export). `GET /vendor/uPlot.iife.min.js` + `/vendor/uPlot.min.css`
+  serve the **vendored** uPlot (no CDN dependency). Deploy caveat: the asset files
+  live **flat** beside `main.ts` (not in a subdir) and are read with
+  `Deno.readTextFile` — Deno Deploy bundles sibling new-URL files but skips subdirs
+  and ignores `with { type: "text" }` at runtime. `GET /` — `ok`.
 
 ## Data model (Deno KV)
 
@@ -45,16 +54,20 @@ Set a different token: `STATS_TOKEN=xyz deno task dev`.
 one atomic commit per hit. Dims are counted **independently** (no co-occurrence →
 no cross-dim segmentation).
 
-**Pageview** (`d.ev` absent) always writes 9 dims: `pv`, `path`, `host`, `ref`,
-`lang`, `tz`, `browser`, `os`, `device`. Plus, only when the beacon carries them:
-`viewport`, `utm_source`, `utm_medium`, `utm_campaign` (from client), and the
-localStorage-derived flags `uv` (first hit of day), `sessions` (new session),
-`bounce` (prior session had 1 pageview). **Event** (`d.ev` set) writes only
-`event` + `event_target` and does **not** increment `pv`.
+**Pageview** (`d.ev` absent) always writes 10 dims: `pv`, `path`, `host`, `ref`,
+`lang`, `tz`, `browser`, `os`, `device`, `hour` (UTC hour, `00`–`23`). Plus, only
+when present: `country` (server-side, **only if** a fronting CDN sets a country
+header like `cf-ipcountry` — bare Deno Deploy exposes no visitor geo, so this dim
+just never fires; no IP is ever read or stored), and from the beacon `viewport`,
+`utm_source`, `utm_medium`, `utm_campaign`, plus the localStorage-derived flags
+`uv` (first hit of day), `sessions` (new session), `bounce` (prior session had 1
+pageview). Every stored value is clamped to 128 chars so a hostile/buggy client
+can't inflate KV cost. **Event** (`d.ev` set) writes only `event` + `event_target`
+and does **not** increment `pv`.
 
-Write-budget: free tier ≈ 300K write units/mo ÷ 9 base dims ≈ **~33K pageviews/mo**
+Write-budget: free tier ≈ 300K write units/mo ÷ 10 base dims ≈ **~30K pageviews/mo**
 (fewer once optional dims fire). A top-level `Deno.cron` prunes days older than
-400.
+400 (stops at the first in-range day — cost is O(days pruned), not a full scan).
 
 ## curl smoke test
 
