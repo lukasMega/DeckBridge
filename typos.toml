@@ -9,9 +9,14 @@ extend-exclude = [
   "**/*.lock",
   "graphify-out/",
   "dist/",
+  "**/*.min.js",   # vendored minified libs (e.g. docs-analytics/uPlot.iife.min.js)
+  "**/*.patch",    # vendored patches — git hashes trip the checker
 ]
 
 [default]
+# Keep en-us so US spellings in code/APIs (Serialize, Color, …) are not flagged.
+# British spellings used in prose are accepted via extend-words below instead —
+# en-gb would (wrongly) flag those US programming identifiers.
 locale = "en-us"
 
 [default.extend-words]
@@ -31,3 +36,32 @@ oxlint = "oxlint"
 oxfmt = "oxfmt"
 knip = "knip"
 tjs = "tjs"
+# British spellings used in prose — accepted, not corrected to US.
+behaviour = "behaviour"
+behaviours = "behaviours"
+behavioural = "behavioural"
+colour = "colour"
+colours = "colours"
+centre = "centre"
+centred = "centred"
+centring = "centring"
+honour = "honour"
+honours = "honours"
+honouring = "honouring"
+initialise = "initialise"
+initialised = "initialised"
+initialises = "initialises"
+labelled = "labelled"
+normalise = "normalise"
+normalises = "normalises"
+signalling = "signalling"
+# Legit domain tokens flagged as typos.
+IST = "IST"      # India Standard Time (worldclock example)
+Nd = "Nd"        # "N days" shorthand (countdown plugin)
+WRK = "WRK"      # Mermaid node-id prefix in ARCHITECTURE.md
+abd = "abd"      # deliberate test-data string ("abc" vs "abd")
+alls = "alls"    # "catch-alls" (plural of catch-all)
+
+[default.extend-identifiers]
+PNGs = "PNGs"    # plural of PNG in prose
+APPn = "APPn"    # JPEG APP0..APP15 marker family

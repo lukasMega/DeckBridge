@@ -4,6 +4,8 @@ title: Getting Started
 description: Install or build DeckBridge, run it, and pair a USB deck with the Elgato app.
 ---
 
+import ThemedImage from '@theme/ThemedImage';
+
 # Getting Started
 
 Two ways to get DeckBridge ([what it is](./introduction.md)): **run a packaged
@@ -77,6 +79,17 @@ In packaged releases (installers and release zips) the tray icon shows status at
 Open the Elgato Stream Deck app (or Companion) on any machine on the **same LAN**. It
 discovers DeckBridge like real Elgato hardware.
 
+The web UI walks you through it — it shows the connected deck and the exact address and
+port to enter in the Elgato app:
+
+<ThemedImage
+  alt="DeckBridge web UI showing the guided pairing card with the connected Stream Deck MK.2 and the network address to add in the Elgato app"
+  sources={{
+    light: require('./img/webui-simple.png').default,
+    dark: require('./img/webui-simple-dark.png').default,
+  }}
+/>
+
 A **second deck** (different model) appears as its **own** network device on its **own
 port** (5345, 5347, …) — pair each separately. The web UI shows a card per deck with the
 exact address and port; see [Multiple decks](./features.md#multiple-decks).
@@ -86,6 +99,8 @@ exact address and port; see [Multiple decks](./features.md#multiple-decks).
 - Open **http://localhost:3000** for the live key grid and log feed.
 - Or use the tray's **Check Requirements** → the `/requirements` diagnostics page (what
   it checks: [Requirements](./features.md#requirements)).
+- Switch the web UI to **Advanced** (top-right) for the live dashboard — key grid, mock
+  devices, brightness, image-fit modes, and a real-time log feed.
 
 ## Troubleshooting
 

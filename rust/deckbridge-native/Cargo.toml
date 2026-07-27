@@ -3,6 +3,10 @@ name = "deckbridge-native"
 version = "0.1.0"
 edition = "2021"
 license = "MIT"
+# cdylib loaded via FFI, never published to crates.io. Marking it unpublishable
+# lets the path dependency on jpeg-encoder-fork use a bare `path` (no version) —
+# cargo-deny's allow-wildcard-paths only applies to non-published crates.
+publish = false
 
 [lib]
 name = "deckbridge_native"

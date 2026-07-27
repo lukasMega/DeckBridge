@@ -944,3 +944,139 @@
     opacity: 0.6;
   }
 }
+
+/* ============================================================
+   Screenshots — WebUI showcase
+   ============================================================ */
+.showcase {
+  display: flex;
+  justify-content: center;
+  margin-top: 26px;
+}
+.shot {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 100%;
+  max-width: 620px;
+}
+.shotFrame {
+  position: relative;
+  display: block;
+  width: 100%;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--surface);
+  box-shadow: var(--shadow-3);
+  cursor: zoom-in;
+  transition:
+    transform 0.18s ease,
+    box-shadow 0.18s ease,
+    border-color 0.18s ease;
+}
+.shotFrame:hover,
+.shotFrame:focus-visible {
+  transform: translateY(-2px);
+  border-color: var(--accent);
+  box-shadow: var(--shadow-3);
+  outline: none;
+}
+.shotFrame img {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+.shotZoom {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  background: oklch(0.2 0.02 60 / 0.55);
+  color: #fff;
+  font-size: 15px;
+  line-height: 1;
+  opacity: 0;
+  transform: scale(0.9);
+  transition:
+    opacity 0.18s ease,
+    transform 0.18s ease;
+  backdrop-filter: blur(4px);
+}
+.shotFrame:hover .shotZoom,
+.shotFrame:focus-visible .shotZoom {
+  opacity: 1;
+  transform: scale(1);
+}
+
+/* lightbox overlay */
+.lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: grid;
+  place-items: center;
+  padding: clamp(16px, 5vw, 56px);
+  background: oklch(0.15 0.008 64 / 0.78);
+  backdrop-filter: blur(6px);
+  cursor: zoom-out;
+  animation: lightboxIn 0.18s ease both;
+}
+@keyframes lightboxIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+.lightboxImg {
+  max-width: min(1440px, 96vw);
+  max-height: 90vh;
+  width: auto;
+  height: auto;
+  border-radius: var(--r-md);
+  border: 1px solid var(--border-strong);
+  box-shadow: var(--shadow-3);
+  cursor: default;
+}
+.lightboxClose {
+  position: fixed;
+  top: 18px;
+  right: 22px;
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border: 1px solid var(--border-strong);
+  border-radius: 50%;
+  background: var(--surface);
+  color: var(--fg);
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  transition:
+    transform 0.15s ease,
+    border-color 0.15s ease;
+}
+.lightboxClose:hover {
+  transform: scale(1.08);
+  border-color: var(--accent);
+}
+.shotCaption {
+  margin: 0;
+  color: var(--fg-dim);
+  font-size: 0.9rem;
+  text-align: center;
+}
+.shotCaption strong {
+  color: var(--fg-muted);
+  font-weight: 600;
+}

@@ -1,6 +1,8 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import Layout from '@theme/Layout';
 import Link from '@docusaurus/Link';
+import { useBaseUrlUtils } from '@docusaurus/useBaseUrl';
+import ThemedImage from '@theme/ThemedImage';
 import styles from './index.module.css';
 import { RotatingWord } from './_home/RotatingWord';
 import { BridgeMark } from './_home/BridgeMark';
@@ -10,8 +12,36 @@ import { Quickstart } from './_home/Quickstart';
 import { FEATURES } from './_home/features';
 import { GITHUB_URL, BRANDS, DEVICES, HIGHLIGHTS } from './_home/content';
 
+const SHOTS = [
+  {
+    id: 'simple',
+    light: '/img/webui-simple.png',
+    dark: '/img/webui-simple-dark.png',
+    width: 1440,
+    height: 955,
+    alt: 'DeckBridge simple web UI: a step-by-step pairing card showing the connected Stream Deck MK.2 and the network address to enter in the Elgato app.',
+    caption: <>connect the deck, copy the address, pair.</>,
+    label: 'Simple view',
+  },
+] as const;
+
 export default function Home(): ReactNode {
+  const { withBaseUrl } = useBaseUrlUtils();
   const [open, setOpen] = useState<number | null>(null);
+  const [zoom, setZoom] = useState<number | null>(null);
+  useEffect(() => {
+    if (zoom === null) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setZoom(null);
+    };
+    document.addEventListener('keydown', onKey);
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.removeEventListener('keydown', onKey);
+      document.body.style.overflow = prev;
+    };
+  }, [zoom]);
   useEffect(() => {
     if (open === null) return;
     if (!window.matchMedia('(max-width: 900px)').matches) return;
@@ -34,15 +64,15 @@ export default function Home(): ReactNode {
           {/* ---- hero ---- */}
           <section className={styles.hero}>
             <div className={styles.mark}>
-              <BridgeMark />
+              <BridgeMark/>
             </div>
             <h1 className={styles.title}>
               Your{' '}
               <span className={styles.accent}>
-                <RotatingWord words={BRANDS} />
+                <RotatingWord words={BRANDS}/>
               </span>{' '}
               stream deck,
-              <br /> <span className={styles.accent}>over WiFi.</span>
+              <br/> <span className={styles.accent}>over WiFi.</span>
             </h1>
             <p className={styles.subtitle}>
               <strong>DeckBridge</strong> runs on your computer and appears to the Elgato app as a
@@ -70,7 +100,7 @@ export default function Home(): ReactNode {
           <section className={`${styles.section} ${styles.reveal}`}>
             <p className={styles.sectionLabel}>Quick start</p>
             <h2 className={styles.sectionTitle}>Running in two minutes</h2>
-            <Quickstart />
+            <Quickstart/>
             <p className={styles.stepsMore}>
               <Link to="/getting-started">Full guide →</Link>
             </p>
@@ -85,7 +115,7 @@ export default function Home(): ReactNode {
               The app discovers it like real hardware.
             </p>
             <div className={styles.panel}>
-              <Flow />
+              <Flow/>
             </div>
             <p className={styles.flowCaption}>
               Key presses travel deck → DeckBridge → app. Button images travel back, resized and
@@ -149,6 +179,45 @@ export default function Home(): ReactNode {
             )}
           </section>
 
+          {/* ---- screenshots ---- */}
+          <section className={`${styles.section} ${styles.reveal}`}>
+            <p className={styles.sectionLabel}>See it</p>
+            <h2 className={styles.sectionTitle}>The built-in web UI</h2>
+            <p className={styles.sectionLead}>
+              DeckBridge serves its own control panel at <code>localhost:3000</code> — a guided
+              pairing flow that walks you through connecting the deck to the Elgato app.
+            </p>
+            <div className={styles.showcase}>
+              {SHOTS.map((shot, idx) => (
+                <figure className={styles.shot} key={shot.id}>
+                  <button
+                    type="button"
+                    className={styles.shotFrame}
+                    onClick={() => setZoom(idx)}
+                    aria-label={`Enlarge screenshot: ${shot.label}`}
+                  >
+                    <ThemedImage
+                      sources={{
+                        light: withBaseUrl(shot.light),
+                        dark: withBaseUrl(shot.dark),
+                      }}
+                      alt={shot.alt}
+                      loading="lazy"
+                      width={shot.width}
+                      height={shot.height}
+                    />
+                    <span className={styles.shotZoom} aria-hidden="true">
+                      ⤢
+                    </span>
+                  </button>
+                  <figcaption className={styles.shotCaption}>
+                    <strong>{shot.label}</strong> — {shot.caption}
+                  </figcaption>
+                </figure>
+              ))}
+            </div>
+          </section>
+
           {/* ---- comparison ---- */}
           <section className={`${styles.section} ${styles.reveal}`} id="compare">
             <p className={styles.sectionLabel}>Compare</p>
@@ -157,7 +226,7 @@ export default function Home(): ReactNode {
               Against the official Network Dock and the closed app that ships with many non-Elgato
               decks.
             </p>
-            <Comparison />
+            <Comparison/>
           </section>
 
           {/* ---- supported devices ---- */}
@@ -217,6 +286,34 @@ export default function Home(): ReactNode {
             </p>
           </section>
         </div>
+
+        {zoom !== null && (
+          <div
+            className={styles.lightbox}
+            role="dialog"
+            aria-modal="true"
+            aria-label={SHOTS[zoom].label}
+            onClick={() => setZoom(null)}
+          >
+            <button
+              type="button"
+              className={styles.lightboxClose}
+              onClick={() => setZoom(null)}
+              aria-label="Close"
+            >
+              ✕
+            </button>
+            <ThemedImage
+              sources={{
+                light: withBaseUrl(SHOTS[zoom].light),
+                dark: withBaseUrl(SHOTS[zoom].dark),
+              }}
+              alt={SHOTS[zoom].alt}
+              className={styles.lightboxImg}
+              onClick={(e) => e.stopPropagation()}
+            />
+          </div>
+        )}
       </main>
     </Layout>
   );

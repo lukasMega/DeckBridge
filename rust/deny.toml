@@ -4,6 +4,12 @@
 [advisories]
 db-urls = ["https://github.com/rustsec/advisory-db"]
 yanked = "deny"
+# Only flag *unmaintained* crates in our own workspace (all maintained). The Linux
+# system-tray (tray-icon → appindicator) drags in the whole unmaintained gtk-rs GTK3
+# family + proc-macro-error transitively — 9+ RUSTSEC-2024 "unmaintained" advisories
+# we can't control and which grow as advisory-db updates. "workspace" ignores those
+# without an ever-stale ignore-list, while security *vulnerabilities* still deny.
+unmaintained = "workspace"
 ignore = []
 
 [licenses]
@@ -22,10 +28,13 @@ allow = [
     "0BSD",
     "Unicode-3.0",
     "Unlicense",
+    # IJG (Independent JPEG Group) — permissive. Carried by both the crates.io
+    # `jpeg-encoder` (jpeg-upstream feature) and the vendored `jpeg-encoder-fork`
+    # (jpeg-fork feature); `--all-features` pulls both, so allow it globally.
+    "IJG",
 ]
 exceptions = [
     { name = "option-ext", allow = ["MPL-2.0"] },
-    { name = "jpeg-encoder-fork", allow = ["IJG"] },
 ]
 
 [bans]
@@ -33,6 +42,10 @@ exceptions = [
 # warn rather than fail. No wildcard version requirements are expected.
 multiple-versions = "warn"
 wildcards = "deny"
+# deckbridge-native depends on the vendored jpeg-encoder-fork by path (no version
+# field → cargo sees `*`). Path deps are never published, so the wildcard is a
+# false positive — allow it while still denying wildcards on published deps.
+allow-wildcard-paths = true
 
 [sources]
 unknown-registry = "deny"
