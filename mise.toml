@@ -208,13 +208,7 @@ open target/release/bundle/macos
 [tasks.tauri-check]
 description = "Cargo check the Tauri crate (cross-platform; auto-creates empty host-triple sidecar stubs so externalBin validates)"
 dir = "src-tauri"
-run = """
-triple=$(rustc -vV | sed -n 's/host: //p')
-suffix=""
-case "$triple" in *windows*) suffix=".exe";; esac
-touch "binaries/deckbridge-${triple}${suffix}" "binaries/deckbridge-tray-${triple}${suffix}"
-cargo check
-"""
+run = "node ../scripts/tauri-check-stubs.mjs && cargo check"
 #description = "cargo-deny: advisories, licenses, bans, sources (needs: cargo install cargo-deny --locked)"
 #dir = "rust"
 #run = "cargo deny check"
@@ -288,7 +282,7 @@ timeout = "30s"
 [tasks.test]
 description = "Run tests (TJS)"
 quiet = true
-depends = ["ts-install"]
+depends = ["ts-install", "tjs-setup"]
 run = "node scripts/run-tests.mjs"
 timeout = "90s"
 
