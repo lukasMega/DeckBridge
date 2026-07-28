@@ -220,8 +220,14 @@ cargo check
 #run = "cargo deny check"
 
 [tasks.rust-lint]
-description = "Rust fmt-check + clippy + tests"
-depends = ["rust-fmt", "rust-clippy", "rust-test"]
+description = "Rust fmt-check + clippy + tests (sequential — parallel cargo races on rustup component downloads)"
+dir = "rust"
+run = """
+cargo fmt --check -p deckbridge-native -p deckbridge-tray
+cargo clippy --workspace --all-targets -- -D warnings
+cargo clippy -p deckbridge-native --no-default-features --features jpeg-fork,usb --all-targets -- -D warnings
+cargo test --workspace
+"""
 
 [tasks.format]
 description = "Format with oxfmt (single quotes)"
@@ -282,6 +288,7 @@ timeout = "30s"
 [tasks.test]
 description = "Run tests (TJS)"
 quiet = true
+depends = ["ts-install"]
 run = "node scripts/run-tests.mjs"
 timeout = "90s"
 
