@@ -25,8 +25,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # ci-checks builds deckbridge-native (the TS bundle FFI-loads libdeckbridge_native), so the
-      # Rust toolchain + libhidapi are needed even though CI doesn't compile the binary.
+      # ci-checks builds deckbridge-native for FFI tests, so Rust + system deps needed.
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
 
@@ -42,8 +41,8 @@ jobs:
 
       # No TJS_FROM_SOURCE → tjs-setup downloads the prebuilt runtime (fast, no
       # toolchain). The slow slim from-source build is release-only.
-      - name: Install system deps (libhidapi + libffi)
-        run: sudo apt-get update && sudo apt-get install -y libhidapi-dev libffi-dev
+      - name: Install system deps (libhidapi + libudev + libffi)
+        run: sudo apt-get update && sudo apt-get install -y libhidapi-dev libudev-dev libffi-dev
 
       - uses: jdx/mise-action@v2
 
