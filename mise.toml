@@ -19,7 +19,7 @@ windows-x64 = { asset_pattern = "txiki-windows-x86_64-slim.zip", bin = "tjs.exe"
 # hardcoding a POSIX-only ${HOME}/.cargo/bin/cargo path (broken on Windows).
 _.path = ["~/.cargo/bin"]
 _TXIKI_MISE_V  = "26.5.1"
-TXIKI_VERSION  = "v26.5.0"
+TXIKI_VERSION  = "v26.5.1"
 # Portable default: vendored build/download destination, per-platform exe suffix.
 # Local overrides (a pre-built $TJS path, TJS_FROM_SOURCE=1) go in mise.local.toml
 # (gitignored) — see that file's comment.

@@ -101,8 +101,8 @@ try {
   rmSync(srcDir, { recursive: true, force: true });
   mkdirSync(buildRoot, { recursive: true });
 
-  console.log(`Cloning saghul/txiki.js @ ${TXIKI_VERSION} ...`);
-  run(`git clone --depth 1 --branch "${TXIKI_VERSION}" https://github.com/saghul/txiki.js "${srcDir}"`);
+  console.log(`Cloning lukasMega/txiki.js @ ${TXIKI_VERSION} ...`);
+  run(`git clone --depth 1 --branch "${TXIKI_VERSION}" https://github.com/lukasMega/txiki.js "${srcDir}"`);
 
   // The slim patch removes the WAMR (deps/wamr) usage entirely, so that
   // submodule is not required — but recursing it is harmless. We init all

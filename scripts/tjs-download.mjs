@@ -27,7 +27,7 @@ if (!osName) { console.error(`Unsupported OS: ${platform()}`); process.exit(1); 
 if (!archName) { console.error(`Unsupported arch: ${arch()}`); process.exit(1); }
 
 const zip = `txiki-${osName}-${archName}.zip`;
-const url = `https://github.com/saghul/txiki.js/releases/download/${TXIKI_VERSION}/${zip}`;
+const url = `https://github.com/lukasMega/txiki.js/releases/download/${TXIKI_VERSION}/${zip}`;
 const tmp = join(tmpdir(), `tjs-download-${Date.now()}`);
 const binName = isWin ? 'tjs.exe' : 'tjs';
 
