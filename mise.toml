@@ -282,7 +282,7 @@ timeout = "30s"
 [tasks.test]
 description = "Run tests (TJS)"
 quiet = true
-depends = ["ts-install", "tjs-setup"]
+depends = ["ts-install", "tjs-setup", "deckbridge-native"]
 run = "node scripts/run-tests.mjs"
 timeout = "90s"
 
