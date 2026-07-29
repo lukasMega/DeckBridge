@@ -50,8 +50,7 @@ function computeFlags(): Record<string, string> {
 // CDP/WebDriver-controlled browser (Playwright, Puppeteer, Selenium).
 // Spec-mandated true under automation; trivially spoofable, but automation
 // rarely bothers spoofing it on a docs site.
-const automated = (): boolean =>
-  typeof navigator !== 'undefined' && navigator.webdriver === true;
+const automated = (): boolean => typeof navigator !== 'undefined' && navigator.webdriver === true;
 
 function track(pathname: string): void {
   if (!navigator.onLine) return; // offline: skip → no failed request/row/log
