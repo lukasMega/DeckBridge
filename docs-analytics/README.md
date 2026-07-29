@@ -110,7 +110,7 @@ day's hour.
 consistent and lands in the CSV export instead of being re-derived per dashboard
 render. `internal` is a referrer whose host equals the beacon's own origin (a
 full-page reload inside the docs site), which keeps it out of the acquisition
-numbers. The client sends `r: ""` for direct traffic; that is normalised to
+numbers. The client sends `r: ""` for direct traffic; that is normalized to
 `direct` (not stored as an empty key).
 
 ### `dowhour` — the one pairwise dim

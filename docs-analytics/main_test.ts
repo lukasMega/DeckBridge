@@ -70,7 +70,7 @@ Deno.test("ref_group is classified at ingest; empty referrer counts as direct", 
     referral: 1,
     internal: 1,
   });
-  assertEquals(stats.ref.direct, 1); // "" normalised, not stored as an empty key
+  assertEquals(stats.ref.direct, 1); // "" normalized, not stored as an empty key
   kv.close();
 });
 
