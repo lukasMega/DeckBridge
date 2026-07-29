@@ -13,11 +13,15 @@
   },
   "unstable": ["kv", "cron"],
   // vendored uPlot: not ours to format or lint (572 lint hits, and formatting a
-  // minified bundle would defeat the point of shipping it minified)
-  "exclude": ["uPlot.iife.min.js", "uPlot.min.css"],
+  // minified bundle would defeat the point of shipping it minified). Scoped to
+  // fmt/lint only — a top-level "exclude" is also honored by deployctl and
+  // silently drops these files from the Deploy upload (they 404 at /vendor/).
+  "fmt": { "exclude": ["uPlot.iife.min.js", "uPlot.min.css"] },
+  "lint": { "exclude": ["uPlot.iife.min.js", "uPlot.min.css"] },
   "deploy": {
     "org": "lukasmega",
     "app": "tst"
   }
 }
+
 
