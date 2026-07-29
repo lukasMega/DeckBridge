@@ -226,7 +226,7 @@ cargo test --workspace
 [tasks.format]
 description = "Format with oxfmt (single quotes)"
 depends = ["ts-install"]
-run = "./ts/node_modules/.bin/oxfmt ts/src ts/test docs-site/src"
+run = "./ts/node_modules/.bin/oxfmt ts/src ts/test docs-site/src docs-site/scripts"
 
 [tasks.check]
 description = "Typecheck + lint + format check"

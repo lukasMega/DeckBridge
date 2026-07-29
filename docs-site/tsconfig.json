@@ -6,7 +6,10 @@
   "compilerOptions": {
     "baseUrl": ".",
     "ignoreDeprecations": "6.0",
-    "strict": true
+    "strict": true,
+    // scripts/ are run directly by `node --test` via native type stripping, so
+    // their relative imports must carry the real .ts extension.
+    "allowImportingTsExtensions": true
   },
   "exclude": [".docusaurus", "build"]
 }

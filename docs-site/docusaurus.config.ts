@@ -25,7 +25,7 @@ const config: Config = {
   organizationName: 'lukasMega',
   projectName: 'DeckBridge',
 
-  onBrokenLinks: 'warn',
+  onBrokenLinks: 'throw',
 
   i18n: {
     defaultLocale: 'en',
@@ -37,7 +37,7 @@ const config: Config = {
     // on the existing docs. New .mdx files still get full MDX treatment.
     format: 'detect',
     hooks: {
-      onBrokenMarkdownLinks: 'warn',
+      onBrokenMarkdownLinks: 'throw',
     },
   },
 

@@ -7,6 +7,12 @@ on:
       - 'docs/**'
       - 'docs-site/**'
       - '.github/workflows/deploy-docs.yml'
+  # Build + test docs changes before merge. The deploy job is skipped on PRs.
+  pull_request:
+    paths:
+      - 'docs/**'
+      - 'docs-site/**'
+      - '.github/workflows/deploy-docs.yml'
   workflow_dispatch:
 
 permissions:
@@ -14,9 +20,10 @@ permissions:
   pages: write
   id-token: write
 
-# One deployment at a time; let an in-flight deploy finish.
+# One deployment at a time; let an in-flight deploy finish. Keyed by ref so PR
+# validation runs never queue behind (or block) a main deploy.
 concurrency:
-  group: pages
+  group: pages-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
@@ -30,7 +37,9 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          # 24 to match mise.toml; the test scripts are TypeScript run directly
+          # by `node --test` via native type stripping (needs 22.18+).
+          node-version: 24
           cache: npm
           cache-dependency-path: docs-site/package-lock.json
 
@@ -53,14 +62,22 @@ jobs:
           PUPPETEER_EXECUTABLE_PATH: ${{ steps.chrome.outputs.chrome-path }}
           MMDC_PUPPETEER_CONFIG: ${{ github.workspace }}/docs-site/puppeteer.json
 
+      # Build already ran above; test:build would rebuild, so run the three
+      # layers that read build/ instead. A failure here blocks the deploy.
+      - name: Test
+        run: npm run test:links && npm run test:content && npm run test:output
+
       - uses: actions/configure-pages@v5
+        if: github.event_name != 'pull_request'
 
       - uses: actions/upload-pages-artifact@v3
+        if: github.event_name != 'pull_request'
         with:
           path: docs-site/build
 
   deploy:
     needs: build
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     environment:
       name: github-pages
