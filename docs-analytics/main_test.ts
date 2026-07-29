@@ -2,7 +2,7 @@
 // does, feed it through createHandler over an in-memory KV, then assert /stats.
 // Run: deno task test
 import { assertEquals } from "jsr:@std/assert@1";
-import { createHandler, eq, parseUA } from "./main.ts";
+import { createHandler, eq, parseUA, refGroup } from "./main.ts";
 
 Deno.env.set("STATS_TOKEN", "testtoken");
 
@@ -40,6 +40,53 @@ Deno.test("pageview writes pv + derived dims", async () => {
   kv.close();
 });
 
+Deno.test("pageview writes a true day×hour joint counter", async () => {
+  const { kv, h } = await fixture();
+  await h(beacon(encode({ p: "/" })));
+  const stats = await (await h(statsReq(""))).json();
+
+  const now = new Date();
+  const key = `${now.getUTCDay()}-${String(now.getUTCHours()).padStart(2, "0")}`;
+  assertEquals(Object.keys(stats.dowhour), [key]);
+  assertEquals(stats.dowhour[key], 1);
+  // the joint key's hour half must agree with the standalone `hour` marginal
+  assertEquals(Object.keys(stats.hour)[0], key.split("-")[1]);
+  kv.close();
+});
+
+Deno.test("ref_group is classified at ingest; empty referrer counts as direct", async () => {
+  const { kv, h } = await fixture();
+  await h(beacon(encode({ p: "/", r: "www.google.co.uk" })));
+  await h(beacon(encode({ p: "/", r: "news.ycombinator.com" })));
+  await h(beacon(encode({ p: "/", r: "" }))); // client sends "" for direct
+  await h(beacon(encode({ p: "/", r: "someblog.dev" })));
+  await h(beacon(encode({ p: "/", r: "docs.x.dev", h: "https://docs.x.dev" })));
+
+  const stats = await (await h(statsReq(""))).json();
+  assertEquals(stats.ref_group, {
+    search: 1,
+    social: 1,
+    direct: 1,
+    referral: 1,
+    internal: 1,
+  });
+  assertEquals(stats.ref.direct, 1); // "" normalised, not stored as an empty key
+  kv.close();
+});
+
+Deno.test("refGroup buckets hosts", () => {
+  assertEquals(refGroup("", ""), "direct");
+  assertEquals(refGroup("direct", ""), "direct");
+  assertEquals(refGroup("news.google.com", ""), "search");
+  assertEquals(refGroup("duckduckgo.com", ""), "search");
+  assertEquals(refGroup("t.co", ""), "social");
+  assertEquals(refGroup("www.reddit.com", ""), "social");
+  assertEquals(refGroup("example.com", ""), "referral");
+  assertEquals(refGroup("docs.x.dev", "https://docs.x.dev"), "internal");
+  assertEquals(refGroup("docs.x.dev", "docs.x.dev"), "internal");
+  assertEquals(refGroup("googleblog.com", ""), "referral"); // not a search engine
+});
+
 Deno.test("event beacon does not increment pv", async () => {
   const { kv, h } = await fixture();
   await h(beacon(encode({ ev: "download", t: "deckbridge.zip" })));
@@ -50,10 +97,42 @@ Deno.test("event beacon does not increment pv", async () => {
   kv.close();
 });
 
-Deno.test("bots are skipped", async () => {
+Deno.test("bots are skipped, but counted (not silently dropped)", async () => {
   const { kv, h } = await fixture();
   await h(beacon(encode({ p: "/" }), "curl/8.0"));
   const stats = await (await h(statsReq(""))).json();
+  assertEquals(stats.pv, undefined);
+  assertEquals(stats.bot.ua, 1);
+  assertEquals(Object.keys(stats.bot_kind).length > 0, true);
+  kv.close();
+});
+
+Deno.test("isbot catches JS-capable bots the old hand-rolled regex missed", async () => {
+  const { kv, h } = await fixture();
+  // facebookexternalhit doesn't contain "bot"/"crawl"/"spider"/... — the old
+  // regex let it through as a real pageview. isbot knows it.
+  await h(beacon(encode({ p: "/" }), "facebookexternalhit/1.1"));
+  const stats = await (await h(statsReq(""))).json();
+  assertEquals(stats.pv, undefined);
+  assertEquals(stats.bot.ua, 1);
+  kv.close();
+});
+
+Deno.test("a normal browser UA is not counted as a bot", async () => {
+  const { kv, h } = await fixture();
+  await h(beacon(encode({ p: "/" }), "Mozilla/5.0 (Windows NT 10.0) Firefox/126.0"));
+  const stats = await (await h(statsReq(""))).json();
+  assertEquals(stats.pv._, 1);
+  assertEquals(stats.bot, undefined);
+  kv.close();
+});
+
+Deno.test("behavioral probe event does not inflate pageviews", async () => {
+  const { kv, h } = await fixture();
+  await h(beacon(encode({ ev: "hi", t: "150-2000" })));
+  const stats = await (await h(statsReq(""))).json();
+  assertEquals(stats.event.hi, 1);
+  assertEquals(stats.event_target["150-2000"], 1);
   assertEquals(stats.pv, undefined);
   kv.close();
 });

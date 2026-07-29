@@ -47,8 +47,15 @@ function computeFlags(): Record<string, string> {
   return flags;
 }
 
+// CDP/WebDriver-controlled browser (Playwright, Puppeteer, Selenium).
+// Spec-mandated true under automation; trivially spoofable, but automation
+// rarely bothers spoofing it on a docs site.
+const automated = (): boolean =>
+  typeof navigator !== 'undefined' && navigator.webdriver === true;
+
 function track(pathname: string): void {
   if (!navigator.onLine) return; // offline: skip → no failed request/row/log
+  if (automated()) return; // webdriver-controlled browser: skip
 
   const flags = computeFlags();
 
@@ -75,12 +82,60 @@ function track(pathname: string): void {
   if (uc) payload.uc = uc;
 
   send(payload);
+  installBehavioralProbe(performance.now());
 }
 
 // Custom event beacon (outbound link / download click, …). No pageview fields.
 export function trackEvent(ev: string, t: string): void {
   if (!navigator.onLine) return;
+  if (automated()) return;
   send({ ev, t });
+}
+
+// Timing + trust probe. One-shot per pageview: the first of these six event
+// types to fire tells us whether it was real input (event.isTrusted) and,
+// if so, how long after the beacon it arrived. That's it — no coordinates,
+// no movement deltas, no event trace, nothing written to localStorage. Only
+// the verdict (trusted bit + a coarse latency bucket) leaves the browser, on
+// the same `ev` channel as any other custom event, so it can't be joined
+// against `path`/`country`/anything else. See README.md's behavioral-probe
+// note for why this stays inside the no-consent-banner claim.
+const PROBE_EVENTS = ['pointerdown', 'keydown', 'touchstart', 'wheel', 'scroll', 'mousemove'] as const;
+
+// Detaches the previously-armed probe, if any — guards against a fast SPA
+// route change re-arming the probe before the prior pageview's listeners fired.
+let detachProbe: (() => void) | null = null;
+
+function installBehavioralProbe(sentAt: number): void {
+  detachProbe?.();
+
+  const onFirstInteraction = (e: Event): void => {
+    detachProbe?.();
+    detachProbe = null;
+
+    if (e.isTrusted === false) {
+      // Synthetic, JS-dispatched event. Real user input is always trusted;
+      // a script calling dispatchEvent() to fake interaction is not.
+      trackEvent('bot', 'synthetic');
+      return;
+    }
+    // Bucketed, not reported raw: this is an observation to weigh against
+    // volume, not a per-hit verdict. `mousemove` is in the trigger set purely
+    // for its isTrusted bit — no coordinate sampling, no delta/teleport
+    // heuristics, which would need retained per-visitor traces.
+    const ms = performance.now() - sentAt;
+    const bucket = ms < 150 ? '<150' : ms <= 2000 ? '150-2000' : '>2000';
+    trackEvent('hi', bucket);
+  };
+
+  for (const type of PROBE_EVENTS) {
+    document.addEventListener(type, onFirstInteraction, { passive: true, once: true });
+  }
+  // `once: true` self-removes only the listener that actually fired; explicitly
+  // detach the other five so a stray real interaction later on doesn't fire again.
+  detachProbe = () => {
+    for (const type of PROBE_EVENTS) document.removeEventListener(type, onFirstInteraction);
+  };
 }
 
 const DOWNLOAD_EXT = /\.(pdf|zip|dmg|exe|pkg|tar|gz|7z|mp4|csv)$/i;

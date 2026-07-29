@@ -6,9 +6,13 @@
 // is the entrypoint (import.meta.main) — which it is on Deploy, so the cron
 // still registers at module top level there.
 
+// Deno resolves npm: specifiers straight off npm's ESM build — verified against
+// isbot 5.2.1 (`index.mjs` via its `exports` map), so no build step is needed
+// on Deno Deploy. If a future Deploy runtime ever fails to resolve this at
+// deploy time, fall back to vendoring isbot's exported `list` + `createIsbotFromList`.
+import { isbot, isbotMatch } from "npm:isbot@5";
+
 const today = () => new Date().toISOString().slice(0, 10);
-const BOT =
-  /bot|crawl|spider|preview|monitor|headless|python|curl|wget|axios|okhttp|java\/|go-http|libwww|slurp|fetch|scrap/i;
 
 // 1×1 transparent gif (43 bytes)
 const GIF = Uint8Array.from(
@@ -67,6 +71,32 @@ export function eq(a: string, b: string): boolean {
   let r = 0;
   for (let i = 0; i < a.length; i++) r |= a.charCodeAt(i) ^ b.charCodeAt(i);
   return r === 0;
+}
+
+// Referrer hosts we can classify. Matched against the registrable-ish tail of the
+// host (leading `www.` stripped), so `www.google.co.uk` and `news.google.com` both
+// land in `search`. Anything unmatched is a plain `referral`.
+const SEARCH =
+  /(^|\.)(google\.[a-z.]+|bing\.com|duckduckgo\.com|search\.brave\.com|yahoo\.[a-z.]+|yandex\.[a-z.]+|baidu\.com|ecosia\.org|startpage\.com|qwant\.com|searx\.[a-z.]+|kagi\.com|naver\.com|seznam\.cz|ask\.com|perplexity\.ai)$/i;
+const SOCIAL =
+  /(^|\.)(twitter\.com|x\.com|t\.co|facebook\.com|fb\.com|instagram\.com|linkedin\.com|lnkd\.in|reddit\.com|out\.reddit\.com|youtube\.com|youtu\.be|news\.ycombinator\.com|lobste\.rs|bsky\.app|threads\.net|mastodon\.[a-z.]+|discord\.com|t\.me|tiktok\.com|pinterest\.[a-z.]+|vk\.com)$/i;
+
+// Bucket a referrer host into search / social / internal / direct / referral.
+// Classified at ingest (server-side) so the grouping is consistent and survives
+// CSV export, instead of being re-derived per dashboard render.
+export function refGroup(ref: string, self: string): string {
+  const host = ref.replace(/^www\./i, "").toLowerCase();
+  if (!host || host === "direct") return "direct";
+  if (SEARCH.test(host)) return "search";
+  if (SOCIAL.test(host)) return "social";
+  // `self` is the beacon's own origin (`location.origin`) or a bare host — compare
+  // hosts so a full-page reload inside the docs site isn't counted as acquisition.
+  let selfHost = self.replace(/^www\./i, "").toLowerCase();
+  try {
+    selfHost = new URL(self).host.replace(/^www\./i, "").toLowerCase();
+  } catch { /* already a bare host */ }
+  if (selfHost && host === selfHost) return "internal";
+  return "referral";
 }
 
 // Best-effort visitor country: only present if a fronting CDN/proxy sets a
@@ -130,7 +160,20 @@ export function createHandler(kv: Deno.Kv) {
     // --- beacon ingest ---
     if (req.method === "GET" && url.pathname === "/e") {
       const ua = req.headers.get("user-agent") ?? "";
-      if (BOT.test(ua)) return gif();
+      // Count instead of silently dropping: `bot` is the total, `bot_kind` is which
+      // isbot pattern fired, so the filter is tunable against real traffic instead
+      // of guesswork. Still a 200 gif, still no `pv` — visitor-visible behavior is
+      // unchanged. Bots reaching `/e` at all are rare (the beacon needs JS + DOM,
+      // so curl/wget/classic crawlers never get here), so 2 extra write units per
+      // hit is noise against the pageview budget.
+      if (isbot(ua)) {
+        const match = isbotMatch(ua) ?? "unknown";
+        await kv.atomic()
+          .sum(["c", today(), "bot", "ua"], 1n)
+          .sum(["c", today(), "bot_kind", clamp(match)], 1n)
+          .commit();
+        return gif();
+      }
 
       let host = "unknown";
       try {
@@ -144,7 +187,10 @@ export function createHandler(kv: Deno.Kv) {
       } catch { /* ignore malformed */ }
 
       const { browser, os, device } = parseUA(ua);
-      const day = today();
+      // one clock read for day/hour/dow — otherwise a hit landing on the midnight
+      // boundary could be filed under one day but carry the next day's hour.
+      const now = new Date();
+      const day = now.toISOString().slice(0, 10);
 
       const isEvent = !!d.ev;
       let dims: [string, string][];
@@ -153,18 +199,27 @@ export function createHandler(kv: Deno.Kv) {
         if (d.t) dims.push(["event_target", clamp(d.t)]);
       } else {
         const lang = (d.l ?? "").split("-")[0] || "unknown";
-        const hour = String(new Date().getUTCHours()).padStart(2, "0");
+        const hour = String(now.getUTCHours()).padStart(2, "0");
+        const dow = String(now.getUTCDay()); // 0=Sun … 6=Sat, UTC
+        // `||` not `??`: the client sends r:"" (empty string) for direct traffic.
+        const ref = clamp(d.r || "direct");
         dims = [
           ["pv", "_"],
           ["path", clamp(d.p ?? "/")],
           ["host", clamp(d.h ?? host)],
-          ["ref", clamp(d.r ?? "direct")],
+          ["ref", ref],
+          ["ref_group", refGroup(ref, d.h ?? host)],
           ["lang", clamp(lang)],
           ["tz", clamp(d.tz ?? "unknown")],
           ["browser", browser],
           ["os", os],
           ["device", device],
           ["hour", hour],
+          // The ONE pairwise key in the schema: a true day×hour joint counter.
+          // `dow` and `hour` alone are independent marginals — combining them
+          // client-side would fabricate an outer product, not real co-occurrence.
+          // Per-day `dow` bars are recoverable by summing this dim over hours.
+          ["dowhour", `${dow}-${hour}`],
         ];
         const cc = country(req);
         if (cc) dims.push(["country", cc]);

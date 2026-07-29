@@ -50,6 +50,20 @@
   .rangeLabel { color: #6b7684; font-size: 12px; margin-left: auto; }
   #chartWrap { background: #10151c; border: 1px solid #20262f; border-radius: 6px; padding: 8px; margin-bottom: 16px; }
   #chart { width: 100%; height: 180px; }
+  /* day×hour heatmap — sequential single-hue ramp (frost), light→dark = low→high
+     against the dark surface. Empty cells stay at surface so "no data" reads as
+     absence, not as a low value. */
+  #heatmapWrap { background: #10151c; border: 1px solid #20262f; border-radius: 6px; padding: 12px; margin-bottom: 16px; }
+  .hmGrid { display: grid; grid-template-columns: 34px repeat(24, 1fr); gap: 2px; }
+  .hmHead, .hmRowLabel { color: #6b7684; font-size: 10px; line-height: 14px; }
+  .hmHead { text-align: center; }
+  .hmRowLabel { align-self: center; }
+  /* an empty cell must read as a hole, not as "a little traffic" — hence the
+     inset ring and a lowest ramp step that is clearly lighter than it */
+  .hmCell { aspect-ratio: 1; min-height: 12px; border-radius: 2px; background: #0e1116; box-shadow: inset 0 0 0 1px #1a212b; }
+  .hmCell:hover { outline: 1px solid #d8dee9; outline-offset: -1px; }
+  .hmLegend { display: flex; align-items: center; gap: 6px; margin-top: 10px; color: #6b7684; font-size: 11px; }
+  .hmSwatch { width: 14px; height: 14px; border-radius: 2px; }
   .search { margin: 4px 0 14px; }
   .bdGroup { margin-bottom: 18px; }
   .barRow { position: relative; display: flex; justify-content: space-between; padding: 5px 8px; margin-bottom: 2px; border-radius: 4px; overflow: hidden; font-size: 12.5px; }
@@ -110,9 +124,15 @@
           <div class="kpiLabel">bounce rate</div>
           <div class="kpiDelta" id="kpiBounceDelta"></div>
         </div>
+        <div class="kpiTile">
+          <div class="kpiVal" id="kpiEngagement">0%</div>
+          <div class="kpiLabel">engagement rate</div>
+          <div class="kpiDelta" id="kpiEngagementDelta"></div>
+        </div>
         <div class="rangeLabel" id="rangeLabel"></div>
       </div>
       <div id="chartWrap"><div id="chart"></div></div>
+      <div id="heatmapWrap"></div>
       <input id="search" class="search" placeholder="Filter breakdowns…">
       <button id="exportCsv" class="alt" style="margin-top:2px">Export CSV</button>
       <div id="breakdowns"></div>
@@ -198,7 +218,8 @@ $("fire").onclick = async () => {
 };
 
 const PATHS = ["/", "/docs/intro", "/docs/setup", "/docs/protocol", "/faq"];
-const REFS  = ["google.com", "github.com", "direct", "duckduckgo.com"];
+// spread across all ref_group buckets so the grouping breakdown has something to show
+const REFS  = ["google.com", "github.com", "direct", "duckduckgo.com", "twitter.com", "news.ycombinator.com"];
 const LANGS = ["en-US", "de-DE", "fr-FR", "es-ES", "en-GB"];
 const TZS   = ["Europe/Berlin", "America/New_York", "Asia/Tokyo", "UTC"];
 const HOSTS = ["docs.deckbridge.app", "localhost:3000", "deckbridge.app"];
@@ -337,11 +358,62 @@ window.addEventListener("resize", () => {
   chart.setSize({ width: $("chart").parentElement.clientWidth, height: 180 });
 });
 
+// --- day×hour heatmap (from the pairwise `dowhour` dim: real co-occurrence) ---
+// Rows are Mon→Sun; the stored dow index is 0=Sun, hence the reordering.
+const DOW_ROWS = [[1, "Mon"], [2, "Tue"], [3, "Wed"], [4, "Thu"], [5, "Fri"], [6, "Sat"], [0, "Sun"]];
+// sequential frost ramp, low→high; index 0 is used only for counts > 0
+const HM_STEPS = ["#1f4854", "#2b6b7c", "#3a92a6", "#5db2c4", "#88c0d0"];
+const HM_EMPTY = "#0e1116";
+
+// sqrt (not linear) so the long tail of quiet hours stays distinguishable —
+// traffic-by-hour is heavily skewed and a linear ramp collapses it to one color.
+function hmStep(v, max) {
+  if (!v) return HM_EMPTY;
+  const t = Math.sqrt(v / max);
+  return HM_STEPS[Math.min(HM_STEPS.length - 1, Math.floor(t * HM_STEPS.length))];
+}
+
+function renderHeatmap(dowhour) {
+  const wrap = $("heatmapWrap");
+  if (!dowhour || !Object.keys(dowhour).length) {
+    wrap.innerHTML = '<div class="dim">day × hour (UTC)</div>' +
+      '<p class="hint">no day×hour data for this range yet</p>';
+    return;
+  }
+  const max = Math.max(...Object.values(dowhour));
+
+  let h = '<div class="dim">day × hour (UTC)</div><div class="hmGrid">';
+  h += '<div class="hmHead"></div>';
+  for (let hr = 0; hr < 24; hr++) {
+    h += '<div class="hmHead">' + (hr % 3 === 0 ? String(hr).padStart(2, "0") : "") + "</div>";
+  }
+  for (const [dow, label] of DOW_ROWS) {
+    h += '<div class="hmRowLabel">' + label + "</div>";
+    for (let hr = 0; hr < 24; hr++) {
+      const hh = String(hr).padStart(2, "0");
+      const v = dowhour[dow + "-" + hh] ?? 0;
+      h += '<div class="hmCell" style="background:' + hmStep(v, max) + '" title="' +
+        label + " " + hh + ":00 UTC · " + v + ' views"></div>';
+    }
+  }
+  h += "</div>";
+
+  // legend: identity is never color-alone — the swatch scale is labelled at both ends
+  h += '<div class="hmLegend"><span>none</span>' +
+    '<span class="hmSwatch hmCell" style="background:' + HM_EMPTY + '"></span><span>1</span>';
+  for (const c of HM_STEPS) h += '<span class="hmSwatch" style="background:' + c + '"></span>';
+  h += "<span>" + max + " views / hour (UTC)</span></div>";
+
+  wrap.innerHTML = h;
+}
+
 const DIM_ORDER = [
-  "path", "host", "ref", "browser", "os", "device", "country", "lang", "tz",
+  "path", "host", "ref_group", "ref", "browser", "os", "device", "country", "lang", "tz",
   "hour", "viewport", "utm_source", "utm_medium", "utm_campaign",
   "event", "event_target",
 ];
+// `dowhour` renders as the heatmap, not a bar list, but still belongs in an export
+const CSV_DIMS = [...DIM_ORDER, "dowhour"];
 
 function renderBreakdowns(data) {
   const wrap = $("breakdowns");
@@ -400,7 +472,10 @@ function setDelta(id, cur, prev) {
   el.textContent = text;
 }
 
-const DELTA_IDS = ["kpiPvDelta", "kpiUvDelta", "kpiSessionsDelta", "kpiViewsPerVisitDelta", "kpiBounceDelta"];
+const DELTA_IDS = [
+  "kpiPvDelta", "kpiUvDelta", "kpiSessionsDelta", "kpiViewsPerVisitDelta",
+  "kpiBounceDelta", "kpiEngagementDelta",
+];
 
 function renderKpis(data, prior) {
   const pv = data.pv?._ ?? 0;
@@ -409,12 +484,19 @@ function renderKpis(data, prior) {
   const bounce = data.bounce?._ ?? 0;
   const viewsPerVisit = uv ? pv / uv : 0;
   const bouncePct = sessions ? (bounce / sessions) * 100 : 0;
+  // engagement = share of sessions that were NOT a bounce (complement of bounce
+  // rate, from the same two counters — no extra dim)
+  const engagementPct = sessions ? 100 - bouncePct : 0;
 
   $("kpiPv").textContent = pv;
   $("kpiUv").textContent = uv;
   $("kpiSessions").textContent = sessions;
   $("kpiViewsPerVisit").textContent = viewsPerVisit.toFixed(1);
-  $("kpiBounce").textContent = bouncePct.toFixed(0) + "%";
+  // derive the displayed engagement % from the *rounded* bounce % so the two
+  // tiles always read as complements (63% / 37%, never 63% / 38%)
+  const bounceShown = Number(bouncePct.toFixed(0));
+  $("kpiBounce").textContent = bounceShown + "%";
+  $("kpiEngagement").textContent = (sessions ? 100 - bounceShown : 0) + "%";
 
   if (!prior) {
     for (const id of DELTA_IDS) { $(id).className = "kpiDelta flat"; $(id).textContent = "—"; }
@@ -426,11 +508,13 @@ function renderKpis(data, prior) {
   const pbounce = prior.bounce?._ ?? 0;
   const pViewsPerVisit = puv ? ppv / puv : 0;
   const pBouncePct = psessions ? (pbounce / psessions) * 100 : 0;
+  const pEngagementPct = psessions ? 100 - pBouncePct : 0;
   setDelta("kpiPvDelta", pv, ppv);
   setDelta("kpiUvDelta", uv, puv);
   setDelta("kpiSessionsDelta", sessions, psessions);
   setDelta("kpiViewsPerVisitDelta", viewsPerVisit, pViewsPerVisit);
   setDelta("kpiBounceDelta", bouncePct, pBouncePct);
+  setDelta("kpiEngagementDelta", engagementPct, pEngagementPct);
 }
 
 async function renderAnalytics(data, prior, from, to) {
@@ -438,6 +522,7 @@ async function renderAnalytics(data, prior, from, to) {
   $("rangeLabel").textContent = fmtRange(from, to);
   renderKpis(data, prior);
   await renderChart(data.series || []);
+  renderHeatmap(data.dowhour);
   renderBreakdowns(data);
 }
 
@@ -506,7 +591,7 @@ function csvCell(v) {
 $("exportCsv").onclick = () => {
   if (!lastData) return;
   const rows = [["dim", "value", "count"]];
-  for (const dim of DIM_ORDER) {
+  for (const dim of CSV_DIMS) {
     const obj = lastData[dim];
     if (!obj) continue;
     for (const [v, c] of Object.entries(obj)) rows.push([dim, v, c]);
