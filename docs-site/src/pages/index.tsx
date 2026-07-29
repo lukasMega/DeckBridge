@@ -64,15 +64,15 @@ export default function Home(): ReactNode {
           {/* ---- hero ---- */}
           <section className={styles.hero}>
             <div className={styles.mark}>
-              <BridgeMark/>
+              <BridgeMark />
             </div>
             <h1 className={styles.title}>
               Your{' '}
               <span className={styles.accent}>
-                <RotatingWord words={BRANDS}/>
+                <RotatingWord words={BRANDS} />
               </span>{' '}
               stream deck,
-              <br/> <span className={styles.accent}>over WiFi.</span>
+              <br /> <span className={styles.accent}>over WiFi.</span>
             </h1>
             <p className={styles.subtitle}>
               <strong>DeckBridge</strong> runs on your computer and appears to the Elgato app as a
@@ -100,7 +100,7 @@ export default function Home(): ReactNode {
           <section className={`${styles.section} ${styles.reveal}`}>
             <p className={styles.sectionLabel}>Quick start</p>
             <h2 className={styles.sectionTitle}>Running in two minutes</h2>
-            <Quickstart/>
+            <Quickstart />
             <p className={styles.stepsMore}>
               <Link to="/getting-started">Full guide →</Link>
             </p>
@@ -115,7 +115,7 @@ export default function Home(): ReactNode {
               The app discovers it like real hardware.
             </p>
             <div className={styles.panel}>
-              <Flow/>
+              <Flow />
             </div>
             <p className={styles.flowCaption}>
               Key presses travel deck → DeckBridge → app. Button images travel back, resized and
@@ -226,7 +226,7 @@ export default function Home(): ReactNode {
               Against the official Network Dock and the closed app that ships with many non-Elgato
               decks.
             </p>
-            <Comparison/>
+            <Comparison />
           </section>
 
           {/* ---- supported devices ---- */}
