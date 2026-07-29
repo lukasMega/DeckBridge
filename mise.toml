@@ -248,6 +248,16 @@ dir = "ts"
 depends = ["ts-install"]
 run = "npx knip"
 
+[tasks.loc]
+description = "Top 10 largest .ts/.tsx files under ts/src by line count (excl. node_modules/dist/test, .d.ts)"
+dir = "ts"
+run = "node scripts/loc.mjs"
+
+[tasks.check-loc]
+description = "Fail (exit 1) if any .ts/.tsx file under ts/src exceeds 500 lines (test/ excluded)"
+dir = "ts"
+run = "node scripts/check-loc.mjs"
+
 [tasks.analytics-check]
 description = "docs-analytics (Deno collector): lint, typecheck, tests"
 dir = "docs-analytics"
@@ -262,8 +272,8 @@ deno task test
 """
 
 [tasks.ci-checks]
-description = "Lint, typecheck, test, and knip (unused files/exports/deps) in parallel (after format)"
-depends = ["lint", "types", "test", "knip"]
+description = "Lint, typecheck, test, knip (unused files/exports/deps), and check-loc in parallel (after format)"
+depends = ["lint", "types", "test", "knip", "check-loc"]
 timeout = "120s"
 
 [tasks.beforeCommit]
