@@ -1,8 +1,8 @@
 // Round-trip tests for the collector: encode a beacon exactly as the client
 // does, feed it through createHandler over an in-memory KV, then assert /stats.
 // Run: deno task test
-import { assertEquals } from "jsr:@std/assert@1";
-import { createHandler, eq, parseUA, refGroup } from "./main.ts";
+import { assertEquals } from "@std/assert";
+import { botKind, createHandler, eq, parseUA, refGroup } from "./main.ts";
 
 Deno.env.set("STATS_TOKEN", "testtoken");
 
@@ -137,6 +137,19 @@ Deno.test("behavioral probe lands in its own dim, not `event`", async () => {
   assertEquals(stats.event, undefined);
   assertEquals(stats.event_target, undefined);
   kv.close();
+});
+
+Deno.test("botKind names the crawler, version-free", () => {
+  // isbotMatch alone would return "Google" / "Bot" / "facebookexternalhit/1.1"
+  const k = (ua: string) => botKind(`Mozilla/5.0 (compatible; ${ua}; +http://x)`);
+  assertEquals(k("Googlebot/2.1"), "googlebot");
+  assertEquals(k("ClaudeBot/1.0"), "claudebot"); // isbotMatch alone: "Bot"
+  assertEquals(k("GPTBot/1.2"), "gptbot"); // isbotMatch alone: "Bot"
+  assertEquals(botKind("Mozilla/5.0 (Macintosh) Chrome-Lighthouse"), "chrome-lighthouse");
+  // same crawler, two versions → one row, not two
+  assertEquals(botKind("facebookexternalhit/1.1"), botKind("facebookexternalhit/2.0"));
+  assertEquals(botKind("facebookexternalhit/1.1"), "facebookexternalhit");
+  assertEquals(botKind("Mozilla/5.0 Firefox/126.0"), "unknown"); // not a bot
 });
 
 Deno.test("untrusted-event verdict counts as bot=synthetic", async () => {

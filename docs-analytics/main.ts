@@ -6,11 +6,12 @@
 // is the entrypoint (import.meta.main) — which it is on Deploy, so the cron
 // still registers at module top level there.
 
-// Deno resolves npm: specifiers straight off npm's ESM build — verified against
-// isbot 5.2.1 (`index.mjs` via its `exports` map), so no build step is needed
-// on Deno Deploy. If a future Deploy runtime ever fails to resolve this at
-// deploy time, fall back to vendoring isbot's exported `list` + `createIsbotFromList`.
-import { isbot, isbotMatch } from "npm:isbot@5";
+// Mapped to `npm:isbot@5` in deno.json (bare specifier, not inline — `deno lint`
+// rejects inline npm:/jsr: imports). Deno resolves it off npm's ESM build,
+// verified against isbot 5.2.1 (`index.mjs` via its `exports` map), so no build
+// step is needed on Deno Deploy. If a future Deploy runtime ever fails to resolve
+// it, fall back to vendoring isbot's exported `list` + `createIsbotFromList`.
+import { isbot, isbotMatch } from "isbot";
 
 const today = () => new Date().toISOString().slice(0, 10);
 
@@ -63,6 +64,30 @@ export function parseUA(
     : /Mobi|Android|iPhone|iPod/i.test(ua)   ? "mobile"
     : "desktop";
   return { browser, os, device };
+}
+
+// Name the crawler for the `bot_kind` dim.
+//
+// `isbotMatch` returns the matched *substring of the UA*, which is wrong at both
+// ends: too coarse for the generic `bots?` pattern (ClaudeBot, GPTBot, PetalBot
+// and Amazonbot all reduce to "Bot", merging every AI crawler into one row), and
+// too fine where the pattern spans a version ("facebookexternalhit/1.1" — a new
+// row per release). `isbotPattern` isn't usable either: it returns raw regex
+// source. So widen the match to the surrounding product token and drop the
+// version → ClaudeBot/1.0 and ClaudeBot/1.2 both land on "claudebot".
+const TOKEN_CHARS = /[\w.@-]/;
+export function botKind(ua: string): string {
+  const match = isbotMatch(ua);
+  if (!match) return "unknown";
+  const at = ua.toLowerCase().indexOf(match.toLowerCase());
+  if (at < 0) return clamp(match.toLowerCase());
+  let start = at;
+  while (start > 0 && TOKEN_CHARS.test(ua[start - 1])) start--;
+  let end = at + match.length;
+  while (end < ua.length && TOKEN_CHARS.test(ua[end])) end++;
+  // split on "/" so the version suffix never reaches the key
+  const token = ua.slice(start, end).split("/")[0].toLowerCase();
+  return clamp(token || match.toLowerCase());
 }
 
 // constant-time-ish string compare for the stats token
@@ -160,17 +185,16 @@ export function createHandler(kv: Deno.Kv) {
     // --- beacon ingest ---
     if (req.method === "GET" && url.pathname === "/e") {
       const ua = req.headers.get("user-agent") ?? "";
-      // Count instead of silently dropping: `bot` is the total, `bot_kind` is which
-      // isbot pattern fired, so the filter is tunable against real traffic instead
-      // of guesswork. Still a 200 gif, still no `pv` — visitor-visible behavior is
+      // Count instead of silently dropping: `bot` is the total, `bot_kind` names
+      // the crawler, so the filter is tunable against real traffic instead of
+      // guesswork. Still a 200 gif, still no `pv` — visitor-visible behavior is
       // unchanged. Bots reaching `/e` at all are rare (the beacon needs JS + DOM,
       // so curl/wget/classic crawlers never get here), so 2 extra write units per
       // hit is noise against the pageview budget.
       if (isbot(ua)) {
-        const match = isbotMatch(ua) ?? "unknown";
         await kv.atomic()
           .sum(["c", today(), "bot", "ua"], 1n)
-          .sum(["c", today(), "bot_kind", clamp(match)], 1n)
+          .sum(["c", today(), "bot_kind", botKind(ua)], 1n)
           .commit();
         return gif();
       }

@@ -2,11 +2,26 @@
   "tasks": {
     "dev": "STATS_TOKEN=${STATS_TOKEN:-devtoken} deno run -A --watch main.ts",
     "start": "deno run -A main.ts",
-    "test": "deno test -A --unstable-kv main_test.ts"
+    // --allow-env is the only permission the suite needs (main_test.ts sets
+    // STATS_TOKEN; the handler reads it). KV/cron come from `unstable` below, so
+    // no --unstable-kv flag. Running bare `deno test` fails without this task.
+    "test": "deno test --allow-env main_test.ts"
+  },
+  "imports": {
+    "isbot": "npm:isbot@5",
+    "@std/assert": "jsr:@std/assert@1"
   },
   "unstable": ["kv", "cron"],
+  // vendored uPlot: not ours to format or lint (572 lint hits, and formatting a
+  // minified bundle would defeat the point of shipping it minified). Scoped to
+  // fmt/lint only — a top-level "exclude" is also honored by deployctl and
+  // silently drops these files from the Deploy upload (they 404 at /vendor/).
+  "fmt": { "exclude": ["uPlot.iife.min.js", "uPlot.min.css"] },
+  "lint": { "exclude": ["uPlot.iife.min.js", "uPlot.min.css"] },
   "deploy": {
     "org": "lukasmega",
     "app": "tst"
   }
 }
+
+

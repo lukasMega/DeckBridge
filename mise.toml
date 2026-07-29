@@ -1,5 +1,9 @@
 [tools]
 node = "24"
+# docs-analytics/ is a Deno project (the collector deploys to Deno Deploy).
+# Declared here so `mise run analytics-check` is reproducible instead of relying
+# on whatever `deno` happens to be on PATH.
+deno = "2"
 
 [tools."github:lukasMega/txiki.js"]
 version = "{{ env._TXIKI_MISE_V }}"
@@ -244,14 +248,37 @@ dir = "ts"
 depends = ["ts-install"]
 run = "npx knip"
 
+[tasks.loc]
+description = "Top 10 largest .ts/.tsx files under ts/src by line count (excl. node_modules/dist/test, .d.ts)"
+dir = "ts"
+run = "node scripts/loc.mjs"
+
+[tasks.check-loc]
+description = "Fail (exit 1) if any .ts/.tsx file under ts/src exceeds 500 lines (test/ excluded)"
+dir = "ts"
+run = "node scripts/check-loc.mjs"
+
+[tasks.analytics-check]
+description = "docs-analytics (Deno collector): lint, typecheck, tests"
+dir = "docs-analytics"
+# `deno fmt` is deliberately NOT run: it disagrees with the repo's oxfmt style
+# (it unwraps the aligned ternary chains in main.ts's parseUA) and the vendored
+# uPlot assets are excluded in deno.json. Formatting for this dir stays manual.
+# `deno task test` (not a raw `deno test`) so the permission flags have one home.
+run = """
+deno lint
+deno check main.ts main_test.ts
+deno task test
+"""
+
 [tasks.ci-checks]
-description = "Lint, typecheck, test, and knip (unused files/exports/deps) in parallel (after format)"
-depends = ["lint", "types", "test", "knip"]
+description = "Lint, typecheck, test, knip (unused files/exports/deps), and check-loc in parallel (after format)"
+depends = ["lint", "types", "test", "knip", "check-loc"]
 timeout = "120s"
 
 [tasks.beforeCommit]
 description = "Format, lint, types, test, and compile — run before committing"
-depends = ["format", "ci-checks", "rust-lint", "compile"]
+depends = ["format", "ci-checks", "rust-lint", "analytics-check", "compile"]
 dir = "ts"
 # run = "npm run beforeCommit"
 timeout = "150s"
