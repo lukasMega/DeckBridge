@@ -9,7 +9,7 @@ name = "deckbridge-tray"
 path = "src/main.rs"
 
 [dependencies]
-tray-icon = "0.22"
+tray-icon = "0.24"
 tao        = "0.36"
 png        = "0.17"
 serde      = { version = "1", features = ["derive"] }
