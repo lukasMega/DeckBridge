@@ -127,13 +127,35 @@ Deno.test("a normal browser UA is not counted as a bot", async () => {
   kv.close();
 });
 
-Deno.test("behavioral probe event does not inflate pageviews", async () => {
+Deno.test("behavioral probe lands in its own dim, not `event`", async () => {
   const { kv, h } = await fixture();
   await h(beacon(encode({ ev: "hi", t: "150-2000" })));
   const stats = await (await h(statsReq(""))).json();
-  assertEquals(stats.event.hi, 1);
-  assertEquals(stats.event_target["150-2000"], 1);
+  assertEquals(stats.hi["150-2000"], 1);
   assertEquals(stats.pv, undefined);
+  // must NOT pollute the real-interaction dims (download/outbound live there)
+  assertEquals(stats.event, undefined);
+  assertEquals(stats.event_target, undefined);
+  kv.close();
+});
+
+Deno.test("untrusted-event verdict counts as bot=synthetic", async () => {
+  const { kv, h } = await fixture();
+  await h(beacon(encode({ ev: "bot", t: "synthetic" })));
+  const stats = await (await h(statsReq(""))).json();
+  assertEquals(stats.bot.synthetic, 1);
+  assertEquals(stats.pv, undefined);
+  assertEquals(stats.event, undefined);
+  kv.close();
+});
+
+Deno.test("real interaction events still use event/event_target", async () => {
+  const { kv, h } = await fixture();
+  await h(beacon(encode({ ev: "outbound", t: "github.com" })));
+  const stats = await (await h(statsReq(""))).json();
+  assertEquals(stats.event.outbound, 1);
+  assertEquals(stats.event_target["github.com"], 1);
+  assertEquals(stats.hi, undefined);
   kv.close();
 });
 

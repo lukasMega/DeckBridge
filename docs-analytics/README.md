@@ -68,7 +68,8 @@ just never fires; no IP is ever read or stored), and from the beacon `viewport`,
 `uv` (first hit of day), `sessions` (new session), `bounce` (prior session had 1
 pageview). Every stored value is clamped to 128 chars so a hostile/buggy client
 can't inflate KV cost. **Event** (`d.ev` set) writes only `event` + `event_target`
-and does **not** increment `pv`.
+and does **not** increment `pv` — except for the two behavioral-probe verdicts
+(`ev=hi`, `ev=bot`), which the server routes to their own dims (below).
 
 **Bot traffic** never reaches the pageview path: a hit whose UA matches `isbot`
 writes `bot["ua"]` (a running total) and `bot_kind[<match>]` (which isbot
@@ -80,24 +81,38 @@ guesswork, and replaces the old approach of dropping bot hits with no signal
 at all.
 
 **Behavioral probe**: the client arms a one-shot listener set
-(`pointerdown`/`keydown`/`touchstart`/`wheel`/`scroll`/`mousemove`, all
+(`pointerdown`/`keydown`/`touchstart`/`wheel`/`mousemove`, all
 `{ passive: true, once: true }`) right after the pageview beacon fires. The
-first of those to land reports a verdict as a normal event beacon: `event=hi`
-with `event_target` bucketed from beacon-to-interaction latency (`<150`,
-`150-2000`, `>2000`), or — if `event.isTrusted === false`, i.e. a script called
-`dispatchEvent` rather than a real user acting — `event=bot`,
-`event_target=synthetic`. **Nothing beyond that verdict leaves the browser**:
-no coordinates, no movement deltas, no event trace, and nothing is written to
-`localStorage`. `mousemove` is in the trigger set purely for its `isTrusted`
-bit, not for tracking motion. The pageview beacon itself is never delayed or
-gated on this — it still fires immediately for every visitor, mouse or no
-mouse. Because the verdict lands on the existing `event`/`event_target` dims,
-it can't be joined against `path`, `country`, or anything else, which is what
-keeps this inside the no-consent-banner claim (see the privacy note in the
-implementation plan for the full reasoning). Read it as a daily trend
-(`1 − event.hi / pv` = share of pageviews with no observed human interaction),
-not a per-hit verdict — a real visitor can legitimately bounce before touching
-anything.
+first of those to land reports a verdict, which the server files under a
+dedicated dim: `hi[<bucket>]` where the bucket is beacon-to-interaction latency
+(`<150`, `150-2000`, `>2000`), or — if `event.isTrusted === false`, i.e. a
+script called `dispatchEvent` rather than a real user acting — `bot[synthetic]`,
+sharing the `bot` dim with UA-detected crawlers (`bot[ua]`) so both detection
+methods total in one place. Keeping these off `event`/`event_target` matters:
+`hi` fires on roughly every pageview, so folding it in would bury the
+download/outbound bars and interleave latency buckets with filenames.
+
+`scroll` is deliberately **not** in the trigger set — Docusaurus scroll-restores
+on every route change and a browser-generated scroll event is `isTrusted`, which
+would report a human on nearly every SPA navigation. `wheel` + `touchstart`
+cover real scroll intent without the false positive.
+
+**Nothing beyond that verdict leaves the browser**: no coordinates, no movement
+deltas, no event trace, and nothing is written to `localStorage`. `mousemove` is
+in the trigger set purely for its `isTrusted` bit, not for tracking motion. The
+pageview beacon itself is never delayed or gated on this — it still fires
+immediately for every visitor, mouse or no mouse. The verdict is a plain
+independent counter like every other dim, so it can't be joined against `path`,
+`country`, or anything else, which is what keeps this inside the
+no-consent-banner claim (see the privacy note in the implementation plan for the
+full reasoning). The dashboard shows it as the **human interaction** KPI
+(`hi total / pv`); read it as a daily trend, not a per-hit verdict — a real
+visitor can legitimately bounce before touching anything.
+
+Known ceiling: a CDP-driven browser using real `Input.dispatchMouseEvent`
+produces **trusted** events, so genuinely stealthy headless automation passes
+this probe. Catching that would need fingerprinting, which is out of scope by
+design.
 
 `day`, `hour` and `dowhour` all come from **one** clock read per hit, so a request
 landing on the midnight boundary can't be filed under one day carrying the next
@@ -133,10 +148,11 @@ ribbons and isn't worth its write cost either.
 Write-budget: free tier ≈ 300K write units/mo ÷ 12 base pageview dims ≈
 **~25K pageviews/mo** for a pageview that sees no interaction. Most pageviews
 also arm the behavioral probe (above), which — if it fires — is a *second*
-beacon costing 2 more write units (`event` + `event_target`), so budget for
-engaged traffic is closer to 300K ÷ 14 ≈ **~21K pv/mo**; bounces that never
-trigger the probe stay at the ~25K figure. (Bot hits cost 2 write units each
-but don't compete with the pv budget — they never write `pv`.) A top-level
+beacon costing **1** more write unit (the single `hi` dim; the bucket is the
+value, not a second key), so budget for engaged traffic is 300K ÷ 13 ≈
+**~23K pv/mo**; bounces that never trigger the probe stay at the ~25K figure.
+(Bot hits cost 2 write units each but don't compete with the pv budget — they
+never write `pv`.) A top-level
 `Deno.cron` prunes days older than 400 (stops at the first in-range day — cost
 is O(days pruned), not a full scan).
 

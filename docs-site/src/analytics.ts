@@ -92,15 +92,20 @@ export function trackEvent(ev: string, t: string): void {
   send({ ev, t });
 }
 
-// Timing + trust probe. One-shot per pageview: the first of these six event
-// types to fire tells us whether it was real input (event.isTrusted) and,
-// if so, how long after the beacon it arrived. That's it — no coordinates,
-// no movement deltas, no event trace, nothing written to localStorage. Only
-// the verdict (trusted bit + a coarse latency bucket) leaves the browser, on
-// the same `ev` channel as any other custom event, so it can't be joined
-// against `path`/`country`/anything else. See README.md's behavioral-probe
-// note for why this stays inside the no-consent-banner claim.
-const PROBE_EVENTS = ['pointerdown', 'keydown', 'touchstart', 'wheel', 'scroll', 'mousemove'] as const;
+// Timing + trust probe. One-shot per pageview: the first of these event types
+// to fire tells us whether it was real input (event.isTrusted) and, if so, how
+// long after the beacon it arrived. That's it — no coordinates, no movement
+// deltas, no event trace, nothing written to localStorage. Only the verdict
+// (trusted bit + a coarse latency bucket) leaves the browser, and the server
+// files it under its own `hi`/`bot` dim, so it can't be joined against
+// `path`/`country`/anything else. See README.md's behavioral-probe note for
+// why this stays inside the no-consent-banner claim.
+//
+// Deliberately NOT `scroll`: Docusaurus scroll-restores on every route change,
+// and a browser-generated scroll event is `isTrusted` — that would report a
+// human on nearly every SPA navigation. `wheel` + `touchstart` cover real
+// scroll intent without the false positive.
+const PROBE_EVENTS = ['pointerdown', 'keydown', 'touchstart', 'wheel', 'mousemove'] as const;
 
 // Detaches the previously-armed probe, if any — guards against a fast SPA
 // route change re-arming the probe before the prior pageview's listeners fired.
@@ -132,7 +137,7 @@ function installBehavioralProbe(sentAt: number): void {
     document.addEventListener(type, onFirstInteraction, { passive: true, once: true });
   }
   // `once: true` self-removes only the listener that actually fired; explicitly
-  // detach the other five so a stray real interaction later on doesn't fire again.
+  // detach the rest so a stray real interaction later on doesn't fire again.
   detachProbe = () => {
     for (const type of PROBE_EVENTS) document.removeEventListener(type, onFirstInteraction);
   };

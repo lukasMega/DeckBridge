@@ -195,8 +195,24 @@ export function createHandler(kv: Deno.Kv) {
       const isEvent = !!d.ev;
       let dims: [string, string][];
       if (isEvent) {
-        dims = [["event", clamp(d.ev)]];
-        if (d.t) dims.push(["event_target", clamp(d.t)]);
+        const ev = clamp(d.ev);
+        // The behavioral probe rides the same beacon shape as a download/outbound
+        // click, but its verdict is not a user action — give it its own dims so
+        // `event`/`event_target` stay a list of real interactions. Without this
+        // split, `event_target` interleaves latency buckets with filenames and
+        // outbound hosts, and `hi` (≈1 per pageview) squashes the download/outbound
+        // bars, which scale against the largest count in the dim.
+        if (ev === "hi") {
+          // one dim, not two: the bucket IS the value → 1 write unit, not 2
+          dims = [["hi", clamp(d.t ?? "unknown")]];
+        } else if (ev === "bot") {
+          // same `bot` dim as the UA check, keyed by how it was caught:
+          // "ua" (isbot matched the header) vs "synthetic" (untrusted DOM event)
+          dims = [["bot", "synthetic"]];
+        } else {
+          dims = [["event", ev]];
+          if (d.t) dims.push(["event_target", clamp(d.t)]);
+        }
       } else {
         const lang = (d.l ?? "").split("-")[0] || "unknown";
         const hour = String(now.getUTCHours()).padStart(2, "0");

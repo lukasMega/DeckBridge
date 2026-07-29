@@ -129,6 +129,11 @@
           <div class="kpiLabel">engagement rate</div>
           <div class="kpiDelta" id="kpiEngagementDelta"></div>
         </div>
+        <div class="kpiTile" title="Share of pageviews where the behavioral probe saw real (isTrusted) input. A low value across a whole range suggests automated traffic; a single pageview without interaction is just a bounce.">
+          <div class="kpiVal" id="kpiHuman">0%</div>
+          <div class="kpiLabel">human interaction</div>
+          <div class="kpiDelta" id="kpiHumanDelta"></div>
+        </div>
         <div class="rangeLabel" id="rangeLabel"></div>
       </div>
       <div id="chartWrap"><div id="chart"></div></div>
@@ -232,6 +237,9 @@ const EVENTS = [
   { ev: "outbound", t: "twitter.com" },
   { ev: "download", t: "deckbridge-v1.2.3.zip" },
 ];
+// behavioral-probe verdicts, so the human-interaction KPI and the `hi`/`bot`
+// breakdowns aren't stuck at zero when seeding locally
+const HI_BUCKETS = ["<150", "150-2000", ">2000"];
 const pick  = (a) => a[Math.floor(Math.random() * a.length)];
 
 $("seed").onclick = async () => {
@@ -251,6 +259,11 @@ $("seed").onclick = async () => {
     if (Math.random() < 0.3) over.s = "1";
     const s = await fire(over);
     if (s === 200) ok++;
+    // mirror the client probe: most pageviews see real input, a few look
+    // synthetic. Not counted in ok/35 — these are follow-up beacons, not seeds.
+    const roll = Math.random();
+    if (roll < 0.7) await fire({ ev: "hi", t: pick(HI_BUCKETS) });
+    else if (roll < 0.78) await fire({ ev: "bot", t: "synthetic" });
   }
   for (let i = 0; i < 5; i++) {
     const ev = pick(EVENTS);
@@ -411,6 +424,10 @@ const DIM_ORDER = [
   "path", "host", "ref_group", "ref", "browser", "os", "device", "country", "lang", "tz",
   "hour", "viewport", "utm_source", "utm_medium", "utm_campaign",
   "event", "event_target",
+  // traffic-quality dims last: `bot` (how a bot was caught: ua / synthetic),
+  // `bot_kind` (which isbot pattern fired — this is what makes the filter
+  // tunable against real traffic), `hi` (human-interaction latency buckets)
+  "bot", "bot_kind", "hi",
 ];
 // `dowhour` renders as the heatmap, not a bar list, but still belongs in an export
 const CSV_DIMS = [...DIM_ORDER, "dowhour"];
@@ -474,14 +491,22 @@ function setDelta(id, cur, prev) {
 
 const DELTA_IDS = [
   "kpiPvDelta", "kpiUvDelta", "kpiSessionsDelta", "kpiViewsPerVisitDelta",
-  "kpiBounceDelta", "kpiEngagementDelta",
+  "kpiBounceDelta", "kpiEngagementDelta", "kpiHumanDelta",
 ];
+
+// total across every value of a dim (the `hi` dim is split into latency buckets,
+// but the KPI only cares that the probe fired at all)
+const dimTotal = (obj) => Object.values(obj || {}).reduce((a, b) => a + b, 0);
 
 function renderKpis(data, prior) {
   const pv = data.pv?._ ?? 0;
   const uv = data.uv?._ ?? 0;
   const sessions = data.sessions?._ ?? 0;
   const bounce = data.bounce?._ ?? 0;
+  // share of pageviews that saw real input. The probe fires at most once per
+  // pageview, so hi ≤ pv. Read as a trend, not a per-hit verdict — a genuine
+  // visitor can leave before touching anything.
+  const humanPct = pv ? (dimTotal(data.hi) / pv) * 100 : 0;
   const viewsPerVisit = uv ? pv / uv : 0;
   const bouncePct = sessions ? (bounce / sessions) * 100 : 0;
   // engagement = share of sessions that were NOT a bounce (complement of bounce
@@ -497,6 +522,7 @@ function renderKpis(data, prior) {
   const bounceShown = Number(bouncePct.toFixed(0));
   $("kpiBounce").textContent = bounceShown + "%";
   $("kpiEngagement").textContent = (sessions ? 100 - bounceShown : 0) + "%";
+  $("kpiHuman").textContent = humanPct.toFixed(0) + "%";
 
   if (!prior) {
     for (const id of DELTA_IDS) { $(id).className = "kpiDelta flat"; $(id).textContent = "—"; }
@@ -509,12 +535,14 @@ function renderKpis(data, prior) {
   const pViewsPerVisit = puv ? ppv / puv : 0;
   const pBouncePct = psessions ? (pbounce / psessions) * 100 : 0;
   const pEngagementPct = psessions ? 100 - pBouncePct : 0;
+  const pHumanPct = ppv ? (dimTotal(prior.hi) / ppv) * 100 : 0;
   setDelta("kpiPvDelta", pv, ppv);
   setDelta("kpiUvDelta", uv, puv);
   setDelta("kpiSessionsDelta", sessions, psessions);
   setDelta("kpiViewsPerVisitDelta", viewsPerVisit, pViewsPerVisit);
   setDelta("kpiBounceDelta", bouncePct, pBouncePct);
   setDelta("kpiEngagementDelta", engagementPct, pEngagementPct);
+  setDelta("kpiHumanDelta", humanPct, pHumanPct);
 }
 
 async function renderAnalytics(data, prior, from, to) {
