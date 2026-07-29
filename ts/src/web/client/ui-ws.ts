@@ -95,7 +95,12 @@ export function connectWS(): void {
 
   ws.addEventListener('message', (e: MessageEvent<string>) => {
     const { event, data } = JSON.parse(e.data) as { event: string; data: unknown };
-    handlers[event]?.(data);
+    if (Object.prototype.hasOwnProperty.call(handlers, event)) {
+      const handler = handlers[event as keyof typeof handlers];
+      if (typeof handler === 'function') {
+        handler(data);
+      }
+    }
   });
 
   ws.addEventListener('close', () => setTimeout(connectWS, 2000));
