@@ -42,7 +42,7 @@ jobs:
       TJS_FROM_SOURCE: '1'
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
@@ -135,7 +135,7 @@ jobs:
     # scripts/tjs-download.mjs's win32 branch. Working beats slim for v1.
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
@@ -277,7 +277,7 @@ jobs:
       TJS_FROM_SOURCE: '1'
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
