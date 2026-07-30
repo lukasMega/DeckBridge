@@ -6,3 +6,13 @@ updates:
       interval: weekly
     ignore:
       - dependency-name: "glib"
+  # Monitor GitHub Actions versions
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    labels:
+      - "dependencies"
+      - "github-actions"
+    commit-message:
+      prefix: "ci"
