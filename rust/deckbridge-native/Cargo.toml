@@ -28,7 +28,7 @@ usb = ["dep:hidapi"]
 
 [dependencies]
 image = { version = "0.25", default-features = false, features = ["jpeg", "bmp"] }
-jpeg-encoder = { version = "=0.6.1", optional = true, default-features = false, features = ["std"] }
+jpeg-encoder = { version = "=0.7.1", optional = true, default-features = false, features = ["std"] }
 # Both deps expose lib name `jpeg_encoder`, so the features are mutually exclusive.
 jpeg-encoder-fork = { path = "../jpeg-encoder", optional = true, default-features = false, features = ["std"] }
 hidapi = { version = "2", optional = true }
