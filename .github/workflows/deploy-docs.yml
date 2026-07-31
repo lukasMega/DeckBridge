@@ -58,6 +58,9 @@ jobs:
 
       - name: Test
         run: npm run test
+        env:
+          PUPPETEER_EXECUTABLE_PATH: ${{ steps.chrome.outputs.chrome-path }}
+          MMDC_PUPPETEER_CONFIG: ${{ github.workspace }}/docs-site/puppeteer.json
 
       - name: Build
         run: npm run build
