@@ -1,7 +1,7 @@
 # DeckBridge — architecture & development
 
 Deep technical documentation: build pipeline, threading model, protocol handling, and
-module layout. For the user-facing overview see [README.md](README.md); rendered docs at
+module layout. For the user-facing overview see [README.md](../README.md); rendered docs at
 <https://lukasmega.github.io/DeckBridge/>.
 
 **Runtime:** [txiki.js](https://github.com/saghul/txiki.js) (QuickJS-ng + libuv + libffi)
@@ -25,11 +25,11 @@ mise run compile   # produce ./deckbridge binary
 **none** of txiki.js's `sqlite3` or `WebAssembly`/WASI (WAMR) — so it ships a **slim**
 runtime.
 
-By default `$TJS` comes from mise's `github:lukasMega/txiki.js` tool ([`mise.toml`](mise.toml)):
+By default `$TJS` comes from mise's `github:lukasMega/txiki.js` tool ([`../mise.toml`](../mise.toml)):
 a **prebuilt slim** runtime with sqlite3 + wasm/WAMR removed and symbols stripped, no
 toolchain needed. It's produced by configuring upstream's own `-DBUILD_WITH_WASM=OFF
 -DBUILD_WITH_SQLITE=OFF` CMake options (native as of v26.5.1 — no source patch needed;
-[`scripts/tjs-build.mjs`](scripts/tjs-build.mjs) is the from-source build script). Rebuild
+[`../scripts/tjs-build.mjs`](../scripts/tjs-build.mjs) is the from-source build script). Rebuild
 from source only to change the runtime or target a platform without a prebuilt:
 
 ```bash
@@ -40,12 +40,12 @@ mise run tjs-build     # configure the slim CMake options + compile from source
 — macOS: `xcode-select --install && brew install cmake libffi`; Debian/Ubuntu:
 `sudo apt-get install -y build-essential cmake git libffi-dev`.
 
-(`scripts/tjs-setup` is the legacy acquisition task, output under `vendor/`; it no-ops when
+(`scripts/tjs-setup` is the legacy acquisition task, output under `../vendor`; it no-ops when
 `$TJS` already exists. Released binaries use the slim runtime.)
 
 ## Running a packaged release
 
-The standalone `deckbridge` binary is self-contained — just `./deckbridge`. Native dylibs
+The standalone `deckbridge` binary is self-contained — just `../deckbridge`. Native dylibs
 (`libdeckbridge_native`, `libhidapi`) are embedded (gzip+base64) and auto-extracted to a per-version
 cache dir on first run (see [Build pipeline](#build-pipeline) for paths); no sidecar `.dylib`/`.so`
 needed. A `deckbridge-tray` sidecar next to the binary is auto-detected and launched if present — the
@@ -138,7 +138,7 @@ header instead of stalling the reader.
 
 The CORA ports (5343/5344) are protocol-fixed and can't fall back like the WebUI port. If either is
 in use (a second DeckBridge, a real Network Dock, or the ESP32 bridge), `startCoraWithRetry`
-([cora-startup.ts](ts/src/cora-startup.ts)) logs "port in use" to the console + WebUI feed and
+([cora-startup.ts](../ts/src/cora-startup.ts)) logs "port in use" to the console + WebUI feed and
 retries every few seconds, keeping the already-started WebUI alive instead of crashing. A shutdown
 signal during the wait still exits cleanly.
 
@@ -151,7 +151,7 @@ main process.
 
 ## HID device detection
 
-At startup `app.ts` constructs a `DriverManager` ([driver-manager.ts](ts/src/driver-manager.ts)); its `probeAndOpen()` iterates `DEVICE_MODELS` in priority order and returns the first device that opens. If none, it retries every 2 s (`RECONNECT_DELAY_MS`).
+At startup `app.ts` constructs a `DriverManager` ([driver-manager.ts](../ts/src/driver-manager.ts)); its `probeAndOpen()` iterates `DEVICE_MODELS` in priority order and returns the first device that opens. If none, it retries every 2 s (`RECONNECT_DELAY_MS`).
 
 ### Probe order
 
@@ -167,7 +167,7 @@ Elgato models are probed first so they take priority over Mirabox; the loop is g
 
 ### Open strategy per device
 
-`ElgatoHidDriver.open()` ([hid-driver-base.ts](ts/src/devices/hid-driver-base.ts)) and `MiraboxDriver.open()` ([mirabox.ts](ts/src/mirabox.ts)) both try path-based open first, then diverge on the fallback:
+`ElgatoHidDriver.open()` ([hid-driver-base.ts](../ts/src/devices/hid-driver-base.ts)) and `MiraboxDriver.open()` ([mirabox.ts](../ts/src/mirabox.ts)) both try path-based open first, then diverge on the fallback:
 
 1. **Path-based open** — if the model sets `usagePage` + `usage`, calls `findHidPath()` → `deckbridge-native` → `mirabox_hid_find_path(vid, pid, usagePage, usage)` (Mirabox passes each PID in turn to disambiguate models sharing VID+usage, e.g. K1 Pro vs 293; Elgato passes `pid=0`, any product). Opening by path avoids claiming system-owned interfaces on macOS (the OS grants the first `hid_open` caller exclusive access to a VID+PID).
 2. **VID+PID fallback** — one attempt per PID, no retries. `ElgatoHidDriver` always falls back to `hid_open(VID, PID)` per PID. `MiraboxDriver` falls back **only off macOS**: on macOS a failed path-open throws immediately, because `hid_open(VID, PID)` there opens the device's first IOKit interface (often an unrelated collection) and a permission-denied open SIGBUSes the process — path-based open is the only safe route.
@@ -176,7 +176,7 @@ Only the Mirabox models set `usagePage`/`usage` (all use `0xffa0`/`1`); Elgato m
 
 ### libhidapi loading
 
-`loadHidapi()` ([ffi/hidapi.ts](ts/src/ffi/hidapi.ts)) tries a platform-specific candidate list via `FFI.dlopen`. If the `HIDAPI_LIB` env var is set (packaged releases: the extracted embedded lib), it is tried first:
+`loadHidapi()` ([ffi/hidapi.ts](../ts/src/ffi/hidapi.ts)) tries a platform-specific candidate list via `FFI.dlopen`. If the `HIDAPI_LIB` env var is set (packaged releases: the extracted embedded lib), it is tried first:
 
 | Platform | Candidates (tried in order, after `HIDAPI_LIB`) |
 |----------|-----------------------------|
@@ -204,19 +204,19 @@ If `DECKBRIDGE_NATIVE_LIB` is unset, path-based open is skipped and the driver f
 
 ### Adding a new device model
 
-Full walkthrough: [docs/adding-a-device.md](docs/adding-a-device.md). In short:
+Full walkthrough: [docs/adding-a-device.md](adding-a-device.md). In short:
 
-1. Create a `DeviceModel` ([driver.ts](ts/src/devices/driver.ts)) under `devices/elgato/` or `devices/mirabox/`; most behavior is in the nested specs (`image`, `wire` (Mirabox), `keyMap`, `cora`, optional `splash`).
-2. Add to `DEVICE_MODELS` in [registry.ts](ts/src/devices/registry.ts) — list position is probe priority.
+1. Create a `DeviceModel` ([driver.ts](../ts/src/devices/driver.ts)) under `devices/elgato/` or `devices/mirabox/`; most behavior is in the nested specs (`image`, `wire` (Mirabox), `keyMap`, `cora`, optional `splash`).
+2. Add to `DEVICE_MODELS` in [registry.ts](../ts/src/devices/registry.ts) — list position is probe priority.
 3. Set `usagePage`+`usage` only for a vendor-specific HID interface (all Mirabox use `0xffa0`/`1`); undefined for standard Elgato VID+PID.
-4. Set `driverKind` — `'elgato-hid'` or `'mirabox'`; `createDriver()` in [hid-worker.ts](ts/src/hid-worker.ts) is the single registration point.
+4. Set `driverKind` — `'elgato-hid'` or `'mirabox'`; `createDriver()` in [hid-worker.ts](../ts/src/hid-worker.ts) is the single registration point.
 5. For a new wire protocol beyond the four variants, add a `DeviceProtocol` literal: Elgato variants implement pack/parse under [protocol/](ts/src/devices/protocol/) (in `PROTOCOL_STRATEGY`); Mirabox variants are driven by `wire` fields in `mirabox.ts`.
 
 ## CORA device capabilities
 
 The CORA capabilities packet (sent to the Elgato desktop on connect) advertises the child device geometry: rows, columns, key count, image dimensions, PID, product name, and serial.
 
-`applyDeviceModel()` in [driver-manager.ts](ts/src/driver-manager.ts) is the single entry point for any model change. Each model's `cora` spec (`DeviceCoraSpec`) drives it:
+`applyDeviceModel()` in [driver-manager.ts](../ts/src/driver-manager.ts) is the single entry point for any model change. Each model's `cora` spec (`DeviceCoraSpec`) drives it:
 
 1. **PID** — `model.cora.productId`. Elgato models use their real USB PID; Mirabox 293/293S advertise `ELGATO_MK2_PID`; K1 Pro advertises the Mini PID (`0x0063`).
 2. **Geometry** — `model.cora.advertiseGeometry ?? modelToChildGeometry(model)`. Mirabox 293/293S pin `MK2_CHILD_GEOMETRY` (advertise as MK.2); K1 Pro pins `MINI_CHILD_GEOMETRY`; Elgato models derive geometry from their own dimensions.
@@ -257,7 +257,7 @@ A `<select id="model-select">` dropdown switches the advertised model in **mock 
 
 A small Rust sidecar (`deckbridge-tray`, built with the `tray-icon` + `tao` crates) shows a status icon and menu. The
 main process spawns it and talks to it over two channels: the tray's **stdout** (lifecycle + menu
-events) and a **loopback TCP** connection (icon/status pushes). `ts/src/tray.ts` (`TrayProcess`)
+events) and a **loopback TCP** connection (icon/status pushes). `../ts/src/tray.ts` (`TrayProcess`)
 owns the TS side; `app.ts` pushes a `TrayState` on every device/client connect and disconnect.
 `TrayProcess.close()` sends the sidecar `SIGTERM` so it doesn't outlive the main process across
 shutdowns/restarts.
@@ -271,7 +271,7 @@ shutdowns/restarts.
 The menu offers **Open Web UI**, **Check Requirements** (the `/requirements` diagnostics page), and
 **Quit**. The tray is spawned only when `DECKBRIDGE_TRAY_BIN` points at the binary (`mise run start` sets it);
 if it is unset or the spawn fails, `startTray()` returns `null` and the app runs normally. See
-[rust/deckbridge-tray/README.md](rust/deckbridge-tray/README.md) for the full protocol.
+[rust/deckbridge-tray/README.md](../rust/deckbridge-tray/README.md) for the full protocol.
 
 ## Build pipeline
 
@@ -359,7 +359,7 @@ mise run coverage    # instrument, run all tests, emit merged report
 engine-agnostic (rewrites JS to increment counters on `globalThis.__coverage__`), so tests run on
 real **txiki.js/QuickJS-ng**, not Node/vitest (which can't host the FFI, socket, and worker tests).
 Each process flushes its map to `ts/coverage/.tmp/<name>.json`; `scripts/coverage-report.mjs` (Node)
-merges them into `ts/coverage/` — stdout summary, `index.html` (+ `lcov-report/`), and `lcov.info`.
+merges them into `../ts/coverage` — stdout summary, `index.html` (+ `lcov-report/`), and `lcov.info`.
 The task builds the Rust dylib first (`depends = ["deckbridge-native"]`) so FFI tests run for real.
 Set `COVERAGE_ENFORCE=1` to fail below thresholds (off by default).
 

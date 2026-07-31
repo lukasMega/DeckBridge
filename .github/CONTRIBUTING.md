@@ -47,7 +47,7 @@ framework).
 - Keep changes surgical. Touch only what the fix or feature requires; don't
   reformat or refactor unrelated code.
 - Match the existing style of the file you're editing.
-- Update docs (`README.md`, `ARCHITECTURE.md`, `CLAUDE.md`) when behavior
+- Update docs (`README.md`, `../docs/ARCHITECTURE.md`, `CLAUDE.md`) when behavior
   changes.
 - Add or update tests where relevant.
 

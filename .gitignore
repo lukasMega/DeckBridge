@@ -54,5 +54,4 @@ graphify-out/
 tmp/
 **/.cmd-history.txt
 bundle-sizes*.csv
-PERFORMANCE_ANALYSIS.md
 CLAUDE.md

@@ -6,7 +6,7 @@ apply the Gatekeeper quarantine flag — so there is **no Apple Developer ID, no
 notarization, and no "developer cannot be verified" dialog**. This is the
 no-Dev-ID, CLI-formula path.
 
-The formula lives at [`deckbridge.rb`](./deckbridge.rb).
+The formula lives at [`deckbridge.rb`](deckbridge.rb).
 
 ---
 

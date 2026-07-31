@@ -64,7 +64,7 @@ Flags (for run):
 
 For unattended Linux (Raspberry Pi / DietPi) under systemd, see
 [Headless Linux](https://lukasmega.github.io/DeckBridge/headless-linux) and
-`packaging/linux/`.
+`scripts/packaging/linux/`.
 
 ## ⚠ Hobby use only
 
@@ -78,7 +78,7 @@ DeckBridge contains no reverse-engineered code — it reuses existing open-sourc
 
 ## For developers
 
-Build from source, architecture, protocols, and testing: [ARCHITECTURE.md](ARCHITECTURE.md).
+Build from source, architecture, protocols, and testing: [ARCHITECTURE.md](docs/ARCHITECTURE.md).
 Technical guides:
 [Adding a device](https://lukasmega.github.io/DeckBridge/adding-a-device) ·
 [Image flow](https://lukasmega.github.io/DeckBridge/image-flow) ·

@@ -38,9 +38,9 @@ board, managed by systemd, with no desktop, tray icon, or browser involved.
 
 ## 1. Install
 
-Copy the `deckbridge` binary and the `packaging/linux/` files onto the Pi (or
+Copy the `deckbridge` binary and the `../scripts/packaging/linux/` files onto the Pi (or
 build from source there — see [Getting Started](./getting-started.md#option-b--build-from-source)),
-then run the installer as root from `packaging/linux/`:
+then run the installer as root from `../scripts/packaging/linux/`:
 
 ```bash
 cd packaging/linux
@@ -147,4 +147,4 @@ DNS name pointing at the Pi is rejected; use the IP directly.
 - [Getting Started](./getting-started.md) — general install/build steps
 - [Features & Use Cases](./features.md#permissions) — permissions and ports on
   every platform
-- `packaging/linux/` in the repo — the udev rule, systemd unit, and install script
+- `../scripts/packaging/linux/` in the repo — the udev rule, systemd unit, and install script

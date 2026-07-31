@@ -6,7 +6,7 @@ to each GitHub release, runs it silently into Scoop's app directory, and exposes
 the supervisor binary. Scoop installs without UAC prompts and side-steps the raw
 `.exe` SmartScreen warning — **no code-signing certificate required**.
 
-The manifest lives at [`deckbridge.json`](./deckbridge.json).
+The manifest lives at [`deckbridge.json`](deckbridge.json).
 
 ---
 
