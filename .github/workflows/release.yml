@@ -116,7 +116,7 @@ jobs:
       - name: Smoke test (boots cleanly, serves, shuts down)
         run: ./scripts/e2e-smoke.sh "$(find dist -maxdepth 1 -name '*.zip' -printf '%T@ %p\n' | sort -rn | head -1 | cut -d' ' -f2-)"
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: ${{ matrix.platform }}
           path: dist/*.zip
@@ -247,7 +247,7 @@ jobs:
         working-directory: src-tauri
         run: cargo tauri build
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: windows-x86_64
           path: src-tauri/target/release/bundle/nsis/*-setup.exe
@@ -351,7 +351,7 @@ jobs:
         working-directory: src-tauri
         run: cargo tauri build --bundles dmg
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: ${{ matrix.platform }}-dmg
           path: src-tauri/target/release/bundle/dmg/*.dmg
