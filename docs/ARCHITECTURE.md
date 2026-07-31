@@ -1,7 +1,8 @@
 # DeckBridge — architecture & development
 
 Deep technical documentation: build pipeline, threading model, protocol handling, and
-module layout. For the user-facing overview see [README.md](../README.md); rendered docs at
+module layout. For the user-facing overview see
+[README.md](https://github.com/lukasMega/DeckBridge/blob/main/README.md); rendered docs at
 <https://lukasmega.github.io/DeckBridge/>.
 
 **Runtime:** [txiki.js](https://github.com/saghul/txiki.js) (QuickJS-ng + libuv + libffi)
@@ -188,7 +189,7 @@ If all candidates fail, the error includes install instructions (`brew install h
 
 ### HID path enumeration
 
-The Rust `deckbridge-native` cdylib ([rust/deckbridge-native/](rust/deckbridge-native/)) is loaded at runtime via the `DECKBRIDGE_NATIVE_LIB` env var. Among its exports is:
+The Rust `deckbridge-native` cdylib ([rust/deckbridge-native/](https://github.com/lukasMega/DeckBridge/tree/main/rust/deckbridge-native)) is loaded at runtime via the `DECKBRIDGE_NATIVE_LIB` env var. Among its exports is:
 
 ```c
 int mirabox_hid_find_path(uint16_t vid, uint16_t pid, uint16_t usage_page, uint16_t usage,
@@ -210,7 +211,7 @@ Full walkthrough: [docs/adding-a-device.md](adding-a-device.md). In short:
 2. Add to `DEVICE_MODELS` in [registry.ts](../ts/src/devices/registry.ts) — list position is probe priority.
 3. Set `usagePage`+`usage` only for a vendor-specific HID interface (all Mirabox use `0xffa0`/`1`); undefined for standard Elgato VID+PID.
 4. Set `driverKind` — `'elgato-hid'` or `'mirabox'`; `createDriver()` in [hid-worker.ts](../ts/src/hid-worker.ts) is the single registration point.
-5. For a new wire protocol beyond the four variants, add a `DeviceProtocol` literal: Elgato variants implement pack/parse under [protocol/](ts/src/devices/protocol/) (in `PROTOCOL_STRATEGY`); Mirabox variants are driven by `wire` fields in `mirabox.ts`.
+5. For a new wire protocol beyond the four variants, add a `DeviceProtocol` literal: Elgato variants implement pack/parse under [protocol/](https://github.com/lukasMega/DeckBridge/tree/main/ts/src/devices/protocol) (in `PROTOCOL_STRATEGY`); Mirabox variants are driven by `wire` fields in `mirabox.ts`.
 
 ## CORA device capabilities
 
@@ -271,7 +272,7 @@ shutdowns/restarts.
 The menu offers **Open Web UI**, **Check Requirements** (the `/requirements` diagnostics page), and
 **Quit**. The tray is spawned only when `DECKBRIDGE_TRAY_BIN` points at the binary (`mise run start` sets it);
 if it is unset or the spawn fails, `startTray()` returns `null` and the app runs normally. See
-[rust/deckbridge-tray/README.md](../rust/deckbridge-tray/README.md) for the full protocol.
+[rust/deckbridge-tray/README.md](https://github.com/lukasMega/DeckBridge/blob/main/rust/deckbridge-tray/README.md) for the full protocol.
 
 ## Build pipeline
 
