@@ -25,6 +25,8 @@ export const EXPECTED_BASE_URL = '/DeckBridge/';
 
 /** Doc routes, in sidebars.ts order (tutorialSidebar then technicalSidebar). */
 export const DOC_ROUTES: readonly string[] = [
+  // Standalone page (docs/ARCHITECTURE.md), not in either sidebar.
+  'ARCHITECTURE',
   'introduction',
   'getting-started',
   'features',

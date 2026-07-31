@@ -14,7 +14,7 @@ import { DOC_ROUTES, allRoutes, extractAttrs, readPage, requireBuild } from './l
 requireBuild();
 
 /** Pages whose markdown contains ```mermaid fences. */
-const MERMAID_ROUTES: readonly string[] = ['image-flow', 'hidapi-ffi', 'features'];
+const MERMAID_ROUTES: readonly string[] = ['image-flow', 'hidapi-ffi', 'features', 'ARCHITECTURE'];
 
 test('every doc page has exactly one h1', () => {
   for (const route of DOC_ROUTES) {

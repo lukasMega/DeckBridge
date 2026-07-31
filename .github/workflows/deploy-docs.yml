@@ -56,6 +56,9 @@ jobs:
           # Chrome comes from setup-chrome; skip puppeteer's own download.
           PUPPETEER_SKIP_DOWNLOAD: 'true'
 
+      - name: Test
+        run: npm run test
+
       - name: Build
         run: npm run build
         env:

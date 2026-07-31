@@ -331,7 +331,7 @@ run = "npm run start -- --port 3001 --host 0.0.0.0"
 [tasks.docs-build]
 description = "Build Docusaurus static HTML (docs-site/build/)"
 dir = "docs-site"
-run = "npm run build"
+run = "npm run test && npm run build"
 
 [tasks.docs-serve]
 description = "Serve the built Docusaurus site locally"
