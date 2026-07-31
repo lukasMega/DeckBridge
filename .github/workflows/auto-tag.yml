@@ -1,0 +1,50 @@
+name: Auto-tag release on version bump
+
+# ts/package.json is the single source of truth for the deckbridge version
+# (see .claude/plans/2026-07-30_unify-versioning.md). Bumping it and merging
+# to main is the entire release trigger — this workflow tags the commit,
+# which then fires release.yml's own `on.push.tags` trigger.
+on:
+  push:
+    branches: [main]
+    paths: ['ts/package.json']
+
+permissions:
+  contents: read
+
+jobs:
+  tag:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0 # need full tag history to check whether this version was already tagged
+          # GITHUB_TOKEN-authored pushes don't trigger other workflows (GitHub's
+          # anti-recursion rule), so release.yml would never fire on this tag.
+          # RELEASE_TOKEN must be a PAT (classic: repo scope; fine-grained:
+          # contents:write) added as a repo secret.
+          token: ${{ secrets.RELEASE_TOKEN }}
+
+      - name: Compute version and check for existing tag
+        id: v
+        run: |
+          VERSION=$(node -p "require('./ts/package.json').version")
+          TAG="deckbridge-v${VERSION}"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          if git rev-parse "$TAG" >/dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Create and push tag
+        if: steps.v.outputs.exists == 'false'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag -a "${{ steps.v.outputs.tag }}" -m "Release ${{ steps.v.outputs.tag }}"
+          git push origin "${{ steps.v.outputs.tag }}"
+
+      - name: Skip (already tagged)
+        if: steps.v.outputs.exists == 'true'
+        run: echo "${{ steps.v.outputs.tag }} already exists — no-op."
