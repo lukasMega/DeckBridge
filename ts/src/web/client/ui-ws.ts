@@ -96,7 +96,7 @@ export function connectWS(): void {
   ws.addEventListener('message', (e: MessageEvent<string>) => {
     const { event, data } = JSON.parse(e.data) as { event: string; data: unknown };
     if (Object.prototype.hasOwnProperty.call(handlers, event)) {
-      const handler = handlers[event as keyof typeof handlers];
+      const handler = handlers[event];
       if (typeof handler === 'function') {
         handler(data);
       }
