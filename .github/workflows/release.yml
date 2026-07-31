@@ -140,6 +140,12 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
+      # Stamps ts/package.json's version (the single source of truth) into
+      # src-tauri/Cargo.toml + tauri.conf.json so the NSIS installer version
+      # is correct without a build-time -c override.
+      - name: Sync version into Cargo.toml/tauri.conf.json
+        run: node scripts/sync-version.mjs
+
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
 
@@ -233,20 +239,13 @@ jobs:
       - name: Install Tauri CLI
         run: cargo install tauri-cli --version "^2" --locked
 
-      # Inject the real version (the crate hard-codes 0.1.0). On a tag, parse
-      # X.Y.Z out of deckbridge-vX.Y.Z; otherwise (manual dispatch) use 0.0.0.
+      # tauri.conf.json's version was already stamped from ts/package.json by
+      # the "Sync version" step above — no build-time override needed.
       # NSIS is fetched by the bundler; WebView2 is preinstalled on the runner.
       - name: Build Tauri NSIS installer
         shell: pwsh
         working-directory: src-tauri
-        run: |
-          if ($env:GITHUB_REF -like "refs/tags/deckbridge-v*") {
-            $ver = $env:GITHUB_REF_NAME -replace '^deckbridge-v', ''
-          } else {
-            $ver = "0.0.0"
-          }
-          Write-Host "Building Tauri bundle version $ver"
-          cargo tauri build -c "{`"version`": `"$ver`"}"
+        run: cargo tauri build
 
       - uses: actions/upload-artifact@v4
         with:
@@ -281,6 +280,12 @@ jobs:
 
     steps:
       - uses: actions/checkout@v5
+
+      # Stamps ts/package.json's version (the single source of truth) into
+      # src-tauri/Cargo.toml + tauri.conf.json so the dmg version is correct
+      # without a build-time -c override.
+      - name: Sync version into Cargo.toml/tauri.conf.json
+        run: node scripts/sync-version.mjs
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
@@ -338,20 +343,13 @@ jobs:
       - name: Install Tauri CLI
         run: cargo install tauri-cli --version "^2" --locked
 
-      # Inject the real version (the crate hard-codes 0.1.0). On a tag, parse
-      # X.Y.Z out of deckbridge-vX.Y.Z; otherwise (manual dispatch) use 0.0.0.
+      # tauri.conf.json's version was already stamped from ts/package.json by
+      # the "Sync version" step above — no build-time override needed.
       # --bundles dmg is belt-and-suspenders; tauri.macos.conf.json already sets
       # targets app,dmg (its array REPLACES the base ["nsis"] via RFC 7396 merge).
       - name: Build Tauri dmg
         working-directory: src-tauri
-        run: |
-          if [[ "$GITHUB_REF" == refs/tags/deckbridge-v* ]]; then
-            VER="${GITHUB_REF_NAME#deckbridge-v}"
-          else
-            VER="0.0.0"
-          fi
-          echo "Building Tauri macOS bundle version $VER"
-          cargo tauri build --bundles dmg -c "{\"version\": \"$VER\"}"
+        run: cargo tauri build --bundles dmg
 
       - uses: actions/upload-artifact@v4
         with:
@@ -368,6 +366,21 @@ jobs:
       contents: write
 
     steps:
+      # Guards against a stray/manual tag diverging from ts/package.json — the
+      # normal path is auto-tag.yml, which only ever tags the current version.
+      - uses: actions/checkout@v5
+        if: github.event_name == 'push'
+
+      - name: Verify tag matches ts/package.json version
+        if: github.event_name == 'push'
+        run: |
+          TAG_VERSION="${GITHUB_REF_NAME#deckbridge-v}"
+          PKG_VERSION=$(node -p "require('./ts/package.json').version")
+          if [ "$TAG_VERSION" != "$PKG_VERSION" ]; then
+            echo "::error::tag $GITHUB_REF_NAME (version $TAG_VERSION) does not match ts/package.json version $PKG_VERSION"
+            exit 1
+          fi
+
       - uses: actions/download-artifact@v4
         with:
           path: artifacts

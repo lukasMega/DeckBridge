@@ -115,6 +115,10 @@ description = "Compile to standalone binary"
 depends = ["build"]
 run = "node scripts/compile.mjs"
 
+[tasks.sync-version]
+description = "Stamp ts/package.json's version into Cargo.toml/tauri.conf.json (CI-only, don't commit the result)"
+run = "node scripts/sync-version.mjs"
+
 [tasks.ts-simple]
 description = "Bundle TypeScript (simple-only: excludes advanced view + its CSS)"
 quiet = true

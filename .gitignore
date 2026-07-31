@@ -42,6 +42,10 @@ docs-site/.docusaurus/
 .vscode/
 *.iml
 
+# Secrets — never committed
+.env
+.env.*
+
 # Internal tooling / working files — live locally, never published
 .claude/
 .mcp.json

@@ -22,8 +22,10 @@ for (const f of cargoFiles) {
 }
 
 const tauriConfPath = resolve(root, 'src-tauri/tauri.conf.json');
-const tauriConf = JSON.parse(readFileSync(tauriConfPath, 'utf8'));
-tauriConf.version = version;
-writeFileSync(tauriConfPath, JSON.stringify(tauriConf, null, 2) + '\n');
+const tauriConfUpdated = readFileSync(tauriConfPath, 'utf8').replace(
+  /"version":\s*".*?"/,
+  `"version": "${version}"`,
+);
+writeFileSync(tauriConfPath, tauriConfUpdated);
 
 console.log(`sync-version: stamped ${version} into ${cargoFiles.length + 1} files`);

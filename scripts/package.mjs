@@ -34,10 +34,12 @@ const scriptDir = dirname(fileURLToPath(import.meta.url));
 const root = resolve(scriptDir, '..');
 
 // --- Version ---
+// Single source of truth is ts/package.json (see scripts/sync-version.mjs);
+// a CLI arg still wins, for manual/dry-run invocations.
 let version = process.argv[2];
 if (!version) {
-  const r = spawnSync('git', ['-C', root, 'describe', '--tags', '--exact-match'], { encoding: 'utf8' });
-  version = r.status === 0 ? r.stdout.trim() : 'dev';
+  const pkgVersion = JSON.parse(readFileSync(resolve(root, 'ts/package.json'), 'utf8')).version;
+  version = `v${pkgVersion}`;
 }
 
 // --- Platform ---
