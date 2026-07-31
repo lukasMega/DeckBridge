@@ -397,21 +397,9 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           generate_release_notes: true
-          name: "deckbridge ${{ github.ref_name }}"
+          name: "${{ github.ref_name }}"
           body: |
-            ## Install
-
-            See [README-DISTRIBUTION.md](https://github.com/${{ github.repository }}/blob/main/README-DISTRIBUTION.md) for full setup instructions.
-
-            **macOS (Apple Silicon):** `deckbridge.app` via `*_aarch64.dmg` (drag-install) — or Homebrew, or `deckbridge-*-macos-arm64.zip`
-            **macOS (Intel):** `deckbridge.app` via `*_x64.dmg` (drag-install) — or Homebrew, or `deckbridge-*-macos-x86_64.zip`
-            **Windows (x86_64):** download `deckbridge_*-setup.exe` (NSIS installer)
-
-            Linux builds are temporarily unavailable — coming back soon.
-
-            macOS: open the `.dmg` and drag the app to Applications. The build is **unsigned** (no Apple Developer ID), so the first launch needs **right-click → Open** (or `xattr -dr com.apple.quarantine /Applications/deckbridge.app`). Homebrew (`brew install`) avoids this entirely.
-            macOS zips: extract and run `./run.sh`. libhidapi is bundled — no prerequisite installs.
-            Windows: run the `-setup.exe` installer (or `scoop install deckbridge`).
+            see docs: https://lukasmega.github.io/DeckBridge/
           files: |
             artifacts/*.zip
             artifacts/*-setup.exe
