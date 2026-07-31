@@ -60,15 +60,16 @@ jobs:
           key: rust-${{ matrix.platform }}-${{ hashFiles('rust/**/Cargo.lock', 'rust/deckbridge-tray/**') }}
           restore-keys: rust-${{ matrix.platform }}-
 
-      # Cache the slim txiki.js runtime so it builds once per platform per patch
-      # change (the from-source build clones + compiles txiki.js, which is slow).
-      # On a hit the binary is restored to $TJS and tjs-setup skips the rebuild.
-      # Key is invalidated by the pinned version (mise.toml) or the patch itself.
+      # Cache the slim txiki.js runtime so it builds once per platform per build
+      # config change (the from-source build clones + compiles txiki.js, which is
+      # slow). On a hit the binary is restored to $TJS and tjs-setup skips the
+      # rebuild. Key is invalidated by the pinned version (mise.toml) or the
+      # build script itself (tjs-build.mjs, e.g. its cmake flags).
       - name: Cache slim txiki.js runtime
         uses: actions/cache@v4
         with:
           path: vendor/txiki.js/build/tjs
-          key: tjs-slim-${{ matrix.platform }}-${{ hashFiles('mise.toml', 'patches/txiki-slim.patch') }}
+          key: tjs-slim-${{ matrix.platform }}-${{ hashFiles('mise.toml', 'scripts/tjs-build.mjs') }}
 
       - name: Install libhidapi (macOS)
         if: startsWith(matrix.os, 'macos')
@@ -131,10 +132,10 @@ jobs:
     name: Build windows-x86_64 (Tauri NSIS)
     runs-on: windows-latest
     # No TJS_FROM_SOURCE here (unlike the Unix jobs above): the slim from-source
-    # build's Windows branch (scripts/tjs-build.mjs, mingw32-make + npm.cmd) is
-    # unverified against MSVC-only runners. tjs-setup instead downloads the
-    # official saghul/txiki.js prebuilt `txiki-windows-x86_64.zip` (confirmed to
-    # exist for the pinned TXIKI_VERSION — see the plan's Phase 0 findings) via
+    # build's Windows branch (scripts/tjs-build.mjs) is unverified against
+    # MSVC-only runners. tjs-setup instead downloads the official saghul/txiki.js
+    # prebuilt `txiki-windows-x86_64.zip` (confirmed to exist for the pinned
+    # TXIKI_VERSION — see the plan's Phase 0 findings) via
     # scripts/tjs-download.mjs's win32 branch. Working beats slim for v1.
 
     steps:
@@ -305,7 +306,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: vendor/txiki.js/build/tjs
-          key: tjs-slim-${{ matrix.platform }}-${{ hashFiles('mise.toml', 'patches/txiki-slim.patch') }}
+          key: tjs-slim-${{ matrix.platform }}-${{ hashFiles('mise.toml', 'scripts/tjs-build.mjs') }}
 
       - name: Install libhidapi (macOS)
         run: brew install hidapi

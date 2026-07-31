@@ -2,9 +2,10 @@
 // Build a SLIM txiki.js runtime from source.
 //
 // This is the size-optimized alternative to scripts/tjs-download.mjs (which
-// grabs the official prebuilt release). It clones saghul/txiki.js at
-// $TXIKI_VERSION, applies patches/txiki-slim.patch (drops sqlite3 + WAMR/wasm,
-// keeps tjs:ffi), builds a Release binary, strips it, and copies it to $TJS.
+// grabs the official prebuilt release). It clones lukasMega/txiki.js at
+// $TXIKI_VERSION and configures it with -DBUILD_WITH_WASM=OFF
+// -DBUILD_WITH_SQLITE=OFF (native upstream options as of v26.5.1 — no patch
+// needed), builds a Release binary, strips it, and copies it to $TJS.
 //
 // The app uses NONE of sqlite/wasm — only tjs:ffi, raw TCP, and tjs.serve
 // HTTP+WebSocket — so removing those subsystems shrinks the embedded runtime
@@ -15,7 +16,7 @@
 //
 // Env (same contract as tjs-download.mjs):
 //   TJS            destination path for the runtime binary (vendor/.../build/tjs)
-//   TXIKI_VERSION  git tag to build (e.g. v26.5.0)
+//   TXIKI_VERSION  git tag to build (e.g. v26.5.1)
 
 import { execSync, execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, copyFileSync, chmodSync, rmSync } from 'node:fs';
@@ -40,12 +41,6 @@ const isWin = platform() === 'win32';
 // Repo root is the parent of this script's scripts/ directory.
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(scriptDir, '..');
-const patchFile = join(repoRoot, 'patches', 'txiki-slim.patch');
-
-if (!existsSync(patchFile)) {
-  console.error(`Patch not found: ${patchFile}`);
-  process.exit(1);
-}
 
 // --- Toolchain preflight: fail with an actionable message, not a build error ---
 function have(cmd) {
@@ -57,12 +52,7 @@ function have(cmd) {
   }
 }
 
-// git + cmake + make + npm are all required: the patch strips the static
-// tjs:wasi / tjs:sqlite imports out of txiki's JS bootstrap, so the embedded
-// bytecode bundles must be regenerated (esbuild via npm + the Makefile `js`
-// target) — otherwise the runtime ships stale bundles that import the removed
-// modules and fail to boot.
-const missing = ['git', 'cmake', 'npm'].filter((c) => !have(c));
+const missing = ['git', 'cmake'].filter((c) => !have(c));
 // Need at least one C compiler. (cmake also needs a working toolchain, but this
 // gives a clearer hint than a mid-configure failure.)
 if (!isWin && !['cc', 'clang', 'gcc'].some(have)) missing.push('a C/C++ compiler (cc/clang/gcc)');
@@ -73,10 +63,9 @@ if (missing.length) {
     [
       `Cannot build txiki.js from source: missing ${missing.join(', ')}.`,
       '',
-      'The slim source build needs git + cmake + make + a C/C++ toolchain + npm',
-      '(npm provides esbuild to regenerate txiki.js bundles after the patch).',
-      '  macOS:  xcode-select --install && brew install cmake libffi node',
-      '  Debian: sudo apt-get install -y build-essential cmake git libffi-dev npm',
+      'The slim source build needs git + cmake + make + a C/C++ toolchain.',
+      '  macOS:  xcode-select --install && brew install cmake libffi',
+      '  Debian: sudo apt-get install -y build-essential cmake git libffi-dev',
       '',
       'No toolchain? Use the prebuilt runtime instead:  mise run tjs-setup',
     ].join('\n'),
@@ -97,33 +86,32 @@ function run(cmd, opts = {}) {
 }
 
 try {
-  // Fresh checkout each run keeps the patch apply deterministic.
+  // Fresh checkout each run keeps the build deterministic.
   rmSync(srcDir, { recursive: true, force: true });
   mkdirSync(buildRoot, { recursive: true });
 
   console.log(`Cloning lukasMega/txiki.js @ ${TXIKI_VERSION} ...`);
   run(`git clone --depth 1 --branch "${TXIKI_VERSION}" https://github.com/lukasMega/txiki.js "${srcDir}"`);
 
-  // The slim patch removes the WAMR (deps/wamr) usage entirely, so that
-  // submodule is not required — but recursing it is harmless. We init all
-  // submodules for robustness (mbedtls/quickjs/libuv/mimalloc/libwebsockets are
-  // all needed). test262 (a quickjs sub-submodule) is huge and skipped by the
-  // upstream .gitmodules `update = none`-style config; --recursive honors that.
+  // BUILD_WITH_WASM=OFF/BUILD_WITH_SQLITE=OFF below compile those subsystems
+  // out entirely, so deps/wamr and deps/sqlite3 (a plain vendored dir, not a
+  // submodule) are never built — but recursing all submodules is harmless. We
+  // init everything for robustness (mbedtls/quickjs/libuv/mimalloc/
+  // libwebsockets are all needed). test262 (a quickjs sub-submodule) is huge
+  // and skipped by upstream's .gitmodules `update = none`-style config;
+  // --recursive honors that.
   console.log('Initializing submodules (this can take a minute) ...');
   run('git submodule update --init --recursive --depth 1', { cwd: srcDir });
 
-  console.log('Applying patches/txiki-slim.patch (drop sqlite3 + wasm/WAMR) ...');
-  run(`git apply "${patchFile}"`, { cwd: srcDir });
-
-  // Configure with cmake. We then (1) build the `tjsc` bytecode compiler,
-  // (2) regenerate the embedded JS bundles with the patched bootstrap sources,
-  // and (3) build the final runtime. Steps 1-2 are required because the patch
-  // edits txiki's JS (drops static tjs:wasi / tjs:sqlite imports); the committed
-  // bundles in the tag must be rebuilt or the runtime won't boot.
+  // -DBUILD_WITH_WASM=OFF / -DBUILD_WITH_SQLITE=OFF are native upstream CMake
+  // options (as of v26.5.1) that compile out WAMR/wasm and sqlite3 entirely —
+  // this app uses neither (see file header). No source patch needed.
   const cmakeArgs = [
     '-B', buildDir,
     '-DCMAKE_BUILD_TYPE=Release',
     '-DBUILD_WITH_MIMALLOC=ON',
+    '-DBUILD_WITH_WASM=OFF',
+    '-DBUILD_WITH_SQLITE=OFF',
   ];
 
   // On macOS, libffi normally resolves from the Command Line Tools SDK
@@ -153,36 +141,10 @@ try {
 
   const jobs = Math.max(1, cpus().length);
 
-  // 1. Build the bytecode compiler (EXCLUDE_FROM_ALL target).
-  console.log(`Building tjsc bytecode compiler (-j ${jobs}) ...`);
-  execFileSync('cmake', ['--build', buildDir, '--target', 'tjsc', '-j', String(jobs)], {
-    stdio: 'inherit',
-    cwd: srcDir,
-  });
-
-  // 2. Install esbuild (+ web-streams-polyfill etc.) and regenerate the embedded
-  //    JS bundles from the patched bootstrap sources. The committed bundles in
-  //    the tag still import the removed tjs:wasi / tjs:sqlite, so they MUST be
-  //    rebuilt — otherwise the runtime fails to boot ("[uninitialized]").
-  //    Delete the generated bundles first so make can't skip them on mtime.
-  console.log('Installing build deps (npm) for bundle regeneration ...');
-  run(`${isWin ? 'npm.cmd' : 'npm'} install --no-audit --no-fund`, { cwd: srcDir });
-
-  rmSync(join(srcDir, 'src', 'bundles', 'js'), { recursive: true, force: true });
-  for (const f of [
-    'core/core.c',
-    'core/polyfills.c',
-    'core/run-main.c',
-    'core/run-repl.c',
-    'core/worker-bootstrap.c',
-    'internal/path.c',
-  ]) {
-    rmSync(join(srcDir, 'src', 'bundles', 'c', f), { force: true });
-  }
-  console.log('Regenerating JS bundles (make js) ...');
-  run(`${isWin ? 'mingw32-make' : 'make'} js`, { cwd: srcDir });
-
-  // 3. Build the final runtime against the regenerated bundles.
+  // No source patch means no bundle regeneration step: the JS bootstrap
+  // bundles committed in the tag already match the checked-out C/JS sources,
+  // so a single direct build is enough (unlike the old patch-based flow,
+  // which had to rebuild tjsc + regenerate bundles from the patched sources).
   console.log(`Building tjs runtime (cmake --build, -j ${jobs}) ...`);
   execFileSync('cmake', ['--build', buildDir, '-j', String(jobs)], { stdio: 'inherit', cwd: srcDir });
 
@@ -192,7 +154,7 @@ try {
   }
 
   // Smoke-test that the freshly built runtime actually boots before we install
-  // it (catches a broken bundle regen rather than shipping a dead binary).
+  // it (catches a broken build rather than shipping a dead binary).
   console.log('Smoke-testing the slim runtime ...');
   const probe = execFileSync(builtTjs, ['eval', 'console.log(typeof tjs)'], { encoding: 'utf8' }).trim();
   if (probe !== 'object') {

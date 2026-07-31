@@ -27,13 +27,13 @@ runtime.
 
 By default `$TJS` comes from mise's `github:lukasMega/txiki.js` tool ([`mise.toml`](mise.toml)):
 a **prebuilt slim** runtime with sqlite3 + wasm/WAMR removed and symbols stripped, no
-toolchain needed. It's produced from [`patches/txiki-slim.patch`](patches/txiki-slim.patch),
-which drops `src/wasm.c`, `src/mod_sqlite3.c`, the `deps/sqlite3` + WAMR CMake wiring, and
-the matching init/version/include sites (guarded by `#ifndef TJS_SLIM`). Rebuild from
-source only to change the runtime or target a platform without a prebuilt:
+toolchain needed. It's produced by configuring upstream's own `-DBUILD_WITH_WASM=OFF
+-DBUILD_WITH_SQLITE=OFF` CMake options (native as of v26.5.1 — no source patch needed;
+[`scripts/tjs-build.mjs`](scripts/tjs-build.mjs) is the from-source build script). Rebuild
+from source only to change the runtime or target a platform without a prebuilt:
 
 ```bash
-mise run tjs-build     # apply the slim patch + compile from source
+mise run tjs-build     # configure the slim CMake options + compile from source
 ```
 
 **Build deps (from-source only):** `cmake`, a C/C++ toolchain, `make`, `libffi`
