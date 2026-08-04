@@ -51,7 +51,7 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
 
       - name: Cache Rust
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: |
             ~/.cargo/registry
@@ -66,7 +66,7 @@ jobs:
       # rebuild. Key is invalidated by the pinned version (mise.toml) or the
       # build script itself (tjs-build.mjs, e.g. its cmake flags).
       - name: Cache slim txiki.js runtime
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: vendor/txiki.js/build/tjs
           key: tjs-slim-${{ matrix.platform }}-${{ hashFiles('mise.toml', 'scripts/tjs-build.mjs') }}
@@ -151,7 +151,7 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
 
       - name: Cache Rust
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: |
             ~/.cargo/registry
@@ -162,7 +162,7 @@ jobs:
           restore-keys: rust-windows-x86_64-
 
       - name: Cache txiki.js runtime
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: vendor/txiki.js/build/tjs.exe
           key: tjs-windows-x86_64-${{ hashFiles('mise.toml') }}
@@ -292,7 +292,7 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
 
       - name: Cache Rust
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: |
             ~/.cargo/registry
@@ -303,7 +303,7 @@ jobs:
           restore-keys: rust-tauri-${{ matrix.platform }}-
 
       - name: Cache slim txiki.js runtime
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: vendor/txiki.js/build/tjs
           key: tjs-slim-${{ matrix.platform }}-${{ hashFiles('mise.toml', 'scripts/tjs-build.mjs') }}
