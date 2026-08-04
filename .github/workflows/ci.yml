@@ -23,7 +23,7 @@ jobs:
     name: TS lint • types • test • knip
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
       # ci-checks builds deckbridge-native for FFI tests, so Rust + system deps needed.
       - name: Install Rust
@@ -71,7 +71,7 @@ jobs:
     name: Rust fmt + clippy + test
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
       - name: Install Rust (rust-toolchain.toml pins 1.95 + clippy/rustfmt)
         uses: dtolnay/rust-toolchain@stable
@@ -104,7 +104,7 @@ jobs:
     name: Windows bundle + cargo check
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
@@ -146,7 +146,7 @@ jobs:
     name: cargo-deny
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - uses: EmbarkStudios/cargo-deny-action@v2
         with:
           manifest-path: rust/Cargo.toml
@@ -157,7 +157,7 @@ jobs:
     name: actionlint
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - uses: raven-actions/actionlint@v2
 
   # ── Secret scan across full history (free for personal/public repos) ──
@@ -165,7 +165,7 @@ jobs:
     name: gitleaks
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
       - uses: gitleaks/gitleaks-action@v3
@@ -177,7 +177,7 @@ jobs:
     name: typos
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - uses: crate-ci/typos@master
         with:
           config: .github/typos.toml

@@ -45,7 +45,7 @@ jobs:
       TJS_FROM_SOURCE: '1'
 
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
@@ -139,7 +139,7 @@ jobs:
     # scripts/tjs-download.mjs's win32 branch. Working beats slim for v1.
 
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
       # Stamps ts/package.json's version (the single source of truth) into
       # src-tauri/Cargo.toml + tauri.conf.json so the NSIS installer version
@@ -280,7 +280,7 @@ jobs:
       TJS_FROM_SOURCE: '1'
 
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
       # Stamps ts/package.json's version (the single source of truth) into
       # src-tauri/Cargo.toml + tauri.conf.json so the dmg version is correct
@@ -369,7 +369,7 @@ jobs:
     steps:
       # Guards against a stray/manual tag diverging from ts/package.json — the
       # normal path is auto-tag.yml, which only ever tags the current version.
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         if: github.event_name == 'push'
 
       - name: Verify tag matches ts/package.json version
