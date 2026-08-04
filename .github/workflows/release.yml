@@ -84,7 +84,7 @@ jobs:
         if: startsWith(matrix.os, 'ubuntu')
         run: sudo apt-get update && sudo apt-get install -y libhidapi-dev libudev-dev libffi-dev cmake build-essential libgtk-3-dev libxdo-dev libayatana-appindicator3-dev
 
-      - uses: jdx/mise-action@v2
+      - uses: jdx/mise-action@v4
 
       - name: Compile
         run: mise run compile
@@ -181,7 +181,7 @@ jobs:
           if (-not $dll) { Write-Error "hidapi.dll not found after build"; exit 1 }
           echo "HIDAPI_LIB=$($dll.FullName)" >> $env:GITHUB_ENV
 
-      - uses: jdx/mise-action@v2
+      - uses: jdx/mise-action@v4
 
       # Produces the Windows relay binary (deckbridge[.exe]) via the same build
       # chain the other platforms use. txiki's `compile` emits a PE executable.
@@ -311,7 +311,7 @@ jobs:
       - name: Install libhidapi (macOS)
         run: brew install hidapi
 
-      - uses: jdx/mise-action@v2
+      - uses: jdx/mise-action@v4
 
       - name: Compile relay binary
         run: mise run compile
