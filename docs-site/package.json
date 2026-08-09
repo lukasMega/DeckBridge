@@ -57,9 +57,26 @@
     "// node": "22.18+ required by the test scripts, which are TypeScript run directly via native type stripping",
     "node": ">=22.18"
   },
+  "// image-size": [
+    "npm audit reports 18 high findings here, all one root cause: image-size@2.0.2,",
+    "pulled in by @docusaurus/mdx-loader. GHSA-w3rx-r6r6-pgpr (CVE-2025-71330, ICNS) and",
+    "GHSA-5p2g-fcmc-qvqq (CVE-2025-71329, JXL/HEIF) are both infinite-loop DoS, both",
+    "unpatched: range is <=2.0.2 and 2.0.2 is the last release. Upstream is archived",
+    "(github.com/image-size/image-size, no issues) and the maintainer has declined to fix.",
+    "No override is possible: mdx-loader calls the named async export `imageSizeFromFile`",
+    "from the `image-size/fromFile` subpath, which is 2.0-only. The `legacy` 1.2.1 tag has",
+    "no exports map and no fromFile entry (would hard-fail the build) and is in range anyway;",
+    "image-dimensions is ESM-only with a different API. Upstream fix is facebook/docusaurus",
+    "PR #12235, a breaking change slated for Docusaurus v4 — nothing lands on 3.x.",
+    "Exposure is nil: build-time only, and getLocalImageAbsolutePath returns early for",
+    "non-local URLs, so the only input is an image already committed to this repo. The",
+    "parsers dispatch on magic bytes and we ship zero icns/jxl/heif/heic/avif files.",
+    "Revisit with the Docusaurus v4 upgrade; track facebook/docusaurus#12231."
+  ],
   "overrides": {
-    "brace-expansion": "5.0.8",
+    "brace-expansion": "5.0.9",
     "minimatch": "10.2.6",
+    "nanoid": "3.3.18",
     "serialize-javascript": ">=7.0.5",
     "uuid": "11.1.1"
   },

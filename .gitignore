@@ -10,6 +10,11 @@ ts/dist/
 ts/coverage/
 # Cargo workspace target (all member crates share one target dir)
 rust/target/
+# Per-member lockfiles are inert: cargo resolves member crates against the
+# workspace root rust/Cargo.lock. Stale copies were still scanned by Dependabot
+# and raised alerts for versions the build never uses — keep them untracked.
+rust/deckbridge-native/Cargo.lock
+rust/deckbridge-tray/Cargo.lock
 # Vendored fork is a non-member crate with its own target dir
 rust/jpeg-encoder/target/
 src-tauri/target/
