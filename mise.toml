@@ -282,7 +282,7 @@ timeout = "120s"
 
 [tasks.beforeCommit]
 description = "Format, lint, types, test, and compile — run before committing"
-depends = ["format", "ci-checks", "rust-lint", "analytics-check", "compile"]
+depends = ["format", "ci-checks", "rust-lint", "analytics-check", "docs-check", "compile"]
 dir = "ts"
 # run = "npm run beforeCommit"
 timeout = "150s"
@@ -327,6 +327,12 @@ description = "Start Docusaurus dev server (docs-site)"
 dir = "docs-site"
 # --port pins 3000 so an ambient PORT (e.g. PORT=/dev/cu.usbserial-* from idf.py flash) can't make Docusaurus parse port NaN
 run = "npm run start -- --port 3001 --host 0.0.0.0"
+
+[tasks.docs-check]
+description = "docs-site: typecheck + tests (build/links/content/output)"
+dir = "docs-site"
+depends = ["docs-install"]
+run = "npm run beforeCommit"
 
 [tasks.docs-build]
 description = "Build Docusaurus static HTML (docs-site/build/)"

@@ -16,7 +16,7 @@ import { MAX_DEVICE_SESSIONS, RECONNECT_DELAY_MS, MDNS_SERVICE_NAME } from './ty
 import type { DockStatus, ExtraKeyConfig } from './types.js';
 import { DEVICE_MODELS } from './devices/registry.js';
 import { DeviceSession, sessionIdentity, type SessionServersFactory } from './device-session.js';
-import { deviceKeyFor } from './device-identity.js';
+import { deviceKeyFor, sharedSerialModelId } from './device-identity.js';
 import { hidSerialForPath } from './ffi/hidapi.js';
 import type { DeviceIdentitySettings } from './settings-store.js';
 
@@ -183,9 +183,11 @@ export class ExtraDockCoordinator {
 
     // The stable USB-serial key (VID:PID:serial); the targeted hidPath is always
     // known here (we picked a specific unit), and its serial disambiguates two
-    // same-model units.
+    // same-model units. v1 models share a hardcoded serial across every unit (see
+    // deviceKeyFor JSDoc) — append the model id so two different v1 decks don't
+    // collapse into one identity.
     const serial = hidSerialForPath(hidPath);
-    const deviceKey = deviceKeyFor(hidPath, serial);
+    const deviceKey = deviceKeyFor(hidPath, serial, sharedSerialModelId(model));
     const deviceIdentity = this.deps.getOrCreateDeviceIdentity(
       deviceKey,
       `${MDNS_SERVICE_NAME} (${model.name})`,

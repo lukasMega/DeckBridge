@@ -8,6 +8,7 @@
 // getOrCreateDeviceIdentity() as a reducer over its in-memory devices array.
 import { DEFAULT_DOCK_SERIAL_NUMBER, DEFAULT_CHILD_SERIAL_NUMBER } from './types.js';
 import type { DeviceIdentitySettings } from './settings-store.js';
+import type { DeviceModel } from './devices/driver.js';
 
 /** Prefix marking a deviceKey built from a stable USB serial (vs. a volatile
  *  IOKit-path fallback key). Entries without this prefix are ephemeral and get
@@ -26,9 +27,27 @@ export function isStableDeviceKey(deviceKey: string): boolean {
  *  available (off-macOS VID/PID-fallback open, or a device that reports no
  *  serial). Path keys are NOT stable — the macOS IOKit path
  *  (`DevSrvsID:<entryID>`) changes whenever the OS re-enumerates the device, so
- *  path-keyed entries are treated as ephemeral (see isStableDeviceKey). */
-export function deviceKeyFor(hidPath: string, serial?: string | null): string {
+ *  path-keyed entries are treated as ephemeral (see isStableDeviceKey).
+ *
+ *  `modelId` (pass `model.wire?.sharedSerial ? model.id : undefined`) disambiguates
+ *  v1 protocol_version devices, which all report the same hardcoded USB serial
+ *  (`355499441494` — see `DeviceWireSpec.sharedSerial`): with a `modelId`, the key
+ *  becomes `usb:<serial>:<modelId>` so two *different* v1 models (e.g. a 293S and an
+ *  AKP153) don't collapse into one persisted identity. Known limitation: two units of
+ *  the *same* v1 model still collide — there is no per-unit bit available to key on
+ *  (upstream opendeck has the same limitation; see its README "Known issues"). */
+export function deviceKeyFor(hidPath: string, serial?: string | null, modelId?: string): string {
+  if (serial && modelId) return `${SERIAL_KEY_PREFIX}${serial}:${modelId}`;
   return serial ? `${SERIAL_KEY_PREFIX}${serial}` : hidPath;
+}
+
+/** `modelId` arg for `deviceKeyFor()`: the model's own id when it shares a hardcoded v1
+ *  serial with every other unit of every v1 model (`DeviceWireSpec.sharedSerial`), else
+ *  `undefined` — the serial alone already identifies the device. Small helper (rather
+ *  than inlining the ternary at each call site) so driver-manager.ts/-extras.ts stay
+ *  simple enough for the cognitive-complexity lint. */
+export function sharedSerialModelId(model: Pick<DeviceModel, 'id' | 'wire'>): string | undefined {
+  return model.wire?.sharedSerial ? model.id : undefined;
 }
 
 // FNV-1a, 32-bit. Deterministic, no crypto needed — this generates a stable

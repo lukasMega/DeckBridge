@@ -43,6 +43,10 @@ export const MIRABOX_293S_MODEL: DeviceModel = {
     heartbeatMs: 8000,
     synthesizeKeyUp: true,
     sendStpAfterImage: false,
+    // v1 firmware reports the same hardcoded serial on every unit — see
+    // DeviceWireSpec.sharedSerial. All 7 rebadge clones inherit this by spreading
+    // this model's wire spec (ts/src/devices/rebadge/akp153-v1-clones.ts).
+    sharedSerial: true,
   },
   keyMap: {
     // 293S is physically 3×6 = 18 keys; we expose the left 5 columns as a 15-key MK.2.

@@ -9,6 +9,15 @@ import {
   AJAZZ_AKP153E_REV2_MODEL,
   AJAZZ_AKP153R_REV2_MODEL,
 } from '../src/devices/ajazz/akp153-rev2.js';
+import {
+  AJAZZ_AKP153_MODEL,
+  AJAZZ_AKP153E_MODEL,
+  AJAZZ_AKP153R_MODEL,
+  MARS_MSD_ONE_MODEL,
+  MADDOG_GK150K_MODEL,
+  RISEMODE_VISION_01_MODEL,
+  TMICE_STREAM_CONTROLLER_MODEL,
+} from '../src/devices/rebadge/akp153-v1-clones.js';
 import { deviceInputToMk2Index } from '../src/translator.js';
 import {
   modelToChildGeometry,
@@ -105,9 +114,11 @@ test('findModel returns the Ajazz AKP153 rev.2 models for VID 0x0300', () => {
   assert.equal(findModel(0x0300, 0x3011)?.id, 'ajazz-akp153r-rev2');
 });
 
-test('Ajazz AKP153 rev.2 models are unmatched for rev.1 PIDs (v1 protocol, unsupported)', () => {
-  assert.equal(findModel(0x0300, 0x1010), null);
-  assert.equal(findModel(0x0300, 0x1020), null);
+// Rev.1 PIDs now resolve to the v1 rebadge clones (akp153-v1-clones.ts), not the rev.2
+// (v3) models — see the "0x0300:0x1010/0x1020 resolves to ..." tests below.
+test('Ajazz AKP153 rev.2 models do not match the rev.1 PIDs (different protocol)', () => {
+  assert.notEqual(findModel(0x0300, 0x1010)?.id, 'ajazz-akp153e-rev2');
+  assert.notEqual(findModel(0x0300, 0x1020)?.id, 'ajazz-akp153r-rev2');
 });
 
 // The rev.2 boards are the 293V3 behind a different VID/PID; the models are literal
@@ -128,6 +139,86 @@ test('Ajazz AKP153 rev.2 models mirror the 293V3 wire/image/key spec', () => {
   }
 });
 
+// ── akp153-v1-clones (7 v1 rebadges of the 293S board) ───────────────────────
+
+console.log('\ndevice-models: akp153-v1-clones');
+
+const V1_CLONES = [
+  { model: AJAZZ_AKP153_MODEL, vid: 0x5548, pid: 0x6674, id: 'ajazz-akp153' },
+  { model: AJAZZ_AKP153E_MODEL, vid: 0x0300, pid: 0x1010, id: 'ajazz-akp153e' },
+  { model: AJAZZ_AKP153R_MODEL, vid: 0x0300, pid: 0x1020, id: 'ajazz-akp153r' },
+  { model: MARS_MSD_ONE_MODEL, vid: 0x0b00, pid: 0x1000, id: 'mars-msd-one' },
+  { model: MADDOG_GK150K_MODEL, vid: 0x0c00, pid: 0x1000, id: 'maddog-gk150k' },
+  { model: RISEMODE_VISION_01_MODEL, vid: 0x0a00, pid: 0x1001, id: 'risemode-vision-01' },
+  {
+    model: TMICE_STREAM_CONTROLLER_MODEL,
+    vid: 0x0500,
+    pid: 0x1001,
+    id: 'tmice-stream-controller',
+  },
+] as const;
+
+for (const { model, vid, pid, id } of V1_CLONES) {
+  test(`findModel resolves ${id} at 0x${vid.toString(16)}:0x${pid.toString(16)}`, () => {
+    const result = findModel(vid, pid);
+    assert.notEqual(result, null);
+    assert.equal(result!.id, id);
+    assert.equal(result, model);
+  });
+}
+
+// Each clone is a literal spec-mirror of the 293S: verified fields must stay
+// byte-identical, so retuning the 293S can't silently desync 7 clones.
+test('akp153-v1-clones mirror the 293S image/wire/keyMap/cora/splash spec', () => {
+  for (const { model } of V1_CLONES) {
+    assert.equal(model.protocol, MIRABOX_293S_MODEL.protocol);
+    assert.equal(model.driverKind, MIRABOX_293S_MODEL.driverKind);
+    assert.equal(model.usagePage, MIRABOX_293S_MODEL.usagePage);
+    assert.equal(model.usage, MIRABOX_293S_MODEL.usage);
+    assert.equal(model.keyCount, MIRABOX_293S_MODEL.keyCount);
+    assert.equal(model.columns, MIRABOX_293S_MODEL.columns);
+    assert.equal(model.rows, MIRABOX_293S_MODEL.rows);
+    assert.equal(model.keyWidth, MIRABOX_293S_MODEL.keyWidth);
+    assert.equal(model.keyHeight, MIRABOX_293S_MODEL.keyHeight);
+    assert.equal(JSON.stringify(model.image), JSON.stringify(MIRABOX_293S_MODEL.image));
+    assert.equal(JSON.stringify(model.wire), JSON.stringify(MIRABOX_293S_MODEL.wire));
+    assert.equal(JSON.stringify(model.keyMap), JSON.stringify(MIRABOX_293S_MODEL.keyMap));
+    assert.equal(JSON.stringify(model.cora), JSON.stringify(MIRABOX_293S_MODEL.cora));
+    assert.equal(JSON.stringify(model.splash), JSON.stringify(MIRABOX_293S_MODEL.splash));
+  }
+});
+
+test('akp153-v1-clones: wire.sharedSerial is true (inherited from the 293S)', () => {
+  for (const { model } of V1_CLONES) {
+    assert.equal(model.wire?.sharedSerial, true);
+  }
+});
+
+test('akp153-v1-clones: model ids and names are distinct per clone', () => {
+  const ids = new Set(V1_CLONES.map(({ model }) => model.id));
+  const names = new Set(V1_CLONES.map(({ model }) => model.name));
+  assert.equal(ids.size, V1_CLONES.length, 'all model ids distinct');
+  assert.equal(names.size, V1_CLONES.length, 'all model names distinct');
+});
+
+// Rev.1 (v1, this file) vs rev.2 (v3, ajazz/akp153-rev2.ts) share a VID but adjacent,
+// non-overlapping PIDs on totally different protocols — must resolve to different models.
+test('0x0300:0x1010 resolves to ajazz-akp153e (v1), not ajazz-akp153e-rev2 (v3)', () => {
+  const result = findModel(0x0300, 0x1010);
+  assert.notEqual(result, null);
+  assert.equal(result!.id, 'ajazz-akp153e');
+  assert.notEqual(result!.id, 'ajazz-akp153e-rev2');
+  assert.equal(result!.protocol, 'mirabox-cora-v1');
+});
+
+test('0x0300:0x1020 resolves to ajazz-akp153r (v1), not ajazz-akp153r-rev2 (v3)', () => {
+  const result = findModel(0x0300, 0x1020);
+  assert.notEqual(result, null);
+  assert.equal(result!.id, 'ajazz-akp153r');
+  assert.notEqual(result!.id, 'ajazz-akp153r-rev2');
+  assert.equal(result!.protocol, 'mirabox-cora-v1');
+});
+
 test('findModel returns null for an unknown VID/PID pair', () => {
   assert.equal(findModel(0xdead, 0xbeef), null);
 });
@@ -140,8 +231,8 @@ test('findModel returns null for a known VID but unknown PID', () => {
 
 console.log('\ndevice-models: DEVICE_MODELS ordering');
 
-test('DEVICE_MODELS contains exactly 7 models', () => {
-  assert.equal(DEVICE_MODELS.length, 7);
+test('DEVICE_MODELS contains exactly 14 models', () => {
+  assert.equal(DEVICE_MODELS.length, 14);
 });
 
 test('DEFAULT_MODEL is MK2_MODEL', () => {

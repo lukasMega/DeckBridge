@@ -41,3 +41,22 @@ KERNEL=="hidraw*", ATTRS{idVendor}=="5548", ATTRS{idProduct}=="6670", TAG+="uacc
 # Ajazz AKP153E / AKP153R rev. 2 (vendor 0x0300) — 293V3 board, untested
 KERNEL=="hidraw*", ATTRS{idVendor}=="0300", ATTRS{idProduct}=="3010", TAG+="uaccess", MODE="0660", GROUP="plugdev"
 KERNEL=="hidraw*", ATTRS{idVendor}=="0300", ATTRS{idProduct}=="3011", TAG+="uaccess", MODE="0660", GROUP="plugdev"
+
+# Ajazz AKP153 (vendor 0x5548) — 293S board, v1/rev.1, untested
+KERNEL=="hidraw*", ATTRS{idVendor}=="5548", ATTRS{idProduct}=="6674", TAG+="uaccess", MODE="0660", GROUP="plugdev"
+
+# Ajazz AKP153E / AKP153R rev. 1 (vendor 0x0300) — 293S board, v1, untested
+KERNEL=="hidraw*", ATTRS{idVendor}=="0300", ATTRS{idProduct}=="1010", TAG+="uaccess", MODE="0660", GROUP="plugdev"
+KERNEL=="hidraw*", ATTRS{idVendor}=="0300", ATTRS{idProduct}=="1020", TAG+="uaccess", MODE="0660", GROUP="plugdev"
+
+# Mars Gaming MSD-ONE (vendor 0x0b00) — 293S board, v1, untested
+KERNEL=="hidraw*", ATTRS{idVendor}=="0b00", ATTRS{idProduct}=="1000", TAG+="uaccess", MODE="0660", GROUP="plugdev"
+
+# Mad Dog GK150K (vendor 0x0c00) — 293S board, v1, untested
+KERNEL=="hidraw*", ATTRS{idVendor}=="0c00", ATTRS{idProduct}=="1000", TAG+="uaccess", MODE="0660", GROUP="plugdev"
+
+# Risemode Vision 01 (vendor 0x0a00) — 293S board, v1, untested
+KERNEL=="hidraw*", ATTRS{idVendor}=="0a00", ATTRS{idProduct}=="1001", TAG+="uaccess", MODE="0660", GROUP="plugdev"
+
+# TMICE Stream Controller (vendor 0x0500) — 293S board, v1, untested
+KERNEL=="hidraw*", ATTRS{idVendor}=="0500", ATTRS{idProduct}=="1001", TAG+="uaccess", MODE="0660", GROUP="plugdev"

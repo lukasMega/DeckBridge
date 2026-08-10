@@ -14,10 +14,11 @@ The Elgato desktop sends image data to the CORA child server in the format match
 | Mirabox 293S (`mirabox-cora-v1`) | MK.2 spoof (PID `0x00a5`, `MK2_CHILD_GEOMETRY`) | gen2 JPEG 72×72 | Yes | `sidecar`: pad 72→85 (edge), rotate 90 |
 | Mirabox K1 Pro (`mirabox-cora`) | Mini spoof (PID `0x0063`, `MINI_CHILD_GEOMETRY`) | gen1 BMP 80×80 | Yes | `sidecar`: crop 6 px/side (80→68) → resize 64, rotate 0 + flipH, BMP→JPEG |
 | Ajazz AKP153E/R rev. 2 (`mirabox-cora`) — untested | MK.2 spoof (PID `0x00a5`, `MK2_CHILD_GEOMETRY`) | gen2 JPEG 72×72 | Yes | identical to the 293V3 (same board, different VID/PID) |
+| AKP153/E/R, MSD-ONE, GK150K, Vision 01, TMICE Stream Controller (`mirabox-cora-v1`) — untested | MK.2 spoof (PID `0x00a5`, `MK2_CHILD_GEOMETRY`) | gen2 JPEG 72×72 | Yes | identical to the 293S (same board, different VID/PID) |
 | Stream Deck MK.2 (`elgato-gen2`) | real MK.2 (PID `0x0080`) | gen2 JPEG 72×72 | No | `passthrough` (rotate 0) |
 | Stream Deck Mini (`elgato-gen1`) | real Mini (6 key, 3×2, PID `0x0063`) | gen1 BMP 80×80 BGR | No | `passthrough` (BMP short-circuit) |
 
-Each **Mirabox/Ajazz** model advertises as an Elgato device the desktop already knows (MK.2 for the 293V3/293S and the AKP153 rev. 2 clones, Mini for the K1 Pro), and the sidecar resizes/rotates to the device's native key size per `model.image` (K1 Pro also re-encodes BMP→JPEG). **Elgato devices** advertise their real geometry and forward device-native data with no transform — the desktop pre-applies all orientation/color work itself.
+Each **Mirabox/Ajazz** model advertises as an Elgato device the desktop already knows (MK.2 for the 293V3/293S, the AKP153 rev. 2 clones, and the 7 v1 rebadges, Mini for the K1 Pro), and the sidecar resizes/rotates to the device's native key size per `model.image` (K1 Pro also re-encodes BMP→JPEG). **Elgato devices** advertise their real geometry and forward device-native data with no transform — the desktop pre-applies all orientation/color work itself.
 
 On image arrival (`setupImageHandler` in `image-pipeline.ts`) the path splits into two tracks on **different threads**:
 
@@ -122,6 +123,7 @@ Orientation is fully described by the active model: `model.image` for live CORA 
 | Mirabox 293S | rotate 90, pad 72→85 (edge) | rotate 270 |
 | Mirabox K1 Pro | crop 6 px/side (80→68) → resize 64, rotate 0, flipH (BMP→JPEG) | rotate 90 (flipH off) |
 | Ajazz AKP153E/R rev. 2 (untested) | rotate 0, resize 72→112 (as 293V3) | rotate 180 |
+| AKP153/E/R, MSD-ONE, GK150K, Vision 01, TMICE Stream Controller (untested) | rotate 90, pad 72→85 (edge) (as 293S) | rotate 270 |
 
 </details>
 

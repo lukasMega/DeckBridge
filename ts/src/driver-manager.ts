@@ -14,7 +14,7 @@ import { applyModelToServers, wireCommonDriverEvents } from './device-session.js
 import type { SessionServersFactory } from './device-session.js';
 import { PrimaryDock } from './driver-manager-primary.js';
 import { ExtraDockCoordinator } from './driver-manager-extras.js';
-import { deviceKeyFor } from './device-identity.js';
+import { deviceKeyFor, sharedSerialModelId } from './device-identity.js';
 
 export type DriverMode = 'real' | 'mock';
 
@@ -287,7 +287,13 @@ export class DriverManager {
       // key (VID/PID-fallback open, no usage-matched path) — same as extras.
       const hidPath = found.hidPath;
       const serial = hidPath ? hidSerialForPath(hidPath) : null;
-      this.primary.resolveIdentity(deviceKeyFor(hidPath ?? `model:${found.model.id}`, serial));
+      this.primary.resolveIdentity(
+        deviceKeyFor(
+          hidPath ?? `model:${found.model.id}`,
+          serial,
+          sharedSerialModelId(found.model),
+        ),
+      );
       this.applyDeviceModel(found.model, {
         serial: found.deviceSerial,
         firmware: found.deviceFirmware,

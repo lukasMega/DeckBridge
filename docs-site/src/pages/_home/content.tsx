@@ -14,6 +14,13 @@ export const DEVICES: { name: string; tested: boolean }[] = [
   { name: 'Mirabox K1 Pro', tested: true },
   { name: 'Ajazz AKP153E (rev. 2)', tested: false },
   { name: 'Ajazz AKP153R (rev. 2)', tested: false },
+  { name: 'Ajazz AKP153', tested: false },
+  { name: 'Ajazz AKP153E (rev. 1)', tested: false },
+  { name: 'Ajazz AKP153R (rev. 1)', tested: false },
+  { name: 'Mars Gaming MSD-ONE', tested: false },
+  { name: 'Mad Dog GK150K', tested: false },
+  { name: 'Risemode Vision 01', tested: false },
+  { name: 'TMICE Stream Controller', tested: false },
   { name: 'Stream Deck MK.2', tested: false },
   { name: 'Stream Deck Mini', tested: true },
 ];

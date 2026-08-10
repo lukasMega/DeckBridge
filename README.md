@@ -17,13 +17,23 @@ else to install.
 - Mirabox K1 Pro
 - Ajazz AKP153E (rev. 2) — untested
 - Ajazz AKP153R (rev. 2) — untested
+- Ajazz AKP153 — untested
+- Ajazz AKP153E (rev. 1) — untested
+- Ajazz AKP153R (rev. 1) — untested
+- Mars Gaming MSD-ONE — untested
+- Mad Dog GK150K — untested
+- Risemode Vision 01 — untested
+- TMICE Stream Controller — untested
 - Stream Deck MK.2
 - Stream Deck Mini
 
 Hardware-tested on macOS: 293V3, 293S, K1 Pro, and Stream Deck Mini. MK.2, the Ajazz
-AKP153 rev. 2 models, and the Linux/Windows builds are implemented but not
-hardware-verified. The Ajazz rev. 2 boards are the same hardware as the 293V3 behind a
-different USB VID/PID, so they reuse the 293V3 model verbatim — report anything that
+AKP153 rev. 2 models, the 7 v1 rebadges of the 293S board (Ajazz AKP153/E/R rev. 1, Mars
+Gaming MSD-ONE, Mad Dog GK150K, Risemode Vision 01, TMICE Stream Controller), and the
+Linux/Windows builds are implemented but not hardware-verified. The Ajazz rev. 2 boards
+are the same hardware as the 293V3 behind a different USB VID/PID, so they reuse the
+293V3 model verbatim; the 7 v1 rebadges are the same hardware as the 293S behind a
+different USB VID/PID, so they reuse the 293S model verbatim — report anything that
 misbehaves.
 
 > **Platform status:** DeckBridge is currently **tested on macOS only**, and the

@@ -1,7 +1,14 @@
 import type { EventEmitter } from 'node:events';
 import type { ImageModeOverride } from '../types.js';
 
-export type DeviceVendor = 'mirabox' | 'ajazz' | 'elgato';
+export type DeviceVendor =
+  | 'mirabox'
+  | 'ajazz'
+  | 'elgato'
+  | 'mars-gaming'
+  | 'mad-dog'
+  | 'risemode'
+  | 'tmice';
 
 /** Wire protocol — closed; adding a new model almost always reuses an existing one. */
 export type DeviceProtocol =
@@ -75,6 +82,11 @@ export interface DeviceWireSpec {
    *  every (packetSize - 1) payload bytes, so the drop only ever eats padding.
    *  Hardware-verified probe round 16 — see jpeg-artifact-findings.md. */
   chunkPadByte?: boolean;
+  /** v1 firmware reports a hardcoded serial shared by every unit of every v1 model
+   *  (`355499441494`), so a serial alone can't identify a physical device. When true,
+   *  deviceKeyFor() appends the model id to keep two different v1 decks apart.
+   *  See mirajazz README "protocol_version = 1". */
+  sharedSerial?: boolean;
 }
 
 /** CORA key index (MK.2, 0-based row-major) ↔ device wire ids.
