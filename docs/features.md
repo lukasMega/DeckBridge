@@ -164,11 +164,13 @@ On Linux, add a udev rule (once), then unplug/replug the device:
 sudo tee /etc/udev/rules.d/99-mirabox.rules <<'EOF'
 SUBSYSTEM=="hidraw", ATTRS{idVendor}=="6603", MODE="0666"
 SUBSYSTEM=="hidraw", ATTRS{idVendor}=="5548", MODE="0666"
+SUBSYSTEM=="hidraw", ATTRS{idVendor}=="0300", MODE="0666"
 EOF
 sudo udevadm control --reload-rules && sudo udevadm trigger
 ```
 
-(`6603` = Mirabox 293V3 / K1 Pro, `5548` = Mirabox 293S.)
+(`6603` = Mirabox 293V3 / HSV293SV3 / K1 Pro, `5548` = Mirabox 293S, `0300` = Ajazz
+AKP153E/R rev. 2.)
 
 ## Requirements
 

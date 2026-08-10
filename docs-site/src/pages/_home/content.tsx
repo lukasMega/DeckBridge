@@ -9,9 +9,11 @@ export const BRANDS: ReactNode[] = [
 ];
 
 export const DEVICES: { name: string; tested: boolean }[] = [
-  { name: 'Mirabox 293V3 / Ajazz', tested: true },
+  { name: 'Mirabox 293V3', tested: true },
   { name: 'Mirabox 293S', tested: true },
   { name: 'Mirabox K1 Pro', tested: true },
+  { name: 'Ajazz AKP153E (rev. 2)', tested: false },
+  { name: 'Ajazz AKP153R (rev. 2)', tested: false },
   { name: 'Stream Deck MK.2', tested: false },
   { name: 'Stream Deck Mini', tested: true },
 ];

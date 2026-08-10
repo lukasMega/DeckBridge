@@ -25,14 +25,18 @@ write).
 
 ## Supported devices
 
-- **Mirabox 293V3/Ajazz**
+- **Mirabox 293V3** — also matches the HSV293SV3 / "293S V3" refresh (PID `0x1014`, untested)
 - **Mirabox 293S**
 - **Mirabox K1 Pro**
+- **Ajazz AKP153E (rev. 2)** — untested
+- **Ajazz AKP153R (rev. 2)** — untested
 - **Stream Deck MK.2**
 - **Stream Deck Mini**
 
-Hardware-tested on macOS: 293V3, 293S, K1 Pro, and Stream Deck Mini; MK.2 and the
-Linux/Windows builds are implemented but not hardware-verified.
+Hardware-tested on macOS: 293V3, 293S, K1 Pro, and Stream Deck Mini; MK.2, the Ajazz
+AKP153 rev. 2 models, and the Linux/Windows builds are implemented but not
+hardware-verified. The Ajazz rev. 2 boards are the same hardware as the 293V3 behind a
+different USB VID/PID, so they reuse the 293V3 model verbatim.
 
 :::caution[Platform status]
 DeckBridge is currently **tested on macOS only**, and the GitHub releases currently

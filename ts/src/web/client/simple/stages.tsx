@@ -101,8 +101,9 @@ export function StageDeviceNoElgato({
         <Step kind="done" title="Stream Deck connected">
           {modelName !== undefined && <div class="step-sub">{modelName}</div>}
         </Step>
-        <Step kind="active" title="Open the Elgato Stream Deck app">
-          <div class="step-sub">
+        <Step
+          kind="active"
+          title={
             <a
               href="streamdeck://"
               id="openSdApp"
@@ -110,9 +111,10 @@ export function StageDeviceNoElgato({
               title="Open Elgato Stream Deck"
               onClick={openSdApp}
             >
-              Click to open Stream Deck app
+              Open the Elgato Stream Deck app
             </a>
-          </div>
+          }
+        >
           <ManualAddPanel onHelp={onHelp} />
           <RestartNote />
         </Step>

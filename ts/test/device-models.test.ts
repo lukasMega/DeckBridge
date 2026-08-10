@@ -5,6 +5,10 @@ import { MINI_MODEL } from '../src/devices/elgato/mini.js';
 import { MIRABOX_293_MODEL } from '../src/devices/mirabox/mirabox-293.js';
 import { MIRABOX_293S_MODEL } from '../src/devices/mirabox/mirabox-293s.js';
 import { MIRABOX_K1PRO_MODEL } from '../src/devices/mirabox/mirabox-k1pro.js';
+import {
+  AJAZZ_AKP153E_REV2_MODEL,
+  AJAZZ_AKP153R_REV2_MODEL,
+} from '../src/devices/ajazz/akp153-rev2.js';
 import { deviceInputToMk2Index } from '../src/translator.js';
 import {
   modelToChildGeometry,
@@ -91,6 +95,39 @@ test('findModel returns MIRABOX_K1PRO_MODEL for PID 0x1019 (EU)', () => {
   assert.equal(result!.id, 'mirabox-k1pro');
 });
 
+// HSV293SV3 / "293S V3" refresh — same v3 board, so it rides MIRABOX_293_MODEL.
+test('findModel returns MIRABOX_293_MODEL for the HSV293SV3 PID 0x1014', () => {
+  assert.equal(findModel(0x6603, 0x1014)?.id, 'mirabox-293');
+});
+
+test('findModel returns the Ajazz AKP153 rev.2 models for VID 0x0300', () => {
+  assert.equal(findModel(0x0300, 0x3010)?.id, 'ajazz-akp153e-rev2');
+  assert.equal(findModel(0x0300, 0x3011)?.id, 'ajazz-akp153r-rev2');
+});
+
+test('Ajazz AKP153 rev.2 models are unmatched for rev.1 PIDs (v1 protocol, unsupported)', () => {
+  assert.equal(findModel(0x0300, 0x1010), null);
+  assert.equal(findModel(0x0300, 0x1020), null);
+});
+
+// The rev.2 boards are the 293V3 behind a different VID/PID; the models are literal
+// clones, so any 293V3 retuning must be mirrored (or the clone claim dropped).
+test('Ajazz AKP153 rev.2 models mirror the 293V3 wire/image/key spec', () => {
+  for (const model of [AJAZZ_AKP153E_REV2_MODEL, AJAZZ_AKP153R_REV2_MODEL]) {
+    assert.equal(model.usbVendorId, 0x0300);
+    assert.equal(model.protocol, MIRABOX_293_MODEL.protocol);
+    assert.equal(model.driverKind, MIRABOX_293_MODEL.driverKind);
+    assert.equal(model.usagePage, MIRABOX_293_MODEL.usagePage);
+    assert.equal(model.usage, MIRABOX_293_MODEL.usage);
+    assert.equal(model.keyCount, MIRABOX_293_MODEL.keyCount);
+    assert.equal(JSON.stringify(model.image), JSON.stringify(MIRABOX_293_MODEL.image));
+    assert.equal(JSON.stringify(model.wire), JSON.stringify(MIRABOX_293_MODEL.wire));
+    assert.equal(JSON.stringify(model.keyMap), JSON.stringify(MIRABOX_293_MODEL.keyMap));
+    assert.equal(JSON.stringify(model.cora), JSON.stringify(MIRABOX_293_MODEL.cora));
+    assert.equal(JSON.stringify(model.splash), JSON.stringify(MIRABOX_293_MODEL.splash));
+  }
+});
+
 test('findModel returns null for an unknown VID/PID pair', () => {
   assert.equal(findModel(0xdead, 0xbeef), null);
 });
@@ -103,8 +140,8 @@ test('findModel returns null for a known VID but unknown PID', () => {
 
 console.log('\ndevice-models: DEVICE_MODELS ordering');
 
-test('DEVICE_MODELS contains exactly 5 models', () => {
-  assert.equal(DEVICE_MODELS.length, 5);
+test('DEVICE_MODELS contains exactly 7 models', () => {
+  assert.equal(DEVICE_MODELS.length, 7);
 });
 
 test('DEFAULT_MODEL is MK2_MODEL', () => {

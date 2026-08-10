@@ -185,9 +185,22 @@ At startup `app.ts` constructs a `DriverManager` ([driver-manager.ts](../ts/src/
 |----------|-------|-----|------|---------------|
 | 1 | Stream Deck MK.2 | `0x0fd9` | `0x0080`, `0x006d`, `0x00a5` | VID+PID |
 | 2 | Stream Deck Mini | `0x0fd9` | `0x0063`, `0x0090`, `0x00b3`, `0x00b8` | VID+PID |
-| 3 | Mirabox 293V3/Ajazz | `0x6603` | `0x1005`, `0x1006`, `0x1010` | usage-page path first, then VID+PID |
+| 3 | Mirabox 293V3 | `0x6603` | `0x1005`, `0x1006`, `0x1010`, `0x1014` ‡ | usage-page path first, then VID+PID |
 | 4 | Mirabox 293S | `0x5548` | `0x6670` | usage-page path first, then VID+PID |
 | 5 | Mirabox K1 Pro | `0x6603` | `0x1015`, `0x1019` | usage-page path first, then VID+PID |
+| 6 | Ajazz AKP153E (rev. 2) † | `0x0300` | `0x3010` | usage-page path first, then VID+PID |
+| 7 | Ajazz AKP153R (rev. 2) † | `0x0300` | `0x3011` | usage-page path first, then VID+PID |
+
+‡ `0x1014` is the **HSV293SV3 / "293S V3"** refresh — the same v3 board, so it rides the
+293V3 model rather than getting its own entry (opendeck-akp153 names `0x1005` and `0x1014`
+identically; keydeck's two device JSONs differ only in PID). Untested — no hardware. Note
+it reports as "Mirabox 293V3" in the WebUI and mDNS name.
+
+† **Untested — no hardware.** Both are the 293V3 board behind a different VID/PID: same
+`mirabox-cora` v3 wire (1024-byte CRT packets, 512-byte reads), same `0xffa0`/`1` usage,
+same 3×6 grid and key map, so `ajazz/akp153-rev2.ts` clones `MIRABOX_293_MODEL`. Rev. 1
+(`0x0300:0x1010`/`0x1020`) is a **v1/512-byte** device and is deliberately not in the
+registry — it would need a 293S-style model.
 
 Elgato models are probed first so they take priority over Mirabox; the loop is generic — every model opens through the same `WorkerHidDriver`. Models needing key remapping (Mirabox 293/293S/K1 Pro, via `hasInputKeyMap(model)`) have wire input codes translated by `deviceInputToMk2Index()` before forwarding to the CORA child server; Elgato models (empty `keyMap`) pass through unchanged.
 
@@ -327,9 +340,10 @@ The key grid rebuilds when the model changes: `rebuildGrid(keyCount, columns)` s
 |--------|------|
 | Stream Deck MK.2 | 5×3 (15 keys) |
 | Stream Deck Mini | 3×2 (6 keys) |
-| Mirabox 293V3/Ajazz | 5×3 (advertised as MK.2) |
+| Mirabox 293V3 | 5×3 (advertised as MK.2) |
 | Mirabox 293S | 5×3 (left 5 of 6 hardware columns; advertised as MK.2) |
 | Mirabox K1 Pro | 3×2 (advertised as Mini) |
+| Ajazz AKP153E/R (rev. 2) | 5×3 (same as 293V3; advertised as MK.2) |
 
 ### Device model selector
 

@@ -1,7 +1,7 @@
 import type { EventEmitter } from 'node:events';
 import type { ImageModeOverride } from '../types.js';
 
-export type DeviceVendor = 'mirabox' | 'elgato';
+export type DeviceVendor = 'mirabox' | 'ajazz' | 'elgato';
 
 /** Wire protocol — closed; adding a new model almost always reuses an existing one. */
 export type DeviceProtocol =

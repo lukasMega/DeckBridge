@@ -662,6 +662,15 @@ input[type='range'].range:disabled {
   gap: 8px;
   width: 100%;
 }
+/* A step whose title is itself the action (e.g. "Open the Elgato Stream Deck app"). */
+.step-title a {
+  color: var(--accent);
+  text-decoration: none;
+}
+.step-title a:hover {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
 .step-sub {
   margin-top: 4px;
   font-size: 13px;

@@ -6,9 +6,13 @@ export const MIRABOX_293_MODEL: DeviceModel = {
   id: 'mirabox-293',
   vendor: 'mirabox',
   protocol: 'mirabox-cora',
-  name: 'Mirabox 293V3/Ajazz',
+  name: 'Mirabox 293V3',
   usbVendorId: 0x6603,
-  usbProductIds: [0x1005, 0x1006, 0x1010],
+  // 0x1005 standard (hardware-verified), 0x1006 EN variant, 0x1010 v2.5 (both from the
+  // vendor's own PID tables), 0x1014 the HSV293SV3 / "293S V3" refresh — same v3 board,
+  // named identically by opendeck-akp153 and byte-identical in keydeck's device JSON.
+  // 0x1006/0x1010/0x1014 are untested here (no hardware).
+  usbProductIds: [0x1005, 0x1006, 0x1010, 0x1014],
   usagePage: 0xffa0,
   usage: 1,
   keyCount: 15,

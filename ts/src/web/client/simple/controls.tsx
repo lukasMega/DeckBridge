@@ -7,7 +7,7 @@ import { useStore } from '../store.js';
 import { ICON } from '../ui-icons.js';
 import { CORA_PORT } from '../ui-state.js';
 import { Icon, HelpButton } from './Icon.js';
-import { openSdApp, postBrightnessOverride, restartElgatoApp } from './handlers.js';
+import { postBrightnessOverride, restartElgatoApp } from './handlers.js';
 
 /** "Back" pill used by the settings and help screens. */
 export function BackButton({ onClick }: Readonly<{ onClick: () => void }>): preact.JSX.Element {
@@ -42,7 +42,8 @@ export function Step({
   children,
 }: Readonly<{
   kind: StepKind;
-  title: string;
+  /** Plain text, or a node (e.g. a link) when the step title itself is interactive. */
+  title: ComponentChildren;
   helpId?: string;
   onHelp?: (id: string) => void;
   children?: ComponentChildren;
@@ -61,7 +62,7 @@ export function Step({
             <HelpButton
               helpId={helpId}
               onHelp={onHelp}
-              ariaLabel={`Help: ${title}`}
+              ariaLabel={typeof title === 'string' ? `Help: ${title}` : 'Help'}
               title="What do I do here?"
             />
           )}
@@ -145,16 +146,6 @@ export function ManualAddPanel({
       </div>
       <div class="manual-add-steps">
         {' '}
-        Open{' '}
-        <a
-          href="streamdeck://"
-          class="app-link"
-          title="Open Elgato Stream Deck"
-          onClick={openSdApp}
-        >
-          Stream Deck
-        </a>{' '}
-        app:
         <ol class="manual-add-list">
           <li>
             Navigate to the <span class="nstrong">top-left corner</span> of the Elgato app to locate
