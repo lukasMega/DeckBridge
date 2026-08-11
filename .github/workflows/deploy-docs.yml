@@ -45,7 +45,7 @@ jobs:
 
       - name: Install Chrome (for mermaid prerender)
         id: chrome
-        uses: browser-actions/setup-chrome@v1
+        uses: browser-actions/setup-chrome@v2
 
       - name: Puppeteer config (--no-sandbox for CI Chrome)
         run: echo '{"args":["--no-sandbox","--disable-setuid-sandbox"]}' > puppeteer.json
