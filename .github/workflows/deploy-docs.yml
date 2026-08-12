@@ -48,7 +48,11 @@ jobs:
         uses: browser-actions/setup-chrome@v2
 
       - name: Puppeteer config (--no-sandbox for CI Chrome)
-        run: echo '{"args":["--no-sandbox","--disable-setuid-sandbox"]}' > puppeteer.json
+        # --disable-dev-shm-usage: CI containers give /dev/shm only 64MB, too
+        # small for Chrome's shared memory renderer on larger mermaid diagrams
+        # (e.g. ARCHITECTURE.md) — it crashes mid-render, surfacing as
+        # ConnectionClosedError from mmdc/puppeteer instead of an OOM message.
+        run: echo '{"args":["--no-sandbox","--disable-setuid-sandbox","--disable-dev-shm-usage"]}' > puppeteer.json
 
       - name: Install deps
         run: npm ci
