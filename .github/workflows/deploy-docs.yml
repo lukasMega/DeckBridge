@@ -46,6 +46,12 @@ jobs:
       - name: Install Chrome (for mermaid prerender)
         id: chrome
         uses: browser-actions/setup-chrome@v2
+        with:
+          # Pinned: 151.0.7922.138 (the "stable" build as of 2026-08-12) crashes
+          # mid-render on ARCHITECTURE.md's mermaid diagram in headless mode
+          # (ConnectionClosedError on page.close — Chrome regression, not our
+          # config). 151.0.7922.77 is the last build confirmed working in CI.
+          chrome-version: 151.0.7922.77
 
       - name: Puppeteer config (--no-sandbox for CI Chrome)
         # --disable-dev-shm-usage: CI containers give /dev/shm only 64MB, too
