@@ -296,8 +296,11 @@ export function createHandler(kv: Deno.Kv) {
         const parts = await Promise.all(days.map((day) => readStats(kv, day)));
 
         const out: Record<string, Record<string, number>> = {};
-        // series rows: [day, pv, uv, sessions] — powers the multi-line trend
-        const series: [string, number, number, number][] = [];
+        // series rows: [day, pv, uv, sessions, bot] — powers the multi-line
+        // trend. `bot` is the per-day total of the `bot` dim (ua + synthetic);
+        // it rides the same row so the dashboard's opt-in bot line needs no
+        // second request. Human metrics stay bot-free — bot hits never write pv.
+        const series: [string, number, number, number, number][] = [];
         for (let i = 0; i < days.length; i++) {
           const part = parts[i];
           for (const dim in part) {
@@ -306,11 +309,14 @@ export function createHandler(kv: Deno.Kv) {
             }
           }
           if (wantSeries) {
+            let bots = 0;
+            for (const v in part.bot ?? {}) bots += part.bot[v];
             series.push([
               days[i],
               part.pv?._ ?? 0,
               part.uv?._ ?? 0,
               part.sessions?._ ?? 0,
+              bots,
             ]);
           }
         }

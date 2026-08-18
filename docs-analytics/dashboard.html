@@ -48,6 +48,12 @@
   .kpiDelta.down { color: #bf616a; }
   .kpiDelta.flat { color: #6b7684; }
   .rangeLabel { color: #6b7684; font-size: 12px; margin-left: auto; }
+  /* bot traffic is opt-in: never counted in the human KPIs, tinted apart from
+     them (amber, not frost) so a visible bot number can't be misread as pv */
+  .kpiTile.bot { border-color: #4a3a20; }
+  .kpiTile.bot .kpiVal { color: #d08770; }
+  .toggle { display: flex; align-items: center; gap: 6px; margin: 10px 0 0; color: #9aa5b1; font-size: 12px; cursor: pointer; }
+  .toggle input { width: auto; margin: 0; }
   #chartWrap { background: #10151c; border: 1px solid #20262f; border-radius: 6px; padding: 8px; margin-bottom: 16px; }
   #chart { width: 100%; height: 180px; }
   /* day×hour heatmap — sequential single-hue ramp (frost), light→dark = low→high
@@ -65,12 +71,21 @@
   .hmLegend { display: flex; align-items: center; gap: 6px; margin-top: 10px; color: #6b7684; font-size: 11px; }
   .hmSwatch { width: 14px; height: 14px; border-radius: 2px; }
   .search { margin: 4px 0 14px; }
-  .bdGroup { margin-bottom: 18px; }
-  .barRow { position: relative; display: flex; justify-content: space-between; padding: 5px 8px; margin-bottom: 2px; border-radius: 4px; overflow: hidden; font-size: 12.5px; }
+  /* two columns on a wide viewport, one below ~900px. Multi-column, not grid:
+     column flow packs a tall group (path, 10+ rows) against short ones instead
+     of leaving grid-row dead space beside it, and `columns: <width>` picks the
+     count itself so no media query is needed. */
+  #breakdowns { columns: 420px 2; column-gap: 22px; }
+  .bdGroup { break-inside: avoid; margin-bottom: 14px; min-width: 0; }
+  .barRow { position: relative; display: flex; justify-content: space-between; padding: 3px 8px; margin-bottom: 1px; border-radius: 3px; overflow: hidden; font-size: 11.5px; }
   .barFill { position: absolute; inset: 0; background: #243244; z-index: 0; }
   .barLabel, .barCount { position: relative; z-index: 1; }
   .barLabel { color: #d8dee9; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .barCount { color: #ebcb8b; padding-left: 10px; }
+  .barCount { color: #ebcb8b; padding-left: 10px; white-space: nowrap; }
+  /* share of the dim total — muted so the raw count stays the primary number */
+  .barPct { color: #6b7684; padding-left: 6px; }
+  .bdMore { margin: 2px 0 0; padding: 2px 8px; background: none; border: 0; color: #6b7684; font: inherit; font-size: 11px; cursor: pointer; }
+  .bdMore:hover { color: #88c0d0; }
 </style>
 </head>
 <body>
@@ -95,6 +110,10 @@
       <button data-period="all">All time</button>
     </div>
     <button id="load" class="alt">Load</button>
+    <label class="toggle" for="showBots">
+      <input type="checkbox" id="showBots">
+      show bot traffic (separate count — never part of pageviews)
+    </label>
     <div class="msg" id="loadMsg"></div>
 
     <div id="analytics" style="display:none">
@@ -133,6 +152,11 @@
           <div class="kpiVal" id="kpiHuman">0%</div>
           <div class="kpiLabel">human interaction</div>
           <div class="kpiDelta" id="kpiHumanDelta"></div>
+        </div>
+        <div class="kpiTile bot" id="kpiBotTile" style="display:none" title="Hits whose User-Agent matched isbot, plus untrusted-event (synthetic) verdicts. Counted separately — bot hits never write `pv`, so no other KPI on this row includes them.">
+          <div class="kpiVal" id="kpiBot">0</div>
+          <div class="kpiLabel">bot visits</div>
+          <div class="kpiDelta" id="kpiBotDelta"></div>
         </div>
         <div class="rangeLabel" id="rangeLabel"></div>
       </div>
@@ -327,6 +351,13 @@ function loadUplot() {
   return uplotReady;
 }
 
+// --- bot visibility (opt-in, remembered across reloads) ---
+// Bots are stored in their own dims and never touch `pv`/`uv`/`sessions`, so
+// this toggle only changes what is *shown*: it re-renders from `lastData`
+// without refetching.
+const BOTS_KEY = "docs-analytics.showBots";
+let showBots = localStorage.getItem(BOTS_KEY) === "1";
+
 let chart = null;
 async function renderChart(series) {
   const el = $("chart");
@@ -340,13 +371,20 @@ async function renderChart(series) {
   if (chart) { chart.destroy(); chart = null; }
   el.innerHTML = "";
   if (!series.length) return;
-  // rows are [day, pv, uv, sessions] (older single-metric rows still plot pv)
+  // rows are [day, pv, uv, sessions, bot] (older single-metric rows still plot pv)
   const xs = series.map((r) => Date.parse(r[0] + "T00:00:00Z") / 1000);
   const pv = series.map((r) => r[1] ?? 0);
   const uv = series.map((r) => r[2] ?? 0);
   const ss = series.map((r) => r[3] ?? 0);
+  const bots = series.map((r) => r[4] ?? 0);
   const points = { show: series.length < 60 };
   const width = el.parentElement.clientWidth;
+  // bot line is added only when opted in — its scale can dwarf pv on a quiet
+  // day, and it is not a human metric
+  const botSeries = showBots
+    ? [{ label: "bots", stroke: "#d08770", width: 1, dash: [4, 4], points }]
+    : [];
+  const botData = showBots ? [bots] : [];
   chart = new uPlot({
     width,
     height: 180,
@@ -363,8 +401,9 @@ async function renderChart(series) {
       { label: "pageviews", stroke: "#88c0d0", width: 2, fill: "rgba(136,192,208,0.15)", points },
       { label: "unique visitors", stroke: "#a3be8c", width: 2, points },
       { label: "sessions", stroke: "#ebcb8b", width: 2, points },
+      ...botSeries,
     ],
-  }, [xs, pv, uv, ss], el);
+  }, [xs, pv, uv, ss, ...botData], el);
 }
 window.addEventListener("resize", () => {
   if (!chart) return;
@@ -424,30 +463,46 @@ const DIM_ORDER = [
   "path", "host", "ref_group", "ref", "browser", "os", "device", "country", "lang", "tz",
   "hour", "viewport", "utm_source", "utm_medium", "utm_campaign",
   "event", "event_target",
-  // traffic-quality dims last: `bot` (how a bot was caught: ua / synthetic),
-  // `bot_kind` (which isbot pattern fired — this is what makes the filter
-  // tunable against real traffic), `hi` (human-interaction latency buckets)
-  "bot", "bot_kind", "hi",
+  // traffic-quality dims last: `hi` (human-interaction latency buckets)
+  "hi",
 ];
+// bot dims are rendered only with the toggle on: `bot` (how a bot was caught:
+// ua / synthetic) and `bot_kind` (which isbot pattern fired — this is what
+// makes the filter tunable against real traffic). Always in the CSV, though —
+// an export shouldn't silently depend on a UI checkbox.
+const BOT_DIMS = ["bot", "bot_kind"];
 // `dowhour` renders as the heatmap, not a bar list, but still belongs in an export
-const CSV_DIMS = [...DIM_ORDER, "dowhour"];
+const CSV_DIMS = [...DIM_ORDER, ...BOT_DIMS, "dowhour"];
+
+// rows past this are rendered but collapsed behind the per-dim "show all"
+// toggle — high-cardinality dims (path, ref, event_target) otherwise dominate
+// the page height. A search query overrides the cap (see applyFilter).
+const BD_TOP = 10;
 
 function renderBreakdowns(data) {
   const wrap = $("breakdowns");
   let h = "";
   const keys = [];
-  for (const dim of DIM_ORDER) {
+  for (const dim of showBots ? [...DIM_ORDER, ...BOT_DIMS] : DIM_ORDER) {
     const obj = data[dim];
     if (!obj) continue;
     const rows = Object.entries(obj).sort((a, b) => b[1] - a[1]);
     const max = rows.length ? rows[0][1] : 1;
+    // bar width is relative to the dim's largest value; the printed % is the
+    // share of the dim total — two different denominators on purpose
+    const total = rows.reduce((a, r) => a + r[1], 0);
     h += '<div class="bdGroup"><div class="dim">' + dim + "</div>";
-    for (const [k, v] of rows) {
+    rows.forEach(([k, v], i) => {
       const pct = max ? Math.round((v / max) * 100) : 0;
-      h += '<div class="barRow"><div class="barFill" style="width:' + pct + '%"></div>' +
+      const share = total ? Math.round((v / total) * 100) : 0;
+      h += '<div class="barRow' + (i >= BD_TOP ? " extra" : "") + '">' +
+        '<div class="barFill" style="width:' + pct + '%"></div>' +
         '<span class="barLabel">' + esc(k) + '</span>' +
-        '<span class="barCount">' + v + "</span></div>";
+        '<span class="barCount">' + v + '<span class="barPct">' + share + "%</span></span></div>";
       keys.push(k);
+    });
+    if (rows.length > BD_TOP) {
+      h += '<button class="bdMore" type="button">+ show all ' + rows.length + "</button>";
     }
     h += "</div>";
   }
@@ -456,10 +511,33 @@ function renderBreakdowns(data) {
   applyFilter();
 }
 
+// one click handler for every "show all" button (delegated — the buttons are
+// re-created on each render)
+$("breakdowns").onclick = (e) => {
+  const btn = e.target.closest(".bdMore");
+  if (!btn) return;
+  const group = btn.closest(".bdGroup");
+  group.classList.toggle("open");
+  const n = group.querySelectorAll(".barRow").length;
+  btn.textContent = group.classList.contains("open") ? "− show top " + BD_TOP : "+ show all " + n;
+  applyFilter();
+};
+
 function applyFilter() {
   const q = $("search").value.trim().toLowerCase();
-  for (const row of document.querySelectorAll(".barRow")) {
-    row.style.display = !q || row.dataset.label.includes(q) ? "" : "none";
+  for (const group of document.querySelectorAll(".bdGroup")) {
+    // a query searches the *whole* dim, not just its visible top rows
+    const open = q ? true : group.classList.contains("open");
+    let shown = 0;
+    for (const row of group.querySelectorAll(".barRow")) {
+      const match = !q || row.dataset.label.includes(q);
+      row.style.display = match && (open || !row.classList.contains("extra")) ? "" : "none";
+      if (match) shown++;
+    }
+    const btn = group.querySelector(".bdMore");
+    if (btn) btn.style.display = q ? "none" : "";
+    // drop a dim entirely when nothing in it matches, so the grid closes up
+    group.style.display = shown ? "" : "none";
   }
 }
 $("search").oninput = applyFilter;
@@ -491,7 +569,7 @@ function setDelta(id, cur, prev) {
 
 const DELTA_IDS = [
   "kpiPvDelta", "kpiUvDelta", "kpiSessionsDelta", "kpiViewsPerVisitDelta",
-  "kpiBounceDelta", "kpiEngagementDelta", "kpiHumanDelta",
+  "kpiBounceDelta", "kpiEngagementDelta", "kpiHumanDelta", "kpiBotDelta",
 ];
 
 // total across every value of a dim (the `hi` dim is split into latency buckets,
@@ -523,6 +601,11 @@ function renderKpis(data, prior) {
   $("kpiBounce").textContent = bounceShown + "%";
   $("kpiEngagement").textContent = (sessions ? 100 - bounceShown : 0) + "%";
   $("kpiHuman").textContent = humanPct.toFixed(0) + "%";
+  // bot total = every value of the `bot` dim (ua + synthetic). Separate tile,
+  // hidden unless opted in; it is never folded into pv/uv/sessions.
+  const bots = dimTotal(data.bot);
+  $("kpiBotTile").style.display = showBots ? "" : "none";
+  $("kpiBot").textContent = bots;
 
   if (!prior) {
     for (const id of DELTA_IDS) { $(id).className = "kpiDelta flat"; $(id).textContent = "—"; }
@@ -543,9 +626,12 @@ function renderKpis(data, prior) {
   setDelta("kpiBounceDelta", bouncePct, pBouncePct);
   setDelta("kpiEngagementDelta", engagementPct, pEngagementPct);
   setDelta("kpiHumanDelta", humanPct, pHumanPct);
+  setDelta("kpiBotDelta", bots, dimTotal(prior.bot));
 }
 
+let lastRender = null;
 async function renderAnalytics(data, prior, from, to) {
+  lastRender = { data, prior, from, to };
   $("analytics").style.display = "";
   $("rangeLabel").textContent = fmtRange(from, to);
   renderKpis(data, prior);
@@ -610,6 +696,15 @@ async function loadStats() {
   } catch (e) { m.className = "msg err"; m.textContent = String(e); }
 }
 $("load").onclick = loadStats;
+
+$("showBots").checked = showBots;
+$("showBots").onchange = () => {
+  showBots = $("showBots").checked;
+  localStorage.setItem(BOTS_KEY, showBots ? "1" : "0");
+  // no refetch — the bot counts are already in the loaded payload
+  const r = lastRender;
+  if (r) renderAnalytics(r.data, r.prior, r.from, r.to);
+};
 
 function csvCell(v) {
   const s = String(v);

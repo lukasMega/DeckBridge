@@ -43,10 +43,15 @@ Set a different token: `STATS_TOKEN=xyz deno task dev`.
   logs) **or** `?token=…` (curl convenience). `day` defaults to today (UTC).
   Range: `&from=YYYY-MM-DD&to=YYYY-MM-DD` (inclusive) merges into totals; days
   are read in parallel. Add `&series=1` to also get a per-day series
-  (`series: [[day, pv, uv, sessions], …]`) for the multi-line trend chart.
-  **401** on bad/missing token.
+  (`series: [[day, pv, uv, sessions, bot], …]`) for the multi-line trend chart;
+  `bot` is that day's total over the `bot` dim (ua + synthetic) and is never
+  part of `pv`. **401** on bad/missing token.
 - **`GET /dashboard`** — the test UI (period selector, uPlot trend chart, KPI tiles,
-  day×hour heatmap, breakdowns, CSV export). `GET /vendor/uPlot.iife.min.js` + `/vendor/uPlot.min.css`
+  day×hour heatmap, breakdowns, CSV export, **show bot traffic** toggle).
+  Breakdowns render as two packed columns (CSS multi-column, one column under
+  ~900px), each dim capped at its **top 10** values behind a per-dim *show all*
+  toggle, each row showing count + share of that dim's total. The filter box
+  searches every value, capped or not, and hides dims with no match. `GET /vendor/uPlot.iife.min.js` + `/vendor/uPlot.min.css`
   serve the **vendored** uPlot (no CDN dependency). Deploy caveat: the asset files
   live **flat** beside `main.ts` (not in a subdir) and are read with
   `Deno.readTextFile` — Deno Deploy bundles sibling new-URL files but skips subdirs
@@ -79,6 +84,15 @@ gif so behavior is unchanged for the caller. This makes the filter tunable
 against real traffic (compare `bot`/`bot_kind` counts over time) instead of
 guesswork, and replaces the old approach of dropping bot hits with no signal
 at all.
+
+**Dashboard display**: bot traffic is **off by default** behind the *show bot
+traffic* checkbox (remembered in `localStorage`). With it on you get a separate
+amber **bot visits** KPI tile (with the same prior-period delta as the other
+tiles), a dashed `bots` line on the trend chart, and the `bot` + `bot_kind`
+breakdowns. It is strictly additive display: bot hits never write `pv`, so
+pageviews/visitors/sessions/bounce are bot-free either way, and toggling only
+re-renders the already-loaded payload (no refetch). The CSV export always
+includes the bot dims regardless of the checkbox.
 
 **Behavioral probe**: the client arms a one-shot listener set
 (`pointerdown`/`keydown`/`touchstart`/`wheel`/`mousemove`, all

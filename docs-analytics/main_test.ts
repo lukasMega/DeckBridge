@@ -107,6 +107,19 @@ Deno.test("bots are skipped, but counted (not silently dropped)", async () => {
   kv.close();
 });
 
+Deno.test("series carries a per-day bot total alongside the human metrics", async () => {
+  const { kv, h } = await fixture();
+  await h(beacon(encode({ p: "/", u: "1", s: "1" })));
+  await h(beacon(encode({ p: "/" }), "curl/8.0")); // ua bot
+  await h(beacon(encode({ ev: "bot", t: "synthetic" }))); // probe verdict
+
+  const day = new Date().toISOString().slice(0, 10);
+  const stats = await (await h(statsReq(`series=1&from=${day}&to=${day}`))).json();
+  // [day, pv, uv, sessions, bot] — bot is ua + synthetic, and pv excludes both
+  assertEquals(stats.series, [[day, 1, 1, 1, 2]]);
+  kv.close();
+});
+
 Deno.test("isbot catches JS-capable bots the old hand-rolled regex missed", async () => {
   const { kv, h } = await fixture();
   // facebookexternalhit doesn't contain "bot"/"crawl"/"spider"/... — the old
