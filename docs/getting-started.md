@@ -16,8 +16,10 @@ release** (easiest) or **build from source**.
 ### Option A — Packaged release (recommended)
 
 :::caution
-Releases are currently **built and tested for macOS only**. On Linux or Windows,
-build from source (Option B) — those builds are implemented but untested.
+Releases are **built and tested on macOS**. Windows and Linux builds are produced by the
+same release workflow but are far less exercised — if one misbehaves, build from source
+(Option B). The Linux binaries need **glibc 2.38 or newer** (Ubuntu 24.04+, Debian 13+);
+on an older distro, build from source.
 :::
 
 Download the build for your OS from the
@@ -47,9 +49,10 @@ mise run start      # build everything + run
 mise run compile    # produce a standalone ./deckbridge binary
 ```
 
-mise fetches the txiki.js runtime automatically — no C/C++ toolchain needed on macOS or
-Windows. Linux has no prebuilt runtime yet, so mise builds it from source (needs cmake,
-make, libffi).
+mise fetches a prebuilt slim txiki.js runtime automatically — no C/C++ toolchain needed on
+macOS arm64, Windows, or Linux (x86_64/arm64). Only macOS x86_64 has no prebuilt asset and
+builds from source (needs git, cmake, npm, libffi). Set `TJS_FROM_SOURCE=1` to force the
+source build anywhere — e.g. on a distro older than glibc 2.38.
 
 ## 2. Plug in your deck
 

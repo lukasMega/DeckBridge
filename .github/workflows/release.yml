@@ -34,7 +34,13 @@ jobs:
           # github:lukasMega/txiki.js mise tool (no linux-arm64 asset), and mise.toml
           # no longer declares that tool at all.
           # See .claude/plans/2026-07-31_linux-build-support.md.
-          - os: ubuntu-22.04       # oldest glibc we ship against
+          # Both Linux jobs run on 24.04 images on purpose: the prebuilt slim
+          # runtime is itself built on 24.04, so a 22.04 runner dies at
+          # `tjs compile` with "GLIBC_2.38 not found". Consequence: the shipped
+          # Linux binaries need glibc >= 2.38 (Ubuntu 24.04+, Debian 13+). To
+          # lower that floor, set from_source on the job and move it back to a
+          # 22.04 image — the same slim profile then links against glibc 2.35.
+          - os: ubuntu-24.04
             platform: linux-x86_64
           - os: ubuntu-24.04-arm
             platform: linux-arm64
