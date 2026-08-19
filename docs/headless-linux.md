@@ -4,13 +4,12 @@ title: Headless Linux (Raspberry Pi / DietPi)
 description: Run DeckBridge unattended on a headless Raspberry Pi / DietPi box under systemd.
 ---
 
-:::caution[Linux builds are upcoming]
-This page documents the intended setup for a headless Linux install. **Prebuilt
-Linux release binaries do not exist yet** — the GitHub releases currently ship
-macOS builds only (see [Getting Started](./getting-started.md)). Until a
-`deckbridge-linux-arm64` release asset ships, build from source on the Pi itself
-(Option B in Getting Started). This page will be updated with a download link
-once that release lands.
+:::caution[Linux builds are new and lightly tested]
+Prebuilt `deckbridge-<version>-linux-x86_64.zip` and `-linux-arm64.zip` assets ship as of
+v0.9.0 (see [releases](https://github.com/lukasMega/DeckBridge/releases)), but they get far
+less real-world use than the macOS builds. They need **glibc 2.38+** (Raspberry Pi OS
+trixie / Ubuntu 24.04+); on an older image, build from source on the Pi itself (Option B in
+[Getting Started](./getting-started.md)).
 :::
 
 Runs DeckBridge unattended on a headless **Raspberry Pi (64-bit OS)** or **DietPi**
