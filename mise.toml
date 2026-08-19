@@ -5,15 +5,10 @@ node = "24"
 # on whatever `deno` happens to be on PATH.
 deno = "2"
 
-[tools."github:lukasMega/txiki.js"]
-version = "{{ env._TXIKI_MISE_V }}"
-[tools."github:lukasMega/txiki.js".platforms]
-macos-arm64 = { asset_pattern = "txiki-macos-arm64-slim.zip", bin = "tjs" }
-macos-x64   = { asset_pattern = "txiki-macos-x86_64-slim.zip",   bin = "tjs" }
-windows-x64 = { asset_pattern = "txiki-windows-x86_64-slim.zip", bin = "tjs.exe" }
-
-[hooks]
-#postinstall = "chmod +x \"$(mise where github:lukasMega/txiki.js)/tjs\" 2>/dev/null || true"
+# NOTE: no `[tools."github:lukasMega/txiki.js"]` entry on purpose. $TJS below is
+# an explicit vendor/ path filled by `mise run tjs-setup`, so a mise-managed tool
+# was never actually used — and mise-action's blind `mise install` failed on
+# platforms with no matching asset (that's what kept linux out of release.yml).
 
 [env]
 # rustup installs cargo here; CI (dtolnay/rust-toolchain) adds it to PATH itself,
@@ -22,8 +17,10 @@ windows-x64 = { asset_pattern = "txiki-windows-x86_64-slim.zip", bin = "tjs.exe"
 # separator, so tasks can call plain `cargo` on every platform without
 # hardcoding a POSIX-only ${HOME}/.cargo/bin/cargo path (broken on Windows).
 _.path = ["~/.cargo/bin"]
-_TXIKI_MISE_V  = "26.5.1"
-TXIKI_VERSION  = "v26.5.1"
+# Release tag of lukasMega/txiki.js-with-slim-builds. Used by BOTH runtime paths:
+# scripts/tjs-download.mjs (downloads the prebuilt `slim-ffi` asset) and
+# scripts/tjs-build.mjs (clones this tag and builds it).
+TXIKI_VERSION  = "slim-v26.6.0-6"
 # Portable default: vendored build/download destination, per-platform exe suffix.
 # Local overrides (a pre-built $TJS path, TJS_FROM_SOURCE=1) go in mise.local.toml
 # (gitignored) — see that file's comment.
@@ -33,32 +30,33 @@ DECKBRIDGE_TRAY_BIN        = "{{config_root}}/rust/target/release/deckbridge-tra
 DECKBRIDGE_RAW_DUMP_DIR="{{config_root}}/tmp/mira2el-raw"
 
 [tasks.checkTjs]
+description = "Print the active txiki.js runtime: path, version, size"
+# No `$TJS --help`: the slim profile compiles the help/eval/serve subcommands out.
 run = '''
-echo "TJS path: $TJS  \n - version: $($TJS --version)"
-echo " - size: $(du -h $TJS | cut -f1) | $(du -k $TJS | cut -f1)kB"
-echo "tjs compile:"
-echo " $($TJS compile) "
-echo "tjs --help:"; echo " $($TJS --help) "
+echo "TJS: $TJS"
+echo " - version: $($TJS --version)"
+echo " - size:    $(du -k "$TJS" | cut -f1) kB"
 '''
 
+# DECKBRIDGE_NATIVE_LIB / DECKBRIDGE_TRAY_BIN come from [env] above — mise already
+# exports them into every task, so the run lines don't repeat them.
 [tasks.s]
 alias = ["start", "run"]
 description = "Build and run"
 quiet = true
 depends = ["build"]
-run = "DECKBRIDGE_NATIVE_LIB=$DECKBRIDGE_NATIVE_LIB DECKBRIDGE_TRAY_BIN=$DECKBRIDGE_TRAY_BIN $TJS run ts/dist/bundle.js"
+run = "$TJS run ts/dist/bundle.js"
 
 [tasks.s-simple]
 alias = ["start-simple", "run-simple"]
 description = "Build and run the simple-only UI (no advanced/debug view)"
 quiet = true
 depends = ["build-simple"]
-run = "DECKBRIDGE_NATIVE_LIB=$DECKBRIDGE_NATIVE_LIB DECKBRIDGE_TRAY_BIN=$DECKBRIDGE_TRAY_BIN $TJS run ts/dist/bundle.js"
+run = "$TJS run ts/dist/bundle.js"
 
 [tasks.d]
 description = "Rebuild at debug log level and run"
-run = "LOG_LEVEL=debug mise run build && DECKBRIDGE_NATIVE_LIB=$DECKBRIDGE_NATIVE_LIB DECKBRIDGE_TRAY_BIN=$DECKBRIDGE_TRAY_BIN $TJS run ts/dist/bundle.js"
-
+run = "LOG_LEVEL=debug mise run build && $TJS run ts/dist/bundle.js"
 
 [tasks.gen-splash]
 description = "Regenerate on-connect splash JPEG assets (run once after design changes)"
@@ -66,17 +64,16 @@ dir = "ts"
 run = "node scripts/gen-splash.mjs"
 
 [tasks.tjs-setup]
-description = "Acquire txiki.js runtime: prebuilt download by default, slim from-source build when TJS_FROM_SOURCE=1"
+description = "Acquire the slim txiki.js runtime: prebuilt download by default, from-source build when TJS_FROM_SOURCE=1"
 quiet = true
-# Default (no env): download the official prebuilt release — works without a
-# C/C++ toolchain, so a contributor can always `mise run build`/`compile`.
-# Opt in to the size-optimized slim runtime (sqlite3 + wasm/WAMR removed,
-# symbols stripped) by exporting TJS_FROM_SOURCE=1. Release CI sets this.
-# `mise run tjs-build` builds the slim runtime unconditionally.
+# Default (no env): download the prebuilt `slim-ffi` asset of $TXIKI_VERSION —
+# no C/C++ toolchain needed, so a contributor can always `mise run build`.
+# TJS_FROM_SOURCE=1 builds the same runtime from source instead (needed on
+# macos-x86_64, which has no prebuilt slim asset).
 run = "node scripts/tjs-setup.mjs"
 
 [tasks.tjs-build]
-description = "Build slim txiki.js from source (drops sqlite3 + wasm/WAMR, strips symbols); needs cmake + C/C++ toolchain"
+description = "Build slim txiki.js from source (no sqlite3/wasm, stripped); needs cmake + C/C++ toolchain"
 run = "node scripts/tjs-build.mjs"
 
 [tasks.deckbridge-native]
@@ -146,32 +143,10 @@ description = "Package the simple-only (lite) binary into a distributable zip (u
 depends = ["compile-simple"]
 run = "SRC_BIN=deckbridge-lite node scripts/package.mjs ${1:-dev}"
 
-[tasks.run-ts]
-description = "Run from bundle (fast iteration)"
-run = "DECKBRIDGE_NATIVE_LIB=$DECKBRIDGE_NATIVE_LIB DECKBRIDGE_TRAY_BIN=$DECKBRIDGE_TRAY_BIN $TJS run ts/dist/bundle.js"
-
 [tasks.lint]
 description = "Lint with oxlint"
 depends = ["ts-install"]
 run = "./ts/node_modules/.bin/oxlint ts && ./ts/node_modules/.bin/eslint ts"
-
-[tasks.rust-fmt]
-description = "Check Rust formatting (member crates; vendored jpeg-encoder fork excluded)"
-dir = "rust"
-run = "cargo fmt --check -p deckbridge-native -p deckbridge-tray"
-
-[tasks.rust-clippy]
-description = "Clippy with -D warnings for both JPEG backends (features are mutually exclusive)"
-dir = "rust"
-run = """
-cargo clippy --workspace --all-targets -- -D warnings
-cargo clippy -p deckbridge-native --no-default-features --features jpeg-fork,usb --all-targets -- -D warnings
-"""
-
-[tasks.rust-test]
-description = "Run Rust unit tests (image transform + decompression-bomb defense)"
-dir = "rust"
-run = "cargo test --workspace"
 
 [tasks.tauri-build]
 description = "Build Windows NSIS installer via Tauri (runs: compile + tray + copy sidecars + cargo tauri build)"
@@ -217,12 +192,12 @@ open target/release/bundle/macos
 description = "Cargo check the Tauri crate (cross-platform; auto-creates empty host-triple sidecar stubs so externalBin validates)"
 dir = "src-tauri"
 run = "node ../scripts/tauri-check-stubs.mjs && cargo check"
-#description = "cargo-deny: advisories, licenses, bans, sources (needs: cargo install cargo-deny --locked)"
-#dir = "rust"
-#run = "cargo deny check"
 
+# fmt-check (member crates only — the vendored jpeg-encoder fork is excluded),
+# clippy for both mutually-exclusive JPEG backends, then the unit tests.
+# Sequential: parallel cargo races on rustup component downloads.
 [tasks.rust-lint]
-description = "Rust fmt-check + clippy + tests (sequential — parallel cargo races on rustup component downloads)"
+description = "Rust fmt-check + clippy + tests"
 dir = "rust"
 run = """
 cargo fmt --check -p deckbridge-native -p deckbridge-tray
@@ -357,14 +332,3 @@ run = """
   node scripts/coverage-report.mjs
 """
 timeout = "120s"
-
-[tasks.largeFiles]
-description = "top 15 large files"
-run = """
-find . -type f -name "*.ts" \
--not -path "*/node_modules/*" \
--not -path "*/vendor/*" \
--not -path "*/test/*" \
--print0 \
-| xargs -0 wc -l | grep -v "total$" | sort -rn | head -n 15
-"""

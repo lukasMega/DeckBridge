@@ -1,28 +1,28 @@
 #!/usr/bin/env node
-// Build a SLIM txiki.js runtime from source.
+// Build the SLIM txiki.js runtime from source into $TJS.
 //
-// This is the size-optimized alternative to scripts/tjs-download.mjs (which
-// grabs the official prebuilt release). It clones lukasMega/txiki.js at
-// $TXIKI_VERSION and configures it with -DBUILD_WITH_WASM=OFF
-// -DBUILD_WITH_SQLITE=OFF (native upstream options as of v26.5.1 — no patch
-// needed), builds a Release binary, strips it, and copies it to $TJS.
+// This is the fallback for platforms with no prebuilt slim asset (macOS x86_64)
+// and the escape hatch when you want to build the runtime yourself; the default
+// path is scripts/tjs-download.mjs, which fetches the same artifact prebuilt.
 //
-// The app uses NONE of sqlite/wasm — only tjs:ffi, raw TCP, and tjs.serve
-// HTTP+WebSocket — so removing those subsystems shrinks the embedded runtime
-// (and therefore the compiled `deckbridge` binary, which self-embeds it).
+// It does NOT hand-roll cmake flags: the fork ships scripts/build-dist.mjs, the
+// same driver its release CI runs, so `--profile ffi` here produces exactly the
+// published `txiki-slim-ffi-*` binary (FFI in; TLS/WASM/SQLite/mimalloc and the
+// eval/serve/test/bundle/app subcommands out; MinSizeRel + compressed bytecode
+// + hardened + stripped).
 //
-// Requires: git, cmake, a C/C++ toolchain (cc/clang/gcc), make, libffi.
-// Opt in via `mise run tjs-build` (or TJS_FROM_SOURCE=1; see mise.toml).
+// Requires: git, cmake, a C/C++ toolchain, npm (esbuild comes from the clone's
+// node_modules — build-dist.mjs never fetches it at build time).
 //
 // Env (same contract as tjs-download.mjs):
 //   TJS            destination path for the runtime binary (vendor/.../build/tjs)
-//   TXIKI_VERSION  git tag to build (e.g. v26.5.1)
+//   TXIKI_VERSION  release tag to build (e.g. slim-v26.6.0-6)
 
-import { execSync, execFileSync } from 'node:child_process';
+import { execFileSync, execSync } from 'node:child_process';
 import { existsSync, mkdirSync, copyFileSync, chmodSync, rmSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { platform, cpus } from 'node:os';
+import { platform } from 'node:os';
 
 const { TJS, TXIKI_VERSION } = process.env;
 
@@ -31,16 +31,17 @@ if (!TJS || !TXIKI_VERSION) {
   process.exit(1);
 }
 
+// Same no-op-when-present contract as tjs-download.mjs: a cached/restored $TJS
+// (CI) or an existing local build must not trigger a multi-minute rebuild on
+// every `mise run test`. Delete $TJS to force a rebuild.
 if (existsSync(TJS)) {
   console.log(`tjs already present: ${TJS}`);
   process.exit(0);
 }
 
 const isWin = platform() === 'win32';
-
-// Repo root is the parent of this script's scripts/ directory.
-const scriptDir = dirname(fileURLToPath(import.meta.url));
-const repoRoot = resolve(scriptDir, '..');
+const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+const REPO = 'https://github.com/lukasMega/txiki.js-with-slim-builds.git';
 
 // --- Toolchain preflight: fail with an actionable message, not a build error ---
 function have(cmd) {
@@ -52,18 +53,14 @@ function have(cmd) {
   }
 }
 
-const missing = ['git', 'cmake'].filter((c) => !have(c));
-// Need at least one C compiler. (cmake also needs a working toolchain, but this
-// gives a clearer hint than a mid-configure failure.)
+const missing = ['git', 'cmake', 'npm'].filter((c) => !have(c));
 if (!isWin && !['cc', 'clang', 'gcc'].some(have)) missing.push('a C/C++ compiler (cc/clang/gcc)');
-if (!isWin && !have('make')) missing.push('make');
 
 if (missing.length) {
   console.error(
     [
       `Cannot build txiki.js from source: missing ${missing.join(', ')}.`,
       '',
-      'The slim source build needs git + cmake + make + a C/C++ toolchain.',
       '  macOS:  xcode-select --install && brew install cmake libffi',
       '  Debian: sudo apt-get install -y build-essential cmake git libffi-dev',
       '',
@@ -73,102 +70,48 @@ if (missing.length) {
   process.exit(1);
 }
 
-// Build into a dedicated dir next to the destination so we never clobber an
-// existing working runtime until the slim build is proven to exist.
-const buildRoot = join(repoRoot, 'vendor', 'txiki.js-src');
-const srcDir = join(buildRoot, TXIKI_VERSION);
-const buildDir = join(srcDir, 'build');
-const builtTjs = join(buildDir, isWin ? 'tjs.exe' : 'tjs');
+// Build in a dedicated dir so an existing working runtime at $TJS is never
+// clobbered until the new binary exists.
+const srcDir = join(repoRoot, 'vendor', 'txiki.js-src', TXIKI_VERSION);
+const outDir = join(srcDir, 'dist');
+const builtTjs = join(outDir, isWin ? 'tjs.exe' : 'tjs');
 
-function run(cmd, opts = {}) {
-  console.log(`$ ${cmd}`);
-  execSync(cmd, { stdio: 'inherit', ...opts });
+function run(cmd, args, opts = {}) {
+  console.log(`$ ${cmd} ${args.join(' ')}`);
+  execFileSync(cmd, args, { stdio: 'inherit', ...opts });
 }
 
 try {
   // Fresh checkout each run keeps the build deterministic.
-  rmSync(srcDir, { recursive: true, force: true });
-  mkdirSync(buildRoot, { recursive: true });
+  // maxRetries: a stale clone contains read-only git objects and (on Windows)
+  // files a virus scanner may still hold open — a single rmSync can hit ENOTEMPTY.
+  rmSync(srcDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
+  mkdirSync(dirname(srcDir), { recursive: true });
 
-  console.log(`Cloning lukasMega/txiki.js @ ${TXIKI_VERSION} ...`);
-  run(`git clone --depth 1 --branch "${TXIKI_VERSION}" https://github.com/lukasMega/txiki.js "${srcDir}"`);
+  console.log(`Cloning ${REPO} @ ${TXIKI_VERSION} (with submodules) ...`);
+  run('git', ['clone', '--depth=1', '--branch', TXIKI_VERSION, '--recursive', '--shallow-submodules', REPO, srcDir]);
 
-  // BUILD_WITH_WASM=OFF/BUILD_WITH_SQLITE=OFF below compile those subsystems
-  // out entirely, so deps/wamr and deps/sqlite3 (a plain vendored dir, not a
-  // submodule) are never built — but recursing all submodules is harmless. We
-  // init everything for robustness (mbedtls/quickjs/libuv/mimalloc/
-  // libwebsockets are all needed). test262 (a quickjs sub-submodule) is huge
-  // and skipped by upstream's .gitmodules `update = none`-style config;
-  // --recursive honors that.
-  console.log('Initializing submodules (this can take a minute) ...');
-  run('git submodule update --init --recursive --depth 1', { cwd: srcDir });
+  // build-dist.mjs resolves esbuild from the clone's node_modules and fails if
+  // it isn't there. --ignore-scripts: the fork's root postinstall runs
+  // `npm install --prefix website` (Docusaurus), which has no lockfile and
+  // fails under `npm ci` — and the docs site is irrelevant to the runtime.
+  // esbuild still works: its binary ships in the @esbuild/<platform> optional
+  // dep, and bin/esbuild is a JS shim, so no install script is needed.
+  console.log('Installing build deps (npm ci --ignore-scripts) ...');
+  // npm.cmd on Windows: npm is a shim, not an .exe, so execFileSync can't spawn
+  // plain `npm` there (and `shell: true` would re-introduce quoting problems).
+  run(isWin ? 'npm.cmd' : 'npm', ['ci', '--ignore-scripts', '--no-fund', '--no-audit'], { cwd: srcDir });
 
-  // -DBUILD_WITH_WASM=OFF / -DBUILD_WITH_SQLITE=OFF are native upstream CMake
-  // options (as of v26.5.1) that compile out WAMR/wasm and sqlite3 entirely —
-  // this app uses neither (see file header). No source patch needed.
-  const cmakeArgs = [
-    '-B', buildDir,
-    '-DCMAKE_BUILD_TYPE=Release',
-    '-DBUILD_WITH_MIMALLOC=ON',
-    '-DBUILD_WITH_WASM=OFF',
-    '-DBUILD_WITH_SQLITE=OFF',
-  ];
-
-  // On macOS, libffi normally resolves from the Command Line Tools SDK
-  // (.../usr/include/ffi/ffi.h + libffi.tbd) — cmake's REQUIRED
-  // find_library/find_path locate it with no help. Only when a Homebrew libffi
-  // keg actually ships BOTH the lib AND the header do we hint it; we never pass
-  // a half-hint (lib without a matching ffi.h) because that would override the
-  // working SDK auto-detection with a broken include path.
-  if (platform() === 'darwin') {
-    try {
-      const ffiPrefix = execSync('brew --prefix libffi', { stdio: ['ignore', 'pipe', 'ignore'] })
-        .toString()
-        .trim();
-      const ffiLib = join(ffiPrefix, 'lib', 'libffi.dylib');
-      const ffiHeader = join(ffiPrefix, 'include', 'ffi.h');
-      if (existsSync(ffiLib) && existsSync(ffiHeader)) {
-        cmakeArgs.push(`-DFFI_LIB=${ffiLib}`, `-DFFI_INCLUDE_DIR=${join(ffiPrefix, 'include')}`);
-      }
-      // Otherwise: let cmake auto-detect (SDK libffi).
-    } catch {
-      // brew not present — let cmake use its default search paths.
-    }
-  }
-
-  console.log('Configuring (cmake) ...');
-  execFileSync('cmake', cmakeArgs, { stdio: 'inherit', cwd: srcDir });
-
-  const jobs = Math.max(1, cpus().length);
-
-  // No source patch means no bundle regeneration step: the JS bootstrap
-  // bundles committed in the tag already match the checked-out C/JS sources,
-  // so a single direct build is enough (unlike the old patch-based flow,
-  // which had to rebuild tjsc + regenerate bundles from the patched sources).
-  console.log(`Building tjs runtime (cmake --build, -j ${jobs}) ...`);
-  execFileSync('cmake', ['--build', buildDir, '-j', String(jobs)], { stdio: 'inherit', cwd: srcDir });
+  console.log('Building slim runtime (build-dist.mjs --profile ffi) ...');
+  run(process.execPath, ['scripts/build-dist.mjs', '--profile', 'ffi', '--out', outDir], { cwd: srcDir });
 
   if (!existsSync(builtTjs)) {
     console.error(`Build finished but ${builtTjs} not found`);
     process.exit(1);
   }
 
-  // Smoke-test that the freshly built runtime actually boots before we install
-  // it (catches a broken build rather than shipping a dead binary).
-  console.log('Smoke-testing the slim runtime ...');
-  const probe = execFileSync(builtTjs, ['eval', 'console.log(typeof tjs)'], { encoding: 'utf8' }).trim();
-  if (probe !== 'object') {
-    console.error(`Slim runtime smoke test failed: expected "object", got "${probe}"`);
-    process.exit(1);
-  }
-
-  // Strip debug + non-global symbols (~355 KB on macOS). Skip on Windows.
-  if (!isWin) {
-    console.log('Stripping symbols (strip -S -x) ...');
-    run(`strip -S -x "${builtTjs}"`);
-  }
-
-  // Only now that we have a proven slim binary, install it to $TJS.
+  // Only now that we have a proven slim binary (build-dist.mjs smoke-tests it
+  // itself), install it to $TJS.
   mkdirSync(dirname(TJS), { recursive: true });
   copyFileSync(builtTjs, TJS);
   chmodSync(TJS, 0o755);

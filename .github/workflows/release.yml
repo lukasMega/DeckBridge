@@ -27,22 +27,27 @@ jobs:
         include:
           - os: macos-latest       # Apple Silicon (arm64)
             platform: macos-arm64
-          - os: macos-15-intel     # Intel (x86_64)
+          - os: macos-15-intel     # Intel (x86_64) — no prebuilt slim asset
             platform: macos-x86_64
-          # Linux (ubuntu-22.04/linux-x86_64, ubuntu-24.04-arm/linux-arm64) temporarily
-          # disabled — mise-action's `mise install` blind-installs the unused
-          # github:lukasMega/txiki.js mise tool and fails on linux-arm64 (no upstream
-          # asset). See .claude/plans/2026-07-31_linux-build-support.md.
+            from_source: '1'
+          # Linux re-enabled: the old blocker was mise-action blind-installing the
+          # github:lukasMega/txiki.js mise tool (no linux-arm64 asset), and mise.toml
+          # no longer declares that tool at all.
+          # See .claude/plans/2026-07-31_linux-build-support.md.
+          - os: ubuntu-22.04       # oldest glibc we ship against
+            platform: linux-x86_64
+          - os: ubuntu-24.04-arm
+            platform: linux-arm64
 
     runs-on: ${{ matrix.os }}
 
-    # Release builds use the SLIM txiki.js runtime: built from source with
-    # sqlite3 + wasm/WAMR compiled out and symbols stripped (~2.3 MB smaller).
-    # tjs-setup reads this flag and runs scripts/tjs-build.mjs instead of
-    # downloading the prebuilt runtime. (Dev/local builds without the flag still
-    # use the no-toolchain download path.)
+    # Every platform ships the SLIM txiki.js runtime (no TLS/WASM/SQLite/mimalloc,
+    # MinSizeRel + compressed bytecode + stripped) — but it is *downloaded*
+    # prebuilt, so most platforms need no C/C++ toolchain and no from-source build.
+    # Only macos-x86_64 has no published asset and sets from_source, which makes
+    # tjs-setup run scripts/tjs-build.mjs (same profile, built locally).
     env:
-      TJS_FROM_SOURCE: '1'
+      TJS_FROM_SOURCE: ${{ matrix.from_source }}
 
     steps:
       - uses: actions/checkout@v7
@@ -69,18 +74,17 @@ jobs:
         uses: actions/cache@v6
         with:
           path: vendor/txiki.js/build/tjs
-          key: tjs-slim-${{ matrix.platform }}-${{ hashFiles('mise.toml', 'scripts/tjs-build.mjs') }}
+          key: tjs-slim-${{ matrix.platform }}-${{ hashFiles('mise.toml', 'scripts/tjs-build.mjs', 'scripts/tjs-download.mjs') }}
 
       - name: Install libhidapi (macOS)
         if: startsWith(matrix.os, 'macos')
         run: brew install hidapi
 
-      # Linux: libhidapi for the app, plus the slim txiki.js build's system deps
-      # (TJS_FROM_SOURCE=1 compiles txiki from source). cmake + build-essential are
-      # normally preinstalled on the runner; libffi-dev (ffi.h) is the real gap —
-      # txiki's CMake find_path(ffi.h) is REQUIRED. macOS uses the preinstalled
-      # cmake + the Command Line Tools SDK libffi, so it needs no extra step.
-      - name: Install libhidapi + slim-build deps (Linux)
+      # Linux: libhidapi/libudev for the app, libffi for the runtime's tjs:ffi
+      # dlopen, and the GTK/appindicator/xdo trio for the deckbridge-tray crate.
+      # (cmake/build-essential stay: harmless on the download path, and needed if
+      # this job is ever flipped to from_source.)
+      - name: Install system deps (Linux)
         if: startsWith(matrix.os, 'ubuntu')
         run: sudo apt-get update && sudo apt-get install -y libhidapi-dev libudev-dev libffi-dev cmake build-essential libgtk-3-dev libxdo-dev libayatana-appindicator3-dev
 
@@ -131,12 +135,11 @@ jobs:
   build-windows:
     name: Build windows-x86_64 (Tauri NSIS)
     runs-on: windows-latest
-    # No TJS_FROM_SOURCE here (unlike the Unix jobs above): the slim from-source
-    # build's Windows branch (scripts/tjs-build.mjs) is unverified against
-    # MSVC-only runners. tjs-setup instead downloads the official saghul/txiki.js
-    # prebuilt `txiki-windows-x86_64.zip` (confirmed to exist for the pinned
-    # TXIKI_VERSION — see the plan's Phase 0 findings) via
-    # scripts/tjs-download.mjs's win32 branch. Working beats slim for v1.
+    # No TJS_FROM_SOURCE here (unlike the Unix jobs above): the from-source build
+    # (scripts/tjs-build.mjs) is unverified against MSVC-only runners. tjs-setup
+    # downloads the prebuilt `txiki-slim-ffi-windows-x86_64.zip` instead — since
+    # the switch to the slim release that download IS the slim runtime, so this
+    # job is no longer trading size for reliability.
 
     steps:
       - uses: actions/checkout@v7
@@ -271,13 +274,16 @@ jobs:
           - os: macos-latest      # Apple Silicon (arm64)
             platform: macos-arm64
             triple: aarch64-apple-darwin
-          - os: macos-15-intel    # Intel (x86_64)
+          - os: macos-15-intel    # Intel (x86_64) — no prebuilt slim asset
             platform: macos-x86_64
             triple: x86_64-apple-darwin
+            from_source: '1'
 
     runs-on: ${{ matrix.os }}
+    # Same rule as the `build` job: slim runtime everywhere, downloaded prebuilt
+    # unless the platform has no published asset.
     env:
-      TJS_FROM_SOURCE: '1'
+      TJS_FROM_SOURCE: ${{ matrix.from_source }}
 
     steps:
       - uses: actions/checkout@v7
@@ -306,7 +312,7 @@ jobs:
         uses: actions/cache@v6
         with:
           path: vendor/txiki.js/build/tjs
-          key: tjs-slim-${{ matrix.platform }}-${{ hashFiles('mise.toml', 'scripts/tjs-build.mjs') }}
+          key: tjs-slim-${{ matrix.platform }}-${{ hashFiles('mise.toml', 'scripts/tjs-build.mjs', 'scripts/tjs-download.mjs') }}
 
       - name: Install libhidapi (macOS)
         run: brew install hidapi

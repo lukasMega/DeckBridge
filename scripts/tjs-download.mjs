@@ -1,4 +1,12 @@
 #!/usr/bin/env node
+// Downloads the prebuilt SLIM txiki.js runtime (lukasMega/txiki.js-with-slim-builds,
+// tag $TXIKI_VERSION) to $TJS. The `slim-ffi` profile is the one this app needs:
+// tjs:ffi in, TLS/WebAssembly/SQLite/mimalloc out, MinSizeRel + compressed
+// bytecode + stripped. Nothing here uses HTTPS/WSS from the runtime (all fetch()
+// calls live in the browser UI), so the larger `ffi-tls` profile buys nothing.
+//
+// No macos-x86_64 asset exists in that release — Intel macOS must build from
+// source (TJS_FROM_SOURCE=1 -> scripts/tjs-build.mjs).
 import { execSync } from 'node:child_process';
 import { existsSync, mkdirSync, chmodSync, rmSync, copyFileSync, writeFileSync, readdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -26,8 +34,17 @@ const archName = ARCH_MAP[arch()];
 if (!osName) { console.error(`Unsupported OS: ${platform()}`); process.exit(1); }
 if (!archName) { console.error(`Unsupported arch: ${arch()}`); process.exit(1); }
 
-const zip = `txiki-${osName}-${archName}.zip`;
-const url = `https://github.com/lukasMega/txiki.js/releases/download/${TXIKI_VERSION}/${zip}`;
+if (osName === 'macos' && archName === 'x86_64') {
+  console.error(
+    'No prebuilt slim asset for macOS x86_64 — build from source instead:\n' +
+      '  TJS_FROM_SOURCE=1 mise run tjs-setup   (needs cmake + a C/C++ toolchain)',
+  );
+  process.exit(1);
+}
+
+const zip = `txiki-slim-ffi-${osName}-${archName}.zip`;
+const url =
+  `https://github.com/lukasMega/txiki.js-with-slim-builds/releases/download/${TXIKI_VERSION}/${zip}`;
 const tmp = join(tmpdir(), `tjs-download-${Date.now()}`);
 const binName = isWin ? 'tjs.exe' : 'tjs';
 
