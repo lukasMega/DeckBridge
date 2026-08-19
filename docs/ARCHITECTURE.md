@@ -26,23 +26,31 @@ mise run compile   # produce ./deckbridge binary
 **none** of txiki.js's `sqlite3` or `WebAssembly`/WASI (WAMR) — so it ships a **slim**
 runtime.
 
-By default `$TJS` comes from mise's `github:lukasMega/txiki.js` tool ([`../mise.toml`](../mise.toml)):
-a **prebuilt slim** runtime with sqlite3 + wasm/WAMR removed and symbols stripped, no
-toolchain needed. It's produced by configuring upstream's own `-DBUILD_WITH_WASM=OFF
--DBUILD_WITH_SQLITE=OFF` CMake options (native as of v26.5.1 — no source patch needed;
-[`../scripts/tjs-build.mjs`](../scripts/tjs-build.mjs) is the from-source build script). Rebuild
-from source only to change the runtime or target a platform without a prebuilt:
+`mise run tjs-setup` (a dependency of `build`) puts that runtime at `$TJS` under
+`../vendor`, and no-ops when it already exists. It downloads the prebuilt
+**`slim-ffi`** asset of `$TXIKI_VERSION` (pinned in [`../mise.toml`](../mise.toml)) from
+[lukasMega/txiki.js-with-slim-builds](https://github.com/lukasMega/txiki.js-with-slim-builds/releases)
+— no toolchain needed. That profile keeps `tjs:ffi`, WebCrypto, `run`/`compile` and the
+REPL, and drops TLS, WebAssembly, SQLite, mimalloc and the `eval`/`serve`/`test`/`bundle`/
+`app` subcommands, built MinSizeRel + hardened with compressed bytecode. TLS costs ~430 KB
+and buys nothing: every `fetch()` in this repo runs in the browser UI, not the runtime.
+
+Effect on the shipped binary (macOS arm64): **6.4 MB → 2.4 MB**.
+
+From-source is the fallback — required on **macOS x86_64** (no prebuilt slim asset) and
+useful when changing the runtime itself:
 
 ```bash
-mise run tjs-build     # configure the slim CMake options + compile from source
+mise run tjs-build     # or TJS_FROM_SOURCE=1 mise run build
 ```
 
-**Build deps (from-source only):** `cmake`, a C/C++ toolchain, `make`, `libffi`
+[`../scripts/tjs-build.mjs`](../scripts/tjs-build.mjs) clones the fork at `$TXIKI_VERSION`
+and runs *its* `scripts/build-dist.mjs --profile ffi` — the same driver that produces the
+published assets, so the result matches the download byte for byte in configuration.
+
+**Build deps (from-source only):** `git`, `cmake`, `npm`, a C/C++ toolchain, `libffi`
 — macOS: `xcode-select --install && brew install cmake libffi`; Debian/Ubuntu:
 `sudo apt-get install -y build-essential cmake git libffi-dev`.
-
-(`scripts/tjs-setup` is the legacy acquisition task, output under `../vendor`; it no-ops when
-`$TJS` already exists. Released binaries use the slim runtime.)
 
 ## Running a packaged release
 

@@ -39,8 +39,9 @@ jobs:
           key: ci-rust-${{ hashFiles('rust/**/Cargo.lock') }}
           restore-keys: ci-rust-
 
-      # No TJS_FROM_SOURCE → tjs-setup downloads the prebuilt runtime (fast, no
-      # toolchain). The slow slim from-source build is release-only.
+      # No TJS_FROM_SOURCE → tjs-setup downloads the prebuilt slim runtime (fast,
+      # no toolchain). The slow from-source build is for platforms without an
+      # asset (macos-x86_64) only.
       - name: Install system deps (libhidapi + libudev + libffi)
         run: sudo apt-get update && sudo apt-get install -y libhidapi-dev libudev-dev libffi-dev
 
