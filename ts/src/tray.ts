@@ -1,4 +1,5 @@
 import { warn } from './logger.js';
+import { platformName } from './os-utils.ts';
 
 export interface TrayState {
   icon: 'full' | 'usb_only' | 'disconnected';
@@ -115,6 +116,28 @@ export function isAbsolutePath(p: string): boolean {
 export function parentDir(p: string): string {
   const i = Math.max(p.lastIndexOf('/'), p.lastIndexOf('\\'));
   return i > 0 ? p.slice(0, i) : '.';
+}
+
+/**
+ * Where the tray binary actually comes from, in priority order:
+ *   1. $DECKBRIDGE_TRAY_BIN (dev via mise, and the Homebrew formula)
+ *   2. a `deckbridge-tray` sidecar next to the executable (every packaged release)
+ *
+ * Both app.ts (which spawns it) and the /requirements check call this, so the
+ * page can't claim "not set" while the tray is visibly running from the sidecar.
+ * Returns '' when neither exists.
+ */
+export async function resolveTrayBin(): Promise<string> {
+  const fromEnv = tjs.env.DECKBRIDGE_TRAY_BIN ?? '';
+  if (fromEnv) return fromEnv;
+
+  // parentDir handles both separators — tjs.exePath is backslash-separated on Windows.
+  const candidate = `${parentDir(tjs.exePath)}/deckbridge-tray${platformName() === 'Windows' ? '.exe' : ''}`;
+  try {
+    const st = await tjs.stat(candidate);
+    if (st.isFile) return candidate;
+  } catch {}
+  return '';
 }
 
 export function startTray(binaryPath: string, onQuit: () => void): TrayHandle | null {

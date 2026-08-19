@@ -1,4 +1,4 @@
-import { startTray } from './tray.js';
+import { resolveTrayBin, startTray } from './tray.js';
 import type { TrayHandle, TrayState } from './tray.js';
 import { ElgatoServer, ElgatoChildServer } from './elgato.js';
 import { WebUIServer } from './web/server';
@@ -385,23 +385,20 @@ if (!headless && tjs.env.DECKBRIDGE_OPEN) {
 if (headless) {
   log('info', 'tray', 'skipped (--headless)');
 } else {
-  let trayBin = tjs.env.DECKBRIDGE_TRAY_BIN ?? '';
-  if (!trayBin) {
-    // No run.sh anymore: look for a deckbridge-tray sidecar next to the executable.
-    const exeDir = tjs.exePath.slice(0, tjs.exePath.lastIndexOf('/'));
-    const candidate = `${exeDir}/deckbridge-tray`;
-    try {
-      const st = await tjs.stat(candidate);
-      if (st.isFile) trayBin = candidate;
-    } catch {}
-  }
+  // $DECKBRIDGE_TRAY_BIN, else a deckbridge-tray sidecar next to the executable
+  // (no run.sh anymore). Same resolver the /requirements check reports on.
+  const trayBin = await resolveTrayBin();
   if (trayBin) {
     tray = startTray(trayBin, () => {
       void shutdown().catch(() => tjs.exit(1));
     });
     log('info', 'tray', tray ? `started: ${trayBin}` : `failed to spawn: ${trayBin}`);
   } else {
-    log('info', 'tray', 'DECKBRIDGE_TRAY_BIN not set — running without tray');
+    log(
+      'info',
+      'tray',
+      'no tray binary (DECKBRIDGE_TRAY_BIN unset, no deckbridge-tray next to the executable) — running without tray',
+    );
   }
 }
 

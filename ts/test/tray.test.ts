@@ -1,5 +1,5 @@
 import assert from 'tjs:assert';
-import { parentDir, isAbsolutePath } from '../src/tray.js';
+import { parentDir, isAbsolutePath, resolveTrayBin } from '../src/tray.js';
 
 let passed = 0;
 let failed = 0;
@@ -97,6 +97,35 @@ await asyncTest('SIGTERM stops a spawned child process', async () => {
   // 'cat' with no explicit handler dies on SIGTERM: either a non-zero exit
   // status or a recorded term_signal, depending on platform reporting.
   assert.ok(exit_status !== 0 || term_signal !== null);
+});
+
+// ── resolveTrayBin ────────────────────────────────────────────────────────────
+// Regression guard: /requirements used to read $DECKBRIDGE_TRAY_BIN only, so a
+// packaged release (which ships the tray as a sidecar next to the executable)
+// reported "Not found" while the tray was running.
+
+console.log('\nresolveTrayBin');
+
+await asyncTest('prefers $DECKBRIDGE_TRAY_BIN when set', async () => {
+  const prev = tjs.env.DECKBRIDGE_TRAY_BIN;
+  tjs.env.DECKBRIDGE_TRAY_BIN = '/some/explicit/deckbridge-tray';
+  try {
+    assert.equal(await resolveTrayBin(), '/some/explicit/deckbridge-tray');
+  } finally {
+    if (prev === undefined) delete tjs.env.DECKBRIDGE_TRAY_BIN;
+    else tjs.env.DECKBRIDGE_TRAY_BIN = prev;
+  }
+});
+
+await asyncTest('returns "" when the env var is unset and no sidecar exists', async () => {
+  const prev = tjs.env.DECKBRIDGE_TRAY_BIN;
+  delete tjs.env.DECKBRIDGE_TRAY_BIN;
+  try {
+    // tjs.exePath here is the test runner's tjs binary — no deckbridge-tray beside it.
+    assert.equal(await resolveTrayBin(), '');
+  } finally {
+    if (prev !== undefined) tjs.env.DECKBRIDGE_TRAY_BIN = prev;
+  }
 });
 
 // ── Summary ───────────────────────────────────────────────────────────────────

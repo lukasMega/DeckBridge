@@ -1,6 +1,7 @@
 import FFI from 'tjs:ffi';
 import { getHidapiSystemCandidates } from '../../ffi/hidapi';
 import { isNativeMdnsAvailable } from '../../ffi/mdns';
+import { resolveTrayBin } from '../../tray.js';
 
 export interface RequirementResult {
   name: string;
@@ -42,6 +43,22 @@ async function checkBinary(
     ok,
     message: ok ? `Found: ${path}` : notFoundMsg(path, envVar),
     installHint: ok ? undefined : installHint,
+  };
+}
+
+// Not checkBinary(): the tray is found via $DECKBRIDGE_TRAY_BIN *or* a sidecar
+// next to the executable, which is how every packaged release ships it. Checking
+// only the env var reported "Not found" while the tray was visibly running.
+async function checkTray(): Promise<RequirementResult> {
+  const path = await resolveTrayBin();
+  const ok = path !== '' && (await fileExists(path));
+  return {
+    name: 'tray',
+    ok,
+    message: ok
+      ? `Found: ${path}`
+      : 'Not found (no deckbridge-tray next to the executable, DECKBRIDGE_TRAY_BIN not set)',
+    installHint: ok ? undefined : 'Run: mise run tray-rs',
   };
 }
 
@@ -131,7 +148,7 @@ export async function checkRequirements(): Promise<RequirementResult[]> {
       'DECKBRIDGE_NATIVE_LIB',
       'Run: mise run deckbridge-native',
     ),
-    await checkBinary('tray', 'DECKBRIDGE_TRAY_BIN', 'Run: mise run tray-rs'),
+    await checkTray(),
     await checkLibhidapi(),
     await checkMdns(),
   ];
