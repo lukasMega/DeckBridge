@@ -22,8 +22,15 @@ Per page view, stored only as running daily counts:
 - **Viewport bucket** (`<640`, `640–1024`, `>1024`) — layout only.
 - **Campaign tags** (`utm_source` / `utm_medium` / `utm_campaign`) when present.
 - **Outbound-link / download clicks** — destination host or file name.
+- **Whether the page saw any interaction**, and how soon after load, as one of three
+  coarse buckets. No mouse coordinates, no movement, no event trace — only that a real
+  (browser-trusted) interaction happened. It is used to tell humans from automation.
 
-Individual visits are never stored as rows, so a single page view cannot be reconstructed.
+Individual visits are never stored as rows, so a single page view cannot be reconstructed,
+and no measurement can be joined to another (e.g. page path × country).
+
+The collector is open source and self-hosted:
+[deno-kv-analytics](https://github.com/lukasMega/deno-kv-analytics).
 
 ## Visitor & session counting
 

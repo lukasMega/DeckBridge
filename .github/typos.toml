@@ -9,7 +9,7 @@ extend-exclude = [
   "**/*.lock",
   "graphify-out/",
   "dist/",
-  "**/*.min.js",   # vendored minified libs (e.g. docs-analytics/uPlot.iife.min.js)
+  "**/*.min.js",   # vendored minified libs
   "**/*.patch",    # vendored patches — git hashes trip the checker
 ]
 

@@ -77,6 +77,13 @@ jobs:
         env:
           PUPPETEER_EXECUTABLE_PATH: ${{ steps.chrome.outputs.chrome-path }}
           MMDC_PUPPETEER_CONFIG: ${{ github.workspace }}/docs-site/puppeteer.json
+          # Analytics beacon host + site id, kept out of git. Repo-level
+          # variables, not environment ones: the `github-pages` environment is
+          # only attached to the deploy job, so its variables are invisible
+          # here — and attaching it to this job would make PR builds fail its
+          # branch protection. Unset just omits the beacon tag.
+          COLLECTOR_ORIGIN: ${{ vars.COLLECTOR_ORIGIN }}
+          COLLECTOR_SITE_ID: ${{ vars.COLLECTOR_SITE_ID }}
 
       # Build already ran above; test:build would rebuild, so run the three
       # layers that read build/ instead. A failure here blocks the deploy.

@@ -1,14 +1,10 @@
 [tools]
 node = "24"
-# docs-analytics/ is a Deno project (the collector deploys to Deno Deploy).
-# Declared here so `mise run analytics-check` is reproducible instead of relying
-# on whatever `deno` happens to be on PATH.
-deno = "2"
 
-# NOTE: no `[tools."github:lukasMega/txiki.js"]` entry on purpose. $TJS below is
-# an explicit vendor/ path filled by `mise run tjs-setup`, so a mise-managed tool
-# was never actually used — and mise-action's blind `mise install` failed on
-# platforms with no matching asset (that's what kept linux out of release.yml).
+# No `[tools."github:lukasMega/txiki.js"]` entry: $TJS is a vendor/ path filled
+# by `mise run tjs-setup`, not a mise-managed tool — mise-action's blind
+# `mise install` failed on platforms with no matching asset (kept linux out
+# of release.yml).
 
 [env]
 # rustup installs cargo here; CI (dtolnay/rust-toolchain) adds it to PATH itself,
@@ -237,18 +233,6 @@ description = "Fail (exit 1) if any .ts/.tsx file under ts/src exceeds 500 lines
 dir = "ts"
 run = "node scripts/check-loc.mjs"
 
-[tasks.analytics-check]
-description = "docs-analytics (Deno collector): lint, typecheck, tests"
-dir = "docs-analytics"
-# `deno fmt` is deliberately NOT run: it disagrees with the repo's oxfmt style
-# (it unwraps the aligned ternary chains in main.ts's parseUA) and the vendored
-# uPlot assets are excluded in deno.json. Formatting for this dir stays manual.
-# `deno task test` (not a raw `deno test`) so the permission flags have one home.
-run = """
-deno lint
-deno check main.ts main_test.ts
-deno task test
-"""
 
 [tasks.ci-checks]
 description = "Lint, typecheck, test, knip (unused files/exports/deps), and check-loc in parallel (after format)"
@@ -257,7 +241,7 @@ timeout = "120s"
 
 [tasks.beforeCommit]
 description = "Format, lint, types, test, and compile — run before committing"
-depends = ["format", "ci-checks", "rust-lint", "analytics-check", "docs-check", "compile"]
+depends = ["format", "ci-checks", "rust-lint", "docs-check", "compile"]
 dir = "ts"
 # run = "npm run beforeCommit"
 timeout = "150s"

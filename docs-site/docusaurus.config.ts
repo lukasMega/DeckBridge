@@ -6,6 +6,27 @@ import type * as Preset from '@docusaurus/preset-classic';
 // header for why an off-the-shelf ESM plugin can't load in Docusaurus's config.
 import remarkMermaidPrerender from './plugins/remark-mermaid-prerender.mjs';
 
+// Collector origin, e.g. `https://stats.example.com`. Read from env, never
+// hardcoded — this repo is public. Unset (default, every fork) omits the
+// beacon entirely instead of emitting a tag that 404s.
+//
+// Only keeps the host out of git — it ends up in published HTML as a
+// `<script src>`, so it's visible to every visitor regardless.
+//
+// Scheme is optional in the env var: a bare `stats.example.com` would build
+// a relative `<script src>` that 404s against the docs host, silently.
+const COLLECTOR_RAW = process.env.COLLECTOR_ORIGIN?.trim().replace(/\/+$/, '');
+const COLLECTOR = COLLECTOR_RAW
+  ? /^https?:\/\//.test(COLLECTOR_RAW)
+    ? COLLECTOR_RAW
+    : `https://${COLLECTOR_RAW}`
+  : undefined;
+
+// Must match an id in the collector's `SITES` env var — an unlisted id
+// writes nothing but still returns the beacon gif, so a typo is silent.
+// Verify against `GET /sites`, not this file.
+const SITE_ID = process.env.COLLECTOR_SITE_ID ?? 'deckbridge';
+
 const config: Config = {
   title: 'deckbridge',
   tagline: 'Stream Deck bridge — standalone binary, no Node',
@@ -19,7 +40,21 @@ const config: Config = {
   url: 'https://lukasmega.github.io',
   baseUrl: '/DeckBridge/',
 
-  clientModules: ['./src/analytics.ts'],
+  // Analytics: collector serves its own beacon, first-party to the stats host —
+  // no client module, no bundled tracking code. Picks up the site from
+  // `data-site` and handles SPA route changes via history.pushState patching.
+  // Details: github.com/lukasMega/deno-kv-analytics. Dev/localhost sends nothing.
+  // `data-site` required: *.github.io is a shared host, so resolveSite falls
+  // back to the `?s=` branch, which only accepts an allowlisted id.
+  scripts: COLLECTOR
+    ? [
+        {
+          src: `${COLLECTOR}/s.js`,
+          defer: true,
+          'data-site': SITE_ID,
+        },
+      ]
+    : [],
 
   // GitHub Pages project site: https://lukasmega.github.io/DeckBridge/
   organizationName: 'lukasMega',
