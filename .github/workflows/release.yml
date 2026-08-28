@@ -246,7 +246,13 @@ jobs:
           Copy-Item "rust/target/release/deckbridge-tray.exe" "src-tauri/binaries/deckbridge-tray-x86_64-pc-windows-msvc.exe" -Force
           Get-ChildItem "src-tauri/binaries/"
 
+      # RUST_MIN_STACK: rustc's codegen thread blows its 8 MB stack building
+      # tauri-utils at opt-level=3 — LLVM's ScopedNoAliasAAResult recurses deep
+      # enough to SIGSEGV (seen on macos-arm64, tauri-cli 2.11.4/tauri-utils
+      # 2.9.3). rustc's own suggested workaround; harmless elsewhere.
       - name: Install Tauri CLI
+        env:
+          RUST_MIN_STACK: '16777216'
         run: cargo install tauri-cli --version "^2" --locked
 
       # tauri.conf.json's version was already stamped from ts/package.json by
@@ -353,7 +359,13 @@ jobs:
         run: |
           codesign --force --sign - --timestamp=none "src-tauri/binaries/deckbridge-tray-${{ matrix.triple }}"
 
+      # RUST_MIN_STACK: rustc's codegen thread blows its 8 MB stack building
+      # tauri-utils at opt-level=3 — LLVM's ScopedNoAliasAAResult recurses deep
+      # enough to SIGSEGV (seen on macos-arm64, tauri-cli 2.11.4/tauri-utils
+      # 2.9.3). rustc's own suggested workaround; harmless elsewhere.
       - name: Install Tauri CLI
+        env:
+          RUST_MIN_STACK: '16777216'
         run: cargo install tauri-cli --version "^2" --locked
 
       # tauri.conf.json's version was already stamped from ts/package.json by
