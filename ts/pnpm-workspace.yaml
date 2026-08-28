@@ -1,0 +1,5 @@
+# pnpm 11 defaults strictDepBuilds=true and reads settings here, not package.json.
+# These dependencies compile native bindings or resolve a platform binary.
+allowBuilds:
+  "esbuild": true
+  "unrs-resolver": true

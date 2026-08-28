@@ -35,13 +35,16 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11
       - uses: actions/setup-node@v7
         with:
           # 24 to match mise.toml; the test scripts are TypeScript run directly
           # by `node --test` via native type stripping (needs 22.18+).
           node-version: 24
-          cache: npm
-          cache-dependency-path: docs-site/package-lock.json
+          cache: pnpm
+          cache-dependency-path: docs-site/pnpm-lock.yaml
 
       - name: Install Chrome (for mermaid prerender)
         id: chrome
@@ -61,19 +64,19 @@ jobs:
         run: echo '{"args":["--no-sandbox","--disable-setuid-sandbox","--disable-dev-shm-usage"]}' > puppeteer.json
 
       - name: Install deps
-        run: npm ci
+        run: pnpm install --frozen-lockfile
         env:
           # Chrome comes from setup-chrome; skip puppeteer's own download.
           PUPPETEER_SKIP_DOWNLOAD: 'true'
 
       - name: Test
-        run: npm run test
+        run: pnpm run test
         env:
           PUPPETEER_EXECUTABLE_PATH: ${{ steps.chrome.outputs.chrome-path }}
           MMDC_PUPPETEER_CONFIG: ${{ github.workspace }}/docs-site/puppeteer.json
 
       - name: Build
-        run: npm run build
+        run: pnpm run build
         env:
           PUPPETEER_EXECUTABLE_PATH: ${{ steps.chrome.outputs.chrome-path }}
           MMDC_PUPPETEER_CONFIG: ${{ github.workspace }}/docs-site/puppeteer.json
@@ -88,7 +91,7 @@ jobs:
       # Build already ran above; test:build would rebuild, so run the three
       # layers that read build/ instead. A failure here blocks the deploy.
       - name: Test
-        run: npm run test:links && npm run test:content && npm run test:output
+        run: pnpm run test:links && pnpm run test:content && pnpm run test:output
 
       - uses: actions/configure-pages@v6
         if: github.event_name != 'pull_request'

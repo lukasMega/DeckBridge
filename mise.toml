@@ -1,5 +1,6 @@
 [tools]
 node = "24"
+pnpm = "11"
 
 # No `[tools."github:lukasMega/txiki.js"]` entry: $TJS is a vendor/ path filled
 # by `mise run tjs-setup`, not a mise-managed tool — mise-action's blind
@@ -89,7 +90,7 @@ run = "cargo build --release"
 description = "Install TypeScript/esbuild dev dependencies"
 quiet = true
 dir = "ts"
-run = "npm i --no-fund --no-audit --silent && echo npm install OK"
+run = "pnpm install --silent && echo pnpm install OK"
 
 [tasks.ts]
 description = "Bundle TypeScript with esbuild"
@@ -215,13 +216,13 @@ depends = ["types", "lint", "format"]
 description = "Type-check TypeScript (no emit)"
 dir = "ts"
 depends = ["ts-install"]
-run = "npx tsgo --noEmit"
+run = "pnpm exec tsgo --noEmit"
 
 [tasks.knip]
 description = "Find unused files, exports, types, and dependencies (knip)"
 dir = "ts"
 depends = ["ts-install"]
-run = "npx knip"
+run = "pnpm exec knip"
 
 [tasks.loc]
 description = "Top 10 largest .ts/.tsx files under ts/src by line count (excl. node_modules/dist/test, .d.ts)"
@@ -243,7 +244,7 @@ timeout = "120s"
 description = "Format, lint, types, test, and compile — run before committing"
 depends = ["format", "ci-checks", "rust-lint", "docs-check", "compile"]
 dir = "ts"
-# run = "npm run beforeCommit"
+# run = "pnpm run beforeCommit"
 timeout = "150s"
 
 [tasks.smoke]
@@ -277,31 +278,31 @@ run = "node scripts/run-tests.mjs"
 timeout = "90s"
 
 [tasks.docs-install]
-description = "Install docs-site npm dependencies"
+description = "Install docs-site pnpm dependencies"
 dir = "docs-site"
-run = "npm install --no-fund"
+run = "pnpm install"
 
 [tasks.docs-dev]
 description = "Start Docusaurus dev server (docs-site)"
 dir = "docs-site"
 # --port pins 3000 so an ambient PORT (e.g. PORT=/dev/cu.usbserial-* from idf.py flash) can't make Docusaurus parse port NaN
-run = "npm run start -- --port 3001 --host 0.0.0.0"
+run = "pnpm run start -- --port 3001 --host 0.0.0.0"
 
 [tasks.docs-check]
 description = "docs-site: typecheck + tests (build/links/content/output)"
 dir = "docs-site"
 depends = ["docs-install"]
-run = "npm run beforeCommit"
+run = "pnpm run beforeCommit"
 
 [tasks.docs-build]
 description = "Build Docusaurus static HTML (docs-site/build/)"
 dir = "docs-site"
-run = "npm run test && npm run build"
+run = "pnpm run test && pnpm run build"
 
 [tasks.docs-serve]
 description = "Serve the built Docusaurus site locally"
 dir = "docs-site"
-run = "npm run serve -- --port 3000"
+run = "pnpm run serve -- --port 3000"
 
 [tasks.coverage]
 description = "Run the tjs test suite with Istanbul instrumentation and emit a merged coverage report (text/html/lcov)"
