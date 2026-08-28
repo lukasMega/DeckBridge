@@ -1,6 +1,10 @@
 [tools]
 node = "24"
-pnpm = "11"
+# npm backend, not the default aqua one: pnpm 11 dropped the `pnpm-macos-x64`
+# standalone binary, so aqua:pnpm/pnpm@11 has no darwin/amd64 asset and
+# `mise install` dies on the macos-15-intel release job ("unsupported env:
+# darwin/amd64"). The npm tarball is platform-agnostic and node is already here.
+"npm:pnpm" = "11"
 
 # No `[tools."github:lukasMega/txiki.js"]` entry: $TJS is a vendor/ path filled
 # by `mise run tjs-setup`, not a mise-managed tool — mise-action's blind
