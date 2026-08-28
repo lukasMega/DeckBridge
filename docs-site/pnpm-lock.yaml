@@ -9,53 +9,53 @@ importers:
   .:
     dependencies:
       '@docusaurus/core':
-        specifier: ^3.10.2
+        specifier: 3.10.2
         version: 3.10.2(@docusaurus/faster@3.10.2(@docusaurus/types@3.10.2(@swc/core@1.15.41(@swc/helpers@0.5.23))(@swc/html@1.15.41)(clean-css@5.3.3)(cssnano@6.1.2(postcss@8.5.24))(csso@5.0.5)(html-minifier-terser@7.2.0)(lightningcss@1.32.0)(postcss@8.5.24)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(supports-color@8.1.1))(@swc/helpers@0.5.23)(clean-css@5.3.3)(cssnano@6.1.2(postcss@8.5.24))(csso@5.0.5)(html-minifier-terser@7.2.0)(postcss@8.5.24))(@mdx-js/react@3.1.1(@types/react@19.2.18)(react@19.2.8))(@rspack/core@1.7.12(@swc/helpers@0.5.23))(@swc/core@1.15.41(@swc/helpers@0.5.23))(@swc/html@1.15.41)(clean-css@5.3.3)(cssnano@6.1.2(postcss@8.5.24))(csso@5.0.5)(debug@4.4.3(supports-color@8.1.1))(html-minifier-terser@7.2.0)(lightningcss@1.32.0)(postcss@8.5.24)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(supports-color@8.1.1)(typescript@6.0.3)
       '@docusaurus/faster':
-        specifier: ^3.10.2
+        specifier: 3.10.2
         version: 3.10.2(@docusaurus/types@3.10.2(@swc/core@1.15.41(@swc/helpers@0.5.23))(@swc/html@1.15.41)(clean-css@5.3.3)(cssnano@6.1.2(postcss@8.5.24))(csso@5.0.5)(html-minifier-terser@7.2.0)(lightningcss@1.32.0)(postcss@8.5.24)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(supports-color@8.1.1))(@swc/helpers@0.5.23)(clean-css@5.3.3)(cssnano@6.1.2(postcss@8.5.24))(csso@5.0.5)(html-minifier-terser@7.2.0)(postcss@8.5.24)
       '@docusaurus/preset-classic':
-        specifier: ^3.10.2
+        specifier: 3.10.2
         version: 3.10.2(@algolia/client-search@5.56.0)(@docusaurus/faster@3.10.2(@docusaurus/types@3.10.2(@swc/core@1.15.41(@swc/helpers@0.5.23))(@swc/html@1.15.41)(clean-css@5.3.3)(cssnano@6.1.2(postcss@8.5.24))(csso@5.0.5)(html-minifier-terser@7.2.0)(lightningcss@1.32.0)(postcss@8.5.24)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(supports-color@8.1.1))(@swc/helpers@0.5.23)(clean-css@5.3.3)(cssnano@6.1.2(postcss@8.5.24))(csso@5.0.5)(html-minifier-terser@7.2.0)(postcss@8.5.24))(@mdx-js/react@3.1.1(@types/react@19.2.18)(react@19.2.8))(@rspack/core@1.7.12(@swc/helpers@0.5.23))(@swc/core@1.15.41(@swc/helpers@0.5.23))(@swc/html@1.15.41)(@types/react@19.2.18)(clean-css@5.3.3)(cssnano@6.1.2(postcss@8.5.24))(csso@5.0.5)(debug@4.4.3(supports-color@8.1.1))(html-minifier-terser@7.2.0)(lightningcss@1.32.0)(postcss@8.5.24)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(search-insights@2.17.3)(supports-color@8.1.1)(typescript@6.0.3)
       '@docusaurus/theme-mermaid':
-        specifier: ^3.10.2
+        specifier: 3.10.2
         version: 3.10.2(4d68e9eb10f9b45de1466161f132e425)
       '@easyops-cn/docusaurus-search-local':
-        specifier: ^0.55.3
+        specifier: 0.55.3
         version: 0.55.3(@docusaurus/faster@3.10.2(@docusaurus/types@3.10.2(@swc/core@1.15.41(@swc/helpers@0.5.23))(@swc/html@1.15.41)(clean-css@5.3.3)(cssnano@6.1.2(postcss@8.5.24))(csso@5.0.5)(html-minifier-terser@7.2.0)(lightningcss@1.32.0)(postcss@8.5.24)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(supports-color@8.1.1))(@swc/helpers@0.5.23)(clean-css@5.3.3)(cssnano@6.1.2(postcss@8.5.24))(csso@5.0.5)(html-minifier-terser@7.2.0)(postcss@8.5.24))(@docusaurus/theme-common@3.10.2(e74cafa4487fff98f6a50bfa3825ae54))(@mdx-js/react@3.1.1(@types/react@19.2.18)(react@19.2.8))(@rspack/core@1.7.12(@swc/helpers@0.5.23))(@swc/core@1.15.41(@swc/helpers@0.5.23))(@swc/html@1.15.41)(clean-css@5.3.3)(cssnano@6.1.2(postcss@8.5.24))(csso@5.0.5)(html-minifier-terser@7.2.0)(lightningcss@1.32.0)(postcss@8.5.24)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(supports-color@8.1.1)(typescript@6.0.3)
       '@mdx-js/react':
-        specifier: ^3.1.1
+        specifier: 3.1.1
         version: 3.1.1(@types/react@19.2.18)(react@19.2.8)
       clsx:
-        specifier: ^2.1.1
+        specifier: 2.1.1
         version: 2.1.1
       prism-react-renderer:
-        specifier: ^2.4.1
+        specifier: 2.4.1
         version: 2.4.1(react@19.2.8)
       react:
-        specifier: ^19.2.8
+        specifier: 19.2.8
         version: 19.2.8
       react-dom:
-        specifier: ^19.2.8
+        specifier: 19.2.8
         version: 19.2.8(react@19.2.8)
     devDependencies:
       '@docusaurus/module-type-aliases':
-        specifier: ^3.10.2
+        specifier: 3.10.2
         version: 3.10.2(@swc/core@1.15.41(@swc/helpers@0.5.23))(@swc/html@1.15.41)(clean-css@5.3.3)(cssnano@6.1.2(postcss@8.5.24))(csso@5.0.5)(html-minifier-terser@7.2.0)(lightningcss@1.32.0)(postcss@8.5.24)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(supports-color@8.1.1)
       '@docusaurus/tsconfig':
-        specifier: ^3.10.2
+        specifier: 3.10.2
         version: 3.10.2
       '@docusaurus/types':
-        specifier: ^3.10.2
+        specifier: 3.10.2
         version: 3.10.2(@swc/core@1.15.41(@swc/helpers@0.5.23))(@swc/html@1.15.41)(clean-css@5.3.3)(cssnano@6.1.2(postcss@8.5.24))(csso@5.0.5)(html-minifier-terser@7.2.0)(lightningcss@1.32.0)(postcss@8.5.24)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(supports-color@8.1.1)
       '@mermaid-js/mermaid-cli':
-        specifier: ^11.16.0
+        specifier: 11.16.0
         version: 11.16.0(@babel/core@7.29.7(supports-color@8.1.1))(@babel/template@7.29.7)(@types/react@19.2.18)(puppeteer@24.43.1(supports-color@8.1.1)(typescript@6.0.3))(tailwindcss@4.3.1)
       '@types/react':
-        specifier: ^19.2.18
+        specifier: 19.2.18
         version: 19.2.18
       typescript:
-        specifier: ~6.0.3
+        specifier: 6.0.3
         version: 6.0.3
 
 packages:
