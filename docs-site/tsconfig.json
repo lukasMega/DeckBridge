@@ -1,11 +1,24 @@
 // This file is not used by "docusaurus start/build" commands.
 // It is here to improve your IDE experience (type-checking, autocompletion...),
 // and can also run the package.json "typecheck" script manually.
+//
+// It does NOT extend @docusaurus/tsconfig: that config still sets `baseUrl`,
+// which TypeScript 7 removed (TS5102). The block below is @docusaurus/tsconfig
+// verbatim minus `baseUrl`, with `paths` resolved relative to this file.
 {
-  "extends": "@docusaurus/tsconfig",
   "compilerOptions": {
-    "baseUrl": ".",
-    "ignoreDeprecations": "6.0",
+    "allowJs": true,
+    "esModuleInterop": true,
+    "jsx": "preserve",
+    "target": "ES2022",
+    "lib": ["ES2022", "DOM"],
+    "moduleResolution": "bundler",
+    "module": "esnext",
+    "noEmit": true,
+    "skipLibCheck": true,
+    "paths": {
+      "@site/*": ["./*"]
+    },
     "strict": true,
     // scripts/ are run directly by `node --test` via native type stripping, so
     // their relative imports must carry the real .ts extension.
