@@ -47,12 +47,15 @@ jobs:
 
       - uses: jdx/mise-action@v4
 
-      - name: Cache npm (ts/node_modules)
+      # Cache the pnpm content-addressable store, not ts/node_modules: under pnpm
+      # node_modules is a symlink farm pointing into the store, so restoring it
+      # without the store yields dangling links.
+      - name: Cache pnpm store
         uses: actions/cache@v6
         with:
-          path: ts/node_modules
-          key: ci-npm-${{ hashFiles('ts/package-lock.json') }}
-          restore-keys: ci-npm-
+          path: ~/.local/share/pnpm/store
+          key: ci-pnpm-${{ hashFiles('ts/pnpm-lock.yaml') }}
+          restore-keys: ci-pnpm-
 
       - name: ci-checks (lint, types, test, knip)
         run: mise run ci-checks
