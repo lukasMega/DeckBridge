@@ -54,8 +54,8 @@
     ]
   },
   "engines": {
-    "// node": "22.18+ required by the test scripts, which are TypeScript run directly via native type stripping",
-    "node": ">=22.18"
+    "// node": "22.18+ required by the test scripts, which are TypeScript run directly via native type stripping; floor raised to 24.13 to match every other project in the tree",
+    "node": ">=24.13"
   },
   "overrides": {
     "brace-expansion": "5.0.9",
