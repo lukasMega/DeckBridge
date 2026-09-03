@@ -4,3 +4,11 @@ allowBuilds:
   "@swc/core": true
   "core-js": true
   "puppeteer": true
+
+# express@4 / body-parser@1 pin `qs: ~6.15.1`, which keeps the tree on a version
+# flagged by a security advisory (fixed in 6.16.0). There is no in-range upgrade,
+# so Dependabot's security update bails with `security_update_not_possible`.
+# qs is build/dev-time only here (Docusaurus dev server + `docusaurus serve`).
+# Drop this once express ships a release that depends on qs >= 6.16.0.
+overrides:
+  qs: "^6.16.0"
