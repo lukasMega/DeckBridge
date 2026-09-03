@@ -1,6 +1,6 @@
 # DeckBridge
 
-[![views](https://tst.lukasmega.deno.net/badge?site=deckbridge)](https://lukasmega.github.io/deno-kv-analytics/badge)
+[![views](https://tst.lukasmega.deno.net/badge?site=deckbridge&total=1&label=docs%20views%2030d%20%2B%20all)](https://lukasmega.github.io/deno-kv-analytics/badge)
 
 Use a USB Stream Deck with the Elgato Stream Deck app **over your local network** — no
 [Elgato Network Dock](https://www.elgato.com/us/en/p/network-dock-stream-deck) (>60 USD)
