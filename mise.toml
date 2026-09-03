@@ -1,10 +1,17 @@
 [tools]
 node = "24"
-# npm backend, not the default aqua one: pnpm 11 dropped the `pnpm-macos-x64`
-# standalone binary, so aqua:pnpm/pnpm@11 has no darwin/amd64 asset and
-# `mise install` dies on the macos-15-intel release job ("unsupported env:
-# darwin/amd64"). The npm tarball is platform-agnostic and node is already here.
-"npm:pnpm" = "11"
+# Default aqua backend. This was `"npm:pnpm" = "11"` because pnpm 11 dropped the
+# `pnpm-macos-x64` standalone binary, so aqua:pnpm/pnpm@11 had no darwin/amd64
+# asset and `mise install` died on the macos-15-intel release job ("unsupported
+# env: darwin/amd64"). pnpm 12 reverses both halves of that trade:
+#
+#   - v12.1.0 ships `pnpm-darwin-x64.tar.gz` again, so aqua resolves on intel macOS.
+#   - the npm backend is now the broken one. pnpm's npm tarball ships a
+#     placeholder `bin/pnpm` ("This is a placeholder. pnpm's native binary
+#     replaces this file during …") that only a postinstall swaps for the real
+#     binary; mise's npm backend links the package without that step, so
+#     `mise x -- pnpm --version` dies with `SyntaxError: Unexpected identifier 'is'`.
+pnpm = "12"
 
 # No `[tools."github:lukasMega/txiki.js"]` entry: $TJS is a vendor/ path filled
 # by `mise run tjs-setup`, not a mise-managed tool — mise-action's blind
