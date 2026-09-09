@@ -5,10 +5,20 @@ allowBuilds:
   "core-js": true
   "puppeteer": true
 
-# express@4 / body-parser@1 pin `qs: ~6.15.1`, which keeps the tree on a version
-# flagged by a security advisory (fixed in 6.16.0). There is no in-range upgrade,
-# so Dependabot's security update bails with `security_update_not_possible`.
-# qs is build/dev-time only here (Docusaurus dev server + `docusaurus serve`).
-# Drop this once express ships a release that depends on qs >= 6.16.0.
+# Transitive dependencies pinned below a security fix by a parent whose range has
+# no in-range upgrade, so Dependabot's security update bails with
+# `security_update_not_possible`. pnpm reads overrides here, NOT from a top-level
+# `overrides` key in package.json (that is npm syntax and is silently ignored).
+# All three are build/dev-time only — none ship in the static site.
+#
+#   qs                   — express@4 / body-parser@1 pin `qs: ~6.15.1` (fix: 6.16.0).
+#                          Drop once express depends on qs >= 6.16.0.
+#   serialize-javascript — copy-webpack-plugin@11 pins `^6.0.0` (fix: 7.0.5).
+#                          Drop once copy-webpack-plugin allows 7.x.
+#   uuid                 — sockjs@0.3.24 (via webpack-dev-server) pins `^8.3.2`
+#                          (fix: 11.1.1). Dev server only. Drop once sockjs
+#                          depends on uuid >= 11.1.1.
 overrides:
   qs: "^6.16.0"
+  serialize-javascript: "^7.0.5"
+  uuid: "^11.1.1"
