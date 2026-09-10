@@ -55,6 +55,25 @@ test('unknown VID/PID → "unknown" model, not supported', () => {
   assert.equal(row.supported, 'no');
 });
 
+// Phase B0 pre-flight for the Fifine D6: `deckbridge devices` is how the unit gets
+// identified before any bring-up step, so the two PIDs must resolve to DISTINCT model
+// names — the revisions differ in packet size, and mixing them up renders black keys.
+test('Fifine D6 PIDs resolve to distinct, supported rows', () => {
+  const rev1 = toDeviceRow({ vendorId: 0x3142, productId: 0x0007, serial: null, path: null });
+  const rev2 = toDeviceRow({
+    vendorId: 0x3142,
+    productId: 0x0060,
+    serial: '81D0DA784037',
+    path: null,
+  });
+  assert.equal(rev1.vidPid, '3142:0007');
+  assert.equal(rev2.vidPid, '3142:0060');
+  assert.equal(rev1.supported, 'yes');
+  assert.equal(rev2.supported, 'yes');
+  assert.notEqual(rev1.model, rev2.model);
+  assert.equal(rev2.serial, '81D0DA784037');
+});
+
 // ── formatDeviceTable ─────────────────────────────────────────────────────────
 
 console.log('\nformatDeviceTable');

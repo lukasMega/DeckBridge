@@ -198,13 +198,15 @@ At startup `app.ts` constructs a `DriverManager` ([driver-manager.ts](../ts/src/
 | 5 | Mirabox K1 Pro | `0x6603` | `0x1015`, `0x1019` | usage-page path first, then VID+PID |
 | 6 | Ajazz AKP153E (rev. 2) † | `0x0300` | `0x3010` | usage-page path first, then VID+PID |
 | 7 | Ajazz AKP153R (rev. 2) † | `0x0300` | `0x3011` | usage-page path first, then VID+PID |
-| 8 | Ajazz AKP153 § | `0x5548` | `0x6674` | usage-page path first, then VID+PID |
-| 9 | Ajazz AKP153E § | `0x0300` | `0x1010` | usage-page path first, then VID+PID |
-| 10 | Ajazz AKP153R § | `0x0300` | `0x1020` | usage-page path first, then VID+PID |
-| 11 | Mars Gaming MSD-ONE § | `0x0b00` | `0x1000` | usage-page path first, then VID+PID |
-| 12 | Mad Dog GK150K § | `0x0c00` | `0x1000` | usage-page path first, then VID+PID |
-| 13 | Risemode Vision 01 § | `0x0a00` | `0x1001` | usage-page path first, then VID+PID |
-| 14 | TMICE Stream Controller § | `0x0500` | `0x1001` | usage-page path first, then VID+PID |
+| 8 | Fifine AmpliGame D6 ¶ | `0x3142` | `0x0007` | usage-page path first, then VID+PID |
+| 9 | Fifine AmpliGame D6 (rev. 2) ¶ | `0x3142` | `0x0060` | usage-page path first, then VID+PID |
+| 10 | Ajazz AKP153 § | `0x5548` | `0x6674` | usage-page path first, then VID+PID |
+| 11 | Ajazz AKP153E § | `0x0300` | `0x1010` | usage-page path first, then VID+PID |
+| 12 | Ajazz AKP153R § | `0x0300` | `0x1020` | usage-page path first, then VID+PID |
+| 13 | Mars Gaming MSD-ONE § | `0x0b00` | `0x1000` | usage-page path first, then VID+PID |
+| 14 | Mad Dog GK150K § | `0x0c00` | `0x1000` | usage-page path first, then VID+PID |
+| 15 | Risemode Vision 01 § | `0x0a00` | `0x1001` | usage-page path first, then VID+PID |
+| 16 | TMICE Stream Controller § | `0x0500` | `0x1001` | usage-page path first, then VID+PID |
 
 ‡ `0x1014` is the **HSV293SV3 / "293S V3"** refresh — the same v3 board, so it rides the
 293V3 model rather than getting its own entry (opendeck-akp153 names `0x1005` and `0x1014`
@@ -216,6 +218,29 @@ it reports as "Mirabox 293V3" in the WebUI and mDNS name.
 same 3×6 grid and key map, so `ajazz/akp153-rev2.ts` clones `MIRABOX_293_MODEL`. Rev. 1
 (`0x0300:0x1010`/`0x1020`) is a **v1/512-byte** device and is deliberately not in the
 registry — it would need a 293S-style model.
+
+¶ **Untested — no hardware, both revisions.** The Fifine AmpliGame D6
+(`devices/fifine/fifine-d6.ts`) is the 293V3 board behind VID `0x3142`: same
+`mirabox-cora` v3 wire, same `0xffa0`/`1` usage, same 3×5 grid and key map, so it clones
+`MIRABOX_293_MODEL`. It is **two** models rather than one model with two PIDs because the
+revisions use **different CRT packet sizes**: rev. 1 (`0x0007`) is 512-byte, rev. 2
+(`0x0060`) is 1024-byte — 512-byte writes render black on rev. 2 according to four
+independent reports. That asymmetry is deliberate; see the packet-size test in
+`ts/test/device-models.test.ts`.
+
+Because both sizes are inferred rather than measured, these are the only models that set
+`wire.packetSizeCandidates: [512, 1024]`. On open, `MiraboxDriver` reads the device's HID
+report descriptor (`devices/hid-report-descriptor.ts`) and, if it states an
+unambiguous output-report size that is one of those candidates, uses it instead of the
+model constant and logs a warning. This is the one D6 unknown the hardware can settle for
+itself: a wrong `packetSize` is otherwise **silent** — the firmware discards short writes
+while `hid_write` still returns success, so the device enumerates and reports key presses
+normally and only the panel stays black. The parser refuses (keeps the model constant) on
+anything it cannot read with certainty, and the candidate list means a probe can only
+correct a guess, never introduce an untested value. Panel resolution and
+press-vs-release, by contrast, are **not** detectable and stay as plain constants.
+`wire.chunkDelayMs` (inter-chunk busy-wait pacing) also exists for this family but is
+left off — our worker already writes chunks synchronously and in order.
 
 § **Untested — no hardware, whole block.** The 7 v1 rebadges of the 293S board
 (`devices/rebadge/akp153-v1-clones.ts`) — same `mirabox-cora-v1` wire (512-byte
@@ -375,6 +400,7 @@ The key grid rebuilds when the model changes: `rebuildGrid(keyCount, columns)` s
 | Mirabox 293S | 5×3 (left 5 of 6 hardware columns; advertised as MK.2) |
 | Mirabox K1 Pro | 3×2 (advertised as Mini) |
 | Ajazz AKP153E/R (rev. 2) | 5×3 (same as 293V3; advertised as MK.2) |
+| Fifine AmpliGame D6 (rev. 1 and rev. 2) | 5×3 (same as 293V3; advertised as MK.2) |
 | AKP153/E/R, MSD-ONE, GK150K, Vision 01, TMICE Stream Controller (v1 rebadges) | 5×3 (left 5 of 6 hardware columns, same as 293S; advertised as MK.2) |
 
 ### Device model selector
