@@ -35,7 +35,8 @@ deckbridge.exe      # Windows
 
 The macOS `.dmg` and Windows installer also bundle a small **system-tray** companion.
 
-### Option B — Build from source
+<details id="option-b--build-from-source">
+<summary><b>Option B — Build from source</b></summary>
 
 Needs [mise](https://mise.jdx.dev), a Rust toolchain, and **libhidapi**:
 
@@ -53,6 +54,8 @@ mise fetches a prebuilt slim txiki.js runtime automatically — no C/C++ toolcha
 macOS arm64, Windows, or Linux (x86_64/arm64). Only macOS x86_64 has no prebuilt asset and
 builds from source (needs git, cmake, npm, libffi). Set `TJS_FROM_SOURCE=1` to force the
 source build anywhere — e.g. on a distro older than glibc 2.38.
+
+</details>
 
 ## 2. Plug in your deck
 

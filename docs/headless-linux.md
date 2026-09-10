@@ -9,7 +9,7 @@ Prebuilt `deckbridge-<version>-linux-x86_64.zip` and `-linux-arm64.zip` assets s
 v0.9.0 (see [releases](https://github.com/lukasMega/DeckBridge/releases)), but they get far
 less real-world use than the macOS builds. They need **glibc 2.38+** (Raspberry Pi OS
 trixie / Ubuntu 24.04+); on an older image, build from source on the Pi itself (Option B in
-[Getting Started](./getting-started.md)).
+[Getting Started](./getting-started.mdx)).
 :::
 
 Runs DeckBridge unattended on a headless **Raspberry Pi (64-bit OS)** or **DietPi**
@@ -38,7 +38,7 @@ board, managed by systemd, with no desktop, tray icon, or browser involved.
 ## 1. Install
 
 Copy the `deckbridge` binary and the `../scripts/packaging/linux/` files onto the Pi (or
-build from source there — see [Getting Started](./getting-started.md#option-b--build-from-source)),
+build from source there — see [Getting Started](./getting-started.mdx#option-b--build-from-source)),
 then run the installer as root from `../scripts/packaging/linux/`:
 
 ```bash
@@ -143,7 +143,7 @@ DNS name pointing at the Pi is rejected; use the IP directly.
 
 ## See also
 
-- [Getting Started](./getting-started.md) — general install/build steps
+- [Getting Started](./getting-started.mdx) — general install/build steps
 - [Features & Use Cases](./features.md#permissions) — permissions and ports on
   every platform
 - `../scripts/packaging/linux/` in the repo — the udev rule, systemd unit, and install script

@@ -296,8 +296,9 @@ run = "pnpm install"
 [tasks.docs-dev]
 description = "Start Docusaurus dev server (docs-site)"
 dir = "docs-site"
-# --port pins 3000 so an ambient PORT (e.g. PORT=/dev/cu.usbserial-* from idf.py flash) can't make Docusaurus parse port NaN
-run = "pnpm run start -- --port 3001 --host 0.0.0.0"
+# --port pins 3001 so an ambient PORT (e.g. PORT=/dev/cu.usbserial-* from idf.py flash) can't make Docusaurus parse port NaN
+# pnpm exec (not `pnpm run start --`): pnpm forwards the bare `--` on, and Docusaurus takes it as the positional siteDir
+run = "pnpm exec docusaurus start --port 3001 --host 0.0.0.0"
 
 [tasks.docs-check]
 description = "docs-site: typecheck + tests (build/links/content/output)"
