@@ -1,12 +1,13 @@
 use crate::bmp::encode_bmp;
 use crate::jpeg::encode_jpeg;
 use crate::pad::pad_to_canvas;
+use crate::png::encode_png;
 use crate::util::write_err;
 use image::imageops::FilterType;
 use std::io::Cursor;
 use std::panic::{catch_unwind, AssertUnwindSafe};
 
-/// Private transform helper: decode, rotate/flip, resize, encode (JPEG or BMP).
+/// Private transform helper: decode, rotate/flip, resize, encode (JPEG, BMP or PNG).
 /// EXIF auto-rotate is intentionally not performed (dropped for binary size — see plan).
 // The flat parameter list mirrors the FFI ABI of image_proc_transform.
 #[allow(clippy::too_many_arguments)]
@@ -111,15 +112,22 @@ pub(crate) fn transform(
     let lenient = skip_resize && fill_mode == 0;
     match format {
         1 => encode_bmp(img, bmp_ppm),
+        // PNG: page-protocol devices (Ulanzi D200) whose firmware unzips PNGs
+        // out of a manifest. max_bytes is a budget, not a hard limit — see
+        // encode_png.
+        2 => encode_png(img, if lenient { 0 } else { max_bytes }),
         _ => encode_jpeg(img, quality, max_bytes, lenient),
     }
 }
 
 /// Transform an image: explicit rotate/flip, optional resize to width×height,
-/// then encode as JPEG (iterative quality down to <= max_bytes) or BMP. Result into `out_buf`.
+/// then encode as JPEG (iterative quality down to <= max_bytes), BMP or PNG.
+/// Result into `out_buf`.
 /// (EXIF auto-rotate is intentionally not performed.)
 ///
-/// format: 0 = JPEG, 1 = BMP. max_bytes: JPEG size cap (0 = no cap; ignored for BMP).
+/// format: 0 = JPEG, 1 = BMP, 2 = PNG. max_bytes: size cap (0 = no cap; ignored for
+/// BMP). For JPEG it is enforced by walking the quality ladder and is an error if
+/// unreachable; for PNG it is a budget that selects a palette step (see png.rs).
 /// quality: 1..=100 percent (JPEG only). skip_resize / flip_h / flip_v: 0 or 1.
 /// resize_filter: 0 = Triangle (default), 1 = Nearest.
 /// fill_mode: 0 = resize (current behaviour, honours skip_resize); 1 = pad with a
@@ -153,7 +161,7 @@ pub unsafe extern "C" fn image_proc_transform(
     rotate: u32,      // 0 | 90 | 180 | 270 (CW)
     flip_h: i32,      // 0 / 1
     flip_v: i32,      // 0 / 1
-    format: i32,      // 0 = JPEG, 1 = BMP
+    format: i32,      // 0 = JPEG, 1 = BMP, 2 = PNG
     bmp_ppm: i32,
     blur_sigma_tenths: u32,    // Gaussian sigma × 10; 0 = no blur
     resize_filter: u32,        // 0 = Triangle (default), 1 = Nearest

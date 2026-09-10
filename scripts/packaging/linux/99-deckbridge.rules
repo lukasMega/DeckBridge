@@ -65,3 +65,12 @@ KERNEL=="hidraw*", ATTRS{idVendor}=="0a00", ATTRS{idProduct}=="1001", TAG+="uacc
 
 # TMICE Stream Controller (vendor 0x0500) — 293S board, v1, untested
 KERNEL=="hidraw*", ATTRS{idVendor}=="0500", ATTRS{idProduct}=="1001", TAG+="uaccess", MODE="0660", GROUP="plugdev"
+
+# Ulanzi Stream Controller D200 (vendor 0x2207) — page/ZIP protocol, untested
+# Needs BOTH subsystems, unlike every board above: the usb rule is what every
+# Linux D200 project ships, and the deck's own libusb-style access path depends
+# on it. If the device does not enumerate at all when plugged in directly, that
+# is a known kernel/device interaction ("can't read configurations, error -22") —
+# put it behind a USB-2 hub.
+KERNEL=="hidraw*", ATTRS{idVendor}=="2207", ATTRS{idProduct}=="0019", TAG+="uaccess", MODE="0660", GROUP="plugdev"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="2207", ATTRS{idProduct}=="0019", TAG+="uaccess", MODE="0660", GROUP="plugdev"

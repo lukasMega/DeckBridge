@@ -332,6 +332,25 @@ for clarity, but a real Path C driver should **extend `HidDeviceBase`** — it a
 the lib singleton, device handle, poll loop, and SIGBUS-safe teardown described in the
 rules below.
 
+#### Path C variant — page-protocol devices
+
+A worked example of Path C lives in `ts/src/devices/ulanzi/` (the Ulanzi D200). It is
+worth reading if your device has **no per-key image write** and instead repaints from a
+whole-screen document, because that shape needs a little more than a new driver:
+
+- the driver is split into **four FFI-free-plus-one** modules — framing (`ulanzi-protocol.ts`),
+  the archive writer (`ulanzi-zip.ts`), the coalescing page model (`ulanzi-page.ts`), and
+  only then the driver itself (`ulanzi-driver.ts`), which is the sole file touching hidapi.
+  The first three are unit-testable without hardware, which is most of what makes a blind
+  implementation reviewable;
+- CORA still pushes one image per key, so the page model is the adapter: stage into a
+  dirty set, debounce, rebuild, send. Do not put that on the main thread — a full page can
+  be hundreds of synchronous HID writes;
+- framing lives in a `page: DevicePageSpec` on the model, **not** in `wire`
+  (`DeviceWireSpec` means Mirabox CRT framing and nothing else);
+- give it its own `driverKind` (`'ulanzi'`) rather than `'custom'`, so `createDriver()`
+  stays exhaustively checked.
+
 ```typescript
 // ts/src/devices/acme/acme-driver.ts
 import { EventEmitter } from 'node:events';

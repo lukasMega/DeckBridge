@@ -7,6 +7,7 @@ mod mdns_windows;
 mod bmp;
 mod jpeg;
 mod pad;
+mod png;
 mod transform;
 mod util;
 

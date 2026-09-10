@@ -16,7 +16,7 @@ interface ImageProcSymbols {
     rotate: number,
     flipH: number,
     flipV: number,
-    format: number,
+    format: number, // 0 = JPEG, 1 = BMP, 2 = PNG (see translator.formatCodeFor)
     bmpPpm: number,
     blurSigmaTenths: number, // sigma × 10; 0 = no blur
     resizeFilter: number, // 0 = Triangle (default), 1 = Nearest

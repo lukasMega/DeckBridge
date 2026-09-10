@@ -6,6 +6,7 @@ import { MIRABOX_293S_MODEL } from './mirabox/mirabox-293s.js';
 import { MIRABOX_K1PRO_MODEL } from './mirabox/mirabox-k1pro.js';
 import { AJAZZ_AKP153E_REV2_MODEL, AJAZZ_AKP153R_REV2_MODEL } from './ajazz/akp153-rev2.js';
 import { FIFINE_D6_MODEL, FIFINE_D6_REV2_MODEL } from './fifine/fifine-d6.js';
+import { ULANZI_D200_MODEL } from './ulanzi/ulanzi-d200.js';
 import {
   AJAZZ_AKP153_MODEL,
   AJAZZ_AKP153E_MODEL,
@@ -21,6 +22,8 @@ import {
 // Ajazz rev. 2 next — its VID (0x0300) is unique among the v3 models.
 // Fifine D6 next — VID 0x3142 is unique, so probe position is cosmetic; it sits with
 // the other v3-family boards. rev. 1 (0x0007) before rev. 2 (0x0060); PIDs don't overlap.
+// Ulanzi D200 after the v3 family — VID 0x2207 (Rockchip) is unique here, and it is the
+// only page/ZIP-protocol model, so its probe position is cosmetic.
 // The 7 v1 rebadges (akp153-v1-clones.ts) last — probe order is irrelevant for them,
 // every VID is unique except 0x5548 (shared with the 293S, but PIDs 0x6670/0x6674 don't
 // overlap).
@@ -34,6 +37,7 @@ export const DEVICE_MODELS: DeviceModel[] = [
   AJAZZ_AKP153R_REV2_MODEL,
   FIFINE_D6_MODEL,
   FIFINE_D6_REV2_MODEL,
+  ULANZI_D200_MODEL,
   AJAZZ_AKP153_MODEL,
   AJAZZ_AKP153E_MODEL,
   AJAZZ_AKP153R_MODEL,

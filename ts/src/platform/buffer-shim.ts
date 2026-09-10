@@ -113,6 +113,14 @@ class BufferClass extends Uint8Array {
     return offset + 2;
   }
 
+  // Big-endian counterpart — the Ulanzi page protocol frames its command word
+  // BE while keeping the length field LE (see devices/ulanzi/ulanzi-protocol.ts).
+  writeUInt16BE(value: number, offset: number): number {
+    this[offset] = (value >>> 8) & 0xff;
+    this[offset + 1] = value & 0xff;
+    return offset + 2;
+  }
+
   writeUInt32LE(value: number, offset: number): number {
     this[offset] = value & 0xff;
     this[offset + 1] = (value >>> 8) & 0xff;

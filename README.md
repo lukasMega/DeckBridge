@@ -28,6 +28,7 @@ else to install.
 - Mad Dog GK150K — untested
 - Risemode Vision 01 — untested
 - TMICE Stream Controller — untested
+- Ulanzi Stream Controller D200 — untested
 - Stream Deck MK.2
 - Stream Deck Mini
 
@@ -41,6 +42,12 @@ ships in two revisions that differ only in USB packet size: 512 bytes for PID `0
 1024 bytes for PID `0x0060`); the 7 v1 rebadges are the same hardware as the 293S behind
 a different USB VID/PID, so they reuse the 293S model verbatim — report anything that
 misbehaves.
+
+The **Ulanzi Stream Controller D200** is the odd one out: it is not a per-key image deck
+at all but a small Linux appliance that repaints its screen from a ZIP archive the host
+sends it, so it has its own driver rather than reusing an existing model. It is
+implemented from public documentation and has never been run against the hardware — the
+13 LCD keys are driven; the wide slot keeps the firmware's own clock.
 
 > **Platform status:** DeckBridge is currently **tested on macOS only**, and the
 > GitHub releases currently ship **macOS builds only**. Linux and Windows support

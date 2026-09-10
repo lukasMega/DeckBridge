@@ -6,7 +6,7 @@
 import { info, warn } from './logger.js';
 import { applyOverride, mk2IndexToDeviceImgId, transformImageForDevice } from './translator.js';
 import { imageCache, hashJpeg, makeCacheKey } from './image-cache.js';
-import type { DeviceModel } from './devices/driver.js';
+import type { DeviceImageFormat, DeviceModel } from './devices/driver.js';
 import type { ImageModeOverride } from './types.js';
 
 /** The slice of a driver this module needs: the native-bytes write. The model
@@ -61,8 +61,9 @@ if (RAW_DUMP_DIR) {
   });
 }
 
-function dumpExt(format: 'jpeg' | 'bmp'): string {
-  return format === 'jpeg' ? 'jpg' : 'bmp';
+function dumpExt(format: DeviceImageFormat): string {
+  if (format === 'jpeg') return 'jpg';
+  return format; // 'bmp' | 'png'
 }
 
 function writeRawDumpFile(path: string, bytes: Uint8Array): void {
@@ -98,7 +99,7 @@ function dumpTransformed(
   handle: { seq: number; files: string[] } | null,
   keyIndex: number,
   nativeBytes: Uint8Array,
-  devFormat: 'jpeg' | 'bmp',
+  devFormat: DeviceImageFormat,
 ): void {
   if (!handle) return;
   const tag = String(handle.seq).padStart(4, '0');
@@ -162,6 +163,10 @@ export function renderImage(
     // Forward the input bytes unchanged when no re-encode is needed: either a
     // true gen1 device (the desktop already sent native BMP) or a model whose
     // CORA JPEG is already in the correct device format ('passthrough').
+    // Note the asymmetry: `format` is what the Elgato desktop SENT us, which is
+    // only ever 'jpeg' | 'bmp'; `eff.format` is what the DEVICE consumes and may
+    // additionally be 'png' (page-protocol devices), which never matches here
+    // and so always takes the transform branch.
     if ((format === 'bmp' && eff.format === 'bmp') || eff.transform === 'passthrough') {
       nativeBytes = Buffer.from(coraBytes);
       perfOnRender(0);

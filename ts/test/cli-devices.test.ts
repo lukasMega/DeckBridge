@@ -74,6 +74,22 @@ test('Fifine D6 PIDs resolve to distinct, supported rows', () => {
   assert.equal(rev2.serial, '81D0DA784037');
 });
 
+// Phase B0 pre-flight for the Ulanzi D200: `deckbridge devices` is the first
+// bring-up step, and a D200H additionally enumerates two Genesys hubs, so the
+// row for the deck itself has to come back supported and named.
+test('Ulanzi D200 resolves to a supported row', () => {
+  const row = toDeviceRow({
+    vendorId: 0x2207,
+    productId: 0x0019,
+    serial: '02C37A015U3672742',
+    path: null,
+  });
+  assert.equal(row.vidPid, '2207:0019');
+  assert.equal(row.supported, 'yes');
+  assert.equal(row.model, 'Ulanzi Stream Controller D200');
+  assert.equal(row.serial, '02C37A015U3672742');
+});
+
 // ── formatDeviceTable ─────────────────────────────────────────────────────────
 
 console.log('\nformatDeviceTable');

@@ -16,7 +16,9 @@ body:
       description: >-
         e.g. Mirabox 293V3, Mirabox 293S, K1 Pro, Stream Deck Mini, Stream Deck MK.2,
         Ajazz AKP153E/R (rev. 1 or rev. 2), Fifine AmpliGame D6 (rev. 1 or rev. 2), Mars
-        Gaming MSD-ONE, Mad Dog GK150K, Risemode Vision 01, TMICE Stream Controller
+        Gaming MSD-ONE, Mad Dog GK150K, Risemode Vision 01, TMICE Stream Controller,
+        Ulanzi Stream Controller D200 (for a D200, please paste the device-info JSON the
+        log prints on connect — it identifies the firmware generation)
       placeholder: Mirabox 293S
     validations:
       required: false

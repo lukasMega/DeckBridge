@@ -27,7 +27,10 @@ jpeg-fork = ["dep:jpeg-encoder-fork"]
 usb = ["dep:hidapi"]
 
 [dependencies]
-image = { version = "0.25", default-features = false, features = ["jpeg", "bmp"] }
+image = { version = "0.25", default-features = false, features = ["jpeg", "bmp", "png"] }
+# Encoder for the page-protocol devices (Ulanzi D200) — same version deckbridge-tray
+# already resolves, so the workspace stays on one copy.
+png = "0.18"
 jpeg-encoder = { version = "=0.7.1", optional = true, default-features = false, features = ["std"] }
 # Both deps expose lib name `jpeg_encoder`, so the features are mutually exclusive.
 jpeg-encoder-fork = { path = "../jpeg-encoder", optional = true, default-features = false, features = ["std"] }

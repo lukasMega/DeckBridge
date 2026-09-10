@@ -39,6 +39,7 @@ write).
 - **Mad Dog GK150K** — untested
 - **Risemode Vision 01** — untested
 - **TMICE Stream Controller** — untested
+- **Ulanzi Stream Controller D200** — untested (PID `0x0019`, 13 of 15 grid cells are keys)
 - **Stream Deck MK.2**
 - **Stream Deck Mini**
 
@@ -51,6 +52,13 @@ hardware-verified. The Ajazz rev. 2 boards and the Fifine D6 are the same hardwa
 ships in two revisions that differ only in USB packet size: 512 bytes for PID `0x0007`,
 1024 bytes for PID `0x0060`); the 7 v1 rebadges are the same hardware as the 293S behind
 a different USB VID/PID, so they reuse the 293S model verbatim.
+
+The **Ulanzi Stream Controller D200** does not share a board with anything else here. It
+is a Linux appliance driven by a *page* protocol: the host ships the whole grid as a ZIP
+archive (`manifest.json` + `Images/*.png`) and the firmware repaints from it, so there is
+no per-key image write to reuse. It has its own driver (`ts/src/devices/ulanzi/`), is
+implemented entirely from public documentation, and has never been run against hardware.
+The 13 LCD keys are driven; the wide bottom-right slot keeps the firmware's own clock.
 
 :::caution[Platform status]
 DeckBridge is currently **tested on macOS only**, and the GitHub releases currently

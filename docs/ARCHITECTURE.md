@@ -115,7 +115,8 @@ device:
   `WorkerHidDriver.renderCoraImage()`; the worker transforms, caches, and writes — so neither the
   transform nor a large upload stalls the CORA ACK loop (P1). A single generic worker
   (`hid-worker.ts`, proxied by `WorkerHidDriver`) serves every device; its `createDriver()` picks
-  `ElgatoHidDriver` (MK.2, Mini) or `MiraboxDriver` (293/293S/K1 Pro) by `driverKind`.
+  `ElgatoHidDriver` (MK.2, Mini), `MiraboxDriver` (293/293S/K1 Pro) or `UlanziDriver`
+  (D200 — the page protocol) by `driverKind`.
 
 The split makes a full profile load fast on **both** sides: the main thread pushes every image to
 the browser immediately while the device updates in parallel on the worker. USB I/O gets a whole
@@ -200,13 +201,14 @@ At startup `app.ts` constructs a `DriverManager` ([driver-manager.ts](../ts/src/
 | 7 | Ajazz AKP153R (rev. 2) † | `0x0300` | `0x3011` | usage-page path first, then VID+PID |
 | 8 | Fifine AmpliGame D6 ¶ | `0x3142` | `0x0007` | usage-page path first, then VID+PID |
 | 9 | Fifine AmpliGame D6 (rev. 2) ¶ | `0x3142` | `0x0060` | usage-page path first, then VID+PID |
-| 10 | Ajazz AKP153 § | `0x5548` | `0x6674` | usage-page path first, then VID+PID |
-| 11 | Ajazz AKP153E § | `0x0300` | `0x1010` | usage-page path first, then VID+PID |
-| 12 | Ajazz AKP153R § | `0x0300` | `0x1020` | usage-page path first, then VID+PID |
-| 13 | Mars Gaming MSD-ONE § | `0x0b00` | `0x1000` | usage-page path first, then VID+PID |
-| 14 | Mad Dog GK150K § | `0x0c00` | `0x1000` | usage-page path first, then VID+PID |
-| 15 | Risemode Vision 01 § | `0x0a00` | `0x1001` | usage-page path first, then VID+PID |
-| 16 | TMICE Stream Controller § | `0x0500` | `0x1001` | usage-page path first, then VID+PID |
+| 10 | Ulanzi Stream Controller D200 ‖ | `0x2207` | `0x0019` | usage-page path first, then VID+PID |
+| 11 | Ajazz AKP153 § | `0x5548` | `0x6674` | usage-page path first, then VID+PID |
+| 12 | Ajazz AKP153E § | `0x0300` | `0x1010` | usage-page path first, then VID+PID |
+| 13 | Ajazz AKP153R § | `0x0300` | `0x1020` | usage-page path first, then VID+PID |
+| 14 | Mars Gaming MSD-ONE § | `0x0b00` | `0x1000` | usage-page path first, then VID+PID |
+| 15 | Mad Dog GK150K § | `0x0c00` | `0x1000` | usage-page path first, then VID+PID |
+| 16 | Risemode Vision 01 § | `0x0a00` | `0x1001` | usage-page path first, then VID+PID |
+| 17 | TMICE Stream Controller § | `0x0500` | `0x1001` | usage-page path first, then VID+PID |
 
 ‡ `0x1014` is the **HSV293SV3 / "293S V3"** refresh — the same v3 board, so it rides the
 293V3 model rather than getting its own entry (opendeck-akp153 names `0x1005` and `0x1014`
@@ -228,7 +230,21 @@ revisions use **different CRT packet sizes**: rev. 1 (`0x0007`) is 512-byte, rev
 independent reports. That asymmetry is deliberate; see the packet-size test in
 `ts/test/device-models.test.ts`.
 
-Because both sizes are inferred rather than measured, these are the only models that set
+‖ **Untested — no hardware. The only page-protocol model.** The Ulanzi Stream Controller
+D200 (`devices/ulanzi/`) shares no board with anything else in the registry. It is a small
+Linux appliance — Qt `UlanziDeckKey` on a Rockchip RK3308, or ZKSWE EasyUI on a SigmaStar
+SSD210, **two firmware generations behind one VID:PID** — with no per-key image write at
+all: the host sends the whole grid as a ZIP (`manifest.json` + `Images/*.png`) inside a
+`0x7c7c`-framed vendor report and the firmware repaints from it. That is why it needs its
+own `DeviceProtocol` (`ulanzi-zk`), its own `driverKind` (`ulanzi`), its own
+`DevicePageSpec` instead of `DeviceWireSpec`, and PNG output from the Rust encoder. Only
+13 of its 15 grid cells are keys; slot 13 is the firmware's wide info window (kept on its
+own clock) and slot 14 does not exist, so both are `-1` in `keyMap`. Everything downstream
+of `driver.sendImage()` — CORA servers, image cache, WebUI, splash, key events, mDNS — is
+reused unchanged. `ts/src/devices/ulanzi/ulanzi-d200.ts` carries the per-constant
+provenance; the bring-up runbook lives in the plan file it cites.
+
+Because both D6 sizes are inferred rather than measured, those are the only models that set
 `wire.packetSizeCandidates: [512, 1024]`. On open, `MiraboxDriver` reads the device's HID
 report descriptor (`devices/hid-report-descriptor.ts`) and, if it states an
 unambiguous output-report size that is one of those candidates, uses it instead of the
@@ -298,8 +314,8 @@ Full walkthrough: [docs/adding-a-device.md](adding-a-device.md). In short:
 1. Create a `DeviceModel` ([driver.ts](../ts/src/devices/driver.ts)) under `devices/elgato/` or `devices/mirabox/`; most behavior is in the nested specs (`image`, `wire` (Mirabox), `keyMap`, `cora`, optional `splash`).
 2. Add to `DEVICE_MODELS` in [registry.ts](../ts/src/devices/registry.ts) — list position is probe priority.
 3. Set `usagePage`+`usage` only for a vendor-specific HID interface (all Mirabox use `0xffa0`/`1`); undefined for standard Elgato VID+PID.
-4. Set `driverKind` — `'elgato-hid'` or `'mirabox'`; `createDriver()` in [hid-worker.ts](../ts/src/hid-worker.ts) is the single registration point.
-5. For a new wire protocol beyond the four variants, add a `DeviceProtocol` literal: Elgato variants implement pack/parse under [protocol/](https://github.com/lukasMega/DeckBridge/tree/main/ts/src/devices/protocol) (in `PROTOCOL_STRATEGY`); Mirabox variants are driven by `wire` fields in `mirabox.ts`.
+4. Set `driverKind` — `'elgato-hid'`, `'mirabox'` or `'ulanzi'`; `createDriver()` in [hid-worker.ts](../ts/src/hid-worker.ts) is the single registration point.
+5. For a new wire protocol beyond the existing variants, add a `DeviceProtocol` literal: Elgato variants implement pack/parse under [protocol/](https://github.com/lukasMega/DeckBridge/tree/main/ts/src/devices/protocol) (in `PROTOCOL_STRATEGY`); Mirabox variants are driven by `wire` fields in `mirabox.ts`; a page protocol gets its own directory under `devices/` plus a `page: DevicePageSpec` (see `devices/ulanzi/`).
 
 ## CORA device capabilities
 
@@ -402,6 +418,7 @@ The key grid rebuilds when the model changes: `rebuildGrid(keyCount, columns)` s
 | Ajazz AKP153E/R (rev. 2) | 5×3 (same as 293V3; advertised as MK.2) |
 | Fifine AmpliGame D6 (rev. 1 and rev. 2) | 5×3 (same as 293V3; advertised as MK.2) |
 | AKP153/E/R, MSD-ONE, GK150K, Vision 01, TMICE Stream Controller (v1 rebadges) | 5×3 (left 5 of 6 hardware columns, same as 293S; advertised as MK.2) |
+| Ulanzi Stream Controller D200 | 5×3 advertised as MK.2, but only 13 cells are keys (slot 13 = wide info window, slot 14 = nonexistent) |
 
 ### Device model selector
 
@@ -566,7 +583,7 @@ All tests are **hardware-free** (pure logic, fakes, local sockets). Real-device 
 |---|---|
 | CORA framing | `packets` (Mirabox builders + framing), `cora-frame` (resync/overflow/oversized-`payloadLength` E10), `assembler`, `elgato-child-image-bounds` (out-of-range `keyIndex` drop, L4) |
 | Image pipeline | `translator` (key-map incl. `-1` E2 + Rust transform), `image-cache` (full-buffer FNV-1a incl. icon-on-black regression, LRU), `image-pipeline`, `image-render` (worker transform/cache/remap/passthrough), `hash-bench` |
-| Drivers & models | `device-models` (probe order, keyMap perms, 293S 6th-col drop, caps geometry), `driver-manager` (connect/reconnect, mode-switch, E1), `device-session` (per-index ports, splash on start, key/image event wiring, mDNS rename), `hid-worker-host` (failed-`open` reuse — SIGBUS-safe), `mirabox-parse` (0x04 vs 0x00), `k1pro-chunk-pad` |
+| Drivers & models | `device-models` (probe order, keyMap perms, 293S 6th-col drop, caps geometry), `driver-manager` (connect/reconnect, mode-switch, E1), `device-session` (per-index ports, splash on start, key/image event wiring, mDNS rename), `hid-worker-host` (failed-`open` reuse — SIGBUS-safe), `mirabox-parse` (0x04 vs 0x00), `k1pro-chunk-pad`, `ulanzi-protocol` (0x7c7c framing/chunking/input vectors), `ulanzi-zip` (CRC-32, stored-ZIP readable by real `unzip`, boundary-byte retry), `ulanzi-page` (coalescing, full-then-partial, flush rate limit) |
 | Servers | `server` (primary+child over real TCP; L6/E3/E4/H3 + WebUI brightness), `pairing` (full MK.2 handshake), `feature-response` (report-id branches + MAC guard) |
 | Web & infra | `web-ui-server` (MAC/port/Broadcaster, NaN-PID V4, `resetImages` L3), `ui-helpers-docks` (dock list vs legacy-field synthesis), `key-preview`, `tray` (path helpers + `SIGTERM` L1), `mdns-advertiser` (per-platform `buildArgs`, E9), `native-libs` (extract/gunzip/cleanup), `buffer-shim` |
 | Settings & identity | `settings-store` (atomic write, corrupt/missing/array-shaped JSON → `{}`, concurrent-save safety), `device-identity` (stable `usb:<serial>` key vs unstable path fallback, deterministic MAC/serial, no-collision sampling) |
@@ -755,13 +772,15 @@ deckbridge/
 │   │   ├── ffi/          ← hidapi.ts (libhidapi) · image-proc.ts (libdeckbridge_native, DECKBRIDGE_NATIVE_LIB)
 │   │   ├── devices/      ← driver.ts (DeviceModel + specs) · registry.ts · hid-connection.ts (HidDeviceBase)
 │   │   │                    · hid-driver-base.ts (ElgatoHidDriver) · mock.ts · elgato/ · mirabox/ · protocol/
+│   │   │                    · ulanzi/ (D200 page protocol: framing · store-mode ZIP · page model · driver)
 │   │   ├── platform/     ← tcp.ts · buffer-shim.ts · events-shim.ts (shims over txiki globals)
 │   │   └── web/          ← server/ (WebUIServer + activity-buffers/dock-registry/image-channel/
 │   │                          persisted-settings/settings-identity-controller/extra-keys-controller/
 │   │                          mock-config/web-request-guard/…) · client/ (browser UI)
 │   └── dist/             ← bundle.js (~560 kB, worker + native dylibs inlined) · hid-worker.js (debug)
 ├── rust/
-│   ├── deckbridge-native/   ← JPEG resize/rotate + HID path-enum cdylib (FFI via DECKBRIDGE_NATIVE_LIB);
+│   ├── deckbridge-native/   ← image resize/rotate + encode (JPEG/BMP/PNG) + HID path-enum cdylib
+│   │                          (FFI via DECKBRIDGE_NATIVE_LIB);
 │   │                          Cargo features: jpeg-upstream (default) / jpeg-fork, HID behind `usb`
 │   ├── jpeg-encoder/        ← vendored jpeg-encoder 0.6.1 fork (interleaved optimized Huffman; JPEG_FORK=1)
 │   └── deckbridge-tray/     ← system-tray sidecar binary (Rust; tray-icon + tao)

@@ -195,7 +195,7 @@ export interface ImageEvent {
 export interface CommEntry {
   ts: number;
   direction: 'rx' | 'tx';
-  protocol: 'elgato' | 'mirabox';
+  protocol: 'elgato' | 'mirabox' | 'ulanzi';
   component: string;
   human: string;
   hex: string;

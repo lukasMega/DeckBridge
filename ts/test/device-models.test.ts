@@ -10,6 +10,7 @@ import {
   AJAZZ_AKP153R_REV2_MODEL,
 } from '../src/devices/ajazz/akp153-rev2.js';
 import { FIFINE_D6_MODEL, FIFINE_D6_REV2_MODEL } from '../src/devices/fifine/fifine-d6.js';
+import { ULANZI_D200_MODEL } from '../src/devices/ulanzi/ulanzi-d200.js';
 import {
   AJAZZ_AKP153_MODEL,
   AJAZZ_AKP153E_MODEL,
@@ -323,12 +324,80 @@ test('findModel returns null for a known VID but unknown PID', () => {
   assert.equal(findModel(MK2_MODEL.usbVendorId, 0xffff), null);
 });
 
+// ── ulanzi-d200 (page protocol) ──────────────────────────────────────────────
+
+console.log('\ndevice-models: ulanzi-d200');
+
+test('findModel resolves ulanzi-d200 at 0x2207:0x0019', () => {
+  const result = findModel(0x2207, 0x0019);
+  assert.notEqual(result, null);
+  assert.equal(result!.id, 'ulanzi-d200');
+  assert.equal(result, ULANZI_D200_MODEL);
+});
+
+test('ulanzi-d200 is the only page-protocol model, and carries page not wire', () => {
+  const pageModels = DEVICE_MODELS.filter((m) => m.protocol === 'ulanzi-zk');
+  assert.equal(pageModels.length, 1);
+  assert.equal(ULANZI_D200_MODEL.driverKind, 'ulanzi');
+  assert.notEqual(ULANZI_D200_MODEL.page, undefined);
+  // DeviceWireSpec is Mirabox-only framing; every model.wire! dereference lives
+  // inside MiraboxDriver, so this model must never grow one.
+  assert.equal(ULANZI_D200_MODEL.wire, undefined);
+});
+
+test('ulanzi-d200 renders PNG at the firmware-mandated 196×196', () => {
+  assert.equal(ULANZI_D200_MODEL.image.format, 'png');
+  assert.equal(ULANZI_D200_MODEL.image.width, 196);
+  assert.equal(ULANZI_D200_MODEL.image.height, 196);
+});
+
+// The 5×3 grid has two cells that are not keys: 13 is the wide info window and
+// 14 does not exist physically. Both must resolve to -1 in BOTH directions.
+test('ulanzi-d200 coraToWireImage: 0..12 are identity, 13 and 14 map to -1', () => {
+  const map = ULANZI_D200_MODEL.keyMap.coraToWireImage!;
+  assert.equal(map.length, 15);
+  for (let i = 0; i < 13; i++) assert.equal(map[i], i, `cora ${i} must map to slot ${i}`);
+  assert.equal(map[13], -1, 'cora 13 (wide info window) must map to -1');
+  assert.equal(map[14], -1, 'cora 14 (no such key) must map to -1');
+});
+
+test('ulanzi-d200 wireInputToCora: slot 13 (wide window press) is dropped', () => {
+  assert.equal(deviceInputToMk2Index(13, ULANZI_D200_MODEL), -1);
+  for (let i = 0; i < 13; i++) assert.equal(deviceInputToMk2Index(i, ULANZI_D200_MODEL), i);
+  // Out of range (a D200X page button) must not throw or alias onto a real key.
+  assert.equal(deviceInputToMk2Index(17, ULANZI_D200_MODEL), -1);
+});
+
+test('ulanzi-d200 image ids are a permutation of 0..12 plus two holes', () => {
+  const live = ULANZI_D200_MODEL.keyMap.coraToWireImage!.filter((v) => v >= 0);
+  assert.equal(live.length, 13);
+  assert.equal(new Set(live).size, 13, 'no two CORA keys may share a device slot');
+});
+
+test('ulanzi-d200 advertises the MK.2 5×3/15 geometry despite owning 13 keys', () => {
+  assert.equal(ULANZI_D200_MODEL.cora.advertiseGeometry, MK2_CHILD_GEOMETRY);
+  assert.equal(ULANZI_D200_MODEL.keyCount, 15);
+  assert.equal(ULANZI_D200_MODEL.columns, 5);
+  assert.equal(ULANZI_D200_MODEL.rows, 3);
+});
+
+test('ulanzi-d200 page spec: the wide slot is "3_2" and the packet size is 1024', () => {
+  const page = ULANZI_D200_MODEL.page!;
+  assert.equal(page.packetSize, 1024);
+  assert.equal(page.inSize, 1024);
+  assert.equal(page.smallWindowSlot.col, 3);
+  assert.equal(page.smallWindowSlot.row, 2);
+  // Slot 13 on a 5-wide grid is exactly col 3 / row 2 — keep the two in sync.
+  assert.equal(13 % ULANZI_D200_MODEL.columns, page.smallWindowSlot.col);
+  assert.equal(Math.floor(13 / ULANZI_D200_MODEL.columns), page.smallWindowSlot.row);
+});
+
 // ── DEVICE_MODELS ordering ───────────────────────────────────────────────────
 
 console.log('\ndevice-models: DEVICE_MODELS ordering');
 
-test('DEVICE_MODELS contains exactly 16 models', () => {
-  assert.equal(DEVICE_MODELS.length, 16);
+test('DEVICE_MODELS contains exactly 17 models', () => {
+  assert.equal(DEVICE_MODELS.length, 17);
 });
 
 test('DEFAULT_MODEL is MK2_MODEL', () => {

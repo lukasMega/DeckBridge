@@ -57,7 +57,7 @@ function callImageProc(
   rotate: number,
   flipH: boolean,
   flipV: boolean,
-  bmp: boolean,
+  format: number,
   bmpPpm: number,
   blurSigma: number,
   resizeFilter: number,
@@ -78,7 +78,7 @@ function callImageProc(
       rotate,
       flipH ? 1 : 0,
       flipV ? 1 : 0,
-      bmp ? 1 : 0,
+      format,
       bmpPpm,
       Math.round(blurSigma * 10),
       resizeFilter,
@@ -106,6 +106,19 @@ export function resizeFilterFor(spec: DeviceImageSpec): number {
     case 'nearest':
       return 1;
     case 'lanczos3':
+      return 2;
+    default:
+      return 0;
+  }
+}
+
+/** Map a DeviceImageSpec's format to the FFI `format: i32` enum.
+ *  0 = JPEG (default), 1 = BMP, 2 = PNG. */
+export function formatCodeFor(spec: DeviceImageSpec): 0 | 1 | 2 {
+  switch (spec.format) {
+    case 'bmp':
+      return 1;
+    case 'png':
       return 2;
     default:
       return 0;
@@ -146,8 +159,9 @@ export function applyOverride(spec: DeviceImageSpec, mode: ImageModeOverride): D
   }
 }
 
-/** Transform a CORA JPEG for an Elgato device according to its DeviceImageSpec.
- *  Returns JPEG bytes for gen2 (MK.2) or BMP bytes for gen1 (Mini). */
+/** Transform a CORA image for a device according to its DeviceImageSpec.
+ *  Returns JPEG bytes for gen2 (MK.2), BMP bytes for gen1 (Mini), or PNG bytes
+ *  for page-protocol devices (Ulanzi D200). */
 export function transformImageForDevice(jpeg: Uint8Array, spec: DeviceImageSpec): Buffer {
   return callImageProc(
     jpeg,
@@ -159,7 +173,7 @@ export function transformImageForDevice(jpeg: Uint8Array, spec: DeviceImageSpec)
     spec.rotate,
     spec.flipH,
     spec.flipV,
-    spec.format === 'bmp',
+    formatCodeFor(spec),
     spec.bmpPpm ?? 2835,
     spec.blur ?? 0,
     resizeFilterFor(spec),

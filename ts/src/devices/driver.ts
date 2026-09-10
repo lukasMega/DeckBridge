@@ -9,21 +9,33 @@ export type DeviceVendor =
   | 'mad-dog'
   | 'risemode'
   | 'tmice'
-  | 'fifine';
+  | 'fifine'
+  | 'ulanzi';
 
 /** Wire protocol — closed; adding a new model almost always reuses an existing one. */
 export type DeviceProtocol =
   | 'mirabox-cora' // v3, 1024-byte packets, press+release
   | 'mirabox-cora-v1' // v1, 512-byte packets, keydown-only
   | 'elgato-gen1' // BMP, 16-byte header, key+1, feature 0x05/0x0B (Mini, original)
-  | 'elgato-gen2'; // JPEG, 8-byte header, feature 0x03 (MK.2, XL)
+  | 'elgato-gen2' // JPEG, 8-byte header, feature 0x03 (MK.2, XL)
+  // PAGE protocol, not a per-key one: the host ships the WHOLE grid as a ZIP
+  // (manifest.json + Images/*.png) inside a 0x7c7c-framed vendor report and the
+  // firmware repaints from it. There is no "write one key" opcode; per-key CORA
+  // updates are emulated by rebuilding and resending a (partial) page.
+  // See devices/ulanzi/ulanzi-protocol.ts.
+  | 'ulanzi-zk';
 
 /** Stable kebab-case slug used as cache key, UI label, logs. */
 // eslint-disable-next-line sonarjs/redundant-type-aliases
 export type DeviceModelId = string;
 
+/** Native image format the DEVICE consumes (not what CORA sends us — that stays
+ *  'jpeg' | 'bmp', see types.ts ImageEvent). 'png' exists for page-protocol
+ *  devices whose firmware unzips PNGs out of a manifest (Ulanzi D200). */
+export type DeviceImageFormat = 'jpeg' | 'bmp' | 'png';
+
 export interface DeviceImageSpec {
-  format: 'jpeg' | 'bmp';
+  format: DeviceImageFormat;
   width: number;
   height: number;
   /** Extra CW rotation applied on top of the CORA JPEG before sending to hardware.
@@ -142,7 +154,41 @@ export interface DeviceSplashSpec {
   transformOverride?: { rotate?: 0 | 90 | 180 | 270; flipH?: boolean; flipV?: boolean };
 }
 
-export type DriverKind = 'elgato-hid' | 'mirabox' | 'custom';
+/** Low-level wire behaviour for PAGE protocols (ulanzi-zk): devices that repaint
+ *  the whole grid from one archive rather than accepting a per-key image write.
+ *  Deliberately NOT folded into DeviceWireSpec — none of that struct's fields
+ *  (sendStpAfterImage, synthesizeKeyUp, chunkPadByte, …) mean anything here, and
+ *  keeping them apart stops Mirabox framing fields growing meanings they lack. */
+export interface DevicePageSpec {
+  packetSize: number; // 1024 for the D200 (both directions)
+  inSize: number; // HID read buffer size
+  /** Any outbound write resets the firmware's watchdog; with none it reverts to
+   *  its own screen after ~5–10 s. We send a clock frame at this interval. */
+  keepaliveMs: number;
+  /** Coalescing window: CORA pushes one image per key, the device takes one ZIP
+   *  per page, so staged images are batched for this long before a flush. */
+  flushDebounceMs: number;
+  /** Floor on the gap between two flushes — a page is ~180 synchronous HID
+   *  writes, and unthrottled writers are reported to stall the firmware after
+   *  ~17 min of animation. */
+  minFlushIntervalMs: number;
+  /** Use the partial-update opcode for flushes after the first full page.
+   *  Disputed on hardware (ghost/white keys have been reported); false falls
+   *  back to resending the whole remembered page every time. */
+  partialUpdates: boolean;
+  /** Firmware cap on one page archive (0 = unknown/uncapped). Oversized ZIPs are
+   *  silently dropped rather than rejected, so this is only a diagnostic. */
+  maxZipBytes: number;
+  /** Firmware render mode for the wide info-window slot (203 = digital clock). */
+  smallWindowMode: number;
+  /** Grid position of that wide slot, as the manifest's "{col}_{row}" key. */
+  smallWindowSlot: { col: number; row: number };
+  /** Milliseconds to busy-wait between page chunks (0/undefined = none). Escape
+   *  hatch for firmware that drops back-to-back 1024-byte writes. */
+  chunkDelayMs?: number;
+}
+
+export type DriverKind = 'elgato-hid' | 'mirabox' | 'ulanzi' | 'custom';
 
 /** Child geometry advertised to the Elgato desktop over CORA capabilities. */
 export interface ChildGeometry {
@@ -172,6 +218,8 @@ export interface DeviceModel {
   /** Mirabox-only wire framing (packet sizes, heartbeat, STP/keyup quirks).
    *  Undefined for elgato-hid models — their framing lives in PROTOCOL_STRATEGY. */
   wire?: DeviceWireSpec;
+  /** Page-protocol framing (ulanzi-zk only). Mutually exclusive with `wire`. */
+  page?: DevicePageSpec;
   keyMap: DeviceKeyMap;
   cora: DeviceCoraSpec;
   splash?: DeviceSplashSpec;

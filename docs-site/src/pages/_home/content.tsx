@@ -7,6 +7,7 @@ export const BRANDS: ReactNode[] = [
   <span style={{ fontStretch: 'condensed' }}>Mirabox</span>,
   'Ajazz',
   'Fifine',
+  'Ulanzi',
 ];
 
 export const DEVICES: { name: string; tested: boolean }[] = [
@@ -24,6 +25,7 @@ export const DEVICES: { name: string; tested: boolean }[] = [
   { name: 'Mad Dog GK150K', tested: false },
   { name: 'Risemode Vision 01', tested: false },
   { name: 'TMICE Stream Controller', tested: false },
+  { name: 'Ulanzi Stream Controller D200', tested: false },
   { name: 'Stream Deck MK.2', tested: false },
   { name: 'Stream Deck Mini', tested: true },
 ];

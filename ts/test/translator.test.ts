@@ -4,11 +4,13 @@ import {
   deviceInputToMk2Index,
   transformImageForDevice,
   fillModeFor,
+  formatCodeFor,
   applyOverride,
 } from '../src/translator.js';
 import type { DeviceImageSpec } from '../src/devices/driver.js';
 import { MIRABOX_293_MODEL } from '../src/devices/mirabox/mirabox-293.js';
 import { MIRABOX_K1PRO_MODEL } from '../src/devices/mirabox/mirabox-k1pro.js';
+import { ULANZI_D200_MODEL } from '../src/devices/ulanzi/ulanzi-d200.js';
 
 const coraToWireImage = MIRABOX_293_MODEL.keyMap.coraToWireImage!;
 
@@ -217,6 +219,16 @@ await test('fillModeFor: undefined resizeMode → 0', () => {
   assert.equal(fillModeFor(baseImageSpec({ resizeMode: undefined })), 0);
 });
 
+// ── formatCodeFor mapping ────────────────────────────────────────────────────
+
+console.log('\ntranslator: formatCodeFor');
+
+await test('formatCodeFor: jpeg → 0, bmp → 1, png → 2', () => {
+  assert.equal(formatCodeFor(baseImageSpec({ format: 'jpeg' })), 0);
+  assert.equal(formatCodeFor(baseImageSpec({ format: 'bmp' })), 1);
+  assert.equal(formatCodeFor(baseImageSpec({ format: 'png' })), 2);
+});
+
 // ── applyOverride ────────────────────────────────────────────────────────────
 
 console.log('\ntranslator: applyOverride');
@@ -280,6 +292,25 @@ await test('transformImageForDevice (mirabox-293) output decodes to spec width×
   assert.notEqual(dims, null);
   assert.equal(dims!.width, MIRABOX_293_MODEL.image.width);
   assert.equal(dims!.height, MIRABOX_293_MODEL.image.height);
+});
+
+// Page-protocol devices (Ulanzi D200) take PNG, and the transform is the only
+// place that format is produced — go through the real cdylib, not a stub.
+await test('transformImageForDevice (ulanzi-d200) output is a valid PNG at 196×196', () => {
+  const out = transformImageForDevice(SOLID_RED_16X16_JPEG, ULANZI_D200_MODEL.image);
+  assert.equal(JSON.stringify(Array.from(out.subarray(0, 8))), '[137,80,78,71,13,10,26,10]');
+  // IHDR is always the first chunk: 4-byte length, "IHDR", then width/height BE.
+  assert.equal(String.fromCharCode(out[12]!, out[13]!, out[14]!, out[15]!), 'IHDR');
+  assert.equal(out.readUInt32BE(16), ULANZI_D200_MODEL.image.width);
+  assert.equal(out.readUInt32BE(20), ULANZI_D200_MODEL.image.height);
+});
+
+await test('transformImageForDevice (ulanzi-d200) honours the per-icon byte budget', () => {
+  const out = transformImageForDevice(SOLID_RED_16X16_JPEG, ULANZI_D200_MODEL.image);
+  assert.ok(
+    out.length <= ULANZI_D200_MODEL.image.maxBytes,
+    `PNG ${out.length} B must fit the ${ULANZI_D200_MODEL.image.maxBytes} B icon budget`,
+  );
 });
 
 await test('transformImageForDevice (400x400 BMP) grows OUT past 256 KB and returns full buffer', () => {

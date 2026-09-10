@@ -7,6 +7,7 @@ import { DEVICE_MODELS } from './devices/registry.js';
 import type { DeviceModel } from './devices/driver.js';
 import { ElgatoHidDriver } from './devices/hid-driver-base.js';
 import { MiraboxDriver } from './mirabox.js';
+import { UlanziDriver } from './devices/ulanzi/ulanzi-driver.js';
 import { renderImage } from './image-render.js';
 import { transformImageForDevice } from './translator.js';
 import { setWorkerPost } from './logger.js';
@@ -20,7 +21,7 @@ setWorkerPost(scope.postMessage.bind(scope));
 
 const post = scope.postMessage.bind(scope);
 
-type AnyRealDriver = ElgatoHidDriver | MiraboxDriver;
+type AnyRealDriver = ElgatoHidDriver | MiraboxDriver | UlanziDriver;
 let driver: AnyRealDriver | null = null;
 let currentModel: DeviceModel | null = null;
 
@@ -38,6 +39,8 @@ function createDriver(model: DeviceModel): AnyRealDriver {
       return new ElgatoHidDriver(model);
     case 'mirabox':
       return new MiraboxDriver(model);
+    case 'ulanzi':
+      return new UlanziDriver(model);
     case 'custom':
       throw new Error(`No driver implementation for driverKind 'custom' (model: ${model.id})`);
   }

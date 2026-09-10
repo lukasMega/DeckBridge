@@ -16,6 +16,7 @@ The Elgato desktop sends image data to the CORA child server in the format match
 | Ajazz AKP153E/R rev. 2 (`mirabox-cora`) — untested | MK.2 spoof (PID `0x00a5`, `MK2_CHILD_GEOMETRY`) | gen2 JPEG 72×72 | Yes | identical to the 293V3 (same board, different VID/PID) |
 | Fifine AmpliGame D6 rev. 1 / rev. 2 (`mirabox-cora`) — untested | MK.2 spoof (PID `0x00a5`, `MK2_CHILD_GEOMETRY`) | gen2 JPEG 72×72 | Yes | identical to the 293V3 (same board, different VID/PID); rev. 2 uses 1024-byte packets, rev. 1 uses 512 |
 | AKP153/E/R, MSD-ONE, GK150K, Vision 01, TMICE Stream Controller (`mirabox-cora-v1`) — untested | MK.2 spoof (PID `0x00a5`, `MK2_CHILD_GEOMETRY`) | gen2 JPEG 72×72 | Yes | identical to the 293S (same board, different VID/PID) |
+| Ulanzi Stream Controller D200 (`ulanzi-zk`) — untested | MK.2 spoof (PID `0x00a5`, `MK2_CHILD_GEOMETRY`) | gen2 JPEG 72×72 | Yes | `sidecar`: resize 72→196 (lanczos3), rotate 0, encode **PNG** — then batched into a page ZIP, no per-key write (see below) |
 | Stream Deck MK.2 (`elgato-gen2`) | real MK.2 (PID `0x0080`) | gen2 JPEG 72×72 | No | `passthrough` (rotate 0) |
 | Stream Deck Mini (`elgato-gen1`) | real Mini (6 key, 3×2, PID `0x0063`) | gen1 BMP 80×80 BGR | No | `passthrough` (BMP short-circuit) |
 
@@ -25,6 +26,20 @@ On image arrival (`setupImageHandler` in `image-pipeline.ts`) the path splits in
 
 - **WebUI path (main thread)** — fires immediately: the CORA bytes are pushed **inline (base64) over WebSocket**, so the browser renders at arrival with no follow-up request.
 - **Transform + USB path (USB worker thread)** — the main thread forwards raw CORA bytes via `WorkerHidDriver.renderCoraImage()`; the worker (`image-render.ts`) transforms through the Rust deckbridge-native cdylib (LRU-cached), then writes to the device. Running on the worker keeps the 50–200 ms transform off the CORA ACK loop (P1).
+
+### Page-protocol devices (Ulanzi D200)
+
+Every model above accepts one image per key. The D200 does not: its firmware repaints the whole screen from a ZIP archive (`manifest.json` + `Images/*.png`) delivered over a `0x7c7c`-framed HID vendor channel. Everything up to `driver.sendImage()` is unchanged — only the last hop differs:
+
+```
+image-render.ts  →  driver.sendImage(slot, pngBytes)
+                      └─ UlanziPage.stage()          dirty set, last write per slot wins
+                           └─ FlushScheduler         75 ms debounce, 120 ms min gap
+                                └─ buildSafePageZip  stored-method ZIP + manifest
+                                     └─ buildChunks  1016 B + N×1024 B HID writes
+```
+
+Consequences worth knowing: a full 13-icon page is roughly 180 synchronous HID writes (~55 ms on the worker), a single-key change about 15; images are coalesced, so a 15-key profile switch is one page, not 15 writes; and icon paths are regenerated on every flush because the firmware appears to cache decoded pixmaps by path. The wide bottom-right slot is not driven as a key — it keeps the firmware's own clock.
 
 ## Image format by device
 
@@ -126,6 +141,7 @@ Orientation is fully described by the active model: `model.image` for live CORA 
 | Ajazz AKP153E/R rev. 2 (untested) | rotate 0, resize 72→112 (as 293V3) | rotate 180 |
 | Fifine AmpliGame D6 rev. 1 / rev. 2 (untested) | rotate 0, resize 72→112 (as 293V3) | rotate 180 |
 | AKP153/E/R, MSD-ONE, GK150K, Vision 01, TMICE Stream Controller (untested) | rotate 90, pad 72→85 (edge) (as 293S) | rotate 270 |
+| Ulanzi D200 (untested) | rotate 0, resize 72→196 (lanczos3), PNG | — (none set; orientation unmeasured) |
 
 </details>
 
