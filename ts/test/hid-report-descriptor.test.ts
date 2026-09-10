@@ -265,7 +265,7 @@ test('refuses (does not throw) when the descriptor call throws', () => {
   assert.equal(probeOutputReportSize(hid, DEV, [512, 1024]), null);
 });
 
-test('refuses an unparseable descriptor even when hidapi returns bytes', () => {
+test('refuses an unparsable descriptor even when hidapi returns bytes', () => {
   const hid = hidReturning(new Uint8Array([0xfe, 0x02, 0x00, 0x00, 0x00])) as HidapiSymbols;
   assert.equal(probeOutputReportSize(hid, DEV, [512, 1024]), null);
 });
