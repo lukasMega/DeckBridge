@@ -98,7 +98,7 @@ a regular **Network device** at `localhost`; the deck behaves like Elgato hardwa
   widgets; see [Side-key widgets](./side-keys.md).
 - **Live web UI** — `http://localhost:3000` shows the key grid and a log feed in real time.
 - **System tray + diagnostics** — packaged releases (installers and release zips) include
-  a status tray icon ([states](./getting-started.md#3-run-it)) and a `/requirements`
+  a status tray icon ([states](./getting-started.mdx#3-run-it)) and a `/requirements`
   self-check page.
 - **Standalone binary** — one **&lt;5 MB** file built on txiki.js; no Node.js.
 
