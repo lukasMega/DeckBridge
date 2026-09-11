@@ -4,7 +4,10 @@ import { MK2_CHILD_GEOMETRY } from '../../capabilities.js';
 
 /** Fifine AmpliGame D6 — the Mirabox 293V3 board behind VID `0x3142`.
  *
- *  NOT HARDWARE-TESTED (neither revision). Everything below is copied from
+ *  Rev. 2 (`0x0060`) is HARDWARE-TESTED on macOS: enumeration via the `0xffa0`/1 usage
+ *  path, all 15 keys rendered, and press+release events mapped correctly (wire `0x0f` →
+ *  mk2 14, `0x0b` → mk2 10). Rev. 1 (`0x0007`) is still untested. Everything below is
+ *  copied from
  *  MIRABOX_293_MODEL because six independent implementations describe the D6 as a
  *  293V3 clone: the same CRT command set, 512-byte HID reads, usagePage `0xffa0`/usage
  *  1, 3×5 grid of 15 JPEG keys, no encoders, and the same button-remap table
@@ -40,8 +43,8 @@ import { MK2_CHILD_GEOMETRY } from '../../capabilities.js';
  *  two rev. 1 units ever collide on one settings key, `sharedSerial: true` on
  *  FIFINE_D6_MODEL is the fix (see `deviceKeyFor`, device-identity.ts).
  *
- *  If keys light up in the wrong place on real hardware, `keyMap` (verified on 293V3
- *  hardware only) is the first thing to re-derive. */
+ *  If keys light up in the wrong place on real hardware, `keyMap` (verified on 293V3 and
+ *  D6 rev. 2 hardware) is the first thing to re-derive. */
 const FIFINE_D6_BASE: Omit<DeviceModel, 'id' | 'name' | 'usbProductIds' | 'wire'> = {
   vendor: 'fifine',
   protocol: 'mirabox-cora',
@@ -63,6 +66,7 @@ const FIFINE_D6_BASE: Omit<DeviceModel, 'id' | 'name' | 'usbProductIds' | 'wire'
     // rather than inherited — PR #6 by tracing Fifine's own Windows software, PR #7 by
     // painting candidate resolutions onto separate keys ("At 105 the artwork leaves a
     // visible gap and each row smears against the fixed framebuffer stride").
+    // 112 now also holds up on a real rev. 2 unit (macOS): keys render full-bleed.
     // Unlike packetSize below, this CANNOT be probed — the device never reports its
     // panel size and never complains. A wrong value shows as letterboxing, a gap, or a
     // soft image; re-measure on hardware before changing it.
@@ -97,12 +101,11 @@ const FIFINE_D6_BASE: Omit<DeviceModel, 'id' | 'name' | 'usbProductIds' | 'wire'
 const D6_WIRE_COMMON = {
   inSize: 512,
   heartbeatMs: 8000,
-  // Both revisions assumed to report press AND release, so nothing is synthesized.
-  // rev. 1: upstream forces its event reader to protocol 3 (see the header note).
-  // rev. 2: opendeck-ampgd6 PR #6 and PR #7 — two independent 0x0060 owners — both run
-  // the board at protocol_version 3, which is mirajazz's press+release mode.
+  // Both revisions report press AND release, so nothing is synthesized.
+  // rev. 1 (assumed): upstream forces its event reader to protocol 3 (see the header
+  // note). rev. 2: confirmed on hardware — down and up events both arrive.
   // Not runtime-detectable: a key that never reports "up" is indistinguishable from a
-  // key the user is still holding, so there is no safe automatic fallback. If rev. 2
+  // key the user is still holding, so there is no safe automatic fallback. If rev. 1
   // turns out to be keydown-only the symptom is a stuck key, and the fix is
   // `synthesizeKeyUp: true` on that model alone.
   synthesizeKeyUp: false,
@@ -128,7 +131,8 @@ export const FIFINE_D6_MODEL: DeviceModel = {
   wire: { packetSize: 512, ...D6_WIRE_COMMON },
 };
 
-/** rev. 2 (PID `0x0060`): **1024-byte** packets. 512-byte writes render BLACK on this
+/** rev. 2 (PID `0x0060`): **1024-byte** packets — hardware-verified on macOS (panel
+ *  renders, keys map correctly). 512-byte writes render BLACK on this
  *  revision — four independent 0x0060 owners hit it and all fixed it by moving to 1024
  *  (opendeck-ampgd6 PR #4, #5, #6, #7). PR #7 has the mechanism: the board reports
  *  `MaxOutputReportSize = 1024`, so every 513-byte write — brightness, clear, image

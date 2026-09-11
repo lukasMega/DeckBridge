@@ -81,8 +81,8 @@ macOS, the driver then falls through to plain `hid_open(VID, PID)` — one attem
 no retry loop. On macOS this fallback is skipped entirely: there, `hid_open(VID, PID)`
 opens the device's first IOKit interface, and a permission-denied open on it SIGBUSes the
 whole process; reconnect retries instead happen at a higher level, in `driver-manager`.
-Every Mirabox/Ajazz model sets `usagePage`/`usage` (293V3, 293S, K1 Pro, and the untested
-Ajazz AKP153E/R rev. 2 — all `0xffa0`/`1`); Elgato models skip path-based open entirely.
+Every Mirabox/Ajazz/Fifine model sets `usagePage`/`usage` (293V3, 293S, K1 Pro, Fifine
+AmpliGame D6 rev. 2, and the untested Ajazz AKP153E/R rev. 2 — all `0xffa0`/`1`); Elgato models skip path-based open entirely.
 
 ## FFI type signatures
 

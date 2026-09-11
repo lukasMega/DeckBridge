@@ -219,16 +219,18 @@ same 3×6 grid and key map, so `ajazz/akp153-rev2.ts` clones `MIRABOX_293_MODEL`
 (`0x0300:0x1010`/`0x1020`) is a **v1/512-byte** device and is deliberately not in the
 registry — it would need a 293S-style model.
 
-¶ **Untested — no hardware, both revisions.** The Fifine AmpliGame D6
-(`devices/fifine/fifine-d6.ts`) is the 293V3 board behind VID `0x3142`: same
+¶ **Rev. 2 hardware-tested (macOS); rev. 1 untested — no hardware.** The Fifine AmpliGame
+D6 (`devices/fifine/fifine-d6.ts`) is the 293V3 board behind VID `0x3142`: same
 `mirabox-cora` v3 wire, same `0xffa0`/`1` usage, same 3×5 grid and key map, so it clones
 `MIRABOX_293_MODEL`. It is **two** models rather than one model with two PIDs because the
 revisions use **different CRT packet sizes**: rev. 1 (`0x0007`) is 512-byte, rev. 2
 (`0x0060`) is 1024-byte — 512-byte writes render black on rev. 2 according to four
 independent reports. That asymmetry is deliberate; see the packet-size test in
-`ts/test/device-models.test.ts`.
+`ts/test/device-models.test.ts`. A rev. 2 unit confirmed the whole path end to end:
+enumeration via the `0xffa0`/`1` usage path, all 15 keys rendered through the sidecar, and
+key events mapped as expected (wire `0x0f` → MK.2 index 14, `0x0b` → 10).
 
-Because both sizes are inferred rather than measured, these are the only models that set
+Because rev. 1's size is inferred rather than measured, these are the only models that set
 `wire.packetSizeCandidates: [512, 1024]`. On open, `MiraboxDriver` reads the device's HID
 report descriptor (`devices/hid-report-descriptor.ts`) and, if it states an
 unambiguous output-report size that is one of those candidates, uses it instead of the
