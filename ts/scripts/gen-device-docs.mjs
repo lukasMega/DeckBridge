@@ -276,17 +276,22 @@ function testedLabel(note) {
 /**
  * Escape `{` and `<` so MDX does not read them as an expression or a tag — but only
  * OUTSIDE inline code spans, where markdown already wins and a backslash would render
- * literally.
+ * literally. A literal backslash is escaped first, so it cannot combine with the
+ * escapes added here (or the pipe escape in `escapeCell`) and neutralize them.
  */
-function escapeMdx(text) {
+function escapeMdx(text, { pipes = false } = {}) {
+  const outside = pipes ? /[\\{<|]/g : /[\\{<]/g;
+  // Inside a code span markdown wins, so only the cell-splitting pipe needs escaping —
+  // and a backslash there is literal content, not an escape.
+  const inCode = (part) => (pipes ? part.replace(/\|/g, '\\|') : part);
   return String(text)
     .split(/(`+[^`]*`+)/)
-    .map((part, i) => (i % 2 === 1 ? part : part.replace(/[{<]/g, (c) => `\\${c}`)))
+    .map((part, i) => (i % 2 === 1 ? inCode(part) : part.replace(outside, (c) => `\\${c}`)))
     .join('');
 }
 
 /** Same, plus the pipe that would otherwise split a markdown table cell. */
-const escapeCell = (text) => escapeMdx(text).replace(/\|/g, '\\|');
+const escapeCell = (text) => escapeMdx(text, { pipes: true });
 
 // ---------------------------------------------------------------- markdown helpers
 
