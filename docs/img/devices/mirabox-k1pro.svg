@@ -1,0 +1,47 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 338 328" width="338" height="328" role="img" aria-label="Mirabox K1 Pro — 3×2 + 3○ key stream deck">
+  <title>Mirabox K1 Pro</title>
+  <defs>
+    <linearGradient id="bodymiraboxk1pro" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#2a2c31"/>
+      <stop offset="1" stop-color="#17181c"/>
+    </linearGradient>
+    <linearGradient id="idlemiraboxk1pro" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#1e2027"/>
+      <stop offset="1" stop-color="#0e0f13"/>
+    </linearGradient>
+    <linearGradient id="glossmiraboxk1pro" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.14"/>
+      <stop offset="0.45" stop-color="#ffffff" stop-opacity="0.02"/>
+      <stop offset="1" stop-color="#000000" stop-opacity="0.18"/>
+    </linearGradient>
+    <linearGradient id="knobmiraboxk1pro" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#2a2c31"/>
+      <stop offset="1" stop-color="#0c0d10"/>
+    </linearGradient>
+    <filter id="shadowmiraboxk1pro" x="-20%" y="-20%" width="140%" height="150%">
+      <feDropShadow dx="0" dy="6" stdDeviation="9" flood-color="#000000" flood-opacity="0.35"/>
+    </filter>
+  </defs>
+
+  <!-- stand -->
+  
+
+  <!-- chassis -->
+  <g filter="url(#shadowmiraboxk1pro)">
+    <rect x="28" y="28" width="282" height="272" rx="14" fill="url(#bodymiraboxk1pro)"/>
+    <rect x="28.5" y="28.5" width="281" height="271" rx="13.5" fill="none" stroke="#ffffff" stroke-opacity="0.10"/>
+  </g>
+  
+
+  <!-- key panel recess -->
+  <rect x="45" y="45" width="248" height="216" rx="14" fill="#000000" opacity="0.22"/>
+
+  <!-- keys -->
+  <g><g transform="translate(52,52)"><rect width="62" height="62" rx="9" fill="#0c0d10"/><rect x="1" y="1" width="60" height="60" rx="8" fill="url(#idlemiraboxk1pro)"/><rect x="1" y="1" width="60" height="60" rx="8" fill="#22b8cf" opacity="0.94"/><rect x="1" y="1" width="60" height="60" rx="8" fill="url(#glossmiraboxk1pro)"/><rect x="1.5" y="1.5" width="59" height="59" rx="7.5" fill="none" stroke="#ffffff" stroke-opacity="0.07"/></g><g transform="translate(138,52)"><rect width="62" height="62" rx="9" fill="#0c0d10"/><rect x="1" y="1" width="60" height="60" rx="8" fill="url(#idlemiraboxk1pro)"/><rect x="1" y="1" width="60" height="60" rx="8" fill="url(#glossmiraboxk1pro)"/><rect x="1.5" y="1.5" width="59" height="59" rx="7.5" fill="none" stroke="#ffffff" stroke-opacity="0.07"/></g><g transform="translate(224,52)"><rect width="62" height="62" rx="9" fill="#0c0d10"/><rect x="1" y="1" width="60" height="60" rx="8" fill="url(#idlemiraboxk1pro)"/><rect x="1" y="1" width="60" height="60" rx="8" fill="url(#glossmiraboxk1pro)"/><rect x="1.5" y="1.5" width="59" height="59" rx="7.5" fill="none" stroke="#ffffff" stroke-opacity="0.07"/></g><g transform="translate(52,138)"><rect width="62" height="62" rx="9" fill="#0c0d10"/><rect x="1" y="1" width="60" height="60" rx="8" fill="url(#idlemiraboxk1pro)"/><rect x="1" y="1" width="60" height="60" rx="8" fill="url(#glossmiraboxk1pro)"/><rect x="1.5" y="1.5" width="59" height="59" rx="7.5" fill="none" stroke="#ffffff" stroke-opacity="0.07"/></g><g transform="translate(138,138)"><rect width="62" height="62" rx="9" fill="#0c0d10"/><rect x="1" y="1" width="60" height="60" rx="8" fill="url(#idlemiraboxk1pro)"/><rect x="1" y="1" width="60" height="60" rx="8" fill="url(#glossmiraboxk1pro)"/><rect x="1.5" y="1.5" width="59" height="59" rx="7.5" fill="none" stroke="#ffffff" stroke-opacity="0.07"/></g><g transform="translate(224,138)"><rect width="62" height="62" rx="9" fill="#0c0d10"/><rect x="1" y="1" width="60" height="60" rx="8" fill="url(#idlemiraboxk1pro)"/><rect x="1" y="1" width="60" height="60" rx="8" fill="#22b8cf" opacity="0.89"/><rect x="1" y="1" width="60" height="60" rx="8" fill="url(#glossmiraboxk1pro)"/><rect x="1.5" y="1.5" width="59" height="59" rx="7.5" fill="none" stroke="#ffffff" stroke-opacity="0.07"/></g></g>
+  
+  <g><g transform="translate(91.0,230)"><circle r="21" fill="#0c0d10"/><circle r="19" fill="url(#knobmiraboxk1pro)"/><circle r="13" fill="none" stroke="#ffffff" stroke-opacity="0.08"/><rect x="-1" y="-17" width="2" height="7" rx="1" fill="#22b8cf" opacity="0.85"/></g><g transform="translate(169.0,230)"><circle r="21" fill="#0c0d10"/><circle r="19" fill="url(#knobmiraboxk1pro)"/><circle r="13" fill="none" stroke="#ffffff" stroke-opacity="0.08"/><rect x="-1" y="-17" width="2" height="7" rx="1" fill="#22b8cf" opacity="0.85"/></g><g transform="translate(247.0,230)"><circle r="21" fill="#0c0d10"/><circle r="19" fill="url(#knobmiraboxk1pro)"/><circle r="13" fill="none" stroke="#ffffff" stroke-opacity="0.08"/><rect x="-1" y="-17" width="2" height="7" rx="1" fill="#22b8cf" opacity="0.85"/></g></g>
+
+  <!-- wordmark + grid caption -->
+  <text x="52" y="285" font-family="Inter, Helvetica Neue, Arial, sans-serif" font-size="13" font-weight="600" letter-spacing="2.4" fill="#8d939f">MIRABOX</text>
+  <text x="286" y="285" text-anchor="end" font-family="Inter, Helvetica Neue, Arial, sans-serif" font-size="12" fill="#8d939f" opacity="0.7">3×2 + 3○</text>
+</svg>

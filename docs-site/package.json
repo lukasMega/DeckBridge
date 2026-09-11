@@ -17,7 +17,8 @@
     "test:links": "node --test scripts/test-links.mts",
     "test:content": "node --test scripts/test-content.mts",
     "test:output": "node --test scripts/test-output.mts",
-    "test": "npm run test:build && npm run test:links && npm run test:content && npm run test:output",
+    "test:feeds": "node --test scripts/test-feeds.mts",
+    "test": "npm run test:build && npm run test:links && npm run test:content && npm run test:output && npm run test:feeds",
     "test:cold": "npm run clear && npm run test",
     "beforeCommit": "npm run typecheck && npm run test"
   },

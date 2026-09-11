@@ -11,7 +11,7 @@
 //       (/DeckBridge/features -> build/features/index.html).
 // See .claude/plans/docs-site-test-plan.md for the full write-up.
 
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { dirname, extname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -44,6 +44,47 @@ export const DOC_ROUTES: readonly string[] = [
 
 /** Every route the sitemap should contain: the docs, the landing page, search. */
 export const EXPECTED_ROUTES: readonly string[] = ['', 'search', ...DOC_ROUTES];
+
+export const FEED_FILES = ['blog/rss.xml', 'blog/atom.xml', 'blog/feed.json'] as const;
+
+/** Blog post slugs, read from docs-site/blog/*.md frontmatter. */
+export function blogPostSlugs(): string[] {
+  const blogDir = join(SITE_DIR, 'blog');
+
+  return readdirSync(blogDir)
+    .filter((file) => file.endsWith('.md'))
+    .map((file) => {
+      const source = readFileSync(join(blogDir, file), 'utf8');
+      const frontmatter = source.match(/^---\n([\s\S]*?)\n---/)?.[1];
+      const slug = frontmatter?.match(/^slug:\s*([^\s#]+)\s*$/m)?.[1];
+      if (!slug) throw new Error(`blog post '${file}' has no frontmatter slug`);
+      return slug;
+    })
+    .sort();
+}
+
+/** Routes emitted by the blog plugin, derived from blog source content. */
+export function expectedBlogRoutes(): string[] {
+  const tags = [
+    ...readFileSync(join(SITE_DIR, 'blog', 'tags.yml'), 'utf8').matchAll(/^(\w[\w-]*):$/gm),
+  ].map((match) => match[1] as string);
+  const slugs = blogPostSlugs();
+  const pageCount = Math.ceil(slugs.length / 10);
+  const pagination = Array.from(
+    { length: Math.max(0, pageCount - 1) },
+    (_, i) => `blog/page/${i + 2}`,
+  );
+
+  return [
+    'blog',
+    'blog/archive',
+    'blog/authors',
+    'blog/tags',
+    ...tags.map((tag) => `blog/tags/${tag}`),
+    ...slugs.map((slug) => `blog/${slug}`),
+    ...pagination,
+  ].sort();
+}
 
 /** Where an in-site link points, once the baseUrl and route shape are resolved. */
 export interface ResolvedHref {

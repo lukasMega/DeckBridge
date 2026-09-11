@@ -352,11 +352,31 @@ description = "Recapture the web UI screenshots the video zooms into (needs Deck
 dir = "video"
 run = "node scripts/shots.mjs"
 
+[tasks.video-clips]
+description = "Record the real web UI as video clips for the tour (needs DeckBridge running)"
+dir = "video"
+run = "node scripts/clips.mjs"
+timeout = "1800s"
+
+[tasks.video-manual]
+description = "Placeholders for the hand-taken captures (tray, Elgato app) — see video/MANUAL.md"
+dir = "video"
+run = "node scripts/manual-placeholders.mjs"
+
 [tasks.video-render]
-description = "Render the product video, both cuts -> video/out/"
+description = "Render the footage tour, both cuts -> video/out/"
 dir = "video"
 run = """
   npm run render
   npm run render:vertical
+"""
+timeout = "1800s"
+
+[tasks.video-render-teaser]
+description = "Render the 30 s teaser, both cuts -> video/out/"
+dir = "video"
+run = """
+  npm run render:teaser
+  npm run render:teaser-vertical
 """
 timeout = "1800s"

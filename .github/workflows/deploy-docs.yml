@@ -88,10 +88,10 @@ jobs:
           COLLECTOR_ORIGIN: ${{ vars.COLLECTOR_ORIGIN }}
           COLLECTOR_SITE_ID: ${{ vars.COLLECTOR_SITE_ID }}
 
-      # Build already ran above; test:build would rebuild, so run the three
+      # Build already ran above; test:build would rebuild, so run the four
       # layers that read build/ instead. A failure here blocks the deploy.
       - name: Test
-        run: pnpm run test:links && pnpm run test:content && pnpm run test:output
+        run: pnpm run test:links && pnpm run test:content && pnpm run test:output && pnpm run test:feeds
 
       - uses: actions/configure-pages@v6
         if: github.event_name != 'pull_request'
