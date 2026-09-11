@@ -246,9 +246,21 @@ dir = "ts"
 run = "node scripts/check-loc.mjs"
 
 
+[tasks.docs-devices]
+description = "Regenerate the device comparison docs from DEVICE_MODELS"
+dir = "ts"
+depends = ["ts-install"]
+run = "node scripts/gen-device-docs.mjs"
+
+[tasks.docs-devices-check]
+description = "Fail if the generated device docs are stale vs DEVICE_MODELS"
+dir = "ts"
+depends = ["ts-install"]
+run = "node scripts/gen-device-docs.mjs --check"
+
 [tasks.ci-checks]
-description = "Lint, typecheck, test, knip (unused files/exports/deps), and check-loc in parallel (after format)"
-depends = ["lint", "types", "test", "knip", "check-loc"]
+description = "Lint, typecheck, test, knip (unused files/exports/deps), check-loc, and the generated device docs in parallel (after format)"
+depends = ["lint", "types", "test", "knip", "check-loc", "docs-devices-check"]
 timeout = "120s"
 
 [tasks.beforeCommit]

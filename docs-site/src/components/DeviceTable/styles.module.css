@@ -1,0 +1,172 @@
+/* Live spec tables on /device-specs. Infima variables only, so light and dark themes
+   come for free. */
+
+.wrap {
+  margin: 1.5rem 0 2.5rem;
+}
+
+.controls {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.5rem;
+}
+
+.search {
+  flex: 1 1 16rem;
+  min-width: 12rem;
+  padding: 0.45rem 0.7rem;
+  font: inherit;
+  font-size: 0.9rem;
+  color: var(--ifm-font-color-base);
+  background: var(--ifm-background-surface-color);
+  border: 1px solid var(--ifm-color-emphasis-300);
+  border-radius: var(--ifm-global-radius);
+}
+
+.search:focus-visible {
+  outline: 2px solid var(--ifm-color-primary);
+  outline-offset: 1px;
+}
+
+.count {
+  font-size: 0.8rem;
+  color: var(--ifm-color-emphasis-700);
+  white-space: nowrap;
+}
+
+.reset {
+  padding: 0.35rem 0.7rem;
+  font: inherit;
+  font-size: 0.8rem;
+  color: var(--ifm-color-primary);
+  cursor: pointer;
+  background: none;
+  border: 1px solid var(--ifm-color-emphasis-300);
+  border-radius: var(--ifm-global-radius);
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  align-items: baseline;
+  margin: 0 0 0.75rem;
+  padding: 0;
+  border: 0;
+}
+
+.chipsLegend {
+  float: left;
+  margin-right: 0.6rem;
+  padding: 0;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--ifm-color-emphasis-700);
+}
+
+.chip {
+  display: inline-flex;
+  gap: 0.35rem;
+  align-items: center;
+  padding: 0.2rem 0.55rem;
+  font-size: 0.78rem;
+  color: var(--ifm-color-emphasis-700);
+  cursor: pointer;
+  border: 1px solid var(--ifm-color-emphasis-300);
+  border-radius: 999px;
+}
+
+.chipOn {
+  color: var(--ifm-color-primary-darkest);
+  background: var(--ifm-color-primary-contrast-background);
+  border-color: var(--ifm-color-primary-lighter);
+}
+
+/* The image matrix is ~18 columns wide; it never fits the content column. */
+.scroll {
+  overflow-x: auto;
+}
+
+.table {
+  display: table;
+  width: max-content;
+  min-width: 100%;
+  margin: 0;
+  font-size: 0.82rem;
+  border-collapse: collapse;
+}
+
+.caption {
+  margin-bottom: 0.5rem;
+  font-size: 0.78rem;
+  line-height: 1.5;
+  color: var(--ifm-color-emphasis-700);
+  text-align: left;
+  caption-side: top;
+}
+
+.table th,
+.table td {
+  padding: 0.35rem 0.6rem;
+  white-space: nowrap;
+  border: 1px solid var(--ifm-table-border-color);
+}
+
+.table thead th {
+  vertical-align: top;
+  background: var(--ifm-table-head-background);
+}
+
+/* Device name stays put while the reader scrolls sideways through 18 columns. */
+.stickyCol {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  text-align: left;
+  background: var(--ifm-background-surface-color);
+}
+
+.table thead .stickyCol {
+  z-index: 2;
+  background: var(--ifm-table-head-background);
+}
+
+.sortBtn {
+  display: inline-flex;
+  gap: 0.3rem;
+  align-items: center;
+  padding: 0;
+  font: inherit;
+  font-weight: 600;
+  color: inherit;
+  cursor: pointer;
+  background: none;
+  border: 0;
+}
+
+.arrow {
+  font-size: 0.7em;
+  opacity: 0.5;
+}
+
+.select {
+  display: block;
+  width: 100%;
+  margin-top: 0.25rem;
+  padding: 0.1rem 0.2rem;
+  font: inherit;
+  font-size: 0.72rem;
+  font-weight: 400;
+  color: var(--ifm-font-color-base);
+  background: var(--ifm-background-surface-color);
+  border: 1px solid var(--ifm-color-emphasis-300);
+  border-radius: var(--ifm-global-radius);
+}
+
+.empty {
+  padding: 1rem;
+  color: var(--ifm-color-emphasis-700);
+  text-align: center;
+}

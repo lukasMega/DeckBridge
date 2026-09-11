@@ -45,7 +45,10 @@ export const AJAZZ_AKP153_MODEL: DeviceModel = cloneOf293S({
 
 export const AJAZZ_AKP153E_MODEL: DeviceModel = cloneOf293S({
   id: 'ajazz-akp153e',
-  name: 'Ajazz AKP153E',
+  // '(rev. 1)' is part of the name: the rev. 2 board (ajazz/akp153-rev2.ts) ships under
+  // the same product name on a different protocol, and the two sit next to each other in
+  // the UI, the device docs and the logs.
+  name: 'Ajazz AKP153E (rev. 1)',
   vendor: 'ajazz',
   vid: 0x0300,
   pid: 0x1010,
@@ -53,7 +56,7 @@ export const AJAZZ_AKP153E_MODEL: DeviceModel = cloneOf293S({
 
 export const AJAZZ_AKP153R_MODEL: DeviceModel = cloneOf293S({
   id: 'ajazz-akp153r',
-  name: 'Ajazz AKP153R',
+  name: 'Ajazz AKP153R (rev. 1)',
   vendor: 'ajazz',
   vid: 0x0300,
   pid: 0x1020,

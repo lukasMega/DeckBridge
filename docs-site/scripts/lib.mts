@@ -28,10 +28,12 @@ export const DOC_ROUTES: readonly string[] = [
   // Standalone page (docs/ARCHITECTURE.md), not in either sidebar.
   'ARCHITECTURE',
   'introduction',
+  'devices',
   'getting-started',
   'features',
   'headless-linux',
   'privacy',
+  'device-specs',
   'adding-a-device',
   'side-keys',
   'plugin-widgets',

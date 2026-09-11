@@ -8,6 +8,9 @@ Documents how a key image travels from the Elgato software to the USB device and
 
 The Elgato desktop sends image data to the CORA child server in the format matching the capabilities the relay advertises via `model.cora` (geometry, PID, product name) — so the CORA format depends on what's physically plugged in. **Everything device-specific is read from the active `DeviceModel`** (`model.image`, `model.keyMap`, `model.cora`) — there is no per-brand branching in the pipeline.
 
+The per-device rows below carry the *argument*; for the raw values of every field, see
+the generated [Device specs](./device-specs.mdx).
+
 | Connected device | Advertised caps (`model.cora`) | CORA format | Sidecar | `model.image` transform |
 |-----------------|-----------------|-------------|---------|-----------|
 | Mirabox 293V3 (`mirabox-cora`) | MK.2 spoof (PID `0x00a5`, `MK2_CHILD_GEOMETRY`) | gen2 JPEG 72×72 | Yes | `sidecar`: resize 72→112 (lanczos3), rotate 0 |

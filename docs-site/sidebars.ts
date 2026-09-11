@@ -15,6 +15,7 @@ import type {SidebarsConfig} from '@docusaurus/plugin-content-docs';
 const sidebars: SidebarsConfig = {
   tutorialSidebar: [
     'introduction',
+    'devices',
     'getting-started',
     'features',
     'headless-linux',
@@ -23,6 +24,7 @@ const sidebars: SidebarsConfig = {
 
   // Technical Details — reached via its own navbar item (docusaurus.config.ts)
   technicalSidebar: [
+    'device-specs',
     'adding-a-device',
     'side-keys',
     'plugin-widgets',
