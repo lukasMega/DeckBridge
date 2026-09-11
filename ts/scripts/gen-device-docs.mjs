@@ -273,20 +273,27 @@ function testedLabel(note) {
 
 // ------------------------------------------------------------------------ MDX escaping
 
+/** Prefix every occurrence of `chars` with a backslash. `\` itself is always escaped —
+ *  otherwise a trailing backslash in the input would escape our escape and undo it. */
+function backslashEscape(text, chars) {
+  return text.replace(new RegExp(`[\\\\${chars}]`, 'g'), (c) => `\\${c}`);
+}
+
 /**
  * Escape `{` and `<` so MDX does not read them as an expression or a tag — but only
- * OUTSIDE inline code spans, where markdown already wins and a backslash would render
- * literally. A literal backslash is escaped first, so it cannot combine with the
- * escapes added here (or the pipe escape in `escapeCell`) and neutralize them.
+ * OUTSIDE inline code spans, where markdown already wins and those characters are
+ * literal. The cell-splitting pipe (`pipes`) is escaped everywhere, including inside
+ * code spans, because GFM strips table escapes before it parses inline code.
  */
 function escapeMdx(text, { pipes = false } = {}) {
-  const outside = pipes ? /[\\{<|]/g : /[\\{<]/g;
-  // Inside a code span markdown wins, so only the cell-splitting pipe needs escaping —
-  // and a backslash there is literal content, not an escape.
-  const inCode = (part) => (pipes ? part.replace(/\|/g, '\\|') : part);
+  const outside = pipes ? '{<|' : '{<';
+  const inside = pipes ? '|' : '';
   return String(text)
     .split(/(`+[^`]*`+)/)
-    .map((part, i) => (i % 2 === 1 ? inCode(part) : part.replace(outside, (c) => `\\${c}`)))
+    .map((part, i) => {
+      if (i % 2 === 0) return backslashEscape(part, outside);
+      return pipes ? backslashEscape(part, inside) : part;
+    })
     .join('');
 }
 
