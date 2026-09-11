@@ -115,55 +115,260 @@ function familyOf(model) {
 
 // -------------------------------------------------------------------------- columns
 
+// `description` becomes the column's `title` tooltip (header cell + show/hide chip),
+// so keep it one plain-text sentence — no markdown, it is never rendered as MDX.
 const COLUMNS = {
   identity: [
-    { key: 'name', label: 'Device', sticky: true },
-    { key: 'id', label: 'Model id' },
-    { key: 'vendor', label: 'Vendor' },
-    { key: 'protocol', label: 'Protocol' },
-    { key: 'driverKind', label: 'Driver' },
-    { key: 'vid', label: 'VID' },
-    { key: 'pids', label: 'PIDs' },
-    { key: 'usagePage', label: 'Usage page' },
-    { key: 'usage', label: 'Usage' },
-    { key: 'keyCount', label: 'Keys', numeric: true },
-    { key: 'columns', label: 'Cols', numeric: true },
-    { key: 'rows', label: 'Rows', numeric: true },
-    { key: 'keyWidth', label: 'Key W', numeric: true },
-    { key: 'keyHeight', label: 'Key H', numeric: true },
+    {
+      key: 'name',
+      label: 'Device',
+      sticky: true,
+      description: 'Product name, as shown in the WebUI and the logs.',
+    },
+    {
+      key: 'id',
+      label: 'Model id',
+      description: 'DeviceModel.id — stable kebab-case slug used as image-cache key, UI label and log tag.',
+    },
+    {
+      key: 'vendor',
+      label: 'Vendor',
+      description: 'Who sells the deck. Rebadges share a board with a tested model but not its vendor.',
+    },
+    {
+      key: 'protocol',
+      label: 'Protocol',
+      description:
+        'Wire protocol family: mirabox-cora (v3, 1024-byte packets, press+release), mirabox-cora-v1 (512-byte, keydown only), elgato-gen1 (BMP, Mini), elgato-gen2 (JPEG, MK.2/XL).',
+    },
+    {
+      key: 'driverKind',
+      label: 'Driver',
+      description:
+        'Which driver the USB worker builds for this model: elgato-hid (MK.2/Mini), mirabox (293/293S/K1 Pro) or custom.',
+    },
+    {
+      key: 'vid',
+      label: 'VID',
+      description: 'USB vendor id the HID enumeration must match.',
+    },
+    {
+      key: 'pids',
+      label: 'PIDs',
+      description: 'USB product ids mapped to this model — matching any one of them is enough.',
+    },
+    {
+      key: 'usagePage',
+      label: 'Usage page',
+      description:
+        'HID usage page the interface must report, to pick the right interface on a multi-interface device. Unset on Elgato models: they are matched on product id alone.',
+    },
+    {
+      key: 'usage',
+      label: 'Usage',
+      description: 'HID usage the interface must report, checked together with the usage page.',
+    },
+    {
+      key: 'keyCount',
+      label: 'Keys',
+      numeric: true,
+      description: 'How many keys DeckBridge drives on this panel, extra keys outside the CORA grid included.',
+    },
+    { key: 'columns', label: 'Cols', numeric: true, description: 'Key grid width, in keys.' },
+    { key: 'rows', label: 'Rows', numeric: true, description: 'Key grid height, in keys.' },
+    {
+      key: 'keyWidth',
+      label: 'Key W',
+      numeric: true,
+      description:
+        'Key image width in pixels advertised in the CORA capabilities packet, and used to size a BMP payload.',
+    },
+    {
+      key: 'keyHeight',
+      label: 'Key H',
+      numeric: true,
+      description:
+        'Key image height in pixels advertised in the CORA capabilities packet, and used to size a BMP payload.',
+    },
   ],
   image: [
-    { key: 'name', label: 'Device', sticky: true },
-    { key: 'format', label: 'Format' },
-    { key: 'width', label: 'Width', numeric: true },
-    { key: 'height', label: 'Height', numeric: true },
-    { key: 'rotate', label: 'Rotate', numeric: true },
-    { key: 'flipH', label: 'Flip H' },
-    { key: 'flipV', label: 'Flip V' },
-    { key: 'colorMode', label: 'Colour' },
-    { key: 'crop', label: 'Crop', numeric: true },
-    { key: 'resizeMode', label: 'Resize mode' },
-    { key: 'padFill', label: 'Pad fill' },
-    { key: 'resizeFilter', label: 'Filter' },
-    { key: 'sharpen', label: 'Sharpen', numeric: true },
-    { key: 'blur', label: 'Blur', numeric: true },
-    { key: 'maxBytes', label: 'Max bytes', numeric: true },
-    { key: 'quality', label: 'Quality', numeric: true },
-    { key: 'bmpPpm', label: 'BMP ppm', numeric: true },
-    { key: 'transform', label: 'Transform' },
+    {
+      key: 'name',
+      label: 'Device',
+      sticky: true,
+      description: 'Product name, as shown in the WebUI and the logs.',
+    },
+    {
+      key: 'format',
+      label: 'Format',
+      description: 'Native image format the panel consumes: jpeg or bmp.',
+    },
+    {
+      key: 'width',
+      label: 'Width',
+      numeric: true,
+      description: 'Pixel width the transform produces for one key image.',
+    },
+    {
+      key: 'height',
+      label: 'Height',
+      numeric: true,
+      description: 'Pixel height the transform produces for one key image.',
+    },
+    {
+      key: 'rotate',
+      label: 'Rotate',
+      numeric: true,
+      description:
+        'Extra clockwise rotation in degrees applied to the CORA frame before it reaches the panel, on top of whatever the Elgato desktop already did.',
+    },
+    {
+      key: 'flipH',
+      label: 'Flip H',
+      description: 'Mirror the image horizontally, after the rotation.',
+    },
+    {
+      key: 'flipV',
+      label: 'Flip V',
+      description: 'Mirror the image vertically, after the rotation.',
+    },
+    {
+      key: 'colorMode',
+      label: 'Colour',
+      description: 'Channel order the panel expects: rgb or bgr.',
+    },
+    {
+      key: 'crop',
+      label: 'Crop',
+      numeric: true,
+      description:
+        'Pixels trimmed off every side of the source before rotate/flip/resize — the K1 Pro drops a 6 px dead border out of its 80x80 input.',
+    },
+    {
+      key: 'resizeMode',
+      label: 'Resize mode',
+      description:
+        'How the source is fitted to width x height: resize interpolates to the panel size, pad keeps source pixels 1:1 and centres them in the canvas.',
+    },
+    {
+      key: 'padFill',
+      label: 'Pad fill',
+      description:
+        'Border fill used by resize mode pad: edge replicates the outer pixels, black, or average source colour. Ignored for resize.',
+    },
+    {
+      key: 'resizeFilter',
+      label: 'Filter',
+      description:
+        'Interpolation filter for the resize: triangle (default), nearest (K1 Pro, matches the known-good reference encoder), lanczos3 (best on upscale).',
+    },
+    {
+      key: 'sharpen',
+      label: 'Sharpen',
+      numeric: true,
+      description:
+        'Unsharp-mask sigma applied after the resize to recover crispness lost to upscaling. Adds detail, so it grows the JPEG; 0 = off.',
+    },
+    {
+      key: 'blur',
+      label: 'Blur',
+      numeric: true,
+      description: 'Gaussian blur sigma applied before the JPEG encode; 0 = off.',
+    },
+    {
+      key: 'maxBytes',
+      label: 'Max bytes',
+      numeric: true,
+      description:
+        'JPEG size cap — the encoder retries at lower quality until the payload fits. 0 = no cap (BMP is fixed-size anyway).',
+    },
+    {
+      key: 'quality',
+      label: 'Quality',
+      numeric: true,
+      description: 'JPEG encode quality, 0 to 1. Unused for BMP panels.',
+    },
+    {
+      key: 'bmpPpm',
+      label: 'BMP ppm',
+      numeric: true,
+      description:
+        'Pixels-per-metre written into the BMP header; only the Elgato Mini insists on a value (2835).',
+    },
+    {
+      key: 'transform',
+      label: 'Transform',
+      description:
+        'How image-pipeline routes a CORA JPEG: passthrough sends it unchanged (CORA-native size, no rotate/flip/cap), sidecar resizes and rotates through the Rust transform.',
+    },
   ],
   wire: [
-    { key: 'name', label: 'Device', sticky: true },
-    { key: 'packetSize', label: 'Packet', numeric: true },
-    { key: 'inSize', label: 'In size', numeric: true },
-    { key: 'heartbeatMs', label: 'Heartbeat ms', numeric: true },
-    { key: 'synthesizeKeyUp', label: 'Synth key-up' },
-    { key: 'sendStpAfterImage', label: 'STP after image' },
-    { key: 'reportId', label: 'Report id' },
-    { key: 'chunkPadByte', label: 'Chunk pad byte' },
-    { key: 'chunkDelayMs', label: 'Chunk delay ms', numeric: true },
-    { key: 'sharedSerial', label: 'Shared serial' },
-    { key: 'packetSizeCandidates', label: 'Packet candidates' },
+    {
+      key: 'name',
+      label: 'Device',
+      sticky: true,
+      description: 'Product name, as shown in the WebUI and the logs.',
+    },
+    {
+      key: 'packetSize',
+      label: 'Packet',
+      numeric: true,
+      description:
+        'HID output-report size every write is padded to: 1024 on v3 boards, 512 on v1. Wrong value = silent short writes and a black panel.',
+    },
+    {
+      key: 'inSize',
+      label: 'In size',
+      numeric: true,
+      description: 'HID read buffer size used by the key-polling read.',
+    },
+    {
+      key: 'heartbeatMs',
+      label: 'Heartbeat ms',
+      numeric: true,
+      description: 'How often to send the keep-alive packet. Dash = this board needs no heartbeat.',
+    },
+    {
+      key: 'synthesizeKeyUp',
+      label: 'Synth key-up',
+      description:
+        'v1 firmware reports keydown only, so the driver fabricates the matching key-up event.',
+    },
+    {
+      key: 'sendStpAfterImage',
+      label: 'STP after image',
+      description: 'Send the CRT STP terminator after each image or clear — v3 does, v1 does not.',
+    },
+    {
+      key: 'reportId',
+      label: 'Report id',
+      description: 'Leading HID report-id byte on every write: 0x00 on the 293 family, 0x04 on the K1 Pro.',
+    },
+    {
+      key: 'chunkPadByte',
+      label: 'Chunk pad byte',
+      description:
+        'K1 Pro firmware eats the last byte of every full image chunk; when yes, a sacrificial padding byte is wire-encoded after each chunk so the drop only hits padding.',
+    },
+    {
+      key: 'chunkDelayMs',
+      label: 'Chunk delay ms',
+      numeric: true,
+      description:
+        'Busy-wait after each full image chunk, for boards that tear on back-to-back writes. No shipped model needs it; it costs chunks x ms of worker-thread time.',
+    },
+    {
+      key: 'sharedSerial',
+      label: 'Shared serial',
+      description:
+        'v1 firmware reports one hardcoded serial for every unit of every v1 model, so the model id is appended to keep two decks apart.',
+    },
+    {
+      key: 'packetSizeCandidates',
+      label: 'Packet candidates',
+      description:
+        'Sizes the HID report descriptor is allowed to correct packetSize to at open(). Listing them means the probe can fix a guess but never invent an untested value.',
+    },
   ],
 };
 
@@ -505,6 +710,8 @@ function specsPage(models, notes) {
   out.push('');
   out.push('The three tables below are **live**: type to filter rows, click a header to sort,');
   out.push('and use the chips to show the columns you care about — most start hidden.');
+  out.push('Column names are abbreviated: hover a dotted header (or a column chip) for what');
+  out.push('the field means.');
   out.push('');
   out.push('How much to trust a value:');
   out.push('');

@@ -13,6 +13,8 @@ export interface DeviceColumn {
   numeric?: boolean;
   /** Always shown; not offered in the show/hide chips. */
   sticky?: boolean;
+  /** Plain-text `title` tooltip for the header cell and the chip — labels are abbreviated. */
+  description?: string;
   defaultVisible: boolean;
 }
 
@@ -163,6 +165,7 @@ export default function DeviceTable({ table, data }: Props): ReactNode {
             <label
               key={col.key}
               className={`${styles.chip} ${hidden.has(col.key) ? '' : styles.chipOn}`}
+              title={col.description}
             >
               <input
                 type="checkbox"
@@ -184,6 +187,7 @@ export default function DeviceTable({ table, data }: Props): ReactNode {
                   key={col.key}
                   scope="col"
                   className={col.sticky ? styles.stickyCol : undefined}
+                  title={col.description}
                   aria-sort={
                     sortKey === col.key ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'
                   }
@@ -193,7 +197,11 @@ export default function DeviceTable({ table, data }: Props): ReactNode {
                     className={styles.sortBtn}
                     onClick={() => toggleSort(col.key)}
                   >
-                    {col.label}
+                    {/* Dotted underline is the only hint that the header carries a tooltip;
+                        it hugs the label so the sort arrow stays clean. */}
+                    <span className={col.description ? styles.described : undefined}>
+                      {col.label}
+                    </span>
                     <span aria-hidden="true" className={styles.arrow}>
                       {sortKey === col.key ? (sortDir === 'asc' ? '▲' : '▼') : '↕'}
                     </span>

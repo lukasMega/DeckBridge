@@ -61,6 +61,7 @@ docs-site/.docusaurus/
 .mcp.json
 .codegraph/
 graphify-out/
+.playwright-mcp/
 tmp/
 **/.cmd-history.txt
 bundle-sizes*.csv

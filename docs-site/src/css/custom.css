@@ -162,28 +162,44 @@ html.db-hide-sidebar .theme-doc-sidebar-container {
 html.db-hide-toc .db-toc-col {
   display: none;
 }
-html.db-hide-toc [class*='docItemCol'] {
-  max-width: 100% !important;
-}
-/* the content col lives in a centered .container capped at --ifm-container-width;
-   uncap it so hiding the TOC actually fills the main area */
-html.db-hide-toc [class*='docItemWrapper'] {
-  max-width: none !important;
-}
 
-/* resize: right TOC column (left uses native --doc-sidebar-width, set via JS) */
-@media (min-width: 997px) {
-  html:not(.db-hide-toc) .db-toc-col {
-    flex: 0 0 var(--db-toc-width);
-    max-width: var(--db-toc-width);
-  }
-  /* let the content col take the remaining width via flex-grow + min-width:0
-     (overrides the theme's 75% cap). Sizing it with calc(100% - toc) instead
-     ties content + toc to exactly 100%, which overflows the row padding at
-     narrow desktop widths and wraps the TOC underneath. */
-  html:not(.db-hide-toc) [class*='docItemCol'] {
-    min-width: 0;
-    max-width: 100% !important;
+/* The width overrides below MUST live in the theme's cascade layer. Docusaurus ships
+   theme-classic inside `@layer docusaurus.theme-classic` and caps the content column
+   with `max-width: 75% !important`; for !important declarations the cascade REVERSES
+   layer order, so a layered !important beats an unlayered one. Unlayered, these rules
+   lose and hiding a panel leaves the content at its old width with dead space beside
+   it. Joining the same layer puts them back on equal footing, where our higher
+   specificity wins. */
+@layer docusaurus.theme-classic {
+  @media (min-width: 997px) {
+    /* The theme sizes the main area as calc(100% - var(--doc-sidebar-width)), which
+       keeps reserving room for a sidebar we just removed from the flow. */
+    html.db-hide-sidebar {
+      --doc-sidebar-width: 0px !important;
+    }
+    html.db-hide-toc [class*='docItemCol'] {
+      max-width: 100% !important;
+    }
+    /* the content col lives in a centered .container capped at --ifm-container-width;
+       uncap it so hiding a panel actually fills the main area */
+    html.db-hide-toc [class*='docItemWrapper'],
+    html.db-hide-toc [class*='docMainContainer'] .container,
+    html.db-hide-sidebar [class*='docMainContainer'] .container {
+      max-width: none !important;
+    }
+    /* resize: right TOC column (left uses native --doc-sidebar-width, set via JS) */
+    html:not(.db-hide-toc) .db-toc-col {
+      flex: 0 0 var(--db-toc-width);
+      max-width: var(--db-toc-width);
+    }
+    /* let the content col take the remaining width via flex-grow + min-width:0
+       (overrides the theme's 75% cap). Sizing it with calc(100% - toc) instead
+       ties content + toc to exactly 100%, which overflows the row padding at
+       narrow desktop widths and wraps the TOC underneath. */
+    html:not(.db-hide-toc) [class*='docItemCol'] {
+      min-width: 0;
+      max-width: 100% !important;
+    }
   }
 }
 
