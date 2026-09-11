@@ -14,6 +14,11 @@ else to install.
 
 ## Supported devices
 
+Full side-by-side comparison (USB IDs, key grid, panel size, test status):
+**[Supported devices](https://lukasmega.github.io/DeckBridge/devices)**. Every value
+DeckBridge uses to drive a deck: **[Device specs](https://lukasmega.github.io/DeckBridge/device-specs)**.
+Both are generated from the device registry, so they never drift from the code.
+
 - Mirabox 293V3 (also matches the HSV293SV3 / "293S V3" refresh — untested)
 - Mirabox 293S
 - Mirabox K1 Pro

@@ -25,6 +25,10 @@ write).
 
 ## Supported devices
 
+Side by side, with USB IDs and panel sizes: **[Supported devices](/devices)**. Every
+field DeckBridge uses to drive one: **[Device specs](/device-specs)**. Both pages are
+generated from the device registry.
+
 - **Mirabox 293V3** — also matches the HSV293SV3 / "293S V3" refresh (PID `0x1014`, untested)
 - **Mirabox 293S**
 - **Mirabox K1 Pro**

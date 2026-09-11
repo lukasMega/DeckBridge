@@ -1,5 +1,7 @@
 import type { ReactNode } from 'react';
 
+import deviceData from '@site/src/data/devices.generated.json';
+
 export const GITHUB_URL = 'https://github.com/lukasMega/DeckBridge';
 
 export const BRANDS: ReactNode[] = [
@@ -9,24 +11,9 @@ export const BRANDS: ReactNode[] = [
   'Fifine',
 ];
 
-export const DEVICES: { name: string; tested: boolean }[] = [
-  { name: 'Mirabox 293V3', tested: true },
-  { name: 'Mirabox 293S', tested: true },
-  { name: 'Mirabox K1 Pro', tested: true },
-  { name: 'Fifine AmpliGame D6 (rev. 2)', tested: true },
-  { name: 'Ajazz AKP153E (rev. 2)', tested: false },
-  { name: 'Ajazz AKP153R (rev. 2)', tested: false },
-  { name: 'Fifine AmpliGame D6', tested: false },
-  { name: 'Ajazz AKP153', tested: false },
-  { name: 'Ajazz AKP153E (rev. 1)', tested: false },
-  { name: 'Ajazz AKP153R (rev. 1)', tested: false },
-  { name: 'Mars Gaming MSD-ONE', tested: false },
-  { name: 'Mad Dog GK150K', tested: false },
-  { name: 'Risemode Vision 01', tested: false },
-  { name: 'TMICE Stream Controller', tested: false },
-  { name: 'Stream Deck MK.2', tested: false },
-  { name: 'Stream Deck Mini', tested: true },
-];
+/** Tested decks first, then untested — generated from DEVICE_MODELS by
+ *  ts/scripts/gen-device-docs.mjs. Run `mise run docs-devices` after adding a device. */
+export const DEVICES: { name: string; tested: boolean }[] = deviceData.homepageOrder;
 
 export const HIGHLIGHTS = [
   'TypeScript + Rust',

@@ -1,0 +1,1252 @@
+{
+  "_generated": "by ts/scripts/gen-device-docs.mjs — do not edit. Run 'mise run docs-devices'.",
+  "tables": {
+    "identity": {
+      "columns": [
+        {
+          "key": "name",
+          "label": "Device",
+          "sticky": true,
+          "defaultVisible": true
+        },
+        {
+          "key": "id",
+          "label": "Model id",
+          "defaultVisible": false
+        },
+        {
+          "key": "vendor",
+          "label": "Vendor",
+          "defaultVisible": true
+        },
+        {
+          "key": "protocol",
+          "label": "Protocol",
+          "defaultVisible": true
+        },
+        {
+          "key": "driverKind",
+          "label": "Driver",
+          "defaultVisible": false
+        },
+        {
+          "key": "vid",
+          "label": "VID",
+          "defaultVisible": true
+        },
+        {
+          "key": "pids",
+          "label": "PIDs",
+          "defaultVisible": true
+        },
+        {
+          "key": "usagePage",
+          "label": "Usage page",
+          "defaultVisible": false
+        },
+        {
+          "key": "usage",
+          "label": "Usage",
+          "defaultVisible": false
+        },
+        {
+          "key": "keyCount",
+          "label": "Keys",
+          "numeric": true,
+          "defaultVisible": true
+        },
+        {
+          "key": "columns",
+          "label": "Cols",
+          "numeric": true,
+          "defaultVisible": true
+        },
+        {
+          "key": "rows",
+          "label": "Rows",
+          "numeric": true,
+          "defaultVisible": true
+        },
+        {
+          "key": "keyWidth",
+          "label": "Key W",
+          "numeric": true,
+          "defaultVisible": false
+        },
+        {
+          "key": "keyHeight",
+          "label": "Key H",
+          "numeric": true,
+          "defaultVisible": false
+        }
+      ],
+      "legend": "— = not set. Elgato models omit usagePage/usage: they are matched on product id alone."
+    },
+    "image": {
+      "columns": [
+        {
+          "key": "name",
+          "label": "Device",
+          "sticky": true,
+          "defaultVisible": true
+        },
+        {
+          "key": "format",
+          "label": "Format",
+          "defaultVisible": true
+        },
+        {
+          "key": "width",
+          "label": "Width",
+          "numeric": true,
+          "defaultVisible": true
+        },
+        {
+          "key": "height",
+          "label": "Height",
+          "numeric": true,
+          "defaultVisible": true
+        },
+        {
+          "key": "rotate",
+          "label": "Rotate",
+          "numeric": true,
+          "defaultVisible": true
+        },
+        {
+          "key": "flipH",
+          "label": "Flip H",
+          "defaultVisible": false
+        },
+        {
+          "key": "flipV",
+          "label": "Flip V",
+          "defaultVisible": false
+        },
+        {
+          "key": "colorMode",
+          "label": "Colour",
+          "defaultVisible": false
+        },
+        {
+          "key": "crop",
+          "label": "Crop",
+          "numeric": true,
+          "defaultVisible": false
+        },
+        {
+          "key": "resizeMode",
+          "label": "Resize mode",
+          "defaultVisible": false
+        },
+        {
+          "key": "padFill",
+          "label": "Pad fill",
+          "defaultVisible": false
+        },
+        {
+          "key": "resizeFilter",
+          "label": "Filter",
+          "defaultVisible": false
+        },
+        {
+          "key": "sharpen",
+          "label": "Sharpen",
+          "numeric": true,
+          "defaultVisible": false
+        },
+        {
+          "key": "blur",
+          "label": "Blur",
+          "numeric": true,
+          "defaultVisible": false
+        },
+        {
+          "key": "maxBytes",
+          "label": "Max bytes",
+          "numeric": true,
+          "defaultVisible": true
+        },
+        {
+          "key": "quality",
+          "label": "Quality",
+          "numeric": true,
+          "defaultVisible": true
+        },
+        {
+          "key": "bmpPpm",
+          "label": "BMP ppm",
+          "numeric": true,
+          "defaultVisible": false
+        },
+        {
+          "key": "transform",
+          "label": "Transform",
+          "defaultVisible": true
+        }
+      ],
+      "legend": "— = field omitted; the effective default applies — resizeFilter triangle · resizeMode resize · padFill edge · crop 0 · sharpen 0 · blur 0 · bmpPpm none (JPEG)."
+    },
+    "wire": {
+      "columns": [
+        {
+          "key": "name",
+          "label": "Device",
+          "sticky": true,
+          "defaultVisible": true
+        },
+        {
+          "key": "packetSize",
+          "label": "Packet",
+          "numeric": true,
+          "defaultVisible": true
+        },
+        {
+          "key": "inSize",
+          "label": "In size",
+          "numeric": true,
+          "defaultVisible": true
+        },
+        {
+          "key": "heartbeatMs",
+          "label": "Heartbeat ms",
+          "numeric": true,
+          "defaultVisible": true
+        },
+        {
+          "key": "synthesizeKeyUp",
+          "label": "Synth key-up",
+          "defaultVisible": true
+        },
+        {
+          "key": "sendStpAfterImage",
+          "label": "STP after image",
+          "defaultVisible": true
+        },
+        {
+          "key": "reportId",
+          "label": "Report id",
+          "defaultVisible": true
+        },
+        {
+          "key": "chunkPadByte",
+          "label": "Chunk pad byte",
+          "defaultVisible": false
+        },
+        {
+          "key": "chunkDelayMs",
+          "label": "Chunk delay ms",
+          "numeric": true,
+          "defaultVisible": false
+        },
+        {
+          "key": "sharedSerial",
+          "label": "Shared serial",
+          "defaultVisible": false
+        },
+        {
+          "key": "packetSizeCandidates",
+          "label": "Packet candidates",
+          "defaultVisible": false
+        }
+      ],
+      "legend": "— = no wire spec at all (Elgato models frame in PROTOCOL_STRATEGY) or the field is omitted — reportId 0x00 · chunkPadByte false · chunkDelayMs 0 · sharedSerial false · packetSizeCandidates none, so packetSize is used as written."
+    }
+  },
+  "models": [
+    {
+      "id": "mk2",
+      "name": "Stream Deck MK.2",
+      "family": "elgato",
+      "tested": false,
+      "testedLabel": "— untested",
+      "cells": {
+        "identity": {
+          "name": "Stream Deck MK.2",
+          "id": "mk2",
+          "vendor": "elgato",
+          "protocol": "elgato-gen2",
+          "driverKind": "elgato-hid",
+          "vid": "0x0fd9",
+          "pids": "0x0080 0x006d 0x00a5",
+          "usagePage": "—",
+          "usage": "—",
+          "keyCount": "15",
+          "columns": "5",
+          "rows": "3",
+          "keyWidth": "72",
+          "keyHeight": "72"
+        },
+        "image": {
+          "name": "Stream Deck MK.2",
+          "format": "jpeg",
+          "width": "72",
+          "height": "72",
+          "rotate": "0°",
+          "flipH": "no",
+          "flipV": "no",
+          "colorMode": "rgb",
+          "crop": "—",
+          "resizeMode": "—",
+          "padFill": "—",
+          "resizeFilter": "—",
+          "sharpen": "—",
+          "blur": "—",
+          "maxBytes": "no cap",
+          "quality": "0.95",
+          "bmpPpm": "—",
+          "transform": "passthrough"
+        },
+        "wire": {
+          "name": "Stream Deck MK.2",
+          "packetSize": "—",
+          "inSize": "—",
+          "heartbeatMs": "—",
+          "synthesizeKeyUp": "—",
+          "sendStpAfterImage": "—",
+          "reportId": "—",
+          "chunkPadByte": "—",
+          "chunkDelayMs": "—",
+          "sharedSerial": "—",
+          "packetSizeCandidates": "—"
+        }
+      }
+    },
+    {
+      "id": "mini",
+      "name": "Stream Deck Mini",
+      "family": "elgato",
+      "tested": true,
+      "testedLabel": "✓ tested (macOS)",
+      "cells": {
+        "identity": {
+          "name": "Stream Deck Mini",
+          "id": "mini",
+          "vendor": "elgato",
+          "protocol": "elgato-gen1",
+          "driverKind": "elgato-hid",
+          "vid": "0x0fd9",
+          "pids": "0x0063 0x0090 0x00b3 0x00b8",
+          "usagePage": "—",
+          "usage": "—",
+          "keyCount": "6",
+          "columns": "3",
+          "rows": "2",
+          "keyWidth": "80",
+          "keyHeight": "80"
+        },
+        "image": {
+          "name": "Stream Deck Mini",
+          "format": "bmp",
+          "width": "80",
+          "height": "80",
+          "rotate": "90°",
+          "flipH": "no",
+          "flipV": "no",
+          "colorMode": "bgr",
+          "crop": "—",
+          "resizeMode": "—",
+          "padFill": "—",
+          "resizeFilter": "—",
+          "sharpen": "—",
+          "blur": "—",
+          "maxBytes": "no cap",
+          "quality": "—",
+          "bmpPpm": "2835",
+          "transform": "passthrough"
+        },
+        "wire": {
+          "name": "Stream Deck Mini",
+          "packetSize": "—",
+          "inSize": "—",
+          "heartbeatMs": "—",
+          "synthesizeKeyUp": "—",
+          "sendStpAfterImage": "—",
+          "reportId": "—",
+          "chunkPadByte": "—",
+          "chunkDelayMs": "—",
+          "sharedSerial": "—",
+          "packetSizeCandidates": "—"
+        }
+      }
+    },
+    {
+      "id": "mirabox-293",
+      "name": "Mirabox 293V3",
+      "family": "mirabox-v3",
+      "tested": true,
+      "testedLabel": "✓ tested (macOS)",
+      "cells": {
+        "identity": {
+          "name": "Mirabox 293V3",
+          "id": "mirabox-293",
+          "vendor": "mirabox",
+          "protocol": "mirabox-cora",
+          "driverKind": "mirabox",
+          "vid": "0x6603",
+          "pids": "0x1005 0x1006 0x1010 0x1014",
+          "usagePage": "0xffa0",
+          "usage": "1",
+          "keyCount": "15",
+          "columns": "5",
+          "rows": "3",
+          "keyWidth": "112",
+          "keyHeight": "112"
+        },
+        "image": {
+          "name": "Mirabox 293V3",
+          "format": "jpeg",
+          "width": "112",
+          "height": "112",
+          "rotate": "0°",
+          "flipH": "no",
+          "flipV": "no",
+          "colorMode": "rgb",
+          "crop": "—",
+          "resizeMode": "—",
+          "padFill": "—",
+          "resizeFilter": "lanczos3",
+          "sharpen": "0.6",
+          "blur": "—",
+          "maxBytes": "10240",
+          "quality": "0.9",
+          "bmpPpm": "—",
+          "transform": "sidecar"
+        },
+        "wire": {
+          "name": "Mirabox 293V3",
+          "packetSize": "1024",
+          "inSize": "512",
+          "heartbeatMs": "8000",
+          "synthesizeKeyUp": "no",
+          "sendStpAfterImage": "yes",
+          "reportId": "—",
+          "chunkPadByte": "—",
+          "chunkDelayMs": "—",
+          "sharedSerial": "—",
+          "packetSizeCandidates": "—"
+        }
+      }
+    },
+    {
+      "id": "mirabox-293s",
+      "name": "Mirabox 293S Stream Deck",
+      "family": "mirabox-v1",
+      "tested": true,
+      "testedLabel": "✓ tested (macOS)",
+      "cells": {
+        "identity": {
+          "name": "Mirabox 293S Stream Deck",
+          "id": "mirabox-293s",
+          "vendor": "mirabox",
+          "protocol": "mirabox-cora-v1",
+          "driverKind": "mirabox",
+          "vid": "0x5548",
+          "pids": "0x6670",
+          "usagePage": "0xffa0",
+          "usage": "1",
+          "keyCount": "15",
+          "columns": "5",
+          "rows": "3",
+          "keyWidth": "85",
+          "keyHeight": "85"
+        },
+        "image": {
+          "name": "Mirabox 293S Stream Deck",
+          "format": "jpeg",
+          "width": "85",
+          "height": "85",
+          "rotate": "90°",
+          "flipH": "no",
+          "flipV": "no",
+          "colorMode": "rgb",
+          "crop": "—",
+          "resizeMode": "pad",
+          "padFill": "edge",
+          "resizeFilter": "—",
+          "sharpen": "0",
+          "blur": "—",
+          "maxBytes": "5120",
+          "quality": "0.7",
+          "bmpPpm": "—",
+          "transform": "sidecar"
+        },
+        "wire": {
+          "name": "Mirabox 293S Stream Deck",
+          "packetSize": "512",
+          "inSize": "512",
+          "heartbeatMs": "8000",
+          "synthesizeKeyUp": "yes",
+          "sendStpAfterImage": "no",
+          "reportId": "—",
+          "chunkPadByte": "—",
+          "chunkDelayMs": "—",
+          "sharedSerial": "yes",
+          "packetSizeCandidates": "—"
+        }
+      }
+    },
+    {
+      "id": "mirabox-k1pro",
+      "name": "Mirabox K1 Pro",
+      "family": "mirabox-v3",
+      "tested": true,
+      "testedLabel": "✓ tested (macOS)",
+      "cells": {
+        "identity": {
+          "name": "Mirabox K1 Pro",
+          "id": "mirabox-k1pro",
+          "vendor": "mirabox",
+          "protocol": "mirabox-cora",
+          "driverKind": "mirabox",
+          "vid": "0x6603",
+          "pids": "0x1015 0x1019",
+          "usagePage": "0xffa0",
+          "usage": "1",
+          "keyCount": "6",
+          "columns": "3",
+          "rows": "2",
+          "keyWidth": "64",
+          "keyHeight": "64"
+        },
+        "image": {
+          "name": "Mirabox K1 Pro",
+          "format": "jpeg",
+          "width": "64",
+          "height": "64",
+          "rotate": "0°",
+          "flipH": "yes",
+          "flipV": "no",
+          "colorMode": "rgb",
+          "crop": "6",
+          "resizeMode": "—",
+          "padFill": "—",
+          "resizeFilter": "lanczos3",
+          "sharpen": "—",
+          "blur": "—",
+          "maxBytes": "4096",
+          "quality": "0.9",
+          "bmpPpm": "—",
+          "transform": "sidecar"
+        },
+        "wire": {
+          "name": "Mirabox K1 Pro",
+          "packetSize": "1024",
+          "inSize": "512",
+          "heartbeatMs": "2000",
+          "synthesizeKeyUp": "no",
+          "sendStpAfterImage": "yes",
+          "reportId": "0x04",
+          "chunkPadByte": "yes",
+          "chunkDelayMs": "—",
+          "sharedSerial": "—",
+          "packetSizeCandidates": "—"
+        }
+      }
+    },
+    {
+      "id": "ajazz-akp153e-rev2",
+      "name": "Ajazz AKP153E (rev. 2)",
+      "family": "mirabox-v3",
+      "tested": false,
+      "testedLabel": "— untested",
+      "cells": {
+        "identity": {
+          "name": "Ajazz AKP153E (rev. 2)",
+          "id": "ajazz-akp153e-rev2",
+          "vendor": "ajazz",
+          "protocol": "mirabox-cora",
+          "driverKind": "mirabox",
+          "vid": "0x0300",
+          "pids": "0x3010",
+          "usagePage": "0xffa0",
+          "usage": "1",
+          "keyCount": "15",
+          "columns": "5",
+          "rows": "3",
+          "keyWidth": "112",
+          "keyHeight": "112"
+        },
+        "image": {
+          "name": "Ajazz AKP153E (rev. 2)",
+          "format": "jpeg",
+          "width": "112",
+          "height": "112",
+          "rotate": "0°",
+          "flipH": "no",
+          "flipV": "no",
+          "colorMode": "rgb",
+          "crop": "—",
+          "resizeMode": "—",
+          "padFill": "—",
+          "resizeFilter": "lanczos3",
+          "sharpen": "0.6",
+          "blur": "—",
+          "maxBytes": "10240",
+          "quality": "0.9",
+          "bmpPpm": "—",
+          "transform": "sidecar"
+        },
+        "wire": {
+          "name": "Ajazz AKP153E (rev. 2)",
+          "packetSize": "1024",
+          "inSize": "512",
+          "heartbeatMs": "8000",
+          "synthesizeKeyUp": "no",
+          "sendStpAfterImage": "yes",
+          "reportId": "—",
+          "chunkPadByte": "—",
+          "chunkDelayMs": "—",
+          "sharedSerial": "—",
+          "packetSizeCandidates": "—"
+        }
+      }
+    },
+    {
+      "id": "ajazz-akp153r-rev2",
+      "name": "Ajazz AKP153R (rev. 2)",
+      "family": "mirabox-v3",
+      "tested": false,
+      "testedLabel": "— untested",
+      "cells": {
+        "identity": {
+          "name": "Ajazz AKP153R (rev. 2)",
+          "id": "ajazz-akp153r-rev2",
+          "vendor": "ajazz",
+          "protocol": "mirabox-cora",
+          "driverKind": "mirabox",
+          "vid": "0x0300",
+          "pids": "0x3011",
+          "usagePage": "0xffa0",
+          "usage": "1",
+          "keyCount": "15",
+          "columns": "5",
+          "rows": "3",
+          "keyWidth": "112",
+          "keyHeight": "112"
+        },
+        "image": {
+          "name": "Ajazz AKP153R (rev. 2)",
+          "format": "jpeg",
+          "width": "112",
+          "height": "112",
+          "rotate": "0°",
+          "flipH": "no",
+          "flipV": "no",
+          "colorMode": "rgb",
+          "crop": "—",
+          "resizeMode": "—",
+          "padFill": "—",
+          "resizeFilter": "lanczos3",
+          "sharpen": "0.6",
+          "blur": "—",
+          "maxBytes": "10240",
+          "quality": "0.9",
+          "bmpPpm": "—",
+          "transform": "sidecar"
+        },
+        "wire": {
+          "name": "Ajazz AKP153R (rev. 2)",
+          "packetSize": "1024",
+          "inSize": "512",
+          "heartbeatMs": "8000",
+          "synthesizeKeyUp": "no",
+          "sendStpAfterImage": "yes",
+          "reportId": "—",
+          "chunkPadByte": "—",
+          "chunkDelayMs": "—",
+          "sharedSerial": "—",
+          "packetSizeCandidates": "—"
+        }
+      }
+    },
+    {
+      "id": "fifine-d6",
+      "name": "Fifine AmpliGame D6",
+      "family": "mirabox-v3",
+      "tested": false,
+      "testedLabel": "— untested",
+      "cells": {
+        "identity": {
+          "name": "Fifine AmpliGame D6",
+          "id": "fifine-d6",
+          "vendor": "fifine",
+          "protocol": "mirabox-cora",
+          "driverKind": "mirabox",
+          "vid": "0x3142",
+          "pids": "0x0007",
+          "usagePage": "0xffa0",
+          "usage": "1",
+          "keyCount": "15",
+          "columns": "5",
+          "rows": "3",
+          "keyWidth": "112",
+          "keyHeight": "112"
+        },
+        "image": {
+          "name": "Fifine AmpliGame D6",
+          "format": "jpeg",
+          "width": "112",
+          "height": "112",
+          "rotate": "0°",
+          "flipH": "no",
+          "flipV": "no",
+          "colorMode": "rgb",
+          "crop": "—",
+          "resizeMode": "—",
+          "padFill": "—",
+          "resizeFilter": "lanczos3",
+          "sharpen": "0.6",
+          "blur": "—",
+          "maxBytes": "10240",
+          "quality": "0.9",
+          "bmpPpm": "—",
+          "transform": "sidecar"
+        },
+        "wire": {
+          "name": "Fifine AmpliGame D6",
+          "packetSize": "512",
+          "inSize": "512",
+          "heartbeatMs": "8000",
+          "synthesizeKeyUp": "no",
+          "sendStpAfterImage": "yes",
+          "reportId": "—",
+          "chunkPadByte": "—",
+          "chunkDelayMs": "—",
+          "sharedSerial": "—",
+          "packetSizeCandidates": "512 / 1024"
+        }
+      }
+    },
+    {
+      "id": "fifine-d6-rev2",
+      "name": "Fifine AmpliGame D6 (rev. 2)",
+      "family": "mirabox-v3",
+      "tested": true,
+      "testedLabel": "✓ tested (macOS, 2026-09-11)",
+      "cells": {
+        "identity": {
+          "name": "Fifine AmpliGame D6 (rev. 2)",
+          "id": "fifine-d6-rev2",
+          "vendor": "fifine",
+          "protocol": "mirabox-cora",
+          "driverKind": "mirabox",
+          "vid": "0x3142",
+          "pids": "0x0060",
+          "usagePage": "0xffa0",
+          "usage": "1",
+          "keyCount": "15",
+          "columns": "5",
+          "rows": "3",
+          "keyWidth": "112",
+          "keyHeight": "112"
+        },
+        "image": {
+          "name": "Fifine AmpliGame D6 (rev. 2)",
+          "format": "jpeg",
+          "width": "112",
+          "height": "112",
+          "rotate": "0°",
+          "flipH": "no",
+          "flipV": "no",
+          "colorMode": "rgb",
+          "crop": "—",
+          "resizeMode": "—",
+          "padFill": "—",
+          "resizeFilter": "lanczos3",
+          "sharpen": "0.6",
+          "blur": "—",
+          "maxBytes": "10240",
+          "quality": "0.9",
+          "bmpPpm": "—",
+          "transform": "sidecar"
+        },
+        "wire": {
+          "name": "Fifine AmpliGame D6 (rev. 2)",
+          "packetSize": "1024",
+          "inSize": "512",
+          "heartbeatMs": "8000",
+          "synthesizeKeyUp": "no",
+          "sendStpAfterImage": "yes",
+          "reportId": "—",
+          "chunkPadByte": "—",
+          "chunkDelayMs": "—",
+          "sharedSerial": "—",
+          "packetSizeCandidates": "512 / 1024"
+        }
+      }
+    },
+    {
+      "id": "ajazz-akp153",
+      "name": "Ajazz AKP153",
+      "family": "mirabox-v1",
+      "tested": false,
+      "testedLabel": "— untested",
+      "cells": {
+        "identity": {
+          "name": "Ajazz AKP153",
+          "id": "ajazz-akp153",
+          "vendor": "ajazz",
+          "protocol": "mirabox-cora-v1",
+          "driverKind": "mirabox",
+          "vid": "0x5548",
+          "pids": "0x6674",
+          "usagePage": "0xffa0",
+          "usage": "1",
+          "keyCount": "15",
+          "columns": "5",
+          "rows": "3",
+          "keyWidth": "85",
+          "keyHeight": "85"
+        },
+        "image": {
+          "name": "Ajazz AKP153",
+          "format": "jpeg",
+          "width": "85",
+          "height": "85",
+          "rotate": "90°",
+          "flipH": "no",
+          "flipV": "no",
+          "colorMode": "rgb",
+          "crop": "—",
+          "resizeMode": "pad",
+          "padFill": "edge",
+          "resizeFilter": "—",
+          "sharpen": "0",
+          "blur": "—",
+          "maxBytes": "5120",
+          "quality": "0.7",
+          "bmpPpm": "—",
+          "transform": "sidecar"
+        },
+        "wire": {
+          "name": "Ajazz AKP153",
+          "packetSize": "512",
+          "inSize": "512",
+          "heartbeatMs": "8000",
+          "synthesizeKeyUp": "yes",
+          "sendStpAfterImage": "no",
+          "reportId": "—",
+          "chunkPadByte": "—",
+          "chunkDelayMs": "—",
+          "sharedSerial": "yes",
+          "packetSizeCandidates": "—"
+        }
+      }
+    },
+    {
+      "id": "ajazz-akp153e",
+      "name": "Ajazz AKP153E (rev. 1)",
+      "family": "mirabox-v1",
+      "tested": false,
+      "testedLabel": "— untested",
+      "cells": {
+        "identity": {
+          "name": "Ajazz AKP153E (rev. 1)",
+          "id": "ajazz-akp153e",
+          "vendor": "ajazz",
+          "protocol": "mirabox-cora-v1",
+          "driverKind": "mirabox",
+          "vid": "0x0300",
+          "pids": "0x1010",
+          "usagePage": "0xffa0",
+          "usage": "1",
+          "keyCount": "15",
+          "columns": "5",
+          "rows": "3",
+          "keyWidth": "85",
+          "keyHeight": "85"
+        },
+        "image": {
+          "name": "Ajazz AKP153E (rev. 1)",
+          "format": "jpeg",
+          "width": "85",
+          "height": "85",
+          "rotate": "90°",
+          "flipH": "no",
+          "flipV": "no",
+          "colorMode": "rgb",
+          "crop": "—",
+          "resizeMode": "pad",
+          "padFill": "edge",
+          "resizeFilter": "—",
+          "sharpen": "0",
+          "blur": "—",
+          "maxBytes": "5120",
+          "quality": "0.7",
+          "bmpPpm": "—",
+          "transform": "sidecar"
+        },
+        "wire": {
+          "name": "Ajazz AKP153E (rev. 1)",
+          "packetSize": "512",
+          "inSize": "512",
+          "heartbeatMs": "8000",
+          "synthesizeKeyUp": "yes",
+          "sendStpAfterImage": "no",
+          "reportId": "—",
+          "chunkPadByte": "—",
+          "chunkDelayMs": "—",
+          "sharedSerial": "yes",
+          "packetSizeCandidates": "—"
+        }
+      }
+    },
+    {
+      "id": "ajazz-akp153r",
+      "name": "Ajazz AKP153R (rev. 1)",
+      "family": "mirabox-v1",
+      "tested": false,
+      "testedLabel": "— untested",
+      "cells": {
+        "identity": {
+          "name": "Ajazz AKP153R (rev. 1)",
+          "id": "ajazz-akp153r",
+          "vendor": "ajazz",
+          "protocol": "mirabox-cora-v1",
+          "driverKind": "mirabox",
+          "vid": "0x0300",
+          "pids": "0x1020",
+          "usagePage": "0xffa0",
+          "usage": "1",
+          "keyCount": "15",
+          "columns": "5",
+          "rows": "3",
+          "keyWidth": "85",
+          "keyHeight": "85"
+        },
+        "image": {
+          "name": "Ajazz AKP153R (rev. 1)",
+          "format": "jpeg",
+          "width": "85",
+          "height": "85",
+          "rotate": "90°",
+          "flipH": "no",
+          "flipV": "no",
+          "colorMode": "rgb",
+          "crop": "—",
+          "resizeMode": "pad",
+          "padFill": "edge",
+          "resizeFilter": "—",
+          "sharpen": "0",
+          "blur": "—",
+          "maxBytes": "5120",
+          "quality": "0.7",
+          "bmpPpm": "—",
+          "transform": "sidecar"
+        },
+        "wire": {
+          "name": "Ajazz AKP153R (rev. 1)",
+          "packetSize": "512",
+          "inSize": "512",
+          "heartbeatMs": "8000",
+          "synthesizeKeyUp": "yes",
+          "sendStpAfterImage": "no",
+          "reportId": "—",
+          "chunkPadByte": "—",
+          "chunkDelayMs": "—",
+          "sharedSerial": "yes",
+          "packetSizeCandidates": "—"
+        }
+      }
+    },
+    {
+      "id": "mars-msd-one",
+      "name": "Mars Gaming MSD-ONE",
+      "family": "mirabox-v1",
+      "tested": false,
+      "testedLabel": "— untested",
+      "cells": {
+        "identity": {
+          "name": "Mars Gaming MSD-ONE",
+          "id": "mars-msd-one",
+          "vendor": "mars-gaming",
+          "protocol": "mirabox-cora-v1",
+          "driverKind": "mirabox",
+          "vid": "0x0b00",
+          "pids": "0x1000",
+          "usagePage": "0xffa0",
+          "usage": "1",
+          "keyCount": "15",
+          "columns": "5",
+          "rows": "3",
+          "keyWidth": "85",
+          "keyHeight": "85"
+        },
+        "image": {
+          "name": "Mars Gaming MSD-ONE",
+          "format": "jpeg",
+          "width": "85",
+          "height": "85",
+          "rotate": "90°",
+          "flipH": "no",
+          "flipV": "no",
+          "colorMode": "rgb",
+          "crop": "—",
+          "resizeMode": "pad",
+          "padFill": "edge",
+          "resizeFilter": "—",
+          "sharpen": "0",
+          "blur": "—",
+          "maxBytes": "5120",
+          "quality": "0.7",
+          "bmpPpm": "—",
+          "transform": "sidecar"
+        },
+        "wire": {
+          "name": "Mars Gaming MSD-ONE",
+          "packetSize": "512",
+          "inSize": "512",
+          "heartbeatMs": "8000",
+          "synthesizeKeyUp": "yes",
+          "sendStpAfterImage": "no",
+          "reportId": "—",
+          "chunkPadByte": "—",
+          "chunkDelayMs": "—",
+          "sharedSerial": "yes",
+          "packetSizeCandidates": "—"
+        }
+      }
+    },
+    {
+      "id": "maddog-gk150k",
+      "name": "Mad Dog GK150K",
+      "family": "mirabox-v1",
+      "tested": false,
+      "testedLabel": "— untested",
+      "cells": {
+        "identity": {
+          "name": "Mad Dog GK150K",
+          "id": "maddog-gk150k",
+          "vendor": "mad-dog",
+          "protocol": "mirabox-cora-v1",
+          "driverKind": "mirabox",
+          "vid": "0x0c00",
+          "pids": "0x1000",
+          "usagePage": "0xffa0",
+          "usage": "1",
+          "keyCount": "15",
+          "columns": "5",
+          "rows": "3",
+          "keyWidth": "85",
+          "keyHeight": "85"
+        },
+        "image": {
+          "name": "Mad Dog GK150K",
+          "format": "jpeg",
+          "width": "85",
+          "height": "85",
+          "rotate": "90°",
+          "flipH": "no",
+          "flipV": "no",
+          "colorMode": "rgb",
+          "crop": "—",
+          "resizeMode": "pad",
+          "padFill": "edge",
+          "resizeFilter": "—",
+          "sharpen": "0",
+          "blur": "—",
+          "maxBytes": "5120",
+          "quality": "0.7",
+          "bmpPpm": "—",
+          "transform": "sidecar"
+        },
+        "wire": {
+          "name": "Mad Dog GK150K",
+          "packetSize": "512",
+          "inSize": "512",
+          "heartbeatMs": "8000",
+          "synthesizeKeyUp": "yes",
+          "sendStpAfterImage": "no",
+          "reportId": "—",
+          "chunkPadByte": "—",
+          "chunkDelayMs": "—",
+          "sharedSerial": "yes",
+          "packetSizeCandidates": "—"
+        }
+      }
+    },
+    {
+      "id": "risemode-vision-01",
+      "name": "Risemode Vision 01",
+      "family": "mirabox-v1",
+      "tested": false,
+      "testedLabel": "— untested",
+      "cells": {
+        "identity": {
+          "name": "Risemode Vision 01",
+          "id": "risemode-vision-01",
+          "vendor": "risemode",
+          "protocol": "mirabox-cora-v1",
+          "driverKind": "mirabox",
+          "vid": "0x0a00",
+          "pids": "0x1001",
+          "usagePage": "0xffa0",
+          "usage": "1",
+          "keyCount": "15",
+          "columns": "5",
+          "rows": "3",
+          "keyWidth": "85",
+          "keyHeight": "85"
+        },
+        "image": {
+          "name": "Risemode Vision 01",
+          "format": "jpeg",
+          "width": "85",
+          "height": "85",
+          "rotate": "90°",
+          "flipH": "no",
+          "flipV": "no",
+          "colorMode": "rgb",
+          "crop": "—",
+          "resizeMode": "pad",
+          "padFill": "edge",
+          "resizeFilter": "—",
+          "sharpen": "0",
+          "blur": "—",
+          "maxBytes": "5120",
+          "quality": "0.7",
+          "bmpPpm": "—",
+          "transform": "sidecar"
+        },
+        "wire": {
+          "name": "Risemode Vision 01",
+          "packetSize": "512",
+          "inSize": "512",
+          "heartbeatMs": "8000",
+          "synthesizeKeyUp": "yes",
+          "sendStpAfterImage": "no",
+          "reportId": "—",
+          "chunkPadByte": "—",
+          "chunkDelayMs": "—",
+          "sharedSerial": "yes",
+          "packetSizeCandidates": "—"
+        }
+      }
+    },
+    {
+      "id": "tmice-stream-controller",
+      "name": "TMICE Stream Controller",
+      "family": "mirabox-v1",
+      "tested": false,
+      "testedLabel": "— untested",
+      "cells": {
+        "identity": {
+          "name": "TMICE Stream Controller",
+          "id": "tmice-stream-controller",
+          "vendor": "tmice",
+          "protocol": "mirabox-cora-v1",
+          "driverKind": "mirabox",
+          "vid": "0x0500",
+          "pids": "0x1001",
+          "usagePage": "0xffa0",
+          "usage": "1",
+          "keyCount": "15",
+          "columns": "5",
+          "rows": "3",
+          "keyWidth": "85",
+          "keyHeight": "85"
+        },
+        "image": {
+          "name": "TMICE Stream Controller",
+          "format": "jpeg",
+          "width": "85",
+          "height": "85",
+          "rotate": "90°",
+          "flipH": "no",
+          "flipV": "no",
+          "colorMode": "rgb",
+          "crop": "—",
+          "resizeMode": "pad",
+          "padFill": "edge",
+          "resizeFilter": "—",
+          "sharpen": "0",
+          "blur": "—",
+          "maxBytes": "5120",
+          "quality": "0.7",
+          "bmpPpm": "—",
+          "transform": "sidecar"
+        },
+        "wire": {
+          "name": "TMICE Stream Controller",
+          "packetSize": "512",
+          "inSize": "512",
+          "heartbeatMs": "8000",
+          "synthesizeKeyUp": "yes",
+          "sendStpAfterImage": "no",
+          "reportId": "—",
+          "chunkPadByte": "—",
+          "chunkDelayMs": "—",
+          "sharedSerial": "yes",
+          "packetSizeCandidates": "—"
+        }
+      }
+    }
+  ],
+  "homepageOrder": [
+    {
+      "name": "Stream Deck Mini",
+      "tested": true
+    },
+    {
+      "name": "Mirabox 293V3",
+      "tested": true
+    },
+    {
+      "name": "Mirabox 293S Stream Deck",
+      "tested": true
+    },
+    {
+      "name": "Mirabox K1 Pro",
+      "tested": true
+    },
+    {
+      "name": "Fifine AmpliGame D6 (rev. 2)",
+      "tested": true
+    },
+    {
+      "name": "Stream Deck MK.2",
+      "tested": false
+    },
+    {
+      "name": "Ajazz AKP153E (rev. 2)",
+      "tested": false
+    },
+    {
+      "name": "Ajazz AKP153R (rev. 2)",
+      "tested": false
+    },
+    {
+      "name": "Fifine AmpliGame D6",
+      "tested": false
+    },
+    {
+      "name": "Ajazz AKP153",
+      "tested": false
+    },
+    {
+      "name": "Ajazz AKP153E (rev. 1)",
+      "tested": false
+    },
+    {
+      "name": "Ajazz AKP153R (rev. 1)",
+      "tested": false
+    },
+    {
+      "name": "Mars Gaming MSD-ONE",
+      "tested": false
+    },
+    {
+      "name": "Mad Dog GK150K",
+      "tested": false
+    },
+    {
+      "name": "Risemode Vision 01",
+      "tested": false
+    },
+    {
+      "name": "TMICE Stream Controller",
+      "tested": false
+    }
+  ]
+}

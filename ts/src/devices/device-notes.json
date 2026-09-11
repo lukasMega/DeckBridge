@@ -1,0 +1,177 @@
+{
+  "$comment": [
+    "Hand-written prose for the generated device docs. Keyed by DeviceModel.id.",
+    "Everything mechanical (IDs, geometry, image/wire spec, key maps) comes out of",
+    "DEVICE_MODELS — do NOT restate it here. This file owns only what code cannot say:",
+    "what was tested on what, the quirks worth warning about, and where the values came",
+    "from. ts/scripts/gen-device-docs.mjs fails if a model has no entry here, or an",
+    "entry here has no model."
+  ],
+  "notes": {
+    "mk2": {
+      "tested": { "status": false },
+      "summary": "Elgato's own 15-key deck. Driven natively over HID (no CORA emulation of the panel itself), so DeckBridge forwards the app's JPEG unchanged.",
+      "alsoSoldAs": [],
+      "quirks": [
+        "`image.rotate` is still the Phase 0 default (0, passthrough). If keys come out upside down on real hardware, 180 is the other candidate — the CORA frames' native orientation has not been measured on an MK.2.",
+        "The only non-Elgato-emulating model: `cora.usePhysicalIdentity` is true, so the deck's real serial and firmware version are forwarded to the app."
+      ],
+      "sources": []
+    },
+    "mini": {
+      "tested": { "status": true, "platform": "macOS" },
+      "summary": "Elgato's 6-key deck. BMP panel, not JPEG: the app's bitmap is forwarded as-is by the `format: 'bmp'` short-circuit in image-pipeline.",
+      "alsoSoldAs": [],
+      "quirks": [
+        "BGR pixel order plus a 90° CW rotation, matching the reference 6-key implementation's `rotate + yFlip`.",
+        "Fixed-size payload: 54-byte BMP header + 80×80×3 = 19254 bytes, 20 packets per key.",
+        "Splash sources are upright, so the splash path overrides the transform to rotate 90 + flipH."
+      ],
+      "sources": []
+    },
+    "mirabox-293": {
+      "tested": { "status": true, "platform": "macOS" },
+      "summary": "The reference v3 board, and the device every other v3 model in this table is derived from. 15 JPEG keys at 112×112, 1024-byte CRT packets, press and release events.",
+      "alsoSoldAs": ["HSV293SV3 / \"293S V3\" refresh (PID 0x1014)"],
+      "quirks": [
+        "Four PIDs: 0x1005 is the hardware-verified one; 0x1006 (EN variant) and 0x1010 (v2.5) come from the vendor's own PID tables; 0x1014 is the HSV293SV3 refresh. The last three are untested here.",
+        "Upscales 72×72 CORA frames to 112×112, so it uses the `lanczos3` filter plus a 0.6 unsharp pass to claw back the softness."
+      ],
+      "sources": ["opendeck-akp153", "keydeck (Mirabox-HSV293SV3-0x1005.json)"]
+    },
+    "mirabox-293s": {
+      "tested": { "status": true, "platform": "macOS" },
+      "summary": "The reference v1 board: physically 3×6 = 18 keys, of which the left 5 columns are exposed as a 15-key MK.2 and the right column becomes DeckBridge-native extra keys.",
+      "alsoSoldAs": [],
+      "quirks": [
+        "Keydown-only firmware — the driver synthesizes the key-up event.",
+        "The app sends MK.2-native 72×72 but the panel is 85×85, so the image is padded (pixels stay 1:1) with an edge-clamped border instead of being upscaled.",
+        "Net image transform is the anti-transpose (rotate 90 ∘ flipV). The opendeck-akp153 guess of rotate90 + flipH + flipV reduces to a plain rotate270 and renders vertically flipped.",
+        "The right column's wire ids (16, 17, 18) are derived from the opendeck-akp153 wire-id namespace, not hardware-verified.",
+        "v1 firmware reports one hardcoded serial (`355499441494`) on every unit of every v1 model, so `sharedSerial` makes the settings key include the model id."
+      ],
+      "sources": ["opendeck-akp153", "keydeck (Mirabox-HSV293S.json)"]
+    },
+    "mirabox-k1pro": {
+      "tested": { "status": true, "platform": "macOS" },
+      "summary": "6 LCD keys (3×2) plus 3 rotary encoders, advertised to the Elgato app as a Stream Deck Mini. The encoders are not wired up — their input codes fall outside the key map and are dropped.",
+      "alsoSoldAs": [],
+      "quirks": [
+        "Report ID 0x04, not the 0x00 the rest of the family uses.",
+        "Firmware drops the last byte of every full 1024-byte image chunk. `chunkPadByte` wire-encodes a sacrificial byte after every `packetSize - 1` payload bytes so the drop only ever eats padding — hardware-verified clean at q90–q100 for 2/3/5-chunk files.",
+        "The app sends an 80×80 Mini BMP whose outer edge is dead border, so 6 px is cropped from every side before the 64×64 resize.",
+        "JPEG must stay baseline with a single interleaved scan (the vendored jpeg-encoder fork), with the header through SOS inside the first 1023 payload bytes."
+      ],
+      "sources": ["keydeck", ".claude/plans/K1Pro/jpeg-artifact-findings.md"]
+    },
+    "ajazz-akp153e-rev2": {
+      "tested": { "status": false },
+      "summary": "The Mirabox 293V3 board behind VID 0x0300. Every value is copied from the 293V3 model because the reference implementations describe the two as identical.",
+      "alsoSoldAs": [],
+      "quirks": [
+        "Not hardware-tested. `keyMap` was verified on 293V3 hardware only — if keys light up in the wrong place, that table is the first thing to re-derive.",
+        "Do not confuse rev. 2 (PID 0x3010, v3, 1024-byte packets) with rev. 1 (PID 0x1010, v1, 512-byte packets). Same VID, adjacent PIDs, completely different protocol."
+      ],
+      "sources": ["opendeck-akp153 (src/mappings.rs)", "keydeck (Ajazz-AKP153E-0x3010.json)"]
+    },
+    "ajazz-akp153r-rev2": {
+      "tested": { "status": false },
+      "summary": "The Mirabox 293V3 board behind VID 0x0300, PID 0x3011. Identical to the AKP153E rev. 2 apart from the PID.",
+      "alsoSoldAs": [],
+      "quirks": [
+        "Not hardware-tested; inherits the 293V3's hardware-verified tuning verbatim.",
+        "Rev. 1 of the same name (PID 0x1020) is a v1 board and is a separate model in this table."
+      ],
+      "sources": ["opendeck-akp153 (src/mappings.rs)", "keydeck"]
+    },
+    "fifine-d6": {
+      "tested": { "status": false },
+      "summary": "Rev. 1 of the Fifine AmpliGame D6 (PID 0x0007) — the 293V3 board behind VID 0x3142, writing at 512-byte packets.",
+      "alsoSoldAs": [],
+      "quirks": [
+        "Not hardware-tested. The 512-byte packet size is inferred, and its own source called it surprising (\"Not sure why, but it works with it\"). `packetSizeCandidates` lets the HID report descriptor overrule it at open().",
+        "Upstream runs this board at mirajazz v1 for writes but forces the event reader to v3, which is why the model is tagged `mirabox-cora` with `synthesizeKeyUp: false` rather than `mirabox-cora-v1`.",
+        "`sharedSerial` is deliberately false. If two rev. 1 units ever collide on one settings key, setting it true on this model alone is the fix."
+      ],
+      "sources": [
+        "companion-surface-mirabox-stream-dock PR #49",
+        "opendeck-ampgd6",
+        "FifineOpenSource",
+        "jasonkoon/sd-connect"
+      ]
+    },
+    "fifine-d6-rev2": {
+      "tested": { "status": true, "platform": "macOS", "date": "2026-09-11" },
+      "summary": "Rev. 2 of the Fifine AmpliGame D6 (PID 0x0060) — the 293V3 board behind VID 0x3142, writing at 1024-byte packets.",
+      "alsoSoldAs": ["\"D6 Pro\" in Fifine's own Windows software (the retail box just says D6)"],
+      "quirks": [
+        "Hardware-verified on macOS: enumerates via the 0xffa0/1 usage path, all 15 keys render full-bleed, press and release both map correctly.",
+        "512-byte writes render BLACK on this revision. The board reports `MaxOutputReportSize = 1024`, so every 513-byte write is discarded by the firmware while `write()` still returns success — the deck enumerates and reports presses while the screen stays black. Do not unify the packet size with rev. 1.",
+        "The 112×112 panel size cannot be probed and the reference projects are split four ways (95 / 100 / 105 / 112). 112 is the value two independent owners derived from the hardware, and it holds up on a real unit."
+      ],
+      "sources": [
+        "opendeck-ampgd6 PR #4, #5, #6, #7",
+        "companion-surface-mirabox-stream-dock PR #49",
+        "FifineOpenSource"
+      ]
+    },
+    "ajazz-akp153": {
+      "tested": { "status": false },
+      "summary": "A v1 rebadge of the Mirabox 293S board (VID 0x5548, PID 0x6674). Every field is inherited from the 293S model by construction, so it cannot drift out of sync.",
+      "alsoSoldAs": [],
+      "quirks": [
+        "Not hardware-tested; see the 293S for the tuning rationale and its own caveats.",
+        "Shares VID 0x5548 with the 293S; only the PID separates them."
+      ],
+      "sources": ["opendeck-akp153", "keydeck"]
+    },
+    "ajazz-akp153e": {
+      "tested": { "status": false },
+      "summary": "Rev. 1 of the AKP153E — a v1 rebadge of the Mirabox 293S board (VID 0x0300, PID 0x1010).",
+      "alsoSoldAs": [],
+      "quirks": [
+        "Not hardware-tested; inherits the 293S model verbatim.",
+        "Do not merge with `ajazz-akp153e-rev2` (PID 0x3010): same VID, adjacent PIDs, completely different protocol."
+      ],
+      "sources": ["opendeck-akp153", "keydeck"]
+    },
+    "ajazz-akp153r": {
+      "tested": { "status": false },
+      "summary": "Rev. 1 of the AKP153R — a v1 rebadge of the Mirabox 293S board (VID 0x0300, PID 0x1020).",
+      "alsoSoldAs": [],
+      "quirks": [
+        "Not hardware-tested; inherits the 293S model verbatim.",
+        "Do not merge with `ajazz-akp153r-rev2` (PID 0x3011)."
+      ],
+      "sources": ["opendeck-akp153", "keydeck"]
+    },
+    "mars-msd-one": {
+      "tested": { "status": false },
+      "summary": "A v1 rebadge of the Mirabox 293S board (VID 0x0b00, PID 0x1000).",
+      "alsoSoldAs": [],
+      "quirks": ["Not hardware-tested; inherits the 293S model verbatim."],
+      "sources": ["opendeck-akp153", "keydeck"]
+    },
+    "maddog-gk150k": {
+      "tested": { "status": false },
+      "summary": "A v1 rebadge of the Mirabox 293S board (VID 0x0c00, PID 0x1000).",
+      "alsoSoldAs": [],
+      "quirks": ["Not hardware-tested; inherits the 293S model verbatim."],
+      "sources": ["opendeck-akp153", "keydeck"]
+    },
+    "risemode-vision-01": {
+      "tested": { "status": false },
+      "summary": "A v1 rebadge of the Mirabox 293S board (VID 0x0a00, PID 0x1001).",
+      "alsoSoldAs": [],
+      "quirks": ["Not hardware-tested; inherits the 293S model verbatim."],
+      "sources": ["opendeck-akp153", "keydeck"]
+    },
+    "tmice-stream-controller": {
+      "tested": { "status": false },
+      "summary": "A v1 rebadge of the Mirabox 293S board (VID 0x0500, PID 0x1001).",
+      "alsoSoldAs": [],
+      "quirks": ["Not hardware-tested; inherits the 293S model verbatim."],
+      "sources": ["opendeck-akp153", "keydeck"]
+    }
+  }
+}

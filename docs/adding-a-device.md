@@ -34,6 +34,9 @@ image-render.ts (worker thread) — on each forwarded image:
 
 Full pipeline diagram (threads, cache, transform): [Image Flow](./image-flow.md).
 
+Every field of every model already in the registry, side by side:
+[Device specs](./device-specs.mdx).
+
 **What you'll touch for any new device:**
 
 | Layer | File(s) | What it does |
@@ -443,6 +446,25 @@ range. `DEFAULT_MODEL` (the no-device fallback) stays `MK2_MODEL` unless you nee
 
 ---
 
+## Step 4b — document it
+
+The two device pages are generated from `DEVICE_MODELS`, so a new model needs one
+hand-written companion entry and one command:
+
+1. Add an entry keyed by your model id to `ts/src/devices/device-notes.json` — test
+   status, a one-line summary, quirks worth warning about, and the reference projects the
+   values came from. Nothing mechanical: IDs, geometry, image/wire spec and key maps all
+   come out of the registry.
+2. Run `mise run docs-devices`, and commit the regenerated
+   [Supported devices](./devices.mdx), [Device specs](./device-specs.mdx) and
+   `docs-site/src/data/devices.generated.json`.
+
+Skipping this fails `ci-checks` on the stale-docs gate — and the generator refuses to run
+at all until the notes entry exists, which is what keeps a new device from landing
+undocumented.
+
+---
+
 ## Step 5 — wire up `hid-worker.ts` (Path C only)
 
 `createDriver()` switches on `model.driverKind`. Path A/B (`'elgato-hid'`) need **no
@@ -513,6 +535,7 @@ unused physical keys in `wireInputToCora`.
 [ ] DeviceProtocol updated if new wire format
 [ ] Driver implemented (Path A / B / C); PROTOCOL_STRATEGY entry added (Path B)
 [ ] Model registered in DEVICE_MODELS (registry.ts)
+[ ] device-notes.json entry added + mise run docs-devices re-run (generated device docs)
 [ ] hid-worker.ts createDriver() updated (Path C only)
 [ ] mise run beforeCommit passes (format + lint + types + test + compile)
 [ ] Image orientation verified on hardware (image.rotate/flipH/flipV, splash.transformOverride)
