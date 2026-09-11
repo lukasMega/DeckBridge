@@ -8,7 +8,8 @@ export type DeviceVendor =
   | 'mars-gaming'
   | 'mad-dog'
   | 'risemode'
-  | 'tmice';
+  | 'tmice'
+  | 'fifine';
 
 /** Wire protocol — closed; adding a new model almost always reuses an existing one. */
 export type DeviceProtocol =
@@ -87,6 +88,25 @@ export interface DeviceWireSpec {
    *  deviceKeyFor() appends the model id to keep two different v1 decks apart.
    *  See mirajazz README "protocol_version = 1". */
   sharedSerial?: boolean;
+  /** Milliseconds to busy-wait after each full image chunk (0/undefined = none).
+   *  Some rebadged v3 boards drop image data when chunks arrive back-to-back;
+   *  Lyagva's D6 fork PR #1 pairs `drawChunkDelayMs: 2` with sequential writes on
+   *  the rev. 2 board. That fix targets node-hid's *async* writer firing every chunk
+   *  through `Promise.all`; our worker writes chunks synchronously and in order, so
+   *  no shipped model sets this — it exists so a device that still tears has a knob
+   *  that doesn't need a code change. Costs chunkCount × ms of worker-thread time
+   *  per image; leave it unset unless hardware demonstrably needs it. */
+  chunkDelayMs?: number;
+  /** When set, read the device's real output-report size out of its HID report
+   *  descriptor at open() and use that instead of `packetSize` — but ONLY if the
+   *  probed value is one of these. See devices/hid-report-descriptor.ts.
+   *
+   *  For boards whose packet size we inferred rather than measured. A wrong
+   *  `packetSize` is otherwise undetectable at runtime: short writes are discarded by
+   *  the firmware while `hid_write` still returns success, so the panel goes black with
+   *  no error anywhere (opendeck-ampgd6 PR #7). Listing the sizes the family is known to
+   *  use means the probe can only correct a guess, never invent an untested value. */
+  packetSizeCandidates?: readonly number[];
 }
 
 /** CORA key index (MK.2, 0-based row-major) ↔ device wire ids.

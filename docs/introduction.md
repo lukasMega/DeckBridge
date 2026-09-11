@@ -28,8 +28,10 @@ write).
 - **Mirabox 293V3** — also matches the HSV293SV3 / "293S V3" refresh (PID `0x1014`, untested)
 - **Mirabox 293S**
 - **Mirabox K1 Pro**
+- **Fifine AmpliGame D6 (rev. 2)** — PID `0x0060`, sold as "D6 Pro"
 - **Ajazz AKP153E (rev. 2)** — untested
 - **Ajazz AKP153R (rev. 2)** — untested
+- **Fifine AmpliGame D6** — untested (PID `0x0007`)
 - **Ajazz AKP153** — untested
 - **Ajazz AKP153E (rev. 1)** — untested
 - **Ajazz AKP153R (rev. 1)** — untested
@@ -40,13 +42,15 @@ write).
 - **Stream Deck MK.2**
 - **Stream Deck Mini**
 
-Hardware-tested on macOS: 293V3, 293S, K1 Pro, and Stream Deck Mini; MK.2, the Ajazz
-AKP153 rev. 2 models, the 7 v1 rebadges of the 293S board (Ajazz AKP153/E/R rev. 1, Mars
-Gaming MSD-ONE, Mad Dog GK150K, Risemode Vision 01, TMICE Stream Controller), and the
-Linux/Windows builds are implemented but not hardware-verified. The Ajazz rev. 2 boards
-are the same hardware as the 293V3 behind a different USB VID/PID, so they reuse the
-293V3 model verbatim; the 7 v1 rebadges are the same hardware as the 293S behind a
-different USB VID/PID, so they reuse the 293S model verbatim.
+Hardware-tested on macOS: 293V3, 293S, K1 Pro, Fifine AmpliGame D6 (rev. 2), and Stream
+Deck Mini; MK.2, the Ajazz AKP153 rev. 2 models, the Fifine AmpliGame D6 rev. 1, the 7 v1
+rebadges of the 293S board (Ajazz AKP153/E/R rev. 1, Mars Gaming MSD-ONE, Mad Dog GK150K,
+Risemode Vision 01, TMICE Stream Controller), and the Linux/Windows builds are implemented
+but not hardware-verified. The Ajazz rev. 2 boards and the Fifine D6 are the same hardware as the
+293V3 behind a different USB VID/PID, so they reuse the 293V3 model verbatim (the D6
+ships in two revisions that differ only in USB packet size: 512 bytes for PID `0x0007`,
+1024 bytes for PID `0x0060`); the 7 v1 rebadges are the same hardware as the 293S behind
+a different USB VID/PID, so they reuse the 293S model verbatim.
 
 :::caution[Platform status]
 DeckBridge is currently **tested on macOS only**, and the GitHub releases currently

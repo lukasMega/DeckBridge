@@ -1,4 +1,6 @@
 import { findHidPath, isNullPtr, IS_MACOS } from './ffi/hidapi.js';
+import type { HidapiSymbols } from './ffi/hidapi.js';
+import { probeOutputReportSize } from './devices/hid-report-descriptor.js';
 import { HidDeviceBase } from './devices/hid-connection.js';
 import { debug, info, warn } from './logger.js';
 import { formatCommHex } from './comm-format.js';
@@ -75,6 +77,27 @@ export class MiraboxDriver extends HidDeviceBase {
       if (path) return path;
     }
     return null;
+  }
+
+  /** Replace `pktSize` (and the scratch buffers sized from it) with the output-report
+   *  size the device itself declares — but only for models that set
+   *  `wire.packetSizeCandidates`, and only when the report descriptor is unambiguous and
+   *  agrees on one of those candidates. Any doubt at all leaves the model constant in
+   *  place, so this is a no-op for every hardware-verified model.
+   *  See devices/hid-report-descriptor.ts for why this is worth probing at all. */
+  private _adoptProbedPacketSize(hid: HidapiSymbols, dev: unknown): void {
+    const candidates = this.model.wire?.packetSizeCandidates;
+    if (!candidates) return;
+    const probed = probeOutputReportSize(hid, dev, candidates);
+    if (probed === null || probed === this.pktSize) return;
+    warn(
+      'hid',
+      `packet size corrected from the report descriptor: model says ${this.pktSize} B, ` +
+        `device reports ${probed} B — using ${probed}`,
+    );
+    this.pktSize = probed;
+    this._chunkScratch = Buffer.alloc(this.pktSize);
+    this._writeScratch = Buffer.alloc(this.pktSize + 1);
   }
 
   async open(hidPath?: string): Promise<void> {
@@ -154,6 +177,11 @@ export class MiraboxDriver extends HidDeviceBase {
     info('hid', 'device opened successfully');
     this.device = dev;
 
+    // Let the device correct our packet-size guess, for models that opted in. Must run
+    // before the first write below: every CRT command is packet-size framed, and getting
+    // it wrong produces no error at all — just a black panel.
+    this._adoptProbedPacketSize(hid, dev);
+
     // Polling loop: hid_read_timeout blocks ≤5ms — safe on single-threaded event loop
     // because data is available immediately or not at all in practice.
     const inSize = this.model.wire!.inSize;
@@ -199,8 +227,11 @@ export class MiraboxDriver extends HidDeviceBase {
     return Promise.resolve();
   }
 
-  sendImage(imageKeyId: number, jpeg: Uint8Array, chunkDelayMs = 0): void {
+  sendImage(imageKeyId: number, jpeg: Uint8Array, chunkDelayMs?: number): void {
     if (!this.device || !this.hidLib) return;
+    // An explicit argument (k1pro-probe) wins; otherwise the model supplies the
+    // pacing — see DeviceWireSpec.chunkDelayMs.
+    const delayMs = chunkDelayMs ?? this.model.wire?.chunkDelayMs ?? 0;
     try {
       const wire = this.model.wire?.chunkPadByte ? padChunkBoundaries(jpeg, this.pktSize) : jpeg;
       this.write(this._buildBat(wire.length, imageKeyId));
@@ -212,9 +243,10 @@ export class MiraboxDriver extends HidDeviceBase {
         chunk.set(wire.subarray(offset, offset + len));
         this.write(chunk);
         offset += this.pktSize;
-        // Diagnostic only (k1pro-probe): pace chunks to test whether the
-        // byte-1024 seam corruption is a device receive-timing overrun.
-        if (chunkDelayMs > 0 && offset < wire.length) this._busyWait(chunkDelayMs);
+        // Pace chunks: diagnostic for the k1pro-probe (does the byte-1024 seam
+        // corruption come from a device receive-timing overrun?), and a per-model
+        // knob for boards that drop back-to-back chunks.
+        if (delayMs > 0 && offset < wire.length) this._busyWait(delayMs);
       }
       this.write(this._buildCrt(CMD_STP));
     } catch (err) {

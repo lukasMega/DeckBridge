@@ -169,13 +169,15 @@ SUBSYSTEM=="hidraw", ATTRS{idVendor}=="0b00", MODE="0666"
 SUBSYSTEM=="hidraw", ATTRS{idVendor}=="0c00", MODE="0666"
 SUBSYSTEM=="hidraw", ATTRS{idVendor}=="0a00", MODE="0666"
 SUBSYSTEM=="hidraw", ATTRS{idVendor}=="0500", MODE="0666"
+SUBSYSTEM=="hidraw", ATTRS{idVendor}=="3142", MODE="0666"
 EOF
 sudo udevadm control --reload-rules && sudo udevadm trigger
 ```
 
 (`6603` = Mirabox 293V3 / HSV293SV3 / K1 Pro, `5548` = Mirabox 293S / Ajazz AKP153,
 `0300` = Ajazz AKP153E/R (rev. 1 and rev. 2), `0b00` = Mars Gaming MSD-ONE, `0c00` = Mad
-Dog GK150K, `0a00` = Risemode Vision 01, `0500` = TMICE Stream Controller.)
+Dog GK150K, `0a00` = Risemode Vision 01, `0500` = TMICE Stream Controller, `3142` =
+Fifine AmpliGame D6 (rev. 1 and rev. 2).)
 
 ## Requirements
 

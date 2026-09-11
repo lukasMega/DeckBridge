@@ -9,6 +9,7 @@ import {
   AJAZZ_AKP153E_REV2_MODEL,
   AJAZZ_AKP153R_REV2_MODEL,
 } from '../src/devices/ajazz/akp153-rev2.js';
+import { FIFINE_D6_MODEL, FIFINE_D6_REV2_MODEL } from '../src/devices/fifine/fifine-d6.js';
 import {
   AJAZZ_AKP153_MODEL,
   AJAZZ_AKP153E_MODEL,
@@ -35,6 +36,7 @@ import {
   MANUFACTURER_STRING,
 } from '../src/types.js';
 import type { DeviceConfig } from '../src/elgato-types.js';
+import type { DeviceModel } from '../src/devices/driver.js';
 
 let passed = 0;
 let failed = 0;
@@ -139,6 +141,100 @@ test('Ajazz AKP153 rev.2 models mirror the 293V3 wire/image/key spec', () => {
   }
 });
 
+// ── Fifine AmpliGame D6 (2 revisions of the 293V3 board) ─────────────────────
+
+function wireWithoutPacketSize(model: DeviceModel): string {
+  const wire: Record<string, unknown> = { ...model.wire! };
+  delete wire.packetSize;
+  return JSON.stringify(wire);
+}
+
+console.log('\ndevice-models: fifine-d6');
+
+test('findModel returns the Fifine D6 models for VID 0x3142', () => {
+  assert.equal(findModel(0x3142, 0x0007)?.id, 'fifine-d6');
+  assert.equal(findModel(0x3142, 0x0060)?.id, 'fifine-d6-rev2');
+});
+
+// The D6 is the 293V3 board behind VID 0x3142; everything but `wire` is a literal
+// clone, so any 293V3 retuning must be mirrored (or the clone claim dropped).
+// `wire` is EXCLUDED here on purpose — see the packet-size test below.
+test('Fifine D6 models mirror the 293V3 image/keyMap/cora/splash spec', () => {
+  for (const model of [FIFINE_D6_MODEL, FIFINE_D6_REV2_MODEL]) {
+    assert.equal(model.usbVendorId, 0x3142);
+    assert.equal(model.vendor, 'fifine');
+    assert.equal(model.protocol, MIRABOX_293_MODEL.protocol);
+    assert.equal(model.driverKind, MIRABOX_293_MODEL.driverKind);
+    assert.equal(model.usagePage, MIRABOX_293_MODEL.usagePage);
+    assert.equal(model.usage, MIRABOX_293_MODEL.usage);
+    assert.equal(model.keyCount, MIRABOX_293_MODEL.keyCount);
+    assert.equal(model.columns, MIRABOX_293_MODEL.columns);
+    assert.equal(model.rows, MIRABOX_293_MODEL.rows);
+    assert.equal(model.keyWidth, MIRABOX_293_MODEL.keyWidth);
+    assert.equal(model.keyHeight, MIRABOX_293_MODEL.keyHeight);
+    assert.equal(JSON.stringify(model.image), JSON.stringify(MIRABOX_293_MODEL.image));
+    assert.equal(JSON.stringify(model.keyMap), JSON.stringify(MIRABOX_293_MODEL.keyMap));
+    assert.equal(JSON.stringify(model.cora), JSON.stringify(MIRABOX_293_MODEL.cora));
+    assert.equal(JSON.stringify(model.splash), JSON.stringify(MIRABOX_293_MODEL.splash));
+  }
+});
+
+// The revisions differ ONLY in packet size, and the asymmetry is deliberate: rev. 1
+// (0x0007) is documented as 512-byte (companion PR #49), while 512-byte writes render
+// black on rev. 2 (0x0060) per three independent reports (Lyagva PR #1, opendeck-ampgd6
+// PR #4 and PR #5). Do not "fix" this into a single value.
+test('Fifine D6 rev. 1 uses 512-byte packets, rev. 2 uses 1024-byte packets', () => {
+  assert.equal(FIFINE_D6_MODEL.wire!.packetSize, 512);
+  assert.equal(FIFINE_D6_REV2_MODEL.wire!.packetSize, 1024);
+});
+
+test('Fifine D6 models share every wire field except packetSize', () => {
+  assert.equal(wireWithoutPacketSize(FIFINE_D6_MODEL), wireWithoutPacketSize(FIFINE_D6_REV2_MODEL));
+});
+
+test('Fifine D6 models use the v3 wire behaviour (press+release, STP after image)', () => {
+  for (const model of [FIFINE_D6_MODEL, FIFINE_D6_REV2_MODEL]) {
+    assert.equal(model.protocol, 'mirabox-cora');
+    assert.equal(model.driverKind, 'mirabox');
+    assert.equal(model.wire!.inSize, 512);
+    assert.equal(model.wire!.heartbeatMs, 8000);
+    assert.equal(model.wire!.synthesizeKeyUp, false);
+    assert.equal(model.wire!.sendStpAfterImage, true);
+    // Unique per-unit serials (the 0x0060 USB dump shows 81D0DA784037), so no
+    // model-id disambiguation in deviceKeyFor().
+    assert.equal(model.wire!.sharedSerial, undefined);
+    // Pacing stays off until hardware proves it necessary (busy-wait on the worker).
+    assert.equal(model.wire!.chunkDelayMs, undefined);
+  }
+});
+
+// Packet size is the one D6 unknown the device can settle for itself, so both
+// revisions opt into the report-descriptor probe. The list must contain BOTH sizes:
+// it is what the probe is allowed to choose between, not a description of this model.
+test('Fifine D6 models let the report descriptor arbitrate the packet size', () => {
+  for (const model of [FIFINE_D6_MODEL, FIFINE_D6_REV2_MODEL]) {
+    assert.deepEqual(Array.from(model.wire!.packetSizeCandidates!), [512, 1024]);
+    // Each revision's own default must be one of the candidates, or the probe could
+    // never confirm it and the warning would fire on correctly-configured hardware.
+    assert.ok(
+      model.wire!.packetSizeCandidates!.includes(model.wire!.packetSize),
+      `${model.id}: packetSize ${model.wire!.packetSize} missing from its own candidates`,
+    );
+  }
+});
+
+// The probe is opt-in: hardware-verified models must not be exposed to it.
+test('hardware-verified models do not opt into the packet-size probe', () => {
+  for (const model of [MIRABOX_293_MODEL, MIRABOX_293S_MODEL, MIRABOX_K1PRO_MODEL]) {
+    assert.equal(model.wire?.packetSizeCandidates, undefined);
+  }
+});
+
+test('Fifine D6 model ids and names are distinct per revision', () => {
+  assert.notEqual(FIFINE_D6_MODEL.id, FIFINE_D6_REV2_MODEL.id);
+  assert.notEqual(FIFINE_D6_MODEL.name, FIFINE_D6_REV2_MODEL.name);
+});
+
 // ── akp153-v1-clones (7 v1 rebadges of the 293S board) ───────────────────────
 
 console.log('\ndevice-models: akp153-v1-clones');
@@ -231,8 +327,8 @@ test('findModel returns null for a known VID but unknown PID', () => {
 
 console.log('\ndevice-models: DEVICE_MODELS ordering');
 
-test('DEVICE_MODELS contains exactly 14 models', () => {
-  assert.equal(DEVICE_MODELS.length, 14);
+test('DEVICE_MODELS contains exactly 16 models', () => {
+  assert.equal(DEVICE_MODELS.length, 16);
 });
 
 test('DEFAULT_MODEL is MK2_MODEL', () => {
@@ -299,6 +395,12 @@ test('mirabox-k1pro coraToWireImage is a permutation of 1..6', () => {
     MIRABOX_K1PRO_MODEL.keyMap.coraToWireImage!,
     MIRABOX_K1PRO_MODEL.keyCount,
   );
+});
+
+test('fifine-d6 (both revisions) coraToWireImage is a permutation of 1..15', () => {
+  for (const model of [FIFINE_D6_MODEL, FIFINE_D6_REV2_MODEL]) {
+    assertPermutation(model.id, model.keyMap.coraToWireImage!, model.keyCount);
+  }
 });
 
 test('mk2 has empty keyMap (identity mapping)', () => {

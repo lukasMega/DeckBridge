@@ -36,28 +36,71 @@ export interface HidapiSymbols {
   hid_get_feature_report(device: unknown, buf: Uint8Array, len: number): number;
   hid_close(device: unknown): void;
   hid_error(device: unknown): string | null;
+  /** hidapi >= 0.14 only. Absent on older builds — always check before calling, or
+   *  go through getReportDescriptor(). See tryLoad()'s two-stage dlopen. */
+  hid_get_report_descriptor?(device: unknown, buf: Uint8Array, len: number): number;
 }
 
 const HID_ENUM = 'deckbridge-native';
 
+/* prettier-ignore */
+const HIDAPI_CORE_SYMBOLS = {
+  hid_init:               { args: [],                            returns: INT     },
+  hid_exit:               { args: [],                            returns: INT     },
+  hid_open:               { args: [UINT16, UINT16, POINTER],     returns: POINTER },
+  hid_open_path:          { args: [STRING],                      returns: POINTER },
+  hid_write:              { args: [POINTER, BUFFER, SIZE_T],     returns: INT     },
+  hid_read_timeout:       { args: [POINTER, BUFFER, SIZE_T, INT],returns: INT     },
+  hid_send_feature_report:{ args: [POINTER, BUFFER, SIZE_T],     returns: INT     },
+  hid_get_feature_report: { args: [POINTER, BUFFER, SIZE_T],     returns: INT     },
+  hid_close:              { args: [POINTER],                     returns: 'void'  },
+  hid_error:              { args: [POINTER],                     returns: STRING  },
+};
+
+/* prettier-ignore */
+const HIDAPI_DESCRIPTOR_SYMBOL = {
+  hid_get_report_descriptor: { args: [POINTER, BUFFER, SIZE_T],   returns: INT     },
+};
+
 function tryLoad(path: string): { symbols: HidapiSymbols; close(): void } {
   debug('ffi', `dlopen: trying ${path}`);
 
-  /* prettier-ignore */
-  const lib = FFI.dlopen(path, {
-    hid_init:               { args: [],                            returns: INT     },
-    hid_exit:               { args: [],                            returns: INT     },
-    hid_open:               { args: [UINT16, UINT16, POINTER],     returns: POINTER },
-    hid_open_path:          { args: [STRING],                      returns: POINTER },
-    hid_write:              { args: [POINTER, BUFFER, SIZE_T],     returns: INT     },
-    hid_read_timeout:       { args: [POINTER, BUFFER, SIZE_T, INT],returns: INT     },
-    hid_send_feature_report:{ args: [POINTER, BUFFER, SIZE_T],     returns: INT     },
-    hid_get_feature_report: { args: [POINTER, BUFFER, SIZE_T],     returns: INT     },
-    hid_close:              { args: [POINTER],                     returns: 'void'  },
-    hid_error:              { args: [POINTER],                     returns: STRING  },
-  });
-  debug('ffi', `dlopen: loaded ${path}`);
-  return lib as unknown as { symbols: HidapiSymbols; close(): void };
+  // Two-stage: hid_get_report_descriptor only exists in hidapi >= 0.14, and dlopen
+  // resolves every symbol up front — asking for it against an older lib would fail the
+  // whole load and take the device offline. So try the richer map first and silently
+  // fall back to the core one, leaving the optional symbol undefined.
+  let lib: unknown;
+  try {
+    lib = FFI.dlopen(path, { ...HIDAPI_CORE_SYMBOLS, ...HIDAPI_DESCRIPTOR_SYMBOL });
+    debug('ffi', `dlopen: loaded ${path} (with hid_get_report_descriptor)`);
+  } catch {
+    lib = FFI.dlopen(path, HIDAPI_CORE_SYMBOLS);
+    debug('ffi', `dlopen: loaded ${path} (hidapi < 0.14 — no hid_get_report_descriptor)`);
+  }
+  return lib as { symbols: HidapiSymbols; close(): void };
+}
+
+/** Raw HID report descriptor for an open device, or null when hidapi is too old to
+ *  expose it, the call fails, or the device returns nothing. Never throws — a device
+ *  that won't describe itself is a fallback-to-defaults case, not an error. */
+export function getReportDescriptor(
+  hid: HidapiSymbols,
+  device: unknown,
+  maxBytes: number,
+): Uint8Array | null {
+  if (typeof hid.hid_get_report_descriptor !== 'function') return null;
+  try {
+    const buf = new Uint8Array(maxBytes);
+    const n = hid.hid_get_report_descriptor(device, buf, buf.length);
+    if (n <= 0) {
+      debug('ffi', `hid_get_report_descriptor returned ${n}`);
+      return null;
+    }
+    return buf.subarray(0, Math.min(n, buf.length));
+  } catch (e) {
+    warn('ffi', `hid_get_report_descriptor threw: ${String(e)}`);
+    return null;
+  }
 }
 
 interface HidEnumSymbols {

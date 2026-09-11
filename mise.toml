@@ -329,3 +329,22 @@ run = """
   node scripts/coverage-report.mjs
 """
 timeout = "120s"
+
+[tasks.video-dev]
+description = "Remotion Studio for the product video (video/)"
+dir = "video"
+run = "npm run dev"
+
+[tasks.video-shots]
+description = "Recapture the web UI screenshots the video zooms into (needs DeckBridge running)"
+dir = "video"
+run = "node scripts/shots.mjs"
+
+[tasks.video-render]
+description = "Render the product video, both cuts -> video/out/"
+dir = "video"
+run = """
+  npm run render
+  npm run render:vertical
+"""
+timeout = "1800s"
