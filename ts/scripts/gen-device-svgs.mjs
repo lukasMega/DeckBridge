@@ -35,7 +35,7 @@ const KNOB_R = 21; // rotary encoder radius
 const KNOB_BAND = 60; // vertical space a knob row occupies
 const PAD = 28; // canvas padding around the chassis (room for the stand + shadow)
 
-/** Chassis colourways. All share the same shading recipe; only the tones differ. */
+/** Chassis colorways. All share the same shading recipe; only the tones differ. */
 const CHASSIS = {
   graphite: { top: '#3a3d45', bottom: '#25272d', edge: '#14161a', text: '#9aa0ad' },
   black: { top: '#2a2c31', bottom: '#17181c', edge: '#0c0d10', text: '#8d939f' },

@@ -44,8 +44,8 @@ node ts/scripts/gen-device-svgs.mjs --check   # fail if any file is out of date
 | Labels | brand wordmark in its real position (top / top-left / bottom / bottom-right), grid caption on the free edge of the same band |
 | Underglow | accent light bar along the base — Fifine D6 only |
 
-Colourways: `graphite` (Elgato), `black` (Mirabox, Mars Gaming, Mad Dog), `ink`
-(Ajazz, Fifine, Rise Mode, TMICE), `white` (the AKP153R light colourway).
+Colorways: `graphite` (Elgato), `black` (Mirabox, Mars Gaming, Mad Dog), `ink`
+(Ajazz, Fifine, Rise Mode, TMICE), `white` (the AKP153R light colorway).
 
 ## Findings from the photo research
 
@@ -65,7 +65,7 @@ driver model, not just the artwork:
    The illustration draws the deck module only, to keep the set consistent.
 3. **Chassis families split three ways on the stand.** Mad Dog GK150K and the Ajazz
    AKP153 family use a detachable wedge cradle; Mars Gaming, Rise Mode, TMICE and the
-   Fifine D6 are one-piece moulded wedges; the Mirabox 293V3 uses a folding 5-position
+   Fifine D6 are one-piece molded wedges; the Mirabox 293V3 uses a folding 5-position
    easel bracket; the Elgato Mini's wedge is integral while the MK.2's is detachable.
 
 > **Grid caveat.** The key grids always mirror `ts/src/devices/registry.ts` — what
@@ -135,7 +135,7 @@ photography:
 | `tmice-stream-controller` | `tmice-stream-controller/` |
 
 **No distinct photography exists for the AKP153R.** It is a regional SKU of the AKP153 —
-identical chassis, different USB IDs. Both black and white colourways shipped under all
+identical chassis, different USB IDs. Both black and white colorways shipped under all
 three AKP153 SKUs.
 
 ### Elgato Stream Deck MK.2 — `elgato.com` (official CDN)
@@ -143,7 +143,7 @@ three AKP153 SKUs.
 | File | Shot | Source |
 |---|---|---|
 | `hero-black.jpg` | 3/4 front-left in wedge stand, keys lit | [cloudinary](https://res.cloudinary.com/elgato-pwa/image/upload/v1679475550/Products/10GBA9901/above-the-fold/desktop/mk.2-black-01_seyirh.jpg) · [page](https://www.elgato.com/us/en/p/stream-deck-mk2-black) |
-| `hero-white.jpg` | Same pose, ice colourway | [cloudinary](https://res.cloudinary.com/elgato-pwa/image/upload/v1679475637/Products/10GBA9911/above-the-fold/desktop/mk.2-white-01_vzth4y.jpg) · [page](https://www.elgato.com/us/en/p/stream-deck-mk2-white) |
+| `hero-white.jpg` | Same pose, ice colorway | [cloudinary](https://res.cloudinary.com/elgato-pwa/image/upload/v1679475637/Products/10GBA9911/above-the-fold/desktop/mk.2-white-01_vzth4y.jpg) · [page](https://www.elgato.com/us/en/p/stream-deck-mk2-white) |
 | `in-the-box.png` | Flat-lay, unit out of the cradle, unlit keys — best proportion reference | [cloudinary](https://res.cloudinary.com/elgato-pwa/image/upload/f_auto/q_auto/v1757598042/Products/10GBA9901/In%20The%20Box/Stream_Deck_MK2_Black_In_The_Box_New.png) |
 | `desk-rear.jpg` | Rear-3/4 on desk, cable exit | [cloudinary](https://res.cloudinary.com/elgato-pwa/image/upload/v1676211190/Products/10GBA9901/above-the-fold/desktop/mk.2-black-abf-desktop-02_oqbdpl.jpg) |
 
@@ -161,7 +161,7 @@ the rear. No knobs or side buttons.
 | `in-the-box.png` | Flat-lay — clearest view of the one-piece base and rear cable exit | [cloudinary](https://res.cloudinary.com/elgato-pwa/image/upload/f_auto/q_auto/v1774253621/Products/10GAI9901/In%20The%20Box/Stream_Deck_Mini_In_The_Box_v2.png) |
 | `desk-front.jpg` | Near-front on a dark desk, keys legible | [cloudinary](https://res.cloudinary.com/elgato-pwa/image/upload/v1747742493/Products/10GAI9901/above-the-fold/NEW/Stream-Deck-Mini-ATF-03.jpg) |
 
-Design notes: matte black only. Body and wedge base are **one continuous moulding** — no
+Design notes: matte black only. Body and wedge base are **one continuous molding** — no
 removable cradle, no faceplate. Same asymmetric bezel language as the MK.2, proportionally
 more prominent top band. 3×2 keys at the same size/pitch as MK.2 keys. USB-C at the rear,
 offset left.
@@ -175,7 +175,7 @@ offset left.
 | `tilt-positions.jpg` | Five side-profile silhouettes, every tilt incl. flat | [cdn](https://cdn.shopify.com/s/files/1/0369/7721/3576/files/293-V3-EN-1700-10.jpg) |
 | `spec-infographic.jpg` | Caliper dimensions + "Aluminum Alloy Panel (Anodizing)" callout | [cdn](https://cdn.shopify.com/s/files/1/0369/7721/3576/files/293_a0f063c3-f405-4328-aa1a-6c304dd4d69e.jpg) |
 
-Design notes: matte anodized aluminium front plate, black plastic rear shell. Squarer
+Design notes: matte anodized aluminum front plate, black plastic rear shell. Squarer
 plate (~3–4 mm radius), near-uniform bezel, **no top branding band** — circular MiraBox
 mark bottom-right. Keys are raised transparent caps standing proud of the plate over a
 single continuous LCD; key area ~115×60 mm, gap ~0.3–0.35× key width. Detachable folding
@@ -204,7 +204,7 @@ pass-through. USB-C centred on the rear.
 | `ajazz-akp153/side-screen-macro.jpg` | Macro of the right column — one continuous flush LCD, 3 zones | [cdn](https://cdn.shopify.com/s/files/1/0823/5050/6282/files/3_ca8e5f5f-7320-4514-8978-dd8f1be571cc.jpg?v=1712582668) |
 | `ajazz-akp153/catalog.jpg` | Catalogue hero | [cdn](https://cdn.shopify.com/s/files/1/0823/5050/6282/files/AKP153.jpg?v=1712557588) |
 | `ajazz-akp153/feature.jpg` | Feature panel | [cdn](https://cdn.shopify.com/s/files/1/0823/5050/6282/files/2_4b8b6d37-91e7-42c2-86f6-672c83bd29fe.jpg?v=1712582669) |
-| `ajazz-akp153e/hero.jpg` | White angled + black flat, both colourways | [cdn](https://cdn.shopify.com/s/files/1/0704/7210/6227/files/AKP153E.jpg?v=1772158720) · [page](https://ajazzbrand.com/products/ajazz-akp153-desk-controller) |
+| `ajazz-akp153e/hero.jpg` | White angled + black flat, both colorways | [cdn](https://cdn.shopify.com/s/files/1/0704/7210/6227/files/AKP153E.jpg?v=1772158720) · [page](https://ajazzbrand.com/products/ajazz-akp153-desk-controller) |
 | `ajazz-akp153e/pair.jpg` | Black + white pair 3/4, USB-C visible on the left flank | [cdn](https://cdn.shopify.com/s/files/1/0704/7210/6227/files/1_05acd579-c97d-4369-b26d-41c6fe8907c6.jpg?v=1772158720) |
 | `ajazz-akp153e/feature.jpg` | Feature panel | [cdn](https://cdn.shopify.com/s/files/1/0704/7210/6227/files/1.2.jpg?v=1772158720) |
 
@@ -226,7 +226,7 @@ title cards reads "AKP153 Studio Controller", confirming a single physical produ
 | `topdown-white.jpg` | Flat top-down + bottom-down, white variant — ideal tracing reference | [shine-tone](https://shine-tone.com/cdn/shop/files/A06.jpg?v=1751889091&width=1946) |
 
 Design notes: 386×143×38 mm TKL tray case, matte black or white, 850 g. The deck module
-runs down the right side: a trough of **3 knurled aluminium knobs**, then a recessed
+runs down the right side: a trough of **3 knurled aluminum knobs**, then a recessed
 3×2 LCD key island (transparent glossy caps, gap ≈ 0.35–0.4× key width), then a status LED
 strip and the arrow cluster. USB-C on the rear edge behind the knob trough. Flip-out feet,
 no detachable stand, no logo on the deck module. Standalone equivalent: the **MiraBox N3**
@@ -239,10 +239,10 @@ no detachable stand, no logo on the deck module. Standalone equivalent: the **Mi
 | `front.png` | Black, 3/4 top-front hero, keys lit, RGB underglow | [cdn](https://fifinemicrophone.com/cdn/shop/files/FIFINE-ampligame-D6-stream-controller-black-front-view.png) · [page](https://fifinemicrophone.com/products/fifine-ampligame-d6-stream-deck) |
 | `back.png` | Rear 3/4 — fifine logo on the riser, USB-C + RGB button, wedge foot | [cdn](https://fifinemicrophone.com/cdn/shop/files/FIFINE-ampligame-D6-stream-controller-black-back-view.png) |
 | `left-side.png` | Steep left iso — wedge slope + perimeter RGB strip | [cdn](https://fifinemicrophone.com/cdn/shop/files/FIFINE-ampligame-D6-stream-controller-black-left-side-view.png) |
-| `white-front.png` | White colourway, front 3/4 | [cdn](https://fifinemicrophone.com/cdn/shop/files/FIFINE-ampligame-D6-stream-controller-white-front-view.png) |
+| `white-front.png` | White colorway, front 3/4 | [cdn](https://fifinemicrophone.com/cdn/shop/files/FIFINE-ampligame-D6-stream-controller-white-front-view.png) |
 | `in-the-box.jpg` | **Keys dark/unlit** — best bezel + key-well geometry reference | [cdn](https://fifinemicrophone.com/cdn/shop/files/What_s_Included_in_FIFINE_AmpliGame_D6_Stream_Controller.jpg) |
 
-Design notes: matte black (also white, MPN `D6W`). Doorstop wedge with the tilt moulded
+Design notes: matte black (also white, MPN `D6W`). Doorstop wedge with the tilt molded
 into the body — **no stand at all**. Wide top bezel carrying a centred `AMPLIGAME`
 wordmark; `fifine` lowercase on the rear riser. 5×3 domed caps in recessed square wells,
 the tightest gap of the set (~0.18–0.2× pitch). A continuous diffused RGB strip runs the
@@ -260,7 +260,7 @@ same hardware, different SKU name.
 | `white-side.jpg` | White, same angle | [cdn](https://marsgaming.eu/35437-large_default/msd-one.jpg) |
 | `keycap-macro.jpg` | Low-angle macro — keycap relief, side strip | [cdn](https://marsgaming.eu/35438-large_default/msd-one.jpg) |
 
-Design notes: graphite or white matte. **One-piece wedge** — body and riser moulded
+Design notes: graphite or white matte. **One-piece wedge** — body and riser molded
 together, large triangular cutout through both sides tapering to a thin front lip. 5×3
 translucent caps with visible clear side walls; right-hand 3-segment flush strip
 (clock+city / temperature+weather / date). `MARS GAMING` centred on the top bezel. Cable
@@ -302,7 +302,7 @@ Design notes: matte black (`-B`) or white (`-W`, Kabum product 516954). ABS body
 buttons, 132×85×63 mm. **One-piece wedge** with a large rounded-triangle cutout through
 each side. 5×3 glossy clear-walled caps (LCD area 15.5×15.5 mm), generous bezel margin;
 right column is one continuous glossy LCD window spanning all three key rows, split into
-three tiles, **noticeably wider than the inter-column gap**. Branding is a stylised flame
+three tiles, **noticeably wider than the inter-column gap**. Branding is a stylized flame
 glyph only — no wordmark — tampo-printed light grey on the bottom bezel under column 3.
 USB-C rear, bottom-centre.
 
