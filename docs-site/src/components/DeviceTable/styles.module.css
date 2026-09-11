@@ -146,6 +146,14 @@
   border: 0;
 }
 
+/* Columns carry a `title` description; the underline is the affordance for it. */
+.described {
+  text-decoration: underline dotted;
+  text-decoration-color: var(--ifm-color-emphasis-500);
+  text-underline-offset: 0.2em;
+  cursor: help;
+}
+
 .arrow {
   font-size: 0.7em;
   opacity: 0.5;
