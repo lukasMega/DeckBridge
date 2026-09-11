@@ -96,11 +96,91 @@ function jitter(id, i) {
   return ((h >>> 0) % 1000) / 1000;
 }
 
+function renderKeys({ d, c, gap, px, py, uid }) {
+  const elements = [];
+  for (let row = 0; row < d.rows; row++) {
+    for (let col = 0; col < d.cols; col++) {
+      const i = row * d.cols + col;
+      const j = jitter(d.id, i);
+      const lit = j > 0.66;
+      const x = px + col * (KEY + gap);
+      const y = py + row * (KEY + gap);
+      elements.push(
+        `<g transform="translate(${x},${y})">` +
+          `<rect width="${KEY}" height="${KEY}" rx="${KEY_R}" fill="${c.edge}"/>` +
+          `<rect x="1" y="1" width="${KEY - 2}" height="${KEY - 2}" rx="${KEY_R - 1}" fill="url(#idle${uid})"/>` +
+          (lit
+            ? `<rect x="1" y="1" width="${KEY - 2}" height="${KEY - 2}" rx="${KEY_R - 1}" fill="${d.accent}" opacity="${(0.35 + j * 0.6).toFixed(2)}"/>`
+            : '') +
+          `<rect x="1" y="1" width="${KEY - 2}" height="${KEY - 2}" rx="${KEY_R - 1}" fill="url(#gloss${uid})"/>` +
+          `<rect x="1.5" y="1.5" width="${KEY - 3}" height="${KEY - 3}" rx="${KEY_R - 1.5}" fill="none" stroke="#ffffff" stroke-opacity="0.07"/>` +
+          `</g>`,
+      );
+    }
+  }
+  return elements.join('');
+}
+
+function renderStrip({ d, c, gap, gridW, panelH, px, py, uid }) {
+  if (!d.strip) return '';
+
+  const sx = px + gridW + gap;
+  const segH = panelH / 3;
+  const segments = Array.from({ length: 3 }, (_, i) => {
+    const j = jitter(`${d.id}:strip`, i);
+    const y = i * segH;
+    const divider =
+      i > 0
+        ? `<rect x="6" y="${y.toFixed(1)}" width="${STRIP_W - 12}" height="1" fill="#ffffff" opacity="0.10"/>`
+        : '';
+    return (
+      `<rect x="7" y="${(y + segH / 2 - 7).toFixed(1)}" width="${STRIP_W - 14}" height="4" rx="2" fill="${d.accent}" opacity="${(0.3 + j * 0.5).toFixed(2)}"/>` +
+      `<rect x="7" y="${(y + segH / 2 + 1).toFixed(1)}" width="${(STRIP_W - 14) * (0.4 + j * 0.5)}" height="3" rx="1.5" fill="#ffffff" opacity="0.16"/>` +
+      divider
+    );
+  }).join('');
+  return (
+    `<g transform="translate(${sx},${py})">` +
+    `<rect width="${STRIP_W}" height="${panelH}" rx="6" fill="${c.edge}"/>` +
+    `<rect x="1" y="1" width="${STRIP_W - 2}" height="${panelH - 2}" rx="5" fill="url(#idle${uid})"/>` +
+    segments +
+    `<rect x="1" y="1" width="${STRIP_W - 2}" height="${panelH - 2}" rx="5" fill="url(#gloss${uid})"/>` +
+    `</g>`
+  );
+}
+
+function renderStand(d, c, bx, by, bodyW, bodyH) {
+  if (d.stand === 'wedge') {
+    return `<path d="M ${bx + bodyW * 0.2} ${by + 10} H ${bx + bodyW * 0.8} L ${bx + bodyW * 0.88} ${by + bodyH + 13} H ${bx + bodyW * 0.12} Z" fill="${c.edge}" opacity="0.85"/>`;
+  }
+  if (d.stand === 'integrated') {
+    return `<path d="M ${bx + 4} ${by + bodyH - 26} H ${bx + bodyW - 4} L ${bx + bodyW + 6} ${by + bodyH + 14} H ${bx - 6} Z" fill="${c.bottom}" opacity="0.95"/>`;
+  }
+  if (d.stand === 'bracket') {
+    return (
+      `<rect x="${bx + bodyW * 0.22}" y="${by + bodyH - 6}" width="9" height="18" rx="3" fill="${c.edge}" opacity="0.85"/>` +
+      `<rect x="${bx + bodyW * 0.78 - 9}" y="${by + bodyH - 6}" width="9" height="18" rx="3" fill="${c.edge}" opacity="0.85"/>` +
+      `<rect x="${bx + bodyW * 0.18}" y="${by + bodyH + 8}" width="${bodyW * 0.64}" height="6" rx="3" fill="${c.edge}" opacity="0.7"/>`
+    );
+  }
+  return '';
+}
+
+function renderWordmark(d, c, bx, bodyW, bandMidY, font) {
+  if (d.label === 'top') {
+    return `<text x="${bx + bodyW / 2}" y="${bandMidY}" text-anchor="middle" font-family="${font}" font-size="13" font-weight="600" letter-spacing="2.4" fill="${c.text}">${d.brand}</text>`;
+  }
+  if (d.label === 'bottom-right') {
+    return `<text x="${bx + bodyW - BEZEL}" y="${bandMidY}" text-anchor="end" font-family="${font}" font-size="13" font-weight="600" letter-spacing="2.4" fill="${c.text}">${d.brand}</text>`;
+  }
+  return `<text x="${bx + BEZEL}" y="${bandMidY}" font-family="${font}" font-size="13" font-weight="600" letter-spacing="2.4" fill="${c.text}">${d.brand}</text>`;
+}
+
 function render(d) {
   const c = CHASSIS[d.chassis];
   const gap = Math.round(KEY * d.gap);
   const knobs = d.knobs ?? 0;
-  const labelTop = d.label === 'top' || d.label === 'top-left';
+  const labelTop = ['top', 'top-left'].includes(d.label);
 
   const gridW = d.cols * KEY + (d.cols - 1) * gap;
   const panelW = gridW + (d.strip ? gap + STRIP_W : 0);
@@ -116,58 +196,13 @@ function render(d) {
 
   const uid = d.id.replace(/[^a-z0-9]/g, '');
 
-  // --- keys ---------------------------------------------------------------
-  const keyEls = [];
-  for (let r = 0; r < d.rows; r++) {
-    for (let col = 0; col < d.cols; col++) {
-      const i = r * d.cols + col;
-      const j = jitter(d.id, i);
-      const lit = j > 0.66;
-      const x = px + col * (KEY + gap);
-      const y = py + r * (KEY + gap);
-      keyEls.push(
-        `<g transform="translate(${x},${y})">` +
-          `<rect width="${KEY}" height="${KEY}" rx="${KEY_R}" fill="${c.edge}"/>` +
-          `<rect x="1" y="1" width="${KEY - 2}" height="${KEY - 2}" rx="${KEY_R - 1}" fill="url(#idle${uid})"/>` +
-          (lit
-            ? `<rect x="1" y="1" width="${KEY - 2}" height="${KEY - 2}" rx="${KEY_R - 1}" fill="${d.accent}" opacity="${(0.35 + j * 0.6).toFixed(2)}"/>`
-            : '') +
-          `<rect x="1" y="1" width="${KEY - 2}" height="${KEY - 2}" rx="${KEY_R - 1}" fill="url(#gloss${uid})"/>` +
-          `<rect x="1.5" y="1.5" width="${KEY - 3}" height="${KEY - 3}" rx="${KEY_R - 1.5}" fill="none" stroke="#ffffff" stroke-opacity="0.07"/>` +
-          `</g>`,
-      );
-    }
-  }
+  const keyEls = renderKeys({ d, c, gap, px, py, uid });
 
   // --- side status strip ---------------------------------------------------
   // One flush LCD divided into 3 zones — deliberately NOT drawn as keycaps: on the
   // real 18-key boards this column is a display, even though DeckBridge exposes its
   // three zones as extra key ids.
-  let stripEls = '';
-  if (d.strip) {
-    const sx = px + gridW + gap;
-    const segH = panelH / 3;
-    const segs = Array.from({ length: 3 }, (_, i) => {
-      const j = jitter(`${d.id}:strip`, i);
-      const y = i * segH;
-      const divider =
-        i > 0
-          ? `<rect x="6" y="${y.toFixed(1)}" width="${STRIP_W - 12}" height="1" fill="#ffffff" opacity="0.10"/>`
-          : '';
-      return (
-        `<rect x="7" y="${(y + segH / 2 - 7).toFixed(1)}" width="${STRIP_W - 14}" height="4" rx="2" fill="${d.accent}" opacity="${(0.3 + j * 0.5).toFixed(2)}"/>` +
-        `<rect x="7" y="${(y + segH / 2 + 1).toFixed(1)}" width="${(STRIP_W - 14) * (0.4 + j * 0.5)}" height="3" rx="1.5" fill="#ffffff" opacity="0.16"/>` +
-        divider
-      );
-    }).join('');
-    stripEls =
-      `<g transform="translate(${sx},${py})">` +
-      `<rect width="${STRIP_W}" height="${panelH}" rx="6" fill="${c.edge}"/>` +
-      `<rect x="1" y="1" width="${STRIP_W - 2}" height="${panelH - 2}" rx="5" fill="url(#idle${uid})"/>` +
-      segs +
-      `<rect x="1" y="1" width="${STRIP_W - 2}" height="${panelH - 2}" rx="5" fill="url(#gloss${uid})"/>` +
-      `</g>`;
-  }
+  const stripEls = renderStrip({ d, c, gap, gridW, panelH, px, py, uid });
 
   // --- knobs ---------------------------------------------------------------
   const knobY = py + panelH + KNOB_BAND / 2;
@@ -188,34 +223,14 @@ function render(d) {
 
   // --- stand ---------------------------------------------------------------
   // Front elevation, so the four stand types read as silhouette differences only.
-  let standEls = '';
-  if (d.stand === 'wedge') {
-    // Separate cradle the slab drops into — a slab peeking out below and behind.
-    standEls = `<path d="M ${bx + bodyW * 0.2} ${by + 10} H ${bx + bodyW * 0.8} L ${bx + bodyW * 0.88} ${by + bodyH + 13} H ${bx + bodyW * 0.12} Z" fill="${c.edge}" opacity="0.85"/>`;
-  } else if (d.stand === 'integrated') {
-    // One-piece wedge: the body itself flares into a wider base.
-    standEls = `<path d="M ${bx + 4} ${by + bodyH - 26} H ${bx + bodyW - 4} L ${bx + bodyW + 6} ${by + bodyH + 14} H ${bx - 6} Z" fill="${c.bottom}" opacity="0.95"/>`;
-  } else if (d.stand === 'bracket') {
-    // Folding easel: two thin legs plus a front rail.
-    standEls =
-      `<rect x="${bx + bodyW * 0.22}" y="${by + bodyH - 6}" width="9" height="18" rx="3" fill="${c.edge}" opacity="0.85"/>` +
-      `<rect x="${bx + bodyW * 0.78 - 9}" y="${by + bodyH - 6}" width="9" height="18" rx="3" fill="${c.edge}" opacity="0.85"/>` +
-      `<rect x="${bx + bodyW * 0.18}" y="${by + bodyH + 8}" width="${bodyW * 0.64}" height="6" rx="3" fill="${c.edge}" opacity="0.7"/>`;
-  }
+  const standEls = renderStand(d, c, bx, by, bodyW, bodyH);
 
   // --- labels --------------------------------------------------------------
   const bandMidY = labelTop ? by + BAND / 2 + 5 : by + bodyH - BAND / 2 + 5;
-  const gridLabel = `${d.cols}×${d.rows}${d.strip ? ' + 3' : ''}${knobs ? ` + ${knobs}○` : ''}`;
+  const knobLabel = knobs ? ` + ${knobs}○` : '';
+  const gridLabel = `${d.cols}×${d.rows}${d.strip ? ' + 3' : ''}${knobLabel}`;
   const font = 'Inter, Helvetica Neue, Arial, sans-serif';
-  let wordmark;
-  if (d.label === 'top') {
-    wordmark = `<text x="${bx + bodyW / 2}" y="${bandMidY}" text-anchor="middle" font-family="${font}" font-size="13" font-weight="600" letter-spacing="2.4" fill="${c.text}">${d.brand}</text>`;
-  } else if (d.label === 'bottom-right') {
-    wordmark = `<text x="${bx + bodyW - BEZEL}" y="${bandMidY}" text-anchor="end" font-family="${font}" font-size="13" font-weight="600" letter-spacing="2.4" fill="${c.text}">${d.brand}</text>`;
-  } else {
-    // 'bottom' and 'top-left' both hang off the left bezel edge.
-    wordmark = `<text x="${bx + BEZEL}" y="${bandMidY}" font-family="${font}" font-size="13" font-weight="600" letter-spacing="2.4" fill="${c.text}">${d.brand}</text>`;
-  }
+  const wordmark = renderWordmark(d, c, bx, bodyW, bandMidY, font);
   // The grid caption shares the wordmark's band (the opposite band is only a plain
   // bezel and too shallow to hold text without touching the key recess) and hangs off
   // whichever edge the wordmark left free.
@@ -269,7 +284,7 @@ function render(d) {
   <rect x="${px - 7}" y="${py - 7}" width="${panelW + 14}" height="${recessH}" rx="14" fill="#000000" opacity="0.22"/>
 
   <!-- keys -->
-  <g>${keyEls.join('')}</g>
+  <g>${keyEls}</g>
   ${stripEls}
   ${knobEls ? `<g>${knobEls}</g>` : ''}
 
