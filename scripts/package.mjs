@@ -7,8 +7,9 @@
 // Requires: mise run compile already done
 //
 // Env:
-//   SRC_BIN       source binary to package (default "deckbridge"; "deckbridge-lite"
-//                 for the simple-only build). Always renamed to `deckbridge` in the zip.
+//   SRC_BIN       source binary to package (default "deckbridge", the shipped
+//                 simple-only build; "deckbridge-advanced" for the opt-in
+//                 advanced-view build). Always renamed to `deckbridge` in the zip.
 //   INCLUDE_TRAY  1 (default) bundles deckbridge-tray + status icons; 0 omits them.
 import { execSync, spawnSync } from 'node:child_process';
 import {
@@ -51,8 +52,8 @@ const archMap = { x64: 'x86_64', arm64: 'arm64' };
 const archName = archMap[process.arch];
 if (!archName) die(`error: unsupported arch: ${process.arch}`);
 
-// Source binary to package: deckbridge (full, default) or deckbridge-lite
-// (simple-only, from `mise run compile-simple`). The in-zip binary is always
+// Source binary to package: deckbridge (simple-only, default) or deckbridge-advanced
+// (advanced view, from `mise run compile-advanced`). The in-zip binary is always
 // named `deckbridge`, so runtime/tray/e2e behavior is identical either way.
 const srcBin = process.env.SRC_BIN || 'deckbridge';
 

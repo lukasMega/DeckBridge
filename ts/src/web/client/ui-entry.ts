@@ -63,7 +63,8 @@ void fetch('/api/state')
 
     mountSimple();
     // __SIMPLE_ONLY__ folds to a constant; esbuild DCEs this branch and tree-shakes
-    // mountAdvanced → AdvancedApp out of the bundle when building --simple-only.
+    // mountAdvanced → AdvancedApp out of the bundle — which is the default build
+    // (only `node build.mjs --advanced` keeps the advanced view).
     if (!__SIMPLE_ONLY__) mountAdvanced();
     connectWS();
     return undefined;

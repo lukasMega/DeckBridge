@@ -23,7 +23,7 @@ src-tauri/target/
 
 # Compiled binary
 deckbridge
-deckbridge-lite
+deckbridge-advanced
 
 # Tauri sidecar binaries (placed by CI or mise run bundle)
 src-tauri/binaries/deckbridge-*
