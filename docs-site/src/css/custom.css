@@ -314,6 +314,18 @@ html.db-no-anim *::after {
   height: 1.25rem;
 }
 
+/* ---- Theme-matched Web UI captures (docs/features.md) ----
+   features.md is CommonMark (`markdown.format: 'detect'`), so it can't use
+   <ThemedImage> like getting-started.mdx does — each state ships as a plain
+   Markdown image pair instead. The variants are keyed off the alt-text suffix,
+   not the URL: Markdown image URLs go through the asset pipeline, which appends
+   a content hash and drops any query string, so `src`-based selectors can't
+   match. Keep the `, light theme` / `, dark theme` alt suffixes in sync. */
+html[data-theme='light'] img[alt$='dark theme'],
+html[data-theme='dark'] img[alt$='light theme'] {
+  display: none;
+}
+
 /* ---- Interactive pairing stepper (docs/features.md) ----
    Pure-CSS, no JS: 4 hidden radios drive the SVG layers + controls through
    `#db-sN:checked ~` sibling selectors. Prev/Next are <label>s pointing at the
