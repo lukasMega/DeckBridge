@@ -6,15 +6,26 @@ slug: /introduction
 description: What DeckBridge is — use a USB Stream Deck with the Elgato app over your local network.
 ---
 
+import DeviceSummaryTable from '@site/src/components/DeviceSummaryTable';
+import deviceData from '@site/src/data/devices.generated.json';
+
 **DeckBridge** lets you use a USB Stream Deck with the Elgato Stream Deck app over your
 local network. It runs on your computer and appears to the app as a network device, so your
 keys and button images work over WiFi — no
 [Elgato Network Dock](https://www.elgato.com/us/en/p/network-dock-stream-deck) required.
 
 It's a free, community-built tool for personal and hobby use, shipped as a **standalone
-binary** (<5MB, no Node.js runtime needed).
+binary** (&lt;5MB, no Node.js runtime needed).
 
 > New here? Head to **[Getting Started](/getting-started)** to install and connect a deck.
+
+:::caution[Experimental project]
+DeckBridge is experimental. The author does not plan to add support for devices beyond
+those already listed as supported, but will accept reasonable pull requests for new
+devices when they include proof that the hardware works. DeckBridge supports only
+6-button (3×2) grids like the Stream Deck Mini and grids with up to 15 buttons (5×3)
+like the Stream Deck MK.2.
+:::
 
 ## How it works
 
@@ -25,26 +36,11 @@ write).
 
 ## Supported devices
 
-Side by side, with USB IDs and panel sizes: **[Supported devices](/devices)**. Every
-field DeckBridge uses to drive one: **[Device specs](/device-specs)**. Both pages are
-generated from the device registry.
+Search below, then open any device for its details. Compare USB IDs and panel sizes on
+**[Supported devices](/devices)**. Every field DeckBridge uses appears in
+**[Device specs](/device-specs)**. All three views come from the device registry.
 
-- **Mirabox 293V3** — also matches the HSV293SV3 / "293S V3" refresh (PID `0x1014`, untested)
-- **Mirabox 293S**
-- **Mirabox K1 Pro**
-- **Fifine AmpliGame D6 (rev. 2)** — PID `0x0060`, sold as "D6 Pro"
-- **Ajazz AKP153E (rev. 2)** — untested
-- **Ajazz AKP153R (rev. 2)** — untested
-- **Fifine AmpliGame D6** — untested (PID `0x0007`)
-- **Ajazz AKP153** — untested
-- **Ajazz AKP153E (rev. 1)** — untested
-- **Ajazz AKP153R (rev. 1)** — untested
-- **Mars Gaming MSD-ONE** — untested
-- **Mad Dog GK150K** — untested
-- **Risemode Vision 01** — untested
-- **TMICE Stream Controller** — untested
-- **Stream Deck MK.2**
-- **Stream Deck Mini**
+<DeviceSummaryTable data={deviceData} />
 
 Hardware-tested on macOS: 293V3, 293S, K1 Pro, Fifine AmpliGame D6 (rev. 2), and Stream
 Deck Mini; MK.2, the Ajazz AKP153 rev. 2 models, the Fifine AmpliGame D6 rev. 1, the 7 v1
@@ -62,12 +58,13 @@ ship **macOS builds only**. Linux and Windows support exists in the code but is
 untested and not yet released.
 :::
 
-<div style="border-left:4px solid #e6a700;background:rgba(230,167,0,0.12);padding:12px 16px;border-radius:6px;margin:20px 0">
-<strong>⚠ Disclaimer</strong><br/>
-Not affiliated with or endorsed by Elgato / Corsair (&ldquo;Stream Deck&rdquo; and &ldquo;Elgato&rdquo; are their trademarks). For <strong>hobby and personal use only</strong>; it <strong>does not replace the Elgato Network Dock</strong>. For professional setups, use official Elgato hardware.
-</div>
+:::warning[Disclaimer]
+Not affiliated with or endorsed by Elgato / Corsair ("Stream Deck" and "Elgato" are
+their trademarks). For **hobby and personal use only**; it **does not replace the Elgato
+Network Dock**. For professional setups, use official Elgato hardware.
+:::
 
-<div style="border-left:4px solid #25c2a0;background:rgba(37,194,160,0.1);padding:12px 16px;border-radius:6px;margin:20px 0">
-<strong>ℹ Nothing reverse-engineered</strong><br/>
-The USB HID and Elgato CORA handling is <strong>reused from existing open-source projects</strong> — DeckBridge only wires them together. Credits: <a href="/references">References</a>.
-</div>
+:::info[Nothing reverse-engineered]
+The USB HID and Elgato CORA handling is **reused from existing open-source projects** —
+DeckBridge only wires them together. Credits: [References](/references).
+:::

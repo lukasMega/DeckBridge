@@ -8,37 +8,31 @@ import ThemedImage from '@theme/ThemedImage';
 
 # Getting Started
 
-Two ways to get DeckBridge ([what it is](./introduction.md)): **run a packaged
-release** (easiest) or **build from source**.
+Use a packaged release, or build from source.
 
 ## 1. Get DeckBridge
 
 ### Option A — Packaged release (recommended)
 
 :::caution
-Releases are **built and tested on macOS**. Windows and Linux builds are produced by the
-same release workflow but are far less exercised — if one misbehaves, build from source
-(Option B). The Linux binaries need **glibc 2.38 or newer** (Ubuntu 24.04+, Debian 13+);
-on an older distro, build from source.
+Releases are **tested on macOS**. Windows and Linux builds receive less testing. Linux
+binaries need **glibc 2.38+** (Ubuntu 24.04+, Debian 13+). Build from source when needed.
 :::
 
-Download the build for your OS from the
-[project releases](https://github.com/lukasMega/DeckBridge/releases), unzip, and run. It's
-self-contained — the txiki.js runtime and native libraries (`libhidapi`,
-`libdeckbridge_native`) are embedded and auto-extract on first run. **No Node.js, no extra
-installs.**
+Download your [release](https://github.com/lukasMega/DeckBridge/releases), unzip it, then
+run it. Everything required is embedded. **No Node.js or extra installs.**
 
 ```bash
 ./deckbridge        # macOS / Linux
 deckbridge.exe      # Windows
 ```
 
-The macOS `.dmg` and Windows installer also bundle a small **system-tray** companion.
+macOS and Windows packages include a tray icon.
 
 <details id="option-b--build-from-source">
 <summary><b>Option B — Build from source</b></summary>
 
-Needs [mise](https://mise.jdx.dev), a Rust toolchain, and **libhidapi**:
+Install [mise](https://mise.jdx.dev), Rust, and **libhidapi**:
 
 - macOS: `brew install hidapi`
 - Debian/Ubuntu: `sudo apt install libhidapi-dev`
@@ -50,29 +44,25 @@ mise run start      # build everything + run
 mise run compile    # produce a standalone ./deckbridge binary
 ```
 
-mise fetches a prebuilt slim txiki.js runtime automatically — no C/C++ toolchain needed on
-macOS arm64, Windows, or Linux (x86_64/arm64). Only macOS x86_64 has no prebuilt asset and
-builds from source (needs git, cmake, npm, libffi). Set `TJS_FROM_SOURCE=1` to force the
-source build anywhere — e.g. on a distro older than glibc 2.38.
+mise downloads txiki.js automatically. macOS x86_64 builds it locally and also needs git,
+cmake, npm, and libffi. Set `TJS_FROM_SOURCE=1` to force a local build, including on Linux
+systems older than glibc 2.38.
 
 </details>
 
 ## 2. Plug in your deck
 
-Connect a [supported device](./introduction.md#supported-devices). DeckBridge probes on
-start and retries every 2 s until one opens. On **macOS**, grant **Input Monitoring** if
-prompted — HID reads need it (see [Permissions](./features.md#permissions)).
+Connect a [supported device](./introduction.mdx#supported-devices). DeckBridge retries every 2
+seconds until it finds one. On macOS, grant **Input Monitoring** when prompted.
 
 ## 3. Run it
 
-Start DeckBridge. It then:
+Start DeckBridge. It opens your deck, advertises a network dock, and serves:
 
-- opens the USB device,
-- advertises an Elgato Network Dock over mDNS (`_elg._tcp`),
-- listens on TCP **5343 / 5344** (CORA protocol),
-- serves a web UI at **http://localhost:3000**.
+- CORA on TCP **5343 / 5344**
+- web UI at **http://localhost:3000**
 
-In packaged releases (installers and release zips) the tray icon shows status at a glance:
+Packaged releases show current status:
 
 |                   Tray icon                    | State      | Meaning                                              |
 |:----------------------------------------------:|------------|------------------------------------------------------|
@@ -82,11 +72,8 @@ In packaged releases (installers and release zips) the tray icon shows status at
 
 ## 4. Pair with the Elgato app
 
-Open the Elgato Stream Deck app (or Companion) on any machine on the **same LAN**. It
-discovers DeckBridge like real Elgato hardware.
-
-The web UI walks you through it — it shows the connected deck and the exact address and
-port to enter in the Elgato app:
+Open Elgato Stream Deck or Companion on any computer using the **same LAN**. Follow the
+web UI. It shows the exact pairing address and port.
 
 <ThemedImage
   alt="DeckBridge web UI showing the guided pairing card with the connected Stream Deck MK.2 and the network address to add in the Elgato app"
@@ -96,29 +83,20 @@ port to enter in the Elgato app:
   }}
 />
 
-A **second deck** (different model) appears as its **own** network device on its **own
-port** (5345, 5347, …) — pair each separately. The web UI shows a card per deck with the
-exact address and port; see [Multiple decks](./features.md#multiple-decks).
+Each extra deck must use a different model. Pair each separately using its web UI card
+and port (5345, 5347, …). See [Multiple decks](./features.md#multiple-decks).
 
 ## Verify your setup
 
-- Open **http://localhost:3000** for the live key grid and log feed.
-- Or use the tray's **Check Requirements** → the `/requirements` diagnostics page (what
-  it checks: [Requirements](./features.md#requirements)).
-- The **Advanced** dashboard (key grid, mock devices, brightness, image-fit modes,
-  real-time log feed) is a developer view and is **not** part of the released binaries.
-  Build it from source with `mise run s-advanced`, then switch the web UI to **Advanced**
-  (top-right).
+- Open **http://localhost:3000**. Check live keys and logs.
+- Use tray → **Check Requirements** for [diagnostics](./features.md#requirements).
+- Developers can run `mise run s-advanced` for mock devices and extra controls. Released
+  binaries exclude this dashboard.
 
 ## Troubleshooting
 
-- **`port in use` (5343/5344)** — another DeckBridge, a real Network Dock, or the ESP32
-  bridge holds the CORA port. Stop it; DeckBridge keeps retrying every few seconds.
-- **No device found** — check the cable/port; on macOS grant Input Monitoring. DeckBridge
-  retries every 2 s.
-- **libhidapi missing (source build only)** — install it as in
-  [Build from source](#option-b--build-from-source).
-- **Permission denied opening the deck (Linux)** — add a udev rule; see
-  [Permissions](./features.md#permissions).
-- **Restrict network access** — set `DECKBRIDGE_BIND=127.0.0.1`; see
-  [Network ports](./features.md#network-ports).
+- **Ports 5343/5344 busy** — stop conflicting DeckBridge, Network Dock, or ESP32 bridge.
+- **No device** — check USB. On macOS, grant Input Monitoring.
+- **Missing libhidapi** — follow [source-build steps](#option-b--build-from-source).
+- **Linux permission denied** — add a [udev rule](./features.md#permissions).
+- **Restrict LAN access** — set `DECKBRIDGE_BIND=127.0.0.1`.
