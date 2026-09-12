@@ -43,6 +43,22 @@ try {
         '--no-first-run',
         '--disable-background-networking',
         '--disable-component-update',
+        // Headless Chrome still boots its full browser services. On a CI runner those
+        // reach for D-Bus/UPower/NetworkManager and retry GCM registration for tens of
+        // seconds, which is enough to keep `--virtual-time-budget` from ever expiring —
+        // so the DOM is never dumped and the run times out with a passing page. This is
+        // the puppeteer launch set, minus what is already above.
+        '--disable-sync',
+        '--disable-extensions',
+        '--disable-default-apps',
+        '--disable-component-extensions-with-background-pages',
+        '--disable-client-side-phishing-detection',
+        '--no-default-browser-check',
+        '--metrics-recording-only',
+        '--disable-breakpad',
+        '--mute-audio',
+        // Small /dev/shm (containers, some runners) crashes the renderer mid-load.
+        '--disable-dev-shm-usage',
         `--user-data-dir=${join(temp, 'profile')}`,
         '--virtual-time-budget=5000',
         '--dump-dom',
@@ -52,14 +68,17 @@ try {
     ));
     let htmlOutput = '';
     let stderrOutput = '';
+    // A passing run takes ~1 s locally; the budget only has to cover a cold CI browser
+    // start, so it is set well clear of that rather than tuned.
+    const timeoutMs = 90000;
     const timer = setTimeout(() => {
       child.kill('SIGKILL');
       reject(
         new Error(
-          `Browser regression tests timed out after 30s (no complete DOM dump). Chrome stderr:\n${stderrOutput}`,
+          `Browser regression tests timed out after ${timeoutMs / 1000}s (no complete DOM dump). Chrome (${chrome}) stderr:\n${stderrOutput}`,
         ),
       );
-    }, 30000);
+    }, timeoutMs);
     const settle = (result) => {
       clearTimeout(timer);
       child.removeAllListeners('close');
@@ -80,11 +99,16 @@ try {
       }
     });
     child.stderr.setEncoding('utf8');
+    let stderrHead = '';
+    let stderrTail = '';
     child.stderr.on('data', (chunk) => {
       // Chrome is chatty on stderr even on success (DevTools listening, GPU/crashpad
-      // notices). Keep only the tail: enough to diagnose a launch failure, not enough
-      // to bury the assertion message.
-      stderrOutput = (stderrOutput + chunk).slice(-4000);
+      // notices) and floods it on failure. Keep both ends: the launch/load error is in
+      // the head, the reason it is still alive is in the tail. A pure tail buffer hides
+      // the actual cause behind whatever noise Chrome emitted last.
+      if (stderrHead.length < 2000) stderrHead += chunk;
+      else stderrTail = (stderrTail + chunk).slice(-2000);
+      stderrOutput = stderrTail === '' ? stderrHead : `${stderrHead}\n…\n${stderrTail}`;
     });
     child.on('error', (error) => {
       clearTimeout(timer);

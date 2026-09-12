@@ -309,6 +309,13 @@ html.db-no-anim *::after {
   border-color: var(--ifm-color-primary);
   color: #fff;
 }
+
+/* Show matching real WebUI captures inside docs/features.md. */
+html[data-theme='light'] img[src$='#db-ui-dark'],
+html[data-theme='dark'] img[src$='#db-ui-light'] {
+  display: none;
+}
+
 .db-anim-toggle svg {
   width: 1.25rem;
   height: 1.25rem;

@@ -314,7 +314,9 @@ description = "Run Preact browser regression tests"
 dir = "ts"
 depends = ["ts-install"]
 run = "pnpm run test:client"
-timeout = "45s"
+# The script's own browser budget is 90s; keep this clear of it so a browser timeout
+# fails with the script's diagnostic (Chrome path + stderr) instead of a bare task kill.
+timeout = "150s"
 
 [tasks.docs-install]
 description = "Install docs-site pnpm dependencies"
