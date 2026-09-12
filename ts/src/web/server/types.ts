@@ -4,6 +4,7 @@ import type {
   ExtraKeyConfig,
   ImageModeOverride,
   DockStatus,
+  RealDeviceIdentity,
   ClientApp,
 } from '../../types.js';
 import type { PluginStatus } from '../../plugin-host.js';
@@ -102,6 +103,7 @@ export interface StateResponse extends StatusSnapshot {
   brightnessOverride: boolean;
   deviceModels: DeviceModelInfo[];
   deviceIdentity: DeviceIdentity;
+  realDeviceIdentity?: RealDeviceIdentity;
   // The SELECTED dock's extra-key assignments, keyed by device wire id.
   extraKeys: Record<string, ExtraKeyConfig>;
 }

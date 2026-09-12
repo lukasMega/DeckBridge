@@ -248,6 +248,11 @@ export class DeviceSession {
       macAddress: this.identity.macAddress,
       mdnsServiceName: this.identity.mdnsServiceName,
       deviceKey: this.identity.deviceKey,
+      realDeviceIdentity: {
+        modelName: this.model.name,
+        ...(this.deviceInfo?.serial ? { serialNumber: this.deviceInfo.serial } : {}),
+        ...(this.deviceInfo?.firmware ? { firmwareVersion: this.deviceInfo.firmware } : {}),
+      },
     };
   }
 

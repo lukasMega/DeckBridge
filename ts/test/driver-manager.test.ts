@@ -896,6 +896,11 @@ await test('C6. getDockStatuses(): scanOnce creating an extra returns 2 sorted e
     'primary primaryPort is ELGATO_TCP_PORT',
   );
   assert.equal(soloStatuses[0]?.elgatoConnected, false, 'no child client attached yet');
+  assert.deepEqual(soloStatuses[0]?.realDeviceIdentity, {
+    modelName: DEFAULT_MODEL.name,
+    serialNumber: 'SN',
+    firmwareVersion: '1.0',
+  });
 
   await driverManager.__scanOnce();
   assert.ok(

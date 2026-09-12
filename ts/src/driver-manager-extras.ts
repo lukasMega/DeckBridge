@@ -199,7 +199,10 @@ export class ExtraDockCoordinator {
       servers,
       driver,
       model,
-      deviceInfo: { serial: driver.deviceSerial, firmware: driver.deviceFirmware },
+      deviceInfo: {
+        serial: driver.deviceSerial ?? serial ?? undefined,
+        firmware: driver.deviceFirmware,
+      },
       onDisconnect: () => {
         void this.teardownExtraSession(hidPath, index);
       },

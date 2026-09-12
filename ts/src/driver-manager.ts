@@ -295,7 +295,7 @@ export class DriverManager {
         ),
       );
       this.applyDeviceModel(found.model, {
-        serial: found.deviceSerial,
+        serial: found.deviceSerial ?? serial ?? undefined,
         firmware: found.deviceFirmware,
       });
     }

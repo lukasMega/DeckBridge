@@ -276,6 +276,16 @@ await test('setBrightness applies to the driver and shows in status()', async ()
   assert.equal(getStatusChanges(), before + 1, 'status change fired');
 });
 
+await test('status exposes real device identity separately', () => {
+  const { session } = makeSession();
+
+  assert.deepEqual(session.status().realDeviceIdentity, {
+    modelName: DEFAULT_MODEL.name,
+    serialNumber: 'SN123',
+    firmwareVersion: '1.0',
+  });
+});
+
 await test("child 'brightness' applies unless the Elgato override is on", async () => {
   const { childServer, driver, session, setIgnoreElgato } = makeSession();
   await session.start();

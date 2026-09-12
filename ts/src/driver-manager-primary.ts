@@ -171,6 +171,15 @@ export class PrimaryDock {
       macAddress: identity?.macAddress ?? DEFAULT_MAC_ADDRESS_STRING,
       mdnsServiceName: identity?.mdnsServiceName ?? MDNS_SERVICE_NAME,
       deviceKey: identity?.deviceKey ?? '',
+      ...(deviceInfo
+        ? {
+            realDeviceIdentity: {
+              modelName: model.name,
+              ...(deviceInfo.serial ? { serialNumber: deviceInfo.serial } : {}),
+              ...(deviceInfo.firmware ? { firmwareVersion: deviceInfo.firmware } : {}),
+            },
+          }
+        : {}),
     };
   }
 }
