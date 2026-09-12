@@ -1,3 +1,4 @@
+import type { ImageAssembly } from './image-assembler.js';
 // Child-server (MK.2/Mini) CORA payload handling: verbatim probes, feature
 // requests, output-report dispatch, brightness extraction, and image-chunk
 // assembly. Split out of elgato-child-server.ts (pure extraction, no
@@ -164,7 +165,7 @@ export function isValidChildImageKey(
 
 export function assembleChildImageChunk(
   pkt: Buffer,
-  imagePages: Map<number, Buffer[]>,
+  imagePages: Map<number, ImageAssembly>,
   keyCount: number,
   warnedOobKeys: Set<number>,
   emitLog: LogFn,
@@ -177,7 +178,7 @@ export function assembleChildImageChunk(
 
 export function assembleChildGen1ImageChunk(
   pkt: Buffer,
-  gen1ImagePages: Map<number, Buffer[]>,
+  gen1ImagePages: Map<number, ImageAssembly>,
   keyCount: number,
   warnedOobKeys: Set<number>,
   emitLog: LogFn,

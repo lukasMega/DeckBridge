@@ -43,14 +43,27 @@ jobs:
       # no toolchain). The slow from-source build is for platforms without an
       # asset (macos-x86_64) only.
       - name: Install system deps (libhidapi + libudev + libffi)
-        # The runner image ships a Google Chrome apt source we never use (the docs
-        # workflow installs Chrome via browser-actions/setup-chrome). When Google's
-        # Packages.gz drifts from its own Release file, apt fails the entire
-        # `apt-get update` with a Hash Sum mismatch and exit 100. Drop the source.
+        # The runner image ships a Google Chrome apt source we never use — every
+        # workflow that needs Chrome installs it via browser-actions/setup-chrome
+        # (this job does so in the next step). When Google's Packages.gz drifts
+        # from its own Release file, apt fails the entire `apt-get update` with a
+        # Hash Sum mismatch and exit 100. Drop the source.
         run: |
           sudo rm -f /etc/apt/sources.list.d/google-chrome.list
           sudo apt-get update
           sudo apt-get install -y libhidapi-dev libudev-dev libffi-dev
+
+      # ci-checks runs `test-client`, which spawns headless Chrome to exercise the
+      # Preact web UI. Install it explicitly rather than relying on the runner
+      # image's preinstalled google-chrome: that is undeclared (the apt step above
+      # actively drops Google's source) and would surface as a spawn ENOENT the day
+      # the image drops it. Unpinned "stable" on purpose — deploy-docs.yml pins
+      # 151.0.7922.77 for a puppeteer page.close regression, which cannot affect us
+      # (test-client spawns Chrome directly with --dump-dom, no puppeteer), and a
+      # UI smoke test is more useful tracking the current browser.
+      - name: Install Chrome (for the web-UI regression tests)
+        id: chrome
+        uses: browser-actions/setup-chrome@v2
 
       - uses: jdx/mise-action@v4
 
@@ -64,8 +77,12 @@ jobs:
           key: ci-pnpm-${{ hashFiles('ts/pnpm-lock.yaml') }}
           restore-keys: ci-pnpm-
 
-      - name: ci-checks (lint, types, test, knip)
+      - name: ci-checks (lint, types, test, test-client, knip)
         run: mise run ci-checks
+        env:
+          # Consumed by ts/scripts/test-client.mjs; without it the script falls
+          # back to a bare `google-chrome` on PATH.
+          CHROME_BIN: ${{ steps.chrome.outputs.chrome-path }}
 
       # oxfmt has no --check flag; run it and fail if it rewrote any tracked source.
       - name: Format check (oxfmt)

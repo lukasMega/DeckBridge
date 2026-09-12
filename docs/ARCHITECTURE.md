@@ -553,7 +553,8 @@ compiled binary — keeping the single-file binary self-contained.
 
 ```bash
 mise run test        # bundle + run every ts/test/*.test.ts on the txiki.js runtime
-mise run ci-checks   # lint + typecheck + test + knip
+mise run test-client # browser regressions for the web UI, in headless Chrome
+mise run ci-checks   # lint + typecheck + test + test-client + knip
 ```
 
 Tests run on the same QuickJS/txiki.js runtime as the app (not Node), with **no test framework**:
@@ -563,6 +564,15 @@ helper and exits `tjs.exit(failed > 0 ? 1 : 0)`. The `test` task bundles each wi
 
 All tests are **hardware-free** (pure logic, fakes, local sockets). Real-device work lives in the
 `smoke` task (USB HID, needs a Mirabox) or `e2e` (black-box test of a packaged zip).
+
+The web UI has a second, separate suite: `ts/test/client-regressions.tsx` renders Preact against a
+real DOM in **headless Chrome** — `ts/scripts/test-client.mjs` bundles it to an IIFE, loads it in a
+temp HTML page with `--dump-dom`, and asserts the dumped DOM contains `data-result="pass"`
+(browser from `CHROME_BIN`, else the macOS Chrome path, else `google-chrome` on `PATH`). It covers
+the parts that can't run under `tjs`: the hand-rolled `useSyncExternalStore` port and the
+shallow-memo `useStore` selector in `ts/src/web/client/store.ts`, plus the clipboard copy UI
+(`use-copy-text.ts`, `CopyChip`, `LogConsolePanel`). It is a `.tsx`, not a `*.test.ts`, so
+`mise run test` never picks it up; `ci-checks` runs it as the `test-client` task.
 
 | Area | Test files · notable coverage |
 |---|---|

@@ -259,8 +259,8 @@ depends = ["ts-install"]
 run = "node scripts/gen-device-docs.mjs --check"
 
 [tasks.ci-checks]
-description = "Lint, typecheck, test, knip (unused files/exports/deps), check-loc, and the generated device docs in parallel (after format)"
-depends = ["lint", "types", "test", "knip", "check-loc", "docs-devices-check"]
+description = "Lint, typecheck, core/browser tests, knip, check-loc, and generated device docs in parallel"
+depends = ["lint", "types", "test", "test-client", "knip", "check-loc", "docs-devices-check"]
 timeout = "120s"
 
 [tasks.beforeCommit]
@@ -308,6 +308,15 @@ quiet = true
 depends = ["ts-install", "tjs-setup", "deckbridge-native"]
 run = "node scripts/run-tests.mjs"
 timeout = "90s"
+
+[tasks.test-client]
+description = "Run Preact browser regression tests"
+dir = "ts"
+depends = ["ts-install"]
+run = "pnpm run test:client"
+# The script's own browser budget is 90s; keep this clear of it so a browser timeout
+# fails with the script's diagnostic (Chrome path + stderr) instead of a bare task kill.
+timeout = "150s"
 
 [tasks.docs-install]
 description = "Install docs-site pnpm dependencies"
