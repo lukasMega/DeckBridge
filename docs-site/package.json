@@ -31,15 +31,15 @@
     "@mdx-js/react": "3.1.1",
     "clsx": "2.1.1",
     "prism-react-renderer": "2.4.1",
-    "react": "19.2.8",
-    "react-dom": "19.2.8"
+    "react": "19.3.0",
+    "react-dom": "19.3.0"
   },
   "devDependencies": {
     "@docusaurus/module-type-aliases": "3.10.2",
     "@docusaurus/tsconfig": "3.10.2",
     "@docusaurus/types": "3.10.2",
-    "@mermaid-js/mermaid-cli": "11.16.0",
-    "@types/react": "19.2.18",
+    "@mermaid-js/mermaid-cli": "11.17.0",
+    "@types/react": "19.3.0",
     "typescript": "7.0.2"
   },
   "browserslist": {

@@ -154,7 +154,7 @@ run = "SRC_BIN=deckbridge-advanced node scripts/package.mjs ${1:-dev}"
 [tasks.lint]
 description = "Lint with oxlint"
 depends = ["ts-install"]
-run = "./ts/node_modules/.bin/oxlint ts && ./ts/node_modules/.bin/eslint ts"
+run = "./ts/node_modules/.bin/oxlint ts && echo 'oxlint done ✅, waiting for eslint...' && ./ts/node_modules/.bin/eslint ts"
 
 [tasks.tauri-build]
 description = "Build Windows NSIS installer via Tauri (runs: compile + tray + copy sidecars + cargo tauri build)"

@@ -157,6 +157,7 @@ const config: Config = {
       title: 'deckbridge',
       style: 'dark',
       items: [
+        { to: '/introduction', label: 'Docs', position: 'right' },
         { to: '/blog', label: 'Blog', position: 'right' },
         {
           type: 'docSidebar',
