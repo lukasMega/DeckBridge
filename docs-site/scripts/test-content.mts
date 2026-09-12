@@ -9,7 +9,14 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { DOC_ROUTES, allRoutes, extractAttrs, readPage, requireBuild } from './lib.mts';
+import {
+  DOC_ROUTES,
+  allRoutes,
+  blogPostSlugs,
+  extractAttrs,
+  readPage,
+  requireBuild,
+} from './lib.mts';
 
 requireBuild();
 
@@ -18,6 +25,20 @@ const MERMAID_ROUTES: readonly string[] = ['image-flow', 'hidapi-ffi', 'features
 
 test('every doc page has exactly one h1', () => {
   for (const route of DOC_ROUTES) {
+    const count = (readPage(route).match(/<h1[\s>]/g) ?? []).length;
+    assert.equal(count, 1, `route '${route}' has ${count} h1 elements, expected 1`);
+  }
+});
+
+test('blog list renders posts and one h1', () => {
+  const html = readPage('blog');
+  assert.equal((html.match(/<h1[\s>]/g) ?? []).length, 1, 'blog list page h1');
+  assert.match(html, /href=\/?DeckBridge\/blog\/v0-10-0\/?/, 'blog list has no post link');
+});
+
+test('every blog post has exactly one h1', () => {
+  for (const slug of blogPostSlugs()) {
+    const route = `blog/${slug}`;
     const count = (readPage(route).match(/<h1[\s>]/g) ?? []).length;
     assert.equal(count, 1, `route '${route}' has ${count} h1 elements, expected 1`);
   }

@@ -1,0 +1,12 @@
+{
+  "_comment": "Captured off real hardware by src/d6-capture.ts (mise run d6-capture). Raw hid_get_report_descriptor bytes for the vendor (0xffa0/1) interface.",
+  "deviceId": "fifine-d6-rev2",
+  "usb": "0x3142:0x0060",
+  "serialsSeen": ["81D0DA78…"],
+  "platform": "macOS",
+  "capturedAt": "2026-09-12",
+  "parsedOutputReportSize": 1024,
+  "modelPacketSize": 1024,
+  "modelInSize": 512,
+  "descriptorHex": "06 a0 ff 09 01 a1 01 09 02 a1 00 06 a1 ff 09 03 09 04 15 80 25 7f 35 00 45 ff 75 08 96 00 02 81 02 09 05 09 06 15 80 25 7f 35 00 45 ff 75 08 96 00 04 91 02 c0 c0"
+}

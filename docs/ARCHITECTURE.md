@@ -575,6 +575,7 @@ All tests are **hardware-free** (pure logic, fakes, local sockets). Real-device 
 | CLI | `cli` (flag parsing incl. `tjs run <bundle>` vs compiled-binary argv shape), `cli-devices` (device table formatting, known/unknown VID+PID rows) |
 | Plugins & extra keys | `extra-keys` (widget rendering: clock/date/text/weather/command/plugin, lat/lon parsing), `plugin-host` (message round-trip, lazy spawn, heartbeat respawn, `MAX_CONSECUTIVE_KILLS` disable, `http://`-only fetch proxy) |
 | Probes (non-assertion) | `k1pro-probe-layout`, `splash-size` — reproduce K1 Pro JPEG variants byte-for-byte and write samples under `/tmp` for offline analysis |
+| Captured hardware | `hid-report-descriptor`'s last block replays the real 54-byte report descriptor of a Fifine D6 rev. 2 (`test/fixtures/fifine-d6-rev2.report-descriptor.json`, taken with `mise run d6-capture`) — it pins the packet-size probe to bytes a physical board emitted, not to synthetic ones |
 
 ### Coverage
 
@@ -753,7 +754,7 @@ deckbridge/
 │   │   │       ← caps/ChildGeometry, GET_REPORT, gen1/gen2 assembly, key-map + transform, LRU cache
 │   │   ├── native-libs.ts · mdns-advertiser.ts · tray.ts · os-utils.ts · comm-format.ts · types.ts · elgato-types.ts
 │   │   │       ← native-lib extraction, mDNS, tray sidecar, browser-open/platform-name, wire-trace hex, shared types
-│   │   ├── mirabox-smoke.ts · k1pro-probe.ts · *.d.ts · assets/   ← hardware probes, ambient types, splash JPEGs, font atlas
+│   │   ├── mirabox-smoke.ts · k1pro-probe.ts · d6-capture.ts · *.d.ts · assets/   ← hardware probes, ambient types, splash JPEGs, font atlas
 │   │   ├── ffi/          ← hidapi.ts (libhidapi) · image-proc.ts (libdeckbridge_native, DECKBRIDGE_NATIVE_LIB)
 │   │   ├── devices/      ← driver.ts (DeviceModel + specs) · registry.ts · hid-connection.ts (HidDeviceBase)
 │   │   │                    · hid-driver-base.ts (ElgatoHidDriver) · mock.ts · elgato/ · mirabox/ · protocol/

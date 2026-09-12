@@ -1,0 +1,47 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 470 334" width="470" height="334" role="img" aria-label="Stream Deck MK.2 — 5×3 key stream deck">
+  <title>Stream Deck MK.2</title>
+  <defs>
+    <linearGradient id="bodymk2" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#3a3d45"/>
+      <stop offset="1" stop-color="#25272d"/>
+    </linearGradient>
+    <linearGradient id="idlemk2" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#1e2027"/>
+      <stop offset="1" stop-color="#0e0f13"/>
+    </linearGradient>
+    <linearGradient id="glossmk2" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.14"/>
+      <stop offset="0.45" stop-color="#ffffff" stop-opacity="0.02"/>
+      <stop offset="1" stop-color="#000000" stop-opacity="0.18"/>
+    </linearGradient>
+    <linearGradient id="knobmk2" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#3a3d45"/>
+      <stop offset="1" stop-color="#14161a"/>
+    </linearGradient>
+    <filter id="shadowmk2" x="-20%" y="-20%" width="140%" height="150%">
+      <feDropShadow dx="0" dy="6" stdDeviation="9" flood-color="#000000" flood-opacity="0.35"/>
+    </filter>
+  </defs>
+
+  <!-- stand -->
+  <path d="M 110.80000000000001 38 H 359.20000000000005 L 392.32 319 H 77.68 Z" fill="#14161a" opacity="0.85"/>
+
+  <!-- chassis -->
+  <g filter="url(#shadowmk2)">
+    <rect x="28" y="28" width="414" height="278" rx="18" fill="url(#bodymk2)"/>
+    <rect x="28.5" y="28.5" width="413" height="277" rx="17.5" fill="none" stroke="#ffffff" stroke-opacity="0.10"/>
+  </g>
+  
+
+  <!-- key panel recess -->
+  <rect x="45" y="61" width="380" height="228" rx="14" fill="#000000" opacity="0.22"/>
+
+  <!-- keys -->
+  <g><g transform="translate(52,68)"><rect width="62" height="62" rx="9" fill="#14161a"/><rect x="1" y="1" width="60" height="60" rx="8" fill="url(#idlemk2)"/><rect x="1" y="1" width="60" height="60" rx="8" fill="#4f63d2" opacity="0.94"/><rect x="1" y="1" width="60" height="60" rx="8" fill="url(#glossmk2)"/><rect x="1.5" y="1.5" width="59" height="59" rx="7.5" fill="none" stroke="#ffffff" stroke-opacity="0.07"/></g><g transform="translate(128,68)"><rect width="62" height="62" rx="9" fill="#14161a"/><rect x="1" y="1" width="60" height="60" rx="8" fill="url(#idlemk2)"/><rect x="1" y="1" width="60" height="60" rx="8" fill="url(#glossmk2)"/><rect x="1.5" y="1.5" width="59" height="59" rx="7.5" fill="none" stroke="#ffffff" stroke-opacity="0.07"/></g><g transform="translate(204,68)"><rect width="62" height="62" rx="9" fill="#14161a"/><rect x="1" y="1" width="60" height="60" rx="8" fill="url(#idlemk2)"/><rect x="1" y="1" width="60" height="60" rx="8" fill="url(#glossmk2)"/><rect x="1.5" y="1.5" width="59" height="59" rx="7.5" fill="none" stroke="#ffffff" stroke-opacity="0.07"/></g><g transform="translate(280,68)"><rect width="62" height="62" rx="9" fill="#14161a"/><rect x="1" y="1" width="60" height="60" rx="8" fill="url(#idlemk2)"/><rect x="1" y="1" width="60" height="60" rx="8" fill="url(#glossmk2)"/><rect x="1.5" y="1.5" width="59" height="59" rx="7.5" fill="none" stroke="#ffffff" stroke-opacity="0.07"/></g><g transform="translate(356,68)"><rect width="62" height="62" rx="9" fill="#14161a"/><rect x="1" y="1" width="60" height="60" rx="8" fill="url(#idlemk2)"/><rect x="1" y="1" width="60" height="60" rx="8" fill="url(#glossmk2)"/><rect x="1.5" y="1.5" width="59" height="59" rx="7.5" fill="none" stroke="#ffffff" stroke-opacity="0.07"/></g><g transform="translate(52,144)"><rect width="62" height="62" rx="9" fill="#14161a"/><rect x="1" y="1" width="60" height="60" rx="8" fill="url(#idlemk2)"/><rect x="1" y="1" width="60" height="60" rx="8" fill="#4f63d2" opacity="0.85"/><rect x="1" y="1" width="60" height="60" rx="8" fill="url(#glossmk2)"/><rect x="1.5" y="1.5" width="59" height="59" rx="7.5" fill="none" stroke="#ffffff" stroke-opacity="0.07"/></g><g transform="translate(128,144)"><rect width="62" height="62" rx="9" fill="#14161a"/><rect x="1" y="1" width="60" height="60" rx="8" fill="url(#idlemk2)"/><rect x="1" y="1" width="60" height="60" rx="8" fill="#4f63d2" opacity="0.77"/><rect x="1" y="1" width="60" height="60" rx="8" fill="url(#glossmk2)"/><rect x="1.5" y="1.5" width="59" height="59" rx="7.5" fill="none" stroke="#ffffff" stroke-opacity="0.07"/></g><g transform="translate(204,144)"><rect width="62" height="62" rx="9" fill="#14161a"/><rect x="1" y="1" width="60" height="60" rx="8" fill="url(#idlemk2)"/><rect x="1" y="1" width="60" height="60" rx="8" fill="url(#glossmk2)"/><rect x="1.5" y="1.5" width="59" height="59" rx="7.5" fill="none" stroke="#ffffff" stroke-opacity="0.07"/></g><g transform="translate(280,144)"><rect width="62" height="62" rx="9" fill="#14161a"/><rect x="1" y="1" width="60" height="60" rx="8" fill="url(#idlemk2)"/><rect x="1" y="1" width="60" height="60" rx="8" fill="#4f63d2" opacity="0.91"/><rect x="1" y="1" width="60" height="60" rx="8" fill="url(#glossmk2)"/><rect x="1.5" y="1.5" width="59" height="59" rx="7.5" fill="none" stroke="#ffffff" stroke-opacity="0.07"/></g><g transform="translate(356,144)"><rect width="62" height="62" rx="9" fill="#14161a"/><rect x="1" y="1" width="60" height="60" rx="8" fill="url(#idlemk2)"/><rect x="1" y="1" width="60" height="60" rx="8" fill="url(#glossmk2)"/><rect x="1.5" y="1.5" width="59" height="59" rx="7.5" fill="none" stroke="#ffffff" stroke-opacity="0.07"/></g><g transform="translate(52,220)"><rect width="62" height="62" rx="9" fill="#14161a"/><rect x="1" y="1" width="60" height="60" rx="8" fill="url(#idlemk2)"/><rect x="1" y="1" width="60" height="60" rx="8" fill="url(#glossmk2)"/><rect x="1.5" y="1.5" width="59" height="59" rx="7.5" fill="none" stroke="#ffffff" stroke-opacity="0.07"/></g><g transform="translate(128,220)"><rect width="62" height="62" rx="9" fill="#14161a"/><rect x="1" y="1" width="60" height="60" rx="8" fill="url(#idlemk2)"/><rect x="1" y="1" width="60" height="60" rx="8" fill="#4f63d2" opacity="0.85"/><rect x="1" y="1" width="60" height="60" rx="8" fill="url(#glossmk2)"/><rect x="1.5" y="1.5" width="59" height="59" rx="7.5" fill="none" stroke="#ffffff" stroke-opacity="0.07"/></g><g transform="translate(204,220)"><rect width="62" height="62" rx="9" fill="#14161a"/><rect x="1" y="1" width="60" height="60" rx="8" fill="url(#idlemk2)"/><rect x="1" y="1" width="60" height="60" rx="8" fill="url(#glossmk2)"/><rect x="1.5" y="1.5" width="59" height="59" rx="7.5" fill="none" stroke="#ffffff" stroke-opacity="0.07"/></g><g transform="translate(280,220)"><rect width="62" height="62" rx="9" fill="#14161a"/><rect x="1" y="1" width="60" height="60" rx="8" fill="url(#idlemk2)"/><rect x="1" y="1" width="60" height="60" rx="8" fill="url(#glossmk2)"/><rect x="1.5" y="1.5" width="59" height="59" rx="7.5" fill="none" stroke="#ffffff" stroke-opacity="0.07"/></g><g transform="translate(356,220)"><rect width="62" height="62" rx="9" fill="#14161a"/><rect x="1" y="1" width="60" height="60" rx="8" fill="url(#idlemk2)"/><rect x="1" y="1" width="60" height="60" rx="8" fill="#4f63d2" opacity="0.76"/><rect x="1" y="1" width="60" height="60" rx="8" fill="url(#glossmk2)"/><rect x="1.5" y="1.5" width="59" height="59" rx="7.5" fill="none" stroke="#ffffff" stroke-opacity="0.07"/></g></g>
+  
+  
+
+  <!-- wordmark + grid caption -->
+  <text x="235" y="53" text-anchor="middle" font-family="Inter, Helvetica Neue, Arial, sans-serif" font-size="13" font-weight="600" letter-spacing="2.4" fill="#9aa0ad">ELGATO</text>
+  <text x="418" y="53" text-anchor="end" font-family="Inter, Helvetica Neue, Arial, sans-serif" font-size="12" fill="#9aa0ad" opacity="0.7">5×3</text>
+</svg>

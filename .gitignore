@@ -66,3 +66,6 @@ tmp/
 **/.cmd-history.txt
 bundle-sizes*.csv
 CLAUDE.md
+
+# Device reference photos (copyrighted vendor/eshop imagery — reference only, never committed)
+.cache/

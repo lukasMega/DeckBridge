@@ -1,0 +1,9 @@
+release:
+  label: Release
+  description: Version releases and their notes
+devices:
+  label: Devices
+  description: New device support
+docs:
+  label: Docs
+  description: Documentation and site changes

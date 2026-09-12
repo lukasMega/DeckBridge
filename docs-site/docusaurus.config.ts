@@ -95,7 +95,27 @@ const config: Config = {
           // No editUrl — local docs, no upstream repo link needed
           beforeDefaultRemarkPlugins: [remarkMermaidPrerender],
         },
-        blog: false,
+        blog: {
+          path: './blog',
+          routeBasePath: 'blog',
+          blogTitle: 'deckbridge blog',
+          blogDescription: 'Release notes and news from the deckbridge project',
+          blogSidebarTitle: 'Recent posts',
+          blogSidebarCount: 10,
+          postsPerPage: 10,
+          showReadingTime: true,
+          onInlineAuthors: 'throw',
+          onUntruncatedBlogPosts: 'throw',
+          feedOptions: {
+            type: 'all',
+            title: 'deckbridge',
+            description: 'Release notes and news from the deckbridge project',
+            copyright: `Copyright © ${new Date().getFullYear()} deckbridge`,
+            language: 'en',
+            limit: 20,
+            xslt: true,
+          },
+        },
         theme: {
           customCss: './src/css/custom.css',
         },
@@ -115,7 +135,9 @@ const config: Config = {
         // (default 'docs') the indexer reads from
         docsRouteBasePath: '/',
         docsDir: '../docs',
-        indexBlog: false,
+        indexBlog: true,
+        blogRouteBasePath: '/blog',
+        blogDir: './blog',
         indexPages: false, // skip the landing + iframe pages
         language: ['en'],
         hashed: true, // content-hashed index file → long-term cache
@@ -135,6 +157,7 @@ const config: Config = {
       title: 'deckbridge',
       style: 'dark',
       items: [
+        { to: '/blog', label: 'Blog', position: 'right' },
         {
           type: 'docSidebar',
           sidebarId: 'technicalSidebar',
@@ -153,6 +176,10 @@ const config: Config = {
         {
           label: 'Privacy',
           to: '/privacy',
+        },
+        {
+          label: 'RSS',
+          href: 'https://lukasmega.github.io/DeckBridge/blog/rss.xml',
         },
       ],
       copyright: `deckbridge — Stream Deck relay, no Node runtime required`,
