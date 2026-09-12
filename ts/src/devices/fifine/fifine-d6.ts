@@ -34,8 +34,20 @@ import { MK2_CHILD_GEOMETRY } from '../../capabilities.js';
  *      label just say "D6", and Fifine separately sells a retail D6PRO SKU — so treat
  *      "rev. 2", not "D6 Pro", as this model's identity.
  *
- *  `sharedSerial` is deliberately omitted (→ false) for both. The 0x0060 USB dump in
- *  companion issue #32 shows a per-unit serial (`USB\VID_3142&PID_0060\81D0DA784037`).
+ *  **The rev. 2 board's own self-description is checked in.** `mise run d6-capture`
+ *  (`src/d6-capture.ts`) read the HID report descriptor off a real 0x0060 unit on macOS;
+ *  the 54 bytes live in `test/fixtures/fifine-d6-rev2.report-descriptor.json` and are
+ *  asserted by `test/hid-report-descriptor.test.ts`. One unnumbered vendor collection
+ *  (usagePage `0xffa0`, usage 1), an **Output report of 1024 bytes** and an **Input report
+ *  of 512 bytes** — i.e. both `wire.packetSize: 1024` and `wire.inSize: 512` are now the
+ *  device's own numbers, not inherited constants. This is also the fixture the B4′
+ *  packet-size probe is regression-tested against, so the synthetic descriptors in that
+ *  test file are no longer the only thing keeping it honest.
+ *
+ *  `sharedSerial` is deliberately omitted (→ false) for both. Two independent 0x0060
+ *  units report per-unit serials that share the `81D0DA78` prefix and differ in the tail:
+ *  the companion issue #32 USB dump (`USB\VID_3142&PID_0060\81D0DA784037`) and the
+ *  captured unit above — neither is mirajazz's shared `355499441494`.
  *  For rev. 1 this is an assumption, not a finding — see open question O3 in
  *  `.claude/plans/2026-09-10_fifine-d6-support.md`: mirajazz hardcodes the shared
  *  `355499441494` for v1 devices, and rev. 1 *is* a v1 board on the write path. It masks
@@ -76,6 +88,15 @@ const FIFINE_D6_BASE: Omit<DeviceModel, 'id' | 'name' | 'usbProductIds' | 'wire'
     flipH: false,
     flipV: false,
     colorMode: 'rgb',
+    // Inherited from the 293V3, and deliberately LEFT ALONE even though a rev. 2 unit
+    // proved the firmware takes far more: the `mise run d6-capture -- s3` ladder pushed
+    // 7.9 / 10.8 / 14.0 / 22.7 / 22.9 KB onto five keys and every one rendered intact
+    // (white frame closed on all four edges, right tally count, even noise fill). So this
+    // is a headroom value, not a ceiling. Raising it buys nothing in practice — the
+    // desktop's own 112×112 keys come through the sidecar at 1.9–4.8 KB (q 0.9), i.e.
+    // less than half the cap, so it almost never binds — while each extra KB is one more
+    // 1024-byte HID write per key on the worker thread. Only revisit it if a genuinely
+    // detailed key is seen getting quality-crushed by the cap.
     maxBytes: 10240,
     quality: IMAGE_JPEG_QUALITY,
     resizeFilter: 'lanczos3',

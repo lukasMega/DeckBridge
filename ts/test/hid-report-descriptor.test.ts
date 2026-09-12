@@ -4,6 +4,7 @@ import {
   probeOutputReportSize,
 } from '../src/devices/hid-report-descriptor.js';
 import type { HidapiSymbols } from '../src/ffi/hidapi.js';
+import { FIFINE_D6_REV2_MODEL } from '../src/devices/fifine/fifine-d6.js';
 
 let passed = 0;
 let failed = 0;
@@ -268,6 +269,43 @@ test('refuses (does not throw) when the descriptor call throws', () => {
 test('refuses an unparsable descriptor even when hidapi returns bytes', () => {
   const hid = hidReturning(new Uint8Array([0xfe, 0x02, 0x00, 0x00, 0x00])) as HidapiSymbols;
   assert.equal(probeOutputReportSize(hid, DEV, [512, 1024]), null);
+});
+
+// ── the real thing: a descriptor captured off hardware ──────────────────────
+// Everything above is a descriptor we wrote ourselves, so it can only prove the walker
+// is self-consistent. This block runs it against the bytes a physical Fifine D6 rev. 2
+// actually returned from hid_get_report_descriptor (captured by `mise run d6-capture`,
+// macOS 2026-09-12) — the one thing that cannot be reconstructed once the unit is gone.
+
+console.log('\nhid-report-descriptor: real captured descriptor (Fifine D6 rev. 2)');
+
+const FIXTURE = 'test/fixtures/fifine-d6-rev2.report-descriptor.json';
+const fixture = JSON.parse(new TextDecoder().decode(await tjs.readFile(FIXTURE))) as {
+  descriptorHex: string;
+  parsedOutputReportSize: number;
+  modelInSize: number;
+};
+const real = new Uint8Array(fixture.descriptorHex.split(' ').map((h) => parseInt(h, 16)));
+
+test('the captured descriptor parses to the model packet size (1024 B)', () => {
+  assert.equal(parseOutputReportSize(real), FIFINE_D6_REV2_MODEL.wire!.packetSize);
+  assert.equal(parseOutputReportSize(real), fixture.parsedOutputReportSize);
+});
+
+test('the probe adopts it against the model candidate list', () => {
+  const hid = hidReturning(real) as HidapiSymbols;
+  const probed = probeOutputReportSize(hid, DEV, FIFINE_D6_REV2_MODEL.wire!.packetSizeCandidates!);
+  assert.equal(probed, 1024);
+});
+
+// The real board describes an input report too, and its size is the other constant the
+// driver hardcodes (`wire.inSize`, used to size the hid_read_timeout buffer). Assert the
+// descriptor agrees: Report Count 0x0200 (512) followed by an Input item.
+test('the captured descriptor also confirms wire.inSize (512 B)', () => {
+  const want = [...reportCount2(FIFINE_D6_REV2_MODEL.wire!.inSize), ...input];
+  const hay = Array.from(real).join(',');
+  assert.ok(hay.includes(want.join(',')), `no 512-byte Input item in ${fixture.descriptorHex}`);
+  assert.equal(fixture.modelInSize, FIFINE_D6_REV2_MODEL.wire!.inSize);
 });
 
 console.log(`\n${passed} passed, ${failed} failed`);

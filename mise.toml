@@ -288,6 +288,15 @@ run = """
   DECKBRIDGE_NATIVE_LIB=$DECKBRIDGE_NATIVE_LIB $TJS run dist/k1pro-probe.js
 """
 
+[tasks.d6-capture]
+description = "Fifine D6 hardware capture: report descriptor + brightness sweep + JPEG size ladder (requires a D6; Input Monitoring). Usage: mise run d6-capture [-- s1,s3]"
+depends = ["tjs-setup", "deckbridge-native"]
+dir = "ts"
+run = """
+  node build.mjs --probe d6-capture
+  DECKBRIDGE_NATIVE_LIB=$DECKBRIDGE_NATIVE_LIB $TJS run dist/d6-capture.js ${1:-}
+"""
+
 [tasks.e2e]
 description = "Black-box smoke test of a packaged release zip (usage: mise run e2e -- dist/foo.zip)"
 run = "./scripts/e2e-smoke.sh ${1:-}"

@@ -107,12 +107,16 @@
       "quirks": [
         "Hardware-verified on macOS: enumerates via the 0xffa0/1 usage path, all 15 keys render full-bleed, press and release both map correctly.",
         "512-byte writes render BLACK on this revision. The board reports `MaxOutputReportSize = 1024`, so every 513-byte write is discarded by the firmware while `write()` still returns success — the deck enumerates and reports presses while the screen stays black. Do not unify the packet size with rev. 1.",
-        "The 112×112 panel size cannot be probed and the reference projects are split four ways (95 / 100 / 105 / 112). 112 is the value two independent owners derived from the hardware, and it holds up on a real unit."
+        "The 112×112 panel size cannot be probed and the reference projects are split four ways (95 / 100 / 105 / 112). 112 is the value two independent owners derived from the hardware, and it holds up on a real unit.",
+        "The HID report descriptor was captured off a real unit (macOS, `mise run d6-capture`) and is checked in at `ts/test/fixtures/fifine-d6-rev2.report-descriptor.json`: 54 bytes, one unnumbered vendor collection declaring a 1024-byte output report and a 512-byte input report. Both `wire.packetSize: 1024` and `wire.inSize: 512` therefore come from the device's own self-description rather than from inference.",
+        "Serials are per-unit, not the shared mirajazz `355499441494`. Two independent 0x0060 samples share the `81D0DA78` prefix and differ in the tail — `81D0DA784037` from the companion issue #32 dump, a different tail on the unit captured here — so `sharedSerial` stays false.",
+        "`maxBytes: 10240` is headroom, not a ceiling: a size ladder on real hardware (`mise run d6-capture -- s3`) rendered 7.9 / 10.8 / 14.0 / 22.7 / 22.9 KB keys intact. The cap is left as inherited because desktop keys arrive at 1.9–4.8 KB, so it almost never binds, and every extra KB is another 1024-byte HID write per key."
       ],
       "sources": [
         "opendeck-ampgd6 PR #4, #5, #6, #7",
         "companion-surface-mirabox-stream-dock PR #49",
-        "FifineOpenSource"
+        "FifineOpenSource",
+        "own hardware capture (ts/src/d6-capture.ts)"
       ]
     },
     "ajazz-akp153": {
