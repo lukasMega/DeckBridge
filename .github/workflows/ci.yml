@@ -65,19 +65,6 @@ jobs:
         id: chrome
         uses: browser-actions/setup-chrome@v2
 
-      # TEMPORARY diagnostic: does --dump-dom work at all on this runner?
-      - name: Chrome smoke (debug)
-        run: |
-          "${{ steps.chrome.outputs.chrome-path }}" --version
-          set +e
-          timeout 30 "${{ steps.chrome.outputs.chrome-path }}" --headless --no-sandbox \
-            --disable-gpu --user-data-dir="$RUNNER_TEMP/smoke" --dump-dom about:blank
-          echo "about:blank exit=$?"
-          printf '<!doctype html><html><body><p id=x>hi</p><script>document.body.dataset.result="pass"</script></body></html>' > "$RUNNER_TEMP/p.html"
-          timeout 30 "${{ steps.chrome.outputs.chrome-path }}" --headless --no-sandbox \
-            --disable-gpu --user-data-dir="$RUNNER_TEMP/smoke2" --dump-dom "file://$RUNNER_TEMP/p.html"
-          echo "file:// exit=$?"
-
       - uses: jdx/mise-action@v4
 
       # Cache the pnpm content-addressable store, not ts/node_modules: under pnpm
