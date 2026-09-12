@@ -20,6 +20,7 @@ export const MAX_RECEIVE_BUFFER = 128 * 1024;
 
 // Per-key cap on accumulated image-chunk bytes before the LAST flag arrives, see S4
 export const MAX_IMAGE_ASSEMBLY_BYTES = 1024 * 1024;
+export const MAX_IMAGE_ASSEMBLY_CHUNKS = 4096;
 
 // Default device identity strings
 export const DEFAULT_DOCK_FIRMWARE_VERSION = '1.01.016';

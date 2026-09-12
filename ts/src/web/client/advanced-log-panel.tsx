@@ -15,6 +15,7 @@
 import { useState, useEffect, useRef } from 'preact/hooks';
 import { subscribe as storeSubscribe, getSnapshot } from './store.js';
 import type { ServerLog, CommLog } from './ui-types.js';
+import { useCopyText } from './use-copy-text.js';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -59,7 +60,8 @@ function buildCommEntry(e: CommLog, showHex: boolean): HTMLElement {
 
 export function LogConsolePanel(): preact.JSX.Element {
   const [activeTab, setActiveTab] = useState<'server' | 'comm'>('server');
-  const [copyLabel, setCopyLabel] = useState('Copy All');
+  const { status: copyStatus, copy } = useCopyText();
+  const copyLabel = { idle: 'Copy All', copied: 'Copied!', error: 'Copy failed' }[copyStatus];
 
   // Server filter state
   const [sfLevel, setSfLevel] = useState('');
@@ -265,11 +267,7 @@ export function LogConsolePanel(): preact.JSX.Element {
       return `${t} ${arrow} ${e.protocol.toUpperCase()} ${e.human}${e.hex ? ' ' + e.hex : ''}`;
     });
     const text = `**SERVER LOGS:**\n\n${sl.join('\n')}\n\n---\n\n**COMM LOGS:**\n\n${cl.join('\n')}`;
-    void navigator.clipboard.writeText(text).then(() => {
-      setCopyLabel('Copied!');
-      setTimeout(() => setCopyLabel('Copy All'), 1500);
-      return undefined;
-    });
+    void copy(text);
   }
 
   const isServer = activeTab === 'server';
@@ -296,6 +294,10 @@ export function LogConsolePanel(): preact.JSX.Element {
           </button>
           <button
             id="copy-logs"
+            aria-live="polite"
+            title={
+              copyStatus === 'error' ? 'Copy failed. Select and copy logs manually.' : undefined
+            }
             class="ghostbtn"
             type="button"
             style="margin-left: 8px"

@@ -4,6 +4,7 @@
 import { useState, useEffect, useRef } from 'preact/hooks';
 import type { ComponentChildren } from 'preact';
 import { useStore } from '../store.js';
+import { useCopyText } from '../use-copy-text.js';
 import { ICON } from '../ui-icons.js';
 import { CORA_PORT } from '../ui-state.js';
 import { Icon, HelpButton } from './Icon.js';
@@ -84,25 +85,12 @@ export function CopyChip({
   cls: string;
   pending?: boolean;
 }>): preact.JSX.Element {
-  const [copied, setCopied] = useState(false);
-  const tidRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
+  const { status, copy } = useCopyText();
   const handleClick = (): void => {
-    if (pending) return;
-    const done = (): void => {
-      setCopied(true);
-      if (tidRef.current !== null) clearTimeout(tidRef.current);
-      tidRef.current = setTimeout(() => setCopied(false), 1500);
-    };
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- clipboard absent in insecure contexts
-    if (navigator.clipboard.writeText) {
-      void navigator.clipboard.writeText(value).finally(() => done());
-    } else {
-      done();
-    }
+    if (!pending) void copy(value);
   };
 
-  if (copied) {
+  if (status === 'copied') {
     return (
       <button class={`${cls} copied`} type="button" onClick={handleClick}>
         <span class="addr-text">Copied</span>
@@ -117,9 +105,12 @@ export function CopyChip({
       type="button"
       disabled={pending}
       aria-label={pending ? 'Detecting IP…' : `Copy ${label} ${value}`}
+      title={status === 'error' ? 'Copy failed. Select and copy the value manually.' : undefined}
       onClick={handleClick}
     >
-      <span class="addr-label">{label}</span>
+      <span class="addr-label" aria-live="polite">
+        {status === 'error' ? 'Copy failed' : label}
+      </span>
       <span class="addr-text">{pending ? '…' : value}</span>
       <Icon class="addr-copy" html={ICON.copy} />
     </button>

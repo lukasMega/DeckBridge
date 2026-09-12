@@ -1,3 +1,4 @@
+import type { ImageAssembly } from './image-assembler.js';
 import * as net from './platform/tcp.js';
 import {
   ELGATO_CHILD_PORT,
@@ -32,8 +33,8 @@ import { createGetReportHandlers, type GetReportHandler } from './elgato-child-r
 type ReconnectState = 'idle' | 'in-progress' | 'scheduled';
 
 export class ElgatoChildServer extends CoraServerBase {
-  private imagePages: Map<number, Buffer[]> = new Map();
-  private gen1ImagePages: Map<number, Buffer[]> = new Map();
+  private imagePages: Map<number, ImageAssembly> = new Map();
+  private gen1ImagePages: Map<number, ImageAssembly> = new Map();
   private warnedOobKeys = new Set<number>();
   private childGeometry: ChildGeometry = MK2_CHILD_GEOMETRY;
   private keyStates: Uint8Array = new Uint8Array(this.childGeometry.keyCount);
