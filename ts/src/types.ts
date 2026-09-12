@@ -316,8 +316,16 @@ export interface DockStatus {
   // identity was generated/looked-up from. Empty for mock-mode docks, which
   // have no persisted identity. Used by the WebUI to edit mdnsServiceName.
   deviceKey: string;
+  // Identity reported by the physical USB device. Absent in mock mode.
+  realDeviceIdentity?: RealDeviceIdentity;
   // Device wire ids of physical keys outside the emulated CORA grid (293S 6th
   // column). Present only when the model has any — the WebUI renders the
   // extra-keys panel off this.
   extraKeys?: readonly number[];
+}
+
+export interface RealDeviceIdentity {
+  modelName: string;
+  serialNumber?: string;
+  firmwareVersion?: string;
 }

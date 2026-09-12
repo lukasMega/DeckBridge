@@ -91,6 +91,12 @@ export interface DeviceIdentity {
   deviceKey?: string;
 }
 
+export interface RealDeviceIdentity {
+  modelName: string;
+  serialNumber?: string;
+  firmwareVersion?: string;
+}
+
 export interface KeyEvent {
   ts: number;
   mk2Index: number;

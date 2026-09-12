@@ -6,7 +6,7 @@ import { HELP } from '../ui-help.js';
 import { Icon } from './Icon.js';
 import { BackButton } from './controls.js';
 import { Collapsible } from '../components/Collapsible.js';
-import type { DeviceIdentity } from '../ui-types.js';
+import type { DeviceIdentity, RealDeviceIdentity } from '../ui-types.js';
 
 /** Run `onEscape` when the Escape key is pressed. */
 function useEscape(onEscape: () => void): void {
@@ -161,6 +161,7 @@ export function SettingsPage({ onBack }: Readonly<{ onBack: () => void }>): prea
   const [status, setStatus] = useState<string | null>(null);
   const [settingsText, setSettingsText] = useState<string | null>(null);
   const [identity, setIdentity] = useState<DeviceIdentity | null>(null);
+  const [realIdentity, setRealIdentity] = useState<RealDeviceIdentity | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   // Load the settings preview + the identifiers currently sent to the
@@ -172,9 +173,22 @@ export function SettingsPage({ onBack }: Readonly<{ onBack: () => void }>): prea
       .then((data) => setSettingsText(JSON.stringify(data, null, 2)))
       .catch(() => setSettingsText(null));
     void fetch('/api/state', { signal: ctrl.signal })
-      .then((r) => r.json() as Promise<{ deviceIdentity?: DeviceIdentity }>)
-      .then((st) => setIdentity(st.deviceIdentity ?? null))
-      .catch(() => setIdentity(null));
+      .then(
+        (r) =>
+          r.json() as Promise<{
+            deviceIdentity?: DeviceIdentity;
+            realDeviceIdentity?: RealDeviceIdentity;
+          }>,
+      )
+      .then((st) => {
+        setIdentity(st.deviceIdentity ?? null);
+        setRealIdentity(st.realDeviceIdentity ?? null);
+        return undefined;
+      })
+      .catch(() => {
+        setIdentity(null);
+        setRealIdentity(null);
+      });
     return () => ctrl.abort();
   }, []);
 
@@ -301,6 +315,26 @@ export function SettingsPage({ onBack }: Readonly<{ onBack: () => void }>): prea
         </ul>
       ) : (
         <p class="help-lead">Loading…</p>
+      )}
+
+      <p class="help-section-label">Real device identity</p>
+      {realIdentity ? (
+        <ul class="identity-list panel-inset">
+          <li>
+            <span class="identity-label">Model</span>
+            <code class="identity-value">{realIdentity.modelName}</code>
+          </li>
+          <li>
+            <span class="identity-label">Serial number</span>
+            <code class="identity-value">{realIdentity.serialNumber ?? 'Unavailable'}</code>
+          </li>
+          <li>
+            <span class="identity-label">Firmware version</span>
+            <code class="identity-value">{realIdentity.firmwareVersion ?? 'Unavailable'}</code>
+          </li>
+        </ul>
+      ) : (
+        <p class="help-lead">No physical device connected.</p>
       )}
 
       <Collapsible title="Saved settings (JSON)">

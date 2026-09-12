@@ -334,6 +334,19 @@ test('snapshot.docks defaults to empty array', () => {
   assert.deepEqual(ui.fullState().docks, []);
 });
 
+test('fullState exposes selected dock real device identity', () => {
+  const ui = new WebUIServer(undefined, [], 'real', TEST_SETTINGS_ROOT);
+  const realDeviceIdentity = {
+    modelName: 'Stream Deck MK.2',
+    serialNumber: 'REAL123',
+    firmwareVersion: '2.0.1',
+  };
+
+  ui.notifyDocks([{ ...fakeDockStatus(0), realDeviceIdentity }]);
+
+  assert.deepEqual(ui.fullState().realDeviceIdentity, realDeviceIdentity);
+});
+
 test('notifyDocks broadcasts status + extra-key configs to a connected WS client', () => {
   const ui = new WebUIServer(undefined, [], 'real', TEST_SETTINGS_ROOT);
   const { sent } = connectMockClient(ui);

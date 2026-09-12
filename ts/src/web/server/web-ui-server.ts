@@ -405,7 +405,6 @@ export class WebUIServer extends EventEmitter implements WebUIController {
   }
 
   // ---- WebUIController surface consumed by the route handlers ----
-
   fullState(): StateResponse {
     const images: Record<string, number> = {};
     for (const [k] of this.imageState) images[String(k)] = this.imageChannel.versionFor(k);
@@ -421,6 +420,7 @@ export class WebUIServer extends EventEmitter implements WebUIController {
       brightnessOverride: this.brightnessOverride,
       deviceModels: this.deviceModels,
       deviceIdentity: this.settingsIdentity.identity(),
+      realDeviceIdentity: this.dockRegistry.selectedStatus()?.realDeviceIdentity,
       extraKeys: this.selectedExtraKeyConfigs(),
     };
   }
