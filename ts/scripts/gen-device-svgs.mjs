@@ -49,7 +49,8 @@ const CHASSIS = {
  *   cols/rows  main key grid, straight out of the device registry
  *   strip      right-hand 3-segment LCD status column (the v1 18-key boards) — flush
  *              with the face, not pressable, so it gets no keycap bevel
- *   knobs      rotary-encoder row below the keys
+ *   knobs      rotary-encoder count
+ *   knobsAbove place rotary encoders above the keys instead of below
  *   gap        key gap as a fraction of key width, traced from product photos
  *   bodyR      chassis corner radius (Mirabox's plate is squarer than Elgato's slab)
  *   brand      wordmark placement: top | top-left | bottom | bottom-right
@@ -64,7 +65,7 @@ const DEVICES = [
   // --- Mirabox ------------------------------------------------------------
   { id: 'mirabox-293', name: 'Mirabox 293V3', brand: 'MIRABOX', cols: 5, rows: 3, gap: 0.32, bodyR: 10, label: 'bottom-right', stand: 'bracket', chassis: 'black', accent: '#22b8cf' }, // prettier-ignore
   { id: 'mirabox-293s', name: 'Mirabox 293S', brand: 'MIRABOX', cols: 5, rows: 3, strip: true, gap: 0.24, bodyR: 14, label: 'top', stand: 'wedge', chassis: 'black', accent: '#22b8cf' }, // prettier-ignore
-  { id: 'mirabox-k1pro', name: 'Mirabox K1 Pro', brand: 'MIRABOX', cols: 3, rows: 2, knobs: 3, gap: 0.38, bodyR: 14, label: 'bottom', stand: 'none', chassis: 'black', accent: '#22b8cf' }, // prettier-ignore
+  { id: 'mirabox-k1pro', name: 'Mirabox K1 Pro', brand: 'MIRABOX', cols: 3, rows: 2, knobs: 3, knobsAbove: true, gap: 0.38, bodyR: 14, label: 'bottom', stand: 'none', chassis: 'black', accent: '#22b8cf' }, // prettier-ignore
 
   // --- Ajazz --------------------------------------------------------------
   { id: 'ajazz-akp153e-rev2', name: 'Ajazz AKP153E (rev. 2)', brand: 'AJAZZ', cols: 5, rows: 3, gap: 0.30, bodyR: 14, label: 'bottom', stand: 'wedge', chassis: 'ink', accent: '#e8590c' }, // prettier-ignore
@@ -176,6 +177,15 @@ function renderWordmark(d, c, bx, bodyW, bandMidY, font) {
   return `<text x="${bx + BEZEL}" y="${bandMidY}" font-family="${font}" font-size="13" font-weight="600" letter-spacing="2.4" fill="${c.text}">${d.brand}</text>`;
 }
 
+function controlLayout(d, knobs, panelH, by) {
+  const knobsAbove = knobs > 0 && d.knobsAbove;
+  const labelTop = ['top', 'top-left'].includes(d.label);
+  const py = by + (labelTop ? BAND : BEZEL) + (knobsAbove ? KNOB_BAND : 0);
+  const knobY = knobsAbove ? py - KNOB_BAND / 2 : py + panelH + KNOB_BAND / 2;
+  const recessY = py - 7 - (knobsAbove ? KNOB_BAND - 6 : 0);
+  return { knobY, py, recessY };
+}
+
 function render(d) {
   const c = CHASSIS[d.chassis];
   const gap = Math.round(KEY * d.gap);
@@ -192,7 +202,7 @@ function render(d) {
   const bx = PAD;
   const by = PAD;
   const px = bx + BEZEL;
-  const py = by + (labelTop ? BAND : BEZEL);
+  const { knobY, py, recessY } = controlLayout(d, knobs, panelH, by);
 
   const uid = d.id.replace(/[^a-z0-9]/g, '');
 
@@ -205,7 +215,6 @@ function render(d) {
   const stripEls = renderStrip({ d, c, gap, gridW, panelH, px, py, uid });
 
   // --- knobs ---------------------------------------------------------------
-  const knobY = py + panelH + KNOB_BAND / 2;
   const knobEls = knobs
     ? Array.from({ length: knobs }, (_, i) => {
         const step = panelW / knobs;
@@ -281,7 +290,7 @@ function render(d) {
   ${underglow}
 
   <!-- key panel recess -->
-  <rect x="${px - 7}" y="${py - 7}" width="${panelW + 14}" height="${recessH}" rx="14" fill="#000000" opacity="0.22"/>
+  <rect x="${px - 7}" y="${recessY}" width="${panelW + 14}" height="${recessH}" rx="14" fill="#000000" opacity="0.22"/>
 
   <!-- keys -->
   <g>${keyEls}</g>
