@@ -102,6 +102,16 @@ a regular **Network device** at `localhost`; the deck behaves like Elgato hardwa
   self-check page.
 - **Standalone binary** — one **&lt;5 MB** file built on txiki.js; no Node.js.
 
+## Web UI states
+
+Web UI always shows current setup state. No guessing required.
+
+| Waiting for USB | Elgato conflict |
+|---|---|
+| ![DeckBridge waiting for a Stream Deck to be connected over USB, light theme](./img/webui-state-no-device.png) ![DeckBridge waiting for a Stream Deck to be connected over USB, dark theme](./img/webui-state-no-device-dark.png) | ![DeckBridge warning that the Elgato app is blocking USB access, light theme](./img/webui-state-conflict.png) ![DeckBridge warning that the Elgato app is blocking USB access, dark theme](./img/webui-state-conflict-dark.png) |
+| **Ready to pair** | **Connected and working** |
+| ![DeckBridge showing the address needed to pair a connected Stream Deck, light theme](./img/webui-state-pairing.png) ![DeckBridge showing the address needed to pair a connected Stream Deck, dark theme](./img/webui-state-pairing-dark.png) | ![DeckBridge showing a connected and working Stream Deck with its live preview, light theme](./img/webui-state-ready.png) ![DeckBridge showing a connected and working Stream Deck with its live preview, dark theme](./img/webui-state-ready-dark.png) |
+
 ## Use cases
 
 ```mermaid
