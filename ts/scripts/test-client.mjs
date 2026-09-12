@@ -60,7 +60,11 @@ try {
         // Small /dev/shm (containers, some runners) crashes the renderer mid-load.
         '--disable-dev-shm-usage',
         `--user-data-dir=${join(temp, 'profile')}`,
-        '--virtual-time-budget=5000',
+        // No --virtual-time-budget: with it, Chrome dumps only once the budget expires,
+        // and on a CI runner it never does — the browser's own background services keep
+        // it from going idle, so a passing page hangs until our timeout. Without it the
+        // dump happens at the load event, which is after the test's promise chain: every
+        // await here is microtask-driven, and microtasks drain before load is dispatched.
         '--dump-dom',
         pathToFileURL(html).href,
       ],
