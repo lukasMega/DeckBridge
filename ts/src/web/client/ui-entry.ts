@@ -30,6 +30,16 @@ interface InitialState extends Status {
   extraKeys?: Record<string, ExtraKeyCfg>;
 }
 
+// Simple-only build: never reach the advanced view. Clear any persisted 'advanced'
+// mode BEFORE the state fetch — ui.html's pre-paint script re-applies
+// data-mode="advanced" from localStorage, and ui-base.css hides #simple-view while
+// that attribute is set, so an upgrading user would stare at a blank page for the
+// whole round-trip (forever, if /api/state never resolves).
+if (__SIMPLE_ONLY__) {
+  document.documentElement.removeAttribute('data-mode');
+  localStorage.removeItem('deckbridge.mode');
+}
+
 void fetch('/api/state')
   .then((r) => r.json() as Promise<InitialState>)
   .then((st) => {
@@ -52,13 +62,6 @@ void fetch('/api/state')
     for (const [k, v] of Object.entries(st.images)) {
       store.setImage(Number(k), { v });
       applyImage(Number(k), { v });
-    }
-
-    // Simple-only build: never reach the advanced view. Clear any persisted
-    // 'advanced' mode so a returning user doesn't land on the (absent) view.
-    if (__SIMPLE_ONLY__) {
-      document.documentElement.removeAttribute('data-mode');
-      localStorage.removeItem('deckbridge.mode');
     }
 
     mountSimple();
