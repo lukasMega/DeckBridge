@@ -28,7 +28,7 @@ _.path = ["~/.cargo/bin"]
 # Release tag of lukasMega/txiki.js-with-slim-builds. Used by BOTH runtime paths:
 # scripts/tjs-download.mjs (downloads the prebuilt `slim-ffi` asset) and
 # scripts/tjs-build.mjs (clones this tag and builds it).
-TXIKI_VERSION  = "slim-v26.6.0-6"
+TXIKI_VERSION  = "slim-v26.6.0-8"
 # Portable default: vendored build/download destination, per-platform exe suffix.
 # Local overrides (a pre-built $TJS path, TJS_FROM_SOURCE=1) go in mise.local.toml
 # (gitignored) — see that file's comment.
