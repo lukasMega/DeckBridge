@@ -50,16 +50,16 @@ echo " - size:    $(du -k "$TJS" | cut -f1) kB"
 # exports them into every task, so the run lines don't repeat them.
 [tasks.s]
 alias = ["start", "run"]
-description = "Build and run"
+description = "Build and run (default UI: simple-only, no advanced/debug view)"
 quiet = true
 depends = ["build"]
 run = "$TJS run ts/dist/bundle.js"
 
-[tasks.s-simple]
-alias = ["start-simple", "run-simple"]
-description = "Build and run the simple-only UI (no advanced/debug view)"
+[tasks.s-advanced]
+alias = ["start-advanced", "run-advanced"]
+description = "Build and run with the advanced/debug view included"
 quiet = true
-depends = ["build-simple"]
+depends = ["build-advanced"]
 run = "$TJS run ts/dist/bundle.js"
 
 [tasks.d]
@@ -104,19 +104,19 @@ dir = "ts"
 run = "pnpm install --silent && echo pnpm install OK"
 
 [tasks.ts]
-description = "Bundle TypeScript with esbuild"
+description = "Bundle TypeScript with esbuild (simple-only UI: excludes the advanced view + its CSS)"
 quiet = true
 dir = "ts"
 depends = ["ts-install", "deckbridge-native"]
 run = "node build.mjs"
 
 [tasks.build]
-description = "Build everything"
+description = "Build everything (simple-only UI)"
 quiet = true
 depends = ["tjs-setup", "deckbridge-native", "tray-rs", "ts"]
 
 [tasks.compile]
-description = "Compile to standalone binary"
+description = "Compile to standalone binary (simple-only UI — this is what release.yml ships)"
 depends = ["build"]
 run = "node scripts/compile.mjs"
 
@@ -124,32 +124,32 @@ run = "node scripts/compile.mjs"
 description = "Stamp ts/package.json's version into Cargo.toml/tauri.conf.json (CI-only, don't commit the result)"
 run = "node scripts/sync-version.mjs"
 
-[tasks.ts-simple]
-description = "Bundle TypeScript (simple-only: excludes advanced view + its CSS)"
+[tasks.ts-advanced]
+description = "Bundle TypeScript with the advanced/debug view included (opt-in, not shipped)"
 quiet = true
 dir = "ts"
 depends = ["ts-install", "deckbridge-native"]
-run = "node build.mjs --simple-only"
+run = "node build.mjs --advanced"
 
-[tasks.build-simple]
-description = "Build everything with the simple-only UI (no advanced/debug view)"
+[tasks.build-advanced]
+description = "Build everything with the advanced/debug view included"
 quiet = true
-depends = ["tjs-setup", "deckbridge-native", "tray-rs", "ts-simple"]
+depends = ["tjs-setup", "deckbridge-native", "tray-rs", "ts-advanced"]
 
-[tasks.compile-simple]
-description = "Compile the simple-only standalone binary → deckbridge-lite"
-depends = ["build-simple"]
-run = "$TJS compile ts/dist/bundle.js deckbridge-lite"
+[tasks.compile-advanced]
+description = "Compile the advanced-view standalone binary → deckbridge-advanced"
+depends = ["build-advanced"]
+run = "$TJS compile ts/dist/bundle.js deckbridge-advanced"
 
 [tasks.package]
 description = "Package compiled binary into a distributable zip (usage: mise run package -- v1.2.3)"
 depends = ["compile"]
 run = "node scripts/package.mjs ${1:-dev}"
 
-[tasks.package-simple]
-description = "Package the simple-only (lite) binary into a distributable zip (usage: mise run package-simple -- v1.2.3)"
-depends = ["compile-simple"]
-run = "SRC_BIN=deckbridge-lite node scripts/package.mjs ${1:-dev}"
+[tasks.package-advanced]
+description = "Package the advanced-view binary into a distributable zip (usage: mise run package-advanced -- v1.2.3)"
+depends = ["compile-advanced"]
+run = "SRC_BIN=deckbridge-advanced node scripts/package.mjs ${1:-dev}"
 
 [tasks.lint]
 description = "Lint with oxlint"

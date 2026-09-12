@@ -25,7 +25,8 @@ declare global {
   // Version string injected by esbuild define (ts/build.mjs, VERSION env var; default 'dev').
   const __VERSION__: string;
 
-  // Simple-only build flag injected by esbuild define (ts/build.mjs --simple-only).
+  // Simple-only build flag injected by esbuild define (ts/build.mjs). Defaults to
+  // TRUE — `node build.mjs --advanced` is the only way to get false.
   // When true, the advanced (debug) view + its CSS are tree-shaken out of the embedded UI.
   const __SIMPLE_ONLY__: boolean;
 }
