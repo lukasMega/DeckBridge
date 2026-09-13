@@ -1,16 +1,10 @@
-// Minimal Node-Buffer-compatible shim for the txiki.js runtime.
+// Minimal Node-Buffer-compatible shim for txiki.js, replacing the npm `buffer` polyfill.
+// Implements ONLY the surface deckbridge uses, over a Uint8Array subclass so instances
+// pass to FFI / TextDecoder / postMessage with no copy. Codecs use the runtime globals
+// TextEncoder/TextDecoder and btoa/atob.
 //
-// Replaces the npm `buffer` polyfill (~27 kB minified, previously bundled into BOTH the
-// main bundle and the embedded USB-worker string). Implements ONLY the Buffer surface
-// deckbridge uses (verified across ts/src + ts/test). Backed by a Uint8Array subclass so
-// instances pass straight to FFI / TextDecoder / postMessage with no copy.
-//
-// Codecs use txiki runtime globals: TextEncoder/TextDecoder (utf8) and btoa/atob (base64).
-//
-// Wired in two ways by ts/build.mjs `shared`:
-//   - inject: ['./src/platform/buffer-shim.ts'] → provides the global `Buffer`
-//   - alias:  'node:buffer' → this file
-// Do NOT rename the exported `Buffer` binding or esbuild's inject will break.
+// ts/build.mjs `shared` wires it twice: `inject` (provides the global `Buffer`) and an
+// `alias` for 'node:buffer'. Do NOT rename the exported `Buffer` — inject breaks.
 
 type Encoding = 'utf8' | 'utf-8' | 'ascii' | 'latin1' | 'binary' | 'hex' | 'base64';
 

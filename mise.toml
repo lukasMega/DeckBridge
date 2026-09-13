@@ -1,29 +1,19 @@
 [tools]
 node = "24"
-# Default aqua backend. This was `"npm:pnpm" = "11"` because pnpm 11 dropped the
-# `pnpm-macos-x64` standalone binary, so aqua:pnpm/pnpm@11 had no darwin/amd64
-# asset and `mise install` died on the macos-15-intel release job ("unsupported
-# env: darwin/amd64"). pnpm 12 reverses both halves of that trade:
-#
-#   - v12.1.0 ships `pnpm-darwin-x64.tar.gz` again, so aqua resolves on intel macOS.
-#   - the npm backend is now the broken one. pnpm's npm tarball ships a
-#     placeholder `bin/pnpm` ("This is a placeholder. pnpm's native binary
-#     replaces this file during …") that only a postinstall swaps for the real
-#     binary; mise's npm backend links the package without that step, so
-#     `mise x -- pnpm --version` dies with `SyntaxError: Unexpected identifier 'is'`.
+# Default aqua backend, NOT `npm:pnpm`: pnpm's npm tarball ships a placeholder `bin/pnpm`
+# that only a postinstall swaps for the real binary, and mise's npm backend skips that, so
+# `pnpm --version` dies with `SyntaxError: Unexpected identifier 'is'`. v12 is the floor —
+# 12.1.0 restored `pnpm-darwin-x64`, without which aqua has no intel-macOS asset.
 pnpm = "12"
 
-# No `[tools."github:lukasMega/txiki.js"]` entry: $TJS is a vendor/ path filled
-# by `mise run tjs-setup`, not a mise-managed tool — mise-action's blind
-# `mise install` failed on platforms with no matching asset (kept linux out
-# of release.yml).
+# No `[tools."github:lukasMega/txiki.js"]` entry: $TJS is a vendor/ path filled by
+# `mise run tjs-setup`, not a mise-managed tool — mise-action's blind `mise install`
+# failed on platforms with no matching asset (kept linux out of release.yml).
 
 [env]
-# rustup installs cargo here; CI (dtolnay/rust-toolchain) adds it to PATH itself,
-# but a plain interactive shell may not (no `source $HOME/.cargo/env` in rc files
-# — confirmed missing here). mise's `_.path` prepends it with the OS-correct
-# separator, so tasks can call plain `cargo` on every platform without
-# hardcoding a POSIX-only ${HOME}/.cargo/bin/cargo path (broken on Windows).
+# rustup's cargo. CI adds it to PATH itself but an interactive shell may not, and `_.path`
+# prepends with the OS-correct separator — so tasks call plain `cargo` everywhere instead
+# of a POSIX-only ${HOME}/.cargo/bin path.
 _.path = ["~/.cargo/bin"]
 # Release tag of lukasMega/txiki.js-with-slim-builds. Used by BOTH runtime paths:
 # scripts/tjs-download.mjs (downloads the prebuilt `slim-ffi` asset) and
@@ -46,8 +36,6 @@ echo " - version: $($TJS --version)"
 echo " - size:    $(du -k "$TJS" | cut -f1) kB"
 '''
 
-# DECKBRIDGE_NATIVE_LIB / DECKBRIDGE_TRAY_BIN come from [env] above — mise already
-# exports them into every task, so the run lines don't repeat them.
 [tasks.s]
 alias = ["start", "run"]
 description = "Build and run (default UI: simple-only, no advanced/debug view)"
@@ -74,10 +62,8 @@ run = "node scripts/gen-splash.mjs"
 [tasks.tjs-setup]
 description = "Acquire the slim txiki.js runtime: prebuilt download by default, from-source build when TJS_FROM_SOURCE=1"
 quiet = true
-# Default (no env): download the prebuilt `slim-ffi` asset of $TXIKI_VERSION —
-# no C/C++ toolchain needed, so a contributor can always `mise run build`.
-# TJS_FROM_SOURCE=1 builds the same runtime from source instead (needed on
-# macos-x86_64, which has no prebuilt slim asset).
+# Downloading by default keeps `mise run build` toolchain-free for contributors.
+# TJS_FROM_SOURCE=1 is needed on macos-x86_64, which has no prebuilt slim asset.
 run = "node scripts/tjs-setup.mjs"
 
 [tasks.tjs-build]
@@ -164,27 +150,20 @@ run = "node scripts/tauri-build.mjs"
 [tasks.tauri-build-macos]
 description = "Build macOS .app + .dmg via Tauri (compile + tray + sidecars renamed to apple-darwin triple + cargo tauri build --bundles app,dmg)"
 depends = ["compile", "tray-rs"]
-# macOS = Tauri Model A, ad-hoc (no Apple Developer ID). The macOS bundle.targets
-# (app,dmg) + signingIdentity "-" + hardenedRuntime false live in
-# src-tauri/tauri.macos.conf.json, which Tauri auto-merges on macOS (RFC 7396 —
-# its targets array REPLACES the base ["nsis"], so nsis never leaks here). We also
-# pass --bundles app,dmg explicitly as belt-and-suspenders. hardenedRuntime stays
-# OFF so the relay's extract+dlopen of libhidapi/libdeckbridge_native isn't blocked by
-# library validation (plan gotcha G3).
+# macOS = Tauri Model A, ad-hoc (no Apple Developer ID). bundle.targets (app,dmg) +
+# signingIdentity "-" + hardenedRuntime false live in src-tauri/tauri.macos.conf.json,
+# auto-merged on macOS. hardenedRuntime stays OFF or library validation blocks the
+# relay's extract+dlopen of libhidapi/libdeckbridge_native (plan gotcha G3).
 #
-# DO NOT re-codesign the relay binary: `tjs compile` appends the bytecode payload
-# AFTER the Mach-O __LINKEDIT, and ships a linker-signed ad-hoc signature the
-# kernel runs leniently (the appended bytes are never mapped). `codesign --force`
-# replaces that special signature with a normal one and runs strict validation,
-# which rejects the trailing data → "main executable failed strict validation".
-# So the relay keeps its as-compiled linker-signed signature; only deckbridge-tray (a
+# DO NOT re-codesign the relay binary. `tjs compile` appends the bytecode payload after
+# the Mach-O __LINKEDIT under a linker-signed ad-hoc signature the kernel treats
+# leniently; `codesign --force` swaps in a normal one, which strict-validates and rejects
+# the trailing data → "main executable failed strict validation". Only deckbridge-tray (a
 # plain Mach-O) is ad-hoc signed.
 #
-# chmod +x: `cp` over a pre-existing destination keeps the OLD file's mode, so a
-# leftover non-executable stub would yield a non-runnable sidecar in the bundle.
-# CI=true: skips bundle_dmg.sh's AppleScript/Finder window-styling pass, which
-# needs a GUI/Automation grant and fails in a plain terminal (GitHub Actions sets
-# CI automatically, so the release job is unaffected either way).
+# chmod +x: `cp` onto an existing destination keeps the OLD mode, so a leftover
+# non-executable stub would ship a non-runnable sidecar. CI=true skips bundle_dmg.sh's
+# AppleScript window-styling pass, which needs a GUI/Automation grant.
 run = """
 TRIPLE="$(uname -m | sed 's/x86_64/x86_64/;s/arm64/aarch64/')-apple-darwin"
 mkdir -p src-tauri/binaries
@@ -269,9 +248,7 @@ description = "Format, lint, types, test, browser e2e, and compile — run befor
 # this run it starts only once docs-check has produced docs-site/build/.
 depends = ["format", "ci-checks", "rust-lint", "docs-check", "e2e-types", "e2e-browser", "compile"]
 dir = "ts"
-# run = "pnpm run beforeCommit"
-# Raised from 150s: e2e-docs cannot start until docs-check's Docusaurus build finishes, so
-# the two are serial, not parallel.
+# 300s, not 150s: e2e-docs can't start until docs-check's Docusaurus build finishes.
 timeout = "300s"
 
 [tasks.smoke]
@@ -306,10 +283,9 @@ description = "Black-box smoke test of a packaged release zip (usage: mise run e
 run = "./scripts/e2e-smoke.sh ${1:-}"
 timeout = "30s"
 
-# ── Playwright + Lightpanda browser e2e (e2e/) ────────────────────────────────
-# Lightpanda is a headless browser with no rendering/layout engine, driven over CDP.
-# It boots in ~50ms and the whole docs suite runs in ~5s, but it means no screenshots,
-# no boundingBox, and no `locator.click()` — see e2e/helpers/click.ts.
+# Playwright + Lightpanda browser e2e (e2e/)
+# Lightpanda has no rendering/layout engine, so it boots in ~50ms but supports no
+# screenshots, no boundingBox and no `locator.click()` — see e2e/helpers/click.ts.
 [tasks.e2e-install]
 description = "Install the Playwright e2e suite's dependencies"
 dir = "e2e"
@@ -329,11 +305,9 @@ timeout = "180s"
 description = "Browser e2e: the built Docusaurus site (run `mise run docs-build` first)"
 dir = "e2e"
 depends = ["e2e-install"]
-# Not `depends = ["docs-check"]`: standalone, this task must stay a few seconds and fail
-# with "run mise run docs-build first" rather than silently triggering a multi-minute
-# Docusaurus build. wait_for only applies when docs-check is already part of the same run
-# (i.e. beforeCommit), where it is what produces docs-site/build/ — without it the two
-# would race and e2e-docs could look for a build that is still being written.
+# wait_for, not `depends`: standalone this task must fail in seconds with "run mise run
+# docs-build first" instead of silently triggering a multi-minute Docusaurus build. Within
+# beforeCommit, docs-check produces docs-site/build/ and wait_for stops the two racing.
 wait_for = ["docs-check"]
 run = "pnpm run test:docs"
 timeout = "180s"
@@ -373,8 +347,9 @@ run = "pnpm install"
 [tasks.docs-dev]
 description = "Start Docusaurus dev server (docs-site)"
 dir = "docs-site"
-# --port pins 3001 so an ambient PORT (e.g. PORT=/dev/cu.usbserial-* from idf.py flash) can't make Docusaurus parse port NaN
-# pnpm exec (not `pnpm run start --`): pnpm forwards the bare `--` on, and Docusaurus takes it as the positional siteDir
+# --port pins 3001 so an ambient PORT (e.g. from idf.py flash) can't make Docusaurus
+# parse port NaN. `pnpm exec`, not `pnpm run start --`: pnpm forwards the bare `--` and
+# Docusaurus reads it as the positional siteDir.
 run = "pnpm exec docusaurus start --port 3001 --host 0.0.0.0"
 
 [tasks.docs-check]

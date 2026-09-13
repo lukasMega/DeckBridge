@@ -16,14 +16,9 @@ import {
   TMICE_STREAM_CONTROLLER_MODEL,
 } from './rebadge/akp153-v1-clones.js';
 
-// Elgato models first so they take priority over Mirabox in the probe loop.
-// 293V3 before 293S within Mirabox (existing device probed first).
-// Ajazz rev. 2 next — its VID (0x0300) is unique among the v3 models.
-// Fifine D6 next — VID 0x3142 is unique, so probe position is cosmetic; it sits with
-// the other v3-family boards. rev. 1 (0x0007) before rev. 2 (0x0060); PIDs don't overlap.
-// The 7 v1 rebadges (akp153-v1-clones.ts) last — probe order is irrelevant for them,
-// every VID is unique except 0x5548 (shared with the 293S, but PIDs 0x6670/0x6674 don't
-// overlap).
+// Probe order: Elgato first (priority over Mirabox), then 293V3 before 293S. Everything
+// after that has a unique VID/PID pair, so its position is cosmetic — the one near-clash,
+// 0x5548 (293S vs. two v1 rebadges), is separated by PID.
 export const DEVICE_MODELS: DeviceModel[] = [
   MK2_MODEL,
   MINI_MODEL,

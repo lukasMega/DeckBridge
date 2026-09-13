@@ -1,11 +1,5 @@
-/**
- * SettingsPanel — collapsible raw-JSON settings editor (v1).
- *
- * Loads the current persisted settings (selectedDock + per-device brightness/
- * brightnessOverride/imageModeOverride under devices[]) from GET /api/settings
- * into a textarea; Save POSTs the edited JSON back. See
- * .claude/plans/2026-07-15_per-device-settings.md.
- */
+/** Raw-JSON settings editor (v1): GET /api/settings into a textarea, Save POSTs it
+ *  back. Schema + rationale: .claude/plans/2026-07-15_per-device-settings.md. */
 import { useState } from 'preact/hooks';
 import { Collapsible } from './components/Collapsible.js';
 

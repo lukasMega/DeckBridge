@@ -1,15 +1,10 @@
-// Node-net-like TCP API backed by txiki.js tjs.connect / tjs.listen globals.
-// Concentrates all impedance mismatch in one place so cora-server-base.ts
-// and elgato.ts only need a one-line import change.
-// No tjs:* import needed — tjs is a global provided at runtime.
+// Node-net-like TCP API backed by the txiki.js tjs.connect / tjs.listen globals (no
+// tjs:* import needed — tjs is a runtime global).
 //
-// No write backpressure: write() fires-and-forgets the writer.write()
-// promise (errors are still caught and routed to the 'error'/close path).
-// This is acceptable because all CORA frames are bounded to <=512 bytes —
-// at that size the OS socket buffer absorbs writes far faster than the
-// 1024B Elgato legacy packets or CORA frames can be produced, so the
-// unawaited promise never represents meaningful unbounded queuing. If a
-// future caller needs to stream larger payloads, add backpressure here.
+// No write backpressure: write() fires-and-forgets writer.write() (errors still route
+// to the 'error'/close path). Safe only because every CORA frame is <=512 bytes, so the
+// OS socket buffer drains faster than frames are produced. Add backpressure here before
+// streaming anything larger.
 
 type DataCb = (chunk: Buffer) => void;
 type CloseCb = (hadError: boolean) => void;

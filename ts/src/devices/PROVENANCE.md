@@ -51,6 +51,46 @@ PR #4), but PR #5's author reports the box and label just say "D6", and Fifine
 separately sells a retail D6PRO SKU — so treat "rev. 2", not "D6 Pro", as this
 model's identity.
 
+512-byte writes render **black** on rev. 2. Four independent `0x0060` owners hit it
+and all fixed it by moving to 1024 (opendeck-ampgd6 PR #4, #5, #6, #7). PR #7 has the
+mechanism: the board reports `MaxOutputReportSize = 1024`, so every 513-byte write —
+brightness, clear, image chunks, the STP commit — is discarded by the firmware while
+`write()` still returns success. The device enumerates and reports button presses
+correctly and the screen simply stays black. That is what `packetSizeCandidates`
+probes for. Lyagva's fork PR #1 is a _different_ fix for the same symptom: it keeps
+`packetSize: 512`, enlarges the image chunks, serializes the writes and paces them
+2 ms apart (see `DeviceWireSpec.chunkDelayMs`). Do not "unify" the two revisions.
+
+### Panel size: 112×112, and it cannot be probed
+
+The least settled value on this device — the reference projects split four ways: 95
+(jasonkoon/sd-connect, live-probed on a `0x0060`), 100 (companion PR #49, on a
+`0x0007`), 105 (opendeck-ampgd6 main + FifineOpenSource), 112 (opendeck-ampgd6 PR #6
+and PR #7, both on `0x0060`).
+
+We take 112: it is the hardware-verified 293V3 size, and the only value two
+independent owners derived _from_ the hardware rather than inherited — PR #6 by
+tracing Fifine's own Windows software, PR #7 by painting candidate resolutions onto
+separate keys ("At 105 the artwork leaves a visible gap and each row smears against
+the fixed framebuffer stride"). 112 also holds up on a real rev. 2 unit on macOS:
+keys render full-bleed.
+
+Unlike `packetSize`, this CANNOT be probed — the device never reports its panel size
+and never complains. A wrong value shows as letterboxing, a gap, or a soft image.
+Re-measure on hardware before changing it.
+
+### `maxBytes: 10240` is headroom, not a ceiling
+
+Inherited from the 293V3 and deliberately left alone even though a rev. 2 unit proved
+the firmware takes far more: the `mise run d6-capture -- s3` ladder pushed
+7.9 / 10.8 / 14.0 / 22.7 / 22.9 KB onto five keys and every one rendered intact (white
+frame closed on all four edges, right tally count, even noise fill).
+
+Raising it buys nothing in practice — the desktop's own 112×112 keys arrive through
+the sidecar at 1.9–4.8 KB (q 0.9), less than half the cap, so it almost never binds —
+while each extra KB is one more 1024-byte HID write per key on the worker thread. Only
+revisit if a genuinely detailed key is seen getting quality-crushed by the cap.
+
 ### The rev. 2 board's own self-description is checked in
 
 `mise run d6-capture` (`src/d6-capture.ts`) read the HID report descriptor off a

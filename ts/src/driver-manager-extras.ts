@@ -110,16 +110,11 @@ export class ExtraDockCoordinator {
     }
   }
 
-  /** The lowest-sorted HID path (across all models) not already claimed by the
-   *  primary or a live extra — the next physical unit to dock. Lowest wins so
-   *  scan ticks are deterministic; exactly one dock opens per tick. null when
-   *  every present unit is already docked.
-   *
-   *  Claimed = the primary's own interface + every live extra's. The primary's
-   *  path is the single source of truth for "don't re-open the primary's unit"
-   *  (see the hid_open_path risk in the plan). If the primary opened without a
-   *  known path (off-macOS VID/PID fallback), we can't tell its unit from a
-   *  duplicate — skip its whole model so we never double-open it. */
+  /** The lowest-sorted unclaimed HID path (claimed = the primary's own interface plus
+   *  every live extra's) — the next physical unit to dock. Lowest wins so scan ticks are
+   *  deterministic; exactly one dock opens per tick. If the primary opened without a
+   *  known path (off-macOS VID/PID fallback), its unit is indistinguishable from a
+   *  duplicate, so skip that whole model rather than risk double-opening it. */
   private pickUnclaimedPath(
     realDriver: WorkerHidDriver,
   ): { model: DeviceModel; hidPath: string } | null {
