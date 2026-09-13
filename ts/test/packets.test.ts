@@ -8,6 +8,8 @@ import {
   CoraFrameReader,
   tryDecodeCoraFrame,
 } from '../src/cora-frame.js';
+import { gen1ParseInput } from '../src/devices/protocol/elgato-gen1.js';
+import { gen2ParseInput } from '../src/devices/protocol/elgato-gen2.js';
 
 let passed = 0;
 let failed = 0;
@@ -138,6 +140,53 @@ test('tryDecodeCoraFrame returns frame for complete data', () => {
   assert.notEqual(decoded, null);
   assert.equal(decoded!.messageId, 42);
   assert.deepEqual(Array.from(decoded!.payload), [0xaa, 0xbb]);
+});
+
+// Elgato HID input reports
+
+console.log('\nElgato input parsing');
+
+test('gen2ParseInput: states start after the u16 key count, not inside it', () => {
+  // Wire: [reportId, inputType, count_lo, count_hi, key0..key14]
+  const data = new Uint8Array(20);
+  data[0] = 0x01;
+  data[1] = 0x00;
+  data[2] = 15;
+  data[3] = 0;
+  data[4] = 1; // key 0 pressed
+
+  const states = gen2ParseInput(data, 15);
+  assert.notEqual(states, null);
+  assert.equal(states![0]!.pressed, true);
+  assert.equal(states![1]!.pressed, false);
+});
+
+test('gen2ParseInput: last key of a 15-key deck is reachable', () => {
+  const data = new Uint8Array(20);
+  data[0] = 0x01;
+  data[1] = 0x00;
+  data[2] = 15;
+  data[18] = 1; // key 14 pressed
+
+  const states = gen2ParseInput(data, 15);
+  assert.equal(states![14]!.pressed, true);
+});
+
+test('gen2ParseInput: rejects non-button reports', () => {
+  const data = new Uint8Array(20);
+  data[0] = 0x01;
+  data[1] = 0x02; // encoder/touch input type
+  assert.equal(gen2ParseInput(data, 15), null);
+});
+
+test('gen1ParseInput: states start right after the report ID', () => {
+  const data = new Uint8Array(8);
+  data[0] = 0x01;
+  data[1] = 1; // key 0 pressed
+
+  const states = gen1ParseInput(data, 6);
+  assert.equal(states![0]!.pressed, true);
+  assert.equal(states![1]!.pressed, false);
 });
 
 // Summary

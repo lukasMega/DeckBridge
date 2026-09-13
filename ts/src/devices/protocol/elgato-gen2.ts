@@ -1,6 +1,6 @@
 /** gen2 HID protocol: Stream Deck MK.2 / Classic / XL.
  *  Image: JPEG, 1024-byte packets, 8-byte header.
- *  Input: report 0x01, input-type byte 0x00, button states at data[3+i]. */
+ *  Input: report 0x01, input-type byte 0x00, key count (u16 LE), then states. */
 
 import { packChunks, parseButtons } from './framing.js';
 
@@ -31,8 +31,8 @@ export function gen2ParseInput(
   if (data[0] !== 0x01) return null;
   // data[1] = input type (0x00 = button)
   if (data[1] !== 0x00) return null;
-  // Button states at data[3..3+keyCount]
-  return parseButtons(data, keyCount, 3);
+  // data[2..3] = key count (u16 LE); button states at data[4..4+keyCount]
+  return parseButtons(data, keyCount, 4);
 }
 
 /** gen2 brightness feature report (32 bytes). */

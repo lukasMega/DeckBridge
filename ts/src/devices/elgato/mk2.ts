@@ -16,8 +16,7 @@ export const MK2_MODEL: DeviceModel = {
     format: 'jpeg',
     width: 72,
     height: 72,
-    // Phase 0: if CORA images are upright set rotate:180; if MK.2-native set rotate:0.
-    // Passthrough (0) until hardware measurement confirms.
+    // CORA images arrive MK.2-native (already 180°-rotated by the desktop app).
     rotate: 0,
     flipH: false,
     flipV: false,
@@ -29,5 +28,8 @@ export const MK2_MODEL: DeviceModel = {
   keyMap: {},
   // Preserves today's behavior: coraProductId() falls back to usbProductIds[0] for Elgato.
   cora: { productId: 0x0080, usePhysicalIdentity: true },
+  // Splash/extra-key sources are upright, so they need the 180° the CORA path
+  // already has baked in.
+  splash: { transformOverride: { rotate: 180 } },
   driverKind: 'elgato-hid',
 };
