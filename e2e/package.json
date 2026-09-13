@@ -1,0 +1,20 @@
+{
+  "name": "deckbridge-e2e",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Playwright e2e suite for the DeckBridge Web UI and the docs site, driven by the Lightpanda runtime over CDP.",
+  "scripts": {
+    "test": "playwright test",
+    "test:app": "playwright test --project=app",
+    "test:docs": "playwright test --project=docs",
+    "types": "tsc --noEmit",
+    "lightpanda": "node scripts/ensure-lightpanda.mjs"
+  },
+  "devDependencies": {
+    "@lightpanda/browser": "1.6.0",
+    "@playwright/test": "1.63.0",
+    "@types/node": "24.13.4",
+    "typescript": "7.0.2"
+  }
+}

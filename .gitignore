@@ -4,6 +4,7 @@ mise.local.toml
 # Node.js
 ts/node_modules/
 docs-site/node_modules/
+e2e/node_modules/
 video/node_modules/
 video/
 
@@ -43,6 +44,10 @@ video/out/
 # Docs site — generated outputs (source of truth is docs-site/src + docs/)
 docs-site/build/
 docs-site/.docusaurus/
+
+# Playwright e2e run artifacts
+e2e/test-results/
+e2e/playwright-report/
 
 # macOS
 .DS_Store
