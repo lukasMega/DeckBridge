@@ -88,11 +88,74 @@ jobs:
       - name: Format check (oxfmt)
         run: |
           mise run format
-          if ! git diff --quiet -- ts/src ts/test; then
+          if ! git diff --quiet -- ts/src ts/test e2e; then
             echo "::error::oxfmt produced changes — run 'mise run format' and commit."
-            git --no-pager diff --stat -- ts/src ts/test
+            git --no-pager diff --stat -- ts/src ts/test e2e
             exit 1
           fi
+
+  # ── Browser e2e: the real bundle in mock mode, driven through Lightpanda ──
+  # Separate from `checks` because it needs a full `mise run build` (Rust cdylib +
+  # tray + tjs runtime), which ci-checks deliberately avoids.
+  e2e-app:
+    name: e2e (web UI, Lightpanda)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust (workspace target)
+        uses: actions/cache@v6
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            rust/target
+          key: ci-e2e-rust-${{ hashFiles('rust/**/Cargo.lock') }}
+          restore-keys: ci-e2e-rust-
+
+      # See the `checks` job for why Google's apt source is removed first.
+      - name: Install system deps (libhidapi + libudev + libffi + gtk for the tray)
+        run: |
+          sudo rm -f /etc/apt/sources.list.d/google-chrome.list
+          sudo apt-get update
+          sudo apt-get install -y libhidapi-dev libudev-dev libffi-dev libgtk-3-dev libxdo-dev libayatana-appindicator3-dev
+
+      - uses: jdx/mise-action@v4
+
+      - name: Cache pnpm store
+        uses: actions/cache@v6
+        with:
+          path: ~/.local/share/pnpm/store
+          key: ci-e2e-pnpm-${{ hashFiles('ts/pnpm-lock.yaml', 'e2e/pnpm-lock.yaml') }}
+          restore-keys: ci-e2e-pnpm-
+
+      # The Lightpanda binary is not in the npm package: `lightpanda install`
+      # downloads a nightly whose identity is fixed by the exact @lightpanda/browser
+      # pin, so the lockfile hash is the right cache key.
+      - name: Cache Lightpanda binary
+        uses: actions/cache@v6
+        with:
+          path: ~/.cache/lightpanda-node
+          key: lightpanda-${{ hashFiles('e2e/pnpm-lock.yaml') }}
+
+      - name: Type-check the e2e suite
+        run: mise run e2e-types
+
+      # CORA 5343/5344 are hardcoded and must be free; helpers/app-server.ts
+      # preflights them and fails with a named error rather than timing out.
+      - name: e2e (app)
+        run: mise run e2e-app
+
+      - name: Upload Playwright report on failure
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: playwright-report-app
+          path: e2e/test-results
+          retention-days: 7
 
   # ── Rust: rustfmt + clippy (-D warnings, both JPEG backends) + unit tests ──
   rust-lint:

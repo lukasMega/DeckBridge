@@ -217,7 +217,7 @@ cargo test --workspace
 [tasks.format]
 description = "Format with oxfmt (single quotes)"
 depends = ["ts-install"]
-run = "./ts/node_modules/.bin/oxfmt ts/src ts/test docs-site/src docs-site/scripts"
+run = "./ts/node_modules/.bin/oxfmt ts/src ts/test docs-site/src docs-site/scripts e2e/fixtures e2e/helpers e2e/scripts e2e/tests e2e/playwright.config.ts e2e/global-setup.ts e2e/global-teardown.ts"
 
 [tasks.check]
 description = "Typecheck + lint + format check"
@@ -264,11 +264,15 @@ depends = ["lint", "types", "test", "test-client", "knip", "check-loc", "docs-de
 timeout = "120s"
 
 [tasks.beforeCommit]
-description = "Format, lint, types, test, and compile — run before committing"
-depends = ["format", "ci-checks", "rust-lint", "docs-check", "compile"]
+description = "Format, lint, types, test, browser e2e, and compile — run before committing"
+# e2e-browser is e2e-app + e2e-docs. e2e-docs carries `wait_for = ["docs-check"]`, so in
+# this run it starts only once docs-check has produced docs-site/build/.
+depends = ["format", "ci-checks", "rust-lint", "docs-check", "e2e-types", "e2e-browser", "compile"]
 dir = "ts"
 # run = "pnpm run beforeCommit"
-timeout = "150s"
+# Raised from 150s: e2e-docs cannot start until docs-check's Docusaurus build finishes, so
+# the two are serial, not parallel.
+timeout = "300s"
 
 [tasks.smoke]
 description = "Build and run USB HID smoke test (requires Mirabox device connected)"
@@ -301,6 +305,49 @@ run = """
 description = "Black-box smoke test of a packaged release zip (usage: mise run e2e -- dist/foo.zip)"
 run = "./scripts/e2e-smoke.sh ${1:-}"
 timeout = "30s"
+
+# ── Playwright + Lightpanda browser e2e (e2e/) ────────────────────────────────
+# Lightpanda is a headless browser with no rendering/layout engine, driven over CDP.
+# It boots in ~50ms and the whole docs suite runs in ~5s, but it means no screenshots,
+# no boundingBox, and no `locator.click()` — see e2e/helpers/click.ts.
+[tasks.e2e-install]
+description = "Install the Playwright e2e suite's dependencies"
+dir = "e2e"
+# The bundled Chromium is never launched (Lightpanda is the runtime; the E2E_BROWSER=chromium
+# triage path uses $CHROME_BIN / a system install), so skip the ~150 MB download.
+env = { PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD = "1" }
+run = "pnpm install --silent && echo e2e pnpm install OK"
+
+[tasks.e2e-app]
+description = "Browser e2e: the DeckBridge Web UI in mock mode (needs CORA ports 5343/5344 free)"
+dir = "e2e"
+depends = ["build", "e2e-install"]
+run = "pnpm run test:app"
+timeout = "180s"
+
+[tasks.e2e-docs]
+description = "Browser e2e: the built Docusaurus site (run `mise run docs-build` first)"
+dir = "e2e"
+depends = ["e2e-install"]
+# Not `depends = ["docs-check"]`: standalone, this task must stay a few seconds and fail
+# with "run mise run docs-build first" rather than silently triggering a multi-minute
+# Docusaurus build. wait_for only applies when docs-check is already part of the same run
+# (i.e. beforeCommit), where it is what produces docs-site/build/ — without it the two
+# would race and e2e-docs could look for a build that is still being written.
+wait_for = ["docs-check"]
+run = "pnpm run test:docs"
+timeout = "180s"
+
+[tasks.e2e-browser]
+alias = ["e2e-all"]
+description = "All browser e2e suites (app + docs)"
+depends = ["e2e-app", "e2e-docs"]
+
+[tasks.e2e-types]
+description = "Type-check the e2e suite"
+dir = "e2e"
+depends = ["e2e-install"]
+run = "pnpm run types"
 
 [tasks.test]
 description = "Run tests (TJS)"

@@ -93,6 +93,36 @@ jobs:
       - name: Test
         run: pnpm run test:links && pnpm run test:content && pnpm run test:output && pnpm run test:feeds
 
+      # Browser layer: everything above is static regex over build/. These specs
+      # drive the built site in Lightpanda and cover hydration only — client-side
+      # routing, the DeviceTable filter/sort, colour-mode and animation prefs.
+      # Lightpanda is not Chromium and needs no display; the Chrome installed
+      # above is for mermaid prerendering and is unrelated.
+      - name: Cache Lightpanda binary
+        uses: actions/cache@v6
+        with:
+          path: ~/.cache/lightpanda-node
+          key: lightpanda-${{ hashFiles('e2e/pnpm-lock.yaml') }}
+
+      - name: Install e2e deps
+        working-directory: e2e
+        run: pnpm install --frozen-lockfile
+        env:
+          # The bundled Chromium is never launched — Lightpanda is the runtime.
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
+
+      - name: Browser e2e (docs)
+        working-directory: e2e
+        run: pnpm run test:docs
+
+      - name: Upload Playwright report on failure
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: playwright-report-docs
+          path: e2e/test-results
+          retention-days: 7
+
       - uses: actions/configure-pages@v6
         if: github.event_name != 'pull_request'
 
