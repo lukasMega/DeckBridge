@@ -15,7 +15,7 @@ interface RenderTarget {
   sendImage(keyIndex: number, bytes: Uint8Array): void;
 }
 
-// --- Diagnostic JPEG dump (DECKBRIDGE_DUMP_DIR) ---
+// Diagnostic JPEG dump (DECKBRIDGE_DUMP_DIR)
 // When set, every device-bound image produced by the transform is also written
 // to disk for offline diffing. Checked once at module load so the normal (unset)
 // case has zero overhead.
@@ -37,7 +37,7 @@ function dumpNativeBytes(keyIndex: number, nativeBytes: Buffer): void {
   });
 }
 
-// --- Paired raw/transformed image dump (DECKBRIDGE_RAW_DUMP_DIR) ---
+// Paired raw/transformed image dump (DECKBRIDGE_RAW_DUMP_DIR)
 // When set, every CORA image received from the Elgato app is saved to disk next
 // to the device-bound transform result, paired by sequence number, so the input
 // the desktop sent can be diffed against what we push to the panel. Keeps the
@@ -107,7 +107,7 @@ function dumpTransformed(
   handle.files.push(outPath);
 }
 
-// --- Worker-side render performance tracking ---
+// Worker-side render performance tracking
 // Logs first-image → 15th-image device-side latency (transform + write) so the
 // device batch can be compared against the main-thread "WebUI 15-key batch".
 const PERF_BATCH_N = 15;

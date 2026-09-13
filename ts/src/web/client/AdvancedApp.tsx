@@ -1,18 +1,8 @@
 /**
- * AdvancedApp — Preact replacement for the ADVANCED view (debug / power-user).
- *
- * Mounts into #advanced-view and reads from store.ts.
- *
- * Log consoles are UNCONTROLLED: Preact mounts the container refs once and
- * never re-renders them. An effect subscribes to the store and appends DOM
- * nodes via a rAF flush (ported verbatim from ui-logs.ts) so a burst of
- * 100 comm packets per image chunk costs one layout, not 100.
- *
- * The subcomponents below live in sibling files (file-size refactor, no
- * behavior change): advanced-header.tsx, advanced-key-grid.tsx,
- * advanced-mock-config.tsx, advanced-key-events.tsx, advanced-log-panel.tsx.
- * The key grid itself is the shared components/KeyGridPreview.tsx (same
- * component as the simple view's live preview, with the debug extras on).
+ * AdvancedApp — Preact ADVANCED view (debug / power-user). Mounts into
+ * #advanced-view, reads store.ts. Log consoles are UNCONTROLLED: an effect
+ * appends DOM nodes via a rAF flush, so a burst of 100 comm packets per image
+ * chunk costs one layout, not 100.
  */
 import { useStore } from './store.js';
 import { AdvHeader } from './advanced-header.js';
@@ -49,9 +39,7 @@ function AdvGridSection(): preact.JSX.Element {
   );
 }
 
-// ---------------------------------------------------------------------------
 // AdvancedApp — top-level component
-// ---------------------------------------------------------------------------
 
 export function AdvancedApp(): preact.JSX.Element {
   return (

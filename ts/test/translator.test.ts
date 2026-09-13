@@ -97,7 +97,7 @@ const SOLID_RED_16X16_JPEG = Buffer.from([
   0xd2, 0xbf, 0x0c, 0x3f, 0xd5, 0x30, 0xa0, 0x02, 0x80, 0x0a, 0x00, 0xff, 0xd9,
 ]);
 
-// ── Pure mapping tests (no sidecar needed) ───────────────────────────────────
+// Pure mapping tests (no sidecar needed)
 
 console.log('\ntranslator: index mapping');
 
@@ -148,7 +148,7 @@ await test('round-trip: all codes 1–15 map to indices 0–14', () => {
   }
 });
 
-// ── K1 Pro mapping tests ──────────────────────────────────────────────────────
+// K1 Pro mapping tests
 
 console.log('\ntranslator: mirabox-k1pro index mapping');
 
@@ -172,7 +172,7 @@ await test('deviceInputToMk2Index(0x50, mirabox-k1pro) === -1 (encoder code drop
   assert.equal(deviceInputToMk2Index(0x50, MIRABOX_K1PRO_MODEL), -1);
 });
 
-// ── fillModeFor mapping ──────────────────────────────────────────────────────
+// fillModeFor mapping
 
 console.log('\ntranslator: fillModeFor');
 
@@ -217,7 +217,7 @@ await test('fillModeFor: undefined resizeMode → 0', () => {
   assert.equal(fillModeFor(baseImageSpec({ resizeMode: undefined })), 0);
 });
 
-// ── applyOverride ────────────────────────────────────────────────────────────
+// applyOverride
 
 console.log('\ntranslator: applyOverride');
 
@@ -259,7 +259,7 @@ await test('applyOverride: other spec fields preserved', () => {
   assert.equal(eff.quality, 0.6);
 });
 
-// ── Image transform tests (uses Rust sidecar) ────────────────────────────────
+// Image transform tests (uses Rust sidecar)
 
 console.log('\ntranslator: image transform (Rust sidecar)');
 
@@ -335,7 +335,7 @@ await test('crop within bounds applies, then resizes to spec size', () => {
   assert.equal(dims!.height, 32);
 });
 
-// ── Summary ──────────────────────────────────────────────────────────────────
+// Summary
 
 console.log(`\n${passed} passed, ${failed} failed`);
 tjs.exit(failed > 0 ? 1 : 0);

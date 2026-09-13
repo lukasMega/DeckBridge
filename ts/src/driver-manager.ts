@@ -210,7 +210,6 @@ export class DriverManager {
       this.currentDriver = null;
       this.realDriver = null;
       this.deps.webui.notifyDriverStatus('real', false);
-      // Reset to default model when nothing is connected
       this.applyDeviceModel(DEFAULT_MODEL);
       if (this.driverMode === 'real') this.scheduleReconnect();
       this.deps.onTrayChange();
@@ -256,7 +255,7 @@ export class DriverManager {
     if (this.deps.getShuttingDown() || this.driverMode !== 'real') return;
 
     if (!this.realDriver) {
-      if (this.probeInFlight) return; // no concurrent probes
+      if (this.probeInFlight) return;
       this.probeInFlight = true;
       let found: WorkerHidDriver | null = null;
       try {
@@ -326,7 +325,6 @@ export class DriverManager {
 
   async connectMock(model?: DeviceModel): Promise<void> {
     const m = model ?? DEFAULT_MODEL;
-    // Close existing mock driver before creating a new one
     if (this.currentDriver && this.driverMode === 'mock') {
       const prev = this.currentDriver;
       this.currentDriver = null;
@@ -370,7 +368,7 @@ export class DriverManager {
     this.deps.onDocksChanged?.();
   }
 
-  // ── Multi-device (extra docks): thin delegation to ExtraDockCoordinator ────
+  // Multi-device (extra docks): thin delegation to ExtraDockCoordinator
 
   /** Begin polling for extra devices to expose as their own docks. Idempotent. */
   startScan(): void {

@@ -16,7 +16,7 @@ function test(name: string, fn: () => void): void {
   }
 }
 
-// ── hashJpeg ─────────────────────────────────────────────────────────────────
+// hashJpeg
 
 console.log('\nhashJpeg');
 
@@ -53,7 +53,7 @@ test('zero buffer hashes to padded 8-char string', () => {
   assert.ok(/^[0-9a-f]{8}$/.test(h));
 });
 
-// ── full-buffer hashing (large buffers, e.g. 19 KB gen1 BMP) ─────────────────
+// full-buffer hashing (large buffers, e.g. 19 KB gen1 BMP)
 
 console.log('\nhashJpeg — large buffers');
 
@@ -102,7 +102,7 @@ test('large buffer: differing length (same prefix) → different hash', () => {
   assert.notEqual(hashJpeg(a), hashJpeg(b));
 });
 
-// ── makeCacheKey ──────────────────────────────────────────────────────────────
+// makeCacheKey
 
 console.log('\nmakeCacheKey');
 
@@ -142,7 +142,7 @@ test('different mode → different key (same modelId/jpegHash)', () => {
   assert.notEqual(k2, k3);
 });
 
-// ── LruCache via imageCache (IMAGE_CACHE_SIZE = 100) ─────────────────────────
+// LruCache via imageCache (IMAGE_CACHE_SIZE = 100)
 //
 // imageCache is a shared singleton; we use a unique key prefix ("__tc__")
 // so our test entries don't collide with any previous state. We insert
@@ -221,7 +221,7 @@ test('recency: get promotes a key so it survives the next eviction', () => {
   );
 });
 
-// ── Summary ───────────────────────────────────────────────────────────────────
+// Summary
 
 console.log(`\n${passed} passed, ${failed} failed`);
 // @ts-ignore — tjs is a runtime global

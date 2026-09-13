@@ -24,7 +24,7 @@ function test(name: string, fn: () => void): void {
   }
 }
 
-// ── Helpers ──────────────────────────────────────────────────────────────────
+// Helpers
 
 /** Build a Buffer that contains no CORA_MAGIC sequence. */
 function makeSafeGarbage(len: number, seed = 0xab): Buffer {
@@ -44,7 +44,7 @@ function makeSafeGarbage(len: number, seed = 0xab): Buffer {
   return buf;
 }
 
-// ── Multi-frame drain ─────────────────────────────────────────────────────────
+// Multi-frame drain
 
 console.log('\nCoraFrameReader – multi-frame and split-frame');
 
@@ -87,7 +87,7 @@ test('two complete frames: flags and hidOp preserved on each', () => {
   assert.equal(frames[1]!.hidOp, 0x03);
 });
 
-// ── Garbage prefix / indexOf resync ──────────────────────────────────────────
+// Garbage prefix / indexOf resync
 
 console.log('\nCoraFrameReader – garbage-prefix resync');
 
@@ -130,7 +130,7 @@ test('garbage larger than CORA_HEADER_SIZE triggers the tail-retain path, then a
   assert.deepEqual(Array.from(second[0]!.payload), [0x99]);
 });
 
-// ── Frame split across two appends ───────────────────────────────────────────
+// Frame split across two appends
 
 console.log('\nCoraFrameReader – split-frame across appends');
 
@@ -185,7 +185,7 @@ test('frame split at the very last byte → reassembles on next append', () => {
   assert.deepEqual(Array.from(frames[0]!.payload), [0x77, 0x88]);
 });
 
-// ── Trailing partial header retained between drains ──────────────────────────
+// Trailing partial header retained between drains
 
 console.log('\nCoraFrameReader – partial header retention');
 
@@ -229,7 +229,7 @@ test('partial header across multiple appends accumulates correctly', () => {
   assert.deepEqual(Array.from(frames[0]!.payload), [0x10, 0x20, 0x30]);
 });
 
-// ── Combined: [garbage][frame A][partial frame B] ────────────────────────────
+// Combined: [garbage][frame A][partial frame B]
 
 console.log('\nCoraFrameReader – combined garbage + partial');
 
@@ -286,7 +286,7 @@ test('[garbage][frame A][garbage][frame B] in one append → returns both frames
   assert.equal(frames[1]!.messageId, 2);
 });
 
-// ── Receive-buffer overflow ──────────────────────────────────────────────────
+// Receive-buffer overflow
 
 console.log('\nCoraFrameReader – receive-buffer overflow');
 
@@ -312,7 +312,7 @@ test('append() beyond MAX_RECEIVE_BUFFER drops oldest bytes and logs a warn', ()
   }
 });
 
-// ── Oversized declared payloadLength ─────────────────────────────────────────
+// Oversized declared payloadLength
 
 console.log('\nCoraFrameReader – oversized declared payloadLength');
 
@@ -351,7 +351,7 @@ test('oversized payloadLength header is dropped, logs one warn, resyncs to next 
   }
 });
 
-// ── Summary ───────────────────────────────────────────────────────────────────
+// Summary
 
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed > 0) tjs.exit(1);

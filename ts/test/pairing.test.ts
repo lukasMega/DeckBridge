@@ -7,7 +7,7 @@ import { connect, waitForValue, closeAndWait, sendPkt, sendFrame } from './helpe
 const PRIMARY_PAIRING_PORT = 25543;
 const CHILD_PAIRING_PORT = 25544;
 
-// ── Setup / teardown ─────────────────────────────────────────────────────────
+// Setup / teardown
 
 let passed = 0;
 let failed = 0;
@@ -265,7 +265,7 @@ await runTest('primary double-probe + child double-probe + operational', async (
   }
 });
 
-// ── Summary ──────────────────────────────────────────────────────────────────
+// Summary
 
 console.log(`\n${passed} passed, ${failed} failed`);
 tjs.exit(failed > 0 ? 1 : 0);

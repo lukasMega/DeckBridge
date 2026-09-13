@@ -22,7 +22,7 @@ const baseStatus: Status = {
   elgatoConnected: true,
 };
 
-// ── deriveDocks ─────────────────────────────────────────────────────────────
+// deriveDocks
 
 console.log('\nderiveDocks');
 
@@ -108,7 +108,7 @@ test('empty docks array → falls through to legacy synthesis', () => {
   assert.equal(docks[0]!.index, 0);
 });
 
-// ── Summary ───────────────────────────────────────────────────────────────────
+// Summary
 
 console.log(`\n${passed} passed, ${failed} failed`);
 tjs.exit(failed > 0 ? 1 : 0);

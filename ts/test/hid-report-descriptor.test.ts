@@ -93,7 +93,7 @@ test('report size in bits is converted to bytes', () => {
   assert.equal(parseOutputReportSize(desc), 512);
 });
 
-// ── Refusals ────────────────────────────────────────────────────────────────
+// Refusals
 // Every one of these must return null so the caller keeps the model's packetSize.
 // A half-understood descriptor must never beat a hardware-verified constant.
 
@@ -204,7 +204,7 @@ test('a 4-byte report count does not sign-flip', () => {
   assert.ok(size === null || size > 0, `expected null or a positive size, got ${String(size)}`);
 });
 
-// ── probeOutputReportSize ───────────────────────────────────────────────────
+// probeOutputReportSize
 // The candidate whitelist is what lets the probe overrule a model constant at all:
 // it can only ever pick between sizes the model already declared valid, so a
 // descriptor we misread (or one Windows reconstructed oddly) can't invent a new size.
@@ -271,7 +271,7 @@ test('refuses an unparsable descriptor even when hidapi returns bytes', () => {
   assert.equal(probeOutputReportSize(hid, DEV, [512, 1024]), null);
 });
 
-// ── the real thing: a descriptor captured off hardware ──────────────────────
+// the real thing: a descriptor captured off hardware
 // Everything above is a descriptor we wrote ourselves, so it can only prove the walker
 // is self-consistent. This block runs it against the bytes a physical Fifine D6 rev. 2
 // actually returned from hid_get_report_descriptor (captured by `mise run d6-capture`,

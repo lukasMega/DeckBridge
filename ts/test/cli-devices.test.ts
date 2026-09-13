@@ -17,7 +17,7 @@ function test(name: string, fn: () => void): void {
   }
 }
 
-// ── toDeviceRow ───────────────────────────────────────────────────────────────
+// toDeviceRow
 
 console.log('\ntoDeviceRow');
 
@@ -74,7 +74,7 @@ test('Fifine D6 PIDs resolve to distinct, supported rows', () => {
   assert.equal(rev2.serial, '81D0DA784037');
 });
 
-// ── formatDeviceTable ─────────────────────────────────────────────────────────
+// formatDeviceTable
 
 console.log('\nformatDeviceTable');
 
@@ -100,7 +100,7 @@ test('non-empty list → header + one line per row, columns aligned', () => {
   assert.ok(lines[1]!.includes('0fd9:0080'));
 });
 
-// ── Summary ───────────────────────────────────────────────────────────────────
+// Summary
 
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed > 0) tjs.exit(1);

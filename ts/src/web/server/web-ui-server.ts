@@ -404,7 +404,7 @@ export class WebUIServer extends EventEmitter implements WebUIController {
     return matched ? matched.handler({ req, url, params: matched.params, ui: this }) : notFound();
   }
 
-  // ---- WebUIController surface consumed by the route handlers ----
+  // WebUIController surface consumed by the route handlers
   fullState(): StateResponse {
     const images: Record<string, number> = {};
     for (const [k] of this.imageState) images[String(k)] = this.imageChannel.versionFor(k);
@@ -425,7 +425,7 @@ export class WebUIServer extends EventEmitter implements WebUIController {
     };
   }
 
-  // ---- Extra keys (293S 6th column — see extra-keys.ts / extra-keys-controller.ts) ----
+  // Extra keys (293S 6th column — see extra-keys.ts / extra-keys-controller.ts)
 
   extraKeyConfigFor(deviceKey: string, wireId: number): ExtraKeyConfig | undefined {
     return this.extraKeys.configFor(deviceKey, wireId);
@@ -483,7 +483,7 @@ export class WebUIServer extends EventEmitter implements WebUIController {
     return this.dockRegistry.brightnessFor(index);
   }
 
-  // ---- Settings JSON surface (see settings-identity-controller.ts) ----
+  // Settings JSON surface (see settings-identity-controller.ts)
 
   getSettingsJson(): string {
     return this.settingsIdentity.json();

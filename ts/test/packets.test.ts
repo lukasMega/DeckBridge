@@ -23,7 +23,7 @@ function test(name: string, fn: () => void): void {
   }
 }
 
-// ── Mirabox packet builders ──────────────────────────────────────────────────
+// Mirabox packet builders
 
 console.log('\npacket builders');
 
@@ -69,7 +69,7 @@ test('CONNECT packet: bytes 5-11 = 43 4F 4E 4E 45 43 54', () => {
   assert.deepEqual(Array.from(pkt.slice(5, 12)), [0x43, 0x4f, 0x4e, 0x4e, 0x45, 0x43, 0x54]);
 });
 
-// ── CORA framing ─────────────────────────────────────────────────────────────
+// CORA framing
 
 console.log('\nCORA framing');
 
@@ -140,7 +140,7 @@ test('tryDecodeCoraFrame returns frame for complete data', () => {
   assert.deepEqual(Array.from(decoded!.payload), [0xaa, 0xbb]);
 });
 
-// ── Summary ──────────────────────────────────────────────────────────────────
+// Summary
 
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed > 0) tjs.exit(1);

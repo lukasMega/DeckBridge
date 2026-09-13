@@ -60,7 +60,7 @@ interface RunningPlugin extends PluginRunConfig {
 }
 const running = new Map<string, RunningPlugin>();
 
-// ── ctx.fetch proxy (worker → main → worker) ─────────────────────────────────
+// ctx.fetch proxy (worker → main → worker)
 let fetchSeq = 0;
 const pendingFetches = new Map<
   number,

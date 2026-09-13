@@ -73,7 +73,7 @@ export function subscribe(fn: () => void): () => void {
   };
 }
 
-// --- Mutators ---
+// Mutators
 
 export function setStatus(status: Status): void {
   state = { ...state, status };
@@ -151,21 +151,11 @@ export function patch(partial: Partial<StoreState>): void {
   notify();
 }
 
-// --- useSyncExternalStore ---
-//
-// Local port of Preact's compat implementation, which is itself a trim of React's
-// useSyncExternalStoreShimClient. Kept local because importing the hook from
-// preact/compat drags the whole compat layer into the browser bundle — measured at
-// +5,556 bytes minified (74,080 -> 79,636, ~8%) for these ~25 lines.
-//
-// UPSTREAM: preact/compat/src/hooks.js (ported from preact 10.29.8). On a Preact
-// upgrade, diff that file against this block — carrying a local copy of someone
-// else's hook means fixes upstream do not reach us automatically.
-//
-// Do not "simplify" the two effects. The double-check in each is what closes the
-// mount race (a store write landing between render and subscribe), and re-running
-// the layout effect whenever `getSnapshot` changes identity is what keeps an inline
-// selector's subscription reading the *latest* selector rather than the mount-time one.
+// Local port of useSyncExternalStore (UPSTREAM: preact/compat/src/hooks.js, preact
+// 10.29.8 — re-diff on upgrade); importing it drags in all of compat, +5,556 bytes
+// minified. Do not "simplify" the two effects: the double-check in each closes the
+// mount race, and re-running the layout effect whenever `getSnapshot` changes identity
+// is what keeps an inline selector reading the latest selector, not the mount-time one.
 
 interface StoreInstance<T> {
   value: T;

@@ -154,7 +154,6 @@ export class PluginHost {
     this.teardownWorker();
   }
 
-  // ── config push ────────────────────────────────────────────────────────────
   private activeEntries(): HostEntry[] {
     return [...this.entries.values()].filter((e) => e.status !== 'disabled');
   }
@@ -174,12 +173,11 @@ export class PluginHost {
       intervalMs: e.intervalMs,
     }));
     const sig = JSON.stringify(plugins);
-    if (sig === this.configSent) return; // no change since last push
+    if (sig === this.configSent) return;
     this.configSent = sig;
     this.post({ type: 'configure', plugins });
   }
 
-  // ── worker lifecycle + heartbeat ─────────────────────────────────────────────
   private ensureWorker(): void {
     if (this.worker) return;
     this.worker = this.workerFactory();
@@ -255,7 +253,6 @@ export class PluginHost {
     this.syncConfig(); // respawn + reload every active plugin
   }
 
-  // ── worker → main ────────────────────────────────────────────────────────────
   private onMessage(msg: PluginWorkerToMain): void {
     switch (msg.type) {
       case 'value':
@@ -335,7 +332,7 @@ function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
   return Promise.race([p, timeout]).finally(() => clearTimeout(timer));
 }
 
-// ── module-level singleton (mirrors the weather/command caches in extra-keys) ──
+// module-level singleton (mirrors the weather/command caches in extra-keys)
 let host: PluginHost | null = null;
 function getPluginHost(): PluginHost {
   host ??= new PluginHost();

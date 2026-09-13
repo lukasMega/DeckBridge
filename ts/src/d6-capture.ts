@@ -59,7 +59,7 @@ const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms
 // eslint-disable-next-line sonarjs/pseudo-random -- visual test pattern, not a secret
 const rnd = (): number => (Math.random() * 256) | 0;
 
-// ── S1: which unit is this, and what does it say about itself? ───────────────────────
+// S1: which unit is this, and what does it say about itself?
 // PID decides the model (and with it the packet size), so resolve it by enumeration
 // before opening anything — exactly the order the B0 runbook step prescribes.
 let model: DeviceModel | null = null;
@@ -138,7 +138,7 @@ if (want('s1')) {
   }
 }
 
-// ── S2: brightness linearity (B3) ────────────────────────────────────────────────────
+// S2: brightness linearity (B3)
 // All 15 keys are painted mid-grey first so the panel has something to dim; a black
 // panel tells you nothing about a brightness curve.
 const wireIds = model.keyMap.coraToWireImage!;
@@ -196,7 +196,7 @@ if (want('s2')) {
   console.log('[s2] if 50% looks much brighter than half of 100%, buildLig wants a gamma.');
 }
 
-// ── S3: JPEG size ladder — what does the firmware actually accept? ───────────────────
+// S3: JPEG size ladder — what does the firmware actually accept?
 // Random noise is the only content that reliably produces a LARGE jpeg at 112x112, but
 // noise ALONE is useless as a verdict: colourful static is exactly what a "broken image"
 // looks like, so the observer cannot tell a clean 22 KB render from a corrupt one.
@@ -261,7 +261,7 @@ if (want('s3')) {
   console.log('[s3] a wedged panel recovers with a replug; nothing persists.');
 }
 
-// ── S4: raw input trace ──────────────────────────────────────────────────────────────
+// S4: raw input trace
 // Both the decoded event and the raw rx bytes, so a future parseAckReport fixture can
 // be built from a real wire capture rather than a reconstruction.
 if (want('s4')) {

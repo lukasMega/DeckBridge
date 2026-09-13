@@ -82,7 +82,6 @@ export abstract class HidDeviceBase extends EventEmitter {
     return n;
   }
 
-  /** Stop the read timer. */
   protected _stopReadTimer(): void {
     if (this.readTimer) {
       clearInterval(this.readTimer);

@@ -176,7 +176,7 @@ export function composeWidgetBmp(lines: readonly WidgetLine[], size: number): Ui
   return new Uint8Array(buf);
 }
 
-// ── Shared background-refresh cache (weather + command) ─────────────────────
+// Shared background-refresh cache (weather + command)
 
 interface CacheEntry<T> {
   value?: T;
@@ -221,7 +221,7 @@ function cachedValue<T>(
   return e.value;
 }
 
-// ── Weather (Open-Meteo, no API key) ─────────────────────────────────────────
+// Weather (Open-Meteo, no API key)
 
 const WEATHER_REFRESH_MS = 10 * 60 * 1000;
 const weatherCache = new Map<string, CacheEntry<number>>();
@@ -254,7 +254,7 @@ function weatherTempFor(param: string | undefined, onUpdate: () => void): number
   return cachedValue(weatherCache, `${lat},${lon}`, WEATHER_REFRESH_MS, fetchTemp, onUpdate);
 }
 
-// ── Custom command (runs the param via the shell, shows its stdout) ───────────
+// Custom command (runs the param via the shell, shows its stdout)
 //
 // SECURITY: this executes an arbitrary shell command taken from the dock's
 // WebUI config. The WebUI has no auth and binds all interfaces by default, so
@@ -306,7 +306,7 @@ function forceRunCommand(param: string | undefined, timeoutMs: number, onUpdate:
   cachedValue(commandCache, cmd, 0, () => runCommand(cmd, timeoutMs), onUpdate);
 }
 
-// ── Per-dock scheduler ────────────────────────────────────────────────────────
+// Per-dock scheduler
 
 /** Ticks once a second, re-renders every configured widget, and repaints a key
  *  only when its rendered content actually changed (clock → one repaint per

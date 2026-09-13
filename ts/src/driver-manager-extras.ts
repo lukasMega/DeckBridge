@@ -1,13 +1,7 @@
-// Multi-device coordinator (extra docks), split out of driver-manager.ts.
-// One live extra dock per physical HID interface (keyed by hidPath, so two units
-// of the SAME model each get their own dock), plus a pool of free session indices
-// (1..MAX_DEVICE_SESSIONS-1, lowest wins) that indices return to on teardown.
-// scanTimer polls for newly-present unclaimed paths; extraCreateInFlight
-// serializes creation so a slow open()/start() can't overlap the next scan
-// tick. Owned by DriverManager as a private field; deps are closures over
-// DriverManager's own mutable state so this coordinator always sees the
-// current value (probeInFlight, driverMode, realDriver, etc.) without a
-// runtime import cycle.
+// Multi-device coordinator: one live extra dock per physical HID interface
+// (keyed by hidPath, so two units of the SAME model each get their own), drawn
+// from a pool of free session indices. `deps` are closures over DriverManager's
+// mutable state — always current, and no runtime import cycle.
 import { log } from './logger.js';
 import { closeDriver, type WorkerHidDriver } from './hid-worker-host.js';
 import type { DeviceModel } from './devices/driver.js';
@@ -102,8 +96,8 @@ export class ExtraDockCoordinator {
     if (!this.deps.sessionServersFactory) return; // multi-device disabled
     const realDriver = this.deps.getRealDriver();
     if (realDriver === null) return; // extras only AFTER the primary connects
-    if (this.extraCreateInFlight) return; // one creation at a time
-    if (this.freeIndices.length === 0) return; // all session indices in use
+    if (this.extraCreateInFlight) return;
+    if (this.freeIndices.length === 0) return;
 
     const pick = this.pickUnclaimedPath(realDriver);
     if (!pick) return;

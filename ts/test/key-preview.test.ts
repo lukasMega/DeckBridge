@@ -21,7 +21,7 @@ function test(name: string, fn: () => void): void {
   }
 }
 
-// ── imageSrc ──────────────────────────────────────────────────────────────────
+// imageSrc
 
 console.log('\nimageSrc');
 
@@ -45,7 +45,7 @@ test('empty-string data falls back to server URL', () => {
   assert.ok(imageSrc(1, { v: 4, data: '' }) === '/api/image/1?v=4');
 });
 
-// ── image store ───────────────────────────────────────────────────────────────
+// image store
 
 console.log('\nimage store');
 
@@ -77,7 +77,7 @@ test('clearImage on a missing key is a no-op', () => {
   assert.ok(getImageEntry(9) === undefined);
 });
 
-// ── Summary ───────────────────────────────────────────────────────────────────
+// Summary
 
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed > 0) tjs.exit(1);

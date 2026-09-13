@@ -26,7 +26,7 @@ async function asyncTest(name: string, fn: () => Promise<void>): Promise<void> {
   }
 }
 
-// ── parentDir ─────────────────────────────────────────────────────────────────
+// parentDir
 
 console.log('\nparentDir');
 
@@ -50,7 +50,7 @@ test('root-only slash → dot (i = 0, not > 0)', () => {
   assert.equal(parentDir('/tray'), '.');
 });
 
-// ── isAbsolutePath ────────────────────────────────────────────────────────────
+// isAbsolutePath
 
 console.log('\nisAbsolutePath');
 
@@ -82,7 +82,7 @@ test('drive letter without colon → false', () => {
   assert.ok(!isAbsolutePath('Ctray.exe'));
 });
 
-// ── TrayProcess.close() kills the spawned process (L1) ───────────────────────
+// TrayProcess.close() kills the spawned process (L1)
 // TrayProcess.proc is private and not directly reachable from a test without a
 // real tray-go binary, so this exercises the same TjsProcess.kill('SIGTERM')
 // call that TrayProcess.close() now makes on a trivial long-running child, to
@@ -99,7 +99,7 @@ await asyncTest('SIGTERM stops a spawned child process', async () => {
   assert.ok(exit_status !== 0 || term_signal !== null);
 });
 
-// ── resolveTrayBin ────────────────────────────────────────────────────────────
+// resolveTrayBin
 // Regression guard: /requirements used to read $DECKBRIDGE_TRAY_BIN only, so a
 // packaged release (which ships the tray as a sidecar next to the executable)
 // reported "Not found" while the tray was running.
@@ -128,7 +128,7 @@ await asyncTest('returns "" when the env var is unset and no sidecar exists', as
   }
 });
 
-// ── Summary ───────────────────────────────────────────────────────────────────
+// Summary
 
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed > 0) tjs.exit(1);

@@ -54,7 +54,6 @@ async function isElgatoAppRunning(): Promise<boolean> {
       const { exit_status } = await p.wait();
       return exit_status === 0;
     }
-    // Windows: pipe stdout and check for the process name
     const p = tjs.spawn(['tasklist', '/FI', 'IMAGENAME eq StreamDeck.exe', '/NH'], {
       stdout: 'pipe',
       stderr: 'ignore',
@@ -260,7 +259,6 @@ webui.on('extraKeyChanged', (dock: number) => {
   driverManager.repaintExtraKeysForDock(dock);
 });
 
-// WebUI "Run now" on a command-widget extra key — force an immediate re-run.
 webui.on('extraKeyRunNow', (dock: number, wireId: number) => {
   driverManager.forceRunExtraKey(dock, wireId);
 });

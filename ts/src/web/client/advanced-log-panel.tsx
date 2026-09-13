@@ -1,32 +1,20 @@
 /**
- * LogConsolePanel — UNCONTROLLED log consoles with rAF-batched DOM appends.
- *
- * Split out of AdvancedApp.tsx (file-size refactor, no behavior change).
- *
- * Architecture: Preact renders the chrome (tabs, filters, clear buttons) as
- * normal controlled JSX. The <pre> and <div> log containers are uncontrolled:
- * they are populated imperatively via refs + rAF flush, never by Preact's
- * reconciler. This is plan §5 option 1.
- *
- * Filter changes trigger a full DOM wipe + re-render from store snapshot.
- * New entries from the store are appended incrementally (tracked by array
- * index so we never re-walk already-rendered entries).
+ * LogConsolePanel — Preact renders the chrome (tabs, filters, clear buttons) as
+ * controlled JSX, but the log containers are UNCONTROLLED: populated via refs +
+ * rAF flush, never by the reconciler. A filter change wipes and re-renders from
+ * the store snapshot; new entries append incrementally, tracked by array index.
  */
 import { useState, useEffect, useRef } from 'preact/hooks';
 import { subscribe as storeSubscribe, getSnapshot } from './store.js';
 import type { ServerLog, CommLog } from './ui-types.js';
 import { useCopyText } from './use-copy-text.js';
 
-// ---------------------------------------------------------------------------
 // Constants
-// ---------------------------------------------------------------------------
 
 const LOG_MAX = 2000;
 const SCROLL_TOLERANCE = 4;
 
-// ---------------------------------------------------------------------------
 // Pure DOM-entry builders (mirrors ui-logs.ts)
-// ---------------------------------------------------------------------------
 
 function esc(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -54,9 +42,7 @@ function buildCommEntry(e: CommLog, showHex: boolean): HTMLElement {
   return d;
 }
 
-// ---------------------------------------------------------------------------
 // LogConsolePanel
-// ---------------------------------------------------------------------------
 
 export function LogConsolePanel(): preact.JSX.Element {
   const [activeTab, setActiveTab] = useState<'server' | 'comm'>('server');
@@ -111,7 +97,7 @@ export function LogConsolePanel(): preact.JSX.Element {
   const serverFlushScheduledRef = useRef(false);
   const commFlushScheduledRef = useRef(false);
 
-  // --- Filter predicates (read current filter state via ref) ---
+  // Filter predicates (read current filter state via ref)
 
   function passesServerFilter(e: ServerLog): boolean {
     const sf = sfRef.current;
@@ -131,7 +117,7 @@ export function LogConsolePanel(): preact.JSX.Element {
     );
   }
 
-  // --- rAF flush functions (mirrors ui-logs.ts flushServerLogs / flushCommLogs) ---
+  // rAF flush functions (mirrors ui-logs.ts flushServerLogs / flushCommLogs)
 
   function flushServerLogs(): void {
     serverFlushScheduledRef.current = false;
@@ -184,7 +170,7 @@ export function LogConsolePanel(): preact.JSX.Element {
     requestAnimationFrame(flushCommLogs);
   }
 
-  // --- Full wipe + re-render (called when filter state changes) ---
+  // Full wipe + re-render (called when filter state changes)
 
   function reRenderServerLogs(): void {
     const logEl = logElRef.current;
@@ -202,7 +188,7 @@ export function LogConsolePanel(): preact.JSX.Element {
     scheduleCommFlush();
   }
 
-  // --- Mount effect: initial render + subscribe for live log appends ---
+  // Mount effect: initial render + subscribe for live log appends
 
   useEffect(() => {
     scheduleServerFlush();
@@ -227,7 +213,7 @@ export function LogConsolePanel(): preact.JSX.Element {
     // eslint-disable-next-line @eslint-react/exhaustive-deps -- mount-only: scheduleServerFlush/scheduleCommFlush use only refs and are effectively stable; adding them would re-subscribe on every render
   }, []); // mount-only: flush fns and storeSubscribe are stable
 
-  // --- Filter-change effects: wipe DOM and re-render with updated filter ---
+  // Filter-change effects: wipe DOM and re-render with updated filter
 
   useEffect(() => {
     reRenderServerLogs();
@@ -239,7 +225,7 @@ export function LogConsolePanel(): preact.JSX.Element {
     // eslint-disable-next-line @eslint-react/exhaustive-deps -- reRenderCommLogs uses only refs; adding it would re-render on every render cycle
   }, [cfProtocol, cfDirection, cfHideImages, cfHideKeepalives, cfShowHex]); // re-render when comm filters change
 
-  // --- Clear handlers ---
+  // Clear handlers
 
   function handleClearServer(): void {
     const logEl = logElRef.current;
@@ -253,7 +239,7 @@ export function LogConsolePanel(): preact.JSX.Element {
     commRenderedRef.current = 0;
   }
 
-  // --- Copy all logs (same format as legacy ui-logs.ts) ---
+  // Copy all logs (same format as legacy ui-logs.ts)
 
   function handleCopyLogs(): void {
     const snap = getSnapshot();

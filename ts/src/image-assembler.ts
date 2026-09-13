@@ -21,18 +21,10 @@ export interface ImageAssembly {
 const GEN2_LABEL = 'image assembly';
 const GEN1_LABEL = 'gen1 image assembly';
 
-// --- malformed-packet reporting ---------------------------------------------
-// Malformed framing arrives at whatever rate the peer sends it, and each warn() fans out
-// to the console, the WebUI socket and (in the worker bundle) a postMessage — so one line
-// per bad packet is both a log flood and main-thread cost on the ACK-paced path. Warn once
-// per reason per window and fold the rest into a count carried on the next line.
-//
-// Keyed by `${label}:${reason}`, not by key index: the useful fact is "this stream is
-// malformed, in this way", and the key space is bounded by construction (2 labels x a
-// handful of reasons) rather than by the peer.
-//
-// The two cap warnings below are deliberately NOT throttled: they are self-limiting by
-// their own caps (at most one per >=1 MiB, or per >=MAX_IMAGE_ASSEMBLY_CHUNKS packets).
+// Malformed framing arrives at the peer's rate, and each warn() fans out to the
+// console, the WebUI socket and a postMessage on the ACK-paced path. Warn once per
+// `${label}:${reason}` per window (key space bounded by us, not the peer) and fold
+// the rest into a count. The two cap warnings below self-limit, so are not throttled.
 const MALFORMED_WARN_INTERVAL_MS = 5000;
 const malformedWarnState = new Map<string, { last: number; suppressed: number }>();
 

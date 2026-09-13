@@ -5,7 +5,7 @@ import type { DeviceDriver, DeviceModel } from '../src/devices/driver.js';
 import type { ElgatoChildServer } from '../src/elgato.js';
 import type { WebUIServer } from '../src/web/server/index.js';
 
-// ── Test harness ─────────────────────────────────────────────────────────────
+// Test harness
 //
 // The image pipeline was refactored (architecture-review P1): the JPEG/BMP
 // transform + LRU cache + key remap + USB write moved OUT of image-pipeline.ts
@@ -29,7 +29,7 @@ async function test(name: string, fn: () => void | Promise<void>): Promise<void>
   }
 }
 
-// ── A valid 16x16 solid-red JPEG (same fixture as translator.test.ts) ─────────
+// A valid 16x16 solid-red JPEG (same fixture as translator.test.ts)
 const SOLID_RED_16X16_JPEG = Buffer.from([
   0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46, 0x00, 0x01, 0x02, 0x00, 0x00, 0x01,
   0x00, 0x01, 0x00, 0x00, 0xff, 0xc0, 0x00, 0x11, 0x08, 0x00, 0x10, 0x00, 0x10, 0x03, 0x01, 0x11,
@@ -73,7 +73,7 @@ const SOLID_RED_16X16_JPEG = Buffer.from([
   0xd2, 0xbf, 0x0c, 0x3f, 0xd5, 0x30, 0xa0, 0x02, 0x80, 0x0a, 0x00, 0xff, 0xd9,
 ]);
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
+// Helpers
 
 /** Minimal DeviceModel — only enough to satisfy the driver shape. The thin
  *  handler never reads model.image, so the values are placeholders. */
@@ -180,7 +180,7 @@ function makeFakeMockDriver(model: DeviceModel): DeviceDriver {
   }) as DeviceDriver;
 }
 
-// ── Tests ─────────────────────────────────────────────────────────────────────
+// Tests
 
 console.log('\nimage-pipeline: setupImageHandler (thin handler, P1)');
 
@@ -326,7 +326,7 @@ await test('null driver does not throw and notifyImageUpdate still fires', () =>
   assert.equal(webui.notifyImageUpdateCalls[0]!.keyIndex, 1, 'keyIndex should be 1');
 });
 
-// ── Summary ───────────────────────────────────────────────────────────────────
+// Summary
 
 console.log(`\n${passed} passed, ${failed} failed`);
 tjs.exit(failed > 0 ? 1 : 0);

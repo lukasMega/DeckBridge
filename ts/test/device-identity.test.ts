@@ -25,7 +25,7 @@ async function test(name: string, fn: () => void | Promise<void>): Promise<void>
   }
 }
 
-// ── deviceKeyFor ─────────────────────────────────────────────────────────────
+// deviceKeyFor
 
 console.log('\ndeviceKeyFor');
 
@@ -41,7 +41,7 @@ await test('no serial: falls back to the HID path (unstable, not a stable key)',
   assert.ok(!isStableDeviceKey(deviceKeyFor('DevSrvsID:42')), 'path key is not stable');
 });
 
-// ── deviceKeyFor: shared-serial disambiguation (modelId) ────────────────────────
+// deviceKeyFor: shared-serial disambiguation (modelId)
 
 console.log('\ndeviceKeyFor: shared-serial disambiguation');
 
@@ -74,7 +74,7 @@ await test('isStableDeviceKey is true for the model-suffixed form', () => {
   assert.ok(isStableDeviceKey(deviceKeyFor('path', '355499441494', 'mirabox-293s')));
 });
 
-// ── generateMacAddress ───────────────────────────────────────────────────────
+// generateMacAddress
 
 console.log('\ngenerateMacAddress');
 
@@ -100,7 +100,7 @@ await test('no collision for a reasonable sample of distinct keys', () => {
   assert.equal(macs.size, 500, 'all 500 generated MACs are distinct');
 });
 
-// ── generateSerial ───────────────────────────────────────────────────────────
+// generateSerial
 
 console.log('\ngenerateSerial');
 
@@ -132,7 +132,7 @@ await test('no collision (12-char app-id prefix) for a reasonable sample of dist
   assert.ok(prefixes.size > N * 0.8, `at least 80% distinct (got ${prefixes.size}/${N})`);
 });
 
-// ── generateDeviceIdentity ───────────────────────────────────────────────────
+// generateDeviceIdentity
 
 console.log('\ngenerateDeviceIdentity');
 
@@ -146,7 +146,7 @@ await test('produces all fields, dock/child serials independently derived', () =
   assert.notEqual(id.dockSerial, id.childSerial, 'dock/child serials differ (different templates)');
 });
 
-// ── getOrCreateDeviceIdentity ────────────────────────────────────────────────
+// getOrCreateDeviceIdentity
 
 console.log('\ngetOrCreateDeviceIdentity');
 
@@ -181,7 +181,7 @@ await test('a second distinct key appends alongside the first, does not disturb 
   assert.equal(second.devices[1], second.identity, 'second entry appended');
 });
 
-// ── settings-store migration: bare shared-serial entry → suffixed key ───────────
+// settings-store migration: bare shared-serial entry → suffixed key
 
 console.log('\nloadSettings: shared-serial migration');
 
@@ -263,7 +263,7 @@ try {
   await tjs.remove(MIGRATION_ROOT, { recursive: true });
 } catch {}
 
-// ── Summary ───────────────────────────────────────────────────────────────────
+// Summary
 
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed > 0) tjs.exit(1);

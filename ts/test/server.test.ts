@@ -16,7 +16,7 @@ import { connect, sendPkt, closeAndWait } from './helpers/cora-framer.js';
 const TEST_PORT = 15343;
 const TEST_CHILD_PORT = 15344;
 
-// ── Setup / teardown ─────────────────────────────────────────────────────────
+// Setup / teardown
 
 let passed = 0;
 let failed = 0;
@@ -41,7 +41,7 @@ await server.start();
 await childServer.start();
 
 try {
-  // ── Post-start server error handling (L6) ────────────────────────────────
+  // Post-start server error handling (L6)
 
   console.log('\nelgato server: post-start error handling');
 
@@ -72,7 +72,7 @@ try {
     }
   });
 
-  // ── Primary server tests ──────────────────────────────────────────────────
+  // Primary server tests
 
   console.log('\nelgato server: keepalive');
 
@@ -263,7 +263,7 @@ try {
     assert.equal(frame.payload.readUInt16LE(12), ELGATO_VID);
   });
 
-  // ── Child server tests ────────────────────────────────────────────────────
+  // Child server tests
 
   console.log('\nelgato child server');
 
@@ -382,7 +382,7 @@ try {
   await childServer.stop();
 }
 
-// ── Child server: client takeover does not trigger outbound reconnect (E3) ──
+// Child server: client takeover does not trigger outbound reconnect (E3)
 
 const TAKEOVER_CHILD_PORT = 15346;
 
@@ -440,7 +440,7 @@ console.log('\nelgato child server: takeover race (E3)');
   }
 }
 
-// ── Multi-device identity plumbing ────────────────────────────────────────────
+// Multi-device identity plumbing
 
 console.log('\nelgato server: multi-device identity');
 
@@ -485,7 +485,7 @@ await runTest('opts.dockSerial and opts.childSerial land in deviceConfig', () =>
   assert.equal(s.deviceConfig.childSerialNumber, 'CHILD456ABCDEF');
 });
 
-// ── startCoraWithRetry (H3) ──────────────────────────────────────────────────
+// startCoraWithRetry (H3)
 
 console.log('\nstartCoraWithRetry');
 
@@ -598,7 +598,7 @@ await runTest('shuttingDown flag set during wait stops further retries', async (
   assert.ok(server2.startCalls >= 1 && server2.startCalls < 10, 'stopped retrying after shutdown');
 });
 
-// ── WebUIServer: POST /api/brightness ────────────────────────────────────────
+// WebUIServer: POST /api/brightness
 
 import { WebUIServer } from '../src/web/server/index.js';
 import { startCoraWithRetry, type CoraStartable } from '../src/cora-startup.js';
@@ -749,7 +749,7 @@ try {
   await webui.stop().catch(() => undefined);
 }
 
-// ── Summary ──────────────────────────────────────────────────────────────────
+// Summary
 
 console.log(`\n${passed} passed, ${failed} failed`);
 tjs.exit(failed > 0 ? 1 : 0);

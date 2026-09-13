@@ -48,7 +48,7 @@ await test('non-ACK "SUCCESSFULLY CONNECTED" banner (reportId=0x04) returns null
   assert.equal(result, null);
 });
 
-// ── CRT framing across packet sizes ──────────────────────────────────────────
+// CRT framing across packet sizes
 //
 // Phase B0/B4 pre-flight for the Fifine D6, whose two revisions differ ONLY in
 // wire.packetSize (512 for rev. 1, 1024 for rev. 2). The command builders take
