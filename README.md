@@ -12,6 +12,12 @@ else to install.
 
 **📖 Documentation:** <https://lukasmega.github.io/DeckBridge/>
 
+> **⚗ Experimental project:** DeckBridge is experimental. The author does not plan to add
+> support for devices beyond those already listed as supported, but will accept reasonable
+> pull requests for new devices when they include proof that the hardware works. DeckBridge
+> supports only 6-button (3×2) grids like the Stream Deck Mini and grids with up to 15
+> buttons (5×3) like the Stream Deck MK.2.
+
 ## Supported devices
 
 Full side-by-side comparison (USB IDs, key grid, panel size, test status):
