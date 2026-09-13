@@ -7,9 +7,7 @@ import { useState, useEffect } from 'preact/hooks';
 import { useStore } from './store.js';
 import { Collapsible } from './components/Collapsible.js';
 
-// ---------------------------------------------------------------------------
 // MockConfigForm — collapsible device config panel
-// ---------------------------------------------------------------------------
 
 export function MockConfigForm(): preact.JSX.Element {
   const mockConfig = useStore((s) => s.mockConfig);

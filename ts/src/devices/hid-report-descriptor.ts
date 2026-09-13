@@ -2,19 +2,12 @@ import { getReportDescriptor } from '../ffi/hidapi.js';
 import type { HidapiSymbols } from '../ffi/hidapi.js';
 import { debug, warn } from '../logger.js';
 
-/** Every USB HID output report this interface can carry is described, in bytes, by the
- *  device's own report descriptor. We use that to settle ONE question the wire cannot
- *  answer for itself: how big a packet does this board actually want?
- *
- *  Why it matters: writing the wrong size is **silent**. On the Fifine D6 rev. 2 the
- *  firmware discards every short write while `hid_write` still reports success — the
- *  device enumerates, registers, and reports button presses normally, and the panel just
- *  stays black (opendeck-ampgd6 PR #7). There is no error to catch and no ACK to miss,
- *  so a per-model constant that is wrong stays wrong forever.
- *
- *  This walker is deliberately **refusal-biased**: it returns `null` for anything it
- *  cannot read with certainty, and the caller then keeps the model's own `packetSize`.
- *  A descriptor we only half-understand must never beat a hardware-verified constant. */
+/** Reads the device's own report descriptor to settle one question the wire cannot
+ *  answer: how big a packet does this board want? Writing the wrong size is **silent** —
+ *  the Fifine D6 rev. 2 firmware discards short writes while `hid_write` still reports
+ *  success, so the panel just stays black (opendeck-ampgd6 PR #7). This walker is
+ *  therefore refusal-biased: `null` for anything it cannot read with certainty, and the
+ *  caller keeps the model's own `packetSize`. */
 
 // Item prefixes with the two bSize bits masked off (bTag + bType).
 const TAG_REPORT_SIZE = 0x74; // Global: bits per field
@@ -82,14 +75,10 @@ export function parseOutputReportSize(desc: Uint8Array): number | null {
 const MAX_DESCRIPTOR_BYTES = 4096;
 
 /** The device's real output-report size, but only when it is one of `candidates` —
- *  otherwise `null` and the caller keeps its own `packetSize`.
- *
- *  The whitelist is what keeps this honest across platforms. On Linux the descriptor
- *  comes verbatim from hidraw, but on Windows hidapi *reconstructs* it from the
- *  preparsed data, so an exotic device could in principle yield a plausible-looking
- *  number we have no business acting on. Constraining the answer to the sizes the model
- *  already declared valid means the probe can only ever pick between values that are
- *  known-good for that family — it can correct a wrong guess, never invent a new one. */
+ *  otherwise `null` and the caller keeps its own `packetSize`. The whitelist is what
+ *  keeps this honest: Windows hidapi *reconstructs* the descriptor from preparsed data
+ *  rather than reading it verbatim as Linux hidraw does, so the probe is confined to
+ *  sizes the model already declared valid — it can correct a guess, never invent one. */
 export function probeOutputReportSize(
   hid: HidapiSymbols,
   device: unknown,

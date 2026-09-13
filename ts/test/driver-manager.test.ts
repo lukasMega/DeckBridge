@@ -17,7 +17,7 @@ import type { WorkerHidDriver } from '../src/hid-worker-host.js';
 import { generateDeviceIdentity } from '../src/device-identity.js';
 import type { DeviceIdentitySettings } from '../src/settings-store.js';
 
-// ── Test harness ─────────────────────────────────────────────────────────────
+// Test harness
 
 let passed = 0;
 let failed = 0;
@@ -33,7 +33,7 @@ async function test(name: string, fn: () => void | Promise<void>): Promise<void>
   }
 }
 
-// ── Fakes ────────────────────────────────────────────────────────────────────
+// Fakes
 
 function makeFakeServer() {
   return {
@@ -259,7 +259,7 @@ function setup() {
   return { server, childServer, webui, driverManager };
 }
 
-// ── Tests ────────────────────────────────────────────────────────────────────
+// Tests
 
 // NOTE: each test gets its own DriverManager instance via setup(), so
 // driverMode always starts at its default ('real' unless DECKBRIDGE_MOCK=1) —
@@ -650,7 +650,7 @@ await test('9. E1-b: in-flight guard — a second tryRealConnect() during a prob
   }
 });
 
-// ── Multi-device coordinator (extra docks) ─────────────────────────────────
+// Multi-device coordinator (extra docks)
 
 /** Fake driver whose open() always succeeds — models a present, openable extra
  *  (or primary) device. Records disconnect wiring via the EventEmitter base. */
@@ -1012,7 +1012,7 @@ await test('D2. disconnecting one same-model extra tears down only that unit; th
   const { driverManager, identities, serversByIndex, driversByPath, present, pathsByModel } =
     setupCoord();
   present.add(DEFAULT_MODEL.id);
-  pathsByModel.set(DEFAULT_MODEL.id, ['hid:mk2:a', 'hid:mk2:b', 'hid:mk2:c']); // three units
+  pathsByModel.set(DEFAULT_MODEL.id, ['hid:mk2:a', 'hid:mk2:b', 'hid:mk2:c']);
 
   await driverManager.tryRealConnect(); // primary claims hid:mk2:a
   await driverManager.__scanOnce(); // extra b → index 1
@@ -1034,7 +1034,7 @@ await test('D2. disconnecting one same-model extra tears down only that unit; th
   assert.equal(identities[2]?.index, 1, 'freed index 1 reused');
 });
 
-// ── Summary ───────────────────────────────────────────────────────────────────
+// Summary
 
 console.log(`\n${passed} passed, ${failed} failed`);
 tjs.exit(failed > 0 ? 1 : 0);

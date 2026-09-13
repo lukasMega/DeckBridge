@@ -214,7 +214,7 @@ export interface LogObject {
  *  null = use the model's own resizeMode/padFill (see DeviceImageSpec). */
 export type ImageModeOverride = 'resize' | 'pad-black' | 'pad-average' | 'pad-edge' | null;
 
-// ── Extra keys (physical keys outside the emulated CORA grid) ──────────────
+// Extra keys (physical keys outside the emulated CORA grid)
 // 293S: the 6th column (wire ids 16/17/18) never maps to an MK.2 index, so
 // DeckBridge binds its own actions to it. Config is persisted per device in
 // settings.json (DeviceIdentitySettings.extraKeys, keyed by wire id).

@@ -1,18 +1,9 @@
 #!/usr/bin/env node
-// Build the SLIM txiki.js runtime from source into $TJS.
-//
-// This is the fallback for platforms with no prebuilt slim asset (macOS x86_64)
-// and the escape hatch when you want to build the runtime yourself; the default
-// path is scripts/tjs-download.mjs, which fetches the same artifact prebuilt.
-//
-// It does NOT hand-roll cmake flags: the fork ships scripts/build-dist.mjs, the
-// same driver its release CI runs, so `--profile ffi` here produces exactly the
-// published `txiki-slim-ffi-*` binary (FFI in; TLS/WASM/SQLite/mimalloc and the
-// eval/serve/test/bundle/app subcommands out; MinSizeRel + compressed bytecode
-// + hardened + stripped).
-//
-// Requires: git, cmake, a C/C++ toolchain, npm (esbuild comes from the clone's
-// node_modules — build-dist.mjs never fetches it at build time).
+// Build the SLIM txiki.js runtime from source into $TJS. Fallback for platforms with
+// no prebuilt slim asset (macOS x86_64); the default path is scripts/tjs-download.mjs.
+// Hand-rolls no cmake flags — delegates to the fork's own scripts/build-dist.mjs with
+// `--profile ffi`, the driver its release CI runs, so the output matches the published
+// `txiki-slim-ffi-*` binary. Requires: git, cmake, a C/C++ toolchain, npm.
 //
 // Env (same contract as tjs-download.mjs):
 //   TJS            destination path for the runtime binary (vendor/.../build/tjs)
@@ -43,7 +34,7 @@ const isWin = platform() === 'win32';
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const REPO = 'https://github.com/lukasMega/txiki.js-with-slim-builds.git';
 
-// --- Toolchain preflight: fail with an actionable message, not a build error ---
+// Toolchain preflight: fail with an actionable message, not a build error
 function have(cmd) {
   try {
     execSync(`${isWin ? 'where' : 'command -v'} ${cmd}`, { stdio: 'ignore' });

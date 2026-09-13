@@ -190,7 +190,6 @@ export function createConnection(
   return nodeSocket;
 }
 
-// Internal type helpers (not exported)
 interface TjsSocketOpenedInfo {
   readable: ReadableStream<Uint8Array>;
   writable: WritableStream<Uint8Array>;

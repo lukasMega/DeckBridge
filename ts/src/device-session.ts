@@ -1,11 +1,7 @@
-// One extra emulated Network Dock (session index 1..MAX_DEVICE_SESSIONS-1).
-//
-// Session 0 (the primary) stays the existing DriverManager singleton path —
-// it owns the WebUI/tray, default ports, mock mode. An extra session is a
-// self-contained dock: its own CORA server pair on strided ports, its own mDNS
-// advert and identity, and one WorkerHidDriver (one hidapi handle) on its own
-// worker thread. Extras have NO WebUI/tray coupling — the WebUI stays
-// single-device (primary only) in v1.
+// One extra emulated Network Dock (session index 1..MAX_DEVICE_SESSIONS-1):
+// own CORA server pair on strided ports, own mDNS advert + identity, own
+// WorkerHidDriver on its own worker thread. No WebUI/tray coupling — session 0
+// (DriverManager) keeps those, and the WebUI stays primary-only in v1.
 import { log } from './logger.js';
 import type { LogLevel } from './logger.js';
 import {

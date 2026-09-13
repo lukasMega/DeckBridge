@@ -1,13 +1,10 @@
 import { defineConfig } from '@playwright/test';
 
 /**
- * Two independent suites, one runtime:
- *   app  — the DeckBridge Web UI served by the real bundle in mock mode
- *   docs — the built Docusaurus site served from docs-site/build
- *
- * Browser lifecycle lives in fixtures/browser.ts; the servers live in fixtures/app.ts and
- * fixtures/docs.ts rather than in `webServer`, so that a missing build or an occupied CORA
- * port produces a named error instead of a generic start-up timeout.
+ * Two independent suites, one runtime: `app` (Web UI from the real bundle in mock mode)
+ * and `docs` (built Docusaurus site). Servers live in fixtures/app.ts + fixtures/docs.ts
+ * rather than in `webServer`, so a missing build or an occupied CORA port produces a
+ * named error instead of a generic start-up timeout.
  */
 export default defineConfig({
   testDir: './tests',

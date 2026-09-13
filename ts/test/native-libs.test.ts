@@ -60,7 +60,7 @@ async function makeFixtureLib(name: string, content: string): Promise<EmbeddedNa
 
 const ROOT = `${tjs.tmpDir}/native-libs-test-${tjs.pid}`;
 
-// ── envVarFor ─────────────────────────────────────────────────────────────────
+// envVarFor
 
 console.log('\nenvVarFor');
 
@@ -78,7 +78,7 @@ await test('maps lib names to env vars (Windows .dll names)', () => {
   assert.equal(envVarFor('libhidapi.dll'), 'HIDAPI_LIB');
 });
 
-// ── defaultCacheRoot ──────────────────────────────────────────────────────────
+// defaultCacheRoot
 
 console.log('\ndefaultCacheRoot');
 
@@ -133,7 +133,7 @@ await test('Windows branch falls back to home/AppData/Local when LOCALAPPDATA un
   }
 });
 
-// ── gzip roundtrip ────────────────────────────────────────────────────────────
+// gzip roundtrip
 
 console.log('\ngunzip');
 
@@ -145,7 +145,7 @@ await test('gunzip(b64ToBytes(...)) roundtrips', async () => {
   assert.equal(restored.length, lib.rawSize);
 });
 
-// ── extractLibs ───────────────────────────────────────────────────────────────
+// extractLibs
 
 console.log('\nextractLibs');
 
@@ -185,7 +185,7 @@ await test('wrong-size file is re-extracted', async () => {
   assert.equal(new TextDecoder().decode(data), 'payload-A');
 });
 
-// ── cleanupOldHashDirs ────────────────────────────────────────────────────────
+// cleanupOldHashDirs
 
 console.log('\ncleanupOldHashDirs');
 
@@ -204,7 +204,7 @@ await test('removes other native-* dirs, keeps current', async () => {
   assert.ok(st.isFile, 'current hash dir must survive');
 });
 
-// ── Cleanup + summary ─────────────────────────────────────────────────────────
+// Cleanup + summary
 
 try {
   await tjs.remove(ROOT, { recursive: true });

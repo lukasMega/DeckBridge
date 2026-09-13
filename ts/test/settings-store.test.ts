@@ -18,7 +18,7 @@ async function test(name: string, fn: () => void | Promise<void>): Promise<void>
 
 const ROOT = `${tjs.tmpDir}/settings-store-test-${tjs.pid}`;
 
-// ── settingsPath ──────────────────────────────────────────────────────────────
+// settingsPath
 
 console.log('\nsettingsPath');
 
@@ -26,7 +26,7 @@ await test('joins cacheRoot with settings.json', () => {
   assert.equal(settingsPath(ROOT), `${ROOT}/settings.json`);
 });
 
-// ── loadSettings ──────────────────────────────────────────────────────────────
+// loadSettings
 
 console.log('\nloadSettings');
 
@@ -51,7 +51,7 @@ await test('JSON array → {}', async () => {
   assert.deepEqual(result, {});
 });
 
-// ── saveSettings / loadSettings round-trip ───────────────────────────────────
+// saveSettings / loadSettings round-trip
 
 console.log('\nsaveSettings/loadSettings round-trip');
 
@@ -134,7 +134,7 @@ await test('devices[] with per-device settings round-trips through save/load', a
   assert.deepEqual(result, data, 'devices[] entries survive a save/load round-trip verbatim');
 });
 
-// ── Cleanup + summary ─────────────────────────────────────────────────────────
+// Cleanup + summary
 
 try {
   await tjs.remove(ROOT, { recursive: true });

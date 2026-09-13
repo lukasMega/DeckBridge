@@ -2,21 +2,10 @@ import type { DeviceModel } from '../driver.js';
 import { ELGATO_MK2_PID, IMAGE_JPEG_QUALITY } from '../../types.js';
 import { MK2_CHILD_GEOMETRY } from '../../capabilities.js';
 
-/** Ajazz AKP153E / AKP153R **rev. 2** — the same board as the Mirabox 293V3 behind a
- *  different VID/PID (`0x0300:0x3010` / `0x3011` instead of `0x6603:0x1005…`).
- *
- *  NOT HARDWARE-TESTED. Everything below is copied from MIRABOX_293_MODEL because the
- *  reference implementations describe the two as identical: protocol v3 (1024-byte CRT
- *  packets, press+release), 512-byte HID reads, usagePage 0xffa0/usage 1, 3×6 physical
- *  grid, JPEG keys, and the same button-remap table
- *  (opendeck-akp153 `src/mappings.rs` `protocol_version()`; keydeck
- *  `driver/devices/Ajazz-AKP153E-0x3010.json` is byte-identical to
- *  `Mirabox-HSV293SV3-0x1005.json` apart from VID/PID and human name).
- *  `keyMap` in particular was verified on 293V3 hardware only — if keys light up in the
- *  wrong place on a real AKP153 rev. 2, that table is the first thing to re-derive.
- *
- *  Rev. 1 (`0x0300:0x1010` / `0x1020`) is a v1/512-byte device and is deliberately NOT
- *  covered here — it needs the 293S-style model instead. */
+/** Ajazz AKP153E / AKP153R **rev. 2** — the Mirabox 293V3 board behind a different
+ *  VID/PID (`0x0300:0x3010` / `0x3011`). NOT HARDWARE-TESTED; every field is copied from
+ *  MIRABOX_293_MODEL. Rev. 1 (`0x1010`/`0x1020`) is a v1 device and lives in
+ *  rebadge/akp153-v1-clones.ts — do not merge them. Provenance: ../PROVENANCE.md. */
 const AKP153_REV2_BASE: Omit<DeviceModel, 'id' | 'name' | 'usbProductIds'> = {
   vendor: 'ajazz',
   protocol: 'mirabox-cora',

@@ -52,7 +52,7 @@ function test(name: string, fn: () => void): void {
   }
 }
 
-// ── findModel resolution ─────────────────────────────────────────────────────
+// findModel resolution
 
 console.log('\ndevice-models: findModel');
 
@@ -141,7 +141,7 @@ test('Ajazz AKP153 rev.2 models mirror the 293V3 wire/image/key spec', () => {
   }
 });
 
-// ── Fifine AmpliGame D6 (2 revisions of the 293V3 board) ─────────────────────
+// Fifine AmpliGame D6 (2 revisions of the 293V3 board)
 
 function wireWithoutPacketSize(model: DeviceModel): string {
   const wire: Record<string, unknown> = { ...model.wire! };
@@ -235,7 +235,7 @@ test('Fifine D6 model ids and names are distinct per revision', () => {
   assert.notEqual(FIFINE_D6_MODEL.name, FIFINE_D6_REV2_MODEL.name);
 });
 
-// ── akp153-v1-clones (7 v1 rebadges of the 293S board) ───────────────────────
+// akp153-v1-clones (7 v1 rebadges of the 293S board)
 
 console.log('\ndevice-models: akp153-v1-clones');
 
@@ -323,7 +323,7 @@ test('findModel returns null for a known VID but unknown PID', () => {
   assert.equal(findModel(MK2_MODEL.usbVendorId, 0xffff), null);
 });
 
-// ── DEVICE_MODELS ordering ───────────────────────────────────────────────────
+// DEVICE_MODELS ordering
 
 console.log('\ndevice-models: DEVICE_MODELS ordering');
 
@@ -358,7 +358,7 @@ test('mirabox-293s precedes mirabox-k1pro in DEVICE_MODELS', () => {
   assert.ok(m293sIdx < k1proIdx, 'mirabox-293s must come before mirabox-k1pro');
 });
 
-// ── keyMap permutation checks ────────────────────────────────────────────────
+// keyMap permutation checks
 
 console.log('\ndevice-models: coraToWireImage permutation');
 
@@ -417,7 +417,7 @@ test('mini has empty keyMap (identity mapping)', () => {
   assert.equal(MINI_MODEL.keyMap.imageOffset, undefined);
 });
 
-// ── deviceInputToMk2Index round-trips ────────────────────────────────────────
+// deviceInputToMk2Index round-trips
 
 console.log('\ndevice-models: deviceInputToMk2Index round-trips');
 
@@ -449,7 +449,7 @@ test('mk2: deviceInputToMk2Index is identity (no keyMap)', () => {
   }
 });
 
-// ── 293S wireInputToCora drop and bijection ───────────────────────────────────
+// 293S wireInputToCora drop and bijection
 
 console.log('\ndevice-models: mirabox-293s wireInputToCora');
 
@@ -493,7 +493,7 @@ test('mirabox-293s: deviceInputToMk2Index returns -1 for code 0', () => {
   assert.equal(deviceInputToMk2Index(0, MIRABOX_293S_MODEL), -1);
 });
 
-// ── mirabox-k1pro properties ──────────────────────────────────────────────────
+// mirabox-k1pro properties
 
 console.log('\ndevice-models: mirabox-k1pro');
 
@@ -521,7 +521,7 @@ test('mirabox-k1pro: keyMap.coraToWireImage deep-equals [5,3,1,6,4,2]', () => {
   assert.deepEqual(Array.from(MIRABOX_K1PRO_MODEL.keyMap.coraToWireImage!), [5, 3, 1, 6, 4, 2]);
 });
 
-// ── modelToChildGeometry ─────────────────────────────────────────────────────
+// modelToChildGeometry
 
 console.log('\ndevice-models: modelToChildGeometry');
 
@@ -569,7 +569,7 @@ test('MK2_CHILD_GEOMETRY constant matches mk2 model geometry', () => {
   assert.equal(MK2_CHILD_GEOMETRY.productName, geo.productName);
 });
 
-// ── buildCapabilitiesPacket (non-MK.2 geometry) ───────────────────────────────
+// buildCapabilitiesPacket (non-MK.2 geometry)
 
 console.log('\ndevice-models: buildCapabilitiesPacket');
 
@@ -679,7 +679,7 @@ test('buildCapabilitiesPacket uses mirabox-293s geometry correctly', () => {
   assert.equal(pkt.readUInt16LE(10), MIRABOX_293S_MODEL.keyHeight);
 });
 
-// ── Summary ──────────────────────────────────────────────────────────────────
+// Summary
 
 console.log(`\n${passed} passed, ${failed} failed`);
 tjs.exit(failed > 0 ? 1 : 0);

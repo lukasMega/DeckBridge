@@ -136,7 +136,9 @@ try {
     });
     browser.on('exit', (code) => {
       clearTimeout(timer);
-      reject(new Error(`Chrome (${chrome}) exited with code ${code}. stderr:\n${stderrSnapshot()}`));
+      reject(
+        new Error(`Chrome (${chrome}) exited with code ${code}. stderr:\n${stderrSnapshot()}`),
+      );
     });
   });
 
@@ -159,13 +161,16 @@ try {
     const evaluated = await cdp.send(
       'Runtime.evaluate',
       {
+        // `document.body` is null until the parser reaches it — we poll from the moment
+        // the target exists, so an early tick must not throw inside the page (a thrown
+        // exception comes back with no `result.value` at all).
         expression:
-          "({ result: document.body.dataset.result ?? '', text: document.body.textContent })",
+          "({ result: document.body?.dataset.result ?? '', text: document.body?.textContent ?? '' })",
         returnByValue: true,
       },
       sessionId,
     );
-    page = evaluated.result.value;
+    page = evaluated.result.value ?? page;
     if (page.result !== '') break;
     await sleep(50);
   }

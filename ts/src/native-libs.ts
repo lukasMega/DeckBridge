@@ -1,14 +1,7 @@
-// Extracts the native libraries embedded in the bundle (virtual:native-libs,
-// gzip + base64) into a content-addressed cache directory, then points the
-// DECKBRIDGE_NATIVE_LIB / HIDAPI_LIB env vars at the extracted files.
-// Rules:
-//   - An env var that is already set wins; that lib is skipped entirely
-//     (dev workflow via mise [env], power-user override).
-//   - Cache dir is named native-<build hash>, so a binary upgrade can never
-//     reuse stale libs; warm starts only do a size check, no decode work.
-//   - Concurrency-safe: write to <name>.tmp-<pid>, then atomic rename.
-//   - If the cache root is unwritable, falls back to tjs.tmpDir; if that fails
-//     too, logs and returns — the FFI loaders produce actionable errors anyway.
+// Extracts bundle-embedded native libs (gzip+base64) into a cache dir named
+// native-<build hash> — so an upgrade can never reuse stale libs — then points
+// DECKBRIDGE_NATIVE_LIB / HIDAPI_LIB at them. A pre-set env var wins and skips
+// that lib entirely. Writes are <name>.tmp-<pid> + atomic rename.
 import { NATIVE_LIBS, NATIVE_LIBS_HASH } from 'virtual:native-libs';
 import type { EmbeddedNativeLib } from 'virtual:native-libs';
 import { log } from './logger.js';

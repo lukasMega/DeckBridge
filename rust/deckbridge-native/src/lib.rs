@@ -71,8 +71,6 @@ mod tests {
         assert!(!out.is_empty(), "JPEG output should be non-empty");
     }
 
-    // ── pad_to_canvas ──────────────────────────────────────────────────────────
-
     fn make_test_src() -> image::RgbaImage {
         // 8×8 RGBA, all pixels solid red except a distinct blue top-left corner
         // pixel, used to verify edge-clamp corner replication.

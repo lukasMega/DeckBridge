@@ -19,7 +19,7 @@ async function test(name: string, fn: () => void | Promise<void>): Promise<void>
   }
 }
 
-// ── Fake driver (records every sendImage call) ────────────────────────────────
+// Fake driver (records every sendImage call)
 
 type SendImageCall = { keyIndex: number; bytes: Uint8Array };
 
@@ -116,7 +116,7 @@ const SOLID_RED_16X16_JPEG = Buffer.from([
   0xd2, 0xbf, 0x0c, 0x3f, 0xd5, 0x30, 0xa0, 0x02, 0x80, 0x0a, 0x00, 0xff, 0xd9,
 ]);
 
-// ── renderImage tests (uses the real Rust image-proc FFI transform) ───────────
+// renderImage tests (uses the real Rust image-proc FFI transform)
 //
 // NOTE: `imageCache` is a module singleton shared across every case in this
 // file. Each case below uses a distinct source image (the fixture mutated at
@@ -208,7 +208,7 @@ await test('passthrough model forwards original bytes unchanged', async () => {
   );
 });
 
-// ── Summary ───────────────────────────────────────────────────────────────────
+// Summary
 
 console.log(`\n${passed} passed, ${failed} failed`);
 tjs.exit(failed > 0 ? 1 : 0);

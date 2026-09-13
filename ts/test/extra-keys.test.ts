@@ -24,7 +24,7 @@ async function test(name: string, fn: () => void | Promise<void>): Promise<void>
   }
 }
 
-// ── renderWidgetLines ─────────────────────────────────────────────────────────
+// renderWidgetLines
 
 console.log('\nrenderWidgetLines');
 
@@ -131,7 +131,7 @@ await test('plugin: no value yet → placeholder; value → lines; null → clea
   );
 });
 
-// ── parseLatLon ───────────────────────────────────────────────────────────────
+// parseLatLon
 
 console.log('\nparseLatLon');
 
@@ -147,7 +147,7 @@ await test('garbage / out-of-range / missing → null', () => {
   assert.equal(parseLatLon('0,181'), null);
 });
 
-// ── composeWidgetBmp ──────────────────────────────────────────────────────────
+// composeWidgetBmp
 
 console.log('\ncomposeWidgetBmp');
 
@@ -192,7 +192,7 @@ await test('blank text renders pure background', () => {
   assert.equal(countFg(Buffer.from(bmp)), 0);
 });
 
-// ── ExtraKeyWidgets ───────────────────────────────────────────────────────────
+// ExtraKeyWidgets
 
 class FakeDriver extends EventEmitter {
   model = MIRABOX_293S_MODEL;
@@ -277,7 +277,7 @@ await test('model without extraKeys → no device I/O, no timer', () => {
   assert.equal(d.splashed.length, 0);
 });
 
-// ── isExtraKeyConfig (migration guard) ────────────────────────────────────────
+// isExtraKeyConfig (migration guard)
 
 console.log('\nisExtraKeyConfig');
 
@@ -323,7 +323,7 @@ await test('accepts command widget intervalMs/timeoutMs in range, rejects out of
   );
 });
 
-// ── ExtraKeyWidgets.forceRun ("Run now") ───────────────────────────────────────
+// ExtraKeyWidgets.forceRun ("Run now")
 
 console.log('\nExtraKeyWidgets.forceRun');
 

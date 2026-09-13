@@ -7,16 +7,10 @@ import {
 } from '@playwright/test';
 
 /**
- * Forbidden in every spec built on this fixture — Lightpanda has no rendering or layout
- * engine, so these silently return stubs instead of failing loudly:
- *
- *   page.screenshot() / toHaveScreenshot()   → a hardcoded placeholder image
- *   page.pdf()                                → a hardcoded placeholder PDF
- *   locator.boundingBox()                     → a fake 5x5 rect
- *   locator.click() / hover() / dragTo()      → hang on the actionability check
- *
- * Use helpers/click.ts for interaction, and assert on DOM state, attributes, text and
- * network instead of pixels.
+ * Forbidden in every spec on this fixture — Lightpanda has no rendering or layout engine,
+ * so these silently return stubs instead of failing loudly: screenshot()/toHaveScreenshot()
+ * and pdf() give placeholders, boundingBox() a fake 5x5 rect, and click()/hover()/dragTo()
+ * hang on the actionability check. Use helpers/click.ts; assert on DOM, not pixels.
  */
 
 const DEFAULT_CHROME = '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';

@@ -11,9 +11,7 @@ import { StatusChip, type StatusChipVariant } from './components/StatusChip.js';
 import { ThemeButton } from './components/ThemeButton.js';
 import type { DeviceModel } from './ui-types.js';
 
-// ---------------------------------------------------------------------------
 // Uptime formatter (mirrors ui-status.ts)
-// ---------------------------------------------------------------------------
 
 function fmtUp(ms: number): string {
   const s = Math.floor(ms / 1000);
@@ -23,9 +21,7 @@ function fmtUp(ms: number): string {
   return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(sc).padStart(2, '0')}`;
 }
 
-// ---------------------------------------------------------------------------
 // Module-level handlers (hoisted out of components — no closure capture)
-// ---------------------------------------------------------------------------
 
 function switchToSimple(): void {
   document.documentElement.setAttribute('data-mode', 'simple');
@@ -52,9 +48,7 @@ function handleModelChange(e: Event): void {
   });
 }
 
-// ---------------------------------------------------------------------------
 // AdvHeader
-// ---------------------------------------------------------------------------
 
 export function AdvHeader(): preact.JSX.Element {
   const status = useStore((s) => s.status);

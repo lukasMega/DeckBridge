@@ -8,7 +8,6 @@ import { BackButton } from './controls.js';
 import { Collapsible } from '../components/Collapsible.js';
 import type { DeviceIdentity, RealDeviceIdentity } from '../ui-types.js';
 
-/** Run `onEscape` when the Escape key is pressed. */
 function useEscape(onEscape: () => void): void {
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {

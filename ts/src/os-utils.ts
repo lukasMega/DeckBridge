@@ -27,7 +27,5 @@ export async function openPathInOS(path: string): Promise<void> {
     else if (platform === WIN) cmd = ['cmd', '/c', 'start', '', path];
     else cmd = ['xdg-open', path]; // Linux: no-op on headless (exits non-zero, caught below)
     await tjs.spawn(cmd, { stdout: 'ignore', stderr: 'ignore' }).wait();
-  } catch {
-    // best-effort — silently ignored on headless Linux or missing opener
-  }
+  } catch {}
 }

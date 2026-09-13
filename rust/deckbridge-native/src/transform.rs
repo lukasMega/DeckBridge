@@ -54,7 +54,6 @@ pub(crate) fn transform(
     }
 
     if fill_mode == 0 {
-        // unchanged: rotate → flip → (optional) resize
         img = match rotate {
             90 => img.rotate90(),
             180 => img.rotate180(),

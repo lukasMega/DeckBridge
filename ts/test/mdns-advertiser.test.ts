@@ -17,7 +17,7 @@ async function test(name: string, fn: () => void | Promise<void>): Promise<void>
   }
 }
 
-// ── buildArgs ──────────────────────────────────────────────────────────────
+// buildArgs
 
 console.log('\nbuildArgs');
 
@@ -42,7 +42,7 @@ await test('empty/unknown platform falls through to the dns-sd default branch wi
   assert.ok(args.length > 0, 'returns a non-empty arg list');
 });
 
-// ── MdnsAdvertiser serviceName ───────────────────────────────────────────────
+// MdnsAdvertiser serviceName
 
 console.log('\nMdnsAdvertiser serviceName');
 
@@ -81,7 +81,7 @@ await test('serviceName defaults to MDNS_SERVICE_NAME when omitted', async () =>
   assert.ok(spawnLog.includes(MDNS_SERVICE_NAME), 'default serviceName should be in spawn log');
 });
 
-// ── platformName ───────────────────────────────────────────────────────────
+// platformName
 
 console.log('\nplatformName');
 
@@ -90,7 +90,7 @@ await test('returns a string without throwing', () => {
   assert.equal(typeof name, 'string');
 });
 
-// ── Summary ───────────────────────────────────────────────────────────────────
+// Summary
 
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed > 0) tjs.exit(1);

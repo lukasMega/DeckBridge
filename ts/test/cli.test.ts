@@ -41,7 +41,7 @@ function restoreEnv(snap: Record<string, string | undefined>): void {
 
 const NO_FLAGS: CliFlags = { mock: false, noWebui: false, open: false, headless: false };
 
-// ── userArgs(): both invocation shapes ───────────────────────────────────────
+// userArgs(): both invocation shapes
 
 console.log('\nuserArgs');
 
@@ -70,7 +70,7 @@ test('userArgs() with no override reads the real (frozen) tjs.args', () => {
   assert.deepEqual(userArgs(), []);
 });
 
-// ── parseCliArgs: commands ───────────────────────────────────────────────────
+// parseCliArgs: commands
 
 console.log('\nparseCliArgs — commands');
 
@@ -125,7 +125,7 @@ test('unknown command word → error, not thrown/exited', () => {
   if (!r.ok) assert.ok(r.error.includes('bogus'));
 });
 
-// ── parseCliArgs: flag matrix ────────────────────────────────────────────────
+// parseCliArgs: flag matrix
 
 console.log('\nparseCliArgs — flag matrix');
 
@@ -241,7 +241,7 @@ test('unknown flag → error (not exit)', () => {
   if (!r.ok) assert.ok(r.error.includes('--bogus-flag'));
 });
 
-// ── applyFlagsToEnv: precedence (CLI flag > pre-existing env > default) ──────
+// applyFlagsToEnv: precedence (CLI flag > pre-existing env > default)
 
 console.log('\napplyFlagsToEnv — precedence');
 
@@ -286,7 +286,7 @@ test('--webui-port / --cache-dir / --log-level land in tjs.env', () => {
   restoreEnv(snap);
 });
 
-// ── help / version text ──────────────────────────────────────────────────────
+// help / version text
 
 console.log('\nhelp / version text');
 
@@ -311,7 +311,7 @@ test('versionText() includes the build define values', () => {
   assert.ok(versionText().includes('deckbridge'));
 });
 
-// ── Summary ───────────────────────────────────────────────────────────────────
+// Summary
 
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed > 0) tjs.exit(1);

@@ -38,7 +38,7 @@ async function runWebTest(name: string, fn: () => Promise<void>): Promise<void> 
   }
 }
 
-// ── isValidMacAddress ─────────────────────────────────────────────────────────
+// isValidMacAddress
 
 console.log('\nisValidMacAddress');
 
@@ -86,7 +86,7 @@ test('empty string → false', () => {
   assert.ok(!isValidMacAddress(''));
 });
 
-// ── isAllowedWebRequest ────────────────────────────────────────────────────────
+// isAllowedWebRequest
 
 console.log('\nisAllowedWebRequest');
 
@@ -134,7 +134,7 @@ test('bare host, bare origin → true', () => {
   assert.ok(isAllowedWebRequest('127.0.0.1', 'http://127.0.0.1', 3000));
 });
 
-// ── isAllowedWebRequest — own-interface IP literals (--bind 0.0.0.0 LAN access) ─
+// isAllowedWebRequest — own-interface IP literals (--bind 0.0.0.0 LAN access) ─
 
 console.log('\nisAllowedWebRequest — own-interface IP literals');
 
@@ -180,7 +180,7 @@ test('localhost/127.0.0.1/[::1] still allowed alongside own-IP support', () => {
   assert.ok(isAllowedWebRequest('[::1]:3000', null, 3000));
 });
 
-// ── pickFallbackPort ──────────────────────────────────────────────────────────
+// pickFallbackPort
 
 console.log('\npickFallbackPort');
 
@@ -191,7 +191,7 @@ test('returns a port in the expected fallback range', () => {
   }
 });
 
-// ── Broadcaster.size ──────────────────────────────────────────────────────────
+// Broadcaster.size
 
 console.log('\nBroadcaster.size');
 
@@ -251,7 +251,7 @@ test('stop() clears all clients', () => {
   assert.equal(bus.size, 0);
 });
 
-// ── WebUIServer.resetImages ──────────────────────────────────────────────────
+// WebUIServer.resetImages
 
 console.log('\nWebUIServer.resetImages');
 
@@ -282,7 +282,7 @@ test('clears imageState/imageVersion and broadcasts repaint', () => {
   assert.ok(repaintBroadcast, 'repaint broadcast sent');
 });
 
-// ── WebUIServer.notifyDocks ──────────────────────────────────────────────────
+// WebUIServer.notifyDocks
 
 console.log('\nWebUIServer.notifyDocks');
 
@@ -391,7 +391,7 @@ test("new WS client's initial snapshot carries stored docks", () => {
   assert.equal(parsed.data.docks.length, 2);
 });
 
-// ── WebUIServer selected-dock preview mirror ─────────────────────────────────
+// WebUIServer selected-dock preview mirror
 
 console.log('\nWebUIServer selected-dock preview mirror');
 
@@ -461,7 +461,7 @@ test('selectDock: snapshot brightness follows the selected dock (per-device)', (
   );
 });
 
-// ── WebUIServer.applyMockConfig productId ────────────────────────────────────
+// WebUIServer.applyMockConfig productId
 
 console.log('\nWebUIServer.applyMockConfig productId');
 
@@ -478,7 +478,7 @@ test('valid integer productId is masked and applied', () => {
   assert.equal(result.productId, 0x1234abcd & 0xffff, 'productId masked');
 });
 
-// ── WebUIServer: POST /api/image-mode ────────────────────────────────────────
+// WebUIServer: POST /api/image-mode
 
 console.log('\nwebui: POST /api/image-mode');
 
@@ -549,7 +549,7 @@ try {
   await imageModeUi.stop().catch(() => undefined);
 }
 
-// ── WebUIServer settings persistence ─────────────────────────────────────────
+// WebUIServer settings persistence
 
 console.log('\nWebUIServer.getSettingsJson / applySettingsJson');
 
@@ -644,7 +644,7 @@ test('applySettingsJson: an unknown selectedDock is ignored, not fatal', () => {
   assert.equal(ui.fullState().selectedDock, 0, 'selection stays on the primary');
 });
 
-// ── WebUIServer device identity (getOrCreateDeviceIdentity / updateDeviceMdnsName) ──
+// WebUIServer device identity (getOrCreateDeviceIdentity / updateDeviceMdnsName)
 
 console.log('\nWebUIServer device identity');
 
@@ -699,7 +699,7 @@ test('updateDeviceMdnsName: unknown deviceKey returns false, no-op', () => {
   assert.equal(ok, false);
 });
 
-// ── WebUIServer: POST /api/device-identity/mdns-name ─────────────────────────
+// WebUIServer: POST /api/device-identity/mdns-name
 
 console.log('\nwebui: POST /api/device-identity/mdns-name');
 
@@ -766,7 +766,7 @@ try {
   await mdnsRouteUi.stop().catch(() => undefined);
 }
 
-// ── WebUIServer: GET/POST /api/settings ──────────────────────────────────────
+// WebUIServer: GET/POST /api/settings
 
 console.log('\nwebui: GET/POST /api/settings');
 
@@ -817,7 +817,7 @@ try {
   await settingsUi.stop().catch(() => undefined);
 }
 
-// ── WebUIServer: load-time prune of legacy path-keyed entries ────────────────
+// WebUIServer: load-time prune of legacy path-keyed entries
 
 console.log('\nwebui: load prunes non-serial deviceKeys');
 
@@ -858,7 +858,7 @@ await runWebTest('start() drops path-keyed entries, keeps usb:<serial> keys', as
   }
 });
 
-// ── Summary ───────────────────────────────────────────────────────────────────
+// Summary
 
 console.log(`\n${passed} passed, ${failed} failed`);
 tjs.exit(failed > 0 ? 1 : 0);

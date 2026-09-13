@@ -21,7 +21,7 @@ export function fwVersionBuf(version: string): Buffer {
   );
 }
 
-// ── CORA report buffer builders ──────────────────────────────────────────────
+// CORA report buffer builders
 // Small pure helpers capturing the repeated "alloc N, set byte0, fill field"
 // shapes used by the child server's verbatim probe / GET_REPORT responses.
 

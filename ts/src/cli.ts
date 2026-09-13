@@ -125,7 +125,6 @@ type FlagsParseResult =
   | { ok: true; flags: CliFlags; commandOverride: CliCommand | null }
   | { ok: false; error: string };
 
-/** Parses the flag tokens starting at `args[startIndex]`. */
 function parseFlagArgs(args: string[], startIndex: number): FlagsParseResult {
   const flags: CliFlags = { mock: false, noWebui: false, open: false, headless: false };
   let commandOverride: CliCommand | null = null;

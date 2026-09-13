@@ -130,13 +130,11 @@ export class WorkerHidDriver extends EventEmitter implements DeviceDriver {
           this.hidPath = msg.hidPath;
           this.settleOpen(this.openResolve, null);
         } else {
-          // Failed open: reject but KEEP the worker alive for reuse. Terminating
-          // a worker that loaded hidapi (hid_init) is SIGBUS-prone on macOS, and
-          // a present-but-unopenable device (e.g. Input Monitoring denied) would
-          // otherwise spawn+terminate a throwaway worker every reconnect cycle —
-          // the exact crash this avoids. driver-manager re-issues open() on this
-          // same instance; close() tears the worker down once when it's no longer
-          // needed (device gone / mode switch).
+          // Failed open: reject but KEEP the worker alive for reuse. Terminating a
+          // worker that loaded hidapi is SIGBUS-prone on macOS, and a present-but-
+          // unopenable device (Input Monitoring denied) would otherwise spawn+terminate
+          // one every reconnect cycle. driver-manager re-issues open() on this instance;
+          // close() tears the worker down once, when it is no longer needed.
           this.settleOpen(null, new Error(msg.error));
         }
         break;

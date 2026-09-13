@@ -2,61 +2,10 @@ import type { DeviceModel } from '../driver.js';
 import { ELGATO_MK2_PID, IMAGE_JPEG_QUALITY } from '../../types.js';
 import { MK2_CHILD_GEOMETRY } from '../../capabilities.js';
 
-/** Fifine AmpliGame D6 — the Mirabox 293V3 board behind VID `0x3142`.
- *
- *  Rev. 2 (`0x0060`) is HARDWARE-TESTED on macOS: enumeration via the `0xffa0`/1 usage
- *  path, all 15 keys rendered, and press+release events mapped correctly (wire `0x0f` →
- *  mk2 14, `0x0b` → mk2 10). Rev. 1 (`0x0007`) is still untested. Everything below is
- *  copied from
- *  MIRABOX_293_MODEL because six independent implementations describe the D6 as a
- *  293V3 clone: the same CRT command set, 512-byte HID reads, usagePage `0xffa0`/usage
- *  1, 3×5 grid of 15 JPEG keys, no encoders, and the same button-remap table
- *  (companion-surface-mirabox-stream-dock PR #49; opendeck-ampgd6 `IMAGE_MAP`;
- *  FifineOpenSource `IMAGE_MAP`; jasonkoon/sd-connect `IMAGE_KEY_MAP` — byte-identical
- *  to our `coraToWireImage`, and sd-connect verified it on hardware by painting each key
- *  with its own index). The wire format was audited command-by-command against
- *  companion's `streamdock.ts`: BAT/LIG/CLE/STP/DIS/CONNECT and the input report layout
- *  all match `mirabox-protocol.ts`, so no protocol code changes.
- *
- *  Note on "protocol version": upstream runs the D6 rev. 1 at mirajazz **v1 for writes**
- *  (512-byte packets) but forces the **event reader to v3** (press+release) — see
- *  FifineOpenSource's explicit `PROTOCOL_VERSION = 1` + `READER_PROTOCOL_VERSION = 3`,
- *  and opendeck-ampgd6's `reader_mut.protocol_version = 3`. We express that same net
- *  behaviour as `packetSize: 512` + `synthesizeKeyUp: false`; the device is NOT
- *  uniformly "v3", which is also why `mirabox-cora-v1` is the wrong protocol tag for it
- *  (that one implies keydown-only and a shared serial too).
- *
- *  The D6 ships under **two PIDs with different packet sizes**, which is why this is
- *  two models rather than one model with two PIDs:
- *    - rev. 1 (`0x0007`) — 512-byte CRT packets
- *    - rev. 2 (`0x0060`) — 1024-byte packets. Fifine's own Windows software labels this
- *      unit "D6 Pro" (opendeck-ampgd6 PR #4), but PR #5's author reports the box and
- *      label just say "D6", and Fifine separately sells a retail D6PRO SKU — so treat
- *      "rev. 2", not "D6 Pro", as this model's identity.
- *
- *  **The rev. 2 board's own self-description is checked in.** `mise run d6-capture`
- *  (`src/d6-capture.ts`) read the HID report descriptor off a real 0x0060 unit on macOS;
- *  the 54 bytes live in `test/fixtures/fifine-d6-rev2.report-descriptor.json` and are
- *  asserted by `test/hid-report-descriptor.test.ts`. One unnumbered vendor collection
- *  (usagePage `0xffa0`, usage 1), an **Output report of 1024 bytes** and an **Input report
- *  of 512 bytes** — i.e. both `wire.packetSize: 1024` and `wire.inSize: 512` are now the
- *  device's own numbers, not inherited constants. This is also the fixture the B4′
- *  packet-size probe is regression-tested against, so the synthetic descriptors in that
- *  test file are no longer the only thing keeping it honest.
- *
- *  `sharedSerial` is deliberately omitted (→ false) for both. Two independent 0x0060
- *  units report per-unit serials that share the `81D0DA78` prefix and differ in the tail:
- *  the companion issue #32 USB dump (`USB\VID_3142&PID_0060\81D0DA784037`) and the
- *  captured unit above — neither is mirajazz's shared `355499441494`.
- *  For rev. 1 this is an assumption, not a finding — see open question O3 in
- *  `.claude/plans/2026-09-10_fifine-d6-support.md`: mirajazz hardcodes the shared
- *  `355499441494` for v1 devices, and rev. 1 *is* a v1 board on the write path. It masks
- *  that serial rather than reading it, so it isn't proof the firmware reports it, but if
- *  two rev. 1 units ever collide on one settings key, `sharedSerial: true` on
- *  FIFINE_D6_MODEL is the fix (see `deviceKeyFor`, device-identity.ts).
- *
- *  If keys light up in the wrong place on real hardware, `keyMap` (verified on 293V3 and
- *  D6 rev. 2 hardware) is the first thing to re-derive. */
+/** Fifine AmpliGame D6 — the Mirabox 293V3 board behind VID `0x3142`. Two models, not
+ *  two PIDs on one: rev. 1 (`0x0007`) writes 512-byte packets, rev. 2 (`0x0060`) 1024.
+ *  Rev. 2 is hardware-tested and its checked-in report descriptor supplies packetSize /
+ *  inSize; rev. 1 is untested. Provenance + open questions: ../PROVENANCE.md. */
 const FIFINE_D6_BASE: Omit<DeviceModel, 'id' | 'name' | 'usbProductIds' | 'wire'> = {
   vendor: 'fifine',
   protocol: 'mirabox-cora',

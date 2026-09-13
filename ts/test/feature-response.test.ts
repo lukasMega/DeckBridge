@@ -30,7 +30,7 @@ function test(name: string, fn: () => void): void {
   }
 }
 
-// ── fwVersionBuf ─────────────────────────────────────────────────────────────
+// fwVersionBuf
 
 console.log('\nfwVersionBuf');
 
@@ -71,7 +71,7 @@ test('exactly FW_VERSION_FIELD_LEN version is unchanged', () => {
   assert.deepEqual(Array.from(buf), Array.from(Buffer.from(version, 'ascii')));
 });
 
-// ── buildFeatureResponse ─────────────────────────────────────────────────────
+// buildFeatureResponse
 
 console.log('\nbuildFeatureResponse');
 
@@ -239,7 +239,7 @@ test('FEATURE_GET_DOCK_FW and FEATURE_GET_QUICK_PROBE produce the same fw versio
   assert.deepEqual(fwDock, fwQuick);
 });
 
-// ── Summary ──────────────────────────────────────────────────────────────────
+// Summary
 
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed > 0) tjs.exit(1);

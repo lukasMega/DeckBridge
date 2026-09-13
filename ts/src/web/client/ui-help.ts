@@ -73,7 +73,6 @@ function svgNetwork(): string {
     '<path d="M97 45l4 4 4-4" stroke="var(--fg-dim)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>' +
     '<rect x="118" y="39" width="46" height="15" rx="7.5" fill="none" stroke="var(--border-strong)" stroke-width="1.4"/>' +
     '<rect x="126" y="45" width="22" height="4" rx="2" fill="var(--fg-dim)"/>' +
-    // '<circle cx="288" cy="21" r="3" fill="var(--inset)"/><circle cx="300" cy="21" r="3" fill="var(--accent-soft)"/>' +
     grid +
     '<g class="menuin">' +
     '<rect x="20" y="58" width="148" height="92" rx="9" fill="var(--surface-2)" stroke="var(--border-strong)" stroke-width="1.5"/>' +

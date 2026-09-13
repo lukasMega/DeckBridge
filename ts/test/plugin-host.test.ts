@@ -40,7 +40,7 @@ class FakeWorker implements WorkerLike {
   addEventListener(type: 'message' | 'error', listener: (ev: MessageEvent) => void): void {
     (type === 'message' ? this.msgCbs : this.errCbs).push(listener);
   }
-  // ── test drivers ──
+  // test drivers
   emit(msg: PluginWorkerToMain): void {
     for (const cb of this.msgCbs) cb({ data: msg } as unknown as MessageEvent);
   }
@@ -75,7 +75,7 @@ function makeHost(): { host: PluginHost; workers: FakeWorker[] } {
   return { host, workers };
 }
 
-// ── protocol shapes ───────────────────────────────────────────────────────────
+// protocol shapes
 
 console.log('\nplugin-worker-protocol');
 
@@ -103,7 +103,7 @@ await runTest('configure/value/fetch/pong message shapes round-trip', () => {
   assert.equal(fetchReq.fetchId, fetchRes.fetchId);
 });
 
-// ── request / value cache ───────────────────────────────────────────────────────
+// request / value cache
 
 console.log('\nPluginHost.request');
 
@@ -165,7 +165,7 @@ await runTest('an error message marks the key ERR', () => {
   host.stop();
 });
 
-// ── ctx.fetch proxy (runs on the host/main thread) ──────────────────────────────
+// ctx.fetch proxy (runs on the host/main thread)
 
 console.log('\nPluginHost fetch proxy');
 
@@ -202,7 +202,7 @@ await runTest('non-http url is rejected without calling fetch', async () => {
   host.stop();
 });
 
-// ── heartbeat watchdog ──────────────────────────────────────────────────────────
+// heartbeat watchdog
 
 console.log('\nPluginHost watchdog');
 
@@ -251,7 +251,7 @@ await runTest('3 consecutive kills disable the plugins until config change', asy
   host.stop();
 });
 
-// ── reaping ──────────────────────────────────────────────────────────────────────
+// reaping
 
 console.log('\nPluginHost reap');
 
@@ -267,7 +267,7 @@ await runTest('a key not re-requested is reaped; last one gone → worker stops'
   host.stop();
 });
 
-// ── listPluginFiles ────────────────────────────────────────────────────────────
+// listPluginFiles
 
 console.log('\nlistPluginFiles');
 

@@ -19,13 +19,9 @@ use tray_icon::{
 #[cfg(target_os = "macos")]
 use tao::platform::macos::{ActivationPolicy, EventLoopExtMacOS};
 
-// ── embedded icon bytes ─────────────────────────────────────────────────────
-
 const ICON_FULL_BYTES: &[u8] = include_bytes!("../icons/icon-full.png");
 const ICON_USB_ONLY_BYTES: &[u8] = include_bytes!("../icons/icon-usb-only.png");
 const ICON_DISCONNECTED_BYTES: &[u8] = include_bytes!("../icons/icon-disconnected.png");
-
-// ── types ───────────────────────────────────────────────────────────────────
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -51,8 +47,6 @@ enum UserEvent {
     Menu(tray_icon::menu::MenuEvent),
     Quit,
 }
-
-// ── helpers ─────────────────────────────────────────────────────────────────
 
 // Tray lifecycle chatter (waiting/connected/disconnected) is only useful when
 // debugging — gated behind DECKBRIDGE_LOG=debug (set by the `mise run d` task), which
@@ -85,7 +79,6 @@ fn open_browser(url: &str) {
     let _ = Command::new("xdg-open").arg(url).spawn();
 }
 
-/// Load a PNG file from bytes and return an `Icon`.
 fn icon_from_bytes(data: &[u8]) -> Option<Icon> {
     let decoder = png::Decoder::new(std::io::Cursor::new(data));
     let mut reader = decoder.read_info().ok()?;
@@ -93,7 +86,6 @@ fn icon_from_bytes(data: &[u8]) -> Option<Icon> {
     let info = reader.next_frame(&mut buf).ok()?;
     let bytes = &buf[..info.buffer_size()];
 
-    // Convert to RGBA if needed
     let rgba = match info.color_type {
         png::ColorType::Rgba => bytes.to_vec(),
         png::ColorType::Rgb => {
@@ -151,7 +143,7 @@ impl Icons {
     }
 }
 
-// ── tray builder ─────────────────────────────────────────────────────────────
+// tray builder
 
 struct TrayHandles {
     tray: tray_icon::TrayIcon,
@@ -202,7 +194,7 @@ fn build_tray(icons: &Icons) -> TrayHandles {
     }
 }
 
-// ── main ─────────────────────────────────────────────────────────────────────
+// main
 
 fn main() {
     // Bind listener before touching the event loop so accept() is ready
@@ -215,7 +207,6 @@ fn main() {
         }
     };
 
-    // Build event loop
     #[cfg_attr(not(target_os = "macos"), allow(unused_mut))]
     let mut event_loop = EventLoopBuilder::<UserEvent>::with_user_event().build();
 
@@ -223,7 +214,6 @@ fn main() {
     event_loop.set_activation_policy(ActivationPolicy::Accessory);
     let proxy = event_loop.create_proxy();
 
-    // Forward menu events into our event loop
     let proxy_menu = proxy.clone();
     MenuEvent::set_event_handler(Some(move |ev: tray_icon::menu::MenuEvent| {
         let _ = proxy_menu.send_event(UserEvent::Menu(ev));
@@ -269,7 +259,6 @@ fn main() {
         }
     });
 
-    // Load icons
     let icons = Icons::load();
 
     // On macOS/Windows: build tray before run; on Linux: defer to NewEvents(Init)

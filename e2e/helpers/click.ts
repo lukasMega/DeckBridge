@@ -1,21 +1,11 @@
 import type { Locator, Page } from '@playwright/test';
 
 /**
- * Lightpanda has no layout engine, so `boundingBox()` returns a stub 5x5 rect and
- * Playwright's actionability check for `locator.click()` never passes — a real click
- * always times out.
- *
- * `locator.dispatchEvent('click')` is the usual workaround, but on Lightpanda it delivers
- * the event **twice** (measured: a raw `addEventListener('click')` counter reads 2 for one
- * `dispatchEvent`, 1 for `el.click()`). Anything that toggles — a sort direction, an
- * `aria-pressed` flag — silently ends up back where it started. So we call the element's
- * own `click()` instead, which auto-waits for attachment without an actionability check
- * and fires exactly once. Verified to drive React/Preact handlers *and* client-side
- * anchor navigation.
- *
- * Under E2E_BROWSER=chromium (the triage path) we use the genuine click, so a spec that
- * passes there but fails on Lightpanda tells you the difference is the runtime, not the
- * product.
+ * Lightpanda has no layout engine, so `boundingBox()` is a stub 5x5 rect and the
+ * actionability check for `locator.click()` never passes. `dispatchEvent('click')` is the
+ * usual workaround but delivers the event **twice** here, so anything that toggles ends up
+ * back where it started — call the element's own `click()`, which fires exactly once.
+ * Under E2E_BROWSER=chromium (the triage path) we use the genuine click instead.
  */
 export const usingChromium = process.env.E2E_BROWSER === 'chromium';
 

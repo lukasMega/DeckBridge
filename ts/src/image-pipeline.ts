@@ -4,7 +4,7 @@ import type { ImageEvent } from './types.js';
 import type { WebUIServer } from './web/server';
 import type { ElgatoChildServer } from './elgato.js';
 
-// --- Image rendering performance tracking (main-thread side) ---
+// Image rendering performance tracking (main-thread side)
 // Measures first-arrival → last-WebUI-broadcast for a ~15-key profile load. With
 // the JPEG/BMP transform now off-thread (image-render.ts on the USB worker, P1),
 // this path no longer blocks on synchronous FFI, so the figure reflects pure

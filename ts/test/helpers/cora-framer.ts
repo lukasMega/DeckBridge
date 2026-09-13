@@ -7,8 +7,6 @@ import type { ElgatoServer, ElgatoChildServer } from '../../src/elgato.js';
 import { ELGATO_PKT_SIZE_RX } from '../../src/types.js';
 import { encodeCoraFrame, tryDecodeCoraFrame, type CoraFrame } from '../../src/cora-frame.js';
 
-// ── Framer ───────────────────────────────────────────────────────────────────
-
 class TjsFramer {
   private buf = Buffer.alloc(0);
   private reader: ReadableStreamDefaultReader<Uint8Array>;
