@@ -119,13 +119,10 @@ export function parentDir(p: string): string {
 }
 
 /**
- * Where the tray binary actually comes from, in priority order:
- *   1. $DECKBRIDGE_TRAY_BIN (dev via mise, and the Homebrew formula)
- *   2. a `deckbridge-tray` sidecar next to the executable (every packaged release)
- *
- * Both app.ts (which spawns it) and the /requirements check call this, so the
- * page can't claim "not set" while the tray is visibly running from the sidecar.
- * Returns '' when neither exists.
+ * Where the tray binary comes from, in priority order: $DECKBRIDGE_TRAY_BIN (dev via
+ * mise, and the Homebrew formula), then a `deckbridge-tray` sidecar next to the
+ * executable (every packaged release). Returns '' when neither exists. Shared with the
+ * /requirements check so it can't report "not set" while the sidecar tray is running.
  */
 export async function resolveTrayBin(): Promise<string> {
   const fromEnv = tjs.env.DECKBRIDGE_TRAY_BIN ?? '';

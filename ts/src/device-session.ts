@@ -35,16 +35,10 @@ export interface DeviceInfo {
   firmware?: string;
 }
 
-/** Identity for an extra dock: ports from CORA_PORT_STRIDE off the primary
- *  pair (a runtime resource, legitimately scan-order-dependent), everything
- *  else (mdns/serials/mac/deviceKey) from the per-physical-device identity
- *  resolved by the caller via device-identity.ts's getOrCreateDeviceIdentity —
- *  stable across restarts/replug, unlike the old session-index scheme. The
- *  dock/child serials' distinguishing suffix (chars 10-11) must stay INSIDE
- *  the first 12 chars: the desktop app keys devices by the serial truncated
- *  to 12 (see pairing challenge 0x06 — serial.substring(0,12)), so a suffix in
- *  chars 12-13 collides with the primary and the app silently drops the extra
- *  child as a duplicate. */
+/** Identity for an extra dock: ports from CORA_PORT_STRIDE off the primary pair (a
+ *  runtime resource, legitimately scan-order-dependent), everything else from
+ *  device-identity.ts's getOrCreateDeviceIdentity — stable across restart/replug.
+ *  The serial suffix must stay within the first 12 chars; see device-identity.ts. */
 export interface SessionIdentity {
   index: number; // 1..MAX_DEVICE_SESSIONS-1 (extras only) — port assignment only
   primaryPort: number; // ELGATO_TCP_PORT + CORA_PORT_STRIDE * index

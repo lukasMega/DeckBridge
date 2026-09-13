@@ -22,9 +22,7 @@ import { fileURLToPath } from 'node:url';
 const HERE = dirname(fileURLToPath(import.meta.url));
 const OUT_DIR = join(HERE, '..', '..', 'docs', 'img', 'devices');
 
-// ---------------------------------------------------------------------------
 // Style constants — the single source of the "same style for all devices" rule.
-// ---------------------------------------------------------------------------
 
 const KEY = 62; // key face edge
 const KEY_R = 9; // key corner radius
@@ -85,9 +83,7 @@ const DEVICES = [
   { id: 'tmice-stream-controller', name: 'TMICE Stream Controller', brand: 'TMICE', cols: 5, rows: 3, strip: true, gap: 0.30, bodyR: 14, label: 'top-left', stand: 'integrated', chassis: 'ink', accent: '#20c997' }, // prettier-ignore
 ];
 
-// ---------------------------------------------------------------------------
 // Rendering
-// ---------------------------------------------------------------------------
 
 /** Deterministic 0..1 hash — drives which key faces read as "lit" so a device's
  *  artwork is stable across runs but doesn't look like a repeating pattern. */
@@ -304,9 +300,7 @@ function render(d) {
 `;
 }
 
-// ---------------------------------------------------------------------------
 // Main
-// ---------------------------------------------------------------------------
 
 const check = process.argv.includes('--check');
 mkdirSync(OUT_DIR, { recursive: true });

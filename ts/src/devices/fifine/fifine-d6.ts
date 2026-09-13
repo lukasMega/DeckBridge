@@ -19,33 +19,19 @@ const FIFINE_D6_BASE: Omit<DeviceModel, 'id' | 'name' | 'usbProductIds' | 'wire'
   keyHeight: 112,
   image: {
     format: 'jpeg',
-    // Panel size is the least settled value here: the reference projects are split four
-    // ways — 95 (jasonkoon/sd-connect, live-probed on a 0x0060), 100 (companion PR #49,
-    // on a 0x0007), 105 (opendeck-ampgd6 main + FifineOpenSource), 112 (opendeck-ampgd6
-    // PR #6 and PR #7, both on 0x0060). We take 112: it is the hardware-verified 293V3
-    // size, and it is the only value two independent owners derived from the hardware
-    // rather than inherited — PR #6 by tracing Fifine's own Windows software, PR #7 by
-    // painting candidate resolutions onto separate keys ("At 105 the artwork leaves a
-    // visible gap and each row smears against the fixed framebuffer stride").
-    // 112 now also holds up on a real rev. 2 unit (macOS): keys render full-bleed.
-    // Unlike packetSize below, this CANNOT be probed — the device never reports its
-    // panel size and never complains. A wrong value shows as letterboxing, a gap, or a
-    // soft image; re-measure on hardware before changing it.
+    // Least settled value on this device — upstream splits four ways (95/100/105/112).
+    // CANNOT be probed: the panel is never reported and a wrong value never errors, it
+    // just letterboxes or smears. Re-measure on hardware before changing; see
+    // ../PROVENANCE.md.
     width: 112,
     height: 112,
     rotate: 0,
     flipH: false,
     flipV: false,
     colorMode: 'rgb',
-    // Inherited from the 293V3, and deliberately LEFT ALONE even though a rev. 2 unit
-    // proved the firmware takes far more: the `mise run d6-capture -- s3` ladder pushed
-    // 7.9 / 10.8 / 14.0 / 22.7 / 22.9 KB onto five keys and every one rendered intact
-    // (white frame closed on all four edges, right tally count, even noise fill). So this
-    // is a headroom value, not a ceiling. Raising it buys nothing in practice — the
-    // desktop's own 112×112 keys come through the sidecar at 1.9–4.8 KB (q 0.9), i.e.
-    // less than half the cap, so it almost never binds — while each extra KB is one more
-    // 1024-byte HID write per key on the worker thread. Only revisit it if a genuinely
-    // detailed key is seen getting quality-crushed by the cap.
+    // Headroom, not a ceiling: hardware takes >22 KB, but real keys arrive at 1.9-4.8 KB
+    // so the cap almost never binds, and each extra KB is another HID write on the worker
+    // thread. Ladder results in ../PROVENANCE.md.
     maxBytes: 10240,
     quality: IMAGE_JPEG_QUALITY,
     resizeFilter: 'lanczos3',
@@ -101,18 +87,10 @@ export const FIFINE_D6_MODEL: DeviceModel = {
   wire: { packetSize: 512, ...D6_WIRE_COMMON },
 };
 
-/** rev. 2 (PID `0x0060`): **1024-byte** packets — hardware-verified on macOS (panel
- *  renders, keys map correctly). 512-byte writes render BLACK on this
- *  revision — four independent 0x0060 owners hit it and all fixed it by moving to 1024
- *  (opendeck-ampgd6 PR #4, #5, #6, #7). PR #7 has the mechanism: the board reports
- *  `MaxOutputReportSize = 1024`, so every 513-byte write — brightness, clear, image
- *  chunks, the STP commit — is discarded by the firmware while `write()` still returns
- *  success; the device enumerates and reports button presses correctly and the screen
- *  simply stays black. That is exactly what `packetSizeCandidates` now probes for.
- *  (Lyagva's fork PR #1 is a *different* fix for the same symptom: it keeps
- *  `packetSize: 512` and instead enlarges the image chunks, serializes the writes and
- *  paces them 2 ms apart — see DeviceWireSpec.chunkDelayMs.)
- *  Do not "unify" the packet size with rev. 1. */
+/** rev. 2 (PID `0x0060`): **1024-byte** packets — hardware-verified on macOS. A 513-byte
+ *  write is silently discarded by this firmware (`MaxOutputReportSize = 1024`) while
+ *  `write()` still returns success, so the panel just stays black; that is what
+ *  `packetSizeCandidates` probes for. Do not "unify" with rev. 1 — see ../PROVENANCE.md. */
 export const FIFINE_D6_REV2_MODEL: DeviceModel = {
   ...FIFINE_D6_BASE,
   id: 'fifine-d6-rev2',

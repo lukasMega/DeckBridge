@@ -37,14 +37,10 @@ function dumpNativeBytes(keyIndex: number, nativeBytes: Buffer): void {
   });
 }
 
-// Paired raw/transformed image dump (DECKBRIDGE_RAW_DUMP_DIR)
-// When set, every CORA image received from the Elgato app is saved to disk next
-// to the device-bound transform result, paired by sequence number, so the input
-// the desktop sent can be diffed against what we push to the panel. Keeps the
-// newest RAW_DUMP_KEEP received images (a ring buffer); older pairs are deleted.
-// Both writes happen here on the worker thread — it owns both buffers and
-// processes images serially, so the seq pairing is race-free. Independent of
-// DECKBRIDGE_DUMP_DIR (which dumps only the transform output, with its own naming).
+// DECKBRIDGE_RAW_DUMP_DIR: dumps each received CORA image beside its transform result,
+// paired by seq, newest RAW_DUMP_KEEP kept as a ring buffer. Pairing is race-free because
+// both writes happen on the worker thread, which processes images serially. Independent
+// of DECKBRIDGE_DUMP_DIR (transform output only, own naming).
 const RAW_DUMP_DIR: string | undefined = tjs.env.DECKBRIDGE_RAW_DUMP_DIR || undefined;
 const RAW_DUMP_KEEP = 30;
 let _rawSeq = 0;
