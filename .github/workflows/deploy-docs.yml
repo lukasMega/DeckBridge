@@ -102,7 +102,7 @@ jobs:
         uses: actions/cache@v6
         with:
           path: ~/.cache/lightpanda-node
-          key: lightpanda-${{ hashFiles('e2e/pnpm-lock.yaml') }}
+          key: lightpanda-${{ hashFiles('e2e/.lightpanda-version') }}
 
       - name: Install e2e deps
         working-directory: e2e

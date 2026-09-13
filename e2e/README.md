@@ -32,6 +32,18 @@ WebSocket correctly (all verified by these specs).
 `global-setup.ts` starts one `lightpanda serve` CDP server for the run;
 `fixtures/browser.ts` attaches with `chromium.connectOverCDP`.
 
+### The browser version is pinned separately
+
+Pinning `@lightpanda/browser` in `package.json` does **not** pin the browser — the wrapper
+ships no binary, and a bare `lightpanda install` fetches the latest *nightly*. The same
+wrapper version handed us nightly 9384 one day and 9405 the next, and 9405 never finished
+hydrating the docs site (`data-has-hydrated="false"`) while running ~5× slower.
+
+So the browser is pinned in **`e2e/.lightpanda-version`** to a tagged release (nightly tags
+are overwritten upstream and cannot be re-fetched). `scripts/ensure-lightpanda.mjs` installs
+exactly that version and refuses a cached binary that reports anything else; both CI
+workflows key their cache on that file. To move the pin, edit it and re-run the suites.
+
 ### What you cannot use
 
 Because there is no layout, these silently return stubs instead of failing loudly:

@@ -22,6 +22,11 @@ test.describe('theme and animation preferences', () => {
     const html = page.locator('html');
     const toggle = page.locator('button[aria-label^="Switch between dark and light mode"]');
 
+    // Docusaurus sets data-has-hydrated on <html> when React has taken over. Clicking
+    // before that is a no-op, and the failure looks like a broken toggle rather than an
+    // unhydrated page — which is exactly how a bad browser build presented itself.
+    await expect(html).toHaveAttribute('data-has-hydrated', 'true');
+
     // respectPrefersColorScheme: true, so a fresh visit starts on "system". Assert the
     // *choice*, not the resolved theme: the first step lands on light, which is what
     // system already resolved to, so data-theme alone would look unchanged.

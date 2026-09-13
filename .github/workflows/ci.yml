@@ -132,14 +132,15 @@ jobs:
           key: ci-e2e-pnpm-${{ hashFiles('ts/pnpm-lock.yaml', 'e2e/pnpm-lock.yaml') }}
           restore-keys: ci-e2e-pnpm-
 
-      # The Lightpanda binary is not in the npm package: `lightpanda install`
-      # downloads a nightly whose identity is fixed by the exact @lightpanda/browser
-      # pin, so the lockfile hash is the right cache key.
+      # The Lightpanda binary is not in the npm package, and pinning the npm wrapper
+      # does NOT pin the browser — a bare `lightpanda install` takes the latest
+      # nightly. The browser version is pinned in e2e/.lightpanda-version, which is
+      # therefore the correct cache key.
       - name: Cache Lightpanda binary
         uses: actions/cache@v6
         with:
           path: ~/.cache/lightpanda-node
-          key: lightpanda-${{ hashFiles('e2e/pnpm-lock.yaml') }}
+          key: lightpanda-${{ hashFiles('e2e/.lightpanda-version') }}
 
       - name: Type-check the e2e suite
         run: mise run e2e-types
