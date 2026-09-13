@@ -64,6 +64,15 @@ their trademarks). For **hobby and personal use only**; it **does not replace th
 Network Dock**. For professional setups, use official Elgato hardware.
 :::
 
+:::note[How it was built]
+DeckBridge started as a small personal project — one person wanting a Stream Deck on the
+network without buying a dock. The code was written largely with
+[Claude Code](https://claude.com/claude-code) (mostly Opus), but the author spent a
+significant amount of their free time debugging it and testing against real hardware:
+protocol quirks, per-device HID report formats, and image pipelines only show up on an
+actual deck, not in a model's output.
+:::
+
 :::info[Nothing reverse-engineered]
 The USB HID and Elgato CORA handling is **reused from existing open-source projects** —
 DeckBridge only wires them together. Credits: [References](/references).

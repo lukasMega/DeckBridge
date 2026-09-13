@@ -67,8 +67,8 @@ export const FEATURES: Feature[] = [
     ),
   },
   {
-    title: 'Skip the Network Dock',
-    text: 'Use a USB deck with the app over WiFi instead of buying the ~$70 hardware dock.',
+    title: 'Save $70+ on the Network Dock',
+    text: 'Skip the hardware dock — run this app instead and use a USB deck over WiFi.',
     detail:
       'The ~$70 Elgato Network Dock puts a deck on your network; DeckBridge does the same job in software for any supported USB deck.',
     icon: (
@@ -104,40 +104,41 @@ export const FEATURES: Feature[] = [
     ),
   },
   {
-    title: 'Place it anywhere',
-    text: 'Across the desk or in another room - only the WiFi link matters, not a cable run.',
+    title: 'Skip opaque vendor software',
+    text: 'Use supported decks without bundled software claiming broad system telemetry.',
     detail:
-      'Only a network path has to reach the app — WiFi, wired LAN, or VPN. Another room or another machine both work.',
+      "One bundled app's EULA permits collection of device, system, installed-app, and peripheral data, but provides no privacy-policy link and caps liability at $50. DeckBridge is open source and collects no data.",
     icon: (
       <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
         <path
-          d="M12 21l-7-9a7 7 0 1114 0z"
+          d="M12 3l7 3v5c0 4.6-2.8 8.1-7 10-4.2-1.9-7-5.4-7-10V6zM9 12l2 2 4-5"
           stroke="currentColor"
           strokeWidth="2"
+          strokeLinecap="round"
           strokeLinejoin="round"
         />
-        <circle cx="12" cy="11" r="2.2" stroke="currentColor" strokeWidth="2" />
       </svg>
     ),
     anim: (
       <svg className={styles.aWrap} viewBox="0 0 24 24" fill="none" aria-hidden="true">
-        <ellipse
-          className={styles.pinRipple}
-          cx="12"
-          cy="21.5"
-          rx="5"
-          ry="1.4"
-          fill="currentColor"
+        <path
+          className={styles.adraw}
+          pathLength={1}
+          d="M12 3l7 3v5c0 4.6-2.8 8.1-7 10-4.2-1.9-7-5.4-7-10V6z"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinejoin="round"
         />
-        <g className={styles.pinBody}>
-          <path
-            d="M12 21l-7-9a7 7 0 1114 0z"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinejoin="round"
-          />
-          <circle cx="12" cy="11" r="2.2" stroke="currentColor" strokeWidth="2" />
-        </g>
+        <path
+          className={styles.adraw}
+          style={{ animationDelay: '0.55s' }}
+          pathLength={1}
+          d="M9 12l2 2 4-5"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
       </svg>
     ),
   },

@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 // Generates one front-elevation SVG illustration per supported device into
-// docs/img/devices/. Every illustration comes out of the same layout engine, so the
+// docs-site/static/img/devices/ — the static dir, not the bundled docs/img/ tree, so
+// Docusaurus emits cacheable files instead of inlining each as a base64 data URI.
+// Every illustration comes out of the same layout engine, so the
 // whole set stays visually consistent: identical key-face recipe, recess treatment,
 // stand language and label typography. Only the grid shape, key pitch, chassis tone,
 // accent hue, wordmark placement and stand type vary per model.
@@ -20,7 +22,8 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-const OUT_DIR = join(HERE, '..', '..', 'docs', 'img', 'devices');
+const OUT_DIR = join(HERE, '..', '..', 'docs-site', 'static', 'img', 'devices');
+const OUT_REL = 'docs-site/static/img/devices';
 
 // Style constants — the single source of the "same style for all devices" rule.
 
@@ -312,7 +315,7 @@ for (const d of DEVICES) {
   if (check) {
     const current = existsSync(file) ? readFileSync(file, 'utf8') : '';
     if (current !== svg) {
-      console.error(`out of date: docs/img/devices/${d.id}.svg`);
+      console.error(`out of date: ${OUT_REL}/${d.id}.svg`);
       stale++;
     }
   } else {
@@ -327,7 +330,7 @@ if (check) {
   }
   console.log(`device SVGs up to date (${DEVICES.length})`);
 } else {
-  console.log(`wrote ${DEVICES.length} device SVGs -> docs/img/devices/`);
+  console.log(`wrote ${DEVICES.length} device SVGs -> ${OUT_REL}/`);
 }
 
 export { DEVICES };
