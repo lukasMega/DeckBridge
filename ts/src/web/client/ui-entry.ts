@@ -60,7 +60,6 @@ void fetch('/api/state')
       keyEvents: st.keyEvents ?? [],
     });
     for (const [k, v] of Object.entries(st.images)) {
-      store.setImage(Number(k), { v });
       applyImage(Number(k), { v });
     }
 

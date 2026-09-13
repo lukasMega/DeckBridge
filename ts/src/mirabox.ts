@@ -291,7 +291,14 @@ export class MiraboxDriver extends HidDeviceBase {
     return `CRT ${cmd}`;
   }
 
+  /** Only d6-capture subscribes; hid-worker never forwards 'comm', so for a real
+   *  device this is dead work on every 1024B chunk. */
+  private get commTracing(): boolean {
+    return this.listenerCount('comm') > 0;
+  }
+
   private emitComm(human: string, data: Buffer, direction: 'rx' | 'tx' = 'tx'): void {
+    if (!this.commTracing) return;
     const hex = formatCommHex(data);
     this.emit('comm', {
       direction,
@@ -314,7 +321,7 @@ export class MiraboxDriver extends HidDeviceBase {
     arr[0] = this.reportId;
     arr.set(pkt, 1);
     this._writeRaw(arr, 'hid', (n, errStr) => `hid_write returned ${n}: ${errStr}`);
-    this.emitComm(this.describeWrite(pkt), pkt, 'tx');
+    if (this.commTracing) this.emitComm(this.describeWrite(pkt), pkt, 'tx');
   }
 
   private parseInput(data: Buffer): void {

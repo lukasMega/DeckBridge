@@ -4,7 +4,7 @@
 // server-rendered value: clock, date, custom text, or weather. The text is
 // composed from a packed bitmap font into a small BMP and shipped through the
 // splash path (the worker transform decodes/rotates/encodes for the device),
-// so the main thread never runs the 50–200 ms FFI transform itself.
+// so the main thread never runs the FFI transform or the hid_write burst itself.
 import { FONT_BIG, FONT_SMALL, fontGlyphIndex } from './assets/font-atlas.js';
 import type { BitmapFont } from './assets/font-atlas.js';
 import {

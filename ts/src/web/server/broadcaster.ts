@@ -61,6 +61,10 @@ export class Broadcaster {
   }
 
   broadcast(event: string, data: unknown): void {
+    // Skip the JSON.stringify, not just the send loop: with no browser open,
+    // ActivityBuffers.flush() serialized up to 500 comm entries every 100 ms for
+    // nothing. sendTo() is unaffected — it targets a socket that exists.
+    if (this.clients.size === 0) return;
     this.send(wsMsg(event, data));
   }
 

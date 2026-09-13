@@ -11,7 +11,7 @@ import type { DockStatus, ExtraKeyConfig } from './types.js';
 import { DEVICE_MODELS } from './devices/registry.js';
 import { DeviceSession, sessionIdentity, type SessionServersFactory } from './device-session.js';
 import { deviceKeyFor, sharedSerialModelId } from './device-identity.js';
-import { hidSerialForPath } from './ffi/hidapi.js';
+import { hidSerialForPath, type HidDeviceRow } from './ffi/hidapi.js';
 import type { DeviceIdentitySettings } from './settings-store.js';
 
 export interface ExtraDockCoordinatorDeps {
@@ -21,9 +21,12 @@ export interface ExtraDockCoordinatorDeps {
   sessionServersFactory: SessionServersFactory | null;
   getRealDriver: () => WorkerHidDriver | null;
   /** Every connected HID interface path for this model (one per physical unit),
-   *  from deckbridge-native enumeration. Drives per-unit docking of same-model
-   *  duplicates. [] when absent or the model can't be path-targeted. */
-  listModelPaths: (model: DeviceModel) => string[];
+   *  matched against the listAllDevices() snapshot. Drives per-unit docking of
+   *  same-model duplicates. [] when absent or not path-targetable. */
+  listModelPaths: (model: DeviceModel, devices: HidDeviceRow[]) => string[];
+  /** One system-wide HID enumeration per scan tick, matched against all 16 models.
+   *  Per-model enumeration here cost ~60 ms/tick on the CORA ACK thread. */
+  listAllDevices: () => HidDeviceRow[];
   makeRealDriver: (model: DeviceModel) => WorkerHidDriver;
   /** Reuse (or vend) the idle worker parked for this model.id, mirroring the
    *  primary probe's idleDrivers pattern — shared with DriverManager via
@@ -123,10 +126,14 @@ export class ExtraDockCoordinator {
     if (primaryPath) claimed.add(primaryPath);
     const skipModelId = primaryPath ? null : realDriver.model.id;
 
+    // ONE enumeration for all 16 models: per-model was ~60 ms of blocking on the
+    // CORA ACK thread every 2 s, which (ACK-pacing) stalls image delivery.
+    const devices = this.deps.listAllDevices();
+
     let pick: { model: DeviceModel; hidPath: string } | null = null;
     for (const model of DEVICE_MODELS) {
       if (model.id === skipModelId) continue;
-      for (const path of this.deps.listModelPaths(model)) {
+      for (const path of this.deps.listModelPaths(model, devices)) {
         if (claimed.has(path)) continue;
         if (!pick || path < pick.hidPath) pick = { model, hidPath: path };
       }

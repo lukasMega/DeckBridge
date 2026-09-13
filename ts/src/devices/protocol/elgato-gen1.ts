@@ -2,22 +2,36 @@
  *  Image: BMP (19254 bytes), 1024-byte packets, 16-byte header, 1-based key index.
  *  Input: report 0x01, button states at data[0..keyCount] (after stripping report ID). */
 
-import { packChunks, parseButtons } from './framing.js';
+import { writeChunks, parseButtons } from './framing.js';
 
 const PACKET_SIZE = 1024;
 const HEADER_SIZE = 16;
 
-/** Split native BMP bytes into gen1 output report buffers (each 1024 bytes). */
-export function gen1PackImage(keyIndex: number, bmpBytes: Uint8Array): Uint8Array[] {
-  return packChunks(bmpBytes, PACKET_SIZE, HEADER_SIZE, (pkt, part, isLast) => {
-    pkt[0] = 0x02;
-    pkt[1] = 0x01;
-    pkt[2] = part & 0xff; // partIndex (0-based, UInt8)
-    pkt[3] = 0x00;
-    pkt[4] = isLast ? 1 : 0;
-    pkt[5] = keyIndex + 1; // 1-based key index
-    // bytes 6-15: padding (zero)
-  });
+export const GEN1_PACKET_SIZE = PACKET_SIZE;
+
+/** Split native BMP bytes into gen1 output reports (each 1024 bytes), handing each
+ *  to `write`. `scratch` is reused for every chunk — see writeChunks. */
+export function gen1WriteImage(
+  keyIndex: number,
+  bmpBytes: Uint8Array,
+  scratch: Uint8Array,
+  write: (pkt: Uint8Array) => void,
+): void {
+  writeChunks(
+    bmpBytes,
+    scratch,
+    HEADER_SIZE,
+    (pkt, part, isLast) => {
+      pkt[0] = 0x02;
+      pkt[1] = 0x01;
+      pkt[2] = part & 0xff; // partIndex (0-based, UInt8)
+      pkt[3] = 0x00;
+      pkt[4] = isLast ? 1 : 0;
+      pkt[5] = keyIndex + 1; // 1-based key index
+      // bytes 6-15: padding (zero)
+    },
+    write,
+  );
 }
 
 /** Parse gen1 input report into key states.

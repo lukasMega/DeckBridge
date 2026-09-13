@@ -87,8 +87,8 @@ export class WorkerHidDriver extends EventEmitter implements DeviceDriver {
 
   /** Splash source image → worker: the worker transforms with `spec` (which
    *  may differ from model.image due to splash orientation overrides) and
-   *  writes the native bytes to the device. Offloads the 50–200 ms synchronous
-   *  FFI transform that would otherwise stall the main thread on connect (P1). */
+   *  writes the native bytes to the device. Offloads the synchronous FFI transform
+   *  and hid_write burst that would otherwise stall the main thread on connect. */
   sendSplashImage(keyIndex: number, bytes: Uint8Array, spec: DeviceImageSpec): void {
     this.post({ type: 'splashImage', keyIndex, bytes: new Uint8Array(bytes), spec });
   }
@@ -159,7 +159,7 @@ export class WorkerHidDriver extends EventEmitter implements DeviceDriver {
       case 'disconnect':
         this.emit('disconnect');
         // Same grace as explicit close(): a physical unplug can race an
-        // in-flight worker-thread FFI transform (50-200ms), and terminating
+        // in-flight worker-thread FFI transform or hid_write, and terminating
         // the thread mid native call SIGBUS/SIGSEGVs the whole process.
         this.cleanupWorker(CLOSE_GRACE_MS);
         break;
@@ -185,6 +185,9 @@ export class WorkerHidDriver extends EventEmitter implements DeviceDriver {
     else resolve?.();
   }
 
+  // Deliberately NO transfer list: txiki accepts one but only DETACHES the buffers,
+  // cloning the content regardless (mod_channel.c). Measured 4 KB..1 MB, transferring
+  // is equal-or-slower. Re-measure before adding one.
   private post(msg: MainToWorker): void {
     this.worker?.postMessage(msg);
   }
@@ -197,7 +200,7 @@ export class WorkerHidDriver extends EventEmitter implements DeviceDriver {
    *  `delayMs` lets the worker thread settle to idle before it's killed: 0 (a
    *  bare macrotask) is enough when the worker can't be mid native call (open
    *  failure, graceful close already drained via 'close'), but a physical
-   *  disconnect can land mid an in-flight FFI image transform (50-200ms), so
+   *  disconnect can land mid an in-flight FFI image transform or hid_write, so
    *  that path passes CLOSE_GRACE_MS instead. */
   private cleanupWorker(delayMs = 0): void {
     const w = this.worker;

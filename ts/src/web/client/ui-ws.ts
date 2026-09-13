@@ -19,19 +19,18 @@ const handlers: Record<string, (d: unknown) => void> = {
     const prev = store.getSnapshot().status.selectedDock ?? 0;
     if ((next.selectedDock ?? 0) !== prev) {
       resetPreviews();
-      store.patch({ images: {} });
     }
     store.setStatus(next);
   },
   image: (d) => {
     const e = d as ImageEvt;
+    // Imperative only: key-preview.ts paints these, no component reads them from the
+    // store. Mirroring each frame in woke every useStore subscriber for nothing.
     applyImage(e.mk2Index, { v: e.v, data: e.data, format: e.format });
-    store.setImage(e.mk2Index, { v: e.v, data: e.data, format: e.format });
   },
   clear: (d) => {
     const idx = (d as { mk2Index: number }).mk2Index;
     clearImage(idx);
-    store.clearImage(idx);
   },
   resizeToggle: (d) => {
     store.setResizeEnabled((d as { enabled: boolean }).enabled);
@@ -55,8 +54,8 @@ const handlers: Record<string, (d: unknown) => void> = {
   },
   // Reserved for a future full-grid refresh; no per-key data accompanies it.
   repaint: () => {},
-  log: (d) => {
-    store.addServerLog(d as ServerLog);
+  logBatch: (d) => {
+    for (const e of d as ServerLog[]) store.addServerLog(e);
   },
   comm: (d) => {
     store.addCommLog(d as CommLog);
@@ -85,7 +84,6 @@ export function connectWS(): void {
         .then((st) => {
           for (const [k, v] of Object.entries(st.images)) {
             applyImage(Number(k), { v });
-            store.setImage(Number(k), { v });
           }
           return undefined;
         });

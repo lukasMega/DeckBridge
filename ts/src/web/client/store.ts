@@ -15,19 +15,12 @@ import type {
 const LOG_MAX = 2000;
 const KE_MAX = 50;
 
-export interface ImageEntry {
-  v: number;
-  data?: string;
-  format?: string;
-}
-
 export interface StoreState {
   status: Status;
   stats: Stats;
   mockConfig?: MockConfig;
   brightness: number;
   brightnessOverride: boolean;
-  images: Record<number, ImageEntry>;
   serverLogs: ServerLog[];
   commLogs: CommLog[];
   keyEvents: KeyEvent[];
@@ -45,7 +38,6 @@ let state: StoreState = {
   mockConfig: undefined,
   brightness: 82,
   brightnessOverride: true,
-  images: {},
   serverLogs: [],
   commLogs: [],
   keyEvents: [],
@@ -87,18 +79,6 @@ export function setStats(stats: Stats): void {
 
 export function setMockConfig(mockConfig: MockConfig): void {
   state = { ...state, mockConfig };
-  notify();
-}
-
-export function setImage(idx: number, img: ImageEntry): void {
-  state = { ...state, images: { ...state.images, [idx]: img } };
-  notify();
-}
-
-export function clearImage(idx: number): void {
-  const images = { ...state.images };
-  delete images[idx];
-  state = { ...state, images };
   notify();
 }
 

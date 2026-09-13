@@ -27,7 +27,7 @@ Each **Mirabox/Ajazz/Fifine** model advertises as an Elgato device the desktop a
 On image arrival (`setupImageHandler` in `image-pipeline.ts`) the path splits into two tracks on **different threads**:
 
 - **WebUI path (main thread)** — fires immediately: the CORA bytes are pushed **inline (base64) over WebSocket**, so the browser renders at arrival with no follow-up request.
-- **Transform + USB path (USB worker thread)** — the main thread forwards raw CORA bytes via `WorkerHidDriver.renderCoraImage()`; the worker (`image-render.ts`) transforms through the Rust deckbridge-native cdylib (LRU-cached), then writes to the device. Running on the worker keeps the 50–200 ms transform off the CORA ACK loop (P1).
+- **Transform + USB path (USB worker thread)** — the main thread forwards raw CORA bytes via `WorkerHidDriver.renderCoraImage()`; the worker (`image-render.ts`) transforms through the Rust deckbridge-native cdylib (LRU-cached), then writes to the device. Running on the worker keeps the transform — and, dominantly, the burst of blocking `hid_write` chunk uploads that follows it — off the CORA ACK loop (P1).
 
 ## Image format by device
 

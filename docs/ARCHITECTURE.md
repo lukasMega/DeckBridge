@@ -110,7 +110,7 @@ device:
   throttles image delivery *and* the WebUI previews riding on it.
 - **USB worker thread** — owns the libhidapi handle and does all **synchronous, blocking** work that
   must never stall the main loop: the JPEG/BMP **transform** (`image-render.ts` →
-  `image_proc_transform` FFI, 50–200 ms) + LRU **image cache**, then HID I/O (`hid_write` uploads,
+  `image_proc_transform` FFI, ~1 ms) + LRU **image cache**, then HID I/O (`hid_write` uploads,
   `hid_read_timeout` key polling). The main thread hands over raw CORA bytes via
   `WorkerHidDriver.renderCoraImage()`; the worker transforms, caches, and writes — so neither the
   transform nor a large upload stalls the CORA ACK loop (P1). A single generic worker

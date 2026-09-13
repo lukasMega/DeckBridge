@@ -4,20 +4,32 @@
  *  table entry; touch zero call-sites in hid-driver-base.ts. */
 import type { DeviceProtocol } from '../driver.js';
 import {
-  gen1PackImage,
+  gen1WriteImage,
+  GEN1_PACKET_SIZE,
   gen1ParseInput,
   gen1BrightnessReport,
   gen1ResetReport,
 } from './elgato-gen1.js';
 import {
-  gen2PackImage,
+  gen2WriteImage,
+  GEN2_PACKET_SIZE,
   gen2ParseInput,
   gen2BrightnessReport,
   gen2ResetReport,
 } from './elgato-gen2.js';
 
 export interface ProtocolStrategy {
-  packImage(keyIndex: number, bytes: Uint8Array): Uint8Array[];
+  /** Output-report size, so the driver can size its reusable packet scratch once. */
+  packetSize: number;
+  /** Chunk `bytes` into output reports and hand each to `write`. `pkt` is the
+   *  driver's scratch buffer, reused for every chunk — `write` must consume it
+   *  synchronously (see writeChunks in framing.ts). */
+  writeImage(
+    keyIndex: number,
+    bytes: Uint8Array,
+    pkt: Uint8Array,
+    write: (pkt: Uint8Array) => void,
+  ): void;
   parseInput(
     data: Uint8Array,
     keyCount: number,
@@ -29,13 +41,15 @@ export interface ProtocolStrategy {
 // Only protocols handled by ElgatoHidDriver need entries; mirabox uses MiraboxDriver.
 export const PROTOCOL_STRATEGY: Partial<Record<DeviceProtocol, ProtocolStrategy>> = {
   'elgato-gen1': {
-    packImage: gen1PackImage,
+    packetSize: GEN1_PACKET_SIZE,
+    writeImage: gen1WriteImage,
     parseInput: gen1ParseInput,
     brightnessReport: gen1BrightnessReport,
     resetReport: gen1ResetReport,
   },
   'elgato-gen2': {
-    packImage: gen2PackImage,
+    packetSize: GEN2_PACKET_SIZE,
+    writeImage: gen2WriteImage,
     parseInput: gen2ParseInput,
     brightnessReport: gen2BrightnessReport,
     resetReport: gen2ResetReport,

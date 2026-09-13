@@ -1,9 +1,9 @@
 /** Worker-side image rendering: transform a CORA image to the device-native
  *  format, cache it, and write it to the device. Runs on the USB worker thread
- *  so the 50–200 ms synchronous FFI transform never stalls the main thread's
+ *  so the synchronous FFI transform and hid_write burst never stall the main thread's
  *  CORA ACK loop or the WebUI (P1). The main thread forwards raw CORA bytes via
  *  the 'image' worker message; this module owns the transform + the LRU cache. */
-import { info, warn } from './logger.js';
+import { debug, info, warn } from './logger.js';
 import { applyOverride, mk2IndexToDeviceImgId, transformImageForDevice } from './translator.js';
 import { imageCache, hashJpeg, makeCacheKey } from './image-cache.js';
 import type { DeviceModel } from './devices/driver.js';
@@ -169,7 +169,10 @@ export function renderImage(
       perfOnRender(Date.now() - tStart);
     }
 
-    info('image', `key=${keyIndex} jpeg=${nativeBytes.length}B q=${eff.quality}`);
+    // debug, not info: fires on every cache-miss transform (once per frame on any
+    // animated key) and each info line becomes a WS broadcast. The 15-key batch perf
+    // counters above stay at info — they are the shipped evidence.
+    debug('image', `key=${keyIndex} jpeg=${nativeBytes.length}B q=${eff.quality}`);
     dumpNativeBytes(keyIndex, nativeBytes);
     entry = { nativeBytes };
     imageCache.set(hash, entry);

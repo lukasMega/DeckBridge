@@ -1,5 +1,10 @@
 import { log } from './logger.js';
-import { hidDevicePresent, hidSerialForPath, listHidPaths } from './ffi/hidapi.js';
+import {
+  hidDevicePresent,
+  hidSerialForPath,
+  listAllHidDevices,
+  type HidDeviceRow,
+} from './ffi/hidapi.js';
 import { WorkerHidDriver, closeDriver } from './hid-worker-host.js';
 import { MockDriver } from './devices/mock.js';
 import type { KeyEvent, CommEntry, DockStatus } from './types.js';
@@ -29,13 +34,22 @@ const defaultPresenceCheck = (model: DeviceModel): boolean =>
   model.usbProductIds.some((pid) => hidDevicePresent(model.usbVendorId, pid));
 
 /** Every connected HID interface matching the model's VID + usagePage/usage, across its
- *  PIDs — one path per physical unit. [] when the model can't be safely path-targeted. */
-const defaultListModelPaths = (model: DeviceModel): string[] => {
+ *  PIDs — one path per physical unit. [] when the model can't be safely path-targeted.
+ *  Matched against a caller-supplied snapshot rather than one FFI enumeration per PID:
+ *  the extras scan runs this over all 16 models every 2 s (~60 ms/tick -> ~3.3 ms). */
+const defaultListModelPaths = (model: DeviceModel, devices: HidDeviceRow[]): string[] => {
   const { usagePage, usage } = model;
   if (usagePage === undefined || usage === undefined) return [];
-  const paths = model.usbProductIds.flatMap((pid) =>
-    listHidPaths(model.usbVendorId, usagePage, usage, pid),
-  );
+  const pids = new Set(model.usbProductIds);
+  const paths = devices
+    .filter(
+      (d) =>
+        d.vendorId === model.usbVendorId &&
+        d.usagePage === usagePage &&
+        d.usage === usage &&
+        pids.has(d.productId),
+    )
+    .map((d) => d.path);
   return [...new Set(paths)];
 };
 
@@ -80,7 +94,9 @@ export class DriverManager {
   private makeRealDriver: (model: DeviceModel) => WorkerHidDriver = (model) =>
     new WorkerHidDriver(model);
   private isModelPresent: (model: DeviceModel) => boolean = defaultPresenceCheck;
-  private listModelPaths: (model: DeviceModel) => string[] = defaultListModelPaths;
+  private listModelPaths: (model: DeviceModel, devices: HidDeviceRow[]) => string[] =
+    defaultListModelPaths;
+  private listAllDevices: () => HidDeviceRow[] = listAllHidDevices;
 
   constructor(deps: DriverManagerDeps) {
     this.deps = deps;
@@ -91,7 +107,8 @@ export class DriverManager {
       isProbeInFlight: () => this.probeInFlight,
       sessionServersFactory: deps.sessionServersFactory ?? null,
       getRealDriver: () => this.realDriver,
-      listModelPaths: (model) => this.listModelPaths(model),
+      listModelPaths: (model, devices) => this.listModelPaths(model, devices),
+      listAllDevices: () => this.listAllDevices(),
       makeRealDriver: (model) => this.makeRealDriver(model),
       takeIdleDriver: (modelId) => {
         const d = this.idleDrivers.get(modelId);

@@ -122,6 +122,16 @@ interface HidEnumSymbols {
     buf: Uint8Array,
     bufLen: number,
   ): number;
+  mirabox_hid_list_all(buf: Uint8Array, bufLen: number): number;
+}
+
+/** One enumerated HID interface, from the single-enumeration snapshot. */
+export interface HidDeviceRow {
+  vendorId: number;
+  productId: number;
+  usagePage: number;
+  usage: number;
+  path: string;
 }
 
 // Cached deckbridge-native handle, kept open for the process lifetime: dlclose() churn
@@ -152,6 +162,10 @@ function loadHidEnum(): { symbols: HidEnumSymbols; close(): void } | null {
       },
       mirabox_hid_list_paths: {
         args: [UINT16, UINT16, UINT16, UINT16, BUFFER, SIZE_T],
+        returns: INT,
+      },
+      mirabox_hid_list_all: {
+        args: [BUFFER, SIZE_T],
         returns: INT,
       },
     }) as unknown as { symbols: HidEnumSymbols; close(): void };
@@ -206,6 +220,45 @@ export function listHidPaths(vid: number, usagePage: number, usage: number, pid 
     return text.split('\n').filter((s) => s.length > 0);
   } catch (e) {
     warn('ffi', `mirabox_hid_list_paths threw: ${String(e)}`);
+    return [];
+  }
+}
+
+/** Every enumerated HID interface, from ONE deckbridge-native enumeration (never
+ *  hid_open). Callers testing many VID/PID/usage combos should match this snapshot
+ *  rather than pay ~3.3 ms of enumeration per model. [] if unavailable. */
+export function listAllHidDevices(): HidDeviceRow[] {
+  _hidEnumLib ??= loadHidEnum();
+  const lib = _hidEnumLib;
+  if (!lib) return [];
+  try {
+    // Grown-and-retried, not truncated: a short read would silently hide a device.
+    for (const size of [65536, 524288]) {
+      const buf = new Uint8Array(size);
+      const count = lib.symbols.mirabox_hid_list_all(buf, buf.length);
+      if (count === -2) continue; // buffer too small — retry bigger
+      if (count <= 0) return [];
+      const end = buf.indexOf(0);
+      const text = new TextDecoder().decode(buf.subarray(0, end >= 0 ? end : buf.length));
+      return text
+        .split('\n')
+        .filter((line) => line.length > 0)
+        .map((line) => {
+          const f = line.split('\t');
+          return {
+            vendorId: parseInt(f[0] ?? '', 16),
+            productId: parseInt(f[1] ?? '', 16),
+            usagePage: parseInt(f[2] ?? '', 16),
+            usage: parseInt(f[3] ?? '', 16),
+            path: f[4] ?? '',
+          };
+        })
+        .filter((r) => r.path.length > 0 && !Number.isNaN(r.vendorId));
+    }
+    warn('ffi', 'mirabox_hid_list_all: device table exceeded 512 KB');
+    return [];
+  } catch (e) {
+    warn('ffi', `mirabox_hid_list_all threw: ${String(e)}`);
     return [];
   }
 }

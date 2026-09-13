@@ -25,6 +25,10 @@ export class ElgatoHidDriver extends HidDeviceBase {
   /** HID path this instance was opened with (path-based open only). Used to
    *  derive a stable per-device identity (device-identity.ts). */
   hidPath: string | undefined = undefined;
+  /** Reused output-report buffer, sized on first sendImage (see sendImage). */
+  private _pktScratch: Uint8Array = new Uint8Array(0);
+  /** Bound once so sendImage doesn't allocate a closure per image. */
+  private readonly _writeBound = (pkt: Uint8Array): void => this._write(pkt);
 
   constructor(model: DeviceModel) {
     super();
@@ -95,10 +99,12 @@ export class ElgatoHidDriver extends HidDeviceBase {
 
   sendImage(keyIndex: number, bytes: Uint8Array): void {
     if (!this.device || !this.hidLib) return;
-    const packets = this.strategy.packImage(keyIndex, bytes);
-    for (const pkt of packets) {
-      this._write(pkt);
+    // Reused scratch, allocated once per driver (as MiraboxDriver does): a fresh
+    // 1024 B buffer per chunk was ~10 KB of garbage per key, per frame.
+    if (this._pktScratch.length !== this.strategy.packetSize) {
+      this._pktScratch = new Uint8Array(this.strategy.packetSize);
     }
+    this.strategy.writeImage(keyIndex, bytes, this._pktScratch, this._writeBound);
   }
 
   clearKey(keyIndex: number): void {

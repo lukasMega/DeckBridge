@@ -42,7 +42,8 @@ function fnv1aRange(buf: Uint8Array, start: number, end: number, h: number): num
 // background — e.g. a "back" arrow — then hashed identically to a blank black
 // frame, so the cached black transform was served and the key showed up black.
 // hashJpeg's only caller is the USB worker thread (image-render.ts), where this
-// ~2 ms FNV loop is negligible beside the 50–200 ms native image transform.
+// ~2 ms FNV loop is comparable to the ~1 ms native transform, but it also skips the
+// hid_write burst on a hit, which is what actually dominates.
 export function hashJpeg(buf: Uint8Array): string {
   let h = 0x811c9dc5;
   // Mix in the total length so same-prefix buffers of different lengths

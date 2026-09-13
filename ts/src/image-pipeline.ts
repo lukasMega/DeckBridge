@@ -50,7 +50,7 @@ export function setupImageHandler(
 
     // Hand the raw CORA image to the device driver. The worker-backed real driver
     // transforms (resize/rotate/encode), caches, and writes it off the main thread
-    // (renderCoraImage → 'image' worker message), so the 50–200 ms FFI transform
+    // (renderCoraImage → 'image' worker message), so the FFI transform
     // never stalls this CORA ACK loop. MockDriver omits renderCoraImage (its device
     // is virtual), so `?.` makes this a no-op in mock mode.
     getDriver()?.renderCoraImage?.(keyIndex, data, format);

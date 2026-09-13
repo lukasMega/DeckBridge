@@ -210,6 +210,18 @@ function from(
   return b;
 }
 
+/** Reinterpret `u8` as a Buffer WITHOUT copying — a view over the same memory.
+ *
+ *  Only for bytes you own outright and consume in the same turn: writes alias both
+ *  ways, and the wrapper pins the WHOLE of `u8.buffer` while reachable, so storing a
+ *  wrapped chunk retains that allocation. The one caller (the TCP read pump) gets a
+ *  fresh per-read buffer from txiki and concats it away in the same turn. */
+function wrap(u8: Uint8Array): BufferClass {
+  // `u8.buffer` widens to ArrayBufferLike (i.e. may be a SharedArrayBuffer); nothing
+  // in this runtime produces one, and BufferClass's ctor takes a plain ArrayBuffer.
+  return new BufferClass(u8.buffer as ArrayBuffer, u8.byteOffset, u8.length);
+}
+
 function concat(list: readonly Uint8Array[], totalLength?: number): BufferClass {
   let total = totalLength;
   if (total === undefined) {
@@ -241,6 +253,7 @@ interface BufferConstructor {
     arg3?: number,
   ): BufferClass;
   concat(list: readonly Uint8Array[], totalLength?: number): BufferClass;
+  wrap(u8: Uint8Array): BufferClass;
   readonly prototype: BufferClass;
 }
 
@@ -255,4 +268,5 @@ export const Buffer = Object.assign(BufferClass, {
   alloc,
   from,
   concat,
+  wrap,
 }) as unknown as BufferConstructor;

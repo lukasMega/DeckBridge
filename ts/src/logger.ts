@@ -24,6 +24,13 @@ export function setLogLevel(level: string): void {
   if (n !== undefined) currentLevel = n;
 }
 
+/** True if `level` would actually be emitted. Guard hot-path call sites with this
+ *  BEFORE building the message — the fns below discard by level, but only after the
+ *  caller paid for the interpolation. A predicate, not a thunk: no closure per call. */
+export function isLevelEnabled(level: LogLevel): boolean {
+  return currentLevel <= (LOG_LEVEL_MAP[level] ?? 1);
+}
+
 type WebUILogFn = (level: LogLevel, component: string, message: string) => void;
 type WorkerPostFn = (msg: {
   type: 'log';

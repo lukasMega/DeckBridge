@@ -1,4 +1,5 @@
 import type { ImageAssembly } from './image-assembler.js';
+import { isLevelEnabled } from './logger.js';
 // Child-server (MK.2/Mini) CORA payload handling: verbatim probes, feature
 // requests, output-report dispatch, brightness extraction, and image-chunk
 // assembly. Split out of elgato-child-server.ts (pure extraction, no
@@ -88,6 +89,35 @@ export function handleChildFeatureRequest(
   }
 }
 
+// Callers MUST guard these with isLevelEnabled('debug'): they run once per 1024B chunk
+// directly ahead of the ACK Elgato paces image delivery on, and at the default `info`
+// level the interpolated string would be built only to be discarded.
+function traceImageChunk(
+  emitLog: LogFn,
+  payload: Buffer,
+  messageId: number,
+  msSinceConnect: number,
+): void {
+  const last = payload[3] === 1 ? ' LAST' : '';
+  emitLog(
+    'debug',
+    `child rx: image-data chunk key=${payload[2]}${last} ${payload.readUInt16LE(4)}B msgId=${messageId} (+${msSinceConnect}ms)`,
+  );
+}
+
+function traceGen1ImageChunk(
+  emitLog: LogFn,
+  payload: Buffer,
+  messageId: number,
+  msSinceConnect: number,
+): void {
+  const last = payload[GEN1_IMAGE_LAST_OFFSET] === 1 ? ' LAST' : '';
+  emitLog(
+    'debug',
+    `child rx: gen1 image chunk key=${payload[GEN1_IMAGE_KEY_OFFSET]! - 1}${last} msgId=${messageId} (+${msSinceConnect}ms)`,
+  );
+}
+
 export function handleChildOutputReportPacket(
   byte0: number,
   byte1: number,
@@ -102,19 +132,13 @@ export function handleChildOutputReportPacket(
   handleGen1ImageChunk: (pkt: Buffer, messageId: number) => void,
 ): void {
   if (byte0 !== PAYLOAD_TYPE_OUTPUT_REPORT) return;
+  const tracing = isLevelEnabled('debug');
   if (byte1 === IMG_CMD_WRITE) {
-    emitLog(
-      'debug',
-      `child rx: image-data chunk key=${payload[2]}${payload[3] === 1 ? ' LAST' : ''} ${payload.readUInt16LE(4)}B msgId=${messageId} (+${msSinceConnect}ms)`,
-    );
+    if (tracing) traceImageChunk(emitLog, payload, messageId, msSinceConnect);
     if (flags & CORA_FLAG_REQACK) sendAckNak(messageId, hidOp);
     handleImageChunk(payload, messageId);
   } else if (byte1 === GEN1_IMG_CMD) {
-    emitLog(
-      'debug',
-      `child rx: gen1 image chunk key=${payload[GEN1_IMAGE_KEY_OFFSET]! - 1}` +
-        `${payload[GEN1_IMAGE_LAST_OFFSET] === 1 ? ' LAST' : ''} msgId=${messageId} (+${msSinceConnect}ms)`,
-    );
+    if (tracing) traceGen1ImageChunk(emitLog, payload, messageId, msSinceConnect);
     if (flags & CORA_FLAG_REQACK) sendAckNak(messageId, hidOp);
     handleGen1ImageChunk(payload, messageId);
   }
