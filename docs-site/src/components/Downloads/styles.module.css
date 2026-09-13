@@ -1,0 +1,95 @@
+/* Live release list on /getting-started. Infima variables only — both themes for free. */
+
+.wrap {
+  margin: 1rem 0 1.5rem;
+}
+
+.releaseRow {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(min(100%, 20rem), 1fr);
+  align-items: start;
+  gap: 0.75rem;
+  overflow-x: auto;
+  padding-bottom: 0.75rem;
+}
+
+.releaseRow:focus-visible {
+  outline: 2px solid var(--ifm-color-primary);
+  outline-offset: 3px;
+}
+
+.release {
+  padding: 0.75rem 1rem;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  background: var(--ifm-background-surface-color);
+  border: 1px solid var(--ifm-color-emphasis-300);
+  border-radius: var(--ifm-global-radius);
+}
+
+.head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: baseline;
+  margin: 0 0 0.35rem;
+  font-size: 1.05rem;
+}
+
+.badge {
+  padding: 0.05rem 0.45rem;
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--ifm-color-primary-darkest);
+  text-transform: uppercase;
+  background: var(--ifm-color-primary-contrast-background);
+  border-radius: 999px;
+}
+
+.date {
+  font-size: 0.78rem;
+  font-weight: 400;
+  color: var(--ifm-color-emphasis-700);
+}
+
+.osLine {
+  margin: 0 0 0.4rem;
+  font-size: 0.82rem;
+  color: var(--ifm-color-emphasis-700);
+}
+
+.assets {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.assets li {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 0.6rem;
+  align-items: baseline;
+  padding: 0.2rem 0;
+}
+
+.meta {
+  font-size: 0.78rem;
+  color: var(--ifm-color-emphasis-700);
+}
+
+.more {
+  margin-top: 0.5rem;
+  font-size: 0.9rem;
+}
+
+.more summary {
+  cursor: pointer;
+  color: var(--ifm-color-emphasis-700);
+}
+
+.fallback {
+  margin: 0.5rem 0 0;
+  font-size: 0.85rem;
+  color: var(--ifm-color-emphasis-700);
+}

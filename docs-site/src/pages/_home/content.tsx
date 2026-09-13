@@ -11,9 +11,9 @@ export const BRANDS: ReactNode[] = [
   'Fifine',
 ];
 
-/** Tested decks first, then untested — generated from DEVICE_MODELS by
+/** Tested decks first, then untested — order generated from DEVICE_MODELS by
  *  ts/scripts/gen-device-docs.mjs. Run `mise run docs-devices` after adding a device. */
-export const DEVICES: { name: string; tested: boolean }[] = deviceData.homepageOrder;
+export const DEVICES = deviceData.homepageOrder;
 
 export const HIGHLIGHTS = [
   'TypeScript + Rust',

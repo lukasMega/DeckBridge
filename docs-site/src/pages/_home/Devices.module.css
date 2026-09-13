@@ -1,0 +1,151 @@
+.hardware {
+  margin-top: 24px;
+}
+
+.viewSwitch {
+  display: flex;
+  width: fit-content;
+  margin: 0 auto 26px;
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid var(--border);
+  border-radius: 99px;
+  background: var(--inset);
+}
+
+.viewSwitch button {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 14px;
+  border: 1px solid transparent;
+  border-radius: 99px;
+  background: transparent;
+  color: var(--fg-dim);
+  font: 500 12px var(--font);
+  cursor: pointer;
+}
+
+.viewSwitch button[aria-pressed='true'] {
+  background: var(--surface);
+  border-color: var(--border);
+  color: var(--fg);
+  box-shadow: var(--shadow-1);
+}
+
+.viewSwitch button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+
+.viewSwitch button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.viewSwitch svg {
+  width: 14px;
+  height: 14px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.rows {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 18px;
+}
+
+.rowLabel {
+  margin: 0 0 8px 18px;
+  color: var(--fg-dim);
+  font: 500 10px var(--mono);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.row:first-child .rowLabel {
+  color: var(--ok);
+}
+
+.viewport {
+  overflow: hidden;
+  mask-image: linear-gradient(to right, transparent, black 4%, black 96%, transparent);
+}
+
+.track,
+.group {
+  display: flex;
+  width: max-content;
+}
+
+.track {
+  animation: drift 80s linear infinite;
+}
+
+.group {
+  flex: none;
+  gap: 12px;
+  padding-right: 12px;
+}
+
+.card {
+  display: flex;
+  align-items: center;
+  flex: 0 0 286px;
+  width: 286px;
+  min-height: 106px;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--surface);
+}
+
+.card img {
+  flex: none;
+  object-fit: contain;
+}
+
+.caption {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 7px;
+}
+
+.deviceName {
+  color: var(--fg);
+  font: 500 12px / 1.4 var(--mono);
+}
+
+.moduleNote {
+  color: var(--fg-dim);
+  font-size: 10px;
+}
+
+.rows:hover .track {
+  animation-play-state: paused;
+}
+
+.hint {
+  margin: 16px 0 0;
+  text-align: center;
+  color: var(--fg-dim);
+  font-size: 11px;
+}
+
+@keyframes drift {
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .track {
+    animation: none;
+  }
+}

@@ -1228,66 +1228,82 @@
   ],
   "homepageOrder": [
     {
+      "id": "mini",
       "name": "Stream Deck Mini",
       "tested": true
     },
     {
+      "id": "mirabox-293",
       "name": "Mirabox 293V3",
       "tested": true
     },
     {
+      "id": "mirabox-293s",
       "name": "Mirabox 293S Stream Deck",
       "tested": true
     },
     {
+      "id": "mirabox-k1pro",
       "name": "Mirabox K1 Pro",
       "tested": true
     },
     {
+      "id": "fifine-d6-rev2",
       "name": "Fifine AmpliGame D6 (rev. 2)",
       "tested": true
     },
     {
+      "id": "mk2",
       "name": "Stream Deck MK.2",
       "tested": false
     },
     {
+      "id": "ajazz-akp153e-rev2",
       "name": "Ajazz AKP153E (rev. 2)",
       "tested": false
     },
     {
+      "id": "ajazz-akp153r-rev2",
       "name": "Ajazz AKP153R (rev. 2)",
       "tested": false
     },
     {
+      "id": "fifine-d6",
       "name": "Fifine AmpliGame D6",
       "tested": false
     },
     {
+      "id": "ajazz-akp153",
       "name": "Ajazz AKP153",
       "tested": false
     },
     {
+      "id": "ajazz-akp153e",
       "name": "Ajazz AKP153E (rev. 1)",
       "tested": false
     },
     {
+      "id": "ajazz-akp153r",
       "name": "Ajazz AKP153R (rev. 1)",
       "tested": false
     },
     {
+      "id": "mars-msd-one",
       "name": "Mars Gaming MSD-ONE",
       "tested": false
     },
     {
+      "id": "maddog-gk150k",
       "name": "Mad Dog GK150K",
       "tested": false
     },
     {
+      "id": "risemode-vision-01",
       "name": "Risemode Vision 01",
       "tested": false
     },
     {
+      "id": "tmice-stream-controller",
       "name": "TMICE Stream Controller",
       "tested": false
     }

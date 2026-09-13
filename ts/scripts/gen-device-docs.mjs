@@ -797,10 +797,11 @@ function dataJson(models, notes) {
       _generated: `by ${GENERATOR} — do not edit. Run 'mise run docs-devices'.`,
       tables,
       models: rows,
-      // Tested first (stable within registry order) — the homepage's chip grid order.
+      // Tested first (stable within registry order) — the homepage's device order.
+      // `id` is the SVG basename under docs-site/static/img/devices/.
       homepageOrder: rows
         .toSorted((a, b) => Number(b.tested) - Number(a.tested))
-        .map(({ name, tested }) => ({ name, tested })),
+        .map(({ id, name, tested }) => ({ id, name, tested })),
     },
     null,
     2,

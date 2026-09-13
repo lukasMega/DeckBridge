@@ -9,8 +9,9 @@ import { BridgeMark } from './_home/BridgeMark';
 import { Flow } from './_home/Flow';
 import { Comparison } from './_home/Comparison';
 import { Quickstart } from './_home/Quickstart';
+import { Devices } from './_home/Devices';
 import { FEATURES } from './_home/features';
-import { GITHUB_URL, BRANDS, DEVICES, HIGHLIGHTS } from './_home/content';
+import { GITHUB_URL, BRANDS, HIGHLIGHTS } from './_home/content';
 
 const SHOTS = [
   {
@@ -75,8 +76,8 @@ export default function Home(): ReactNode {
               <br /> <span className={styles.accent}>over WiFi.</span>
             </h1>
             <p className={styles.subtitle}>
-              <strong>DeckBridge</strong> runs on your computer and appears to the Elgato app as a
-              network device - your buttons work there. No Network Dock required.
+              Control supported non-Elgato decks using Elgato software. DeckBridge connects them
+              over network. No Network Dock ($70+) required.
             </p>
             <div className={styles.cta}>
               <Link className={styles.ctabtn} to="/getting-started">
@@ -112,7 +113,7 @@ export default function Home(): ReactNode {
             <h2 className={styles.sectionTitle}>One bridge, two protocols</h2>
             <p className={styles.sectionLead}>
               DeckBridge speaks USB HID to your deck and emulates an Elgato Network Dock on the LAN.
-              The app discovers it like real hardware.
+              The Elgato desktop app discovers it like real hardware.
             </p>
             <div className={styles.panel}>
               <Flow />
@@ -233,18 +234,7 @@ export default function Home(): ReactNode {
           <section className={`${styles.section} ${styles.reveal}`}>
             <p className={styles.sectionLabel}>Hardware</p>
             <h2 className={styles.sectionTitle}>Supported devices</h2>
-            <div className={styles.devices}>
-              {DEVICES.map((d) => (
-                <span className={styles.chip} key={d.name}>
-                  {d.name}{' '}
-                  <span
-                    className={`${styles.chipBadge} ${d.tested ? styles.chipBadgeOk : styles.chipBadgeMuted}`}
-                  >
-                    {d.tested ? '✓ tested' : 'untested'}
-                  </span>
-                </span>
-              ))}
-            </div>
+            <Devices />
             <p className={styles.devicesNote}>
               Tested on macOS — the Linux / Windows builds are implemented but not
               hardware-verified.

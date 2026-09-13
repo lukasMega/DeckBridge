@@ -18,6 +18,12 @@ else to install.
 > supports only 6-button (3×2) grids like the Stream Deck Mini and grids with up to 15
 > buttons (5×3) like the Stream Deck MK.2.
 
+> **🛠 How it was built:** DeckBridge started as a small personal project. The code was
+> written largely with [Claude Code](https://claude.com/claude-code) (mostly Opus), but the
+> author spent a significant amount of their free time debugging it and testing against
+> real hardware — protocol quirks, per-device HID report formats and image pipelines only
+> show up on an actual deck.
+
 ## Supported devices
 
 Full side-by-side comparison (USB IDs, key grid, panel size, test status):

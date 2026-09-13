@@ -665,36 +665,6 @@
     opacity: 1;
   }
 }
-/* pin: drops in once, base ripples forever */
-.pinBody {
-  transform-origin: 12px 21px;
-  animation: pinDrop 0.7s cubic-bezier(0.3, 1.4, 0.5, 1) both;
-}
-@keyframes pinDrop {
-  0% {
-    opacity: 0;
-    transform: translateY(-7px) scale(0.9);
-  }
-  100% {
-    opacity: 1;
-    transform: none;
-  }
-}
-.pinRipple {
-  transform-origin: 12px 21.5px;
-  animation: ripple 1.8s ease-out infinite;
-  animation-delay: 0.5s;
-}
-@keyframes ripple {
-  0% {
-    opacity: 0.5;
-    transform: scale(0.4);
-  }
-  100% {
-    opacity: 0;
-    transform: scale(1.5);
-  }
-}
 /* grid: cells light up in sequence */
 .gCell {
   opacity: 0.28;
@@ -919,8 +889,6 @@
   .adraw,
   .sig,
   .sigDot,
-  .pinBody,
-  .pinRipple,
   .gCell {
     animation: none !important;
   }
@@ -933,13 +901,6 @@
   }
   .sig,
   .sigDot,
-  .pinBody {
-    opacity: 1;
-    transform: none;
-  }
-  .pinRipple {
-    opacity: 0;
-  }
   .gCell {
     opacity: 0.6;
   }
