@@ -2,7 +2,7 @@ import { assets } from './assets.js';
 import { checkRequirements } from './requirements.js';
 import { get, post } from './router.js';
 import type { Route, RouteContext } from './router.js';
-import { badRequest, css, html, jpeg, js, json, noContent, notFound } from './http.js';
+import { badRequest, css, html, jpeg, js, json, noContent, notFound, text } from './http.js';
 import type { MockDeviceConfig } from './types.js';
 import {
   EXTRA_KEY_WIDGETS,
@@ -53,7 +53,81 @@ export const routes: Route[] = [
     return json({ ok: true });
   }),
   post('/api/device-identity/mdns-name', setDeviceMdnsName),
+  post('/api/log-level', setLogLevelRoute),
+  post('/api/logs/open-in-os', async ({ ui }) => {
+    await ui.openLogsFolder();
+    return json({ ok: true });
+  }),
+
+  get('/api/device-overrides', ({ ui, url }) => {
+    const modelId = url.searchParams.get('modelId') ?? undefined;
+    const view = ui.deviceOverridesView(modelId);
+    return 'error' in view ? json({ error: view.error }, view.status) : json(view);
+  }),
+  post('/api/device-overrides', setDeviceOverrides),
+  post('/api/device-overrides/reset', resetDeviceOverrides),
+
+  // text/plain, not JSON: the report is meant to be pasted verbatim into an issue.
+  get('/api/diagnostics', async ({ ui, url }) => {
+    const redact = url.searchParams.get('redactCommands') === '1';
+    return text(await ui.buildDiagnosticsReport({ redactCommands: redact }));
+  }),
+  post('/api/diagnostics/save', saveDiagnostics),
 ];
+
+/** Persist one model's device tuning. A validation failure returns the whole
+ *  error list so the UI can show every bad field at once. */
+async function setDeviceOverrides({ req, ui }: RouteContext): Promise<Response> {
+  let body: { modelId?: unknown; overrides?: unknown };
+  try {
+    body = JSON.parse(await req.text()) as { modelId?: unknown; overrides?: unknown };
+  } catch {
+    return badRequest('invalid JSON');
+  }
+  const err = ui.trySetModelOverride(body.modelId, body.overrides ?? {});
+  if (err) return json({ error: err.error }, err.status);
+  // The device session closes and reopens (image/wire/keyMap must be in force
+  // from the next open) — the UI shows a brief "reapplying…" state on this flag.
+  return json({ ok: true, reconnecting: true });
+}
+
+async function resetDeviceOverrides({ req, ui }: RouteContext): Promise<Response> {
+  let modelId: unknown;
+  try {
+    ({ modelId } = JSON.parse(await req.text()) as { modelId: unknown });
+  } catch {
+    return badRequest('invalid JSON');
+  }
+  const err = ui.tryResetModelOverride(modelId);
+  return err ? json({ error: err.error }, err.status) : json({ ok: true, reconnecting: true });
+}
+
+/** Write the report next to settings.json and reveal it in the OS file manager —
+ *  the path for users who would rather attach a file than paste text. */
+async function saveDiagnostics({ req, ui }: RouteContext): Promise<Response> {
+  let redactCommands = false;
+  try {
+    const raw = await req.text();
+    if (raw) ({ redactCommands = false } = JSON.parse(raw) as { redactCommands?: boolean });
+  } catch {
+    return badRequest('invalid JSON');
+  }
+  const path = await ui.saveDiagnosticsReport({ redactCommands });
+  return path ? json({ ok: true, path }) : json({ error: 'could not write report' }, 500);
+}
+
+/** WebUI "Debug logging" toggle. Levels are validated against cli.ts's LOG_LEVELS
+ *  (the single source of truth, shared with --log-level and settings.json). */
+async function setLogLevelRoute({ req, ui }: RouteContext): Promise<Response> {
+  let level: unknown;
+  try {
+    ({ level } = JSON.parse(await req.text()) as { level: unknown });
+  } catch {
+    return badRequest('invalid JSON');
+  }
+  const err = ui.trySetLogLevel(level);
+  return err ? json({ error: err.error }, err.status) : json({ ok: true, level });
+}
 
 async function setBrightness({ req, ui }: RouteContext): Promise<Response> {
   let level: unknown;

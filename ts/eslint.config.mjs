@@ -162,10 +162,10 @@ export default defineConfig([
         { type: 'transform', mode: 'full', pattern: ['src/translator.ts', 'src/image-render.ts', 'src/splash-sender.ts'] },
         { type: 'image-main', mode: 'full', pattern: ['src/image-pipeline.ts', 'src/image-cache.ts', 'src/image-assembler.ts'] },
         { type: 'cora', mode: 'full', pattern: ['src/cora-*.ts', 'src/elgato*.ts', 'src/feature-response.ts'] },
-        { type: 'infra', mode: 'full', pattern: ['src/native-libs.ts', 'src/mdns-advertiser.ts', 'src/tray.ts', 'src/settings-store.ts', 'src/device-identity.ts', 'src/os-utils.ts'] },
+        { type: 'infra', mode: 'full', pattern: ['src/native-libs.ts', 'src/mdns-advertiser.ts', 'src/tray.ts', 'src/settings-store.ts', 'src/device-identity.ts', 'src/os-utils.ts', 'src/log-file.ts'] },
         { type: 'app', mode: 'full', pattern: ['src/app.ts', 'src/driver-manager*.ts', 'src/cora-startup.ts', 'src/device-session.ts', 'src/extra-keys.ts'] },
         { type: 'dev-entry', mode: 'full', pattern: ['src/mirabox-smoke.ts', 'src/k1pro-probe.ts', 'src/d6-capture.ts'] },
-        { type: 'cli', mode: 'full', pattern: 'src/cli-devices.ts' },
+        { type: 'cli', mode: 'full', pattern: ['src/cli-devices.ts', 'src/cli-diagnose.ts'] },
         { type: 'shared', mode: 'full', pattern: ['src/types.ts', 'src/logger.ts', 'src/capabilities.ts', 'src/comm-format.ts', 'src/cli.ts']
         },
       ],
@@ -192,6 +192,7 @@ export default defineConfig([
             { from: { element: { type: 'infra' } }, allow: { to: { element: { type: 'infra' } } } },
             { from: { element: { type: 'app' } }, allow: { to: { element: { type: 'app' } } } },
             { from: { element: { type: 'ffi' } }, allow: { to: { element: { type: 'ffi' } } } },
+            { from: { element: { type: 'cli' } }, allow: { to: { element: { type: 'cli' } } } },
             // mdns-advertiser.ts (infra) needs the native Windows mDNS advertise
             // (ffi/mdns.ts) — a fire-and-forget dlopen call (register) / a blocking
             // dlopen call only on stop(), never device I/O. Other infra files gain
@@ -256,6 +257,17 @@ export default defineConfig([
                 'cli-devices.ts may import ffi/devices/infra for enumeration-only HID listing ' +
                 '(never hid_open) and native-lib setup — mirrors the devices tier\'s own ffi access.',
             },
+            // cli-diagnose.ts shares the diagnostics builder + the requirements probe with
+            // the HTTP route, so one report shape serves both the server path and the
+            // no-server path (`deckbridge diagnose`, the freeze case). Pure/read-only
+            // modules only — the CLI never starts a WebUIServer.
+            {
+              from: { element: { type: 'cli' } },
+              allow: { to: { element: { type: 'web-server' } } },
+              message:
+                'cli-diagnose.ts may import web-server ONLY for the pure diagnostics builder ' +
+                'and the read-only requirements probe — never to start or drive the server.',
+            },
             {
               from: { element: { type: 'cora' } },
               allow: { to: { element: { type: ['image-main', 'infra', 'platform'] } } },
@@ -277,6 +289,13 @@ export default defineConfig([
             // web-server reads the plugin dir listing + per-key plugin status for the
             // extra-key WebUI popup — read-only queries (listPluginFiles/pluginKeyStatus),
             // never to drive the plugin worker.
+            {
+              from: { element: { type: 'web-server' } },
+              allow: { to: { element: { type: 'cli' } } },
+              message:
+                'web-server may import cli-devices ONLY for the pure enumeration + row formatting ' +
+                'the diagnostics report shares with `deckbridge devices` — never hid_open.',
+            },
             {
               from: { element: { type: 'web-server' } },
               allow: { to: { element: { type: 'plugin-worker-host' } } },
@@ -319,6 +338,16 @@ export default defineConfig([
             {
               from: { element: { type: 'worker' } },
               allow: { to: { element: { type: ['devices', 'transform'] } } },
+            },
+            // The worker clears the LRU image cache on every open(): a device-tuning
+            // change alters the encoded bytes, and stale entries would make the tweak
+            // look like it did nothing. Cache only — no main-side image orchestration.
+            {
+              from: { element: { type: 'worker' } },
+              allow: { to: { element: { type: 'image-main' } } },
+              message:
+                'hid-worker.ts may import image-main ONLY for the image cache it already ' +
+                'owns through image-render.ts (invalidation on open) — never image-pipeline.',
             },
             {
               from: { element: { type: 'devices' } },

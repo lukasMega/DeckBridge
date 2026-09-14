@@ -1,4 +1,5 @@
 import { IMAGE_CACHE_SIZE } from './types.js';
+import type { DeviceImageSpec } from './devices/driver.js';
 
 export interface CacheEntry {
   nativeBytes: Buffer;
@@ -25,6 +26,10 @@ class LruCache<K, V> {
 
   get size(): number {
     return this.map.size;
+  }
+
+  clear(): void {
+    this.map.clear();
   }
 }
 
@@ -58,8 +63,22 @@ export function hashJpeg(buf: Uint8Array): string {
  *  Mirabox, MK.2, and Mini, and so a WebUI mode override (resize ⇄ pad-*)
  *  can't serve a stale entry from a different mode. `mode` defaults to
  *  `'def'` (model default) for callers that don't track an override. */
-export function makeCacheKey(modelId: string, jpegHash: string, mode = 'def'): string {
-  return `${modelId}:${mode}:${jpegHash}`;
+export function makeCacheKey(modelId: string, jpegHash: string, mode = 'def', rev = ''): string {
+  return `${modelId}:${mode}:${rev}:${jpegHash}`;
+}
+
+/** Short hash of an effective DeviceImageSpec, for the `rev` slot of the cache
+ *  key. Without it, a user device-tuning change (rotation, quality, size — see
+ *  devices/model-overrides.ts) would keep serving entries encoded under the OLD
+ *  spec, and the tweak would appear to do nothing until a restart. */
+export function specRevision(spec: DeviceImageSpec): string {
+  const text = JSON.stringify(spec);
+  let h = 0x811c9dc5;
+  for (let i = 0; i < text.length; i++) {
+    h ^= text.charCodeAt(i);
+    h = Math.imul(h, 0x01000193) >>> 0;
+  }
+  return h.toString(16).padStart(8, '0');
 }
 
 export const imageCache = new LruCache<string, CacheEntry>(IMAGE_CACHE_SIZE);

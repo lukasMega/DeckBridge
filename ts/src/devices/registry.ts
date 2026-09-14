@@ -41,6 +41,13 @@ export const DEVICE_MODELS: DeviceModel[] = [
 /** Fallback model used when nothing is connected / before a real device is probed. */
 export const DEFAULT_MODEL: DeviceModel = MK2_MODEL;
 
+/** The registry entry with this model id, or null. Model ids are the key of
+ *  settings.json's `modelOverrides`, so this is the lookup that turns a persisted
+ *  override back into the model it applies to. */
+export function findModelById(id: string): DeviceModel | null {
+  return DEVICE_MODELS.find((m) => m.id === id) ?? null;
+}
+
 /** Identifies which model matches a VID+PID pair, or null if unknown. */
 export function findModel(vid: number, pid: number): DeviceModel | null {
   for (const model of DEVICE_MODELS) {

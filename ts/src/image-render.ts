@@ -5,7 +5,7 @@
  *  the 'image' worker message; this module owns the transform + the LRU cache. */
 import { debug, info, warn } from './logger.js';
 import { applyOverride, mk2IndexToDeviceImgId, transformImageForDevice } from './translator.js';
-import { imageCache, hashJpeg, makeCacheKey } from './image-cache.js';
+import { imageCache, hashJpeg, makeCacheKey, specRevision } from './image-cache.js';
 import type { DeviceModel } from './devices/driver.js';
 import type { ImageModeOverride } from './types.js';
 
@@ -130,6 +130,21 @@ function perfOnRender(transformMs: number): void {
   _pIdleTimer = setTimeout(perfReset, 3000);
 }
 
+// Device-tuning revision of the model's image spec, mixed into the cache key so
+// an override change can't be served a stale entry. Memoized per model object:
+// applyModelOverrides() returns a NEW object whenever the spec changes, so a
+// WeakMap hit is exactly "same effective spec as last time".
+const _specRevisions = new WeakMap<DeviceModel, string>();
+
+function revisionFor(model: DeviceModel): string {
+  let rev = _specRevisions.get(model);
+  if (rev === undefined) {
+    rev = specRevision(model.image);
+    _specRevisions.set(model, rev);
+  }
+  return rev;
+}
+
 /** Transform (if needed), cache, key-remap, and write one CORA image to the
  *  device. Resolves once the device write has been dispatched; throws on a
  *  transform failure (the worker turns that into an 'error' message). */
@@ -148,7 +163,7 @@ export function renderImage(
   // override (null = model default unchanged). The override discriminator
   // goes into the cache key so a mode switch can't serve a stale entry.
   const eff = applyOverride(model.image, override);
-  const hash = makeCacheKey(model.id, hashJpeg(coraBytes), override ?? 'def');
+  const hash = makeCacheKey(model.id, hashJpeg(coraBytes), override ?? 'def', revisionFor(model));
   let entry = imageCache.get(hash);
 
   if (!entry) {

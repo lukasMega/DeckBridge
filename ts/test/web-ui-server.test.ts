@@ -858,6 +858,194 @@ await runWebTest('start() drops path-keyed entries, keeps usb:<serial> keys', as
   }
 });
 
+// Device tuning (modelOverrides) + log level — see devices/model-overrides.ts
+
+console.log('\nWebUIServer device tuning + log level');
+
+/** A registry model id every build has, so these tests don't depend on the
+ *  probe order or on hardware. */
+const TUNED_MODEL = 'mirabox-293';
+
+test('device-overrides view seeds from the registry when nothing is persisted', () => {
+  const ui = new WebUIServer(undefined, [], 'real', TEST_SETTINGS_ROOT);
+  const view = ui.deviceOverridesView(TUNED_MODEL);
+  assert.ok(!('error' in view), 'known model resolves');
+  if (!('error' in view)) {
+    assert.equal(view.modelId, TUNED_MODEL);
+    assert.deepEqual(view.overrides, {}, 'nothing tuned yet');
+    assert.equal(view.effective.image.rotate, view.defaults.image?.rotate, 'effective = default');
+  }
+});
+
+test('the form seed round-trips: POSTing `tunable` unchanged is accepted', () => {
+  // Regression: the panel used to seed from `effective`, which carries the
+  // non-tunable protocol facts (format/colorMode/bmpPpm) as well — so pressing
+  // Apply without touching anything failed with "image.format: unknown field".
+  const ui = new WebUIServer(undefined, [], 'real', TEST_SETTINGS_ROOT);
+  for (const modelId of [
+    'mk2',
+    'mini',
+    TUNED_MODEL,
+    'mirabox-k1pro',
+    'fifine-d6',
+    'ajazz-akp153',
+  ]) {
+    const view = ui.deviceOverridesView(modelId);
+    assert.ok(!('error' in view), `${modelId} resolves`);
+    if ('error' in view) continue;
+    assert.equal(
+      ui.trySetModelOverride(modelId, view.tunable),
+      null,
+      `${modelId}: the seed the UI renders must be a valid override`,
+    );
+    ui.tryResetModelOverride(modelId);
+  }
+});
+
+test('`tunable` excludes the protocol facts `effective` exposes', () => {
+  const ui = new WebUIServer(undefined, [], 'real', TEST_SETTINGS_ROOT);
+  const view = ui.deviceOverridesView('mk2');
+  assert.ok(!('error' in view));
+  if ('error' in view) return;
+  assert.equal(view.effective.image.format, 'jpeg', 'effective keeps format for display');
+  const seedKeys = Object.keys(view.tunable.image ?? {});
+  for (const excluded of ['format', 'colorMode', 'bmpPpm']) {
+    assert.ok(!seedKeys.includes(excluded), `${excluded} must not reach the form`);
+  }
+});
+
+test('a seeded-then-edited override is still accepted', () => {
+  // The actual user flow: open the panel, change rotation, press Apply.
+  const ui = new WebUIServer(undefined, [], 'real', TEST_SETTINGS_ROOT);
+  const view = ui.deviceOverridesView(TUNED_MODEL);
+  assert.ok(!('error' in view));
+  if ('error' in view) return;
+  const edited = { ...view.overrides, image: { ...view.tunable.image, rotate: 90 as const } };
+  assert.equal(ui.trySetModelOverride(TUNED_MODEL, edited), null);
+  const after = ui.deviceOverridesView(TUNED_MODEL);
+  assert.ok(!('error' in after) && after.effective.image.rotate === 90);
+  ui.tryResetModelOverride(TUNED_MODEL);
+});
+
+test('device-overrides view 404s on an unknown model id', () => {
+  const ui = new WebUIServer(undefined, [], 'real', TEST_SETTINGS_ROOT);
+  const view = ui.deviceOverridesView('not-a-model');
+  assert.ok('error' in view && view.status === 404, 'unknown id is a 404, not a crash');
+});
+
+test('a valid override persists and shows up in the effective spec', () => {
+  const ui = new WebUIServer(undefined, [], 'real', TEST_SETTINGS_ROOT);
+  assert.equal(ui.trySetModelOverride(TUNED_MODEL, { image: { rotate: 180 } }), null);
+  const view = ui.deviceOverridesView(TUNED_MODEL);
+  assert.ok(!('error' in view));
+  if (!('error' in view)) assert.equal(view.effective.image.rotate, 180);
+  const parsed = JSON.parse(ui.getSettingsJson()) as {
+    modelOverrides?: Record<string, { image?: { rotate?: number } }>;
+  };
+  assert.equal(parsed.modelOverrides?.[TUNED_MODEL]?.image?.rotate, 180, 'written to settings');
+});
+
+test('an invalid override is rejected with the full error list, nothing persisted', () => {
+  const ui = new WebUIServer(undefined, [], 'real', TEST_SETTINGS_ROOT);
+  const err = ui.trySetModelOverride(TUNED_MODEL, { image: { rotate: 45, quality: 9 } });
+  assert.ok(err !== null, 'rejected');
+  assert.equal(err?.status, 400);
+  assert.ok(err?.error.includes('image.rotate'), err?.error);
+  assert.ok(err?.error.includes('image.quality'), 'every bad field is reported at once');
+  assert.equal(ui.modelOverrideFor(TUNED_MODEL), undefined, 'nothing stored');
+});
+
+test('reset clears the override', () => {
+  const ui = new WebUIServer(undefined, [], 'real', TEST_SETTINGS_ROOT);
+  ui.trySetModelOverride(TUNED_MODEL, { image: { rotate: 90 } });
+  assert.ok(ui.modelOverrideFor(TUNED_MODEL) !== undefined, 'precondition: tuned');
+  assert.equal(ui.tryResetModelOverride(TUNED_MODEL), null);
+  assert.equal(ui.modelOverrideFor(TUNED_MODEL), undefined);
+});
+
+test('applySettingsJson imports modelOverrides and drops invalid entries', () => {
+  const ui = new WebUIServer(undefined, [], 'real', TEST_SETTINGS_ROOT);
+  ui.applySettingsJson(
+    JSON.stringify({
+      modelOverrides: {
+        [TUNED_MODEL]: { image: { rotate: 270 } },
+        'not-a-model': { image: { rotate: 90 } },
+        'mirabox-293s': { image: { rotate: 45 } },
+      },
+    }),
+  );
+  assert.equal(ui.modelOverrideFor(TUNED_MODEL)?.image?.rotate, 270, 'valid entry kept');
+  assert.equal(ui.modelOverrideFor('not-a-model'), undefined, 'unknown model dropped');
+  assert.equal(ui.modelOverrideFor('mirabox-293s'), undefined, 'invalid override dropped');
+});
+
+test('safe mode reports the registry defaults as effective, but keeps the override', () => {
+  // The one time a user opens this panel is when a bad override made the device
+  // look dead — a view that disagreed with the hardware would mislead them. The
+  // stored value stays so Reset still works.
+  const ui = new WebUIServer(undefined, [], 'real', TEST_SETTINGS_ROOT);
+  ui.trySetModelOverride(TUNED_MODEL, { image: { rotate: 180 } });
+  const before = ui.deviceOverridesView(TUNED_MODEL);
+  assert.ok(!('error' in before) && before.effective.image.rotate === 180, 'precondition');
+
+  tjs.env.DECKBRIDGE_NO_OVERRIDES = '1';
+  try {
+    const view = ui.deviceOverridesView(TUNED_MODEL);
+    assert.ok(!('error' in view));
+    if (!('error' in view)) {
+      assert.equal(view.safeMode, true, 'the UI can say so');
+      assert.equal(view.effective.image.rotate, 0, 'effective = what the device runs');
+      assert.equal(view.overrides.image?.rotate, 180, 'the override is still stored');
+    }
+  } finally {
+    delete tjs.env.DECKBRIDGE_NO_OVERRIDES;
+  }
+  ui.tryResetModelOverride(TUNED_MODEL);
+});
+
+test('trySetLogLevel validates and persists', () => {
+  const ui = new WebUIServer(undefined, [], 'real', TEST_SETTINGS_ROOT);
+  assert.equal(ui.trySetLogLevel('debug'), null);
+  assert.equal(ui.logLevel(), 'debug', 'applied to the main thread');
+  const parsed = JSON.parse(ui.getSettingsJson()) as { logLevel?: string };
+  assert.equal(parsed.logLevel, 'debug', 'written to settings');
+  const err = ui.trySetLogLevel('loud');
+  assert.equal(err?.status, 400);
+  assert.equal(ui.logLevel(), 'debug', 'a rejected level does not change anything');
+  ui.trySetLogLevel('warn'); // restore: setLogLevel is process-wide
+});
+
+test('fullState exposes the log level and log path for the Settings page', () => {
+  const ui = new WebUIServer(undefined, [], 'real', TEST_SETTINGS_ROOT);
+  const state = ui.fullState();
+  assert.equal(typeof state.logLevel, 'string');
+  assert.ok(state.logFilePath.endsWith('deckbridge.log'), state.logFilePath);
+});
+
+await runWebTest(
+  'invalid modelOverrides on disk are dropped at load, leaving the rest intact',
+  async () => {
+    const root = `${tjs.tmpDir}/webui-overrides-load-${tjs.pid}`;
+    await saveSettings(
+      {
+        selectedDock: 0,
+        // Written straight to disk (bypassing validation) the way a hand-edited
+        // or imported settings.json can be.
+        modelOverrides: {
+          [TUNED_MODEL]: { image: { rotate: 180 } },
+          'mirabox-293s': { image: { rotate: 45 } },
+        },
+      } as never,
+      root,
+    );
+    const ui = new WebUIServer(undefined, [], 'real', root);
+    await ui.start(false); // load settings without binding a port
+    assert.equal(ui.modelOverrideFor(TUNED_MODEL)?.image?.rotate, 180, 'valid entry survives');
+    assert.equal(ui.modelOverrideFor('mirabox-293s'), undefined, 'invalid entry dropped');
+    await tjs.remove(root, { recursive: true }).catch(() => undefined);
+  },
+);
+
 // Summary
 
 console.log(`\n${passed} passed, ${failed} failed`);

@@ -17,5 +17,10 @@ export const css = (body: string): Response =>
   new Response(body, { headers: { 'Content-Type': 'text/css' } });
 export const js = (body: string): Response =>
   new Response(body, { headers: { 'Content-Type': 'application/javascript' } });
+/** Plain text, no-store — the diagnostics report (a fresh snapshot every time). */
+export const text = (body: string): Response =>
+  new Response(body, {
+    headers: { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store' },
+  });
 export const jpeg = (body: Buffer): Response =>
   new Response(body, { headers: { 'Content-Type': 'image/jpeg', 'Cache-Control': 'no-store' } });

@@ -65,6 +65,7 @@ IST = "IST"      # India Standard Time (worldclock example)
 Nd = "Nd"        # "N days" shorthand (countdown plugin)
 WRK = "WRK"      # Mermaid node-id prefix in ARCHITECTURE.md
 abd = "abd"      # deliberate test-data string ("abc" vs "abd")
+rotat = "rotat"  # deliberate unknown-field test-data key (model-overrides.test.ts)
 alls = "alls"    # "catch-alls" (plural of catch-all)
 
 [default.extend-identifiers]

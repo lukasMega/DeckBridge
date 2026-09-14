@@ -85,24 +85,27 @@ export function wireCommonDriverEvents(
   driver: WorkerHidDriver,
   model: DeviceModel,
   opts: {
-    onKey: (mk2Index: number, state: KeyEvent['state']) => void;
+    /** `wireId` is the raw device code the press arrived on (pre-keyMap);
+     *  undefined for identity-mapped models. Key-map learn mode needs it —
+     *  a wrong map is exactly what it is there to fix. */
+    onKey: (mk2Index: number, state: KeyEvent['state'], wireId?: number) => void;
     /** Sleep/wake re-init sent CLE ALL — repaint the extra-key widgets it wiped. */
     onReinit: () => void;
   },
 ): void {
   driver.on('key', (e: KeyEvent) => {
-    let index = e.keyIndex;
-    if (hasInputKeyMap(model)) {
-      index = deviceInputToMk2Index(e.keyIndex, model);
-      // Outside the emulated grid (293S 6th column) — display-only keys
-      // with no switches; nothing to dispatch.
-      if (index < 0) return;
-      const wire = e.keyIndex.toString(16).padStart(2, '0');
-      log('info', 'key', `${model.id} wire=0x${wire} → mk2=${index} ${e.state}`);
-    } else {
+    if (!hasInputKeyMap(model)) {
       log('info', 'key', `${model.id} key=${e.keyIndex} ${e.state}`);
+      opts.onKey(e.keyIndex, e.state);
+      return;
     }
-    opts.onKey(index, e.state);
+    const index = deviceInputToMk2Index(e.keyIndex, model);
+    // Outside the emulated grid (293S 6th column) — display-only keys
+    // with no switches; nothing to dispatch.
+    if (index < 0) return;
+    const wire = e.keyIndex.toString(16).padStart(2, '0');
+    log('info', 'key', `${model.id} wire=0x${wire} → mk2=${index} ${e.state}`);
+    opts.onKey(index, e.state, e.keyIndex);
   });
   driver.on('error', (err: Error) => log('error', model.id, err.message));
   driver.on('reinit', opts.onReinit);

@@ -11,6 +11,7 @@ type ReqError = { error: string; status: number };
 
 export class SettingsIdentityController {
   constructor(
+    private readonly applyLogLevel: (level: unknown) => void,
     private readonly settings: PersistedSettings,
     private readonly driverMode: () => DriverMode,
     private readonly mockConfig: () => MockDeviceConfig,
@@ -71,6 +72,14 @@ export class SettingsIdentityController {
       throw new Error('settings must be a JSON object');
     }
     const s = parsed as Settings;
+    if (s.logLevel !== undefined) this.applyLogLevel(s.logLevel);
+    // Device tuning: invalid entries are dropped with a warn inside
+    // importModelOverrides, never thrown — an imported file must not be able to
+    // poison runtime state. '' = "all models", the sessions reopen either way.
+    if (Object.hasOwn(parsed, 'modelOverrides')) {
+      this.settings.importModelOverrides(s.modelOverrides);
+      this.emit('modelOverridesChanged', '');
+    }
     // devices[] first, so the selected dock's entry is in place before we (re)select + re-apply.
     if (this.settings.importDevices(s.devices)) this.reapplySelectedDeviceLive();
     // selectedDock is best-effort — an index absent on this host (file imported from a machine

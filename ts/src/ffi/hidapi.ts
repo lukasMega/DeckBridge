@@ -125,15 +125,6 @@ interface HidEnumSymbols {
   mirabox_hid_list_all(buf: Uint8Array, bufLen: number): number;
 }
 
-/** One enumerated HID interface, from the single-enumeration snapshot. */
-export interface HidDeviceRow {
-  vendorId: number;
-  productId: number;
-  usagePage: number;
-  usage: number;
-  path: string;
-}
-
 // Cached deckbridge-native handle, kept open for the process lifetime: dlclose() churn
 // around HID libs causes SIGBUS on macOS (see _workerHidLib in mirabox.ts). Only
 // successful loads are cached, so a missing/failed DECKBRIDGE_NATIVE_LIB can be retried later.
@@ -177,11 +168,95 @@ function loadHidEnum(): { symbols: HidEnumSymbols; close(): void } | null {
   }
 }
 
+// ---------------------------------------------------------------------------
+// Enumeration snapshot
+//
+// Every VID/PID-filtered helper below used to run its OWN native enumeration, and
+// each of those is a full hid_enumerate() over every HID interface on the machine.
+// The presence sweep alone is one call per registry VID/PID pair (~26) every
+// RECONNECT_DELAY_MS, on the main thread. On Windows hidapi's enumeration opens
+// each interface to read its product/serial strings, so one hostile composite
+// device (the "freeze when this keyboard is plugged in" report, issue #67.2) is
+// multiplied by 26 into seconds of blocked event loop — no CORA ACKs, no WebUI.
+//
+// So: enumerate ONCE per short window and answer the filtered queries from that
+// snapshot. The TTL is shorter than the 2 s reconnect tick, so hotplug latency is
+// unchanged; a caller that must not see stale data passes maxAgeMs = 0.
+// ---------------------------------------------------------------------------
+
+/** Reuse window for one full enumeration. Shorter than RECONNECT_DELAY_MS (2 s) on
+ *  purpose: one sweep = one enumeration, and no tick ever reuses the previous tick's. */
+const SNAPSHOT_TTL_MS = 1_000;
+
+/** Above this, one enumeration alone eats a visible slice of a 2 s tick — worth a
+ *  warn line, since it is the first thing to look for in a freeze report. */
+const SLOW_ENUMERATE_MS = 250;
+
+let _snapshot: HidDeviceInfo[] = [];
+let _snapshotAt = 0;
+
+/** Cached full HID enumeration, refreshed when older than `maxAgeMs` (0 forces a
+ *  fresh one). [] when deckbridge-native is unavailable or enumeration failed —
+ *  callers fall back to their own native filtered call in that case. */
+export function hidSnapshot(maxAgeMs = SNAPSHOT_TTL_MS): HidDeviceInfo[] {
+  const now = Date.now();
+  if (_snapshotAt !== 0 && now - _snapshotAt < maxAgeMs) return _snapshot;
+  _snapshot = listAllHidDevices();
+  _snapshotAt = Date.now();
+  const took = _snapshotAt - now;
+  const line = `hid enumerate took ${took}ms (${_snapshot.length} interfaces)`;
+  if (took >= SLOW_ENUMERATE_MS) warn('ffi', line);
+  else debug('ffi', line);
+  return _snapshot;
+}
+
+/** Drop the cached enumeration so the next query re-enumerates (test seam; also the
+ *  hook for a future hotplug notification). */
+export function invalidateHidSnapshot(): void {
+  _snapshotAt = 0;
+  _snapshot = [];
+}
+
+/** TSV absent-field marker written by mirabox_hid_list_all. */
+const TSV_ABSENT = '-';
+
+function matchesModel(
+  d: HidDeviceInfo,
+  vid: number,
+  pid: number,
+  usagePage: number,
+  usage: number,
+): boolean {
+  return (
+    d.vendorId === vid &&
+    (pid === 0 || d.productId === pid) &&
+    d.usagePage === usagePage &&
+    d.usage === usage
+  );
+}
+
 export function findHidPath(vid: number, usagePage: number, usage: number, pid = 0): string | null {
   debug(
     'ffi',
     `findHidPath: vid=0x${vid.toString(16)} pid=0x${pid.toString(16)} usagePage=0x${usagePage.toString(16)} usage=0x${usage.toString(16)}`,
   );
+  const snap = hidSnapshot();
+  if (snap.length > 0) {
+    const hit = snap.find((d) => matchesModel(d, vid, pid, usagePage, usage));
+    debug('ffi', hit ? `hid snapshot: found path=${hit.path}` : 'hid snapshot: no device found');
+    return hit?.path ?? null;
+  }
+  return nativeFindHidPath(vid, usagePage, usage, pid);
+}
+
+/** Single-query native fallback for findHidPath — used only when the snapshot is
+ *  empty (enum lib missing, or enumeration failed). */
+function nativeFindHidPath(
+  vid: number,
+  usagePage: number,
+  usage: number,
+  pid: number,
+): string | null {
   _hidEnumLib ??= loadHidEnum();
   const lib = _hidEnumLib;
   if (!lib) return null;
@@ -208,6 +283,17 @@ export function findHidPath(vid: number, usagePage: number, usage: number, pid =
  *  hid_open_path. Returns [] when the enum lib is missing or nothing matches.
  *  Param order mirrors findHidPath. */
 export function listHidPaths(vid: number, usagePage: number, usage: number, pid = 0): string[] {
+  const snap = hidSnapshot();
+  if (snap.length > 0) {
+    const paths = snap
+      .filter((d) => matchesModel(d, vid, pid, usagePage, usage))
+      .map((d) => d.path);
+    return [...new Set(paths)];
+  }
+  return nativeListHidPaths(vid, usagePage, usage, pid);
+}
+
+function nativeListHidPaths(vid: number, usagePage: number, usage: number, pid: number): string[] {
   _hidEnumLib ??= loadHidEnum();
   const lib = _hidEnumLib;
   if (!lib) return [];
@@ -224,51 +310,20 @@ export function listHidPaths(vid: number, usagePage: number, usage: number, pid 
   }
 }
 
-/** Every enumerated HID interface, from ONE deckbridge-native enumeration (never
- *  hid_open). Callers testing many VID/PID/usage combos should match this snapshot
- *  rather than pay ~3.3 ms of enumeration per model. [] if unavailable. */
-export function listAllHidDevices(): HidDeviceRow[] {
-  _hidEnumLib ??= loadHidEnum();
-  const lib = _hidEnumLib;
-  if (!lib) return [];
-  try {
-    // Grown-and-retried, not truncated: a short read would silently hide a device.
-    for (const size of [65536, 524288]) {
-      const buf = new Uint8Array(size);
-      const count = lib.symbols.mirabox_hid_list_all(buf, buf.length);
-      if (count === -2) continue; // buffer too small — retry bigger
-      if (count <= 0) return [];
-      const end = buf.indexOf(0);
-      const text = new TextDecoder().decode(buf.subarray(0, end >= 0 ? end : buf.length));
-      return text
-        .split('\n')
-        .filter((line) => line.length > 0)
-        .map((line) => {
-          const f = line.split('\t');
-          return {
-            vendorId: parseInt(f[0] ?? '', 16),
-            productId: parseInt(f[1] ?? '', 16),
-            usagePage: parseInt(f[2] ?? '', 16),
-            usage: parseInt(f[3] ?? '', 16),
-            path: f[4] ?? '',
-          };
-        })
-        .filter((r) => r.path.length > 0 && !Number.isNaN(r.vendorId));
-    }
-    warn('ffi', 'mirabox_hid_list_all: device table exceeded 512 KB');
-    return [];
-  } catch (e) {
-    warn('ffi', `mirabox_hid_list_all threw: ${String(e)}`);
-    return [];
-  }
-}
-
 /** True if a HID device with this VID+PID is connected, via deckbridge-native
  *  enumeration (never hid_open). Used by the host's probe to pick the connected
  *  model before spawning a worker — so we never hid_open an absent device or
  *  load hidapi in a throwaway worker, both of which segfault on macOS. Returns
  *  false (no device) when deckbridge-native is unavailable. */
 export function hidDevicePresent(vid: number, pid: number): boolean {
+  const snap = hidSnapshot();
+  if (snap.length > 0) {
+    return snap.some((d) => d.vendorId === vid && (pid === 0 || d.productId === pid));
+  }
+  return nativeHidDevicePresent(vid, pid);
+}
+
+function nativeHidDevicePresent(vid: number, pid: number): boolean {
   _hidEnumLib ??= loadHidEnum();
   const lib = _hidEnumLib;
   if (!lib) return false;
@@ -285,6 +340,18 @@ export function hidDevicePresent(vid: number, pid: number): boolean {
  *  serial, or the enum lib is missing. Used to build a stable per-device key
  *  (VID:PID:serial) that survives reboot/replug, unlike the IOKit path. */
 export function hidSerialForPath(hidPath: string): string | null {
+  const snap = hidSnapshot();
+  if (snap.length > 0) {
+    const hit = snap.find((d) => d.path === hidPath);
+    // A row exists but carries no serial: that is an answer (null), not a reason to
+    // re-enumerate natively — mirabox_hid_serial_for_path would report the same.
+    if (hit) return hit.serial && hit.serial !== TSV_ABSENT ? hit.serial : null;
+    return null;
+  }
+  return nativeHidSerialForPath(hidPath);
+}
+
+function nativeHidSerialForPath(hidPath: string): string | null {
   _hidEnumLib ??= loadHidEnum();
   const lib = _hidEnumLib;
   if (!lib) return null;
@@ -297,6 +364,74 @@ export function hidSerialForPath(hidPath: string): string | null {
   } catch (e) {
     warn('ffi', `mirabox_hid_serial_for_path threw: ${String(e)}`);
     return null;
+  }
+}
+
+/** One row of the unfiltered HID enumeration (see listAllHidDevices). */
+export interface HidDeviceInfo {
+  vendorId: number;
+  productId: number;
+  usagePage: number;
+  usage: number;
+  interfaceNumber: number;
+  manufacturer: string;
+  product: string;
+  serial: string;
+  path: string;
+}
+
+// A machine with several composite HID devices can enumerate well over a hundred
+// interfaces; 512 KB holds a few thousand rows before the native side truncates
+// cleanly. Sized generously because device PRESENCE is now answered from this
+// enumeration (hidSnapshot) — a truncated tail would read as "device unplugged".
+const LIST_ALL_BUF_BYTES = 512 * 1024;
+
+function parseHidRow(line: string): HidDeviceInfo | null {
+  const f = line.split('\t');
+  if (f.length !== 9) return null;
+  return {
+    vendorId: parseInt(f[0]!, 16),
+    productId: parseInt(f[1]!, 16),
+    usagePage: parseInt(f[2]!, 16),
+    usage: parseInt(f[3]!, 16),
+    interfaceNumber: Number(f[4]),
+    manufacturer: f[5]!,
+    product: f[6]!,
+    serial: f[7]!,
+    path: f[8]!,
+  };
+}
+
+/** listAllHidDevices() plus how long it took. The duration is what a freeze report
+ *  needs: the presence sweep runs this same enumeration on the main thread, so a
+ *  four-figure `tookMs` here IS the freeze (issue #67.2). */
+export function listAllHidDevicesTimed(): { devices: HidDeviceInfo[]; tookMs: number } {
+  const t0 = Date.now();
+  const devices = listAllHidDevices();
+  return { devices, tookMs: Date.now() - t0 };
+}
+
+/** EVERY connected HID interface — no VID/PID filter, enumeration only (never
+ *  hid_open). The diagnostics bundle uses this to show the devices DeckBridge
+ *  does *not* recognize; a VID/PID-filtered call by definition cannot. Returns
+ *  [] when deckbridge-native is unavailable. */
+export function listAllHidDevices(): HidDeviceInfo[] {
+  _hidEnumLib ??= loadHidEnum();
+  const lib = _hidEnumLib;
+  if (!lib) return [];
+  try {
+    const buf = new Uint8Array(LIST_ALL_BUF_BYTES);
+    const count = lib.symbols.mirabox_hid_list_all(buf, buf.length);
+    if (count <= 0) return [];
+    const end = buf.indexOf(0);
+    const text = new TextDecoder().decode(buf.subarray(0, end >= 0 ? end : buf.length));
+    return text
+      .split('\n')
+      .map(parseHidRow)
+      .filter((d): d is HidDeviceInfo => d !== null);
+  } catch (e) {
+    warn('ffi', `mirabox_hid_list_all threw: ${String(e)}`);
+    return [];
   }
 }
 

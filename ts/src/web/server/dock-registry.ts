@@ -24,6 +24,18 @@ export class DockRegistry {
     return this.docks.some((d) => d.index === index);
   }
 
+  /** Validate a select-dock request. Index 0 (the primary) is always selectable,
+   *  even before a device connects. Returns an HTTP-shaped error, or null. */
+  validateSelect(index: unknown): { error: string; status: number } | null {
+    if (typeof index !== 'number' || !Number.isInteger(index) || index < 0) {
+      return { error: 'index must be a non-negative integer', status: 400 };
+    }
+    if (index !== 0 && !this.has(index)) {
+      return { error: `no dock with index ${index}`, status: 404 };
+    }
+    return null;
+  }
+
   /** Replace the dock list; false (no-op) if unchanged — the 2s reconnect scan calls this every
    *  tick and an unchanged shape must not spam a broadcast. */
   update(docks: DockStatus[]): boolean {

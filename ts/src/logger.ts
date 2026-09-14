@@ -31,7 +31,21 @@ export function isLevelEnabled(level: LogLevel): boolean {
   return currentLevel <= (LOG_LEVEL_MAP[level] ?? 1);
 }
 
+/** The level currently in effect, as a name — for the diagnostics header. */
+export function currentLogLevel(): LogLevel | 'silent' {
+  return (
+    (Object.keys(LOG_LEVEL_MAP).find((k) => LOG_LEVEL_MAP[k] === currentLevel) as
+      | LogLevel
+      | 'silent'
+      | undefined) ?? 'info'
+  );
+}
+
 type WebUILogFn = (level: LogLevel, component: string, message: string) => void;
+/** Disk sink, installed by log-file.ts on the MAIN thread only — a worker
+ *  forwards via `_workerPost` and never writes the file itself, so there is
+ *  exactly one writer and no cross-thread interleave. */
+type FileSinkFn = (level: LogLevel, component: string, message: string, ts: number) => void;
 type WorkerPostFn = (msg: {
   type: 'log';
   level: LogLevel;
@@ -41,9 +55,14 @@ type WorkerPostFn = (msg: {
 
 let _webuiLog: WebUILogFn | null = null;
 let _workerPost: WorkerPostFn | null = null;
+let _fileSink: FileSinkFn | null = null;
 
 export function setWebUILog(fn: WebUILogFn): void {
   _webuiLog = fn;
+}
+/** Install (or, with null, remove) the disk sink. See FileSinkFn. */
+export function setFileSink(fn: FileSinkFn | null): void {
+  _fileSink = fn;
 }
 export function setWorkerPost(fn: WorkerPostFn): void {
   _workerPost = fn;
@@ -64,6 +83,7 @@ export function debug(component: string, message: string): void {
     if (_workerPost) return _workerPost({ type: 'log', level: 'debug', component, message });
     console.debug(`${ts()} DEBUG [${component}] ${message}`);
     _webuiLog?.('debug', component, message);
+    _fileSink?.('debug', component, message, Date.now());
   }
 }
 
@@ -72,6 +92,7 @@ export function info(component: string, message: string): void {
     if (_workerPost) return _workerPost({ type: 'log', level: 'info', component, message });
     console.log(`${ts()} INFO  [${component}] ${message}`);
     _webuiLog?.('info', component, message);
+    _fileSink?.('info', component, message, Date.now());
   }
 }
 
@@ -80,6 +101,7 @@ export function warn(component: string, message: string): void {
     if (_workerPost) return _workerPost({ type: 'log', level: 'warn', component, message });
     console.warn(`${ts()} WARN  [${component}] ${message}`);
     _webuiLog?.('warn', component, message);
+    _fileSink?.('warn', component, message, Date.now());
   }
 }
 
@@ -88,6 +110,28 @@ export function error(component: string, message: string): void {
     if (_workerPost) return _workerPost({ type: 'log', level: 'error', component, message });
     console.error(`${ts()} ERROR [${component}] ${message}`);
     _webuiLog?.('error', component, message);
+    _fileSink?.('error', component, message, Date.now());
+  }
+}
+
+/** Paired breadcrumb around a blocking startup step: an `info` line before, and
+ *  one with the elapsed ms after (or on throw). When the process wedges, the
+ *  last line in the log file is the unpaired "start" — which names the step
+ *  that hung. Re-throws so callers keep their own error handling. */
+export async function step<T>(
+  component: string,
+  name: string,
+  fn: () => T | Promise<T>,
+): Promise<T> {
+  info(component, `▶ ${name}`);
+  const t0 = Date.now();
+  try {
+    const result = await fn();
+    info(component, `✔ ${name} (${Date.now() - t0}ms)`);
+    return result;
+  } catch (e) {
+    warn(component, `✘ ${name} failed after ${Date.now() - t0}ms: ${(e as Error).message}`);
+    throw e;
   }
 }
 

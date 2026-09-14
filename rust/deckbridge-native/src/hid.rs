@@ -207,77 +207,6 @@ pub unsafe extern "C" fn mirabox_hid_serial_for_path(
     result.unwrap_or(0)
 }
 
-/// Dump the WHOLE enumerated HID device list into `out_buf` as one `\n`-separated,
-/// NUL-terminated table. Each row is 5 tab-separated fields:
-///
-/// ```text
-/// <vid-hex>\t<pid-hex>\t<usage_page-hex>\t<usage-hex>\t<path>
-/// ```
-///
-/// Returns the number of rows written, `0` on error/null buffer, or `-2` if `out_buf`
-/// was too small (caller should grow and retry, not act on a truncated list).
-/// Enumeration only — never opens.
-///
-/// Lets the host match all 16 known models against ONE enumeration instead of one per
-/// model×PID: `mirabox_hid_list_paths`/`_present` each cost a full system-wide
-/// enumeration (3.3 ms), which made the 2 s extras scan ~60 ms on the CORA ACK thread.
-///
-/// Tab/newline are safe separators — no HID path on macOS/Linux/Windows contains
-/// either; a path that somehow did is skipped rather than emitted malformed.
-///
-/// # Safety
-/// `out_buf` must be null or valid for `out_len` bytes for the duration of the call.
-#[no_mangle]
-pub unsafe extern "C" fn mirabox_hid_list_all(out_buf: *mut c_char, out_len: usize) -> i32 {
-    let result = catch_unwind(AssertUnwindSafe(|| {
-        if out_buf.is_null() || out_len == 0 {
-            return 0;
-        }
-        with_api(0, |api| {
-            let mut table = String::new();
-            let mut count: i32 = 0;
-            for info in api.device_list() {
-                let Ok(path) = info.path().to_str() else {
-                    continue;
-                };
-                if path.contains('\t') || path.contains('\n') {
-                    continue;
-                }
-                if count > 0 {
-                    table.push('\n');
-                }
-                use std::fmt::Write as _;
-                let _ = write!(
-                    table,
-                    "{:x}\t{:x}\t{:x}\t{:x}\t{}",
-                    info.vendor_id(),
-                    info.product_id(),
-                    info.usage_page(),
-                    info.usage(),
-                    path
-                );
-                count += 1;
-            }
-            let bytes = table.as_bytes();
-            if bytes.len() + 1 > out_len {
-                return -2;
-            }
-            // SAFETY: out_buf is non-null and valid for out_len bytes (checked at entry);
-            // the length check above leaves room for the payload plus the NUL.
-            unsafe {
-                std::ptr::copy_nonoverlapping(
-                    bytes.as_ptr().cast::<c_char>(),
-                    out_buf,
-                    bytes.len(),
-                );
-                *out_buf.add(bytes.len()) = 0;
-            }
-            count
-        })
-    }));
-    result.unwrap_or(0)
-}
-
 /// Returns 1 if any HID interface matches `vid` + `pid` (usage ignored), else 0.
 /// `pid == 0` matches any product. Enumeration only — never opens the device.
 ///
@@ -298,4 +227,107 @@ pub extern "C" fn mirabox_hid_present(vid: u16, pid: u16) -> i32 {
         })
     }));
     result.unwrap_or(0)
+}
+
+/// Sanitize one enumerated string field for the TSV line format used by
+/// `mirabox_hid_list_all`: tabs and newlines would break the record separators,
+/// and an absent field becomes `-` so column counts stay fixed.
+fn tsv_field(value: Option<&str>) -> String {
+    match value {
+        None | Some("") => "-".to_string(),
+        Some(s) => s.replace(['\t', '\n', '\r'], " "),
+    }
+}
+
+/// List EVERY connected HID interface, one TSV record per line, NUL-terminated,
+/// into `out_buf`. Returns the number of records written (0 on error / null
+/// buffer). Enumeration only — never opens a device.
+///
+/// Columns: `vid<TAB>pid<TAB>usage_page<TAB>usage<TAB>interface<TAB>manufacturer
+/// <TAB>product<TAB>serial<TAB>path`, with vid/pid/usage_page/usage as 4-digit
+/// lowercase hex and absent strings as `-`.
+///
+/// Unlike `mirabox_hid_list_paths` this filters nothing: the point is to see the
+/// devices DeckBridge does NOT recognize — a composite HID keyboard whose
+/// enumeration is slow is the prime suspect behind the "freeze when a keyboard is
+/// plugged in" report, and no VID/PID-filtered call can show it.
+///
+/// Truncates cleanly if the buffer fills (stops before overflow, still
+/// NUL-terminates); the returned count reflects only records actually written.
+///
+/// # Safety
+/// `out_buf` must be null or valid for `out_len` bytes for the duration of the call.
+#[no_mangle]
+pub unsafe extern "C" fn mirabox_hid_list_all(out_buf: *mut c_char, out_len: usize) -> i32 {
+    let result = catch_unwind(AssertUnwindSafe(|| {
+        if out_buf.is_null() || out_len == 0 {
+            return 0;
+        }
+        let Ok(api) = HidApi::new() else {
+            return 0;
+        };
+        let mut count: i32 = 0;
+        let mut pos: usize = 0; // bytes written so far (excluding the final NUL)
+        for info in api.device_list() {
+            let record = format!(
+                "{:04x}\t{:04x}\t{:04x}\t{:04x}\t{}\t{}\t{}\t{}\t{}",
+                info.vendor_id(),
+                info.product_id(),
+                info.usage_page(),
+                info.usage(),
+                info.interface_number(),
+                tsv_field(info.manufacturer_string()),
+                tsv_field(info.product_string()),
+                tsv_field(info.serial_number()),
+                tsv_field(info.path().to_str().ok()),
+            );
+            let bytes = record.as_bytes();
+            let sep = usize::from(count > 0);
+            if pos + sep + bytes.len() + 1 > out_len {
+                break;
+            }
+            // SAFETY: the bounds check above guarantees pos + sep + len + 1 <= out_len,
+            // so every write below (separator, record bytes, terminating NUL) stays in range.
+            unsafe {
+                if sep == 1 {
+                    *out_buf.add(pos) = b'\n' as c_char;
+                    pos += 1;
+                }
+                std::ptr::copy_nonoverlapping(
+                    bytes.as_ptr().cast::<c_char>(),
+                    out_buf.add(pos),
+                    bytes.len(),
+                );
+                pos += bytes.len();
+            }
+            count += 1;
+        }
+        // SAFETY: pos <= out_len - 1 (the loop reserves a byte for the NUL before writing).
+        unsafe {
+            *out_buf.add(pos) = 0;
+        }
+        count
+    }));
+    result.unwrap_or(0)
+}
+
+#[cfg(test)]
+mod list_all_tests {
+    use super::tsv_field;
+
+    #[test]
+    fn absent_and_empty_fields_become_a_dash() {
+        assert_eq!(tsv_field(None), "-");
+        assert_eq!(tsv_field(Some("")), "-");
+    }
+
+    #[test]
+    fn separators_inside_a_field_are_replaced() {
+        assert_eq!(tsv_field(Some("a\tb\nc\rd")), "a b c d");
+    }
+
+    #[test]
+    fn ordinary_values_pass_through() {
+        assert_eq!(tsv_field(Some("Mirabox 293V3")), "Mirabox 293V3");
+    }
 }

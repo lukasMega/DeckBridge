@@ -97,6 +97,14 @@ a regular **Network device** at `localhost`; the deck behaves like Elgato hardwa
   sixth column) show server-rendered clock / date / text / weather / command / plugin
   widgets; see [Side-key widgets](./side-keys.md).
 - **Live web UI** — `http://localhost:3000` shows the key grid and a log feed in real time.
+- **Device tuning** — rotation, flip, image fit, quality and size are adjustable at
+  runtime per model, with a key-map learn mode that derives the correct key mapping from
+  the hardware itself. For boards supported from documentation rather than from hardware
+  we own; see [Device tuning](./troubleshooting.md#device-tuning).
+- **Log file + diagnostics report** — logs are written to disk (rotated, ~6 MB cap), and
+  a single pasteable report can be produced from the web UI or with
+  `./deckbridge diagnose` — which works even when the web UI never starts. See
+  [Troubleshooting](./troubleshooting.md).
 - **System tray + diagnostics** — packaged releases (installers and release zips) include
   a status tray icon ([states](./getting-started.mdx#3-run-it)) and a `/requirements`
   self-check page.
@@ -222,6 +230,11 @@ only case that needs a system libhidapi installed.
   - fallback: a temp directory if the cache root isn't writable
 
   Old `native-<hash>` folders from previous versions are cleaned up automatically.
+- **Settings** — `settings.json` in the cache root: per-device brightness/identity,
+  side-key widgets, log level, and device tuning (`modelOverrides`).
+- **Log file** — `<cache-root>/logs/deckbridge.log`, rotated at 2 MB with three files
+  kept. See [Troubleshooting](./troubleshooting.md#where-the-logs-live).
+- **Diagnostics reports** — `<cache-root>/diagnostics/`, only when you ask for one.
 - **Debug image dumps** — only when `DECKBRIDGE_DUMP_DIR` / `DECKBRIDGE_RAW_DUMP_DIR` are
   set. Off by default.
 
@@ -265,6 +278,11 @@ UI is always localhost-only.
 | `DECKBRIDGE_MOCK` | Run with a mock device (no hardware) |
 | `DECKBRIDGE_DUMP_DIR` | Write each transformed device image here (debug) |
 | `DECKBRIDGE_RAW_DUMP_DIR` | Write paired raw + transformed images here (debug) |
+| `DECKBRIDGE_LOG_LEVEL` | Log verbosity: `debug`/`info`/`warn`/`error`/`silent` |
+| `DECKBRIDGE_CACHE_DIR` | Cache root (settings, logs, extracted native libs) |
+| `DECKBRIDGE_NO_OVERRIDES` | Safe mode: ignore device tuning for this session |
 
-Console/web UI log verbosity is fixed at **build time** (`LOG_LEVEL`, default `info`) —
-there is no runtime environment variable to change it after the binary is built.
+Log verbosity resolves as `--log-level` > `$DECKBRIDGE_LOG_LEVEL` > `"logLevel"` in
+`settings.json` (what the web UI's **Debug logging** toggle writes) > the level compiled
+into the build (`info` for releases). See
+[Turning on debug logging](./troubleshooting.md#turning-on-debug-logging).

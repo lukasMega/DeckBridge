@@ -43,3 +43,16 @@ today" / "new session" flag is sent, never the id. Clearing browser storage rese
 The beacon is a plain image request. Block it with any content blocker, disable
 JavaScript for this site, or clear `localStorage` — the docs work fully either way. No
 consent banner is needed, since nothing personal is stored locally or server-side.
+
+## The DeckBridge app
+
+The binary itself sends nothing anywhere: no telemetry, no update checks, no beacons.
+Everything it records stays on your machine, under the cache directory described in
+[Troubleshooting](./troubleshooting.md).
+
+One thing to know before sharing: the **diagnostics report** you can generate for a bug
+report includes your `settings.json` verbatim — which means your extra-key shell
+commands, plugin arguments and local file paths. But bug reports are public, so skim
+the report before posting it, or omit the commands with
+`./deckbridge diagnose --redact-commands` / the **Hide my commands** checkbox in the web
+UI. The report's first line repeats this reminder.

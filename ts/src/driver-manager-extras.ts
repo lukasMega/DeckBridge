@@ -4,14 +4,14 @@
 // mutable state — always current, and no runtime import cycle.
 import { log } from './logger.js';
 import { closeDriver, type WorkerHidDriver } from './hid-worker-host.js';
-import type { DeviceModel } from './devices/driver.js';
+import type { DeviceModel, DeviceModelOverride } from './devices/driver.js';
 import type { DriverMode } from './driver-manager.js';
 import { MAX_DEVICE_SESSIONS, RECONNECT_DELAY_MS, MDNS_SERVICE_NAME } from './types.js';
 import type { DockStatus, ExtraKeyConfig } from './types.js';
 import { DEVICE_MODELS } from './devices/registry.js';
 import { DeviceSession, sessionIdentity, type SessionServersFactory } from './device-session.js';
 import { deviceKeyFor, sharedSerialModelId } from './device-identity.js';
-import { hidSerialForPath, type HidDeviceRow } from './ffi/hidapi.js';
+import { hidSerialForPath } from './ffi/hidapi.js';
 import type { DeviceIdentitySettings } from './settings-store.js';
 
 export interface ExtraDockCoordinatorDeps {
@@ -21,13 +21,18 @@ export interface ExtraDockCoordinatorDeps {
   sessionServersFactory: SessionServersFactory | null;
   getRealDriver: () => WorkerHidDriver | null;
   /** Every connected HID interface path for this model (one per physical unit),
-   *  matched against the listAllDevices() snapshot. Drives per-unit docking of
-   *  same-model duplicates. [] when absent or not path-targetable. */
-  listModelPaths: (model: DeviceModel, devices: HidDeviceRow[]) => string[];
-  /** One system-wide HID enumeration per scan tick, matched against all 16 models.
-   *  Per-model enumeration here cost ~60 ms/tick on the CORA ACK thread. */
-  listAllDevices: () => HidDeviceRow[];
-  makeRealDriver: (model: DeviceModel) => WorkerHidDriver;
+   *  from deckbridge-native enumeration. Drives per-unit docking of same-model
+   *  duplicates. [] when absent or the model can't be path-targeted. */
+  listModelPaths: (model: DeviceModel) => string[];
+  /** Registry model + the user's device tuning for it (settings.json
+   *  modelOverrides), resolved by DriverManager. In safe mode
+   *  (`--no-overrides`) `override` is undefined and `model` is the registry
+   *  entry unchanged. */
+  effectiveModelFor: (model: DeviceModel) => {
+    model: DeviceModel;
+    override?: DeviceModelOverride;
+  };
+  makeRealDriver: (model: DeviceModel, override?: DeviceModelOverride) => WorkerHidDriver;
   /** Reuse (or vend) the idle worker parked for this model.id, mirroring the
    *  primary probe's idleDrivers pattern — shared with DriverManager via
    *  these two callbacks rather than a second map. */
@@ -126,24 +131,34 @@ export class ExtraDockCoordinator {
     if (primaryPath) claimed.add(primaryPath);
     const skipModelId = primaryPath ? null : realDriver.model.id;
 
-    // ONE enumeration for all 16 models: per-model was ~60 ms of blocking on the
-    // CORA ACK thread every 2 s, which (ACK-pacing) stalls image delivery.
-    const devices = this.deps.listAllDevices();
-
     let pick: { model: DeviceModel; hidPath: string } | null = null;
+    // Timed: this sweep is one synchronous hid_enumerate per model per 2 s tick
+    // on the main thread. On Windows a chatty composite HID keyboard can make
+    // each call take hundreds of ms — issue #67.2's prime suspect. The number
+    // here is what turns "it freezes" into a named step with a duration.
+    const t0 = Date.now();
+    let seen = 0;
     for (const model of DEVICE_MODELS) {
       if (model.id === skipModelId) continue;
-      for (const path of this.deps.listModelPaths(model, devices)) {
+      for (const path of this.deps.listModelPaths(model)) {
+        seen++;
         if (claimed.has(path)) continue;
         if (!pick || path < pick.hidPath) pick = { model, hidPath: path };
       }
     }
+    log('debug', 'coord', `enumerate took ${Date.now() - t0}ms, ${seen} device interface(s)`);
     return pick;
   }
 
-  private async createExtraSession(model: DeviceModel, hidPath: string): Promise<void> {
+  private async createExtraSession(registryModel: DeviceModel, hidPath: string): Promise<void> {
     const factory = this.deps.sessionServersFactory;
     if (!factory) return; // narrowing — scanExtras already guarded this
+
+    // Device tuning applies to extras exactly as it does to the primary: the
+    // effective model drives CORA geometry/input mapping/splash here, and the
+    // raw override travels to the worker, which re-derives it from its own
+    // registry copy (so no override can select a different driver).
+    const { model, override } = this.deps.effectiveModelFor(registryModel);
 
     // Reuse a worker from a prior failed open (SIGBUS-safe pattern, see
     // idleDrivers / probeAndOpen) or spawn a fresh one. Clear any stale
@@ -151,7 +166,7 @@ export class ExtraDockCoordinator {
     // reused worker — DeviceSession.start() wires its own after a good open.
     let driver = this.deps.takeIdleDriver(model.id);
     if (!driver) {
-      driver = this.deps.makeRealDriver(model);
+      driver = this.deps.makeRealDriver(model, override);
     } else {
       driver.removeAllListeners();
     }
@@ -289,6 +304,23 @@ export class ExtraDockCoordinator {
         return;
       }
     }
+  }
+
+  /** Tear down the extra docks running `modelId` ('' = all) so the next scan
+   *  tick re-creates them with the new device tuning. */
+  async reloadDeviceTuning(modelId: string): Promise<void> {
+    // Snapshot first: teardownExtraSession deletes from the map we're walking.
+    const live = Array.from(this.extraSessions.entries());
+    for (const [hidPath, session] of live) {
+      const status = session.status();
+      if (modelId && status.modelId !== modelId) continue;
+      await this.teardownExtraSession(hidPath, status.index);
+    }
+  }
+
+  /** Push a runtime log-level change to every extra dock's USB worker. */
+  setLogLevel(level: string): void {
+    for (const s of this.extraSessions.values()) s.getDriver().setLogLevel(level);
   }
 
   /** The driver behind the extra dock with this index, for app.ts's per-dock
