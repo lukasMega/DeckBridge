@@ -174,7 +174,7 @@ test('header carries version, platform, txiki version, uptime and log level', ()
   assert.ok(report.includes('debug'), 'log level');
 });
 
-test('the unfiltered HID table includes devices DeckBridge does not recognise', () => {
+test('the unfiltered HID table includes devices DeckBridge does not recognize', () => {
   // The whole point of the full enumeration: a keyboard DeckBridge never opens
   // is exactly the suspect in the "freeze when a keyboard is plugged in" report.
   const report = buildDiagnostics(fullSources());
@@ -223,7 +223,7 @@ test('--redact-commands replaces param and pluginArg only', () => {
   assert.ok(report.includes('"widget": "clock"'), 'a command-less widget is untouched');
 });
 
-test('unparseable settings redact to (unavailable) rather than leaking', () => {
+test('unparsable settings redact to (unavailable) rather than leaking', () => {
   const report = buildDiagnostics(
     { ...fullSources(), settingsJson: 'not json{{{' },
     { redactCommands: true },

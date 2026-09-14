@@ -196,7 +196,7 @@ function redactSettings(settingsJson: string): string {
     }
     return JSON.stringify(parsed, null, 2);
   } catch {
-    // Unparseable settings: redact nothing rather than leak — the raw text could
+    // Unparsable settings: redact nothing rather than leak — the raw text could
     // contain commands anywhere.
     return UNAVAILABLE;
   }

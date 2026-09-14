@@ -219,7 +219,7 @@ fn tsv_field(value: Option<&str>) -> String {
 /// lowercase hex and absent strings as `-`.
 ///
 /// Unlike `mirabox_hid_list_paths` this filters nothing: the point is to see the
-/// devices DeckBridge does NOT recognise — a composite HID keyboard whose
+/// devices DeckBridge does NOT recognize — a composite HID keyboard whose
 /// enumeration is slow is the prime suspect behind the "freeze when a keyboard is
 /// plugged in" report, and no VID/PID-filtered call can show it.
 ///

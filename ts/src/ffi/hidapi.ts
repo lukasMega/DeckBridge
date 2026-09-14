@@ -287,7 +287,7 @@ function parseHidRow(line: string): HidDeviceInfo | null {
 
 /** EVERY connected HID interface — no VID/PID filter, enumeration only (never
  *  hid_open). The diagnostics bundle uses this to show the devices DeckBridge
- *  does *not* recognise; a VID/PID-filtered call by definition cannot. Returns
+ *  does *not* recognize; a VID/PID-filtered call by definition cannot. Returns
  *  [] when deckbridge-native is unavailable. */
 export function listAllHidDevices(): HidDeviceInfo[] {
   _hidEnumLib ??= loadHidEnum();
