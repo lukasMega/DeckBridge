@@ -1,6 +1,6 @@
 /** Generic USB HID worker message protocol. */
 import type { KeyState, CommEntry, ImageModeOverride } from './types.js';
-import type { DeviceModelId, DeviceImageSpec } from './devices/driver.js';
+import type { DeviceModelId, DeviceImageSpec, DeviceModelOverride } from './devices/driver.js';
 import type { LogLevel } from './logger.js';
 
 export type WorkerComm = Omit<CommEntry, 'ts'>;
@@ -9,7 +9,16 @@ export type MainToWorker =
   // `hidPath` targets a SPECIFIC unclaimed HID interface (multi-device: two
   // units of the same model). Absent → the driver enumerates + opens the first
   // usage-matched path itself (primary probe).
-  | { type: 'open'; modelId: DeviceModelId; hidPath?: string }
+  // `overrides` is the user's device tuning for this model (settings.json
+  // modelOverrides). The whole effective model is deliberately NOT sent: the
+  // worker keeps sourcing driverKind/VID/PID from its own registry, so no
+  // override can smuggle in a different driver, and the message stays small.
+  | {
+      type: 'open';
+      modelId: DeviceModelId;
+      hidPath?: string;
+      overrides?: DeviceModelOverride;
+    }
   // Raw CORA image: the worker transforms (resize/rotate/encode) + caches it,
   // then writes it to the device. Off the main thread so the 50–200 ms FFI
   // transform never stalls the CORA ACK loop (see P1).
@@ -24,6 +33,10 @@ export type MainToWorker =
   | { type: 'setBrightness'; level: number }
   | { type: 'clearKey'; keyIndex: number }
   | { type: 'setImageOverride'; mode: ImageModeOverride }
+  // Runtime log-level change (WebUI "Debug logging"). Without this the USB
+  // worker — where the interesting device traffic is — stays at its spawn-time
+  // level while the main thread switches to debug.
+  | { type: 'setLogLevel'; level: string }
   | { type: 'close' };
 
 export type WorkerToMain =

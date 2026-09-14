@@ -8,6 +8,8 @@ import type {
   ClientApp,
 } from '../../types.js';
 import type { PluginStatus } from '../../plugin-host.js';
+import type { DeviceOverridesView } from './model-overrides-controller.js';
+import type { DiagnosticsOptions } from './diagnostics.js';
 
 /** Payload for GET /api/plugins — the extra-key plugin widget's WebUI data:
  *  the plugins dir (for the empty-state hint), the *.js files found there
@@ -61,6 +63,11 @@ export interface KeyEventEntry {
   ts: number;
   mk2Index: number;
   state: KeyState;
+  /** Raw device wire id the press arrived on, before keyMap translation.
+   *  Absent for models with no input keyMap (identity) and in mock mode. This is
+   *  what key-map learn mode records to derive `wireInputToCora` on hardware —
+   *  the mapped index alone can't, since a wrong map is the thing being fixed. */
+  wireId?: number;
 }
 
 export interface DeviceModelInfo {
@@ -106,6 +113,11 @@ export interface StateResponse extends StatusSnapshot {
   realDeviceIdentity?: RealDeviceIdentity;
   // The SELECTED dock's extra-key assignments, keyed by device wire id.
   extraKeys: Record<string, ExtraKeyConfig>;
+  /** Log level currently in effect (not merely the persisted one) + where the
+   *  log file lives — both surfaced under Settings so a reporter can turn on
+   *  debug logging and find the file. */
+  logLevel: string;
+  logFilePath: string;
 }
 
 /**
@@ -134,4 +146,14 @@ export interface WebUIController {
   getSettingsJson(): string;
   applySettingsJson(raw: string): void;
   openSettingsFile(): Promise<void>;
+  trySetLogLevel(level: unknown): { error: string; status: number } | null;
+  openLogsFolder(): Promise<void>;
+  deviceOverridesView(modelId?: unknown): DeviceOverridesView | { error: string; status: number };
+  trySetModelOverride(
+    modelId: unknown,
+    overrides: unknown,
+  ): { error: string; status: number } | null;
+  tryResetModelOverride(modelId: unknown): { error: string; status: number } | null;
+  buildDiagnosticsReport(opt?: DiagnosticsOptions): Promise<string>;
+  saveDiagnosticsReport(opt?: DiagnosticsOptions): Promise<string | null>;
 }

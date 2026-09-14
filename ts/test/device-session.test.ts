@@ -1,6 +1,6 @@
 import assert from 'tjs:assert';
 import { EventEmitter } from '../src/platform/events-shim.js';
-import { DeviceSession, sessionIdentity } from '../src/device-session.js';
+import { DeviceSession, sessionIdentity, wireCommonDriverEvents } from '../src/device-session.js';
 import type { SessionServers } from '../src/device-session.js';
 import { generateDeviceIdentity } from '../src/device-identity.js';
 import { DEFAULT_MODEL } from '../src/devices/registry.js';
@@ -242,6 +242,43 @@ await test('key event translates via keymap and reaches childServer.sendKeyEvent
     driver.emit('key', { keyIndex: droppedWire, state: 'down' });
     assert.equal(childServer.sendKeyEventCalls.length, 1, 'dropped key produces no sendKeyEvent');
   }
+});
+
+await test('wireCommonDriverEvents reports the raw wire id alongside the mk2 index', () => {
+  // Key-map learn mode derives wireInputToCora from these raw codes — the mapped
+  // index alone cannot, since a wrong map is exactly what it is there to fix.
+  const driver = new EventEmitter() as unknown as WorkerHidDriver;
+  const seen: Array<{ mk2Index: number; wireId: number | undefined }> = [];
+  wireCommonDriverEvents(driver, MIRABOX_293S_MODEL, {
+    onKey: (mk2Index, _state, wireId) => seen.push({ mk2Index, wireId }),
+    onReinit: () => undefined,
+  });
+
+  const wireInputToCora = MIRABOX_293S_MODEL.keyMap.wireInputToCora;
+  assert.ok(wireInputToCora != null, '293S declares wireInputToCora');
+  const validWire = wireInputToCora!.findIndex((v) => v >= 0);
+  driver.emit('key', { keyIndex: validWire, state: 'down' });
+
+  assert.equal(seen.length, 1, 'one dispatch');
+  assert.equal(seen[0]?.wireId, validWire, 'raw wire id passed through untranslated');
+  assert.equal(
+    seen[0]?.mk2Index,
+    deviceInputToMk2Index(validWire, MIRABOX_293S_MODEL),
+    'mk2 index still translated',
+  );
+});
+
+await test('an identity-mapped model reports no wire id', () => {
+  // DEFAULT_MODEL (MK.2) has no input keyMap: the wire code IS the mk2 index, so
+  // there is nothing for learn mode to derive and the field stays absent.
+  const driver = new EventEmitter() as unknown as WorkerHidDriver;
+  const seen: Array<number | undefined> = [];
+  wireCommonDriverEvents(driver, DEFAULT_MODEL, {
+    onKey: (_mk2Index, _state, wireId) => seen.push(wireId),
+    onReinit: () => undefined,
+  });
+  driver.emit('key', { keyIndex: 3, state: 'down' });
+  assert.deepEqual(seen, [undefined]);
 });
 
 await test('image event reaches driver.renderCoraImage', async () => {

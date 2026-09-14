@@ -46,3 +46,20 @@ export function mergeMockConfig(config: MockDeviceConfig, parsed: Partial<MockDe
     config.macAddress = parsed.macAddress;
   }
 }
+
+/** Guard for POST /api/key/:n. Key simulation is a mock-mode affordance: with a
+ *  real device attached the press must come from the hardware, or the WebUI
+ *  would silently diverge from what the device reports. */
+export function validateSimulatedKey(
+  n: number,
+  keyCount: number,
+  driverMode: 'real' | 'mock',
+): { error: string; status: number } | null {
+  if (n < 0 || n >= keyCount) {
+    return { error: `key index must be 0–${keyCount - 1}`, status: 400 };
+  }
+  if (driverMode !== 'mock') {
+    return { error: 'key simulation only available in mock mode', status: 409 };
+  }
+  return null;
+}

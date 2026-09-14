@@ -47,13 +47,26 @@ body:
     validations:
       required: true
   - type: textarea
-    id: logs
+    id: diagnostics
     attributes:
-      label: Relevant logs / output
-      description: Console output or errors. Quote verbatim.
+      label: Diagnostics report
+      description: >-
+        Paste the output of `./deckbridge diagnose` (or use **Settings → Create
+        diagnostics report** in the web UI). Run it with the device connected.
+
+
+        **Turn on debug logging first** — web UI Settings → *Debug logging*, or
+        `./deckbridge --log-level debug` — then reproduce the problem, then generate
+        the report. If DeckBridge freezes before the web UI starts, `./deckbridge
+        diagnose` still works: it runs before any server or device is opened.
+
+
+        The report includes your settings, extra-key commands and local paths. Review
+        it before posting, or re-run with `--redact-commands` to omit commands. See
+        [Troubleshooting](https://deckbridge.dev/docs/troubleshooting).
       render: shell
     validations:
-      required: false
+      required: true
   - type: input
     id: os
     attributes:

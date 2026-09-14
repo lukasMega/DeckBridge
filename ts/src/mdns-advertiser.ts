@@ -76,6 +76,9 @@ export class MdnsAdvertiser {
       const txtKv = Object.entries(txt)
         .map(([k, v]) => `${k}=${v}`)
         .join('\n');
+      // Breadcrumb before the blocking dlopen+call, not just after: if this is
+      // where startup wedges, the "▶" line is the last thing in the log file.
+      this.log('info', `▶ mdns advertise (native) ${this.serviceName}:${this.port}`);
       if (mdnsAdvertiseStart(this.serviceName, serviceType, this.port, txtKv)) {
         this.usingNative = true;
         this.log(

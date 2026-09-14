@@ -79,3 +79,15 @@ export const FALLBACK_PORT_ATTEMPTS = 5;
 export function pickFallbackPort(): number {
   return FALLBACK_PORT_MIN + Math.floor(Math.random() * FALLBACK_PORT_RANGE); // eslint-disable-line sonarjs/pseudo-random
 }
+
+/** `preferred` if free, else the first free random high port within
+ *  FALLBACK_PORT_ATTEMPTS tries — else `preferred` anyway, letting tjs.serve
+ *  report the real bind error. */
+export async function resolveListenPort(preferred: number): Promise<number> {
+  if (!(await isPortInUse(preferred))) return preferred;
+  for (let attempt = 0; attempt < FALLBACK_PORT_ATTEMPTS; attempt++) {
+    const candidate = pickFallbackPort();
+    if (!(await isPortInUse(candidate))) return candidate;
+  }
+  return preferred;
+}

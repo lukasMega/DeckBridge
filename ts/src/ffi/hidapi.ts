@@ -122,6 +122,7 @@ interface HidEnumSymbols {
     buf: Uint8Array,
     bufLen: number,
   ): number;
+  mirabox_hid_list_all(buf: Uint8Array, bufLen: number): number;
 }
 
 // Cached deckbridge-native handle, kept open for the process lifetime: dlclose() churn
@@ -152,6 +153,10 @@ function loadHidEnum(): { symbols: HidEnumSymbols; close(): void } | null {
       },
       mirabox_hid_list_paths: {
         args: [UINT16, UINT16, UINT16, UINT16, BUFFER, SIZE_T],
+        returns: INT,
+      },
+      mirabox_hid_list_all: {
+        args: [BUFFER, SIZE_T],
         returns: INT,
       },
     }) as unknown as { symbols: HidEnumSymbols; close(): void };
@@ -244,6 +249,63 @@ export function hidSerialForPath(hidPath: string): string | null {
   } catch (e) {
     warn('ffi', `mirabox_hid_serial_for_path threw: ${String(e)}`);
     return null;
+  }
+}
+
+/** One row of the unfiltered HID enumeration (see listAllHidDevices). */
+export interface HidDeviceInfo {
+  vendorId: number;
+  productId: number;
+  usagePage: number;
+  usage: number;
+  interfaceNumber: number;
+  manufacturer: string;
+  product: string;
+  serial: string;
+  path: string;
+}
+
+// A machine with several composite HID devices can enumerate well over a hundred
+// interfaces; 128 KB holds ~600 rows before the native side truncates cleanly.
+const LIST_ALL_BUF_BYTES = 128 * 1024;
+
+function parseHidRow(line: string): HidDeviceInfo | null {
+  const f = line.split('\t');
+  if (f.length !== 9) return null;
+  return {
+    vendorId: parseInt(f[0]!, 16),
+    productId: parseInt(f[1]!, 16),
+    usagePage: parseInt(f[2]!, 16),
+    usage: parseInt(f[3]!, 16),
+    interfaceNumber: Number(f[4]),
+    manufacturer: f[5]!,
+    product: f[6]!,
+    serial: f[7]!,
+    path: f[8]!,
+  };
+}
+
+/** EVERY connected HID interface — no VID/PID filter, enumeration only (never
+ *  hid_open). The diagnostics bundle uses this to show the devices DeckBridge
+ *  does *not* recognize; a VID/PID-filtered call by definition cannot. Returns
+ *  [] when deckbridge-native is unavailable. */
+export function listAllHidDevices(): HidDeviceInfo[] {
+  _hidEnumLib ??= loadHidEnum();
+  const lib = _hidEnumLib;
+  if (!lib) return [];
+  try {
+    const buf = new Uint8Array(LIST_ALL_BUF_BYTES);
+    const count = lib.symbols.mirabox_hid_list_all(buf, buf.length);
+    if (count <= 0) return [];
+    const end = buf.indexOf(0);
+    const text = new TextDecoder().decode(buf.subarray(0, end >= 0 ? end : buf.length));
+    return text
+      .split('\n')
+      .map(parseHidRow)
+      .filter((d): d is HidDeviceInfo => d !== null);
+  } catch (e) {
+    warn('ffi', `mirabox_hid_list_all threw: ${String(e)}`);
+    return [];
   }
 }
 

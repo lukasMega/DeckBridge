@@ -510,6 +510,20 @@ Run with `DECKBRIDGE_MOCK=0` and a real device connected. Push a known asymmetri
 Rotations apply CW before flips. If splash images need a different orientation than live
 frames (some hardware does), set `splash.transformOverride` rather than changing `image`.
 
+:::tip[Calibrate on hardware, then upstream]
+
+You do **not** need a rebuild per guess, and neither does a reporter who owns hardware
+you don't. The web UI's **Settings → Device tuning** panel changes `image.rotate` /
+`flipH` / `flipV` / size / quality at runtime and reconnects the device, so a full
+rotate-flip sweep takes a minute instead of a release cycle.
+
+When the values are right, hit **Copy overrides as JSON** and paste them into the
+model's `DeviceModel` here — the registry is the ground truth, and runtime tuning is
+scaffolding on the way to it. See
+[Device tuning](./troubleshooting.md#device-tuning).
+
+:::
+
 ---
 
 ## Phase 5 — measure key index mappings on hardware
@@ -523,6 +537,22 @@ If you started with an empty `keyMap` (identity), verify it now:
 
 For an N-key device with N > 15, pick which keys map to "keys 0–14" and set `-1` for
 unused physical keys in `wireInputToCora`.
+
+:::tip[Let learn mode derive it]
+
+Reading indices out of the comm panel by hand is slow and easy to get wrong — and a
+wrong map is precisely what makes a device *feel* broken (images on one key, presses
+from another). **Settings → Device tuning → Key-map learn mode** walks the grid position
+by position, records the raw wire code each physical key reports, and derives
+`wireInputToCora` from that. Its **Copy for a registry PR** button emits exactly the
+array to paste into the `DeviceModel` above.
+
+Note the two directions are independent: an image map (`coraToWireImage`) and an input
+map (`wireInputToCora`/`inputOffset`) that disagree is a real and easy-to-miss bug —
+images land on one key while presses come from another. If you set one explicitly,
+check the other matches.
+
+:::
 
 ---
 
@@ -540,6 +570,8 @@ unused physical keys in `wireInputToCora`.
 [ ] mise run beforeCommit passes (format + lint + types + test + compile)
 [ ] Image orientation verified on hardware (image.rotate/flipH/flipV, splash.transformOverride)
 [ ] Key mappings verified on hardware (keyMap.coraToWireImage / wireInputToCora / offsets)
+[ ] Image and input key maps agree in direction (a flip in one needs the matching flip in the other)
+[ ] Runtime tuning used for calibration has been baked back into the DeviceModel
 [ ] Elgato software / Companion connects and receives key events
 ```
 
@@ -558,6 +590,11 @@ unused physical keys in `wireInputToCora`.
 
 **Multiple devices detected as the same model** → make `usbProductIds` a precise list;
 overlapping PIDs need separate model entries with specific PIDs.
+
+**Images land on the wrong key relative to touch** → the image and input directions are
+resolved separately, so a row-flipped `coraToWireImage` paired with an identity
+`inputOffset` puts the picture on one key and the press on another. Derive both on
+hardware (learn mode covers the input side) rather than assuming one implies the other.
 
 **hid_write always returns -1** → the report must be `pktSize + 1` bytes with report ID
 `0x00` at index 0; check `_write()` prepends it.

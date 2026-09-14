@@ -9,6 +9,7 @@ import { log } from './logger.js';
 import { defaultCacheRoot } from './native-libs.js';
 import { SERIAL_KEY_PREFIX } from './device-identity.js';
 import type { ExtraKeyConfig, ImageModeOverride } from './types.js';
+import type { DeviceModelId, DeviceModelOverride } from './devices/driver.js';
 
 /** One physical device's persisted state, keyed by device-identity.ts's
  *  deviceKeyFor() (v1: the HID path). Holds both the stable identity
@@ -30,9 +31,25 @@ export interface DeviceIdentitySettings {
   extraKeys?: Record<string, ExtraKeyConfig>;
 }
 
+/** Persisted log level. Precedence (documented in cli.ts's usage text and
+ *  docs/troubleshooting.md): CLI flag > DECKBRIDGE_LOG_LEVEL > settings.json >
+ *  build-time `__LOG_LEVEL__`. */
+export type PersistedLogLevel = 'debug' | 'info' | 'warn' | 'error' | 'silent';
+
 export interface Settings {
   selectedDock?: number;
+  logLevel?: PersistedLogLevel;
   devices?: DeviceIdentitySettings[];
+  /** Per-MODEL device tuning (rotation/flip/size/quality/keyMap — see
+   *  devices/model-overrides.ts), keyed by model id.
+   *
+   *  Keyed by model id rather than by `deviceKey` on purpose: deviceKeyFor()
+   *  needs the device's serial, which is only known AFTER open() succeeds, but
+   *  image/wire/keyMap must already be correct for that first open and first
+   *  splash. It also matches the intent — these are calibration values for an
+   *  untested board, destined to be upstreamed into the registry, not per-unit
+   *  taste. Per-unit settings (brightness/imageMode) stay in devices[]. */
+  modelOverrides?: Record<DeviceModelId, DeviceModelOverride>;
 }
 
 const SETTINGS_FILE = 'settings.json';

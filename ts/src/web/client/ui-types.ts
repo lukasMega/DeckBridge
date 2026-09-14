@@ -101,6 +101,70 @@ export interface KeyEvent {
   ts: number;
   mk2Index: number;
   state: 'up' | 'down';
+  /** Raw device wire id, pre-keyMap. Absent for identity-mapped models and in
+   *  mock mode — key-map learn mode (keymap-learn.tsx) needs it to derive a
+   *  correct map on hardware. */
+  wireId?: number;
+}
+
+/** Tunable subset of a DeviceModel — mirrors server-side DeviceModelOverride
+ *  (devices/driver.ts, see the boundaries note at the top of this file). Only
+ *  the fields the Device tuning form exposes are typed here. */
+export interface DeviceImageOverride {
+  rotate?: 0 | 90 | 180 | 270;
+  flipH?: boolean;
+  flipV?: boolean;
+  width?: number;
+  height?: number;
+  quality?: number;
+  maxBytes?: number;
+  blur?: number;
+  sharpen?: number;
+  crop?: number;
+  resizeFilter?: 'triangle' | 'nearest' | 'lanczos3';
+  resizeMode?: 'resize' | 'pad';
+  padFill?: 'black' | 'average' | 'edge';
+  transform?: 'passthrough' | 'sidecar';
+}
+
+/** `effective.image`: every tunable field, plus the protocol facts the device
+ *  reports but no override may set. */
+export interface DeviceEffectiveImage extends DeviceImageOverride {
+  format?: 'jpeg' | 'bmp';
+  colorMode?: 'rgb' | 'bgr';
+  bmpPpm?: number;
+}
+
+export interface DeviceKeyMapOverride {
+  coraToWireImage?: number[];
+  wireInputToCora?: number[];
+  inputOffset?: number;
+  imageOffset?: number;
+  extraKeys?: number[];
+}
+
+export interface DeviceModelOverride {
+  image?: DeviceImageOverride;
+  keyMap?: DeviceKeyMapOverride;
+  wire?: Record<string, number | boolean>;
+  splash?: unknown;
+}
+
+/** GET /api/device-overrides payload. */
+export interface DeviceOverridesView {
+  modelId: string;
+  modelName: string;
+  defaults: DeviceModelOverride;
+  overrides: DeviceModelOverride;
+  /** True when started with `--no-overrides`: tuning is stored but not in force. */
+  safeMode?: boolean;
+  /** Full effective spec — DISPLAY ONLY. Deliberately NOT typed as
+   *  DeviceImageOverride: it carries the non-tunable protocol facts
+   *  (`format`, `colorMode`, `bmpPpm`) as well, and posting those back is
+   *  rejected by the server. Seed the form from `tunable`. */
+  effective: { image: DeviceEffectiveImage; keyMap: DeviceKeyMapOverride };
+  /** `effective` projected to the settable fields — what the form seeds from. */
+  tunable: DeviceModelOverride;
 }
 export interface ServerLog {
   ts: number;

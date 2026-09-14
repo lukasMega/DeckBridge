@@ -6,11 +6,20 @@ import { useEffect, useRef, useState } from 'preact/hooks';
 // "Copy All"), so an error that never cleared would erase that caption for good.
 const STATUS_DWELL_MS = 1500;
 
+export type CopyStatus = 'idle' | 'copied' | 'error';
+
+/** Button caption for a copy action: the transient outcome, else `idle`. */
+export function copyLabel(status: CopyStatus, idle: string): string {
+  if (status === 'copied') return 'Copied';
+  if (status === 'error') return 'Copy failed';
+  return idle;
+}
+
 export function useCopyText(): {
-  status: 'idle' | 'copied' | 'error';
+  status: CopyStatus;
   copy: (text: string) => Promise<void>;
 } {
-  const [status, setStatus] = useState<'idle' | 'copied' | 'error'>('idle');
+  const [status, setStatus] = useState<CopyStatus>('idle');
   const timerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const requestRef = useRef(0);
 

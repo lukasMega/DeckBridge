@@ -3,21 +3,18 @@ import { Broadcaster } from './broadcaster.js';
 import { matchRoute } from './router.js';
 import { routes } from './routes.js';
 import { forbidden, notFound } from './http.js';
-import { DEFAULT_MODEL } from '../../devices/registry.js';
 import type { DeviceIdentitySettings } from '../../settings-store.js';
 import { ExtraKeysController } from './extra-keys-controller.js';
 import { ImageChannel } from './image-channel.js';
 import type { ImageFormat, DockFrame } from './image-channel.js';
 import { SettingsIdentityController } from './settings-identity-controller.js';
+import { ModelOverridesController } from './model-overrides-controller.js';
+import type { DeviceOverridesView } from './model-overrides-controller.js';
+import type { DeviceModelOverride } from '../../devices/driver.js';
 import { DockRegistry } from './dock-registry.js';
-import {
-  FALLBACK_PORT_ATTEMPTS,
-  isAllowedWebRequest,
-  isPortInUse,
-  pickFallbackPort,
-} from './web-request-guard.js';
+import { isAllowedWebRequest, resolveListenPort } from './web-request-guard.js';
 import { ActivityBuffers } from './activity-buffers.js';
-import { defaultMockConfig, mergeMockConfig } from './mock-config.js';
+import { defaultMockConfig, mergeMockConfig, validateSimulatedKey } from './mock-config.js';
 import { PersistedSettings } from './persisted-settings.js';
 import type {
   DeviceModelInfo,
@@ -38,7 +35,13 @@ import type {
   DockStatus,
   ClientApp,
 } from '../../types.js';
-import { WEBUI_PORT, webuiBindAddr, DEFAULT_BRIGHTNESS_OVERRIDE } from '../../types.js';
+import { WEBUI_PORT, webuiBindAddr } from '../../types.js';
+import { StatusPublisher } from './status-publisher.js';
+import { buildStateResponse } from './state-response.js';
+import { LoggingController } from './logging-controller.js';
+import { DevicePrefsController } from './device-prefs-controller.js';
+import { liveDiagnosticsInputs } from './diagnostics-sources.js';
+import type { DiagnosticsOptions } from './diagnostics.js';
 
 export { isAllowedWebRequest, isValidMacAddress, pickFallbackPort } from './web-request-guard.js';
 
@@ -52,6 +55,9 @@ export class WebUIServer extends EventEmitter implements WebUIController {
   private readonly dockRegistry: DockRegistry;
   private readonly extraKeys: ExtraKeysController;
   private readonly settingsIdentity: SettingsIdentityController;
+  private readonly modelOverrides: ModelOverridesController;
+  private readonly logging: LoggingController;
+  private readonly devicePrefs: DevicePrefsController;
   private readonly imageChannel = new ImageChannel(this.bus, () => this.selectedDock);
 
   get imageState(): Map<number, Buffer> {
@@ -64,51 +70,28 @@ export class WebUIServer extends EventEmitter implements WebUIController {
     return this.dockRegistry.selectedDock;
   }
   resizeEnabled = true;
-  // brightness/brightnessOverride/imageModeOverride live per-device in settings.devices[]; these two are the runtime-only fallback with no deviceKey (mock/pre-connect) — never persisted.
-  private runtimeBrightnessOverride = DEFAULT_BRIGHTNESS_OVERRIDE;
-  private runtimeImageModeOverride: ImageModeOverride = null;
 
-  /** brightnessOverride of the SELECTED dock (WebUI toggle). */
+  // brightness/brightnessOverride/imageModeOverride live per-device in
+  // settings.devices[] — see device-prefs-controller.ts.
   get brightnessOverride(): boolean {
-    return this.isBrightnessOverride(this.dockRegistry.selectedDeviceKey());
+    return this.devicePrefs.brightnessOverride;
   }
-  /** Per-device brightnessOverride — read by DriverManager/DeviceSession's Elgato-brightness ignore (per dock). */
   isBrightnessOverride(deviceKey: string): boolean {
-    const e = this.settings.entryFor(deviceKey);
-    return e
-      ? (e.brightnessOverride ?? DEFAULT_BRIGHTNESS_OVERRIDE)
-      : this.runtimeBrightnessOverride;
+    return this.devicePrefs.isBrightnessOverride(deviceKey);
   }
   /** Same, by dock index (app.ts's Elgato→primary brightness gate). */
   isBrightnessOverrideForDock(index: number): boolean {
-    return this.isBrightnessOverride(this.dockRegistry.deviceKeyFor(index));
+    return this.devicePrefs.isBrightnessOverride(this.dockRegistry.deviceKeyFor(index));
   }
-  /** imageModeOverride of the SELECTED dock; null = model default. */
   get imageModeOverride(): ImageModeOverride {
-    const e = this.settings.entryFor(this.dockRegistry.selectedDeviceKey());
-    return e ? (e.imageModeOverride ?? null) : this.runtimeImageModeOverride;
+    return this.devicePrefs.imageModeOverride;
   }
 
-  /** Scalar state mirrored 1:1 into the status snapshot. */
-  private readonly status = {
-    driverMode: 'real' as DriverMode,
-    driverConnected: false,
-    elgatoConnected: false,
-    elgatoRemoteAddr: null as string | null,
-    clientApp: 'unknown' as ClientApp,
-    modelId: DEFAULT_MODEL.id,
-    modelName: DEFAULT_MODEL.name,
-    keyCount: DEFAULT_MODEL.keyCount,
-    columns: DEFAULT_MODEL.columns,
-    rows: DEFAULT_MODEL.rows,
-    elgatoAppRunning: false,
-    elgatoDevicePresent: false,
-    localIp: '127.0.0.1',
-  };
+  private readonly status: StatusPublisher;
   private readonly stats: Stats = { uptimeMs: 0, elgatoRxPkts: 0, elgatoTxPkts: 0, imagesSent: 0 };
   private readonly startTime = Date.now();
   setLocalIp(ip: string): void {
-    this.status.localIp = ip;
+    this.status.setLocalIp(ip);
   }
   private _port: number;
   get port(): number {
@@ -121,14 +104,31 @@ export class WebUIServer extends EventEmitter implements WebUIController {
     port = WEBUI_PORT,
     deviceModels: DeviceModelInfo[] = [],
     initialDriverMode: DriverMode = 'real',
-    settingsCacheRoot?: string,
+    private readonly settingsCacheRoot?: string,
   ) {
     super();
     this._port = port;
     this.deviceModels = deviceModels;
-    this.status.driverMode = initialDriverMode;
     this.settings = new PersistedSettings(settingsCacheRoot);
     this.dockRegistry = new DockRegistry(this.settings);
+    this.status = new StatusPublisher(
+      () => ({
+        brightness: this.dockRegistry.selectedBrightness(),
+        imageModeOverride: this.imageModeOverride,
+        docks: this.dockRegistry.list(),
+        selectedDock: this.selectedDock,
+      }),
+      (event, payload) => this.bus.broadcast(event, payload),
+      initialDriverMode,
+    );
+    this.devicePrefs = new DevicePrefsController(
+      this.settings,
+      () => this.dockRegistry.selectedDeviceKey(),
+      () => this.selectedDock,
+      () => this.dockRegistry.selectedBrightness(),
+      (event, payload) => this.bus.broadcast(event, payload),
+      (event, ...args) => this.emit(event, ...args),
+    );
     this.extraKeys = new ExtraKeysController(
       this.settings,
       this.bus,
@@ -137,6 +137,7 @@ export class WebUIServer extends EventEmitter implements WebUIController {
       (event, ...args) => this.emit(event, ...args),
     );
     this.settingsIdentity = new SettingsIdentityController(
+      (level) => this.trySetLogLevel(level),
       this.settings,
       () => this.status.driverMode,
       () => this.mockConfig,
@@ -148,22 +149,62 @@ export class WebUIServer extends EventEmitter implements WebUIController {
       () => this.broadcastSelectedDeviceState(),
       (event, ...args) => this.emit(event, ...args),
     );
+    this.modelOverrides = new ModelOverridesController(
+      this.settings,
+      () => this.status.modelId,
+      (event, ...args) => this.emit(event, ...args),
+    );
+    this.logging = new LoggingController(
+      this.settings,
+      () =>
+        liveDiagnosticsInputs({
+          cacheRoot: this.settingsCacheRoot,
+          logPath: this.logFilePath(),
+          logLevel: this.logLevel(),
+          uptimeMs: Date.now() - this.startTime,
+          overrides: this.modelOverrides,
+          state: this.fullState(),
+          activity: this.activity,
+          settingsJson: this.getSettingsJson(),
+        }),
+      (event, payload) => this.bus.broadcast(event, payload),
+      (event, ...args) => this.emit(event, ...args),
+    );
+  }
+
+  // Device tuning (model overrides) — see devices/model-overrides.ts
+
+  /** Read by DriverManager at probe time; undefined = registry defaults. */
+  modelOverrideFor(modelId: string): DeviceModelOverride | undefined {
+    return this.modelOverrides.overrideFor(modelId);
+  }
+
+  /** Every persisted override, for the diagnostics bundle's loud section. */
+  allModelOverrides(): Record<string, DeviceModelOverride> {
+    return this.modelOverrides.all();
+  }
+
+  deviceOverridesView(modelId?: unknown): DeviceOverridesView | ReqError {
+    return this.modelOverrides.view(modelId);
+  }
+
+  trySetModelOverride(modelId: unknown, overrides: unknown): ReqError | null {
+    return this.modelOverrides.trySet(modelId, overrides);
+  }
+
+  tryResetModelOverride(modelId: unknown): ReqError | null {
+    return this.modelOverrides.tryReset(modelId);
   }
 
   // `listen = false` (--no-webui): settings still load (identity/brightness/extra-keys must work
   // headless too), but the HTTP/WS listener + broadcast timers never start — notify*/log/snapshot become no-ops.
   async start(listen = true): Promise<void> {
     await this.settings.load(); // direct load — no broadcasts/hardware events fire before anything listens
+    // app.ts already applied the persisted level before startup (it re-reads
+    // settings.json to get it in force from the first log line); this only
+    // mirrors the resolved value for /api/state.
     if (!listen) return;
-    if (await isPortInUse(this._port)) {
-      for (let attempt = 0; attempt < FALLBACK_PORT_ATTEMPTS; attempt++) {
-        const candidate = pickFallbackPort();
-        if (!(await isPortInUse(candidate))) {
-          this._port = candidate;
-          break;
-        }
-      }
-    }
+    this._port = await resolveListenPort(this._port);
     this.server = tjs.serve({
       port: this._port,
       listenIp: webuiBindAddr(),
@@ -191,8 +232,9 @@ export class WebUIServer extends EventEmitter implements WebUIController {
     return this.bus.size > 0;
   }
 
-  notifyKeyEvent(mk2Index: number, state: KeyState): void {
-    this.activity.keyEvent(mk2Index, state);
+  /** `wireId` (raw device code, pre-keyMap) is what key-map learn mode records. */
+  notifyKeyEvent(mk2Index: number, state: KeyState, wireId?: number): void {
+    this.activity.keyEvent(mk2Index, state, wireId);
   }
 
   notifyComm(entry: Omit<CommEntry, 'ts'>): void {
@@ -207,13 +249,8 @@ export class WebUIServer extends EventEmitter implements WebUIController {
     this.imageChannel.notifyImageUpdate(mk2Index, data, format);
   }
 
-  notifyDockImage(
-    dock: number,
-    mk2Index: number,
-    data: Buffer,
-    format: ImageFormat = 'jpeg',
-  ): void {
-    this.imageChannel.notifyDockImage(dock, mk2Index, data, format);
+  notifyDockImage(dock: number, mk2Index: number, data: Buffer, fmt: ImageFormat = 'jpeg'): void {
+    this.imageChannel.notifyDockImage(dock, mk2Index, data, fmt);
   }
 
   dockFramesSnapshot(dock: number): Map<number, DockFrame> {
@@ -225,9 +262,9 @@ export class WebUIServer extends EventEmitter implements WebUIController {
     if (index === this.selectedDock) return;
     this.dockRegistry.selectedDock = index;
     this.imageChannel.clearLive();
-    this.broadcastStatus();
+    this.status.publish();
     // Per-device values aren't in the status snapshot — re-push the new dock's to keep slider/toggles in sync.
-    this.bus.broadcast('brightness', { level: this.dockRegistry.selectedBrightness() });
+    this.devicePrefs.broadcastBrightness(this.dockRegistry.selectedBrightness());
     this.broadcastSelectedDeviceState();
     this.settings.persist();
     this.imageChannel.replay(index);
@@ -235,13 +272,9 @@ export class WebUIServer extends EventEmitter implements WebUIController {
 
   /** Validate + apply a select-dock request from the WebUI. */
   trySelectDock(index: unknown): ReqError | null {
-    if (typeof index !== 'number' || !Number.isInteger(index) || index < 0) {
-      return { error: 'index must be a non-negative integer', status: 400 };
-    }
-    if (index !== 0 && !this.dockRegistry.has(index)) {
-      return { error: `no dock with index ${index}`, status: 404 };
-    }
-    this.selectDock(index);
+    const invalid = this.dockRegistry.validateSelect(index);
+    if (invalid) return invalid;
+    this.selectDock(index as number);
     return null;
   }
 
@@ -261,72 +294,29 @@ export class WebUIServer extends EventEmitter implements WebUIController {
     this.emit('regenPreviews', enabled);
   }
 
-  /** Store a value on the SELECTED dock's persisted entry, or (no deviceKey) a runtime-only fallback field. Shared by notifyBrightnessOverride/notifyImageMode. */
-  private mutateSelectedEntryOrRuntime(
-    mutate: (e: DeviceIdentitySettings) => void,
-    runtimeFallback: () => void,
-  ): void {
-    const e = this.settings.entryFor(this.dockRegistry.selectedDeviceKey());
-    if (e) {
-      mutate(e);
-      this.settings.persist();
-    } else {
-      runtimeFallback();
-    }
-  }
-
   notifyBrightnessOverride(enabled: boolean): void {
-    this.mutateSelectedEntryOrRuntime(
-      (e) => (e.brightnessOverride = enabled),
-      () => (this.runtimeBrightnessOverride = enabled),
-    );
-    this.bus.broadcast('brightnessOverride', { enabled });
-    // Re-assert brightness so a freshly enabled override wins over whatever Elgato last pushed.
-    if (enabled)
-      this.emit('setBrightness', this.dockRegistry.selectedBrightness(), this.selectedDock);
+    this.devicePrefs.setBrightnessOverride(enabled);
   }
 
-  /** Per-device image-mode override: store, broadcast, and let app.ts apply it via 'setImageOverride'. */
   notifyImageMode(mode: ImageModeOverride): void {
-    this.mutateSelectedEntryOrRuntime(
-      (e) => (e.imageModeOverride = mode),
-      () => (this.runtimeImageModeOverride = mode),
-    );
-    this.bus.broadcast('imageMode', { mode });
-    this.emit('setImageOverride', mode, this.selectedDock);
+    this.devicePrefs.setImageMode(mode);
   }
 
-  // Broadcast-only: brightness is persisted per-device via notifyDocks; this just pushes the slider value.
   notifyBrightness(level: number): void {
-    this.bus.broadcast('brightness', { level });
+    this.devicePrefs.broadcastBrightness(level);
   }
 
   notifyDriverStatus(mode: DriverMode, connected: boolean): void {
-    this.status.driverMode = mode;
-    this.status.driverConnected = connected;
-    this.broadcastStatus();
+    this.status.setDriverStatus(mode, connected);
   }
 
   notifyElgatoStatus(connected: boolean, remoteAddr?: string): void {
-    this.status.elgatoConnected = connected;
-    this.status.elgatoRemoteAddr = remoteAddr ?? null;
-    if (!connected) this.status.clientApp = 'unknown';
-    this.broadcastStatus();
-  }
-
-  /** Set a status field + broadcast, only if changed — shared by notifyClientApp/AppRunning/DevicePresent. */
-  private setStatusFlag<K extends 'clientApp' | 'elgatoAppRunning' | 'elgatoDevicePresent'>(
-    key: K,
-    value: (typeof this.status)[K],
-  ): void {
-    if (this.status[key] === value) return;
-    this.status[key] = value;
-    this.broadcastStatus();
+    this.status.setElgatoStatus(connected, remoteAddr);
   }
 
   /** Which CORA client (Elgato app vs Bitfocus Companion) was detected. Reset to 'unknown' on disconnect. */
   notifyClientApp(app: ClientApp): void {
-    this.setStatusFlag('clientApp', app);
+    this.status.setFlag('clientApp', app);
   }
 
   /** Push the current per-dock status list (primary + extras); deduped, since the 2s reconnect scan calls this every tick. */
@@ -336,7 +326,7 @@ export class WebUIServer extends EventEmitter implements WebUIController {
     const live = new Set(docks.map((d) => d.index));
     this.imageChannel.pruneDeadDocks(live);
     this.settings.syncDockBrightness(docks);
-    this.broadcastStatus();
+    this.status.publish();
     // Extra-key configs resolve from the (possibly changed) selected deviceKey; re-push so a replug
     // doesn't leave the client's map stale. Skipped when selectDock(0) below already covers it.
     if (this.selectedDock !== 0 && !live.has(this.selectedDock)) this.selectDock(0);
@@ -344,11 +334,11 @@ export class WebUIServer extends EventEmitter implements WebUIController {
   }
 
   notifyElgatoAppRunning(running: boolean): void {
-    this.setStatusFlag('elgatoAppRunning', running);
+    this.status.setFlag('elgatoAppRunning', running);
   }
 
   notifyElgatoDevicePresent(present: boolean): void {
-    this.setStatusFlag('elgatoDevicePresent', present);
+    this.status.setFlag('elgatoDevicePresent', present);
   }
 
   notifyStats(delta: Partial<Stats>): void {
@@ -362,30 +352,15 @@ export class WebUIServer extends EventEmitter implements WebUIController {
     columns: number;
     rows: number;
   }): void {
-    const { id: modelId, name: modelName, ...rest } = model;
-    Object.assign(this.status, { modelId, modelName, ...rest });
-    this.broadcastStatus();
+    this.status.setDeviceModel(model);
   }
 
   snapshot(): StatusSnapshot {
-    return {
-      ...this.status,
-      brightness: this.dockRegistry.selectedBrightness(),
-      imageModeOverride: this.imageModeOverride,
-      docks: this.dockRegistry.list(),
-      selectedDock: this.selectedDock,
-    };
+    return this.status.snapshot();
   }
 
-  private broadcastStatus(): void {
-    this.bus.broadcast('status', this.snapshot());
-  }
-
-  /** Push the SELECTED dock's per-device values to WS clients. */
   private broadcastSelectedDeviceState(): void {
-    this.bus.broadcast('brightnessOverride', { enabled: this.brightnessOverride });
-    this.bus.broadcast('imageMode', { mode: this.imageModeOverride });
-    this.bus.broadcast('extraKeys', { configs: this.selectedExtraKeyConfigs() });
+    this.devicePrefs.broadcastSelected(this.selectedExtraKeyConfigs());
   }
 
   private handleRequest(
@@ -406,14 +381,11 @@ export class WebUIServer extends EventEmitter implements WebUIController {
 
   // WebUIController surface consumed by the route handlers
   fullState(): StateResponse {
-    const images: Record<string, number> = {};
-    for (const [k] of this.imageState) images[String(k)] = this.imageChannel.versionFor(k);
-    return {
-      ...this.snapshot(),
-      images,
-      logs: this.activity.logs,
-      commLogs: this.activity.comms,
-      keyEvents: this.activity.keyEvents,
+    return buildStateResponse({
+      snapshot: this.snapshot(),
+      imageVersions: this.imageChannel,
+      imageKeys: this.imageState.keys(),
+      activity: this.activity,
       stats: { ...this.stats, uptimeMs: Date.now() - this.startTime },
       mockConfig: this.mockConfig,
       resizeEnabled: this.resizeEnabled,
@@ -422,7 +394,9 @@ export class WebUIServer extends EventEmitter implements WebUIController {
       deviceIdentity: this.settingsIdentity.identity(),
       realDeviceIdentity: this.dockRegistry.selectedStatus()?.realDeviceIdentity,
       extraKeys: this.selectedExtraKeyConfigs(),
-    };
+      logLevel: this.logLevel(),
+      logFilePath: this.logFilePath(),
+    });
   }
 
   // Extra keys (293S 6th column — see extra-keys.ts / extra-keys-controller.ts)
@@ -468,12 +442,8 @@ export class WebUIServer extends EventEmitter implements WebUIController {
   }
 
   trySimulateKey(n: number): ReqError | null {
-    if (n < 0 || n >= this.status.keyCount) {
-      return { error: `key index must be 0–${this.status.keyCount - 1}`, status: 400 };
-    }
-    if (this.status.driverMode !== 'mock') {
-      return { error: 'key simulation only available in mock mode', status: 409 };
-    }
+    const invalid = validateSimulatedKey(n, this.status.keyCount, this.status.driverMode);
+    if (invalid) return invalid;
     this.emit('keyPress', n);
     return null;
   }
@@ -495,5 +465,33 @@ export class WebUIServer extends EventEmitter implements WebUIController {
 
   applySettingsJson(raw: string): void {
     this.settingsIdentity.applyJson(raw);
+  }
+
+  // Logging + diagnostics (see logging-controller.ts / docs/troubleshooting.md)
+
+  trySetLogLevel(level: unknown): ReqError | null {
+    return this.logging.trySetLevel(level);
+  }
+
+  logLevel(): string {
+    return this.logging.level();
+  }
+
+  logFilePath(): string {
+    return this.logging.path();
+  }
+
+  openLogsFolder(): Promise<void> {
+    return this.logging.openFolder();
+  }
+
+  buildDiagnosticsReport(opt: DiagnosticsOptions = {}): Promise<string> {
+    return this.logging.buildReport(opt);
+  }
+
+  async saveDiagnosticsReport(opt: DiagnosticsOptions = {}): Promise<string | null> {
+    const path = await this.logging.saveReport(opt);
+    if (path === null) this.log('error', 'webui', 'diagnostics save failed');
+    return path;
   }
 }
