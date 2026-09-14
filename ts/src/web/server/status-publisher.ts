@@ -14,7 +14,7 @@ export interface SnapshotExtras {
   selectedDock: number;
 }
 
-type StatusFlag = 'clientApp' | 'elgatoAppRunning' | 'elgatoDevicePresent';
+type StatusFlag = 'clientApp' | 'elgatoAppConflict' | 'elgatoDevicePresent';
 
 export class StatusPublisher {
   private readonly status = {
@@ -28,7 +28,7 @@ export class StatusPublisher {
     keyCount: DEFAULT_MODEL.keyCount,
     columns: DEFAULT_MODEL.columns,
     rows: DEFAULT_MODEL.rows,
-    elgatoAppRunning: false,
+    elgatoAppConflict: false,
     elgatoDevicePresent: false,
     localIp: '127.0.0.1',
   };

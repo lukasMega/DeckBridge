@@ -88,7 +88,10 @@ export interface StatusSnapshot {
   keyCount: number;
   columns: number;
   rows: number;
-  elgatoAppRunning: boolean;
+  /** True when the Elgato desktop app is running AND we do not hold the device —
+   *  i.e. it is plausibly blocking us. NOT "the Elgato app is running": while
+   *  DeckBridge is connected this is always false, app running or not. */
+  elgatoAppConflict: boolean;
   /** True when an Elgato-branded device (MK.2/Mini) is enumerated on USB —
    *  independent of whether we could open it. Gates the "Elgato app is
    *  blocking access" screen so it doesn't fire for non-Elgato hardware. */

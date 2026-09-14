@@ -14,7 +14,7 @@ import { listAllHidDevicesTimed } from '../../ffi/hidapi.js';
 import { tailLogFile } from '../../log-file.js';
 import { defaultCacheRoot } from '../../native-libs.js';
 import { settingsPath } from '../../settings-store.js';
-import { openPathInOS, platformName } from '../../os-utils.ts';
+import { isElgatoAppRunning, openPathInOS, platformName } from '../../os-utils.ts';
 import { versionText } from '../../cli.js';
 
 /** Everything the report needs that only the running server knows. */
@@ -76,7 +76,11 @@ export function deckbridgeEnv(): Record<string, string> {
   );
 }
 
-function sourcesFor(live: LiveDiagnosticsInputs, logTail: string): DiagnosticsSources {
+function sourcesFor(
+  live: LiveDiagnosticsInputs,
+  logTail: string,
+  elgatoAppRunning: boolean,
+): DiagnosticsSources {
   const hidEnum = listAllHidDevicesTimed();
   return {
     header: {
@@ -86,6 +90,7 @@ function sourcesFor(live: LiveDiagnosticsInputs, logTail: string): DiagnosticsSo
       cpus: `${tjs.system.cpus.length}x ${tjs.system.cpus[0]?.model ?? '?'}`,
       uptimeMs: live.uptimeMs,
       logLevel: live.logLevel,
+      elgatoAppRunning,
     },
     env: deckbridgeEnv(),
     paths: {
@@ -116,7 +121,10 @@ export async function buildLiveDiagnostics(
   // Read the whole file and let the builder apply the line cap — the tail is the
   // one section whose length is worth bounding at render time, not at read time.
   const logTail = await tailLogFile(Number.MAX_SAFE_INTEGER, live.cacheRoot);
-  const sources = sourcesFor(live, logTail);
+  // Probed here, not read off the status snapshot: that flag is a conflict signal,
+  // forced false whenever DeckBridge holds the device (app.ts's poll) and stale
+  // whenever no WebUI client is connected. A report must say what is actually running.
+  const sources = sourcesFor(live, logTail, await isElgatoAppRunning());
   sources.requirements = await checkRequirements();
   return buildDiagnostics(sources, opt);
 }
