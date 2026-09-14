@@ -13,7 +13,7 @@ export function clientAppName(app: ClientApp | undefined): string {
 
 export function deriveState(s: Status): DeviceState {
   if (!s.driverConnected) {
-    if (s.driverMode !== 'mock' && s.elgatoAppRunning && s.elgatoDevicePresent)
+    if (s.driverMode !== 'mock' && s.elgatoAppConflict && s.elgatoDevicePresent)
       return 'no-device-elgato-conflict';
     return 'no-device';
   }

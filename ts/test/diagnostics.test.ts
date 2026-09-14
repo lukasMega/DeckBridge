@@ -54,6 +54,7 @@ function fullSources(): DiagnosticsSources {
       cpus: '10x Apple M1 Pro',
       uptimeMs: 3_725_000,
       logLevel: 'debug',
+      elgatoAppRunning: true,
     },
     flags: { mock: false, headless: true, logLevel: 'debug' },
     env: { DECKBRIDGE_NATIVE_LIB: '/opt/deckbridge/libdeckbridge_native.dylib', HIDAPI_LIB: '' },
@@ -172,6 +173,27 @@ test('header carries version, platform, txiki version, uptime and log level', ()
   assert.ok(report.includes('24.0.0'), 'txiki version');
   assert.ok(report.includes('1h 2m 5s'), 'uptime is formatted');
   assert.ok(report.includes('debug'), 'log level');
+  assert.ok(report.includes('elgato app'), 'elgato app row');
+});
+
+test('the elgato app row reports process presence, not the conflict flag', () => {
+  // The bug this fixes: the report showed `elgatoAppRunning: false` (the status
+  // flag, forced false while DeckBridge holds the device) on a machine where the
+  // Elgato app was running and paired. The header row is probed independently.
+  const src = fullSources();
+  assert.ok(buildDiagnostics(src).includes('elgato app = running'), 'running');
+  assert.ok(
+    buildDiagnostics({ ...src, header: { ...src.header, elgatoAppRunning: false } }).includes(
+      'elgato app = not running',
+    ),
+    'not running',
+  );
+  const header = { ...src.header };
+  delete header.elgatoAppRunning;
+  assert.ok(
+    buildDiagnostics({ ...src, header }).includes('elgato app = (unavailable)'),
+    'unavailable when the caller could not probe',
+  );
 });
 
 test('the unfiltered HID table includes devices DeckBridge does not recognize', () => {

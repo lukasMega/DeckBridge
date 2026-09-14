@@ -53,7 +53,7 @@ export interface Status {
   brightness?: number;
   modelId?: string;
   modelName?: string;
-  elgatoAppRunning?: boolean;
+  elgatoAppConflict?: boolean;
   elgatoDevicePresent?: boolean;
   localIp?: string;
   docks?: DockUi[];

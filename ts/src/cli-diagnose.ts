@@ -15,7 +15,7 @@ import { deckbridgeEnv } from './web/server/diagnostics-sources.js';
 import { loadSettings, settingsPath } from './settings-store.js';
 import { logFilePath, tailLogFile } from './log-file.js';
 import { currentLogLevel } from './logger.js';
-import { platformName } from './os-utils.js';
+import { isElgatoAppRunning, platformName } from './os-utils.js';
 import { versionText } from './cli.js';
 import type { CliFlags } from './cli.js';
 
@@ -32,6 +32,7 @@ export async function buildDiagnosticsReport(flags: CliFlags): Promise<string> {
         txikiVersion: tjs.version,
         cpus: `${tjs.system.cpus.length}x ${tjs.system.cpus[0]?.model ?? '?'}`,
         logLevel: currentLogLevel(),
+        elgatoAppRunning: await isElgatoAppRunning(),
       },
       flags: { ...flags },
       env: deckbridgeEnv(),
