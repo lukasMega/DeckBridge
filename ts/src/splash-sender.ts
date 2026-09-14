@@ -27,7 +27,7 @@ export function splashSpec(model: DeviceDriver['model']): DeviceImageSpec {
 }
 
 export function sendSplashImages(driver: DeviceDriver): void {
-  // Requires sendSplashImage (WorkerHidDriver) to offload the 50–200 ms
+  // Requires sendSplashImage (WorkerHidDriver) to offload the
   // synchronous FFI transform off the main thread (P1 / Finding 1).
   // MockDriver has no USB device to paint, so the absence is expected.
   if (!driver.sendSplashImage) {

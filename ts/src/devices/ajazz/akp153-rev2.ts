@@ -58,6 +58,16 @@ export const AJAZZ_AKP153E_REV2_MODEL: DeviceModel = {
   id: 'ajazz-akp153e-rev2',
   name: 'Ajazz AKP153E (rev. 2)',
   usbProductIds: [0x3010],
+  image: {
+    ...AKP153_REV2_BASE.image,
+    rotate: 90,
+  },
+  keyMap: {
+    // Confirmed on hardware in issue #67: image IDs and input codes share the
+    // same column-major namespace, so these maps are exact inverses.
+    coraToWireImage: [13, 10, 7, 4, 1, 14, 11, 8, 5, 2, 15, 12, 9, 6, 3],
+    wireInputToCora: [-1, 4, 9, 14, 3, 8, 13, 2, 7, 12, 1, 6, 11, 0, 5, 10],
+  },
 };
 
 export const AJAZZ_AKP153R_REV2_MODEL: DeviceModel = {

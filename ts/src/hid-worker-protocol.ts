@@ -20,13 +20,13 @@ export type MainToWorker =
       overrides?: DeviceModelOverride;
     }
   // Raw CORA image: the worker transforms (resize/rotate/encode) + caches it,
-  // then writes it to the device. Off the main thread so the 50–200 ms FFI
+  // then writes it to the device. Off the main thread so the FFI
   // transform never stalls the CORA ACK loop (see P1).
   | { type: 'image'; keyIndex: number; bytes: Uint8Array; format: 'jpeg' | 'bmp' }
   // Already-native bytes (pre-encoded) — written verbatim, no transform.
   | { type: 'sendImage'; keyIndex: number; bytes: Uint8Array }
   // Splash source image: the worker transforms with the provided spec (which
-  // may differ from model.image) and then writes it. Offloads the 50–200 ms
+  // may differ from model.image) and then writes it. Offloads the
   // synchronous FFI call that would otherwise stall the main thread on every
   // device connect (see P1 / Finding 1).
   | { type: 'splashImage'; keyIndex: number; bytes: Uint8Array; spec: DeviceImageSpec }

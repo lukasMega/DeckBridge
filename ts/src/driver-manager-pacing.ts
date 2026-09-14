@@ -1,11 +1,8 @@
 // Probe pacing: how often DriverManager re-runs its USB presence sweep.
 //
-// The sweep is one synchronous HID enumeration on the main thread. On Windows that
-// enumeration opens every HID interface on the machine to read its strings, and a
-// single unhappy composite device (the keyboards in issue #67.2) can make it take
-// seconds. At a fixed 2 s tick the main thread would then spend most of its life
-// enumerating — no CORA ACKs, no WebUI, which is exactly what "DeckBridge freezes
-// when this keyboard is connected" looks like from the outside.
+// The sweep runs in the dedicated HID discovery worker. On Windows, even filtered
+// enumeration can be slow around unhappy composite devices. Backoff reduces repeated
+// OS/driver load while the worker remains busy; CORA and WebUI timers stay responsive.
 //
 // So the interval adapts: double it while enumeration is slow (capped, so a deck
 // plugged in later still connects), snap back to the baseline the moment it isn't.
@@ -17,9 +14,8 @@ import { RECONNECT_DELAY_MS } from './types.js';
  *  single-digit ms. */
 export const SLOW_ENUMERATE_MS = 250;
 
-/** Ceiling for the backed-off interval. Long enough that a pathological enumeration
- *  can't starve the main thread, short enough that plugging a deck in still connects
- *  without restarting DeckBridge. */
+/** Ceiling for the backed-off interval. Long enough to reduce pathological HID traffic,
+ * short enough that plugging a deck in still connects without restarting DeckBridge. */
 export const RECONNECT_BACKOFF_MAX_MS = 30_000;
 
 /** Pure: the probe interval to use after a sweep whose enumeration took `enumerateMs`. */

@@ -14,8 +14,13 @@ exclude = ["jpeg-encoder"]
 # single [profile.release], so deckbridge-tray — which previously set panic = "abort" —
 # now also unwinds. The size/behaviour delta for the tray binary is negligible and
 # it has no FFI surface.
+#
+# opt-level = 3, not "z", despite the size focus: a profile covers the whole build
+# graph, so "z" de-vectorized `image`/`zune-jpeg`/jpeg-encoder too. 3.50 ms -> 0.91 ms
+# per image for +192 KB of dylib — only +69 KB in the shipped binary, which embeds it
+# gzip+base64'd. See rust/PERF.md before reverting.
 [profile.release]
-opt-level     = "z"
+opt-level     = 3
 lto           = true
 codegen-units = 1
 panic         = "unwind"

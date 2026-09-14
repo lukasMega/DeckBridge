@@ -91,7 +91,7 @@ a regular **Network device** at `localhost`; the deck behaves like Elgato hardwa
 - **Per-device image pipeline** — resizes, rotates, and (for the K1 Pro) re-encodes every
   button image to the device's native format via a Rust native library, with a cache
   to skip repeat work.
-- **Non-blocking by design** — USB HID and the 50–200 ms image transforms run on a
+- **Non-blocking by design** — USB HID and the image transforms run on a
   separate worker thread, so the network ACK loop and web UI never stall.
 - **Side-key widgets** — decks with display-only keys outside the grid (e.g. the 293S
   sixth column) show server-rendered clock / date / text / weather / command / plugin

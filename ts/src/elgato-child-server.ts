@@ -346,6 +346,10 @@ export class ElgatoChildServer extends CoraServerBase {
     messageId: number,
     description?: string,
   ): void {
+    const frame = encodeCoraFrame(payload, flags, hidOp, messageId);
+    // Write FIRST, then trace — matching the base class. Elgato ACK-paces image
+    // chunks, so anything ahead of the write throttles image delivery.
+    this.client?.write(frame);
     const desc =
       description ??
       describeChildPayload(
@@ -356,7 +360,6 @@ export class ElgatoChildServer extends CoraServerBase {
         this.deviceConfig.productId,
         this.port,
       );
-    const frame = encodeCoraFrame(payload, flags, hidOp, messageId);
     const msSinceConnect = this.sessionStartTs ? `+${Date.now() - this.sessionStartTs}ms` : '';
     // Per-chunk image ACKs and keepalives fire constantly during image bursts;
     // demote them to debug so they don't each become an info-level WS broadcast.
@@ -366,7 +369,6 @@ export class ElgatoChildServer extends CoraServerBase {
       isNoisy ? 'debug' : 'info',
       `child tx: ${desc} (${frame.length}B)${msSinceConnect}`,
     );
-    this.client?.write(frame);
     this.emitComm('tx', desc, frame);
   }
 }

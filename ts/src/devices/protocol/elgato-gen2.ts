@@ -2,23 +2,37 @@
  *  Image: JPEG, 1024-byte packets, 8-byte header.
  *  Input: report 0x01, input-type byte 0x00, key count (u16 LE), then states. */
 
-import { packChunks, parseButtons } from './framing.js';
+import { writeChunks, parseButtons } from './framing.js';
 
 const PACKET_SIZE = 1024;
 const HEADER_SIZE = 8;
 
-/** Split native JPEG bytes into gen2 output report buffers (each 1024 bytes). */
-export function gen2PackImage(keyIndex: number, jpegBytes: Uint8Array): Uint8Array[] {
-  return packChunks(jpegBytes, PACKET_SIZE, HEADER_SIZE, (pkt, part, isLast, bodyLen) => {
-    pkt[0] = 0x02;
-    pkt[1] = 0x07;
-    pkt[2] = keyIndex;
-    pkt[3] = isLast ? 1 : 0;
-    pkt[4] = bodyLen & 0xff;
-    pkt[5] = (bodyLen >> 8) & 0xff;
-    pkt[6] = part & 0xff;
-    pkt[7] = (part >> 8) & 0xff;
-  });
+export const GEN2_PACKET_SIZE = PACKET_SIZE;
+
+/** Split native JPEG bytes into gen2 output reports (each 1024 bytes), handing each
+ *  to `write`. `scratch` is reused for every chunk — see writeChunks. */
+export function gen2WriteImage(
+  keyIndex: number,
+  jpegBytes: Uint8Array,
+  scratch: Uint8Array,
+  write: (pkt: Uint8Array) => void,
+): void {
+  writeChunks(
+    jpegBytes,
+    scratch,
+    HEADER_SIZE,
+    (pkt, part, isLast, bodyLen) => {
+      pkt[0] = 0x02;
+      pkt[1] = 0x07;
+      pkt[2] = keyIndex;
+      pkt[3] = isLast ? 1 : 0;
+      pkt[4] = bodyLen & 0xff;
+      pkt[5] = (bodyLen >> 8) & 0xff;
+      pkt[6] = part & 0xff;
+      pkt[7] = (part >> 8) & 0xff;
+    },
+    write,
+  );
 }
 
 /** Parse gen2 input report into key states.

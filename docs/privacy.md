@@ -52,7 +52,7 @@ Everything it records stays on your machine, under the cache directory described
 
 One thing to know before sharing: the **diagnostics report** you can generate for a bug
 report includes your `settings.json` verbatim — which means your extra-key shell
-commands, plugin arguments and local file paths. But bug reports are public, so skim 
+commands, plugin arguments and local file paths. But bug reports are public, so skim
 the report before posting it, or omit the commands with
 `./deckbridge diagnose --redact-commands` / the **Hide my commands** checkbox in the web
 UI. The report's first line repeats this reminder.

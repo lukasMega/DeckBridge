@@ -41,8 +41,10 @@ export class NodeLikeSocket {
       for (;;) {
         const { done, value } = await reader.read();
         if (done) break;
-        // Wrap Uint8Array in Buffer so callers can use Buffer methods (readUInt16LE, etc.)
-        const chunk = Buffer.from(value);
+        // Wrap, don't copy: callers get Buffer methods without copying every inbound
+        // byte, and CoraFrameBuffer.append concats it away immediately. Safe because
+        // txiki allocates a fresh buffer per read. See Buffer.wrap for the caveats.
+        const chunk = Buffer.wrap(value);
         for (const cb of this._cbs.data) cb(chunk);
       }
     } catch (e) {

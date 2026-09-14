@@ -1,0 +1,86 @@
+import assert from 'tjs:assert';
+import { HidScanWorkerHost } from '../src/hid-scan-worker-host.js';
+import type { MainToHidScanWorker } from '../src/hid-scan-worker-protocol.js';
+
+let passed = 0;
+let failed = 0;
+
+async function test(name: string, fn: () => void | Promise<void>): Promise<void> {
+  try {
+    await fn();
+    console.log(`  ✓ ${name}`);
+    passed++;
+  } catch (e) {
+    console.error(`  ✗ ${name}: ${(e as Error).message}`);
+    failed++;
+  }
+}
+
+class FakeScanWorker {
+  readonly posted: MainToHidScanWorker[] = [];
+  private messageListener: ((ev: MessageEvent) => void) | null = null;
+  private errorListener: ((ev: Event) => void) | null = null;
+
+  postMessage(msg: MainToHidScanWorker): void {
+    this.posted.push(msg);
+  }
+
+  addEventListener(type: 'message' | 'error', listener: (ev: MessageEvent | Event) => void): void {
+    if (type === 'message') this.messageListener = listener;
+    else this.errorListener = listener;
+  }
+
+  finish(tookMs: number): void {
+    this.messageListener?.({
+      data: { type: 'scanResult', devices: [], tookMs },
+    } as MessageEvent);
+  }
+
+  fail(message: string): void {
+    this.errorListener?.({ message } as unknown as Event);
+  }
+}
+
+console.log('\nhid-scan-worker-host: scan serialization');
+
+await test('concurrent callers share one scan', async () => {
+  const worker = new FakeScanWorker();
+  const host = new HidScanWorkerHost(() => worker);
+  const first = host.scan();
+  const second = host.scan();
+  assert.equal(first, second);
+  assert.equal(worker.posted.length, 1);
+  worker.finish(45_263);
+  assert.equal((await first).tookMs, 45_263);
+  assert.equal((await second).tookMs, 45_263);
+});
+
+await test('completed scan permits next scan', async () => {
+  const worker = new FakeScanWorker();
+  const host = new HidScanWorkerHost(() => worker);
+  const first = host.scan();
+  worker.finish(20);
+  await first;
+  const second = host.scan();
+  assert.equal(worker.posted.length, 2);
+  worker.finish(25);
+  assert.equal((await second).tookMs, 25);
+});
+
+await test('worker failure rejects scan', async () => {
+  const worker = new FakeScanWorker();
+  const host = new HidScanWorkerHost(() => worker);
+  const scan = host.scan();
+  worker.fail('boom');
+  let error: Error | null = null;
+  try {
+    await scan;
+  } catch (e) {
+    error = e as Error;
+  }
+  assert.ok(error);
+  assert.ok(/boom/.test(error?.message ?? ''));
+});
+
+console.log(`\n${passed} passed, ${failed} failed`);
+tjs.exit(failed > 0 ? 1 : 0);

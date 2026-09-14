@@ -253,6 +253,6 @@ export interface DeviceDriver extends EventEmitter {
    *  may differ from model.image due to splash orientation overrides) and writes
    *  the native bytes to the device. Implemented only by `WorkerHidDriver`;
    *  omitted by `MockDriver` (no USB device to write to). Offloads the
-   *  50–200 ms synchronous FFI transform away from the main thread (P1). */
+   *  synchronous FFI transform and hid_write burst away from the main thread. */
   sendSplashImage?(keyIndex: number, bytes: Uint8Array, spec: DeviceImageSpec): void;
 }
