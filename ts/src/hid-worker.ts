@@ -4,12 +4,14 @@
 import type { MainToWorker, WorkerToMain } from './hid-worker-protocol.js';
 import type { ImageModeOverride, KeyEvent } from './types.js';
 import { DEVICE_MODELS } from './devices/registry.js';
-import type { DeviceModel } from './devices/driver.js';
+import type { DeviceModel, DeviceModelOverride } from './devices/driver.js';
+import { applyModelOverrides, overrideSummary } from './devices/model-overrides.js';
+import { imageCache } from './image-cache.js';
 import { ElgatoHidDriver } from './devices/hid-driver-base.js';
 import { MiraboxDriver } from './mirabox.js';
 import { renderImage } from './image-render.js';
 import { transformImageForDevice } from './translator.js';
-import { setWorkerPost } from './logger.js';
+import { setWorkerPost, setLogLevel, info } from './logger.js';
 
 const scope = globalThis as unknown as {
   postMessage(msg: WorkerToMain): void;
@@ -43,11 +45,26 @@ function createDriver(model: DeviceModel): AnyRealDriver {
   }
 }
 
-async function handleOpen(modelId: string, hidPath?: string): Promise<void> {
-  const model = DEVICE_MODELS.find((m) => m.id === modelId);
-  if (!model) {
+async function handleOpen(
+  modelId: string,
+  hidPath?: string,
+  overrides?: DeviceModelOverride,
+): Promise<void> {
+  const registryModel = DEVICE_MODELS.find((m) => m.id === modelId);
+  if (!registryModel) {
     post({ type: 'opened', ok: false, error: `Unknown modelId: ${modelId}` });
     return;
+  }
+
+  // Same pure merge the main thread ran, applied on top of OUR registry lookup —
+  // driverKind/VID/PID therefore always come from the registry, never the message.
+  const model = applyModelOverrides(registryModel, overrides);
+  // A changed image spec must not be served from entries encoded under the old
+  // one. The cache key carries a spec revision too (image-render.ts); clearing
+  // here additionally frees the stale entries instead of letting them age out.
+  imageCache.clear();
+  if (overrides) {
+    info('worker', `${model.id} opened with overrides: ${overrideSummary(overrides)}`);
   }
 
   const d = createDriver(model);
@@ -107,7 +124,7 @@ function handleSplashImage(
 async function handle(msg: MainToWorker): Promise<void> {
   switch (msg.type) {
     case 'open':
-      await handleOpen(msg.modelId, msg.hidPath);
+      await handleOpen(msg.modelId, msg.hidPath, msg.overrides);
       break;
     case 'image':
       await handleImage(msg.keyIndex, msg.bytes, msg.format);
@@ -126,6 +143,9 @@ async function handle(msg: MainToWorker): Promise<void> {
       break;
     case 'setImageOverride':
       imageOverride = msg.mode;
+      break;
+    case 'setLogLevel':
+      setLogLevel(msg.level);
       break;
     case 'close': {
       const d = driver;

@@ -1,4 +1,5 @@
-import { log } from './logger.js';
+import { log, step } from './logger.js';
+import { overridesDisabled } from './cli.js';
 import { hidDevicePresent, hidSerialForPath, listHidPaths } from './ffi/hidapi.js';
 import { WorkerHidDriver, closeDriver } from './hid-worker-host.js';
 import { MockDriver } from './devices/mock.js';
@@ -6,7 +7,8 @@ import type { KeyEvent, CommEntry, DockStatus } from './types.js';
 import { RECONNECT_DELAY_MS } from './types.js';
 import type { ElgatoServer, ElgatoChildServer } from './elgato.js';
 import type { WebUIServer } from './web/server';
-import type { DeviceDriver, DeviceModel } from './devices/driver.js';
+import type { DeviceDriver, DeviceModel, DeviceModelOverride } from './devices/driver.js';
+import { applyModelOverrides, overrideSummary } from './devices/model-overrides.js';
 import { DEVICE_MODELS, DEFAULT_MODEL } from './devices/registry.js';
 import { sendSplashImages } from './splash-sender.js';
 import { modelToChildGeometry } from './capabilities.js';
@@ -77,8 +79,10 @@ export class DriverManager {
   // Test seams (tests have no hardware/FFI) — overridden via __set* below. Presence is
   // decided up front by enumeration, never trial hid_open: opening an absent device or
   // terminating a throwaway hidapi-loaded worker segfaults on macOS (IOKit/dlclose churn).
-  private makeRealDriver: (model: DeviceModel) => WorkerHidDriver = (model) =>
-    new WorkerHidDriver(model);
+  private makeRealDriver: (model: DeviceModel, ov?: DeviceModelOverride) => WorkerHidDriver = (
+    model,
+    ov,
+  ) => new WorkerHidDriver(model, ov);
   private isModelPresent: (model: DeviceModel) => boolean = defaultPresenceCheck;
   private listModelPaths: (model: DeviceModel) => string[] = defaultListModelPaths;
 
@@ -92,7 +96,11 @@ export class DriverManager {
       sessionServersFactory: deps.sessionServersFactory ?? null,
       getRealDriver: () => this.realDriver,
       listModelPaths: (model) => this.listModelPaths(model),
-      makeRealDriver: (model) => this.makeRealDriver(model),
+      effectiveModelFor: (model) => ({
+        model: this.effectiveModel(model),
+        override: this.overrideFor(model.id),
+      }),
+      makeRealDriver: (model, ov) => this.makeRealDriver(model, ov),
       takeIdleDriver: (modelId) => {
         const d = this.idleDrivers.get(modelId);
         this.idleDrivers.delete(modelId);
@@ -132,17 +140,46 @@ export class DriverManager {
     return this.driverMode;
   }
 
+  /** Push a runtime log-level change to every live USB worker (primary, extras,
+   *  and parked idle workers). Workers spawned later inherit it from
+   *  DECKBRIDGE_LOG_LEVEL, which app.ts keeps in sync. */
+  setLogLevel(level: string): void {
+    this.realDriver?.setLogLevel(level);
+    for (const d of this.idleDrivers.values()) d.setLogLevel(level);
+    this.extraCoordinator.setLogLevel(level);
+  }
+
   getReconnectAttemptCount(): number {
     return this.reconnectAttemptCount;
   }
 
   /** Test-only: override the real-driver factory used by probeAndOpen(). */
-  __setRealDriverFactory(fn: (model: DeviceModel) => WorkerHidDriver): void {
+  __setRealDriverFactory(
+    fn: (model: DeviceModel, ov?: DeviceModelOverride) => WorkerHidDriver,
+  ): void {
     this.makeRealDriver = fn;
   }
 
   __resetRealDriverFactory(): void {
-    this.makeRealDriver = (model) => new WorkerHidDriver(model);
+    this.makeRealDriver = (model, ov) => new WorkerHidDriver(model, ov);
+  }
+
+  /** The user's device tuning for `modelId`, or undefined in safe mode
+   *  (`--no-overrides`) / when nothing is persisted. */
+  private overrideFor(modelId: string): DeviceModelOverride | undefined {
+    // Safe mode (`run --no-overrides`): a bad keyMap can make a device look dead,
+    // and the WebUI Reset button is no help if the user can't get that far. Shared
+    // with the WebUI's own view, so the panel never claims tuning the device isn't
+    // actually running.
+    if (overridesDisabled()) return undefined;
+    return this.deps.webui.modelOverrideFor(modelId);
+  }
+
+  /** Registry model + the user's tuning. Everything downstream (CORA advertise
+   *  geometry, input mapping, splash, extras) sees the effective model; the
+   *  registry itself is never mutated. */
+  private effectiveModel(model: DeviceModel): DeviceModel {
+    return applyModelOverrides(model, this.overrideFor(model.id));
   }
 
   /** Test-only: override the device-presence check used by probeAndOpen(). */
@@ -155,7 +192,13 @@ export class DriverManager {
     this.listModelPaths = fn;
   }
 
-  applyDeviceModel(model: DeviceModel, deviceInfo?: { serial?: string; firmware?: string }): void {
+  applyDeviceModel(
+    registryOrEffective: DeviceModel,
+    deviceInfo?: { serial?: string; firmware?: string },
+  ): void {
+    // Idempotent: callers pass either a bare registry model (WebUI model picker,
+    // DEFAULT_MODEL on disconnect) or an already-effective one (probe result).
+    const model = this.effectiveModel(registryOrEffective);
     this.deps.webui.resetImages();
     this.primary.model = model;
     this.primary.deviceInfo = deviceInfo;
@@ -198,9 +241,9 @@ export class DriverManager {
     driver.on('comm', (entry: Omit<CommEntry, 'ts'>) => this.deps.webui.notifyComm(entry));
     driver.on('imageSent', () => this.deps.webui.notifyStats({ imagesSent: ++this.imagesSent }));
     wireCommonDriverEvents(driver, model, {
-      onKey: (index, state) => {
+      onKey: (index, state, wireId) => {
         this.deps.childServer.sendKeyEvent(index, state);
-        this.deps.webui.notifyKeyEvent(index, state);
+        this.deps.webui.notifyKeyEvent(index, state, wireId);
       },
       onReinit: () => this.primary.repaintWidgets(),
     });
@@ -225,20 +268,31 @@ export class DriverManager {
     );
   }
 
+  /** Presence sweep = one synchronous hid_enumerate per model/PID on the main
+   *  thread. Timed as a breadcrumb: a slow enumerate is the leading suspect
+   *  when startup appears to hang (issue #67.2). */
+  private presentModels(): DeviceModel[] {
+    const t0 = Date.now();
+    const present = DEVICE_MODELS.filter((model) => this.isModelPresent(model));
+    log('debug', 'hid', `enumerate took ${Date.now() - t0}ms, ${present.length} model(s) present`);
+    return present;
+  }
+
   private async probeAndOpen(): Promise<WorkerHidDriver | null> {
-    for (const model of DEVICE_MODELS) {
-      // Only spawn a worker for a connected device — hid_open on a missing device
-      // or terminating a hidapi-loaded worker segfaults on macOS.
-      if (!this.isModelPresent(model)) continue;
+    // Only spawn a worker for a connected device — hid_open on a missing device
+    // or terminating a hidapi-loaded worker segfaults on macOS.
+    for (const model of this.presentModels()) {
       // Reuse the worker from a prior failed open (present-but-unopenable device,
       // e.g. Input Monitoring denied) — it connects the moment open() succeeds.
-      let driver = this.idleDrivers.get(model.id);
-      if (!driver) {
-        driver = this.makeRealDriver(model);
-        this.attachRealDriverListeners(driver, model);
-      }
+      const override = this.overrideFor(model.id);
+      const effective = applyModelOverrides(model, override);
+      const parked = this.idleDrivers.get(model.id);
+      const driver = parked ?? this.makeRealDriver(effective, override);
+      if (!parked) this.attachRealDriverListeners(driver, effective);
       try {
-        await driver.open();
+        await step('hid', `probe ${model.id} (overrides: ${overrideSummary(override)})`, () =>
+          driver.open(),
+        );
         this.idleDrivers.delete(model.id);
         return driver;
       } catch (e) {
@@ -311,6 +365,30 @@ export class DriverManager {
     this.deps.onDocksChanged?.();
   }
 
+  /** Device tuning changed (WebUI / settings import): close the affected
+   *  session(s) so the 2 s reconnect tick reopens them with the new spec.
+   *  image/wire/keyMap must already be correct at open() and at the first
+   *  splash, so a live patch would not do. `modelId` '' means "all models".
+   *  No-op in mock mode beyond a model re-apply — there is no worker to reopen. */
+  async reloadDeviceTuning(modelId: string): Promise<void> {
+    if (this.driverMode === 'mock') {
+      const current = this.currentDriver;
+      if (current) await this.connectMock(current.model);
+      return;
+    }
+    await this.extraCoordinator.reloadDeviceTuning(modelId);
+    const driver = this.realDriver;
+    if (!driver || (modelId && driver.model.id !== modelId)) return;
+    log('info', 'driverMgr', `reopening ${driver.model.id} to apply device tuning`);
+    this.currentDriver = null;
+    this.realDriver = null;
+    this.deps.webui.notifyDriverStatus('real', false);
+    await closeDriver(driver);
+    // The disconnect handler is detached by closeDriver, so schedule explicitly.
+    this.scheduleReconnect();
+    this.deps.onDocksChanged?.();
+  }
+
   /** WebUI extra-key config change — repaint (config resolves per tick, no re-wire). */
   repaintExtraKeysForDock(index: number): void {
     if (index === 0) this.primary.repaintWidgets();
@@ -324,7 +402,8 @@ export class DriverManager {
   }
 
   async connectMock(model?: DeviceModel): Promise<void> {
-    const m = model ?? DEFAULT_MODEL;
+    // Effective, so device tuning is previewable in mock mode without hardware.
+    const m = this.effectiveModel(model ?? DEFAULT_MODEL);
     if (this.currentDriver && this.driverMode === 'mock') {
       const prev = this.currentDriver;
       this.currentDriver = null;

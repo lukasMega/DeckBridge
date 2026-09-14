@@ -1,7 +1,7 @@
 /** CLI argument parsing. Hand-rolled, zero dependencies (see CLAUDE.md boundaries —
  *  this file is classified 'shared' and must not import anything else in the tree). */
 
-export type CliCommand = 'run' | 'devices' | 'version' | 'help';
+export type CliCommand = 'run' | 'devices' | 'diagnose' | 'version' | 'help';
 
 export interface CliFlags {
   mock: boolean;
@@ -12,6 +12,15 @@ export interface CliFlags {
   headless: boolean;
   logLevel?: 'debug' | 'info' | 'warn' | 'error' | 'silent';
   cacheDir?: string;
+  /** `diagnose`: replace extra-key commands/plugin args with "<redacted>". Off by
+   *  default — a redacted field is precisely the one needed when an extra-key
+   *  widget is the bug. See docs/troubleshooting.md. */
+  redactCommands: boolean;
+  /** `diagnose`: write the report here instead of the default cache location. */
+  out?: string;
+  /** `run`: ignore settings.json's `modelOverrides` for this session (safe mode
+   *  — a bad keyMap override can make a device look dead). */
+  noOverrides: boolean;
 }
 
 export interface ParsedCli {
@@ -21,14 +30,22 @@ export interface ParsedCli {
 
 export type CliParseResult = { ok: true; cli: ParsedCli } | { ok: false; error: string };
 
-const COMMANDS = ['run', 'devices', 'version', 'help'] as const;
-const LOG_LEVELS = ['debug', 'info', 'warn', 'error', 'silent'] as const;
+const COMMANDS = ['run', 'devices', 'diagnose', 'version', 'help'] as const;
+/** Single source of truth for the accepted levels — reused by the persisted-settings
+ *  guard and POST /api/log-level so the three can't drift apart. */
+export const LOG_LEVELS = ['debug', 'info', 'warn', 'error', 'silent'] as const;
+export type CliLogLevel = (typeof LOG_LEVELS)[number];
+
+export function isLogLevel(v: unknown): v is CliLogLevel {
+  return typeof v === 'string' && (LOG_LEVELS as readonly string[]).includes(v);
+}
 
 export const USAGE_TEXT = `Usage: deckbridge [command] [flags]
 
 Commands:
   run                 Start the bridge (default when no command given)
   devices             List detected stream deck HID devices, then exit
+  diagnose            Write a diagnostics report (for bug reports), then exit
   version             Print version/build info, then exit
   help                Print usage, then exit
 
@@ -40,22 +57,46 @@ Flags (for run):
   --open                    Auto-open browser (desktop convenience)
   --headless                Shorthand: no tray, no browser open, skip Elgato-app poll
   --log-level <lvl>         debug|info|warn|error|silent (runtime override)
+  --no-overrides            Safe mode: ignore settings.json modelOverrides
   --cache-dir <path>        Settings + native-lib extraction root (default: XDG cache dir)
   -h, --help                Show this help
-  -V, --version             Show version`;
+  -V, --version             Show version
+
+Flags (for diagnose):
+  --out <path>              Write the report here instead of the cache dir
+  --redact-commands         Replace extra-key commands/plugin args with <redacted>
+
+Log level precedence: --log-level > $DECKBRIDGE_LOG_LEVEL > settings.json
+"logLevel" > the level baked in at build time.`;
+
+/** True in safe mode (`run --no-overrides` / DECKBRIDGE_NO_OVERRIDES=1): device
+ *  tuning stays persisted but is ignored for this session. Read live, not at
+ *  module load, so the WebUI reports the same answer the DriverManager acts on. */
+export function overridesDisabled(): boolean {
+  return typeof tjs !== 'undefined' && tjs.env.DECKBRIDGE_NO_OVERRIDES === '1';
+}
 
 export function versionText(): string {
   return `deckbridge ${__VERSION__} (built ${__BUILD_TIME__})`;
 }
 
 /** `tjs.args` shape differs by invocation:
- *    tjs run ts/dist/bundle.js --mock  → [tjs, run, bundle.js, --mock]  (args[1] === 'run')
+ *    tjs run ts/dist/bundle.js --mock  → [tjs, run, bundle.js, --mock]
  *    ./deckbridge --mock               → [deckbridge, --mock]
+ *    ./deckbridge run --mock           → [deckbridge, run, --mock]
  *  Strips the runtime prefix so callers only ever see the user-supplied flags.
+ *
+ *  `args[1] === 'run'` alone can't tell the first shape from the third — and
+ *  treating the third as the first ate the `run` word AND the flag after it, so
+ *  `./deckbridge run --mock --headless` silently started without the mock driver.
+ *  The script path is the discriminator: txiki's `run` always takes one, and our
+ *  own `run` command never does.
+ *
  *  `raw` defaults to tjs.args (frozen/non-configurable at runtime — can't be mutated
- *  in place), overridable so tests can exercise both shapes without touching the global. */
+ *  in place), overridable so tests can exercise every shape without touching the global. */
 export function userArgs(raw: string[] = tjs.args): string[] {
-  return raw[1] === 'run' ? raw.slice(3) : raw.slice(1);
+  const isRuntimePrefix = raw[1] === 'run' && raw[2] !== undefined && raw[2].endsWith('.js');
+  return isRuntimePrefix ? raw.slice(3) : raw.slice(1);
 }
 
 /** First token, if it's a bare command word (not a `-`-prefixed flag). Returns
@@ -84,6 +125,12 @@ const BOOLEAN_FLAGS: Record<string, (flags: CliFlags) => void> = {
   '--headless': (f) => {
     f.headless = true;
   },
+  '--redact-commands': (f) => {
+    f.redactCommands = true;
+  },
+  '--no-overrides': (f) => {
+    f.noOverrides = true;
+  },
 };
 
 /** Flags that consume the following arg as a value. Returns an error message,
@@ -100,10 +147,12 @@ const VALUE_FLAGS: Record<string, (flags: CliFlags, value: string) => string | u
     return undefined;
   },
   '--log-level': (f, v) => {
-    if (!(LOG_LEVELS as readonly string[]).includes(v)) {
-      return `--log-level must be one of ${LOG_LEVELS.join('|')}`;
-    }
-    f.logLevel = v as CliFlags['logLevel'];
+    if (!isLogLevel(v)) return `--log-level must be one of ${LOG_LEVELS.join('|')}`;
+    f.logLevel = v;
+    return undefined;
+  },
+  '--out': (f, v) => {
+    f.out = v;
     return undefined;
   },
   '--cache-dir': (f, v) => {
@@ -126,7 +175,14 @@ type FlagsParseResult =
   | { ok: false; error: string };
 
 function parseFlagArgs(args: string[], startIndex: number): FlagsParseResult {
-  const flags: CliFlags = { mock: false, noWebui: false, open: false, headless: false };
+  const flags: CliFlags = {
+    mock: false,
+    noWebui: false,
+    open: false,
+    headless: false,
+    redactCommands: false,
+    noOverrides: false,
+  };
   let commandOverride: CliCommand | null = null;
 
   for (let i = startIndex; i < args.length; i++) {
@@ -188,4 +244,5 @@ export function applyFlagsToEnv(flags: CliFlags): void {
   if (flags.headless) tjs.env.DECKBRIDGE_HEADLESS = '1';
   if (flags.cacheDir !== undefined) tjs.env.DECKBRIDGE_CACHE_DIR = flags.cacheDir;
   if (flags.logLevel !== undefined) tjs.env.DECKBRIDGE_LOG_LEVEL = flags.logLevel;
+  if (flags.noOverrides) tjs.env.DECKBRIDGE_NO_OVERRIDES = '1';
 }

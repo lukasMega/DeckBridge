@@ -1,5 +1,6 @@
 import assert from 'tjs:assert';
-import { hashJpeg, makeCacheKey, imageCache } from '../src/image-cache.js';
+import { hashJpeg, makeCacheKey, imageCache, specRevision } from '../src/image-cache.js';
+import type { DeviceImageSpec } from '../src/devices/driver.js';
 import { IMAGE_CACHE_SIZE } from '../src/types.js';
 
 let passed = 0;
@@ -125,8 +126,8 @@ test('different jpegHash → different key (same modelId)', () => {
   assert.notEqual(k1, k2);
 });
 
-test('default mode arg → "def" (preserves old 2-arg callers)', () => {
-  assert.equal(makeCacheKey('mirabox-293s', 'aabbccdd'), 'mirabox-293s:def:aabbccdd');
+test('default mode/rev args → "def" and empty (preserves old 2-arg callers)', () => {
+  assert.equal(makeCacheKey('mirabox-293s', 'aabbccdd'), 'mirabox-293s:def::aabbccdd');
   assert.equal(
     makeCacheKey('mirabox-293s', 'aabbccdd'),
     makeCacheKey('mirabox-293s', 'aabbccdd', 'def'),
@@ -140,6 +141,41 @@ test('different mode → different key (same modelId/jpegHash)', () => {
   assert.notEqual(k1, k2);
   assert.notEqual(k1, k3);
   assert.notEqual(k2, k3);
+});
+
+// specRevision — device-tuning cache busting (devices/model-overrides.ts)
+
+console.log('\nspecRevision');
+
+const BASE_SPEC: DeviceImageSpec = {
+  format: 'jpeg',
+  width: 112,
+  height: 112,
+  rotate: 0,
+  flipH: false,
+  flipV: false,
+  colorMode: 'rgb',
+  maxBytes: 10240,
+  quality: 0.8,
+  transform: 'sidecar',
+};
+
+test('same spec → same revision', () => {
+  assert.equal(specRevision(BASE_SPEC), specRevision({ ...BASE_SPEC }));
+});
+
+test('a rotation override changes the revision', () => {
+  assert.notEqual(specRevision(BASE_SPEC), specRevision({ ...BASE_SPEC, rotate: 180 }));
+});
+
+test('a quality override changes the revision', () => {
+  assert.notEqual(specRevision(BASE_SPEC), specRevision({ ...BASE_SPEC, quality: 0.5 }));
+});
+
+test('the cache key busts when the spec revision changes', () => {
+  const before = makeCacheKey('m', 'aabbccdd', 'def', specRevision(BASE_SPEC));
+  const after = makeCacheKey('m', 'aabbccdd', 'def', specRevision({ ...BASE_SPEC, rotate: 90 }));
+  assert.notEqual(before, after, 'a tuned rotation must not serve the untuned entry');
 });
 
 // LruCache via imageCache (IMAGE_CACHE_SIZE = 100)

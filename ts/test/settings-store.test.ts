@@ -134,6 +134,32 @@ await test('devices[] with per-device settings round-trips through save/load', a
   assert.deepEqual(result, data, 'devices[] entries survive a save/load round-trip verbatim');
 });
 
+await test('logLevel and modelOverrides round-trip through save/load', async () => {
+  const dir = `${ROOT}/tuning-roundtrip`;
+  const data: Settings = {
+    selectedDock: 0,
+    logLevel: 'debug',
+    modelOverrides: {
+      'ajazz-akp153e-rev2': {
+        image: { rotate: 180, flipV: true },
+        keyMap: { wireInputToCora: [-1, 10, 11, 12] },
+      },
+    },
+  };
+  await saveSettings(data, dir);
+  assert.deepEqual(await loadSettings(dir), data);
+});
+
+await test('a file without the new keys still loads (purely additive schema)', async () => {
+  const dir = `${ROOT}/legacy-file`;
+  await tjs.makeDir(dir, { recursive: true });
+  await tjs.writeFile(settingsPath(dir), JSON.stringify({ selectedDock: 1 }));
+  const result = await loadSettings(dir);
+  assert.equal(result.selectedDock, 1);
+  assert.equal(result.logLevel, undefined);
+  assert.equal(result.modelOverrides, undefined);
+});
+
 // Cleanup + summary
 
 try {

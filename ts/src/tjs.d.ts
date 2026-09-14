@@ -281,18 +281,29 @@ declare module '*.js' {
   export default s;
 }
 
+interface TjsFileHandle {
+  read(buf: Uint8Array): Promise<number>;
+  write(data: Uint8Array | string): Promise<number>;
+  stat(): Promise<{ isFile: boolean; isDirectory: boolean; size: number; mode: number }>;
+  close(): Promise<void>;
+  readonly path: string;
+}
+
 declare const tjs: {
   readonly version: string;
   exit(code?: number): never;
   addSignalListener(signal: string, listener: () => void): void;
   removeSignalListener(signal: string, listener: () => void): void;
   readFile(path: string): Promise<Uint8Array>;
-  readFile(path: string, options: { encoding: 'utf-8' } | 'utf-8'): Promise<string>;
+  // NOTE: no string-returning overload — this txiki build ignores the `encoding`
+  // argument and always resolves to Uint8Array. Decode with TextDecoder.
   writeFile(path: string, data: Uint8Array | string, options?: { mode?: number }): Promise<void>;
   stat(
     path: string,
   ): Promise<{ isFile: boolean; isDirectory: boolean; size: number; mode: number }>;
   makeDir(path: string, options?: { recursive?: boolean; mode?: number }): Promise<void>;
+  /** Mode strings follow fopen(3): 'a' append, 'r' read, 'w' truncate. */
+  open(path: string, mode: string): Promise<TjsFileHandle>;
   rename(path: string, newPath: string): Promise<void>;
   remove(path: string, options?: { recursive?: boolean }): Promise<void>;
   readDir(

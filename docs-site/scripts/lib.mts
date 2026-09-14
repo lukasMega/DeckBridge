@@ -32,6 +32,7 @@ export const DOC_ROUTES: readonly string[] = [
   'getting-started',
   'features',
   'headless-linux',
+  'troubleshooting',
   'privacy',
   'device-specs',
   'adding-a-device',

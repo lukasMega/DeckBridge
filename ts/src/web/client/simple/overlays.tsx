@@ -6,6 +6,8 @@ import { HELP } from '../ui-help.js';
 import { Icon } from './Icon.js';
 import { BackButton } from './controls.js';
 import { Collapsible } from '../components/Collapsible.js';
+import { DiagnosticsPanel } from './diagnostics-panel.js';
+import { DeviceTuningPanel } from './device-tuning.js';
 import type { DeviceIdentity, RealDeviceIdentity } from '../ui-types.js';
 
 function useEscape(onEscape: () => void): void {
@@ -335,6 +337,9 @@ export function SettingsPage({ onBack }: Readonly<{ onBack: () => void }>): prea
       ) : (
         <p class="help-lead">No physical device connected.</p>
       )}
+
+      <DiagnosticsPanel />
+      <DeviceTuningPanel />
 
       <Collapsible title="Saved settings (JSON)">
         <pre class="settings-json-preview panel-inset">{settingsText ?? 'Loading…'}</pre>

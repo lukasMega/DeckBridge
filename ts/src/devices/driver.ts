@@ -178,6 +178,53 @@ export interface DeviceModel {
   driverKind: DriverKind;
 }
 
+/** User-tunable subset of a DeviceModel, persisted per model id under
+ *  settings.json's `modelOverrides` (see devices/model-overrides.ts). Deep-partial
+ *  per section; arrays replace wholesale.
+ *
+ *  Deliberately NOT tunable — this is the safety story, not an oversight:
+ *  `usbVendorId`/`usbProductIds`/`protocol`/`driverKind`/`cora.productId` do not
+ *  tune a device, they impersonate a different one (and would let a settings.json
+ *  import select an arbitrary driver); `keyCount`/`rows`/`columns` change what is
+ *  advertised to the Elgato app over CORA and force a re-pair; `image.format` is a
+ *  protocol fact, not a preference. */
+export interface DeviceModelOverride {
+  image?: Partial<
+    Pick<
+      DeviceImageSpec,
+      | 'rotate'
+      | 'flipH'
+      | 'flipV'
+      | 'width'
+      | 'height'
+      | 'quality'
+      | 'maxBytes'
+      | 'blur'
+      | 'sharpen'
+      | 'crop'
+      | 'resizeFilter'
+      | 'resizeMode'
+      | 'padFill'
+      | 'transform'
+    >
+  >;
+  keyMap?: Partial<DeviceKeyMap>;
+  wire?: Partial<
+    Pick<
+      DeviceWireSpec,
+      | 'packetSize'
+      | 'inSize'
+      | 'heartbeatMs'
+      | 'reportId'
+      | 'chunkDelayMs'
+      | 'chunkPadByte'
+      | 'synthesizeKeyUp'
+      | 'sendStpAfterImage'
+    >
+  >;
+  splash?: DeviceSplashSpec;
+}
+
 /** Common interface satisfied by every driver (real USB and mock). */
 export interface DeviceDriver extends EventEmitter {
   readonly model: DeviceModel;

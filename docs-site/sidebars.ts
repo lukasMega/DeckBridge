@@ -19,6 +19,7 @@ const sidebars: SidebarsConfig = {
     'getting-started',
     'features',
     'headless-linux',
+    'troubleshooting',
     'privacy',
   ],
 

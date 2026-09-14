@@ -4,7 +4,12 @@
 import { EventEmitter } from 'node:events';
 import workerSource from 'virtual:hid-worker';
 import type { MainToWorker, WorkerToMain } from './hid-worker-protocol.js';
-import type { DeviceDriver, DeviceImageSpec, DeviceModel } from './devices/driver.js';
+import type {
+  DeviceDriver,
+  DeviceImageSpec,
+  DeviceModel,
+  DeviceModelOverride,
+} from './devices/driver.js';
 import type { ImageModeOverride, KeyEvent } from './types.js';
 
 const OPEN_TIMEOUT_MS = 10_000;
@@ -20,7 +25,11 @@ export async function closeDriver(d: {
 }
 
 export class WorkerHidDriver extends EventEmitter implements DeviceDriver {
+  /** The EFFECTIVE model (registry entry with the user's device tuning already
+   *  applied — see devices/model-overrides.ts). `overrides` is forwarded to the
+   *  worker so it can re-derive the same thing from its own registry copy. */
   readonly model: DeviceModel;
+  private readonly overrides: DeviceModelOverride | undefined;
   deviceSerial: string | undefined = undefined;
   deviceFirmware: string | undefined = undefined;
   /** HID path the worker opened this device with — see device-identity.ts. */
@@ -32,9 +41,10 @@ export class WorkerHidDriver extends EventEmitter implements DeviceDriver {
   private openTimer: ReturnType<typeof setTimeout> | null = null;
   private closeResolve: (() => void) | null = null;
 
-  constructor(model: DeviceModel) {
+  constructor(model: DeviceModel, overrides?: DeviceModelOverride) {
     super();
     this.model = model;
+    this.overrides = overrides;
   }
 
   /** `hidPath` (optional) targets a specific unclaimed HID interface — used to
@@ -70,7 +80,7 @@ export class WorkerHidDriver extends EventEmitter implements DeviceDriver {
         this.settleOpen(null, new Error('worker open timed out'));
         this.cleanupWorker();
       }, OPEN_TIMEOUT_MS);
-      this.post({ type: 'open', modelId: this.model.id, hidPath });
+      this.post({ type: 'open', modelId: this.model.id, hidPath, overrides: this.overrides });
     });
   }
 
@@ -105,6 +115,11 @@ export class WorkerHidDriver extends EventEmitter implements DeviceDriver {
    *  I/O — the worker just stores the mode for the next 'image' render. */
   setImageOverride(mode: ImageModeOverride): void {
     this.post({ type: 'setImageOverride', mode });
+  }
+
+  /** Runtime log-level change — no device I/O, the worker just re-filters. */
+  setLogLevel(level: string): void {
+    this.post({ type: 'setLogLevel', level });
   }
 
   close(): Promise<void> {

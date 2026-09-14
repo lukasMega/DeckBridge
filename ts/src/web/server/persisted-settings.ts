@@ -1,10 +1,15 @@
 import { loadSettings, saveSettings, settingsPath } from '../../settings-store.js';
-import type { Settings, DeviceIdentitySettings } from '../../settings-store.js';
+import type { Settings, DeviceIdentitySettings, PersistedLogLevel } from '../../settings-store.js';
+import { isLogLevel } from '../../cli.js';
 import { openPathInOS } from '../../os-utils.ts';
 import {
   getOrCreateDeviceIdentity as getOrCreateDeviceIdentityPure,
   isStableDeviceKey,
 } from '../../device-identity.js';
+import { isModelOverridesRecord, validateModelOverride } from '../../devices/model-overrides.js';
+import { findModelById } from '../../devices/registry.js';
+import type { DeviceModelOverride } from '../../devices/driver.js';
+import { log } from '../../logger.js';
 import { isExtraKeyConfig } from '../../types.js';
 import type { DockStatus, ExtraKeyConfig } from '../../types.js';
 
@@ -53,6 +58,38 @@ function isDeviceIdentitySettings(d: unknown): d is DeviceIdentitySettings {
   );
 }
 
+/** Validate a persisted/imported `modelOverrides` map, dropping (with a warn)
+ *  every entry that names an unknown model or fails validateModelOverride. Runs
+ *  on BOTH disk load and raw-JSON import, same as isDeviceIdentitySettings — an
+ *  invalid override must never poison runtime state, and a bad keyMap can make a
+ *  device look dead. */
+export function sanitizeModelOverrides(raw: unknown): Record<string, DeviceModelOverride> {
+  if (raw === undefined) return {};
+  if (!isModelOverridesRecord(raw)) {
+    log('warn', 'settings', 'modelOverrides: not an object map — ignoring');
+    return {};
+  }
+  const out: Record<string, DeviceModelOverride> = {};
+  for (const [modelId, override] of Object.entries(raw)) {
+    const model = findModelById(modelId);
+    if (!model) {
+      log('warn', 'settings', `modelOverrides['${modelId}']: unknown model id — dropped`);
+      continue;
+    }
+    const result = validateModelOverride(override, model);
+    if (!result.ok) {
+      log(
+        'warn',
+        'settings',
+        `modelOverrides['${modelId}']: dropped — ${result.errors.join('; ')}`,
+      );
+      continue;
+    }
+    out[modelId] = result.value;
+  }
+  return out;
+}
+
 /** The settings.json slice owned by the WebUI server: the selected dock and the
  *  per-physical-device entries (identity + brightness/override/imageMode/
  *  extraKeys), keyed by device-identity.ts's deviceKeyFor(). This class is the
@@ -60,7 +97,11 @@ function isDeviceIdentitySettings(d: unknown): d is DeviceIdentitySettings {
  *  through getOrCreateIdentity() rather than touching disk themselves. */
 export class PersistedSettings {
   selectedDock = 0;
+  /** undefined = not persisted; the level then comes from the CLI flag / env /
+   *  the build-time default (see PersistedLogLevel). */
+  logLevel: PersistedLogLevel | undefined = undefined;
   private devices: DeviceIdentitySettings[] = [];
+  private modelOverrides: Record<string, DeviceModelOverride> = {};
 
   /** `cacheRoot` is overridable so tests never touch the real user cache dir;
    *  production passes undefined and settings-store.ts picks the default. */
@@ -73,6 +114,8 @@ export class PersistedSettings {
   async load(): Promise<void> {
     const saved = await loadSettings(this.cacheRoot);
     if (typeof saved.selectedDock === 'number') this.selectedDock = saved.selectedDock;
+    if (isLogLevel(saved.logLevel)) this.logLevel = saved.logLevel;
+    this.modelOverrides = sanitizeModelOverrides(saved.modelOverrides);
     if (Array.isArray(saved.devices)) {
       saved.devices.forEach(stripInvalidExtraKeys);
       this.devices = saved.devices
@@ -146,10 +189,50 @@ export class PersistedSettings {
     if (changed) this.persist();
   }
 
+  /** Persist a new log level (WebUI "Debug logging"). `undefined` clears it, so
+   *  the CLI flag / env / build-time default takes over again. */
+  setLogLevel(level: PersistedLogLevel | undefined): void {
+    this.logLevel = level;
+    this.persist();
+  }
+
+  // Model overrides (device tuning) — see devices/model-overrides.ts
+
+  /** Every model's override, by model id. Read by DriverManager at probe time. */
+  allModelOverrides(): Record<string, DeviceModelOverride> {
+    return this.modelOverrides;
+  }
+
+  overrideFor(modelId: string): DeviceModelOverride | undefined {
+    return this.modelOverrides[modelId];
+  }
+
+  /** Store (or, with undefined, clear) one model's override. Callers validate
+   *  first — this is the write half only. */
+  setModelOverride(modelId: string, override: DeviceModelOverride | undefined): void {
+    if (override === undefined || Object.keys(override).length === 0) {
+      delete this.modelOverrides[modelId];
+    } else {
+      this.modelOverrides[modelId] = override;
+    }
+    this.persist();
+  }
+
+  /** Replace the whole map from a raw-JSON import; invalid entries are dropped
+   *  (not thrown), same policy as importDevices. */
+  importModelOverrides(raw: unknown): void {
+    this.modelOverrides = sanitizeModelOverrides(raw);
+    this.persist();
+  }
+
   private current(): Settings {
     return {
       selectedDock: this.selectedDock,
+      ...(this.logLevel !== undefined ? { logLevel: this.logLevel } : {}),
       ...(this.devices.length > 0 ? { devices: this.devices } : {}),
+      ...(Object.keys(this.modelOverrides).length > 0
+        ? { modelOverrides: this.modelOverrides }
+        : {}),
     };
   }
 }

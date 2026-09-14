@@ -199,3 +199,106 @@ pub extern "C" fn mirabox_hid_present(vid: u16, pid: u16) -> i32 {
     }));
     result.unwrap_or(0)
 }
+
+/// Sanitize one enumerated string field for the TSV line format used by
+/// `mirabox_hid_list_all`: tabs and newlines would break the record separators,
+/// and an absent field becomes `-` so column counts stay fixed.
+fn tsv_field(value: Option<&str>) -> String {
+    match value {
+        None | Some("") => "-".to_string(),
+        Some(s) => s.replace(['\t', '\n', '\r'], " "),
+    }
+}
+
+/// List EVERY connected HID interface, one TSV record per line, NUL-terminated,
+/// into `out_buf`. Returns the number of records written (0 on error / null
+/// buffer). Enumeration only — never opens a device.
+///
+/// Columns: `vid<TAB>pid<TAB>usage_page<TAB>usage<TAB>interface<TAB>manufacturer
+/// <TAB>product<TAB>serial<TAB>path`, with vid/pid/usage_page/usage as 4-digit
+/// lowercase hex and absent strings as `-`.
+///
+/// Unlike `mirabox_hid_list_paths` this filters nothing: the point is to see the
+/// devices DeckBridge does NOT recognise — a composite HID keyboard whose
+/// enumeration is slow is the prime suspect behind the "freeze when a keyboard is
+/// plugged in" report, and no VID/PID-filtered call can show it.
+///
+/// Truncates cleanly if the buffer fills (stops before overflow, still
+/// NUL-terminates); the returned count reflects only records actually written.
+///
+/// # Safety
+/// `out_buf` must be null or valid for `out_len` bytes for the duration of the call.
+#[no_mangle]
+pub unsafe extern "C" fn mirabox_hid_list_all(out_buf: *mut c_char, out_len: usize) -> i32 {
+    let result = catch_unwind(AssertUnwindSafe(|| {
+        if out_buf.is_null() || out_len == 0 {
+            return 0;
+        }
+        let Ok(api) = HidApi::new() else {
+            return 0;
+        };
+        let mut count: i32 = 0;
+        let mut pos: usize = 0; // bytes written so far (excluding the final NUL)
+        for info in api.device_list() {
+            let record = format!(
+                "{:04x}\t{:04x}\t{:04x}\t{:04x}\t{}\t{}\t{}\t{}\t{}",
+                info.vendor_id(),
+                info.product_id(),
+                info.usage_page(),
+                info.usage(),
+                info.interface_number(),
+                tsv_field(info.manufacturer_string()),
+                tsv_field(info.product_string()),
+                tsv_field(info.serial_number()),
+                tsv_field(info.path().to_str().ok()),
+            );
+            let bytes = record.as_bytes();
+            let sep = usize::from(count > 0);
+            if pos + sep + bytes.len() + 1 > out_len {
+                break;
+            }
+            // SAFETY: the bounds check above guarantees pos + sep + len + 1 <= out_len,
+            // so every write below (separator, record bytes, terminating NUL) stays in range.
+            unsafe {
+                if sep == 1 {
+                    *out_buf.add(pos) = b'\n' as c_char;
+                    pos += 1;
+                }
+                std::ptr::copy_nonoverlapping(
+                    bytes.as_ptr().cast::<c_char>(),
+                    out_buf.add(pos),
+                    bytes.len(),
+                );
+                pos += bytes.len();
+            }
+            count += 1;
+        }
+        // SAFETY: pos <= out_len - 1 (the loop reserves a byte for the NUL before writing).
+        unsafe {
+            *out_buf.add(pos) = 0;
+        }
+        count
+    }));
+    result.unwrap_or(0)
+}
+
+#[cfg(test)]
+mod list_all_tests {
+    use super::tsv_field;
+
+    #[test]
+    fn absent_and_empty_fields_become_a_dash() {
+        assert_eq!(tsv_field(None), "-");
+        assert_eq!(tsv_field(Some("")), "-");
+    }
+
+    #[test]
+    fn separators_inside_a_field_are_replaced() {
+        assert_eq!(tsv_field(Some("a\tb\nc\rd")), "a b c d");
+    }
+
+    #[test]
+    fn ordinary_values_pass_through() {
+        assert_eq!(tsv_field(Some("Mirabox 293V3")), "Mirabox 293V3");
+    }
+}

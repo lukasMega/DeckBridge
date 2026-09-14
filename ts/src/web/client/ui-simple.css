@@ -1275,6 +1275,31 @@ input[type='range'].range:disabled {
 .identity-error-row .settings-error {
   margin: 0;
 }
+/* Device tuning form (simple/device-tuning.tsx) */
+.tuning-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 10px 16px;
+  margin: 0 0 12px;
+}
+.tuning-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 13px;
+  color: var(--fg-muted);
+}
+.tuning-field .input {
+  width: 100%;
+}
+.settings-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--fg-muted);
+  margin: 0 0 8px;
+}
 .settings-json-preview {
   margin: 0 0 6px;
   padding: 13px 15px;
@@ -1348,6 +1373,29 @@ select.input {
   max-height: 2000px;
   opacity: 1;
 }
+/* Logging & diagnostics — orange so a reporter can spot it on the settings page */
+.diag-section {
+  background: var(--warn-soft);
+  border: 1px solid color-mix(in oklab, var(--warn), transparent 70%);
+  border-radius: var(--r-md);
+  padding: 10px 12px;
+  margin: 12px 0;
+
+  & .fine {
+    font-size: 12px;
+  }
+}
+.diag-section > .collapse-header {
+  color: var(--warn);
+  margin: 0;
+}
+.diag-section > .collapse-header:hover {
+  color: var(--warn);
+}
+.diag-section > .collapse-body.open {
+  padding-top: 8px;
+}
+
 .cfg-subtitle-hdr {
   font-weight: 400;
   color: var(--fg-dim);

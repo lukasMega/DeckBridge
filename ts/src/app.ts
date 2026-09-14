@@ -7,15 +7,18 @@ import { MockDriver } from './devices/mock.js';
 import type { ClientApp, CommEntry, ImageModeOverride, LogObject } from './types.js';
 import { ELGATO_CHILD_PORT, ELGATO_TCP_PORT, WEBUI_PORT } from './types.js';
 import { DEVICE_MODELS } from './devices/registry.js';
-import { log, setWebUILog, setLogLevel } from './logger.js';
+import { log, setWebUILog, setLogLevel, step } from './logger.js';
+import { startLogFile, stopLogFile, activeLogFilePath } from './log-file.js';
 import { setupNativeLibs } from './native-libs.js';
 import { setupImageHandler } from './image-pipeline.js';
 import { DriverManager, getInitialDriverMode } from './driver-manager.js';
 import type { SessionServersFactory } from './device-session.js';
 import { startCoraWithRetry } from './cora-startup.js';
 import { openPathInOS, platformName } from './os-utils.ts';
-import { parseCli, userArgs, applyFlagsToEnv, versionText, USAGE_TEXT } from './cli.js';
+import { parseCli, userArgs, applyFlagsToEnv, versionText, USAGE_TEXT, isLogLevel } from './cli.js';
 import { runDevicesCommand } from './cli-devices.js';
+import { runDiagnoseCommand } from './cli-diagnose.js';
+import { loadSettings } from './settings-store.js';
 
 const [MAC_OS, WIN] = ['macOS', 'Windows'];
 
@@ -38,9 +41,31 @@ if (cli.command === 'devices') {
   tjs.exit(0);
 }
 applyFlagsToEnv(cli.flags);
+// `diagnose` runs AFTER applyFlagsToEnv (it reports the effective flags/env and honours
+// --cache-dir) but before any server or device open — that's what makes it usable on the
+// freeze report, where the WebUI never comes up. Enumeration only, never hid_open.
+if (cli.command === 'diagnose') {
+  await runDiagnoseCommand(cli.flags);
+  tjs.exit(0);
+}
+// Log level, in precedence order: --log-level / $DECKBRIDGE_LOG_LEVEL (both already
+// in env by now) win outright; otherwise settings.json's persisted "logLevel" applies.
 // setLogLevel(), not a plain env read: logger.ts's own module-load env read already
-// happened (as one of this file's imports, above) before this line runs.
-if (tjs.env.DECKBRIDGE_LOG_LEVEL) setLogLevel(tjs.env.DECKBRIDGE_LOG_LEVEL);
+// happened (as one of this file's imports, above) before this line runs. The winner is
+// written back into env so every USB worker spawned later inherits it at module load.
+if (tjs.env.DECKBRIDGE_LOG_LEVEL) {
+  setLogLevel(tjs.env.DECKBRIDGE_LOG_LEVEL);
+} else {
+  const { logLevel } = await loadSettings();
+  if (isLogLevel(logLevel)) {
+    setLogLevel(logLevel);
+    tjs.env.DECKBRIDGE_LOG_LEVEL = logLevel;
+  }
+}
+// Disk sink first — before setupNativeLibs, before any HID call. defaultCacheRoot()
+// is pure (env + tjs.homeDir), so this needs no native lib, and a freeze anywhere
+// below still leaves the breadcrumb that names the step it hung on.
+startLogFile();
 const headless = cli.flags.headless;
 const noWebui = cli.flags.noWebui;
 
@@ -76,7 +101,7 @@ async function isElgatoAppRunning(): Promise<boolean> {
 // Extract embedded native libs and set DECKBRIDGE_NATIVE_LIB / HIDAPI_LIB
 // before any server, the HID worker, or the FFI loaders run.
 // No-op when env vars are already set (dev) or in --no-embed builds.
-await setupNativeLibs();
+await step('deckBr', 'native-libs extract', () => setupNativeLibs());
 
 // tjs.env.DECKBRIDGE_WEBUI_PORT already reflects --webui-port (applyFlagsToEnv, above)
 // or a pre-existing env var — falls back to the WEBUI_PORT default.
@@ -226,6 +251,21 @@ webui.on('setImageOverride', (mode: ImageModeOverride, dock?: number) => {
   }
 });
 
+// The WebUI already applied the level to the main thread; forward it to the USB
+// workers, where the interesting device traffic is.
+webui.on('setLogLevel', (level: string) => {
+  driverManager.setLogLevel(level);
+  log('info', 'deckBr', `log level set to ${level}`);
+});
+
+// Device tuning changed: reopen the affected session(s) so the new image/wire/
+// keyMap spec is in force from the next open() and the first splash.
+webui.on('modelOverridesChanged', (modelId: string) => {
+  driverManager.reloadDeviceTuning(modelId).catch((err: unknown) => {
+    log('error', 'deckBr', `reloadDeviceTuning(${modelId}) failed: ${(err as Error).message}`);
+  });
+});
+
 webui.on('switchMode', (mode: 'real' | 'mock') => {
   driverManager.switchMode(mode).catch((err: unknown) => {
     log('error', 'deckBr', `switchMode(${mode}) failed: ${(err as Error).message}`);
@@ -307,6 +347,9 @@ async function shutdown(): Promise<void> {
   await childServer.stop().catch(() => undefined);
   await webui.stop().catch(() => undefined);
   tray?.close();
+  // Last thing before exit: drain the batched log lines so the shutdown path
+  // itself is on disk (the tray "Quit" handler routes through here too).
+  await stopLogFile().catch(() => undefined);
   tjs.exit(0);
 }
 
@@ -331,6 +374,7 @@ log(
   `cpus         : ${tjs.system.cpus.length}x ${tjs.system.cpus[0]?.model ?? '?'}`,
 );
 log('info', 'deckBr', `txiki.js     : ${tjs.version}`);
+log('info', 'deckBr', `log file     : ${activeLogFilePath() ?? '(disabled)'}`);
 log('debug', 'deckBr', `platform     : ${platformName() || '(unknown)'}`);
 log(
   'info',
@@ -368,7 +412,7 @@ if (!headless) {
 }
 
 // --no-webui: settings still load (see WebUIServer.start), the HTTP/WS listener doesn't.
-await webui.start(!noWebui);
+await step('deckBr', `webui bind :${webuiPort}`, () => webui.start(!noWebui));
 if (noWebui) {
   log('info', 'web', 'WebUI disabled (--no-webui)');
 } else {
@@ -387,10 +431,13 @@ if (headless) {
   // (no run.sh anymore). Same resolver the /requirements check reports on.
   const trayBin = await resolveTrayBin();
   if (trayBin) {
-    tray = startTray(trayBin, () => {
-      void shutdown().catch(() => tjs.exit(1));
-    });
-    log('info', 'tray', tray ? `started: ${trayBin}` : `failed to spawn: ${trayBin}`);
+    const spawned = await step('tray', 'tray spawn', () =>
+      startTray(trayBin, () => {
+        void shutdown().catch(() => tjs.exit(1));
+      }),
+    );
+    tray = spawned;
+    log('info', 'tray', spawned ? `started: ${trayBin}` : `failed to spawn: ${trayBin}`);
   } else {
     log(
       'info',
@@ -406,15 +453,17 @@ const localIp =
   _ifaces.find((i) => _privateRe.test(i.address))?.address ?? _ifaces[0]?.address ?? '';
 if (localIp) webui.setLocalIp(localIp);
 
-await startCoraWithRetry({
-  server,
-  childServer,
-  log,
-  webuiLog: (level, component, message) => webui.log(level, component, message),
-  getShuttingDown: () => shuttingDown,
-  elgatoTcpPort: ELGATO_TCP_PORT,
-  elgatoChildPort: ELGATO_CHILD_PORT,
-});
+await step('deckBr', `cora bind :${ELGATO_TCP_PORT}/:${ELGATO_CHILD_PORT}`, () =>
+  startCoraWithRetry({
+    server,
+    childServer,
+    log,
+    webuiLog: (level, component, message) => webui.log(level, component, message),
+    getShuttingDown: () => shuttingDown,
+    elgatoTcpPort: ELGATO_TCP_PORT,
+    elgatoChildPort: ELGATO_CHILD_PORT,
+  }),
+);
 log('info', 'elgato', `primary (Network Dock) listening on ${localIp}:${ELGATO_TCP_PORT}`);
 log('info', 'elgato', `child (Stream Deck) listening on ${localIp}:${ELGATO_CHILD_PORT}`);
 

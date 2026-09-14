@@ -21,8 +21,13 @@ export class ActivityBuffers {
 
   constructor(private readonly bus: Broadcaster) {}
 
-  keyEvent(mk2Index: number, state: KeyState): void {
-    const entry: KeyEventEntry = { ts: Date.now(), mk2Index, state };
+  keyEvent(mk2Index: number, state: KeyState, wireId?: number): void {
+    const entry: KeyEventEntry = {
+      ts: Date.now(),
+      mk2Index,
+      state,
+      ...(wireId !== undefined ? { wireId } : {}),
+    };
     this.push(this.keyEvents, entry, KEY_EVENT_BUFFER_MAX);
     this.bus.broadcast('keyEvent', entry);
   }

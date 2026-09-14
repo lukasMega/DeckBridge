@@ -6,7 +6,7 @@ import { MIRABOX_293_MODEL } from '../src/devices/mirabox/mirabox-293.js';
 import { MIRABOX_293S_MODEL } from '../src/devices/mirabox/mirabox-293s.js';
 import { MIRABOX_K1PRO_MODEL } from '../src/devices/mirabox/mirabox-k1pro.js';
 import type { SessionIdentity, SessionServers } from '../src/device-session.js';
-import type { DeviceModel } from '../src/devices/driver.js';
+import type { DeviceModel, DeviceModelOverride } from '../src/devices/driver.js';
 import type { CommEntry, KeyState } from '../src/types.js';
 import { ELGATO_TCP_PORT } from '../src/types.js';
 import type { ChildGeometry } from '../src/capabilities.js';
@@ -138,6 +138,11 @@ function makeFakeWebUI() {
     notifyDockImageCalls: [] as { dock: number; key: number; format: string }[],
     notifyDockImage(dock: number, key: number, _data: unknown, format: 'jpeg' | 'bmp' = 'jpeg') {
       this.notifyDockImageCalls.push({ dock, key, format });
+    },
+    // Device tuning (settings.json modelOverrides). Defaults to "nothing
+    // persisted"; the tuning tests below replace this per instance.
+    modelOverrideFor(_modelId: string): DeviceModelOverride | undefined {
+      return undefined;
     },
   };
 }
@@ -1032,6 +1037,112 @@ await test('D2. disconnecting one same-model extra tears down only that unit; th
   await driverManager.__scanOnce();
   assert.equal(identities.length, 3, 'unit b re-docks into the freed index');
   assert.equal(identities[2]?.index, 1, 'freed index 1 reused');
+});
+
+// Device tuning (settings.json modelOverrides — see devices/model-overrides.ts)
+
+/** A driver whose open() always succeeds, capturing the model + override the
+ *  manager handed the factory. Stands in for WorkerHidDriver, which would
+ *  forward the same pair to the worker in its 'open' message. */
+class CapturingDriver extends EventEmitter {
+  readonly model: DeviceModel;
+  readonly overrides: DeviceModelOverride | undefined;
+  deviceSerial: string | undefined = 'SN-TUNED';
+  deviceFirmware: string | undefined = '1.0';
+  hidPath: string | undefined = undefined;
+  constructor(model: DeviceModel, overrides?: DeviceModelOverride) {
+    super();
+    this.model = model;
+    this.overrides = overrides;
+  }
+  open(): Promise<void> {
+    return Promise.resolve();
+  }
+  close(): Promise<void> {
+    return Promise.resolve();
+  }
+  setBrightness(): void {}
+  clearKey(): void {}
+  sendImage(): void {}
+  renderCoraImage(): void {}
+  sendSplashImage(): void {}
+  setImageOverride(): void {}
+  setLogLevel(): void {}
+}
+
+await test('E1. probe hands the worker the EFFECTIVE model plus the raw override', async () => {
+  const { webui, driverManager } = setup();
+  const firstModel = DEVICE_MODELS[0]!;
+  const override: DeviceModelOverride = { image: { rotate: 180 }, keyMap: { inputOffset: 4 } };
+  webui.modelOverrideFor = (modelId: string) => (modelId === firstModel.id ? override : undefined);
+
+  const created: CapturingDriver[] = [];
+  driverManager.__setRealDriverFactory((model, ov) => {
+    created.push(new CapturingDriver(model, ov));
+    return created[0] as unknown as WorkerHidDriver;
+  });
+  driverManager.__setPresenceCheck((m) => m.id === firstModel.id);
+
+  await driverManager.tryRealConnect();
+
+  const driver = created[0];
+  assert.ok(driver !== undefined, 'a driver was created');
+  assert.equal(driver!.model.image.rotate, 180, 'the driver sees the tuned rotation');
+  assert.equal(driver!.model.keyMap.inputOffset, 4, 'and the tuned input mapping');
+  // The raw override travels alongside: the worker re-derives the effective model
+  // from ITS OWN registry copy, so no override can select a different driver.
+  assert.deepEqual(driver!.overrides, override, 'raw override forwarded to the worker');
+  assert.equal(driver!.model.driverKind, firstModel.driverKind, 'driverKind is registry-sourced');
+  assert.equal(driver!.model.usbVendorId, firstModel.usbVendorId, 'VID is registry-sourced');
+});
+
+await test('E2. the tuned geometry/identity reaches the CORA servers and the WebUI', async () => {
+  const { webui, driverManager } = setup();
+  const firstModel = DEVICE_MODELS[0]!;
+  webui.modelOverrideFor = () => ({ image: { rotate: 90 } });
+  driverManager.__setRealDriverFactory(
+    (model, ov) => new CapturingDriver(model, ov) as unknown as WorkerHidDriver,
+  );
+  driverManager.__setPresenceCheck((m) => m.id === firstModel.id);
+
+  await driverManager.tryRealConnect();
+  const notified = webui.notifyDeviceModelCalls.at(-1);
+  assert.equal(notified?.id, firstModel.id, 'the model id is unchanged by tuning');
+  assert.equal(
+    driverManager.getCurrentDriver()?.model.image.rotate,
+    90,
+    'the session-visible model carries the tuning',
+  );
+});
+
+await test('E3. the registry model is never mutated by an override', async () => {
+  const { webui, driverManager } = setup();
+  const firstModel = DEVICE_MODELS[0]!;
+  const before = JSON.stringify(firstModel);
+  webui.modelOverrideFor = () => ({ image: { rotate: 270, quality: 0.1 } });
+  driverManager.__setRealDriverFactory(
+    (model, ov) => new CapturingDriver(model, ov) as unknown as WorkerHidDriver,
+  );
+  driverManager.__setPresenceCheck((m) => m.id === firstModel.id);
+
+  await driverManager.tryRealConnect();
+  assert.equal(JSON.stringify(firstModel), before, 'the registry stays ground truth');
+});
+
+await test('E4. no override → the registry model reaches the driver unchanged', async () => {
+  const { webui, driverManager } = setup();
+  const firstModel = DEVICE_MODELS[0]!;
+  webui.modelOverrideFor = () => undefined;
+  const created: CapturingDriver[] = [];
+  driverManager.__setRealDriverFactory((model, ov) => {
+    created.push(new CapturingDriver(model, ov));
+    return created[0] as unknown as WorkerHidDriver;
+  });
+  driverManager.__setPresenceCheck((m) => m.id === firstModel.id);
+
+  await driverManager.tryRealConnect();
+  assert.ok(created[0]?.model === firstModel, 'same object, not a copy');
+  assert.equal(created[0]?.overrides, undefined, 'nothing forwarded to the worker');
 });
 
 // Summary
