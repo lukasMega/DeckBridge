@@ -10,7 +10,7 @@ import type { CommEntry } from '../../types.js';
 import type { DeviceModelOverride } from '../../devices/driver.js';
 import type { ModelOverridesController } from './model-overrides-controller.js';
 import { enumerateDevices, toDeviceRow } from '../../cli-devices.js';
-import { listAllHidDevices } from '../../ffi/hidapi.js';
+import { listAllHidDevicesTimed } from '../../ffi/hidapi.js';
 import { tailLogFile } from '../../log-file.js';
 import { defaultCacheRoot } from '../../native-libs.js';
 import { settingsPath } from '../../settings-store.js';
@@ -77,6 +77,7 @@ export function deckbridgeEnv(): Record<string, string> {
 }
 
 function sourcesFor(live: LiveDiagnosticsInputs, logTail: string): DiagnosticsSources {
+  const hidEnum = listAllHidDevicesTimed();
   return {
     header: {
       version: versionText(),
@@ -94,7 +95,8 @@ function sourcesFor(live: LiveDiagnosticsInputs, logTail: string): DiagnosticsSo
     },
     modelOverrides: live.modelOverrides,
     effectiveModels: live.effectiveModels,
-    hidDevices: listAllHidDevices(),
+    hidDevices: hidEnum.devices,
+    hidEnumerateMs: hidEnum.tookMs,
     deviceRows: enumerateDevices().map(toDeviceRow),
     state: live.state,
     comms: live.comms,

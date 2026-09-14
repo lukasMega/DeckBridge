@@ -1,10 +1,9 @@
 import { log, step } from './logger.js';
 import { overridesDisabled } from './cli.js';
-import { hidDevicePresent, hidSerialForPath, listHidPaths } from './ffi/hidapi.js';
+import { hidDevicePresent, hidSerialForPath, hidSnapshot, listHidPaths } from './ffi/hidapi.js';
 import { WorkerHidDriver, closeDriver } from './hid-worker-host.js';
 import { MockDriver } from './devices/mock.js';
 import type { KeyEvent, CommEntry, DockStatus } from './types.js';
-import { RECONNECT_DELAY_MS } from './types.js';
 import type { ElgatoServer, ElgatoChildServer } from './elgato.js';
 import type { WebUIServer } from './web/server';
 import type { DeviceDriver, DeviceModel, DeviceModelOverride } from './devices/driver.js';
@@ -15,6 +14,7 @@ import { modelToChildGeometry } from './capabilities.js';
 import { applyModelToServers, wireCommonDriverEvents } from './device-session.js';
 import type { SessionServersFactory } from './device-session.js';
 import { PrimaryDock } from './driver-manager-primary.js';
+import { ProbePacer } from './driver-manager-pacing.js';
 import { ExtraDockCoordinator } from './driver-manager-extras.js';
 import { deviceKeyFor, sharedSerialModelId } from './device-identity.js';
 
@@ -64,6 +64,9 @@ export class DriverManager {
   private probeInFlight = false;
   private imagesSent = 0;
 
+  /** Probe interval, adapted to how slow HID enumeration is (driver-manager-pacing.ts). */
+  private readonly pacer = new ProbePacer();
+
   /** Primary dock (index 0) state: identity, brightness, widgets, saved-frame replay. */
   private readonly primary: PrimaryDock;
 
@@ -85,6 +88,10 @@ export class DriverManager {
   ) => new WorkerHidDriver(model, ov);
   private isModelPresent: (model: DeviceModel) => boolean = defaultPresenceCheck;
   private listModelPaths: (model: DeviceModel) => string[] = defaultListModelPaths;
+  /** One fresh enumeration per sweep (maxAgeMs 0 — a reused one could miss a hotplug for
+   *  a tick), which every per-model query below then reads from. Cleared by
+   *  __setPresenceCheck: stubbed presence means stubbed enumeration, so tests skip FFI. */
+  private refreshHidSnapshot: () => void = () => void hidSnapshot(0);
 
   constructor(deps: DriverManagerDeps) {
     this.deps = deps;
@@ -185,6 +192,7 @@ export class DriverManager {
   /** Test-only: override the device-presence check used by probeAndOpen(). */
   __setPresenceCheck(fn: (model: DeviceModel) => boolean): void {
     this.isModelPresent = fn;
+    this.refreshHidSnapshot = () => undefined;
   }
 
   /** Test-only: override the extra-dock coordinator's per-model path enumeration. */
@@ -232,7 +240,12 @@ export class DriverManager {
       this.tryRealConnect().catch((e: unknown) =>
         log('error', 'hid', `scheduled reconnect failed: ${(e as Error).message}`),
       );
-    }, RECONNECT_DELAY_MS);
+    }, this.pacer.delayMs);
+  }
+
+  /** Test-only: current probe interval (see driver-manager-pacing.ts). */
+  __reconnectDelayMs(): number {
+    return this.pacer.delayMs;
   }
 
   /** Attach event handlers to a freshly created real driver — once per instance; reused
@@ -268,13 +281,17 @@ export class DriverManager {
     );
   }
 
-  /** Presence sweep = one synchronous hid_enumerate per model/PID on the main
-   *  thread. Timed as a breadcrumb: a slow enumerate is the leading suspect
-   *  when startup appears to hang (issue #67.2). */
+  /** Presence sweep = ONE synchronous hid enumeration on the main thread, reused by every
+   *  per-model query in this tick (hidSnapshot) — it used to be one per registry VID/PID
+   *  pair, ~26. Timed as a breadcrumb AND as the pacer's input: a slow enumerate is the
+   *  leading suspect when startup appears to hang (issue #67.2). */
   private presentModels(): DeviceModel[] {
     const t0 = Date.now();
+    this.refreshHidSnapshot();
     const present = DEVICE_MODELS.filter((model) => this.isModelPresent(model));
-    log('debug', 'hid', `enumerate took ${Date.now() - t0}ms, ${present.length} model(s) present`);
+    const took = Date.now() - t0;
+    log('debug', 'hid', `enumerate took ${took}ms, ${present.length} model(s) present`);
+    this.pacer.note(took);
     return present;
   }
 
@@ -328,7 +345,7 @@ export class DriverManager {
       }
 
       if (!found) {
-        log('warn', 'hid', `no device found — retrying in ${RECONNECT_DELAY_MS / 1000}s`);
+        log('warn', 'hid', `no device found — retrying in ${this.pacer.delayMs / 1000}s`);
         this.deps.webui.notifyElgatoDevicePresent(this.elgatoHardwarePresent());
         this.scheduleReconnect();
         this.deps.onTrayChange();

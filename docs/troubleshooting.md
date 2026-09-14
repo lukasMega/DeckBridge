@@ -84,3 +84,22 @@ flagged at the top of the diagnostics report.
 
 If DeckBridge **freezes**, the last line in `deckbridge.log` names the startup step it
 hung on — include it even if no report could be written.
+
+## Freezes tied to a particular USB device
+
+If DeckBridge only hangs while some unrelated USB device (a keyboard, a headset, a
+wireless dongle) is plugged in, the suspect is HID **enumeration**, not that device's
+data. DeckBridge lists the connected HID interfaces to find your deck; on Windows that
+listing opens every HID interface on the machine to read its name, and one device that
+answers slowly holds up the whole list.
+
+What to look for:
+
+- The `hid enumeration (all devices, took NNNms)` heading in the diagnostics report.
+  Single- or low-double-digit ms is healthy; hundreds of ms is the problem.
+- `USB enumeration slow (NNNms) — device probe interval now Ns` in the log. DeckBridge
+  detects this and probes less often (up to 30 s apart) so the rest of the app keeps
+  running, then snaps back to every 2 s once enumeration is quick again.
+
+Please attach the report **with the device connected** — the enumeration table names the
+device DeckBridge does not recognize, which is what makes the report actionable.

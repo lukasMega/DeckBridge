@@ -1,6 +1,7 @@
 import assert from 'tjs:assert';
 import { EventEmitter } from '../src/platform/events-shim.js';
 import { DriverManager } from '../src/driver-manager.js';
+import { ProbePacer, nextProbeDelayMs } from '../src/driver-manager-pacing.js';
 import { DEFAULT_MODEL, DEVICE_MODELS } from '../src/devices/registry.js';
 import { MIRABOX_293_MODEL } from '../src/devices/mirabox/mirabox-293.js';
 import { MIRABOX_293S_MODEL } from '../src/devices/mirabox/mirabox-293s.js';
@@ -1143,6 +1144,42 @@ await test('E4. no override → the registry model reaches the driver unchanged'
   await driverManager.tryRealConnect();
   assert.ok(created[0]?.model === firstModel, 'same object, not a copy');
   assert.equal(created[0]?.overrides, undefined, 'nothing forwarded to the worker');
+});
+
+// F. Probe pacing under slow HID enumeration (issue #67.2)
+
+await test('F1. a fast enumeration keeps the 2s probe interval', () => {
+  assert.equal(nextProbeDelayMs(2_000, 5), 2_000, 'healthy sweep → baseline');
+  assert.equal(nextProbeDelayMs(2_000, 249), 2_000, 'just under the slow threshold');
+});
+
+await test('F2. a slow enumeration backs the probe interval off, capped at 30s', () => {
+  let delay = 2_000;
+  delay = nextProbeDelayMs(delay, 900);
+  assert.equal(delay, 4_000, 'first slow sweep doubles');
+  delay = nextProbeDelayMs(delay, 900);
+  assert.equal(delay, 8_000, 'and again');
+  for (let i = 0; i < 10; i++) delay = nextProbeDelayMs(delay, 900);
+  assert.equal(delay, 30_000, 'capped — a deck plugged in later still connects');
+});
+
+await test('F3. recovery snaps straight back to the baseline', () => {
+  assert.equal(nextProbeDelayMs(30_000, 3), 2_000, 'keyboard unplugged → 2s again');
+});
+
+await test('F4. the manager starts at the baseline interval', () => {
+  const { driverManager } = setup();
+  assert.equal(driverManager.__reconnectDelayMs(), 2_000, 'no backoff before any sweep');
+});
+
+await test('F5. the cold first sweep never triggers a backoff', () => {
+  const pacer = new ProbePacer();
+  // dlopen + a cold OS HID stack costs ~700ms on a healthy machine; only the
+  // sweeps after it describe the steady state.
+  pacer.note(900);
+  assert.equal(pacer.delayMs, 2_000, 'first sweep is discarded');
+  pacer.note(900);
+  assert.equal(pacer.delayMs, 4_000, 'the second one counts');
 });
 
 // Summary

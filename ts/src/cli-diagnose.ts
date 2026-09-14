@@ -7,7 +7,7 @@
  *  (macOS SIGBUS — the same rule cli-devices.ts documents).
  */
 import { setupNativeLibs, defaultCacheRoot } from './native-libs.js';
-import { listAllHidDevices } from './ffi/hidapi.js';
+import { listAllHidDevicesTimed } from './ffi/hidapi.js';
 import { enumerateDevices, toDeviceRow } from './cli-devices.js';
 import { checkRequirements } from './web/server/requirements.js';
 import { buildDiagnostics, diagnosticsFileName, REVIEW_NOTICE } from './web/server/diagnostics.js';
@@ -23,6 +23,7 @@ import type { CliFlags } from './cli.js';
 export async function buildDiagnosticsReport(flags: CliFlags): Promise<string> {
   const cacheRoot = defaultCacheRoot();
   const settings = await loadSettings(cacheRoot);
+  const hidEnum = listAllHidDevicesTimed();
   return buildDiagnostics(
     {
       header: {
@@ -40,7 +41,8 @@ export async function buildDiagnosticsReport(flags: CliFlags): Promise<string> {
         logPath: logFilePath(cacheRoot),
       },
       modelOverrides: settings.modelOverrides ?? {},
-      hidDevices: listAllHidDevices(),
+      hidDevices: hidEnum.devices,
+      hidEnumerateMs: hidEnum.tookMs,
       deviceRows: enumerateDevices().map(toDeviceRow),
       requirements: await checkRequirements(),
       logTail: await tailLogFile(Number.MAX_SAFE_INTEGER, cacheRoot),

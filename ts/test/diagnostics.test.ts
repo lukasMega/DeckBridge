@@ -182,6 +182,15 @@ test('the unfiltered HID table includes devices DeckBridge does not recognize', 
   assert.ok(report.includes('3434:0361'), 'its VID:PID is shown in hex');
 });
 
+test('the enumeration duration rides in the HID section title', () => {
+  // The presence sweep runs this same enumeration on the main thread, so a
+  // four-figure number here IS the "DeckBridge freezes" report (issue #67.2).
+  const slow = buildDiagnostics({ ...fullSources(), hidEnumerateMs: 4200 });
+  assert.ok(slow.includes('hid enumeration (all devices, took 4200ms)'), 'duration shown');
+  const unknown = buildDiagnostics(fullSources());
+  assert.ok(unknown.includes('hid enumeration (all devices)'), 'omitted when not measured');
+});
+
 test('failing requirements show their install hint', () => {
   const report = buildDiagnostics(fullSources());
   assert.ok(report.includes('avahi-daemon not running'));
