@@ -333,8 +333,8 @@ export class WebUIServer extends EventEmitter implements WebUIController {
     else this.bus.broadcast('extraKeys', { configs: this.selectedExtraKeyConfigs() });
   }
 
-  notifyElgatoAppRunning(running: boolean): void {
-    this.status.setFlag('elgatoAppRunning', running);
+  notifyElgatoAppConflict(conflict: boolean): void {
+    this.status.setFlag('elgatoAppConflict', conflict);
   }
 
   notifyElgatoDevicePresent(present: boolean): void {

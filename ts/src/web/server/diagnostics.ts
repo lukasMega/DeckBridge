@@ -30,6 +30,10 @@ export interface DiagnosticsSources {
     cpus?: string;
     uptimeMs?: number;
     logLevel: string;
+    /** Elgato desktop app process presence, probed fresh for the report. Distinct
+     *  from `state.elgatoAppConflict`, which is forced false while we hold the
+     *  device — that flag answers "is it blocking us", this one "is it running". */
+    elgatoAppRunning?: boolean;
   };
   /** Effective CLI flags, as parsed. Values are shown verbatim — none are secrets. */
   flags?: Record<string, unknown>;
@@ -213,6 +217,13 @@ function redactSettings(settingsJson: string): string {
   }
 }
 
+/** Process presence of the Elgato desktop app, or "(unavailable)" when the
+ *  caller could not probe it. */
+function elgatoAppText(running: boolean | undefined): string {
+  if (running === undefined) return UNAVAILABLE;
+  return running ? 'running' : 'not running';
+}
+
 function headerBlock(h: DiagnosticsSources['header']): string {
   return kvBlock({
     version: h.version,
@@ -221,6 +232,7 @@ function headerBlock(h: DiagnosticsSources['header']): string {
     cpus: h.cpus ?? UNAVAILABLE,
     uptime: h.uptimeMs === undefined ? UNAVAILABLE : formatDuration(h.uptimeMs),
     'log level': h.logLevel,
+    'elgato app': elgatoAppText(h.elgatoAppRunning),
     generated: new Date().toISOString(),
   });
 }

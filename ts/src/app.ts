@@ -14,13 +14,11 @@ import { setupImageHandler } from './image-pipeline.js';
 import { DriverManager, getInitialDriverMode } from './driver-manager.js';
 import type { SessionServersFactory } from './device-session.js';
 import { startCoraWithRetry } from './cora-startup.js';
-import { openPathInOS, platformName } from './os-utils.ts';
+import { isElgatoAppRunning, openPathInOS, platformName } from './os-utils.ts';
 import { parseCli, userArgs, applyFlagsToEnv, versionText, USAGE_TEXT, isLogLevel } from './cli.js';
 import { runDevicesCommand } from './cli-devices.js';
 import { runDiagnoseCommand } from './cli-diagnose.js';
 import { loadSettings } from './settings-store.js';
-
-const [MAC_OS, WIN] = ['macOS', 'Windows'];
 
 const openBrowser = openPathInOS;
 
@@ -68,35 +66,6 @@ if (tjs.env.DECKBRIDGE_LOG_LEVEL) {
 startLogFile();
 const headless = cli.flags.headless;
 const noWebui = cli.flags.noWebui;
-
-async function isElgatoAppRunning(): Promise<boolean> {
-  // platformName() returns 'macOS', 'Windows', 'Linux', etc. (or '' if unavailable).
-  const platform = platformName();
-  if (platform !== MAC_OS && platform !== WIN) return false;
-  try {
-    if (platform === MAC_OS) {
-      const p = tjs.spawn(['pgrep', '-x', 'Stream Deck'], { stdout: 'ignore', stderr: 'ignore' });
-      const { exit_status } = await p.wait();
-      return exit_status === 0;
-    }
-    const p = tjs.spawn(['tasklist', '/FI', 'IMAGENAME eq StreamDeck.exe', '/NH'], {
-      stdout: 'pipe',
-      stderr: 'ignore',
-    });
-    const dec = new TextDecoder();
-    let out = '';
-    const reader = p.stdout.getReader();
-    for (;;) {
-      const { value, done } = await reader.read();
-      if (done) break;
-      out += dec.decode(value, { stream: true });
-    }
-    await p.wait();
-    return out.toLowerCase().includes('streamdeck.exe');
-  } catch {
-    return false;
-  }
-}
 
 // Extract embedded native libs and set DECKBRIDGE_NATIVE_LIB / HIDAPI_LIB
 // before any server, the HID worker, or the FFI loaders run.
@@ -392,21 +361,23 @@ log(
 );
 log('info', 'deckBr', '══════════════════════════════════════════════');
 
-// Poll for the Elgato desktop app running status. When driverConnected the
-// conflict is irrelevant; only check when the device slot is free. Skip the
-// spawn entirely when no WebUI client is connected — nobody is looking at
-// `elgatoAppRunning`, and a fresh poll happens on the next tick once a client
-// connects. --headless skips this timer entirely: no WebUI client is ever
-// expected to be watching on a headless box.
-let _elgatoAppRunning = false;
+// Poll for a conflict with the Elgato desktop app: it is running AND the device
+// slot is free, i.e. it is plausibly the reason we can't open the hardware. When
+// driverConnected we own the device, so there is no conflict by definition and the
+// flag is false regardless of whether the app is running (the diagnostics report
+// probes the process separately — see os-utils.isElgatoAppRunning). Skip the spawn
+// entirely when no WebUI client is connected — nobody is looking at the flag, and a
+// fresh poll happens on the next tick once a client connects. --headless skips this
+// timer entirely: no WebUI client is ever expected to be watching on a headless box.
+let _elgatoAppConflict = false;
 if (!headless) {
   setInterval(async () => {
     if (!webui.hasClients()) return;
     const connected = webui.snapshot().driverConnected;
     const next = connected ? false : await isElgatoAppRunning();
-    if (next !== _elgatoAppRunning) {
-      _elgatoAppRunning = next;
-      webui.notifyElgatoAppRunning(next);
+    if (next !== _elgatoAppConflict) {
+      _elgatoAppConflict = next;
+      webui.notifyElgatoAppConflict(next);
     }
   }, 2000);
 }
