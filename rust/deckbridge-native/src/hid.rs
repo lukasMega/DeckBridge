@@ -1,34 +1,38 @@
 use hidapi::HidApi;
+use std::collections::BTreeSet;
 use std::os::raw::c_char;
 use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::sync::Mutex;
 
-/// Process-lifetime `HidApi`, lazily created and refreshed per use.
+/// Process-lifetime `HidApi`, lazily created without automatic discovery.
 static HID_API: Mutex<Option<HidApi>> = Mutex::new(None);
 
-/// Run `f` against a refreshed device list, returning `default` if hidapi is
-/// unavailable (what the per-call `HidApi::new()` used to yield). Hoisting it out of
-/// the call drops a `hid_init()` per call. Mutex because `HidApi` is not `Sync` and
-/// both the main and worker threads call in; a poisoned lock is recovered, and a
-/// failed construction is retried later. Enumeration only — `f` must never
-/// `hid_open` (corrupts IOKit state on macOS).
-fn with_api<T>(default: T, f: impl FnOnce(&HidApi) -> T) -> T {
+/// Run `f` against exactly the requested VID/PID filters. Avoiding the implicit
+/// `add_devices(0, 0)` matters on Windows: full HIDAPI discovery requests descriptor
+/// strings from unrelated keyboards, and issue #67 found several that block those
+/// requests for five seconds per collection.
+fn with_api<T>(default: T, filters: &[(u16, u16)], f: impl FnOnce(&HidApi) -> T) -> T {
     let mut guard = HID_API.lock().unwrap_or_else(|e| e.into_inner());
-    match guard.as_mut() {
-        Some(api) => {
-            if api.refresh_devices().is_err() {
-                return default;
-            }
-        }
-        None => match HidApi::new() {
+    if guard.is_none() {
+        #[allow(deprecated)]
+        let created = HidApi::new_without_enumerate();
+        match created {
             Ok(api) => *guard = Some(api),
             Err(_) => return default,
-        },
+        }
     }
-    match guard.as_ref() {
-        Some(api) => f(api),
-        None => default,
+    let Some(api) = guard.as_mut() else {
+        return default;
+    };
+    if api.reset_devices().is_err() {
+        return default;
     }
+    for &(vid, pid) in filters {
+        if api.add_devices(vid, pid).is_err() {
+            return default;
+        }
+    }
+    f(api)
 }
 
 /// Find a HID device path by vendor ID, product ID, usage page, and usage.
@@ -51,7 +55,7 @@ pub unsafe extern "C" fn mirabox_hid_find_path(
         if out_buf.is_null() || out_len == 0 {
             return 0;
         }
-        with_api(0, |api| {
+        with_api(0, &[(vid, pid)], |api| {
             for info in api.device_list() {
                 if info.vendor_id() == vid
                     && (pid == 0 || info.product_id() == pid)
@@ -108,7 +112,7 @@ pub unsafe extern "C" fn mirabox_hid_list_paths(
         if out_buf.is_null() || out_len == 0 {
             return 0;
         }
-        with_api(0, |api| {
+        with_api(0, &[(vid, pid)], |api| {
             let mut count: i32 = 0;
             let mut pos: usize = 0; // bytes written so far (excluding the final NUL)
             for info in api.device_list() {
@@ -176,7 +180,7 @@ pub unsafe extern "C" fn mirabox_hid_serial_for_path(
         }
         // SAFETY: caller guarantees `path` is a valid null-terminated C string.
         let want = unsafe { std::ffi::CStr::from_ptr(path) };
-        with_api(0, |api| {
+        with_api(0, &[(0, 0)], |api| {
             for info in api.device_list() {
                 if info.path() != want {
                     continue;
@@ -217,7 +221,7 @@ pub unsafe extern "C" fn mirabox_hid_serial_for_path(
 #[no_mangle]
 pub extern "C" fn mirabox_hid_present(vid: u16, pid: u16) -> i32 {
     let result = catch_unwind(AssertUnwindSafe(|| {
-        with_api(0, |api| {
+        with_api(0, &[(vid, pid)], |api| {
             for info in api.device_list() {
                 if info.vendor_id() == vid && (pid == 0 || info.product_id() == pid) {
                     return 1;
@@ -237,6 +241,96 @@ fn tsv_field(value: Option<&str>) -> String {
         None | Some("") => "-".to_string(),
         Some(s) => s.replace(['\t', '\n', '\r'], " "),
     }
+}
+
+fn write_hid_rows(api: &HidApi, out_buf: *mut c_char, out_len: usize) -> i32 {
+    let mut count: i32 = 0;
+    let mut pos: usize = 0;
+    for info in api.device_list() {
+        let record = format!(
+            "{:04x}\t{:04x}\t{:04x}\t{:04x}\t{}\t{}\t{}\t{}\t{}",
+            info.vendor_id(),
+            info.product_id(),
+            info.usage_page(),
+            info.usage(),
+            info.interface_number(),
+            tsv_field(info.manufacturer_string()),
+            tsv_field(info.product_string()),
+            tsv_field(info.serial_number()),
+            tsv_field(info.path().to_str().ok()),
+        );
+        let bytes = record.as_bytes();
+        let sep = usize::from(count > 0);
+        if pos + sep + bytes.len() + 1 > out_len {
+            break;
+        }
+        // SAFETY: callers validate the output buffer; the bounds check reserves
+        // room for every byte plus the final NUL.
+        unsafe {
+            if sep == 1 {
+                *out_buf.add(pos) = b'\n' as c_char;
+                pos += 1;
+            }
+            std::ptr::copy_nonoverlapping(
+                bytes.as_ptr().cast::<c_char>(),
+                out_buf.add(pos),
+                bytes.len(),
+            );
+            pos += bytes.len();
+        }
+        count += 1;
+    }
+    // SAFETY: every loop iteration reserves one byte for this terminator.
+    unsafe {
+        *out_buf.add(pos) = 0;
+    }
+    count
+}
+
+fn parse_vid_pid_filters(spec: &str) -> Vec<(u16, u16)> {
+    spec.split(',')
+        .filter_map(|pair| {
+            let (vid, pid) = pair.split_once(':')?;
+            Some((
+                u16::from_str_radix(vid, 16).ok()?,
+                u16::from_str_radix(pid, 16).ok()?,
+            ))
+        })
+        .collect::<BTreeSet<_>>()
+        .into_iter()
+        .collect()
+}
+
+/// List only interfaces matching comma-separated hexadecimal `VID:PID` pairs.
+/// HIDAPI therefore skips descriptor-string queries for unrelated devices.
+/// Operational discovery uses this export; full enumeration remains diagnostics-only.
+///
+/// # Safety
+/// `filter_spec` must be a valid null-terminated C string. `out_buf` must be null
+/// or valid for `out_len` bytes for the duration of the call.
+#[no_mangle]
+pub unsafe extern "C" fn mirabox_hid_list_supported(
+    filter_spec: *const c_char,
+    out_buf: *mut c_char,
+    out_len: usize,
+) -> i32 {
+    let result = catch_unwind(AssertUnwindSafe(|| {
+        if filter_spec.is_null() || out_buf.is_null() || out_len == 0 {
+            return 0;
+        }
+        // SAFETY: caller guarantees `filter_spec` is null-terminated.
+        let Ok(spec) = unsafe { std::ffi::CStr::from_ptr(filter_spec) }.to_str() else {
+            return 0;
+        };
+        let filters = parse_vid_pid_filters(spec);
+        if filters.is_empty() {
+            // SAFETY: output buffer validity was checked above.
+            unsafe { *out_buf = 0 };
+            return 0;
+        }
+        with_api(0, &filters, |api| write_hid_rows(api, out_buf, out_len))
+    }));
+    result.unwrap_or(0)
 }
 
 /// List EVERY connected HID interface, one TSV record per line, NUL-terminated,
@@ -263,57 +357,14 @@ pub unsafe extern "C" fn mirabox_hid_list_all(out_buf: *mut c_char, out_len: usi
         if out_buf.is_null() || out_len == 0 {
             return 0;
         }
-        let Ok(api) = HidApi::new() else {
-            return 0;
-        };
-        let mut count: i32 = 0;
-        let mut pos: usize = 0; // bytes written so far (excluding the final NUL)
-        for info in api.device_list() {
-            let record = format!(
-                "{:04x}\t{:04x}\t{:04x}\t{:04x}\t{}\t{}\t{}\t{}\t{}",
-                info.vendor_id(),
-                info.product_id(),
-                info.usage_page(),
-                info.usage(),
-                info.interface_number(),
-                tsv_field(info.manufacturer_string()),
-                tsv_field(info.product_string()),
-                tsv_field(info.serial_number()),
-                tsv_field(info.path().to_str().ok()),
-            );
-            let bytes = record.as_bytes();
-            let sep = usize::from(count > 0);
-            if pos + sep + bytes.len() + 1 > out_len {
-                break;
-            }
-            // SAFETY: the bounds check above guarantees pos + sep + len + 1 <= out_len,
-            // so every write below (separator, record bytes, terminating NUL) stays in range.
-            unsafe {
-                if sep == 1 {
-                    *out_buf.add(pos) = b'\n' as c_char;
-                    pos += 1;
-                }
-                std::ptr::copy_nonoverlapping(
-                    bytes.as_ptr().cast::<c_char>(),
-                    out_buf.add(pos),
-                    bytes.len(),
-                );
-                pos += bytes.len();
-            }
-            count += 1;
-        }
-        // SAFETY: pos <= out_len - 1 (the loop reserves a byte for the NUL before writing).
-        unsafe {
-            *out_buf.add(pos) = 0;
-        }
-        count
+        with_api(0, &[(0, 0)], |api| write_hid_rows(api, out_buf, out_len))
     }));
     result.unwrap_or(0)
 }
 
 #[cfg(test)]
 mod list_all_tests {
-    use super::tsv_field;
+    use super::{parse_vid_pid_filters, tsv_field};
 
     #[test]
     fn absent_and_empty_fields_become_a_dash() {
@@ -329,5 +380,13 @@ mod list_all_tests {
     #[test]
     fn ordinary_values_pass_through() {
         assert_eq!(tsv_field(Some("Mirabox 293V3")), "Mirabox 293V3");
+    }
+
+    #[test]
+    fn supported_filters_parse_and_deduplicate() {
+        assert_eq!(
+            parse_vid_pid_filters("0fd9:006c,0300:3010,0fd9:006c,bad"),
+            vec![(0x0300, 0x3010), (0x0fd9, 0x006c)]
+        );
     }
 }

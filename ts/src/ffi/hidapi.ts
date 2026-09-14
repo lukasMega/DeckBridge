@@ -179,9 +179,8 @@ function loadHidEnum(): { symbols: HidEnumSymbols; close(): void } | null {
 // device (the "freeze when this keyboard is plugged in" report, issue #67.2) is
 // multiplied by 26 into seconds of blocked event loop — no CORA ACKs, no WebUI.
 //
-// So: enumerate ONCE per short window and answer the filtered queries from that
-// snapshot. The TTL is shorter than the 2 s reconnect tick, so hotplug latency is
-// unchanged; a caller that must not see stale data passes maxAgeMs = 0.
+// Operational discovery now installs a supported-only snapshot from a dedicated
+// worker. Legacy CLI/diagnostic callers may still request a short-lived full snapshot.
 // ---------------------------------------------------------------------------
 
 /** Reuse window for one full enumeration. Shorter than RECONNECT_DELAY_MS (2 s) on
@@ -386,7 +385,7 @@ export interface HidDeviceInfo {
 // enumeration (hidSnapshot) — a truncated tail would read as "device unplugged".
 const LIST_ALL_BUF_BYTES = 512 * 1024;
 
-function parseHidRow(line: string): HidDeviceInfo | null {
+export function parseHidRow(line: string): HidDeviceInfo | null {
   const f = line.split('\t');
   if (f.length !== 9) return null;
   return {
@@ -402,9 +401,8 @@ function parseHidRow(line: string): HidDeviceInfo | null {
   };
 }
 
-/** listAllHidDevices() plus how long it took. The duration is what a freeze report
- *  needs: the presence sweep runs this same enumeration on the main thread, so a
- *  four-figure `tookMs` here IS the freeze (issue #67.2). */
+/** Full diagnostic enumeration plus duration. A four-figure `tookMs` identifies
+ * the hostile HID stack behavior which operational supported-only scans avoid. */
 export function listAllHidDevicesTimed(): { devices: HidDeviceInfo[]; tookMs: number } {
   const t0 = Date.now();
   const devices = listAllHidDevices();

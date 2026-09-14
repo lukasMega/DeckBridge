@@ -153,9 +153,9 @@ export default defineConfig([
         { type: 'platform', mode: 'full', pattern: 'src/platform/**' },
         { type: 'assets', mode: 'full', pattern: 'src/assets/**' },
         { type: 'devices', mode: 'full', pattern: ['src/devices/**', 'src/mirabox.ts'] },
-        { type: 'worker', mode: 'full', pattern: 'src/hid-worker.ts' },
-        { type: 'worker-host', mode: 'full', pattern: 'src/hid-worker-host.ts' },
-        { type: 'worker-ipc', mode: 'full', pattern: 'src/hid-worker-protocol.ts' },
+        { type: 'worker', mode: 'full', pattern: ['src/hid-worker.ts', 'src/hid-scan-worker.ts'] },
+        { type: 'worker-host', mode: 'full', pattern: ['src/hid-worker-host.ts', 'src/hid-scan-worker-host.ts'] },
+        { type: 'worker-ipc', mode: 'full', pattern: ['src/hid-worker-protocol.ts', 'src/hid-scan-worker-protocol.ts'] },
         { type: 'plugin-worker', mode: 'full', pattern: 'src/plugin-worker.ts' },
         { type: 'plugin-worker-host', mode: 'full', pattern: 'src/plugin-host.ts' },
         { type: 'plugin-worker-ipc', mode: 'full', pattern: 'src/plugin-worker-protocol.ts' },
@@ -315,6 +315,10 @@ export default defineConfig([
               from: { element: { type: 'worker-host' } },
               allow: { to: { element: { type: 'worker-ipc' } } },
             },
+            {
+              from: { element: { type: 'worker-host' } },
+              allow: { to: { element: { type: 'ffi' } }, dependency: { kind: 'type' } },
+            },
 
             // ── plugin worker (crash/CPU isolation for user plugin JS) ──
             // The worker entry talks to its own IPC types; the host proxies to it
@@ -337,7 +341,7 @@ export default defineConfig([
             // ── tier B (USB worker) ──
             {
               from: { element: { type: 'worker' } },
-              allow: { to: { element: { type: ['devices', 'transform'] } } },
+              allow: { to: { element: { type: ['devices', 'transform', 'ffi'] } } },
             },
             // The worker clears the LRU image cache on every open(): a device-tuning
             // change alters the encoded bytes, and stale entries would make the tweak

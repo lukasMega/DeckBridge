@@ -28,6 +28,11 @@ declare module 'virtual:hid-worker' {
   export default s;
 }
 
+declare module 'virtual:hid-scan-worker' {
+  const s: string;
+  export default s;
+}
+
 // esbuild virtual module: the bundled plugin worker (runs user plugin JS)
 declare module 'virtual:plugin-worker' {
   const s: string;

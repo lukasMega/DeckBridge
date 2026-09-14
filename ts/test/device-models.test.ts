@@ -123,9 +123,9 @@ test('Ajazz AKP153 rev.2 models do not match the rev.1 PIDs (different protocol)
   assert.notEqual(findModel(0x0300, 0x1020)?.id, 'ajazz-akp153r-rev2');
 });
 
-// The rev.2 boards are the 293V3 behind a different VID/PID; the models are literal
-// clones, so any 293V3 retuning must be mirrored (or the clone claim dropped).
-test('Ajazz AKP153 rev.2 models mirror the 293V3 wire/image/key spec', () => {
+// Both rev.2 boards use the 293V3 protocol. AKP153E image/key geometry is calibrated
+// separately below; AKP153R remains an unverified literal clone.
+test('Ajazz AKP153 rev.2 models mirror the 293V3 protocol and wire spec', () => {
   for (const model of [AJAZZ_AKP153E_REV2_MODEL, AJAZZ_AKP153R_REV2_MODEL]) {
     assert.equal(model.usbVendorId, 0x0300);
     assert.equal(model.protocol, MIRABOX_293_MODEL.protocol);
@@ -133,12 +133,18 @@ test('Ajazz AKP153 rev.2 models mirror the 293V3 wire/image/key spec', () => {
     assert.equal(model.usagePage, MIRABOX_293_MODEL.usagePage);
     assert.equal(model.usage, MIRABOX_293_MODEL.usage);
     assert.equal(model.keyCount, MIRABOX_293_MODEL.keyCount);
-    assert.equal(JSON.stringify(model.image), JSON.stringify(MIRABOX_293_MODEL.image));
     assert.equal(JSON.stringify(model.wire), JSON.stringify(MIRABOX_293_MODEL.wire));
-    assert.equal(JSON.stringify(model.keyMap), JSON.stringify(MIRABOX_293_MODEL.keyMap));
     assert.equal(JSON.stringify(model.cora), JSON.stringify(MIRABOX_293_MODEL.cora));
     assert.equal(JSON.stringify(model.splash), JSON.stringify(MIRABOX_293_MODEL.splash));
   }
+  assert.equal(
+    JSON.stringify(AJAZZ_AKP153R_REV2_MODEL.image),
+    JSON.stringify(MIRABOX_293_MODEL.image),
+  );
+  assert.equal(
+    JSON.stringify(AJAZZ_AKP153R_REV2_MODEL.keyMap),
+    JSON.stringify(MIRABOX_293_MODEL.keyMap),
+  );
 });
 
 // Fifine AmpliGame D6 (2 revisions of the 293V3 board)
@@ -401,6 +407,35 @@ test('fifine-d6 (both revisions) coraToWireImage is a permutation of 1..15', () 
   for (const model of [FIFINE_D6_MODEL, FIFINE_D6_REV2_MODEL]) {
     assertPermutation(model.id, model.keyMap.coraToWireImage!, model.keyCount);
   }
+});
+
+test('ajazz-akp153e-rev2 uses issue #67 hardware mapping', () => {
+  assert.equal(AJAZZ_AKP153E_REV2_MODEL.image.rotate, 90);
+  assert.deepEqual(
+    Array.from(AJAZZ_AKP153E_REV2_MODEL.keyMap.coraToWireImage!),
+    [13, 10, 7, 4, 1, 14, 11, 8, 5, 2, 15, 12, 9, 6, 3],
+  );
+  assert.deepEqual(
+    Array.from(AJAZZ_AKP153E_REV2_MODEL.keyMap.wireInputToCora!),
+    [-1, 4, 9, 14, 3, 8, 13, 2, 7, 12, 1, 6, 11, 0, 5, 10],
+  );
+  assert.equal(AJAZZ_AKP153E_REV2_MODEL.keyMap.inputOffset, undefined);
+});
+
+test('ajazz-akp153e-rev2 input and image maps are inverses', () => {
+  const images = AJAZZ_AKP153E_REV2_MODEL.keyMap.coraToWireImage!;
+  const inputs = AJAZZ_AKP153E_REV2_MODEL.keyMap.wireInputToCora!;
+  images.forEach((wireId, coraIndex) => assert.equal(inputs[wireId], coraIndex));
+});
+
+test('ajazz-akp153r-rev2 keeps unverified inherited mapping', () => {
+  assert.equal(AJAZZ_AKP153R_REV2_MODEL.image.rotate, 0);
+  assert.deepEqual(
+    Array.from(AJAZZ_AKP153R_REV2_MODEL.keyMap.coraToWireImage!),
+    [11, 12, 13, 14, 15, 6, 7, 8, 9, 10, 1, 2, 3, 4, 5],
+  );
+  assert.equal(AJAZZ_AKP153R_REV2_MODEL.keyMap.inputOffset, 1);
+  assert.equal(AJAZZ_AKP153R_REV2_MODEL.keyMap.wireInputToCora, undefined);
 });
 
 test('mk2 has empty keyMap (identity mapping)', () => {

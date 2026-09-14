@@ -28,6 +28,10 @@ going global (fat LTO across mixed opt-levels bloats the output).
 
 ## HID enumeration cost
 
+> Historical benchmark. Operational discovery now uses
+> `mirabox_hid_list_supported` inside a dedicated worker. Full
+> `mirabox_hid_list_all` enumeration remains diagnostics-only.
+
 `HidApi::new()` is a full `hid_init()` + system-wide `hid_enumerate()`. It used to run
 inside every one of the four exported HID fns.
 

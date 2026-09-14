@@ -46,9 +46,8 @@ export interface DiagnosticsSources {
   /** Model specs in effect after overrides are applied, keyed by model id. */
   effectiveModels?: Record<string, unknown>;
   hidDevices?: HidDeviceInfo[];
-  /** Wall time of the enumeration that produced `hidDevices`, in ms. The first number
-   *  to look at on a "DeckBridge freezes when X is plugged in" report: the presence
-   *  sweep runs this on the main thread (issue #67.2). */
+  /** Wall time of the full diagnostic enumeration that produced `hidDevices`, in ms.
+   * Large values identify HID stacks avoided by operational supported-only scans. */
   hidEnumerateMs?: number;
   deviceRows?: DeviceRow[];
   requirements?: RequirementResult[];

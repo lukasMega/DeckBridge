@@ -636,7 +636,10 @@ await test('9. E1-b: in-flight guard — a second tryRealConnect() during a prob
     const first = driverManager.tryRealConnect();
     const second = driverManager.tryRealConnect();
 
-    // Let the first probe's driver open() resolve.
+    // Discovery is asynchronous, even with the test seam. Let it reach open().
+    await Promise.resolve();
+    await Promise.resolve();
+    assert.ok(firstDriver, 'first probe reached driver open');
     firstDriver!.resolveOpen();
 
     await first;

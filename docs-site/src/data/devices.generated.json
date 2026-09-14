@@ -615,7 +615,7 @@
           "format": "jpeg",
           "width": "112",
           "height": "112",
-          "rotate": "0°",
+          "rotate": "90°",
           "flipH": "no",
           "flipV": "no",
           "colorMode": "rgb",

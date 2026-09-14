@@ -5,13 +5,12 @@
 import { log } from './logger.js';
 import { closeDriver, type WorkerHidDriver } from './hid-worker-host.js';
 import type { DeviceModel, DeviceModelOverride } from './devices/driver.js';
-import type { DriverMode } from './driver-manager.js';
+import type { DriverMode } from './driver-manager-discovery.js';
 import { MAX_DEVICE_SESSIONS, RECONNECT_DELAY_MS, MDNS_SERVICE_NAME } from './types.js';
 import type { DockStatus, ExtraKeyConfig } from './types.js';
 import { DEVICE_MODELS } from './devices/registry.js';
 import { DeviceSession, sessionIdentity, type SessionServersFactory } from './device-session.js';
 import { deviceKeyFor, sharedSerialModelId } from './device-identity.js';
-import { hidSerialForPath } from './ffi/hidapi.js';
 import type { DeviceIdentitySettings } from './settings-store.js';
 
 export interface ExtraDockCoordinatorDeps {
@@ -20,10 +19,14 @@ export interface ExtraDockCoordinatorDeps {
   isProbeInFlight: () => boolean;
   sessionServersFactory: SessionServersFactory | null;
   getRealDriver: () => WorkerHidDriver | null;
+  /** Refresh supported HID paths off-thread before each discovery pass. */
+  refreshHidSnapshot: () => Promise<number>;
   /** Every connected HID interface path for this model (one per physical unit),
    *  from deckbridge-native enumeration. Drives per-unit docking of same-model
    *  duplicates. [] when absent or the model can't be path-targeted. */
   listModelPaths: (model: DeviceModel) => string[];
+  /** Serial lookup from the completed discovery snapshot. Never enumerates. */
+  serialForPath: (hidPath: string) => string | null;
   /** Registry model + the user's device tuning for it (settings.json
    *  modelOverrides), resolved by DriverManager. In safe mode
    *  (`--no-overrides`) `override` is undefined and `model` is the registry
@@ -65,6 +68,7 @@ export class ExtraDockCoordinator {
   private extraSessions = new Map<string, DeviceSession>();
   private freeIndices: number[] = Array.from({ length: MAX_DEVICE_SESSIONS - 1 }, (_, k) => k + 1);
   private scanTimer: ReturnType<typeof setInterval> | null = null;
+  private scanInFlight = false;
   private extraCreateInFlight = false;
 
   constructor(deps: ExtraDockCoordinatorDeps) {
@@ -96,25 +100,38 @@ export class ExtraDockCoordinator {
     await this.scanExtras();
   }
 
+  private scanTarget(): WorkerHidDriver | null {
+    if (this.deps.getShuttingDown()) return null;
+    if (this.deps.getDriverMode() !== 'real') return null;
+    if (this.deps.isProbeInFlight()) return null;
+    if (!this.deps.sessionServersFactory) return null;
+    if (this.extraCreateInFlight) return null;
+    if (this.freeIndices.length === 0) return null;
+    return this.deps.getRealDriver();
+  }
+
   private async scanExtras(): Promise<void> {
-    // Guard order matters: cheapest/most-decisive first.
-    if (this.deps.getShuttingDown()) return;
-    if (this.deps.getDriverMode() !== 'real') return;
-    if (this.deps.isProbeInFlight()) return; // don't race the primary probe
-    if (!this.deps.sessionServersFactory) return; // multi-device disabled
-    const realDriver = this.deps.getRealDriver();
-    if (realDriver === null) return; // extras only AFTER the primary connects
-    if (this.extraCreateInFlight) return;
-    if (this.freeIndices.length === 0) return;
-
-    const pick = this.pickUnclaimedPath(realDriver);
-    if (!pick) return;
-
-    this.extraCreateInFlight = true;
+    if (this.scanInFlight) return;
+    if (this.scanTarget() === null) return;
+    this.scanInFlight = true;
     try {
-      await this.createExtraSession(pick.model, pick.hidPath);
+      const enumerateMs = await this.deps.refreshHidSnapshot();
+      log('debug', 'coord', `worker enumerate took ${enumerateMs}ms`);
+
+      // State can change while the worker is blocked inside native discovery.
+      const currentRealDriver = this.scanTarget();
+      if (currentRealDriver === null) return;
+
+      const pick = this.pickUnclaimedPath(currentRealDriver);
+      if (!pick) return;
+      this.extraCreateInFlight = true;
+      try {
+        await this.createExtraSession(pick.model, pick.hidPath);
+      } finally {
+        this.extraCreateInFlight = false;
+      }
     } finally {
-      this.extraCreateInFlight = false;
+      this.scanInFlight = false;
     }
   }
 
@@ -132,10 +149,8 @@ export class ExtraDockCoordinator {
     const skipModelId = primaryPath ? null : realDriver.model.id;
 
     let pick: { model: DeviceModel; hidPath: string } | null = null;
-    // Timed: this sweep is one synchronous hid_enumerate per model per 2 s tick
-    // on the main thread. On Windows a chatty composite HID keyboard can make
-    // each call take hundreds of ms — issue #67.2's prime suspect. The number
-    // here is what turns "it freezes" into a named step with a duration.
+    // Pure snapshot filtering. Native discovery already completed inside the
+    // dedicated worker, so this loop cannot stall CORA or WebUI timers.
     const t0 = Date.now();
     let seen = 0;
     for (const model of DEVICE_MODELS) {
@@ -197,7 +212,7 @@ export class ExtraDockCoordinator {
     // same-model units. v1 models share a hardcoded serial across every unit (see
     // deviceKeyFor JSDoc) — append the model id so two different v1 decks don't
     // collapse into one identity.
-    const serial = hidSerialForPath(hidPath);
+    const serial = this.deps.serialForPath(hidPath);
     const deviceKey = deviceKeyFor(hidPath, serial, sharedSerialModelId(model));
     const deviceIdentity = this.deps.getOrCreateDeviceIdentity(
       deviceKey,
