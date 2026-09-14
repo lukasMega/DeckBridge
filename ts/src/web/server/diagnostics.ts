@@ -42,6 +42,10 @@ export interface DiagnosticsSources {
   /** Model specs in effect after overrides are applied, keyed by model id. */
   effectiveModels?: Record<string, unknown>;
   hidDevices?: HidDeviceInfo[];
+  /** Wall time of the enumeration that produced `hidDevices`, in ms. The first number
+   *  to look at on a "DeckBridge freezes when X is plugged in" report: the presence
+   *  sweep runs this on the main thread (issue #67.2). */
+  hidEnumerateMs?: number;
   deviceRows?: DeviceRow[];
   requirements?: RequirementResult[];
   /** Server path only — absent for the CLI path. */
@@ -107,6 +111,13 @@ function table(headers: string[], rows: string[][]): string {
 
 function hex4(n: number): string {
   return Number.isFinite(n) ? n.toString(16).padStart(4, '0') : '????';
+}
+
+/** The enumeration duration rides in the section title: it is the single number that
+ *  says whether a "freezes when X is plugged in" report is an enumeration stall. */
+function hidSectionTitle(tookMs: number | undefined): string {
+  const took = tookMs === undefined ? '' : `, took ${tookMs}ms`;
+  return `hid enumeration (all devices${took})`;
 }
 
 function hidTable(devices: HidDeviceInfo[] | undefined): string {
@@ -241,7 +252,7 @@ export function buildDiagnostics(src: DiagnosticsSources, opt: DiagnosticsOption
     section('paths', kvBlock(src.paths)),
     section('model overrides', overridesBlock(src.modelOverrides)),
     section('effective model specs', jsonBlock(src.effectiveModels)),
-    section('hid enumeration (all devices)', hidTable(src.hidDevices)),
+    section(hidSectionTitle(src.hidEnumerateMs), hidTable(src.hidDevices)),
     section('registry matches', registryTable(src.deviceRows)),
     section('requirements', requirementsBlock(src.requirements)),
     section('docks / live state', jsonBlock(src.state)),
