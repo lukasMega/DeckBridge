@@ -52,9 +52,8 @@ function elementText(selector: string): string {
 }
 
 async function run(): Promise<void> {
-  // Cases below replace navigator.clipboard in place; the last one installs a
-  // never-resolving writeText. Restore the real descriptor at the end so anything
-  // appended after that case starts from an unstubbed clipboard.
+  // Cases replace navigator.clipboard; the last installs a pending writeText.
+  // Restore the real descriptor before later tests.
   const originalClipboard = Object.getOwnPropertyDescriptor(navigator, 'clipboard');
   patch({ brightness: 10, imageMode: 'resize' });
   await act(() => render(<SelectedValue field="brightness" />, root));
@@ -139,10 +138,8 @@ async function run(): Promise<void> {
     await act(() => render(null, root));
   }
 
-  // A failed copy must revert to the idle label. Both consumers *replace* their label
-  // with "Copy failed" rather than adding to it, so a stuck error would permanently
-  // erase the chip's "IP" caption / the button's "Copy All". Rendered together so one
-  // shared wait covers both without spending the virtual-time budget twice.
+  // Failed copies must restore both idle labels instead of leaving "Copy failed".
+  // Render both consumers together so one shared wait covers both.
   const originalSetTimeout = globalThis.setTimeout;
   const resets: Array<() => void> = [];
   // Offset the fake handles: `clearTimeout` is left real, and useCopyText's unmount
@@ -259,20 +256,20 @@ function stubFetch(handler: (url: string, init?: RequestInit) => unknown): {
 } {
   const calls: StubCall[] = [];
   const original = globalThis.fetch;
-  globalThis.fetch = ((url: string, init?: RequestInit) => {
+  globalThis.fetch = (async (url: string, init?: RequestInit) => {
     calls.push({
       url,
       method: init?.method ?? 'GET',
       body: typeof init?.body === 'string' ? JSON.parse(init.body) : undefined,
     });
-    const result = handler(url, init) as { status?: number; payload?: unknown };
+    const result = (await handler(url, init)) as { status?: number; payload?: unknown };
     const status = result.status ?? 200;
-    return Promise.resolve({
+    return {
       ok: status < 400,
       status,
       json: () => Promise.resolve(result.payload ?? {}),
       text: () => Promise.resolve(JSON.stringify(result.payload ?? {})),
-    });
+    };
   }) as typeof fetch;
   return { calls, restore: () => (globalThis.fetch = original) };
 }
@@ -418,6 +415,68 @@ async function runSettingsPanels(): Promise<void> {
         (posted?.body as { modelId?: string } | undefined)?.modelId === 'mirabox-293s',
         'Apply targets selected dock model',
       );
+      check(root.textContent.includes('Saved.'), 'Apply shows selected model status');
+
+      await act(() => patch({ status: { ...baseStatus, selectedDock: 0, docks } }));
+      await settle();
+      check(!root.textContent.includes('Saved.'), 'Dock selection clears stale status');
+    } finally {
+      stub.restore();
+      await act(() => render(null, root));
+    }
+  }
+
+  // A refetch started by Apply may resolve after the user selects another dock.
+  // Its response must not replace the selected dock's newer view.
+  {
+    let primaryGets = 0;
+    let resolveStale!: (value: { payload: DeviceOverridesView }) => void;
+    const stale = new Promise<{ payload: DeviceOverridesView }>((resolve) => {
+      resolveStale = resolve;
+    });
+    const docks = [
+      {
+        index: 0,
+        modelId: OVERRIDES_VIEW.modelId,
+        modelName: OVERRIDES_VIEW.modelName,
+        keyCount: 15,
+        columns: 5,
+        rows: 3,
+        primaryPort: 5325,
+        primaryConnected: true,
+        elgatoConnected: true,
+      },
+      {
+        index: 1,
+        modelId: SECOND_OVERRIDES_VIEW.modelId,
+        modelName: SECOND_OVERRIDES_VIEW.modelName,
+        keyCount: 18,
+        columns: 6,
+        rows: 3,
+        primaryPort: 5345,
+        primaryConnected: true,
+        elgatoConnected: true,
+      },
+    ];
+    const stub = stubFetch((url, init) => {
+      if (init?.method === 'POST') return { payload: { ok: true } };
+      if (url.includes('modelId=mirabox-293s')) return { payload: SECOND_OVERRIDES_VIEW };
+      primaryGets++;
+      return primaryGets === 1 ? { payload: OVERRIDES_VIEW } : stale;
+    });
+    try {
+      await act(() => patch({ status: { ...baseStatus, selectedDock: 0, docks } }));
+      await act(() => render(<DeviceTuningPanel />, root));
+      await settle();
+      await click('#tuning-apply');
+
+      await act(() => patch({ status: { ...baseStatus, selectedDock: 1, docks } }));
+      await settle();
+      check(root.textContent.includes('Mirabox 293S'), 'New selection wins during stale reload');
+
+      resolveStale({ payload: OVERRIDES_VIEW });
+      await settle();
+      check(root.textContent.includes('Mirabox 293S'), 'Stale tuning response is ignored');
     } finally {
       stub.restore();
       await act(() => render(null, root));
