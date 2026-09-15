@@ -7,6 +7,7 @@
 // not a form).
 import { useCallback, useEffect, useState } from 'preact/hooks';
 import { Collapsible } from '../components/Collapsible.js';
+import { useStore } from '../store.js';
 import { copyLabel, useCopyText } from '../use-copy-text.js';
 import { KeymapLearn } from './keymap-learn.js';
 import type { DeviceImageOverride, DeviceOverridesView } from '../ui-types.js';
@@ -127,6 +128,10 @@ function CheckField({
 }
 
 export function DeviceTuningPanel(): preact.JSX.Element {
+  const selectedModelId = useStore((s) => {
+    const selectedDock = s.status.selectedDock ?? 0;
+    return s.status.docks?.find((dock) => dock.index === selectedDock)?.modelId ?? s.status.modelId;
+  });
   const [view, setView] = useState<DeviceOverridesView | null>(null);
   const [image, setImage] = useState<DeviceImageOverride>({});
   const [busy, setBusy] = useState(false);
@@ -134,18 +139,22 @@ export function DeviceTuningPanel(): preact.JSX.Element {
   const [error, setError] = useState<string | null>(null);
   const copy = useCopyText();
 
-  const load = useCallback(async (signal?: AbortSignal): Promise<void> => {
-    const r = await fetch('/api/device-overrides', signal ? { signal } : {});
-    if (!r.ok) throw new Error(`Could not load device tuning (${r.status})`);
-    const data = (await r.json()) as DeviceOverridesView;
-    setView(data);
-    // Seed from `tunable` (the effective spec projected down to the settable
-    // fields), not from the (usually empty) override and NOT from `effective`:
-    // every control starts at what the device is actually using, and Apply posts
-    // back a shape the server accepts. `effective` also carries protocol facts
-    // like `format`/`colorMode`, which validateModelOverride rejects outright.
-    setImage({ ...data.tunable.image });
-  }, []);
+  const load = useCallback(
+    async (signal?: AbortSignal): Promise<void> => {
+      const query = selectedModelId ? `?modelId=${encodeURIComponent(selectedModelId)}` : '';
+      const r = await fetch(`/api/device-overrides${query}`, signal ? { signal } : {});
+      if (!r.ok) throw new Error(`Could not load device tuning (${r.status})`);
+      const data = (await r.json()) as DeviceOverridesView;
+      setView(data);
+      // Seed from `tunable` (the effective spec projected down to the settable
+      // fields), not from the (usually empty) override and NOT from `effective`:
+      // every control starts at what the device is actually using, and Apply posts
+      // back a shape the server accepts. `effective` also carries protocol facts
+      // like `format`/`colorMode`, which validateModelOverride rejects outright.
+      setImage({ ...data.tunable.image });
+    },
+    [selectedModelId],
+  );
 
   useEffect(() => {
     const ctrl = new AbortController();
@@ -153,8 +162,12 @@ export function DeviceTuningPanel(): preact.JSX.Element {
     return () => ctrl.abort();
   }, [load]);
 
+  // Never leave previous dock's controls actionable while its replacement view
+  // is loading after a selection change.
+  const activeView = view && (!selectedModelId || view.modelId === selectedModelId) ? view : null;
+
   async function apply(): Promise<void> {
-    if (!view) return;
+    if (!activeView) return;
     setBusy(true);
     setError(null);
     setStatus(null);
@@ -163,8 +176,8 @@ export function DeviceTuningPanel(): preact.JSX.Element {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          modelId: view.modelId,
-          overrides: { ...view.overrides, image },
+          modelId: activeView.modelId,
+          overrides: { ...activeView.overrides, image },
         }),
       });
       const parsed = (await r.json()) as { error?: string; reconnecting?: boolean };
@@ -179,7 +192,7 @@ export function DeviceTuningPanel(): preact.JSX.Element {
   }
 
   async function reset(): Promise<void> {
-    if (!view) return;
+    if (!activeView) return;
     setBusy(true);
     setError(null);
     setStatus(null);
@@ -187,7 +200,7 @@ export function DeviceTuningPanel(): preact.JSX.Element {
       const r = await fetch('/api/device-overrides/reset', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ modelId: view.modelId }),
+        body: JSON.stringify({ modelId: activeView.modelId }),
       });
       if (!r.ok) throw new Error(`Reset failed (${r.status})`);
       setStatus('Reset to the built-in defaults — the device reconnects…');
@@ -199,7 +212,7 @@ export function DeviceTuningPanel(): preact.JSX.Element {
     }
   }
 
-  if (!view) {
+  if (!activeView) {
     return (
       <Collapsible
         title="Device tuning"
@@ -218,18 +231,18 @@ export function DeviceTuningPanel(): preact.JSX.Element {
 
   return (
     <Collapsible
-      title={`Device tuning — ${view.modelName}`}
+      title={`Device tuning — ${activeView.modelName}`}
       class="tuning-section"
       id="device-tuning"
       bodyId="device-tuning-body"
     >
       <p class="help-lead">
         Adjust how images are sent to this model. Changes apply to every unit of{' '}
-        <code>{view.modelId}</code> and take effect on reconnect. If the panel goes dark, press
-        Reset, or restart with <code>--no-overrides</code>.
+        <code>{activeView.modelId}</code> and take effect on reconnect. If the panel goes dark,
+        press Reset, or restart with <code>--no-overrides</code>.
       </p>
 
-      {view.safeMode === true && (
+      {activeView.safeMode === true && (
         <p class="settings-error" id="tuning-safe-mode">
           Safe mode (<code>--no-overrides</code>): saved tuning is ignored this session, so the
           device is running the built-in defaults. Restart without the flag to apply it again.
@@ -324,7 +337,7 @@ export function DeviceTuningPanel(): preact.JSX.Element {
           class="ghostbtn"
           type="button"
           onClick={() =>
-            void copy.copy(JSON.stringify({ [view.modelId]: view.overrides }, null, 2))
+            void copy.copy(JSON.stringify({ [activeView.modelId]: activeView.overrides }, null, 2))
           }
         >
           {copyLabel(copy.status, 'Copy overrides as JSON')}
@@ -333,7 +346,7 @@ export function DeviceTuningPanel(): preact.JSX.Element {
       {error && <p class="settings-error">{error}</p>}
       {status && !error && <p class="settings-status">{status}</p>}
 
-      <KeymapLearn view={view} onSaved={() => void load()} />
+      <KeymapLearn view={activeView} onSaved={() => void load()} />
     </Collapsible>
   );
 }

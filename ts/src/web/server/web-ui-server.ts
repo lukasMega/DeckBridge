@@ -151,7 +151,7 @@ export class WebUIServer extends EventEmitter implements WebUIController {
     );
     this.modelOverrides = new ModelOverridesController(
       this.settings,
-      () => this.status.modelId,
+      () => this.dockRegistry.selectedStatus()?.modelId ?? this.status.modelId,
       (event, ...args) => this.emit(event, ...args),
     );
     this.logging = new LoggingController(
