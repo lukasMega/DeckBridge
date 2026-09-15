@@ -185,10 +185,33 @@ jobs:
           chmod +x "src-tauri/binaries/deckbridge-${{ matrix.triple }}" "src-tauri/binaries/deckbridge-tray-${{ matrix.triple }}"
           codesign --force --sign - --timestamp=none "src-tauri/binaries/deckbridge-tray-${{ matrix.triple }}"
 
+      # Intel builds compile txiki.js locally. Its source tree is roughly 1 GB
+      # and is no longer needed after sidecars are staged. DMG creation needs
+      # temporary disk space, so reclaim it before hdiutil runs.
+      - name: Reclaim Tauri disk space
+        if: matrix.tauri == '1' && matrix.from_source == '1'
+        run: |
+          du -sh vendor/txiki.js-src || true
+          rm -rf vendor/txiki.js-src
+          df -h .
+
+      # hdiutil intermittently returns "Resource busy" on GitHub's Intel macOS
+      # runners. Tauri's bundled create-dmg 1.2.1 does not retry image creation,
+      # so retry the incremental build twice before failing the job.
       - name: Build Tauri dmg
         if: matrix.tauri == '1'
         working-directory: src-tauri
-        run: pnpm tauri build --bundles dmg
+        run: |
+          for attempt in 1 2 3; do
+            if pnpm tauri build --bundles dmg --verbose; then
+              exit 0
+            fi
+            if [[ "$attempt" == 3 ]]; then
+              exit 1
+            fi
+            echo "DMG build failed; retrying in $((attempt * 10)) seconds."
+            sleep $((attempt * 10))
+          done
 
       - uses: actions/upload-artifact@v7
         if: matrix.tauri == '1'
