@@ -3,6 +3,7 @@
  *  Runs on a worker thread; blocking hid_write never stalls the main loop. */
 import { error } from '../logger.js';
 import { findHidPath, isNullPtr } from '../ffi/hidapi.js';
+import { hidErrorString } from '../ffi/wide-string.js';
 import type { HidapiSymbols } from '../ffi/hidapi.js';
 import { HidDeviceBase } from './hid-connection.js';
 import type { DeviceModel } from './driver.js';
@@ -156,7 +157,7 @@ export class ElgatoHidDriver extends HidDeviceBase {
     if (!this.device || !this.hidLib) return;
     const n = this.hidLib.symbols.hid_send_feature_report(this.device, buf, buf.length);
     if (n < 0) {
-      const err = this.hidLib.symbols.hid_error(this.device) ?? 'unknown';
+      const err = hidErrorString(this.hidLib.symbols, this.device);
       error('elgato-hid', `hid_send_feature_report error: ${err}`);
     }
   }

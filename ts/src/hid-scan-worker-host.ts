@@ -24,6 +24,7 @@ function defaultWorkerFactory(): ScanWorkerLike {
  * so fixed timers cannot queue duplicate scans behind a blocked HID interface. */
 export class HidScanWorkerHost {
   private worker: ScanWorkerLike | null = null;
+  private resetPending = false;
   private inFlight: Promise<HidScanResult> | null = null;
   private resolve: ((result: HidScanResult) => void) | null = null;
   private reject: ((error: Error) => void) | null = null;
@@ -33,13 +34,22 @@ export class HidScanWorkerHost {
   scan(): Promise<HidScanResult> {
     if (this.inFlight) return this.inFlight;
     this.ensureWorker();
+    const reset = this.resetPending;
+    this.resetPending = false;
     this.inFlight = new Promise<HidScanResult>((resolve, reject) => {
       this.resolve = resolve;
       this.reject = reject;
     });
     // oxlint-disable-next-line unicorn/require-post-message-target-origin -- Worker.postMessage has no targetOrigin
-    this.worker!.postMessage({ type: 'scan' });
+    this.worker!.postMessage(reset ? { type: 'scan', reset: true } : { type: 'scan' });
     return this.inFlight;
+  }
+
+  /** Ask the next scan to re-init the native HID stack first (see the `reset` flag in
+   *  hid-scan-worker-protocol.ts). Called on disconnect so a replug is enumerable
+   *  again; a scan already in flight carries stale state, so the flag survives it. */
+  requestReset(): void {
+    this.resetPending = true;
   }
 
   private ensureWorker(): void {

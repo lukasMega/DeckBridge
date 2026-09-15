@@ -6,6 +6,7 @@ import { BUFFER, INT, SIZE_T, STRING, parseHidRow, type HidDeviceInfo } from './
 
 interface DiscoverySymbols {
   mirabox_hid_list_supported(filterSpec: string, buf: Uint8Array, bufLen: number): number;
+  mirabox_hid_reset(): number;
 }
 
 const LIST_BUF_BYTES = 512 * 1024;
@@ -20,6 +21,10 @@ function loadDiscovery(): typeof lib {
     const loaded = FFI.dlopen(path, {
       mirabox_hid_list_supported: {
         args: [STRING, BUFFER, SIZE_T],
+        returns: INT,
+      },
+      mirabox_hid_reset: {
+        args: [],
         returns: INT,
       },
     }) as unknown as { symbols: DiscoverySymbols; close(): void };
@@ -56,6 +61,22 @@ export function cachedDiscoveryPaths(
     )
     .map((d) => d.path);
   return [...new Set(paths)];
+}
+
+/** Drop the native library's cached HidApi so the next scan re-runs hid_init.
+ * Must be called on the same thread that scans (the discovery worker): on macOS the
+ * fresh IOHIDManager is scheduled on the calling thread's run loop. Without this, a
+ * device unplugged after a successful open can stay invisible to enumeration for the
+ * rest of the process lifetime. */
+export function resetHidDiscovery(): boolean {
+  lib ??= loadDiscovery();
+  if (!lib) return false;
+  try {
+    return lib.symbols.mirabox_hid_reset() === 1;
+  } catch (e) {
+    warn('ffi', `mirabox_hid_reset threw: ${String(e)}`);
+    return false;
+  }
 }
 
 export function scanSupportedHidDevicesTimed(

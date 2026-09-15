@@ -122,6 +122,22 @@ declare module 'tjs:ffi' {
     static createRef(type: FfiType, value: unknown): NativePointer;
   }
 
+  /** Scalar reads at a native address — the only way to dereference a pointer
+   *  returned by a call (there is no bulk memory-read API). */
+  export const read: {
+    u8(ptr: unknown): number;
+    i8(ptr: unknown): number;
+    u16(ptr: unknown): number;
+    i16(ptr: unknown): number;
+    u32(ptr: unknown): number;
+    i32(ptr: unknown): number;
+    f32(ptr: unknown): number;
+    f64(ptr: unknown): number;
+  };
+
+  /** Address of a TypedArray's backing bytes — test seam for the read helpers. */
+  export function bufferToPointer(buf: Uint8Array): NativePointer;
+
   type TypeAlias = string | FfiType | PointerType | StructType;
 
   export interface DlopenSymbolDef {
@@ -147,6 +163,8 @@ declare module 'tjs:ffi' {
     PointerType: typeof PointerType;
     Pointer: typeof Pointer;
     dlopen: typeof dlopen;
+    read: typeof read;
+    bufferToPointer: typeof bufferToPointer;
   };
   export default FFI;
 }

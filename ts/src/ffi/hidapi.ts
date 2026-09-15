@@ -35,7 +35,8 @@ export interface HidapiSymbols {
   hid_send_feature_report(device: unknown, buf: Uint8Array, len: number): number;
   hid_get_feature_report(device: unknown, buf: Uint8Array, len: number): number;
   hid_close(device: unknown): void;
-  hid_error(device: unknown): string | null;
+  /** `const wchar_t*` — decode with hidErrorString(), never interpolate directly. */
+  hid_error(device: unknown): unknown;
   /** hidapi >= 0.14 only. Absent on older builds — always check before calling, or
    *  go through getReportDescriptor(). See tryLoad()'s two-stage dlopen. */
   hid_get_report_descriptor?(device: unknown, buf: Uint8Array, len: number): number;
@@ -54,7 +55,7 @@ const HIDAPI_CORE_SYMBOLS = {
   hid_send_feature_report:{ args: [POINTER, BUFFER, SIZE_T],     returns: INT     },
   hid_get_feature_report: { args: [POINTER, BUFFER, SIZE_T],     returns: INT     },
   hid_close:              { args: [POINTER],                     returns: 'void'  },
-  hid_error:              { args: [POINTER],                     returns: STRING  },
+  hid_error:              { args: [POINTER],                     returns: POINTER },
 };
 
 /* prettier-ignore */
