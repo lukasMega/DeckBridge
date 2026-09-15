@@ -41,7 +41,7 @@ The 293V3 board and its rebadges: 1024-byte CRT packets (512 on the D6 rev. 1), 
 |---|---|---|---|---|---|---|---|
 | [Mirabox 293V3](#mirabox-293) | mirabox | `0x6603:0x1005`<br />`0x6603:0x1006`<br />`0x6603:0x1010`<br />`0x6603:0x1014` | 15 (5×3) | 112×112 | JPEG | — | ✓ tested (macOS) |
 | [Mirabox K1 Pro](#mirabox-k1pro) | mirabox | `0x6603:0x1015`<br />`0x6603:0x1019` | 6 (3×2) | 64×64 | JPEG | — | ✓ tested (macOS) |
-| [Ajazz AKP153E (rev. 2)](#ajazz-akp153e-rev2) | ajazz | `0x0300:0x3010` | 15 (5×3) | 112×112 | JPEG | — | — untested |
+| [Ajazz AKP153E (rev. 2)](#ajazz-akp153e-rev2) | ajazz | `0x0300:0x3010` | 15 (5×3) | 95×95 | JPEG | — | ✓ tested (Windows, 2026-09-15) |
 | [Ajazz AKP153R (rev. 2)](#ajazz-akp153r-rev2) | ajazz | `0x0300:0x3011` | 15 (5×3) | 112×112 | JPEG | — | — untested |
 | [Fifine AmpliGame D6](#fifine-d6) | fifine | `0x3142:0x0007` | 15 (5×3) | 112×112 | JPEG | — | — untested |
 | [Fifine AmpliGame D6 (rev. 2)](#fifine-d6-rev2) | fifine | `0x3142:0x0060` | 15 (5×3) | 112×112 | JPEG | — | ✓ tested (macOS, 2026-09-11) |
@@ -164,17 +164,18 @@ The reference v1 board: physically 3×6 = 18 keys, of which the left 5 columns a
 
 ### Ajazz AKP153E (rev. 2) \{#ajazz-akp153e-rev2}
 
-The Mirabox 293V3 board behind VID 0x0300. Every value is copied from the 293V3 model because the reference implementations describe the two as identical.
+The Mirabox 293V3 protocol behind VID 0x0300, with hardware-confirmed 95×95 key images and AKP153E-specific input/image mapping.
 
 |  |  |
 |---|---|
 | **USB** | `0x0300`:`0x3010` |
 | **Keys** | 15 (5×3) |
-| **Panel** | 112×112 JPEG |
+| **Panel** | 95×95 JPEG |
 | **Protocol** | `mirabox-cora` (mirabox driver) |
-| **Tested** | — untested |
+| **Tested** | ✓ tested (Windows, 2026-09-15) |
 
-- Not hardware-tested. `keyMap` was verified on 293V3 hardware only — if keys light up in the wrong place, that table is the first thing to re-derive.
+- Issue #67 hardware testing confirmed 95×95 images; inherited 112×112 images were clipped and became centered only after overriding both dimensions to 95.
+- Issue #67 also confirmed the AKP153E-specific input and image mapping. AKP153R remains unverified and deliberately keeps inherited defaults.
 - Do not confuse rev. 2 (PID 0x3010, v3, 1024-byte packets) with rev. 1 (PID 0x1010, v1, 512-byte packets). Same VID, adjacent PIDs, completely different protocol.
 
 [Full spec →](./device-specs.mdx#ajazz-akp153e-rev2)

@@ -410,6 +410,10 @@ test('fifine-d6 (both revisions) coraToWireImage is a permutation of 1..15', () 
 });
 
 test('ajazz-akp153e-rev2 uses issue #67 hardware mapping', () => {
+  assert.equal(AJAZZ_AKP153E_REV2_MODEL.keyWidth, 95);
+  assert.equal(AJAZZ_AKP153E_REV2_MODEL.keyHeight, 95);
+  assert.equal(AJAZZ_AKP153E_REV2_MODEL.image.width, 95);
+  assert.equal(AJAZZ_AKP153E_REV2_MODEL.image.height, 95);
   assert.equal(AJAZZ_AKP153E_REV2_MODEL.image.rotate, 90);
   assert.deepEqual(
     Array.from(AJAZZ_AKP153E_REV2_MODEL.keyMap.coraToWireImage!),
@@ -429,6 +433,10 @@ test('ajazz-akp153e-rev2 input and image maps are inverses', () => {
 });
 
 test('ajazz-akp153r-rev2 keeps unverified inherited mapping', () => {
+  assert.equal(AJAZZ_AKP153R_REV2_MODEL.keyWidth, 112);
+  assert.equal(AJAZZ_AKP153R_REV2_MODEL.keyHeight, 112);
+  assert.equal(AJAZZ_AKP153R_REV2_MODEL.image.width, 112);
+  assert.equal(AJAZZ_AKP153R_REV2_MODEL.image.height, 112);
   assert.equal(AJAZZ_AKP153R_REV2_MODEL.image.rotate, 0);
   assert.deepEqual(
     Array.from(AJAZZ_AKP153R_REV2_MODEL.keyMap.coraToWireImage!),

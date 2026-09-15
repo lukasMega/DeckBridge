@@ -128,16 +128,15 @@ and D6 rev. 2 hardware) is the first thing to re-derive.
 The same board as the Mirabox 293V3 behind a different VID/PID
 (`0x0300:0x3010` / `0x3011` instead of `0x6603:0x1005…`).
 
-**NOT hardware-tested.** Everything is copied from `MIRABOX_293_MODEL` because the
-reference implementations describe the two as identical: protocol v3 (1024-byte CRT
+Shared protocol fields come from `MIRABOX_293_MODEL`: protocol v3 (1024-byte CRT
 packets, press+release), 512-byte HID reads, usagePage `0xffa0`/usage 1, 3×6
-physical grid, JPEG keys, and the same button-remap table — opendeck-akp153
-`src/mappings.rs` `protocol_version()`; keydeck
-`driver/devices/Ajazz-AKP153E-0x3010.json` is byte-identical to
-`Mirabox-HSV293SV3-0x1005.json` apart from VID/PID and human name.
+physical grid, and JPEG keys. AKP153R remains untested and keeps those defaults.
 
-`keyMap` in particular was verified on 293V3 hardware only — if keys light up in the
-wrong place on a real AKP153 rev. 2, that table is the first thing to re-derive.
+AKP153E was hardware-tested on Windows in issue #67. Its input/image mapping, 90°
+rotation, and 95×95 image size are now device-specific. The reporter found inherited
+112×112 images clipped; 95×95 rendered complete and centered. That result agrees with
+both opendeck-akp153 `src/mappings.rs` and keydeck
+`driver/devices/Ajazz-AKP153E-0x3010.json`, which independently specify 95×95.
 
 Rev. 1 (`0x0300:0x1010` / `0x1020`) is a v1/512-byte device and is deliberately NOT
 covered here; it needs the 293S-style model instead (see below).

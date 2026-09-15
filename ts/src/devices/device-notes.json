@@ -65,14 +65,19 @@
       "sources": ["keydeck", ".claude/plans/K1Pro/jpeg-artifact-findings.md"]
     },
     "ajazz-akp153e-rev2": {
-      "tested": { "status": false },
-      "summary": "The Mirabox 293V3 board behind VID 0x0300. Every value is copied from the 293V3 model because the reference implementations describe the two as identical.",
+      "tested": { "status": true, "platform": "Windows", "date": "2026-09-15" },
+      "summary": "The Mirabox 293V3 protocol behind VID 0x0300, with hardware-confirmed 95×95 key images and AKP153E-specific input/image mapping.",
       "alsoSoldAs": [],
       "quirks": [
-        "Not hardware-tested. `keyMap` was verified on 293V3 hardware only — if keys light up in the wrong place, that table is the first thing to re-derive.",
+        "Issue #67 hardware testing confirmed 95×95 images; inherited 112×112 images were clipped and became centered only after overriding both dimensions to 95.",
+        "Issue #67 also confirmed the AKP153E-specific input and image mapping. AKP153R remains unverified and deliberately keeps inherited defaults.",
         "Do not confuse rev. 2 (PID 0x3010, v3, 1024-byte packets) with rev. 1 (PID 0x1010, v1, 512-byte packets). Same VID, adjacent PIDs, completely different protocol."
       ],
-      "sources": ["opendeck-akp153 (src/mappings.rs)", "keydeck (Ajazz-AKP153E-0x3010.json)"]
+      "sources": [
+        "issue #67",
+        "opendeck-akp153 (src/mappings.rs)",
+        "keydeck (Ajazz-AKP153E-0x3010.json)"
+      ]
     },
     "ajazz-akp153r-rev2": {
       "tested": { "status": false },

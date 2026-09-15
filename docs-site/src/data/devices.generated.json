@@ -591,8 +591,8 @@
       "id": "ajazz-akp153e-rev2",
       "name": "Ajazz AKP153E (rev. 2)",
       "family": "mirabox-v3",
-      "tested": false,
-      "testedLabel": "— untested",
+      "tested": true,
+      "testedLabel": "✓ tested (Windows, 2026-09-15)",
       "cells": {
         "identity": {
           "name": "Ajazz AKP153E (rev. 2)",
@@ -607,14 +607,14 @@
           "keyCount": "15",
           "columns": "5",
           "rows": "3",
-          "keyWidth": "112",
-          "keyHeight": "112"
+          "keyWidth": "95",
+          "keyHeight": "95"
         },
         "image": {
           "name": "Ajazz AKP153E (rev. 2)",
           "format": "jpeg",
-          "width": "112",
-          "height": "112",
+          "width": "95",
+          "height": "95",
           "rotate": "90°",
           "flipH": "no",
           "flipV": "no",
@@ -1248,6 +1248,11 @@
       "tested": true
     },
     {
+      "id": "ajazz-akp153e-rev2",
+      "name": "Ajazz AKP153E (rev. 2)",
+      "tested": true
+    },
+    {
       "id": "fifine-d6-rev2",
       "name": "Fifine AmpliGame D6 (rev. 2)",
       "tested": true
@@ -1255,11 +1260,6 @@
     {
       "id": "mk2",
       "name": "Stream Deck MK.2",
-      "tested": false
-    },
-    {
-      "id": "ajazz-akp153e-rev2",
-      "name": "Ajazz AKP153E (rev. 2)",
       "tested": false
     },
     {
