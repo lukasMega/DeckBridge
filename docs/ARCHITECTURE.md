@@ -185,7 +185,7 @@ directly (`./deckbridge devices`).
 
 ## HID device detection
 
-At startup `app.ts` constructs a `DriverManager` ([driver-manager.ts](../ts/src/driver-manager.ts)); its `probeAndOpen()` iterates `DEVICE_MODELS` in priority order and returns the first device that opens. If none, it retries every 2 s (`RECONNECT_DELAY_MS`).
+At startup `app.ts` constructs a `DriverManager` ([driver-manager.ts](../ts/src/driver-manager.ts)); its `probeAndOpen()` iterates `DEVICE_MODELS` in priority order and returns the first device that opens. If none, it retries every 3 s (`HID_POLL_INTERVAL_MS`).
 
 ### Probe order
 
@@ -341,7 +341,7 @@ extracted pieces:
   index-0 dock's presentation state: identity resolution, brightness, extra-key widgets, and
   replaying saved per-key frames across a USB replug so the Elgato desktop doesn't see a blank grid.
 - **`ExtraDockCoordinator`** ([driver-manager-extras.ts](../ts/src/driver-manager-extras.ts)) — runs
-  its own scan timer (every `RECONNECT_DELAY_MS`) over HID paths not already claimed by the primary
+  its own scan timer (every `HID_POLL_INTERVAL_MS`) over HID paths not already claimed by the primary
   or another extra dock, and spins up a [`DeviceSession`](../ts/src/device-session.ts) per newly
   found physical unit (`createExtraSession()`), keyed by HID path with a pool of free session
   indices (1..3, lowest wins).

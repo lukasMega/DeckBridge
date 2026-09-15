@@ -10,6 +10,19 @@ not their pedigree.
 
 ---
 
+## Elgato Stream Deck MK.2 (`elgato/mk2.ts`)
+
+PID `0x0080` was hardware-tested on macOS on 2026-09-15. The test confirmed
+native 72×72 JPEG passthrough with `image.rotate: 0`; DeckBridge also detected
+the connected unit as a supported Stream Deck MK.2. PIDs `0x006d` and `0x00a5`
+remain source-derived and were not present during this test.
+
+The physical identity path forwards the unit's real serial and firmware to the
+Elgato app. Splash images remain separate: their upright sources require the
+180° transform already configured in `splash.transformOverride`.
+
+---
+
 ## Fifine AmpliGame D6 (`fifine/fifine-d6.ts`)
 
 The Mirabox 293V3 board behind VID `0x3142`.

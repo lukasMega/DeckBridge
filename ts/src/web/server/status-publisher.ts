@@ -1,7 +1,7 @@
 // The scalar status snapshot pushed to WS clients: driver/Elgato connection
 // state, the active model's geometry, and the environment flags the simple UI
 // branches on. Every mutator broadcasts; the flag setters dedupe first, because
-// the 2 s reconnect scan calls them on every tick.
+// the 3 s reconnect scan calls them on every tick.
 import { DEFAULT_MODEL } from '../../devices/registry.js';
 import type { ClientApp, DockStatus, ImageModeOverride } from '../../types.js';
 import type { DriverMode, StatusSnapshot } from './types.js';

@@ -717,7 +717,7 @@ function specsPage(models, notes) {
   out.push('');
   out.push(
     '- **Measured** — anything on a deck marked tested. The image tuning and key maps of the',
-    '  293V3, 293S, K1 Pro, D6 rev. 2 and Mini were derived on hardware.',
+    '  MK.2, 293V3, 293S, K1 Pro, D6 rev. 2 and Mini were derived on hardware.',
     '- **Inherited** — the rebadges copy a tested board field-for-field, by construction, so',
     '  they cannot drift; what is untested is the *assumption* that the board is the same.',
     '- **Inferred** — read out of a reference implementation. Each device lists its sources.',

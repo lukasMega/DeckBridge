@@ -99,7 +99,7 @@ What to look for:
   Single- or low-double-digit ms is healthy; hundreds of ms is the problem.
 - `USB enumeration slow (NNNms) — device probe interval now Ns` in the log. DeckBridge
   detects this and probes less often (up to 30 s apart) so the rest of the app keeps
-  running, then snaps back to every 2 s once enumeration is quick again.
+  running, then snaps back to every 3 s once enumeration is quick again.
 
 Please attach the report **with the device connected** — the enumeration table names the
 device DeckBridge does not recognize, which is what makes the report actionable.

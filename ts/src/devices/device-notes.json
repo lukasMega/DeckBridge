@@ -9,14 +9,14 @@
   ],
   "notes": {
     "mk2": {
-      "tested": { "status": false },
+      "tested": { "status": true, "platform": "macOS", "date": "2026-09-15" },
       "summary": "Elgato's own 15-key deck. Driven natively over HID (no CORA emulation of the panel itself), so DeckBridge forwards the app's JPEG unchanged.",
       "alsoSoldAs": [],
       "quirks": [
-        "`image.rotate` is still the Phase 0 default (0, passthrough). If keys come out upside down on real hardware, 180 is the other candidate — the CORA frames' native orientation has not been measured on an MK.2.",
+        "Hardware testing with PID 0x0080 confirmed the native 72×72 JPEG passthrough and `image.rotate: 0`. The other accepted PIDs (0x006d and 0x00a5) remain source-derived.",
         "The only non-Elgato-emulating model: `cora.usePhysicalIdentity` is true, so the deck's real serial and firmware version are forwarded to the app."
       ],
-      "sources": []
+      "sources": ["own hardware test (macOS, PID 0x0080)"]
     },
     "mini": {
       "tested": { "status": true, "platform": "macOS" },

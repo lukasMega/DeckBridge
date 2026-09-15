@@ -201,10 +201,14 @@ export function DeviceTuningPanel(): preact.JSX.Element {
 
   if (!view) {
     return (
-      <>
-        <p class="help-section-label">Device tuning</p>
+      <Collapsible
+        title="Device tuning"
+        class="tuning-section"
+        id="device-tuning"
+        bodyId="device-tuning-body"
+      >
         <p class="help-lead">No device model available yet.</p>
-      </>
+      </Collapsible>
     );
   }
 
@@ -213,8 +217,12 @@ export function DeviceTuningPanel(): preact.JSX.Element {
   const advanced = NUMBER_FIELDS.filter((f) => f.advanced);
 
   return (
-    <>
-      <p class="help-section-label">Device tuning — {view.modelName}</p>
+    <Collapsible
+      title={`Device tuning — ${view.modelName}`}
+      class="tuning-section"
+      id="device-tuning"
+      bodyId="device-tuning-body"
+    >
       <p class="help-lead">
         Adjust how images are sent to this model. Changes apply to every unit of{' '}
         <code>{view.modelId}</code> and take effect on reconnect. If the panel goes dark, press
@@ -326,6 +334,6 @@ export function DeviceTuningPanel(): preact.JSX.Element {
       {status && !error && <p class="settings-status">{status}</p>}
 
       <KeymapLearn view={view} onSaved={() => void load()} />
-    </>
+    </Collapsible>
   );
 }

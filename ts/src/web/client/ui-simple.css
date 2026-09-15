@@ -1276,6 +1276,19 @@ input[type='range'].range:disabled {
   margin: 0;
 }
 /* Device tuning form (simple/device-tuning.tsx) */
+.tuning-section {
+  margin: 12px 0;
+}
+.tuning-section > .collapse-header {
+  color: var(--accent);
+  margin: 0;
+}
+.tuning-section > .collapse-header:hover {
+  color: var(--accent);
+}
+.tuning-section > .collapse-body.open {
+  padding-top: 10px;
+}
 .tuning-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));

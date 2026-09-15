@@ -7,10 +7,10 @@
 // So the interval adapts: double it while enumeration is slow (capped, so a deck
 // plugged in later still connects), snap back to the baseline the moment it isn't.
 import { log } from './logger.js';
-import { RECONNECT_DELAY_MS } from './types.js';
+import { HID_POLL_INTERVAL_MS } from './types.js';
 
 /** A sweep slower than this means enumeration itself is the bottleneck, not the
- *  devices. 250 ms is an eighth of a normal tick; a healthy machine enumerates in
+ *  devices. 250 ms is a visible slice of a normal tick; a healthy machine enumerates in
  *  single-digit ms. */
 export const SLOW_ENUMERATE_MS = 250;
 
@@ -20,14 +20,14 @@ export const RECONNECT_BACKOFF_MAX_MS = 30_000;
 
 /** Pure: the probe interval to use after a sweep whose enumeration took `enumerateMs`. */
 export function nextProbeDelayMs(currentMs: number, enumerateMs: number): number {
-  if (enumerateMs < SLOW_ENUMERATE_MS) return RECONNECT_DELAY_MS;
+  if (enumerateMs < SLOW_ENUMERATE_MS) return HID_POLL_INTERVAL_MS;
   return Math.min(currentMs * 2, RECONNECT_BACKOFF_MAX_MS);
 }
 
 /** Current probe interval plus the transition logging. Owns no timer — the caller
  *  reads delayMs when it schedules the next reconnect. */
 export class ProbePacer {
-  delayMs: number = RECONNECT_DELAY_MS;
+  delayMs: number = HID_POLL_INTERVAL_MS;
 
   /** The first sweep pays for dlopen + the OS's cold HID stack (~700 ms on a healthy
    *  Mac), which says nothing about how the machine will behave afterwards. */

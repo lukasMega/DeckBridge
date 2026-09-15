@@ -375,7 +375,7 @@ export class DriverManager {
   }
 
   /** Device tuning changed (WebUI / settings import): close the affected
-   *  session(s) so the 2 s reconnect tick reopens them with the new spec.
+   *  session(s) so the 3 s reconnect tick reopens them with the new spec.
    *  image/wire/keyMap must already be correct at open() and at the first
    *  splash, so a live patch would not do. `modelId` '' means "all models".
    *  No-op in mock mode beyond a model re-apply — there is no worker to reopen. */

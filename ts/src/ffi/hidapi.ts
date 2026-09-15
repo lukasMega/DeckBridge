@@ -174,7 +174,7 @@ function loadHidEnum(): { symbols: HidEnumSymbols; close(): void } | null {
 // Every VID/PID-filtered helper below used to run its OWN native enumeration, and
 // each of those is a full hid_enumerate() over every HID interface on the machine.
 // The presence sweep alone is one call per registry VID/PID pair (~26) every
-// RECONNECT_DELAY_MS, on the main thread. On Windows hidapi's enumeration opens
+// HID_POLL_INTERVAL_MS, on the main thread. On Windows hidapi's enumeration opens
 // each interface to read its product/serial strings, so one hostile composite
 // device (the "freeze when this keyboard is plugged in" report, issue #67.2) is
 // multiplied by 26 into seconds of blocked event loop — no CORA ACKs, no WebUI.
@@ -183,11 +183,11 @@ function loadHidEnum(): { symbols: HidEnumSymbols; close(): void } | null {
 // worker. Legacy CLI/diagnostic callers may still request a short-lived full snapshot.
 // ---------------------------------------------------------------------------
 
-/** Reuse window for one full enumeration. Shorter than RECONNECT_DELAY_MS (2 s) on
+/** Reuse window for one full enumeration. Shorter than HID_POLL_INTERVAL_MS (3 s) on
  *  purpose: one sweep = one enumeration, and no tick ever reuses the previous tick's. */
 const SNAPSHOT_TTL_MS = 1_000;
 
-/** Above this, one enumeration alone eats a visible slice of a 2 s tick — worth a
+/** Above this, one enumeration alone eats a visible slice of a 3 s tick — worth a
  *  warn line, since it is the first thing to look for in a freeze report. */
 const SLOW_ENUMERATE_MS = 250;
 

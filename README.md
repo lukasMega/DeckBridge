@@ -3,7 +3,7 @@
 [![views](https://tst.lukasmega.deno.net/badge?site=deckbridge&total=1&label=docs%20views%2030d%20%2B%20all)](https://lukasmega.github.io/deno-kv-analytics/badge)
 
 Use a USB Stream Deck with the Elgato Stream Deck app **over your local network** — no
-[Elgato Network Dock](https://www.elgato.com/us/en/p/network-dock-stream-deck) (>60 USD)
+[Elgato Network Dock](https://www.elgato.com/us/en/p/network-dock-stream-deck) (>70 USD)
 required.
 
 Plug your deck into any computer, run DeckBridge there, and the Elgato app on any machine
@@ -12,7 +12,7 @@ else to install.
 
 **📖 Documentation:** <https://lukasmega.github.io/DeckBridge/>
 
-> **⚗ Experimental project:** DeckBridge is experimental. The author does not plan to add
+> **⚠️ Experimental project:** DeckBridge is experimental. The author does not plan to add
 > support for devices beyond those already listed as supported, but will accept reasonable
 > pull requests for new devices when they include proof that the hardware works. DeckBridge
 > supports only 6-button (3×2) grids like the Stream Deck Mini and grids with up to 15
@@ -48,8 +48,8 @@ Both are generated from the device registry, so they never drift from the code.
 - Stream Deck MK.2
 - Stream Deck Mini
 
-Hardware-tested on macOS: 293V3, 293S, K1 Pro, Fifine AmpliGame D6 (rev. 2), and Stream
-Deck Mini. MK.2, the Ajazz AKP153 rev. 2 models, the Fifine AmpliGame D6 rev. 1, the 7 v1
+Hardware-tested on macOS: Stream Deck MK.2, Stream Deck Mini, 293V3, 293S, K1 Pro, and
+Fifine AmpliGame D6 (rev. 2). The Ajazz AKP153 rev. 2 models, the Fifine AmpliGame D6 rev. 1, the 7 v1
 rebadges of the 293S board (Ajazz AKP153/E/R rev. 1, Mars Gaming MSD-ONE, Mad Dog GK150K,
 Risemode Vision 01, TMICE Stream Controller), and the Linux/Windows builds are implemented
 but not hardware-verified. The Ajazz rev. 2 boards and the Fifine D6 are the same hardware
@@ -59,10 +59,7 @@ D6 ships in two revisions that differ only in USB packet size: 512 bytes for PID
 a different USB VID/PID, so they reuse the 293S model verbatim — report anything that
 misbehaves.
 
-> **Platform status:** DeckBridge is currently **tested on macOS only**, and the
-> GitHub releases currently ship **macOS builds only**. Linux and Windows support
-> exists in the code but is untested and not yet released — build from source at
-> your own risk.
+> **Platform status:** DeckBridge is currently **tested on macOS only**.
 
 ## Quick start
 
