@@ -6,6 +6,8 @@ ts/node_modules/
 docs-site/node_modules/
 e2e/node_modules/
 video/node_modules/
+src-tauri/node_modules/
+.pnpm-store/
 video/
 
 # Build outputs

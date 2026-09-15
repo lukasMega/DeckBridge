@@ -1,11 +1,11 @@
 name: Release deckbridge
 
-# Trigger: push a tag like deckbridge-v1.2.3
-# Or dispatch manually for a smoke-test dry run (skips GitHub Release by default).
+# Version bumps run from main so every release can reuse main-scoped caches.
+# The release job creates the immutable deckbridge-v* tag after builds pass.
 on:
   push:
-    tags:
-      - 'deckbridge-v*'
+    branches: [main]
+    paths: ['ts/package.json']
   workflow_dispatch:
     inputs:
       skip_release:
@@ -19,16 +19,52 @@ permissions:
   contents: read
 
 jobs:
+  prepare:
+    name: Prepare release metadata
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      package_version: ${{ steps.version.outputs.package_version }}
+      tag: ${{ steps.version.outputs.tag }}
+      should_build: ${{ steps.version.outputs.should_build }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Read version
+        id: version
+        run: |
+          VERSION=$(node -p "require('./ts/package.json').version")
+          TAG="deckbridge-v$VERSION"
+          if [[ "$GITHUB_EVENT_NAME" == "push" ]] && git rev-parse "$TAG" >/dev/null 2>&1; then
+            SHOULD_BUILD=false
+          else
+            SHOULD_BUILD=true
+          fi
+          {
+            echo "version=$VERSION"
+            echo "package_version=v$VERSION"
+            echo "tag=$TAG"
+            echo "should_build=$SHOULD_BUILD"
+          } >> "$GITHUB_OUTPUT"
+
   build:
     name: Build ${{ matrix.platform }}
+    needs: prepare
+    if: needs.prepare.outputs.should_build == 'true'
     strategy:
       fail-fast: false
       matrix:
         include:
           - os: macos-latest       # Apple Silicon (arm64)
             platform: macos-arm64
+            triple: aarch64-apple-darwin
+            tauri: '1'
           - os: macos-15-intel     # Intel (x86_64) — no prebuilt slim asset
             platform: macos-x86_64
+            triple: x86_64-apple-darwin
+            tauri: '1'
             from_source: '1'
           # Linux re-enabled: the old blocker was mise-action blind-installing the
           # github:lukasMega/txiki.js mise tool (no linux-arm64 asset), and mise.toml
@@ -58,18 +94,20 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      - name: Sync Tauri version
+        if: matrix.tauri == '1'
+        run: node scripts/sync-version.mjs
+
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
 
       - name: Cache Rust
-        uses: actions/cache@v6
+        uses: Swatinem/rust-cache@v2
         with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            rust/target
-          key: rust-${{ matrix.platform }}-${{ hashFiles('rust/**/Cargo.lock', 'rust/deckbridge-tray/**') }}
-          restore-keys: rust-${{ matrix.platform }}-
+          workspaces: |
+            rust -> target
+            src-tauri -> target
+          shared-key: release-${{ matrix.platform }}
 
       # Cache the slim txiki.js runtime so it builds once per platform per build
       # config change (the from-source build clones + compiles txiki.js, which is
@@ -118,13 +156,7 @@ jobs:
           codesign -dv deckbridge 2>&1 | head -3
 
       - name: Package
-        run: |
-          if [[ "$GITHUB_REF" == refs/tags/deckbridge-v* ]]; then
-            VERSION="${GITHUB_REF_NAME#deckbridge-}"
-          else
-            VERSION="dev"
-          fi
-          node scripts/package.mjs "$VERSION"
+        run: node scripts/package.mjs "${{ needs.prepare.outputs.package_version }}"
 
       - name: Smoke-test deps (Linux)
         if: startsWith(matrix.os, 'ubuntu')
@@ -139,13 +171,64 @@ jobs:
           path: dist/*.zip
           if-no-files-found: error
 
+      - name: Install pinned Tauri CLI
+        if: matrix.tauri == '1'
+        working-directory: src-tauri
+        run: pnpm install --frozen-lockfile
+
+      - name: Stage Tauri sidecars
+        if: matrix.tauri == '1'
+        run: |
+          mkdir -p src-tauri/binaries
+          cp deckbridge "src-tauri/binaries/deckbridge-${{ matrix.triple }}"
+          cp rust/target/release/deckbridge-tray "src-tauri/binaries/deckbridge-tray-${{ matrix.triple }}"
+          chmod +x "src-tauri/binaries/deckbridge-${{ matrix.triple }}" "src-tauri/binaries/deckbridge-tray-${{ matrix.triple }}"
+          codesign --force --sign - --timestamp=none "src-tauri/binaries/deckbridge-tray-${{ matrix.triple }}"
+
+      # Intel builds compile txiki.js locally. Its source tree is roughly 1 GB
+      # and is no longer needed after sidecars are staged. DMG creation needs
+      # temporary disk space, so reclaim it before hdiutil runs.
+      - name: Reclaim Tauri disk space
+        if: matrix.tauri == '1' && matrix.from_source == '1'
+        run: |
+          du -sh vendor/txiki.js-src || true
+          rm -rf vendor/txiki.js-src
+          df -h .
+
+      # hdiutil intermittently returns "Resource busy" on GitHub's Intel macOS
+      # runners. Tauri's bundled create-dmg 1.2.1 does not retry image creation,
+      # so retry the incremental build twice before failing the job.
+      - name: Build Tauri dmg
+        if: matrix.tauri == '1'
+        working-directory: src-tauri
+        run: |
+          for attempt in 1 2 3; do
+            if pnpm tauri build --bundles dmg --verbose; then
+              exit 0
+            fi
+            if [[ "$attempt" == 3 ]]; then
+              exit 1
+            fi
+            echo "DMG build failed; retrying in $((attempt * 10)) seconds."
+            sleep $((attempt * 10))
+          done
+
+      - uses: actions/upload-artifact@v7
+        if: matrix.tauri == '1'
+        with:
+          name: ${{ matrix.platform }}-dmg
+          path: src-tauri/target/release/bundle/dmg/*.dmg
+          if-no-files-found: error
+
   # Windows is packaged differently: instead of a raw zip, the binary is wrapped
   # in a Tauri v2 supervisor shell (src-tauri/) and shipped as an NSIS installer
   # (Scoop/winget-friendly, no Gatekeeper/SmartScreen friction via Scoop). The
   # relay binary + deckbridge-tray ride along as Tauri sidecars (externalBin), so they
-  # must be renamed to the MSVC target triple before `cargo tauri build` (G2).
+  # must be renamed to the MSVC target triple before `pnpm tauri build` (G2).
   build-windows:
     name: Build windows-x86_64 (Tauri NSIS)
+    needs: prepare
+    if: needs.prepare.outputs.should_build == 'true'
     runs-on: windows-latest
     # No TJS_FROM_SOURCE here (unlike the Unix jobs above): the from-source build
     # (scripts/tjs-build.mjs) is unverified against MSVC-only runners. tjs-setup
@@ -166,15 +249,12 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
 
       - name: Cache Rust
-        uses: actions/cache@v6
+        uses: Swatinem/rust-cache@v2
         with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            rust/target
-            src-tauri/target
-          key: rust-windows-x86_64-${{ hashFiles('rust/**/Cargo.lock', 'rust/deckbridge-tray/**', 'src-tauri/Cargo.lock') }}
-          restore-keys: rust-windows-x86_64-
+          workspaces: |
+            rust -> target
+            src-tauri -> target
+          shared-key: release-windows-x86_64
 
       - name: Cache txiki.js runtime
         uses: actions/cache@v6
@@ -182,11 +262,17 @@ jobs:
           path: vendor/txiki.js/build/tjs.exe
           key: tjs-windows-x86_64-${{ hashFiles('mise.toml') }}
 
-      # Windows ships no system hidapi.dll (B3) — build it from source and point
-      # HIDAPI_LIB at the result so ts/build.mjs's embed step (Phase 2) can find
-      # it; without this the compile step below hard-errors by design (a
-      # Windows binary with no HID backend would silently fail at runtime).
+      - name: Cache hidapi.dll
+        id: hidapi-cache
+        uses: actions/cache@v6
+        with:
+          path: vendor/hidapi/hidapi.dll
+          key: hidapi-0.15.0-windows-x86_64
+
+      # Windows ships no system hidapi.dll (B3). Build once, then reuse its
+      # stable output across main-scoped releases.
       - name: Build hidapi.dll
+        if: steps.hidapi-cache.outputs.cache-hit != 'true'
         shell: pwsh
         run: |
           git clone --depth 1 --branch hidapi-0.15.0 https://github.com/libusb/hidapi C:\hidapi-src
@@ -194,9 +280,18 @@ jobs:
           cmake --build C:\hidapi-build --config Release
           $dll = Get-ChildItem -Path C:\hidapi-build -Filter hidapi.dll -Recurse | Select-Object -First 1
           if (-not $dll) { Write-Error "hidapi.dll not found after build"; exit 1 }
-          echo "HIDAPI_LIB=$($dll.FullName)" >> $env:GITHUB_ENV
+          New-Item -ItemType Directory -Force -Path "vendor/hidapi" | Out-Null
+          Copy-Item $dll.FullName "vendor/hidapi/hidapi.dll"
+
+      - name: Configure hidapi.dll
+        shell: pwsh
+        run: echo "HIDAPI_LIB=${{ github.workspace }}\vendor\hidapi\hidapi.dll" >> $env:GITHUB_ENV
 
       - uses: jdx/mise-action@v4
+
+      - name: Install pinned Tauri CLI
+        working-directory: src-tauri
+        run: pnpm install --frozen-lockfile
 
       # Produces the Windows relay binary (deckbridge[.exe]) via the same build
       # chain the other platforms use. txiki's `compile` emits a PE executable.
@@ -236,10 +331,6 @@ jobs:
           Write-Host "Smoke test OK: WebUI responded 200"
           Stop-Process -Id $proc.Id -Force
 
-      # deckbridge-tray.exe — the system-tray sidecar (same Rust crate as macOS/Linux).
-      - name: Build deckbridge-tray
-        run: mise run tray-rs
-
       # Tauri's bundler only picks up the sidecar whose filename matches the
       # build's target triple (G2), so copy both binaries into src-tauri/binaries/
       # with the -x86_64-pc-windows-msvc.exe suffix. `mise run compile` writes
@@ -252,22 +343,13 @@ jobs:
           Copy-Item "rust/target/release/deckbridge-tray.exe" "src-tauri/binaries/deckbridge-tray-x86_64-pc-windows-msvc.exe" -Force
           Get-ChildItem "src-tauri/binaries/"
 
-      # RUST_MIN_STACK: rustc's codegen thread blows its 8 MB stack building
-      # tauri-utils at opt-level=3 — LLVM's ScopedNoAliasAAResult recurses deep
-      # enough to SIGSEGV (seen on macos-arm64, tauri-cli 2.11.4/tauri-utils
-      # 2.9.3). rustc's own suggested workaround; harmless elsewhere.
-      - name: Install Tauri CLI
-        env:
-          RUST_MIN_STACK: '16777216'
-        run: cargo install tauri-cli --version "^2" --locked
-
       # tauri.conf.json's version was already stamped from ts/package.json by
       # the "Sync version" step above — no build-time override needed.
       # NSIS is fetched by the bundler; WebView2 is preinstalled on the runner.
       - name: Build Tauri NSIS installer
         shell: pwsh
         working-directory: src-tauri
-        run: cargo tauri build
+        run: pnpm tauri build
 
       - uses: actions/upload-artifact@v7
         with:
@@ -275,142 +357,14 @@ jobs:
           path: src-tauri/target/release/bundle/nsis/*-setup.exe
           if-no-files-found: error
 
-  # macOS Tauri .dmg (ADDITIVE — the zip artifacts in the `build` job above stay
-  # the Homebrew/manual path). Model A: the relay binary + deckbridge-tray ride along as
-  # Tauri sidecars (externalBin), renamed to the apple-darwin target triple (G2),
-  # ad-hoc signed (no Apple Developer ID). The macOS bundle config lives in
-  # src-tauri/tauri.macos.conf.json (targets app,dmg; signingIdentity "-";
-  # hardenedRuntime false — keeps the relay's extract+dlopen of native libs
-  # working, plan gotcha G3). Downloads are unsigned vs Gatekeeper → right-click
-  # "Open" or `xattr -dr com.apple.quarantine` (documented in README-DISTRIBUTION).
-  build-macos-tauri:
-    name: Build ${{ matrix.platform }} (Tauri dmg)
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - os: macos-latest      # Apple Silicon (arm64)
-            platform: macos-arm64
-            triple: aarch64-apple-darwin
-          - os: macos-15-intel    # Intel (x86_64) — no prebuilt slim asset
-            platform: macos-x86_64
-            triple: x86_64-apple-darwin
-            from_source: '1'
-
-    runs-on: ${{ matrix.os }}
-    # Same rule as the `build` job: slim runtime everywhere, downloaded prebuilt
-    # unless the platform has no published asset.
-    env:
-      TJS_FROM_SOURCE: ${{ matrix.from_source }}
-
-    steps:
-      - uses: actions/checkout@v7
-
-      # Stamps ts/package.json's version (the single source of truth) into
-      # src-tauri/Cargo.toml + tauri.conf.json so the dmg version is correct
-      # without a build-time -c override.
-      - name: Sync version into Cargo.toml/tauri.conf.json
-        run: node scripts/sync-version.mjs
-
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Cache Rust
-        uses: actions/cache@v6
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            rust/target
-            src-tauri/target
-          key: rust-tauri-${{ matrix.platform }}-${{ hashFiles('rust/**/Cargo.lock', 'rust/deckbridge-tray/**', 'src-tauri/Cargo.lock') }}
-          restore-keys: rust-tauri-${{ matrix.platform }}-
-
-      - name: Cache slim txiki.js runtime
-        uses: actions/cache@v6
-        with:
-          path: vendor/txiki.js/build/tjs
-          key: tjs-slim-${{ matrix.platform }}-${{ hashFiles('mise.toml', 'scripts/tjs-build.mjs', 'scripts/tjs-download.mjs') }}
-
-      - name: Install libhidapi (macOS)
-        run: brew install hidapi
-
-      - uses: jdx/mise-action@v4
-
-      - name: Compile relay binary
-        run: mise run compile
-
-      - name: Build deckbridge-tray
-        run: mise run tray-rs
-
-      # Tauri's bundler only picks up the sidecar whose filename matches the
-      # build's target triple (G2). `mise run compile` writes `deckbridge`.
-      - name: Stage sidecars for Tauri (apple-darwin triple)
-        run: |
-          mkdir -p src-tauri/binaries
-          cp deckbridge                             "src-tauri/binaries/deckbridge-${{ matrix.triple }}"
-          cp rust/target/release/deckbridge-tray "src-tauri/binaries/deckbridge-tray-${{ matrix.triple }}"
-          # cp can leave a non-executable file if the dest already exists; ensure
-          # both sidecars are executable so they spawn from inside the .app.
-          chmod +x "src-tauri/binaries/deckbridge-${{ matrix.triple }}" "src-tauri/binaries/deckbridge-tray-${{ matrix.triple }}"
-          ls -la src-tauri/binaries/
-
-      # Ad-hoc sign deckbridge-tray only. The relay is left with its as-compiled
-      # linker-signed signature — re-signing a `tjs compile` binary (payload
-      # appended after the Mach-O) fails strict validation. The Tauri bundler does
-      # NOT codesign the app either (tauri.macos.conf.json sets no signingIdentity),
-      # since its deep-sign pass would hit the same wall on the relay sidecar; each
-      # Mach-O ships its own ad-hoc signature instead.
-      - name: Ad-hoc sign deckbridge-tray sidecar
-        run: |
-          codesign --force --sign - --timestamp=none "src-tauri/binaries/deckbridge-tray-${{ matrix.triple }}"
-
-      # RUST_MIN_STACK: rustc's codegen thread blows its 8 MB stack building
-      # tauri-utils at opt-level=3 — LLVM's ScopedNoAliasAAResult recurses deep
-      # enough to SIGSEGV (seen on macos-arm64, tauri-cli 2.11.4/tauri-utils
-      # 2.9.3). rustc's own suggested workaround; harmless elsewhere.
-      - name: Install Tauri CLI
-        env:
-          RUST_MIN_STACK: '16777216'
-        run: cargo install tauri-cli --version "^2" --locked
-
-      # tauri.conf.json's version was already stamped from ts/package.json by
-      # the "Sync version" step above — no build-time override needed.
-      # --bundles dmg is belt-and-suspenders; tauri.macos.conf.json already sets
-      # targets app,dmg (its array REPLACES the base ["nsis"] via RFC 7396 merge).
-      - name: Build Tauri dmg
-        working-directory: src-tauri
-        run: cargo tauri build --bundles dmg
-
-      - uses: actions/upload-artifact@v7
-        with:
-          name: ${{ matrix.platform }}-dmg
-          path: src-tauri/target/release/bundle/dmg/*.dmg
-          if-no-files-found: error
-
   release:
     name: Publish GitHub Release
-    needs: [build, build-windows, build-macos-tauri]
+    needs: [prepare, build, build-windows]
     runs-on: ubuntu-latest
     permissions:
       contents: write
 
     steps:
-      # Guards against a stray/manual tag diverging from ts/package.json — the
-      # normal path is auto-tag.yml, which only ever tags the current version.
-      - uses: actions/checkout@v7
-        if: github.event_name == 'push'
-
-      - name: Verify tag matches ts/package.json version
-        if: github.event_name == 'push'
-        run: |
-          TAG_VERSION="${GITHUB_REF_NAME#deckbridge-v}"
-          PKG_VERSION=$(node -p "require('./ts/package.json').version")
-          if [ "$TAG_VERSION" != "$PKG_VERSION" ]; then
-            echo "::error::tag $GITHUB_REF_NAME (version $TAG_VERSION) does not match ts/package.json version $PKG_VERSION"
-            exit 1
-          fi
-
       - uses: actions/download-artifact@v8
         with:
           path: artifacts
@@ -439,7 +393,9 @@ jobs:
         uses: softprops/action-gh-release@v3
         with:
           generate_release_notes: true
-          name: "${{ github.ref_name }}"
+          tag_name: "${{ needs.prepare.outputs.tag }}"
+          name: "${{ needs.prepare.outputs.tag }}"
+          target_commitish: "${{ github.sha }}"
           body: |
             see docs: https://lukasmega.github.io/DeckBridge/
           files: |

@@ -1,0 +1,11 @@
+{
+  "name": "deckbridge-tauri-build",
+  "version": "0.0.0",
+  "private": true,
+  "scripts": {
+    "tauri": "tauri"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "2.11.3"
+  }
+}

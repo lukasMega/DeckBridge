@@ -4,7 +4,7 @@
 // task's whole purpose is the Windows NSIS build, so cmd /c is exactly the
 // shell it needs to work under). Stages the relay + tray sidecars under the
 // MSVC target-triple names Tauri's bundler expects (G2 in CLAUDE.md), then
-// runs `cargo tauri build`.
+// runs the pinned, prebuilt npm Tauri CLI.
 import { mkdirSync, copyFileSync, existsSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 
@@ -18,6 +18,7 @@ copyFileSync(
   'src-tauri/binaries/deckbridge-tray-x86_64-pc-windows-msvc.exe',
 );
 
-execFileSync('cargo', ['tauri', 'build', '--manifest-path', 'src-tauri/Cargo.toml'], {
+execFileSync('pnpm', ['tauri', 'build'], {
+  cwd: 'src-tauri',
   stdio: 'inherit',
 });
