@@ -384,6 +384,7 @@ jobs:
 
       # VirusTotal may share uploads. Throttle free API requests.
       - name: Upload release artifacts to VirusTotal
+        id: virustotal
         continue-on-error: true
         uses: crazy-max/ghaction-virustotal@936d8c5c00afe97d3d9a1af26d017cfdf26800a2 # v5.0.0
         with:
@@ -400,6 +401,31 @@ jobs:
           sha256sum ./*.zip ./*-setup.exe ./*.dmg > SHA256SUMS.txt
           cat SHA256SUMS.txt
 
+      # The VirusTotal step outputs `analysis` as `path/to/file=url,path/to/file=url`
+      # (empty when the upload step failed or was skipped). Render it as a table so
+      # each published artifact links to its own scan report.
+      - name: Build release body
+        env:
+          VT_ANALYSIS: ${{ steps.virustotal.outputs.analysis }}
+        run: |
+          {
+            echo "see docs: https://lukasmega.github.io/DeckBridge/"
+            echo
+            echo "## VirusTotal scans"
+            echo
+            if [ -n "$VT_ANALYSIS" ]; then
+              echo "| Artifact | Report |"
+              echo "| --- | --- |"
+              echo "$VT_ANALYSIS" | tr ',' '\n' | while IFS='=' read -r file url; do
+                [ -n "$file" ] || continue
+                echo "| \`$(basename "$file")\` | [analysis]($url) |"
+              done
+            else
+              echo "_Scan unavailable for this release._"
+            fi
+          } > release-body.md
+          cat release-body.md
+
       - name: Create release
         if: github.event_name == 'push' || inputs.skip_release == 'false'
         uses: softprops/action-gh-release@v3
@@ -408,8 +434,7 @@ jobs:
           tag_name: "${{ needs.prepare.outputs.tag }}"
           name: "${{ needs.prepare.outputs.tag }}"
           target_commitish: "${{ github.sha }}"
-          body: |
-            see docs: https://lukasmega.github.io/DeckBridge/
+          body_path: release-body.md
           files: |
             artifacts/*.zip
             artifacts/*-setup.exe
