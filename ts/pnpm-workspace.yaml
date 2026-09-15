@@ -3,3 +3,9 @@
 allowBuilds:
   "esbuild": true
   "unrs-resolver": true
+
+# Keep transitive browser data tooling above security-fix floors.
+# Drop these once all direct parents resolve fixed releases themselves.
+overrides:
+  browserslist: "^4.28.7"
+  baseline-browser-mapping: "^2.11.0"
