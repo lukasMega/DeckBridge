@@ -143,13 +143,19 @@ depends = ["ts-install"]
 run = "./ts/node_modules/.bin/oxlint ts && echo 'oxlint done ✅, waiting for eslint...' && ./ts/node_modules/.bin/eslint ts"
 
 [tasks.tauri-build]
-description = "Build Windows NSIS installer via Tauri (runs: compile + tray + copy sidecars + cargo tauri build)"
-depends = ["compile", "tray-rs"]
+description = "Build Windows NSIS installer via Tauri (compile + stage sidecars + pinned npm CLI)"
+depends = ["compile", "tauri-install"]
 run = "node scripts/tauri-build.mjs"
 
+[tasks.tauri-install]
+description = "Install pinned prebuilt Tauri CLI"
+quiet = true
+dir = "src-tauri"
+run = "pnpm install --frozen-lockfile --silent && echo Tauri CLI install OK"
+
 [tasks.tauri-build-macos]
-description = "Build macOS .app + .dmg via Tauri (compile + tray + sidecars renamed to apple-darwin triple + cargo tauri build --bundles app,dmg)"
-depends = ["compile", "tray-rs"]
+description = "Build macOS .app + .dmg via Tauri (compile + stage sidecars + pinned npm CLI)"
+depends = ["compile", "tauri-install"]
 # macOS = Tauri Model A, ad-hoc (no Apple Developer ID). bundle.targets (app,dmg) +
 # signingIdentity "-" + hardenedRuntime false live in src-tauri/tauri.macos.conf.json,
 # auto-merged on macOS. hardenedRuntime stays OFF or library validation blocks the
@@ -171,7 +177,7 @@ cp deckbridge                                  "src-tauri/binaries/deckbridge-${
 cp rust/target/release/deckbridge-tray                "src-tauri/binaries/deckbridge-tray-${TRIPLE}"
 chmod +x "src-tauri/binaries/deckbridge-${TRIPLE}" "src-tauri/binaries/deckbridge-tray-${TRIPLE}"
 codesign --force --sign - --timestamp=none "src-tauri/binaries/deckbridge-tray-${TRIPLE}"
-cd src-tauri && CI=true cargo tauri build --bundles app,dmg
+cd src-tauri && CI=true pnpm tauri build --bundles app,dmg
 open target/release/bundle/macos
 """
 

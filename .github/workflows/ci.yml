@@ -30,14 +30,10 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
 
       - name: Cache Rust (workspace target)
-        uses: actions/cache@v6
+        uses: Swatinem/rust-cache@v2
         with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            rust/target
-          key: ci-rust-${{ hashFiles('rust/**/Cargo.lock') }}
-          restore-keys: ci-rust-
+          workspaces: rust -> target
+          shared-key: ci-checks
 
       # No TJS_FROM_SOURCE → tjs-setup downloads the prebuilt slim runtime (fast,
       # no toolchain). The slow from-source build is for platforms without an
@@ -107,14 +103,10 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
 
       - name: Cache Rust (workspace target)
-        uses: actions/cache@v6
+        uses: Swatinem/rust-cache@v2
         with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            rust/target
-          key: ci-e2e-rust-${{ hashFiles('rust/**/Cargo.lock') }}
-          restore-keys: ci-e2e-rust-
+          workspaces: rust -> target
+          shared-key: ci-e2e
 
       # See the `checks` job for why Google's apt source is removed first.
       - name: Install system deps (libhidapi + libudev + libffi + gtk for the tray)
@@ -171,14 +163,10 @@ jobs:
           components: clippy, rustfmt
 
       - name: Cache Rust (workspace target)
-        uses: actions/cache@v6
+        uses: Swatinem/rust-cache@v2
         with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            rust/target
-          key: ci-rustlint-${{ hashFiles('rust/**/Cargo.lock') }}
-          restore-keys: ci-rustlint-
+          workspaces: rust -> target
+          shared-key: ci-rustlint
 
       # clippy compiles the whole workspace incl. deckbridge-tray (gtk/xdo/appindicator).
       - name: Install Rust system deps
@@ -207,15 +195,12 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
 
       - name: Cache Rust (workspace target)
-        uses: actions/cache@v6
+        uses: Swatinem/rust-cache@v2
         with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            rust/target
-            src-tauri/target
-          key: ci-rust-windows-${{ hashFiles('rust/**/Cargo.lock', 'src-tauri/Cargo.lock') }}
-          restore-keys: ci-rust-windows-
+          workspaces: |
+            rust -> target
+            src-tauri -> target
+          shared-key: ci-windows
 
       - uses: jdx/mise-action@v4
 

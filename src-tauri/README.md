@@ -81,7 +81,7 @@ bundled by matching the **target triple** of the build. CI must place, before
   `binaries/deckbridge-tray-<arch>-apple-darwin`, where `<arch>` is `aarch64`
   (Apple Silicon) or `x86_64` (Intel) — no `.exe` suffix. `chmod +x` both (a
   `cp` over a stale dest can drop the execute bit). Ad-hoc sign **only**
-  `deckbridge-tray` before `cargo tauri build`; leave the relay's linker-signed
+  `deckbridge-tray` before `pnpm tauri build`; leave the relay's linker-signed
   signature alone (see the macOS note above).
 
 deckbridge-tray embeds its own status icons via `include_bytes!`, so the icon PNGs do
@@ -89,21 +89,20 @@ deckbridge-tray embeds its own status icons via `include_bytes!`, so the icon PN
 
 ## How CI builds it
 
-The Tauri CLI (`cargo-tauri`) is the build driver — it is not installed here;
-CI installs it (`cargo install tauri-cli --version '^2' --locked`). Both jobs
-live in `.github/workflows/release.yml` (`build-windows`, `build-macos-tauri`).
+The pinned npm Tauri CLI is the build driver. `pnpm install --frozen-lockfile`
+downloads a prebuilt platform binary instead of compiling `tauri-cli` from
+source. Both platform paths live in `.github/workflows/release.yml`.
 
 Windows runner (`mise run tauri-build` mirrors this locally):
 
 ```sh
 # from deckbridge/
 mise run compile                                  # → ./deckbridge (txiki binary)
-mise run tray-rs                                  # → rust/target/release/deckbridge-tray.exe
 mkdir -p src-tauri/binaries
 cp deckbridge                              src-tauri/binaries/deckbridge-x86_64-pc-windows-msvc.exe
 cp rust/target/release/deckbridge-tray.exe src-tauri/binaries/deckbridge-tray-x86_64-pc-windows-msvc.exe
 cd src-tauri
-cargo tauri build                                 # → target/release/bundle/nsis/*-setup.exe
+pnpm tauri build                                  # → target/release/bundle/nsis/*-setup.exe
 ```
 
 Unsigned is acceptable (one-click SmartScreen "Run anyway"); no signing
@@ -113,14 +112,14 @@ macOS runner (`mise run tauri-build-macos` mirrors this locally):
 
 ```sh
 # from deckbridge/ (TRIPLE = aarch64-apple-darwin or x86_64-apple-darwin)
-mise run compile && mise run tray-rs
+mise run compile
 mkdir -p src-tauri/binaries
 cp deckbridge                             src-tauri/binaries/deckbridge-$TRIPLE
 cp rust/target/release/deckbridge-tray src-tauri/binaries/deckbridge-tray-$TRIPLE
 chmod +x src-tauri/binaries/deckbridge-$TRIPLE src-tauri/binaries/deckbridge-tray-$TRIPLE
 codesign --force --sign - src-tauri/binaries/deckbridge-tray-$TRIPLE   # relay: do NOT re-sign
 cd src-tauri
-CI=true cargo tauri build --bundles app,dmg       # → target/release/bundle/dmg/*.dmg + bundle/macos/*.app
+CI=true pnpm tauri build --bundles app,dmg        # → target/release/bundle/dmg/*.dmg + bundle/macos/*.app
 ```
 
 `CI=true` skips `bundle_dmg.sh`'s AppleScript/Finder window-styling pass (needs a
