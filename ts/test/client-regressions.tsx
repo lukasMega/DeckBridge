@@ -205,6 +205,7 @@ async function run(): Promise<void> {
   else delete (navigator as { clipboard?: unknown }).clipboard;
 
   await runSettingsPanels();
+  await runKeymapAndDiagnosticsPanels();
 }
 
 // Device tuning + diagnostics panels (simple/device-tuning.tsx,
@@ -482,7 +483,9 @@ async function runSettingsPanels(): Promise<void> {
       await act(() => render(null, root));
     }
   }
+}
 
+async function runKeymapAndDiagnosticsPanels(): Promise<void> {
   // Key-map learn mode: the derived array IS the deliverable (it gets pasted into
   // a registry PR), so drive it with real key events and assert the exact shape.
   {
@@ -533,8 +536,10 @@ async function runSettingsPanels(): Promise<void> {
       await click('#keymap-learn-save');
       await settle();
       const posted = stub.calls.find((c) => c.method === 'POST');
-      const keyMap = (posted?.body as { overrides?: { keyMap?: Record<string, unknown> } })
-        ?.overrides?.keyMap;
+      const postedBody = posted?.body as
+        | { overrides?: { keyMap?: Record<string, unknown> } }
+        | undefined;
+      const keyMap = postedBody?.overrides?.keyMap;
       check(
         JSON.stringify(keyMap?.wireInputToCora) === JSON.stringify([-1, 2, 3, 0, 1]),
         'Save posts the derived map',
