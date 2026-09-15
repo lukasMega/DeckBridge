@@ -391,7 +391,6 @@ jobs:
   release:
     name: Publish GitHub Release
     needs: [build, build-windows, build-macos-tauri]
-    if: github.event_name == 'push' || inputs.skip_release == 'false'
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -417,6 +416,18 @@ jobs:
           path: artifacts
           merge-multiple: true
 
+      # Scan every packaged binary before checksumming and publishing it.
+      # freshclam updates signatures; clamscan exits 1 when malware is found.
+      - name: Install ClamAV and update signatures
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clamav
+          sudo systemctl stop clamav-freshclam.service || true
+          sudo freshclam
+
+      - name: Scan release artifacts for malware
+        run: clamscan --recursive --infected artifacts
+
       - name: Generate SHA256SUMS
         run: |
           cd artifacts
@@ -424,6 +435,7 @@ jobs:
           cat SHA256SUMS.txt
 
       - name: Create release
+        if: github.event_name == 'push' || inputs.skip_release == 'false'
         uses: softprops/action-gh-release@v3
         with:
           generate_release_notes: true
