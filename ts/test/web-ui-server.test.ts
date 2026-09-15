@@ -877,6 +877,18 @@ test('device-overrides view seeds from the registry when nothing is persisted', 
   }
 });
 
+test('device-overrides default view follows the selected dock', () => {
+  const ui = new WebUIServer(undefined, [], 'real', TEST_SETTINGS_ROOT);
+  ui.notifyDocks([
+    { ...fakeDockStatus(0), modelId: TUNED_MODEL },
+    { ...fakeDockStatus(1), modelId: 'mirabox-293s', modelName: 'Mirabox 293S' },
+  ]);
+  ui.selectDock(1);
+  const view = ui.deviceOverridesView();
+  assert.ok(!('error' in view));
+  if (!('error' in view)) assert.equal(view.modelId, 'mirabox-293s');
+});
+
 test('the form seed round-trips: POSTing `tunable` unchanged is accepted', () => {
   // Regression: the panel used to seed from `effective`, which carries the
   // non-tunable protocol facts (format/colorMode/bmpPpm) as well — so pressing

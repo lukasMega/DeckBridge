@@ -240,6 +240,12 @@ const OVERRIDES_VIEW: DeviceOverridesView = {
   },
 };
 
+const SECOND_OVERRIDES_VIEW: DeviceOverridesView = {
+  ...OVERRIDES_VIEW,
+  modelId: 'mirabox-293s',
+  modelName: 'Mirabox 293S',
+};
+
 interface StubCall {
   url: string;
   method: string;
@@ -352,6 +358,65 @@ async function runSettingsPanels(): Promise<void> {
       check(
         (reset?.body as { modelId?: string } | undefined)?.modelId === 'mirabox-293',
         'Reset names the model being reset',
+      );
+    } finally {
+      stub.restore();
+      await act(() => render(null, root));
+    }
+  }
+
+  // Changing selected dock reloads tuning for that model. Before this regression
+  // fix, the settings panel kept its mount-time primary model forever.
+  {
+    const docks = [
+      {
+        index: 0,
+        modelId: OVERRIDES_VIEW.modelId,
+        modelName: OVERRIDES_VIEW.modelName,
+        keyCount: 15,
+        columns: 5,
+        rows: 3,
+        primaryPort: 5325,
+        primaryConnected: true,
+        elgatoConnected: true,
+      },
+      {
+        index: 1,
+        modelId: SECOND_OVERRIDES_VIEW.modelId,
+        modelName: SECOND_OVERRIDES_VIEW.modelName,
+        keyCount: 18,
+        columns: 6,
+        rows: 3,
+        primaryPort: 5345,
+        primaryConnected: true,
+        elgatoConnected: true,
+      },
+    ];
+    const stub = stubFetch((url) => ({
+      payload: url.includes(encodeURIComponent(SECOND_OVERRIDES_VIEW.modelId))
+        ? SECOND_OVERRIDES_VIEW
+        : OVERRIDES_VIEW,
+    }));
+    try {
+      await act(() => patch({ status: { ...baseStatus, selectedDock: 0, docks } }));
+      await act(() => render(<DeviceTuningPanel />, root));
+      await settle();
+      check(root.textContent.includes('Mirabox 293V3'), 'Primary tuning loads initially');
+
+      await act(() => patch({ status: { ...baseStatus, selectedDock: 1, docks } }));
+      await settle();
+      check(root.textContent.includes('Mirabox 293S'), 'Tuning reloads after dock selection');
+      check(
+        stub.calls.some((call) => call.url.includes('modelId=mirabox-293s')),
+        'Selected model id is explicit in tuning request',
+      );
+
+      await click('#tuning-apply');
+      await settle();
+      const posted = stub.calls.find((call) => call.method === 'POST');
+      check(
+        (posted?.body as { modelId?: string } | undefined)?.modelId === 'mirabox-293s',
+        'Apply targets selected dock model',
       );
     } finally {
       stub.restore();
