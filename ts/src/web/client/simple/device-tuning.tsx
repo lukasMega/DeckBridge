@@ -1,13 +1,10 @@
-// "Device tuning" — the Settings-page form over POST /api/device-overrides.
-//
-// Exists so the person holding an untested board can find its correct rotation /
-// flip / size / quality WITHOUT a build-per-guess loop, then copy the working
-// values into a registry PR. The key-map editor lives in keymap-learn.tsx (both
-// to keep this file under the 500-line check-loc gate and because it is a wizard,
-// not a form).
-import { useCallback, useEffect, useState } from 'preact/hooks';
+// Settings-page device tuning over POST /api/device-overrides.
+// Supports runtime calibration before copying values into a registry PR.
+// Key-map wizard lives in keymap-learn.tsx.
+import { useCallback, useEffect, useRef, useState } from 'preact/hooks';
 import { Collapsible } from '../components/Collapsible.js';
 import { useStore } from '../store.js';
+import type { StoreState } from '../store.js';
 import { copyLabel, useCopyText } from '../use-copy-text.js';
 import { KeymapLearn } from './keymap-learn.js';
 import type { DeviceImageOverride, DeviceOverridesView } from '../ui-types.js';
@@ -127,11 +124,38 @@ function CheckField({
   );
 }
 
+function selectedModel(state: StoreState): string | undefined {
+  const selectedDock = state.status.selectedDock ?? 0;
+  return (
+    state.status.docks?.find((dock) => dock.index === selectedDock)?.modelId ?? state.status.modelId
+  );
+}
+
+function matchingView(
+  view: DeviceOverridesView | null,
+  selectedModelId: string | undefined,
+): DeviceOverridesView | null {
+  return view && (!selectedModelId || view.modelId === selectedModelId) ? view : null;
+}
+
+function EmptyDeviceTuningPanel(): preact.JSX.Element {
+  return (
+    <Collapsible
+      title="Device tuning"
+      class="tuning-section"
+      id="device-tuning"
+      bodyId="device-tuning-body"
+    >
+      <p class="help-lead">No device model available yet.</p>
+    </Collapsible>
+  );
+}
+
 export function DeviceTuningPanel(): preact.JSX.Element {
-  const selectedModelId = useStore((s) => {
-    const selectedDock = s.status.selectedDock ?? 0;
-    return s.status.docks?.find((dock) => dock.index === selectedDock)?.modelId ?? s.status.modelId;
-  });
+  const selectedModelId = useStore(selectedModel);
+  const selectedModelIdRef = useRef(selectedModelId);
+  selectedModelIdRef.current = selectedModelId;
+  const loadSeqRef = useRef(0);
   const [view, setView] = useState<DeviceOverridesView | null>(null);
   const [image, setImage] = useState<DeviceImageOverride>({});
   const [busy, setBusy] = useState(false);
@@ -141,30 +165,44 @@ export function DeviceTuningPanel(): preact.JSX.Element {
 
   const load = useCallback(
     async (signal?: AbortSignal): Promise<void> => {
+      const requested = selectedModelId;
+      // Calls retained by an earlier Apply/Reset/learn callback must not start
+      // another request after selection changes.
+      if (requested !== selectedModelIdRef.current) return;
+      const seq = ++loadSeqRef.current;
       const query = selectedModelId ? `?modelId=${encodeURIComponent(selectedModelId)}` : '';
       const r = await fetch(`/api/device-overrides${query}`, signal ? { signal } : {});
       if (!r.ok) throw new Error(`Could not load device tuning (${r.status})`);
       const data = (await r.json()) as DeviceOverridesView;
+      if (seq !== loadSeqRef.current || requested !== selectedModelIdRef.current) return;
       setView(data);
-      // Seed from `tunable` (the effective spec projected down to the settable
-      // fields), not from the (usually empty) override and NOT from `effective`:
-      // every control starts at what the device is actually using, and Apply posts
-      // back a shape the server accepts. `effective` also carries protocol facts
-      // like `format`/`colorMode`, which validateModelOverride rejects outright.
+      // `tunable` mirrors active settable values without rejected protocol facts.
+      // Reloading intentionally discards drafts so edits never follow another dock.
       setImage({ ...data.tunable.image });
     },
     [selectedModelId],
   );
 
-  useEffect(() => {
-    const ctrl = new AbortController();
-    void load(ctrl.signal).catch(() => setView(null));
-    return () => ctrl.abort();
-  }, [load]);
+  useEffect(
+    function loadSelectedModel() {
+      const ctrl = new AbortController();
+      // eslint-disable-next-line @eslint-react/set-state-in-effect -- selection boundary: feedback from the previous model must disappear before the next request finishes
+      setStatus(null);
+      // eslint-disable-next-line @eslint-react/set-state-in-effect -- selection boundary: errors from the previous model must not describe the newly selected model
+      setError(null);
+      void load(ctrl.signal).catch(function handleLoadError() {
+        if (!ctrl.signal.aborted) setView(null);
+      });
+      return function abortSelectedModelLoad() {
+        ctrl.abort();
+      };
+    },
+    [load],
+  );
 
   // Never leave previous dock's controls actionable while its replacement view
   // is loading after a selection change.
-  const activeView = view && (!selectedModelId || view.modelId === selectedModelId) ? view : null;
+  const activeView = matchingView(view, selectedModelId);
 
   async function apply(): Promise<void> {
     if (!activeView) return;
@@ -212,18 +250,7 @@ export function DeviceTuningPanel(): preact.JSX.Element {
     }
   }
 
-  if (!activeView) {
-    return (
-      <Collapsible
-        title="Device tuning"
-        class="tuning-section"
-        id="device-tuning"
-        bodyId="device-tuning-body"
-      >
-        <p class="help-lead">No device model available yet.</p>
-      </Collapsible>
-    );
-  }
+  if (!activeView) return <EmptyDeviceTuningPanel />;
 
   const patch = (p: Partial<DeviceImageOverride>): void => setImage({ ...image, ...p });
   const basic = NUMBER_FIELDS.filter((f) => !f.advanced);
