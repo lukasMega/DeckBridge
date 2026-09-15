@@ -252,6 +252,9 @@ export class DriverManager {
     });
     driver.on('disconnect', () => {
       log('info', model.id, 'disconnected');
+      // Re-init the native HID stack before the next probe: without it a replug of the
+      // same unit can stay invisible to enumeration for the rest of the process.
+      this.hidScanner.requestReset();
       this.primary.onDisconnect(model.id);
       this.currentDriver = null;
       this.realDriver = null;

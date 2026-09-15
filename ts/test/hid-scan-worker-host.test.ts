@@ -82,5 +82,32 @@ await test('worker failure rejects scan', async () => {
   assert.ok(/boom/.test(error?.message ?? ''));
 });
 
+await test('requested reset rides the next scan, once', async () => {
+  const worker = new FakeScanWorker();
+  const host = new HidScanWorkerHost(() => worker);
+  host.requestReset();
+  const first = host.scan();
+  assert.equal(worker.posted[0]?.reset, true);
+  worker.finish(10);
+  await first;
+  const second = host.scan();
+  assert.equal(worker.posted[1]?.reset, undefined);
+  worker.finish(10);
+  await second;
+});
+
+await test('reset survives a scan already in flight', async () => {
+  const worker = new FakeScanWorker();
+  const host = new HidScanWorkerHost(() => worker);
+  const first = host.scan();
+  host.requestReset(); // disconnect arrives mid-scan: that result is stale state
+  worker.finish(10);
+  await first;
+  const second = host.scan();
+  assert.equal(worker.posted[1]?.reset, true);
+  worker.finish(10);
+  await second;
+});
+
 console.log(`\n${passed} passed, ${failed} failed`);
 tjs.exit(failed > 0 ? 1 : 0);

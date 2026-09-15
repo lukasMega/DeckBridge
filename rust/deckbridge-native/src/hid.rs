@@ -35,6 +35,26 @@ fn with_api<T>(default: T, filters: &[(u16, u16)], f: impl FnOnce(&HidApi) -> T)
     f(api)
 }
 
+/// Drop the process-lifetime `HidApi` (hid_exit), so the next enumeration starts
+/// from a fresh hid_init. Returns 1 if an instance was dropped, 0 if none existed.
+///
+/// `reset_devices()` + `add_devices()` only rebuild HIDAPI's *own* device list; the
+/// platform backend's shared enumeration state (on macOS, the `IOHIDManager` created
+/// at hid_init and scheduled on that thread's run loop) survives. When a device is
+/// unplugged and replugged, that state can stop reporting the device for the rest of
+/// the process lifetime. Call this after a disconnect so a replug is seen again.
+///
+/// Safe alongside the USB worker: that thread drives a separately dlopen'd
+/// `libhidapi`, a distinct copy with its own globals and open handles.
+#[no_mangle]
+pub extern "C" fn mirabox_hid_reset() -> i32 {
+    let result = catch_unwind(AssertUnwindSafe(|| {
+        let mut guard = HID_API.lock().unwrap_or_else(|e| e.into_inner());
+        i32::from(guard.take().is_some())
+    }));
+    result.unwrap_or(0)
+}
+
 /// Find a HID device path by vendor ID, product ID, usage page, and usage.
 /// Enumerates all HID interfaces (unlike hid_open which picks the first).
 /// `pid == 0` means match any product ID (backward-compatible).

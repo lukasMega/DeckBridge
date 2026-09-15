@@ -378,7 +378,7 @@ export class AcmeDriver extends EventEmitter {
     this.readTimer = setInterval(() => {
       if (!this.device) return;
       const n = hid.hid_read_timeout(this.device, buf, 512, 5) as number;
-      if (n < 0) { const e = String(hid.hid_error(this.device)); this._cleanup(); this.emit('error', new Error(e)); this.emit('disconnect'); return; }
+      if (n < 0) { const e = hidErrorString(hid, this.device); this._cleanup(); this.emit('error', new Error(e)); this.emit('disconnect'); return; }
       if (n > 0) this._parseInput(buf.subarray(0, n));
     }, 5);
   }

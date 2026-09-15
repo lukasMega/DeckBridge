@@ -96,7 +96,7 @@ hid_read_timeout(pointer dev, buffer, size_t len, int timeoutMs) → int
 hid_send_feature_report(pointer dev, buffer, size_t len)         → int
 hid_get_feature_report(pointer dev, buffer, size_t len)          → int
 hid_close(pointer dev)             → void
-hid_error(pointer dev)             → string
+hid_error(pointer dev)             → pointer (const wchar_t*; decode via hidErrorString())
 
 // deckbridge-native HID exports:
 mirabox_hid_find_path(uint16 vid, uint16 pid, uint16 usagePage, uint16 usage,

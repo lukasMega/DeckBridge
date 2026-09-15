@@ -104,17 +104,20 @@ globalThis.addEventListener('unhandledrejection', (ev: PromiseRejectionEvent) =>
 });
 
 function buildTrayState(): TrayState {
-  const driverConnected =
-    driverManager.getCurrentDriver() !== null && driverManager.getDriverMode() === 'real';
+  const driver = driverManager.getCurrentDriver();
+  const driverConnected = driver !== null && driverManager.getDriverMode() === 'real';
   const { elgatoConnected } = webui.snapshot();
+  // The USB device is whatever model is actually open (Mirabox OR Elgato hardware);
+  // "Elgato" in these strings means the Stream Deck app on the other end of CORA.
+  const deviceName = driver?.model.name ?? 'Device';
   let icon: TrayState['icon'];
   let status: string;
   if (driverConnected && elgatoConnected) {
     icon = 'full';
-    status = 'Mirabox + Elgato connected';
+    status = `${deviceName} + Elgato app connected`;
   } else if (driverConnected) {
     icon = 'usb_only';
-    status = 'Mirabox connected (Elgato not paired)';
+    status = `${deviceName} connected (Elgato app not paired)`;
   } else {
     icon = 'disconnected';
     const attempts = driverManager.getReconnectAttemptCount();

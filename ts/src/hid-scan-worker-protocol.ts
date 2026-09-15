@@ -12,7 +12,10 @@ export interface HidScanDeviceInfo {
   path: string;
 }
 
-export type MainToHidScanWorker = { type: 'scan' };
+/** `reset`: drop the native cached HidApi before scanning (hid_exit/hid_init), so a
+ * replugged device is seen again after a disconnect. Costs one extra init per
+ * disconnect, not per tick. */
+export type MainToHidScanWorker = { type: 'scan'; reset?: boolean };
 
 export type HidScanWorkerToMain =
   | { type: 'scanResult'; devices: HidScanDeviceInfo[]; tookMs: number }

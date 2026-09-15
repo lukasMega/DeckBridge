@@ -9,6 +9,7 @@
  *  setImmediate, queueMicrotask, or promises are introduced here. */
 import { EventEmitter } from 'node:events';
 import { loadHidapi } from '../ffi/hidapi.js';
+import { hidErrorString } from '../ffi/wide-string.js';
 import type { HidapiSymbols } from '../ffi/hidapi.js';
 import { error } from '../logger.js';
 
@@ -50,11 +51,11 @@ export abstract class HidDeviceBase extends EventEmitter {
       const n = hid.hid_read_timeout(this.device, readBuf, bufSize, pollMs);
       if (n < 0) {
         // A negative read means the handle is gone (device unplugged). hid_error()
-        // is unreliable here: on macOS it returns a wchar_t* the FFI reads as a
-        // char*, yielding a single garbage char (e.g. "S"). Log a fixed, accurate
-        // message instead (A6).
+        // is read BEFORE cleanup — hid_close() invalidates it — and is only ever a
+        // detail suffix: the fixed message stays the diagnosis (A6).
+        const detail = hidErrorString(hid, this.device);
         this._cleanup();
-        this.emit('error', new Error('device read failed — disconnected'));
+        this.emit('error', new Error(`device read failed — disconnected (${detail})`));
         this.emit('disconnect');
         return;
       }
@@ -76,7 +77,7 @@ export abstract class HidDeviceBase extends EventEmitter {
     if (!this.device || !this.hidLib) return -1;
     const n = this.hidLib.symbols.hid_write(this.device, buf, buf.length);
     if (n < 0) {
-      const errStr = this.hidLib.symbols.hid_error(this.device) ?? 'unknown';
+      const errStr = hidErrorString(this.hidLib.symbols, this.device);
       error(logTag, message(n, errStr));
     }
     return n;
