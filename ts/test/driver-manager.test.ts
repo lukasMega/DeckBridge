@@ -1151,28 +1151,28 @@ await test('E4. no override → the registry model reaches the driver unchanged'
 
 // F. Probe pacing under slow HID enumeration (issue #67.2)
 
-await test('F1. a fast enumeration keeps the 2s probe interval', () => {
-  assert.equal(nextProbeDelayMs(2_000, 5), 2_000, 'healthy sweep → baseline');
-  assert.equal(nextProbeDelayMs(2_000, 249), 2_000, 'just under the slow threshold');
+await test('F1. a fast enumeration keeps the 3s probe interval', () => {
+  assert.equal(nextProbeDelayMs(3_000, 5), 3_000, 'healthy sweep → baseline');
+  assert.equal(nextProbeDelayMs(3_000, 249), 3_000, 'just under the slow threshold');
 });
 
 await test('F2. a slow enumeration backs the probe interval off, capped at 30s', () => {
-  let delay = 2_000;
+  let delay = 3_000;
   delay = nextProbeDelayMs(delay, 900);
-  assert.equal(delay, 4_000, 'first slow sweep doubles');
+  assert.equal(delay, 6_000, 'first slow sweep doubles');
   delay = nextProbeDelayMs(delay, 900);
-  assert.equal(delay, 8_000, 'and again');
+  assert.equal(delay, 12_000, 'and again');
   for (let i = 0; i < 10; i++) delay = nextProbeDelayMs(delay, 900);
   assert.equal(delay, 30_000, 'capped — a deck plugged in later still connects');
 });
 
 await test('F3. recovery snaps straight back to the baseline', () => {
-  assert.equal(nextProbeDelayMs(30_000, 3), 2_000, 'keyboard unplugged → 2s again');
+  assert.equal(nextProbeDelayMs(30_000, 3), 3_000, 'keyboard unplugged → 3s again');
 });
 
 await test('F4. the manager starts at the baseline interval', () => {
   const { driverManager } = setup();
-  assert.equal(driverManager.__reconnectDelayMs(), 2_000, 'no backoff before any sweep');
+  assert.equal(driverManager.__reconnectDelayMs(), 3_000, 'no backoff before any sweep');
 });
 
 await test('F5. the cold first sweep never triggers a backoff', () => {
@@ -1180,9 +1180,9 @@ await test('F5. the cold first sweep never triggers a backoff', () => {
   // dlopen + a cold OS HID stack costs ~700ms on a healthy machine; only the
   // sweeps after it describe the steady state.
   pacer.note(900);
-  assert.equal(pacer.delayMs, 2_000, 'first sweep is discarded');
+  assert.equal(pacer.delayMs, 3_000, 'first sweep is discarded');
   pacer.note(900);
-  assert.equal(pacer.delayMs, 4_000, 'the second one counts');
+  assert.equal(pacer.delayMs, 6_000, 'the second one counts');
 });
 
 // Summary

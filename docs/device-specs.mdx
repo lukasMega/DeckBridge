@@ -21,7 +21,7 @@ the field means.
 How much to trust a value:
 
 - **Measured** — anything on a deck marked tested. The image tuning and key maps of the
-  293V3, 293S, K1 Pro, D6 rev. 2 and Mini were derived on hardware.
+  MK.2, 293V3, 293S, K1 Pro, D6 rev. 2 and Mini were derived on hardware.
 - **Inherited** — the rebadges copy a tested board field-for-field, by construction, so
   they cannot drift; what is untested is the *assumption* that the board is the same.
 - **Inferred** — read out of a reference implementation. Each device lists its sources.
@@ -62,7 +62,7 @@ transform override. Image and input are resolved independently —
 
 ### Stream Deck MK.2 \{#mk2}
 
-`mk2` · `elgato-gen2` · — untested · [compare entry](./devices.mdx#mk2)
+`mk2` · `elgato-gen2` · ✓ tested (macOS, 2026-09-15) · [compare entry](./devices.mdx#mk2)
 
 ```text
 mk2 index → wire image id  (5×3, row-major)
@@ -84,6 +84,8 @@ splash: {
   }
 }
 ```
+
+**Derived from:** own hardware test (macOS, PID 0x0080)
 
 ### Stream Deck Mini \{#mini}
 

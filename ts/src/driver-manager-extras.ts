@@ -6,7 +6,7 @@ import { log } from './logger.js';
 import { closeDriver, type WorkerHidDriver } from './hid-worker-host.js';
 import type { DeviceModel, DeviceModelOverride } from './devices/driver.js';
 import type { DriverMode } from './driver-manager-discovery.js';
-import { MAX_DEVICE_SESSIONS, RECONNECT_DELAY_MS, MDNS_SERVICE_NAME } from './types.js';
+import { HID_POLL_INTERVAL_MS, MAX_DEVICE_SESSIONS, MDNS_SERVICE_NAME } from './types.js';
 import type { DockStatus, ExtraKeyConfig } from './types.js';
 import { DEVICE_MODELS } from './devices/registry.js';
 import { DeviceSession, sessionIdentity, type SessionServersFactory } from './device-session.js';
@@ -84,7 +84,7 @@ export class ExtraDockCoordinator {
       this.scanExtras().catch((e: unknown) =>
         log('error', 'coord', `scanExtras failed: ${(e as Error).message}`),
       );
-    }, RECONNECT_DELAY_MS);
+    }, HID_POLL_INTERVAL_MS);
   }
 
   stopScan(): void {

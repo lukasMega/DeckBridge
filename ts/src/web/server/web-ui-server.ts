@@ -319,7 +319,7 @@ export class WebUIServer extends EventEmitter implements WebUIController {
     this.status.setFlag('clientApp', app);
   }
 
-  /** Push the current per-dock status list (primary + extras); deduped, since the 2s reconnect scan calls this every tick. */
+  /** Push the current per-dock status list (primary + extras); deduped, since the 3s reconnect scan calls this every tick. */
   notifyDocks(docks: DockStatus[]): void {
     if (!this.dockRegistry.update(docks)) return;
     // Drop image caches of vanished docks; fall back to the primary when the selected dock was unplugged.

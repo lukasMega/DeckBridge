@@ -18,7 +18,7 @@ async function test(name: string, fn: () => void | Promise<void>): Promise<void>
 // Runs against the real deckbridge-native enumeration (like ffi-mdns.test.ts), so it
 // asserts only device-independent behavior: the CACHING, which is the whole point.
 // Before this cache every VID/PID-filtered query ran its own full hid_enumerate — ~26
-// of them per presence sweep, every 2 s, on the main thread (issue #67.2).
+// of them per presence sweep, every 3 s, on the main thread (issue #67.2).
 
 console.log('\nffi/hidapi enumeration snapshot');
 

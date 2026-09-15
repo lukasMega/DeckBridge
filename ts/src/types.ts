@@ -78,6 +78,7 @@ export const IMAGE_JPEG_QUALITY = 0.9;
 
 // Reconnect
 export const RECONNECT_DELAY_MS = 2_000;
+export const HID_POLL_INTERVAL_MS = 3_000;
 
 // WebUI server
 export const WEBUI_PORT = 3000;

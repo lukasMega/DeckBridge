@@ -36,7 +36,7 @@ export class DockRegistry {
     return null;
   }
 
-  /** Replace the dock list; false (no-op) if unchanged — the 2s reconnect scan calls this every
+  /** Replace the dock list; false (no-op) if unchanged — the 3s reconnect scan calls this every
    *  tick and an unchanged shape must not spam a broadcast. */
   update(docks: DockStatus[]): boolean {
     if (JSON.stringify(docks) === JSON.stringify(this.docks)) return false;

@@ -301,8 +301,8 @@
       "id": "mk2",
       "name": "Stream Deck MK.2",
       "family": "elgato",
-      "tested": false,
-      "testedLabel": "— untested",
+      "tested": true,
+      "testedLabel": "✓ tested (macOS, 2026-09-15)",
       "cells": {
         "identity": {
           "name": "Stream Deck MK.2",
@@ -1228,6 +1228,11 @@
   ],
   "homepageOrder": [
     {
+      "id": "mk2",
+      "name": "Stream Deck MK.2",
+      "tested": true
+    },
+    {
       "id": "mini",
       "name": "Stream Deck Mini",
       "tested": true
@@ -1256,11 +1261,6 @@
       "id": "fifine-d6-rev2",
       "name": "Fifine AmpliGame D6 (rev. 2)",
       "tested": true
-    },
-    {
-      "id": "mk2",
-      "name": "Stream Deck MK.2",
-      "tested": false
     },
     {
       "id": "ajazz-akp153r-rev2",
