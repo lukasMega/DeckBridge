@@ -177,7 +177,7 @@ class ToggleRealDriver extends EventEmitter {
 
 /** A fake "real" driver whose open() resolves only when the test calls
  * `resolveOpen()`, via a `Promise.withResolvers()` deferred. Lets a test pause mid-probe
- * to exercise the post-await state re-check (E1-a) and the in-flight probe guard (E1-b). / */
+ * to exercise the post-await state re-check (E1-a) and the in-flight probe guard (E1-b). */
 class ControllableRealDriver extends EventEmitter {
   readonly model: DeviceModel;
   deviceSerial: string | undefined = 'SN999';

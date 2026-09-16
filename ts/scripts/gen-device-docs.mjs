@@ -1,7 +1,9 @@
 #!/usr/bin/env node
-// Generates the device comparison docs from ts/src/devices/registry.ts. node
-// scripts/gen-device-docs.mjs write the three artifacts node scripts/gen-device-docs.mjs --check fail if they
-// are stale Why it lives in ts/scripts/ and not the repo-root scripts/: it imports esbuild, and ESM resolves bare…
+// Generates the device comparison docs from ts/src/devices/registry.ts (--check: fail if stale).
+// Lives in ts/scripts/, not repo-root scripts/: ESM resolves bare specifiers from the
+// importing file's path, and repo-root scripts/ has no node_modules for `esbuild`.
+// Registry is bundled to ESM and imported (pure data); an import throwing on `tjs:ffi`
+// under node would mean non-native data snuck in.
 
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
@@ -472,9 +474,11 @@ function backslashEscape(text, chars) {
   return text.replace(new RegExp(`[\\\\${chars}]`, 'g'), (c) => `\\${c}`);
 }
 
-/** Escape `{` and `<` so MDX does not read them as an
- * expression or a tag — but only OUTSIDE inline code spans,
- * where markdown already wins and those characters are literal. */
+/**
+ * Escape `{` and `<` so MDX does not read them as an expression or a tag, but only
+ * outside inline code spans, where they are already literal. The cell-splitting pipe
+ * is escaped everywhere: GFM strips table escapes before parsing inline code.
+ */
 function escapeMdx(text, { pipes = false } = {}) {
   const outside = pipes ? '{<|' : '{<';
   const inside = pipes ? '|' : '';

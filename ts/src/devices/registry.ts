@@ -1,5 +1,4 @@
-import type { DeviceModel } from './driver.js';
-import type { ChildGeometry } from './driver.js';
+import type { ChildGeometry, DeviceModel } from './driver.js';
 import { modelToChildGeometry } from '../capabilities.js';
 import { MK2_MODEL } from './elgato/mk2.js';
 import { MINI_MODEL } from './elgato/mini.js';
@@ -60,8 +59,11 @@ export function findModel(vid: number, pid: number): DeviceModel | null {
   return null;
 }
 
-/** Resolve geometry emulation through registry ids, never copied dimensions. */
-export function advertisedModel(model: DeviceModel): DeviceModel {
+/** The model whose geometry `model` emulates over CORA — itself unless it sets
+ *  `cora.advertiseAs`. Resolved through registry ids, never copied dimensions, so an
+ *  emulating model can't drift from the one it impersonates. device-models.test.ts
+ *  asserts every `advertiseAs` resolves, so the throw is a can't-happen guard. */
+function advertisedModel(model: DeviceModel): DeviceModel {
   if (!model.cora.advertiseAs) return model;
   const advertised = findModelById(model.cora.advertiseAs);
   if (!advertised) {
@@ -72,11 +74,4 @@ export function advertisedModel(model: DeviceModel): DeviceModel {
 
 export function advertisedGeometry(model: DeviceModel): ChildGeometry {
   return modelToChildGeometry(advertisedModel(model));
-}
-
-for (const model of DEVICE_MODELS) {
-  if (model.wire.packetSize <= 0 || model.wire.inSize <= 0) {
-    throw new Error(`${model.id}: wire sizes must be positive`);
-  }
-  if (model.cora.advertiseAs) advertisedModel(model);
 }

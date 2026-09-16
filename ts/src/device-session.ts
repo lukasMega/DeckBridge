@@ -34,9 +34,9 @@ export interface DeviceInfo {
   firmware?: string;
 }
 
-/** Identity for an extra dock: ports from CORA_PORT_STRIDE off the primary pair
- * (a runtime resource, legitimately scan-order-dependent), everything else from
- * device-identity.ts's getOrCreateDeviceIdentity — stable across restart/replug. */
+/** Identity for an extra dock: ports from CORA_PORT_STRIDE off the primary pair (a
+ *  runtime resource, legitimately scan-order-dependent), everything else from
+ *  getOrCreateDeviceIdentity — stable across restart/replug. */
 export interface SessionIdentity {
   index: number; // 1..MAX_DEVICE_SESSIONS-1 (extras only) — port assignment only
   primaryPort: number; // ELGATO_TCP_PORT + CORA_PORT_STRIDE * index
@@ -113,9 +113,9 @@ export function wireCommonDriverEvents(
   );
 }
 
-/** Server-facing half of DriverManager.applyDeviceModel (no WebUI). Advertises the model's
- * PID/geometry/identity to the desktop over both CORA ports. Shared by the primary (via
- * DriverManager) and every extra session so there is ONE implementation of the CORA identity/geometry push. */
+/** Server-facing half of DriverManager.applyDeviceModel (no WebUI): advertises the
+ *  model's PID/geometry/identity to the desktop over both CORA ports. Shared by the
+ *  primary and every extra session. */
 export function applyModelToServers(
   server: ElgatoServer,
   childServer: ElgatoChildServer,
@@ -302,9 +302,9 @@ export class DeviceSession {
       log('info', this.model.id, 'disconnected');
       this.onDisconnect();
     });
-    // Raw CORA image → worker: transform + write off the main thread (P1). The onImage mirror
-    // runs after the driver call — bytes are already on the main thread, so the mirror costs
-    // one callback (the WebUI only encodes/ broadcasts when this dock is the selected preview).
+    // Raw CORA image → worker: transform + write off the main thread. The onImage
+    // mirror runs after the driver call and costs one callback — the WebUI only
+    // encodes/broadcasts when this dock is the selected preview.
     this.childServer.on('image', ({ keyIndex, data, format }: ImageEvent) => {
       this.driver.renderCoraImage(keyIndex, data, format);
       this.onImage?.(keyIndex, data, format);

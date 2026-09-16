@@ -46,9 +46,8 @@ if (cli.command === 'diagnose') {
   await runDiagnoseCommand(cli.flags);
   tjs.exit(0);
 }
-// Log level, in precedence order: --log-level /
-// $DECKBRIDGE_LOG_LEVEL (both already in env by now) win
-// outright; otherwise settings.json's persisted "logLevel" applies.
+// Log level precedence: --log-level / $DECKBRIDGE_LOG_LEVEL (already in env) win,
+// else settings.json's "logLevel". Winner goes back into env so USB workers inherit it.
 if (tjs.env.DECKBRIDGE_LOG_LEVEL) {
   setLogLevel(tjs.env.DECKBRIDGE_LOG_LEVEL);
 } else {
@@ -96,7 +95,7 @@ setWebUILog((level, component, message) => webui.log(level, component, message))
 
 // Last-resort handler: txiki hard-aborts the process on an unhandled promise
 // rejection unless preventDefault() is called. Calling it lets shutdown() run the
-// device disconnect handshake / socket teardown / tray kill instead of a raw abort.
+// disconnect handshake / socket teardown / tray kill instead of a raw abort.
 globalThis.addEventListener('unhandledrejection', (ev: PromiseRejectionEvent) => {
   ev.preventDefault();
   const reason =
@@ -132,9 +131,9 @@ function pushTrayState(): void {
   tray?.push(buildTrayState());
 }
 
-// Extra-dock CORA server pair builder (multi-device). Mirrors the primary wiring above: the
-// childServer gets the SAME server.deviceConfig reference, and each server's serverLog is piped to the
-// shared logger (DeviceSession wires the driver's events but not the servers' — extras would otherwise be…
+// Extra-dock CORA server pair builder (multi-device). Mirrors the primary wiring
+// above: the childServer shares the SAME server.deviceConfig reference, and each
+// serverLog is piped to the shared logger. No WebUI/comm mirror — WebUI stays primary-only.
 const sessionServersFactory: SessionServersFactory = (identity) => {
   const s = new ElgatoServer(defaultChildGeometry, identity.primaryPort, false, {
     childPort: identity.childPort,
@@ -364,9 +363,9 @@ log(
 );
 log('info', 'deckBr', '══════════════════════════════════════════════');
 
-// Poll for a conflict with the Elgato desktop app: it
-// is running AND the device slot is free, i.e. it is
-// plausibly the reason we can't open the hardware.
+// Poll for a conflict with the Elgato desktop app: running AND the device slot free
+// plausibly explains why we can't open the hardware. Skipped when no WebUI client is
+// connected (nobody reads the flag) or under --headless.
 let _elgatoAppConflict = false;
 if (!headless) {
   setInterval(async () => {

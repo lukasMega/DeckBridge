@@ -1,6 +1,7 @@
-/** Per-protocol byte-level framing strategy table. `ElgatoHidDriver` looks up its strategy
- * once (in the constructor) instead of branching on `model.protocol` at every call site.
- * Adding a protocol = add one table entry; touch zero call-sites in hid-driver-base.ts. */
+/** Per-protocol byte-level framing strategy table. `ElgatoHidDriver` looks its strategy
+ *  up once in the constructor instead of branching on `model.protocol` per call site, so
+ *  adding a protocol touches no call sites in hid-driver-base.ts. Framing algorithms
+ *  only — packet/input-report SIZES live on the model (`wire.packetSize`/`wire.inSize`). */
 import type { DeviceProtocol } from '../driver.js';
 import {
   gen1WriteImage,

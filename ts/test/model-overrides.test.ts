@@ -318,6 +318,49 @@ test('the seed carries no non-tunable protocol fields', () => {
   }
 });
 
+test('the seed omits the sizes elgato-hid models cannot tune', () => {
+  for (const model of DEVICE_MODELS.filter((m) => m.driverKind === 'elgato-hid')) {
+    const wire = tunableDefaults(model).wire ?? {};
+    assert.ok(!('packetSize' in wire), `${model.id}: wire.packetSize leaked into the seed`);
+    assert.ok(!('inSize' in wire), `${model.id}: wire.inSize leaked into the seed`);
+  }
+  // …and a Mirabox board still gets them: the packet size is the knob an untested
+  // rebadge is calibrated with (see wire.packetSizeCandidates).
+  const wire = tunableDefaults(MIRABOX_293_MODEL).wire ?? {};
+  assert.equal(wire.packetSize, MIRABOX_293_MODEL.wire.packetSize);
+  assert.equal(wire.inSize, MIRABOX_293_MODEL.wire.inSize);
+});
+
+// wire: protocol-fixed sizes
+
+console.log('\nvalidateModelOverride: wire sizes');
+
+test('elgato-hid models reject packetSize/inSize overrides', () => {
+  for (const key of ['packetSize', 'inSize'] as const) {
+    const result = validateModelOverride({ wire: { [key]: 512 } }, MK2_MODEL);
+    assert.ok(!result.ok, `wire.${key} must be rejected for an elgato-hid model`);
+    assert.ok(
+      !result.ok && result.errors.some((e) => e.startsWith(`wire.${key}: not tunable`)),
+      `wire.${key}: expected a "not tunable" error, got ${result.ok ? '' : result.errors.join('; ')}`,
+    );
+  }
+});
+
+test('mirabox models still accept a packetSize override', () => {
+  const result = validateModelOverride({ wire: { packetSize: 512 } }, MIRABOX_293_MODEL);
+  assert.ok(result.ok, 'the packet size is the calibration knob for a Mirabox board');
+});
+
+// An unbounded inSize is allocated as a read buffer on the USB worker thread.
+test('inSize is bounded on both sides', () => {
+  const tooBig = validateModelOverride({ wire: { inSize: 2_000_000_000 } }, MIRABOX_293_MODEL);
+  assert.ok(!tooBig.ok, 'a 2 GB read buffer must be rejected');
+  const tooSmall = validateModelOverride({ wire: { inSize: 0 } }, MIRABOX_293_MODEL);
+  assert.ok(!tooSmall.ok, 'a zero-length read buffer must be rejected');
+  const ok = validateModelOverride({ wire: { inSize: 1024 } }, MIRABOX_293_MODEL);
+  assert.ok(ok.ok, 'a plausible read buffer must still be accepted');
+});
+
 test('seeds from the model and validates against it', () => {
   const defaults = tunableDefaults(MODEL);
   assert.equal(defaults.image?.rotate, MODEL.image.rotate);

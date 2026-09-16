@@ -1,10 +1,12 @@
-/** Shared HID framing helpers for the Elgato gen1/gen2 protocols. Both protocols
- * chunk an image into fixed-size output reports and parse button-state input reports
- * the same way — only the header bytes, header size, and report-ID validation differ. */
+/** Shared HID framing helpers for the Elgato gen1/gen2 protocols. Both chunk an image
+ *  into fixed-size output reports and parse button-state input reports the same way —
+ *  only the header bytes, header size and report-ID validation differ. */
 
-/** Split a payload into fixed-size packets, writing a per-protocol header into each, and hand each
- * finished packet to `write`. The `|| part === 0` guard emits one (empty-payload) packet even when
- * `payload` is empty, matching both protocols' original behavior. `writeHeader` fills bytes [0, headerSize). */
+/** Split a payload into fixed-size packets, writing a per-protocol header into each
+ *  (`writeHeader` fills bytes [0, headerSize)) and handing each to `write`. The
+ *  `|| part === 0` guard emits one empty packet for an empty payload, as both protocols
+ *  did before. `pkt` is caller-owned scratch reused for EVERY chunk, so `write` must
+ *  consume it synchronously; its length is the packet size. */
 export function writeChunks(
   payload: Uint8Array,
   pkt: Uint8Array,

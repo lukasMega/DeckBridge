@@ -607,6 +607,34 @@ test('advertised geometry derives from referenced registry model', () => {
   assert.deepEqual(advertisedGeometry(MIRABOX_K1PRO_MODEL), modelToChildGeometry(MINI_MODEL));
 });
 
+// Registry invariants. Asserted here rather than at registry module load: an import-time
+// throw fires on every thread before logger.ts's step() breadcrumbs exist, taking the app
+// down with nothing in the log. The models are fixed data, so a test catches the same
+// mistake just as early.
+
+test('every model advertises a geometry that resolves', () => {
+  for (const model of DEVICE_MODELS) {
+    assert.ok(advertisedGeometry(model).keyCount > 0, `${model.id}: advertiseAs must resolve`);
+  }
+});
+
+test('every model declares positive wire sizes', () => {
+  for (const model of DEVICE_MODELS) {
+    assert.ok(model.wire.packetSize > 0, `${model.id}: wire.packetSize must be positive`);
+    assert.ok(model.wire.inSize > 0, `${model.id}: wire.inSize must be positive`);
+  }
+});
+
+// synthesizeKeyUp/sendStpAfterImage are optional so elgato-hid models needn't carry
+// Mirabox quirks. On a mirabox model an omission is not a default but a missed decision
+// (no STP after image, or a key that never releases). The type can't tell those apart.
+test('every mirabox model states both v1/v3 wire quirks explicitly', () => {
+  for (const model of DEVICE_MODELS.filter((m) => m.driverKind === 'mirabox')) {
+    assert.equal(typeof model.wire.synthesizeKeyUp, 'boolean', `${model.id}: synthesizeKeyUp`);
+    assert.equal(typeof model.wire.sendStpAfterImage, 'boolean', `${model.id}: sendStpAfterImage`);
+  }
+});
+
 // buildCapabilitiesPacket (non-MK.2 geometry)
 
 console.log('\ndevice-models: buildCapabilitiesPacket');

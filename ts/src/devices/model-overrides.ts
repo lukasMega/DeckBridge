@@ -1,6 +1,6 @@
-// Validate + merge user model overrides on top of a registry-resolved
-// DeviceModel. Pure — no I/O, no FFI — so the same functions run on the main
-// thread (probe time) and inside the USB worker (after its own registry lookup).
+// Validate + merge user model overrides on top of a registry-resolved DeviceModel.
+// Pure — no I/O/FFI — runs on main thread and USB worker. Applied ON TOP of a resolved
+// model, never in place of one; excluded fields mean it can't smuggle in a different driver.
 import type {
   DeviceImageSpec,
   DeviceKeyMap,
@@ -56,13 +56,21 @@ const WIRE_KEYS = [
 ] as const;
 const SECTION_KEYS = ['image', 'keyMap', 'wire', 'splash'] as const;
 
+/** Protocol facts on elgato-hid, not preferences: an unexpected `packetSize` makes
+ *  gen1/gen2 chunk short, silently discarded by the firmware for a black panel with
+ *  no error. MiraboxDriver genuinely tunes both. */
+const ELGATO_FIXED_WIRE_KEYS = ['packetSize', 'inSize'] as const;
+
 /** Bounds chosen to keep a typo from producing a device-bricking spec while
  *  still covering every panel we know of (64×64 K1 Pro … 112×112 293V3). */
 const MIN_DIMENSION = 8;
 const MAX_DIMENSION = 1024;
-// 0 means "not applicable", exactly as it does for maxBytes: BMP models (the
-// Mini ships `quality: 0`) never JPEG-encode. Rejecting it would make a device's
-// own registry value an invalid override — see the tunableDefaults invariant.
+/** Ceiling on `inSize` (USB worker read buffer) — without one, `inSize: 2e9` in
+ *  settings.json is a one-line OOM. Every known device asks for 512. */
+const MAX_IN_SIZE = 4096;
+// 0 = "not applicable", as for maxBytes: BMP models never JPEG-encode (the Mini ships
+// `quality: 0`). Rejecting it would make a device's own registry value an invalid
+// override — see the tunableDefaults invariant.
 const MIN_QUALITY = 0;
 const MAX_QUALITY = 1;
 
@@ -185,14 +193,23 @@ function validateKeyMap(raw: unknown, model: DeviceModel, errors: Errors): void 
   checkNumber(raw.imageOffset, 'keyMap.imageOffset', errors, { integer: true });
 }
 
-function validateWire(raw: unknown, errors: Errors): void {
+function validateWire(raw: unknown, model: DeviceModel, errors: Errors): void {
   if (!isPlainObject(raw)) {
     errors.push('wire: must be an object');
     return;
   }
   rejectUnknownKeys(raw, WIRE_KEYS, 'wire', errors);
+  if (model.driverKind === 'elgato-hid') {
+    for (const key of ELGATO_FIXED_WIRE_KEYS) {
+      if (raw[key] !== undefined) {
+        errors.push(
+          `wire.${key}: not tunable on ${model.name} — fixed by the ${model.protocol} protocol`,
+        );
+      }
+    }
+  }
   checkEnum(raw.packetSize, PACKET_SIZES, 'wire.packetSize', errors);
-  checkNumber(raw.inSize, 'wire.inSize', errors, { min: 1, integer: true });
+  checkNumber(raw.inSize, 'wire.inSize', errors, { min: 1, max: MAX_IN_SIZE, integer: true });
   checkNumber(raw.heartbeatMs, 'wire.heartbeatMs', errors, { min: 0, integer: true });
   checkNumber(raw.reportId, 'wire.reportId', errors, { min: 0, max: 255, integer: true });
   checkNumber(raw.chunkDelayMs, 'wire.chunkDelayMs', errors, { min: 0, integer: true });
@@ -229,7 +246,7 @@ export function validateModelOverride(raw: unknown, model: DeviceModel): Validat
   rejectUnknownKeys(raw, SECTION_KEYS, 'override', errors);
   if (raw.image !== undefined) validateImage(raw.image, errors);
   if (raw.keyMap !== undefined) validateKeyMap(raw.keyMap, model, errors);
-  if (raw.wire !== undefined) validateWire(raw.wire, errors);
+  if (raw.wire !== undefined) validateWire(raw.wire, model, errors);
   if (raw.splash !== undefined) validateSplash(raw.splash, errors);
   if (errors.length > 0) return { ok: false, errors };
   return { ok: true, value: raw };
@@ -289,9 +306,9 @@ export function overrideRevision(ov?: DeviceModelOverride): string {
   return h.toString(16).padStart(8, '0');
 }
 
-/** Copy exactly `keys` from `src`, skipping absent ones. Spreading the whole source object
- * instead would drag in the NON-tunable siblings (`image.format`, `wire.sharedSerial`, …), and the
- * result would then fail validateModelOverride — which is what the Device tuning form posts back. */
+/** Copy exactly `keys` from `src`, skipping absent ones. Spreading the whole object
+ *  would drag in non-tunable siblings (`image.format`, `wire.sharedSerial`, …), which
+ *  validateModelOverride then rejects when the tuning form posts them back. */
 function project<T extends object, K extends keyof T>(
   src: T,
   keys: readonly K[],
@@ -303,15 +320,21 @@ function project<T extends object, K extends keyof T>(
   return out;
 }
 
-/** The tunable fields at their current (post-override) values —
- * the seed for the Device tuning form, so every control starts
- * at what the device is actually using rather than at a blank. */
+/** The wire fields this model actually accepts as an override — everything for a Mirabox
+ *  board, minus the protocol-fixed sizes for an elgato-hid one (ELGATO_FIXED_WIRE_KEYS). */
+function tunableWireKeys(model: DeviceModel): readonly (keyof DeviceWireSpec)[] {
+  if (model.driverKind !== 'elgato-hid') return WIRE_KEYS;
+  return WIRE_KEYS.filter((k) => !ELGATO_FIXED_WIRE_KEYS.includes(k as never));
+}
+
+/** Tunable fields at their current (post-override) values — seeds the Device tuning
+ *  form so every control starts at what the device actually uses. */
 export function tunableDefaults(model: DeviceModel): DeviceModelOverride {
   const { image, keyMap, wire, splash } = model;
   return {
     image: project(image, IMAGE_KEYS),
     keyMap: project(keyMap, KEYMAP_KEYS),
-    wire: project(wire, WIRE_KEYS),
+    wire: project(wire, tunableWireKeys(model)),
     ...(splash ? { splash } : {}),
   };
 }

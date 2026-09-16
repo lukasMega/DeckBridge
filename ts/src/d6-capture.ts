@@ -6,9 +6,10 @@ import { parseOutputReportSize } from './devices/hid-report-descriptor.js';
 import { FIFINE_D6_MODEL, FIFINE_D6_REV2_MODEL } from './devices/fifine/fifine-d6.js';
 import type { DeviceModel } from './devices/driver.js';
 
-// Fifine AmpliGame D6 capture probe — the "the unit goes back tomorrow" harness. Phase B of
-// .claude/plans/2026-09-10_fifine-d6-support.md is already complete for rev. 2 (0x0060). What it did NOT
-// do is record the things that can only be read off physical hardware and never reconstructed afterwards.
+// Fifine AmpliGame D6 capture probe — records things only readable off physical hardware:
+// S1 HID report descriptor, S2 brightness sweep (linearity vs 293V3), S3 JPEG size ladder
+// (untested maxBytes), S4 raw input-report trace. Usage: mise run d6-capture [-- s1,s2,s3,s4].
+// Leaves no persistent state: every stage reads, or writes state a replug resets.
 
 const args = (tjs.args[3] ?? 's1,s2,s3,s4').toLowerCase();
 const want = (stage: string): boolean => args.includes(stage);
@@ -16,9 +17,9 @@ const want = (stage: string): boolean => args.includes(stage);
 const FIXTURE_DIR = 'test/fixtures';
 const VID = 0x3142;
 
-/** Probe-local subclass: `device`/`hidLib` are `protected` on HidDeviceBase, which is exactly the seam
- * a diagnostic needs — the raw descriptor must come off the SAME open handle the driver uses
- * (re-opening it on macOS risks the IOHIDManager churn that mirabox.ts's _workerHidLib comment warns about). */
+/** Probe-local subclass exposing HidDeviceBase's protected `device`/`hidLib`: the raw
+ *  descriptor must come off the SAME open handle the driver uses, since re-opening on
+ *  macOS risks IOHIDManager churn (see mirabox.ts's _workerHidLib comment). */
 class CaptureDriver extends MiraboxDriver {
   /** The descriptor bytes hidapi reports for the open interface, or null if this build
    *  of hidapi predates hid_get_report_descriptor. */
@@ -175,9 +176,10 @@ if (want('s2')) {
   console.log('[s2] if 50% looks much brighter than half of 100%, buildLig wants a gamma.');
 }
 
-// S3: JPEG size ladder — what does the firmware actually accept? Random noise is the only content
-// that reliably produces a LARGE jpeg at 112x112, but noise ALONE is useless as a verdict: colourful
-// static is exactly what a "broken image" looks like, so the observer cannot tell a clean 22 KB render…
+// S3: JPEG size ladder — noise maximizes size but static looks like a torn image, so
+// each key adds a white edge frame, a colour band, and N tally squares — landmarks
+// that only survive a fully-received image. maxBytes caps each step near its target
+// (encoder ceiling is ~21.8 KB at 112x112 uncapped).
 if (want('s3')) {
   const BANDS: [number, number, number][] = [
     [255, 255, 255],

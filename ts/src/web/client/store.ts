@@ -126,9 +126,11 @@ export function patch(partial: Partial<StoreState>): void {
   notify();
 }
 
-// Local port of useSyncExternalStore (UPSTREAM:
-// preact/compat/src/hooks.js, preact 10.29.8 — re-diff on
-// upgrade); importing it drags in all of compat, +5,556 bytes minified.
+// Local port of useSyncExternalStore (UPSTREAM: preact/compat/src/hooks.js, preact
+// 10.29.8 — re-diff on upgrade); importing it drags in all of compat, +5,556 bytes
+// minified. Do not "simplify" the two effects: the double-check closes the mount race,
+// and re-running the layout effect on a new `getSnapshot` identity is what keeps an
+// inline selector reading the latest selector, not the mount-time one.
 
 interface StoreInstance<T> {
   value: T;
@@ -185,9 +187,11 @@ function shallowEqual(a: unknown, b: unknown): boolean {
   return keys.every((k) => Object.hasOwn(bv, k) && Object.is(av[k], bv[k]));
 }
 
-// Select during rendering, against the local useSyncExternalStore above. useSyncExternalStore
-// compares consecutive getSnapshot() results with Object.is and re-renders until two agree, so a
-// selector that builds a *fresh* object or array per call (`(s) => ({ a: s.x })`, `(s) => s.list.filter(…)`)…
+// Select during rendering, against the local useSyncExternalStore above. It compares
+// consecutive getSnapshot() results with Object.is and re-renders until two agree, so a
+// selector building a *fresh* object per call (`(s) => ({ a: s.x })`) would loop forever
+// ("getSnapshot should be cached"). Memoizing on shallow equality hands those a stable
+// reference; selectors returning primitives or stored refs are unaffected.
 export function useStore<T>(selector: (s: StoreState) => T): T {
   const cacheRef = useRef<{ value: T } | undefined>(undefined);
   return useSyncExternalStore(subscribe, (): T => {

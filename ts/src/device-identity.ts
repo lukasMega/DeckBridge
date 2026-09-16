@@ -1,6 +1,8 @@
 // Deterministic per-physical-device identity: MAC address + dock/child serial
 // suffix, keyed by a stable device key so the SAME physical unit gets the SAME
 // identity across restarts/replugs instead of whatever session slot it lands in.
+// Pure — WebUIServer owns settings.json persistence and calls getOrCreateDeviceIdentity()
+// as a reducer over its in-memory devices array.
 import { DEFAULT_DOCK_SERIAL_NUMBER, DEFAULT_CHILD_SERIAL_NUMBER } from './types.js';
 import type { DeviceIdentitySettings } from './settings-store.js';
 import type { DeviceModel } from './devices/driver.js';
@@ -16,17 +18,18 @@ export function isStableDeviceKey(deviceKey: string): boolean {
   return deviceKey.startsWith(SERIAL_KEY_PREFIX);
 }
 
-/** The key identifying "the same physical device" across restarts. Preferred: the device's USB `serial`
- * (`usb:<serial>`) — stable across reboot, replug, and port changes. Fallback: the HID path, used only
- * when no serial is available (off-macOS VID/PID-fallback open, or a device that reports no serial). */
+/** Key identifying "the same physical device" across restarts. Prefers USB `serial`
+ *  (`usb:<serial>`, stable across reboot/replug); falls back to HID path, which is
+ *  NOT stable (macOS IOKit path changes on re-enumeration — see isStableDeviceKey).
+ *  `modelId`: see sharedSerialModelId(). */
 export function deviceKeyFor(hidPath: string, serial?: string | null, modelId?: string): string {
   if (serial && modelId) return `${SERIAL_KEY_PREFIX}${serial}:${modelId}`;
   return serial ? `${SERIAL_KEY_PREFIX}${serial}` : hidPath;
 }
 
-/** `modelId` arg for `deviceKeyFor()`: the model's own id when it shares a
- * hardcoded v1 serial with every other unit of every v1 model
- * (`DeviceWireSpec.sharedSerial`), else `undefined` — the serial alone already identifies the device. */
+/** `modelId` arg for `deviceKeyFor()`: the model's own id when it shares a hardcoded v1
+ *  serial (`DeviceWireSpec.sharedSerial`), else `undefined` — the serial alone already
+ *  identifies the device. */
 export function sharedSerialModelId(model: Pick<DeviceModel, 'id' | 'wire'>): string | undefined {
   return model.wire.sharedSerial ? model.id : undefined;
 }
@@ -63,9 +66,9 @@ export function generateMacAddress(deviceKey: string): string {
   return ['02', ...bytes.map((b) => b.toString(16).padStart(2, '0'))].join(':');
 }
 
-/** Same substitution point as the old session-index scheme (chars 10-11
- * of the default serial) — MUST stay inside the first 12 chars: the
- * Elgato app keys devices by serial.substring(0,12) (see device-session.ts). */
+/** Same substitution point as the old session-index scheme (chars 10-11 of the default
+ *  serial) — MUST stay inside the first 12 chars: the Elgato app keys devices by
+ *  serial.substring(0,12) (see device-session.ts). */
 export function generateSerial(template: string, deviceKey: string): string {
   const suffix = (fnv1a(deviceKey) % 1296).toString(36).padStart(2, '0');
   return `${template.slice(0, 10)}${suffix}${template.slice(12)}`;

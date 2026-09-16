@@ -79,9 +79,10 @@ export class MiraboxDriver extends HidDeviceBase {
     return null;
   }
 
-  /** Replace `pktSize` (and the scratch buffers sized from it) with the output-report size
-   * the device itself declares — but only for models that set `wire.packetSizeCandidates`,
-   * and only when the report descriptor is unambiguous and agrees on one of those candidates. */
+  /** Replace `pktSize` (and the buffers sized from it) with the output-report size the
+   *  device declares — only for models setting `wire.packetSizeCandidates`, and only
+   *  when the report descriptor is unambiguous and agrees on one candidate. Mutates
+   *  `pktSize`, so open() re-seeds it from the model on every (re)connect. */
   private _adoptProbedPacketSize(hid: HidapiSymbols, dev: unknown): void {
     const candidates = this.model.wire.packetSizeCandidates;
     if (!candidates) return;
@@ -110,9 +111,10 @@ export class MiraboxDriver extends HidDeviceBase {
     const usagePage = this.model.usagePage!;
     const usage = this.model.usage!;
 
-    // Prefer path-based open (filters by usage_page/usage, same as node-hid). hid_open(VID,
-    // PID) picks the first IOKit interface which may be system-claimed on macOS. Explicit
-    // hidPath (multi-device: a specific unit) skips enumeration and opens that exact interface.
+    // Prefer path-based open (filters by usage_page/usage, same as node-hid):
+    // hid_open(VID, PID) picks the first IOKit interface, which macOS may have claimed.
+    // An explicit hidPath (a specific unit) skips enumeration; absent → enumerate and
+    // open the first usage-matched path.
     let dev: unknown = null;
     const path = hidPath ?? this.findDevicePath(vid, pids, usagePage, usage);
     if (path) {
@@ -122,9 +124,11 @@ export class MiraboxDriver extends HidDeviceBase {
         debug('hid', 'hid_open_path succeeded');
         this.hidPath = path;
       } else if (IS_MACOS) {
-        // Device is present (enumeration matched the
-        // vendor interface) but the open was refused
-        // (e.g. half-seated cable, missing Input Monitoring).
+        // Present (enumeration matched) but open refused — half-seated cable, missing
+        // Input Monitoring. Do NOT fall through to hid_open(VID/PID): on macOS that
+        // opens the first IOKit interface (keyboard/consumer collection) and a denied
+        // open of it SIGBUSes. Release IOHIDManager so worker.terminate() is safe, then
+        // fail loudly and let scheduleReconnect() retry.
         this._releaseLibAfterFailedOpen();
         throw new Error(
           `device present but hid_open_path failed (path=${path}). On macOS this is ` +
@@ -137,9 +141,10 @@ export class MiraboxDriver extends HidDeviceBase {
       }
     }
 
-    // Fall back to hid_open(VID, PID), off macOS only — one attempt per PID. On macOS this opens the
-    // first IOKit interface (often a keyboard) and segfaults on a denied/absent open, so the path-based
-    // open above is the only safe route there; elsewhere it's a useful fallback when enumeration found no…
+    // Fall back to hid_open(VID, PID), off macOS only (there it opens the first IOKit
+    // interface, often a keyboard, and segfaults on a denied/absent open; elsewhere it
+    // covers enumeration finding no usage-matched path). No-explicit-path case only —
+    // with a targeted hidPath a VID/PID open could grab the wrong unit.
     if (isNullPtr(dev) && !IS_MACOS && hidPath === undefined) {
       for (const pid of pids) {
         debug('hid', `hid_open(vid=0x${vid.toString(16)}, pid=0x${pid.toString(16)})`);

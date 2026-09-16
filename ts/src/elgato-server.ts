@@ -86,9 +86,9 @@ export class ElgatoServer extends CoraServerBase {
     void this.mdnsAdvertiser.start();
   }
 
-  /** Live-rename the mDNS service name (WebUI "Device Identity" edit) — the advertiser process
-   * bakes the name in at spawn (dns-sd/avahi-publish-service take it as an argv, not something
-   * updatable in place), so this stops the old advertiser and spawns a fresh one under the new name. */
+  /** Live-rename the mDNS service name (WebUI "Device Identity" edit). dns-sd and
+   *  avahi-publish-service take the name as an argv, so it can't be updated in place:
+   *  stop the old advertiser and spawn a fresh one. No-op before start(). */
   setMdnsServiceName(name: string): void {
     if (name === this.mdnsServiceName) return;
     this.mdnsServiceName = name;
