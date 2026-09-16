@@ -1,17 +1,10 @@
-/** Shared HID framing helpers for the Elgato gen1/gen2 protocols.
- *  Both protocols chunk an image into fixed-size output reports and parse
- *  button-state input reports the same way — only the header bytes,
- *  header size, and report-ID validation differ. These two helpers hold the
- *  common loops; each protocol supplies the tiny per-protocol differences. */
+/** Shared HID framing helpers for the Elgato gen1/gen2 protocols. Both protocols
+ * chunk an image into fixed-size output reports and parse button-state input reports
+ * the same way — only the header bytes, header size, and report-ID validation differ. */
 
-/** Split a payload into fixed-size packets, writing a per-protocol header into
- *  each, and hand each finished packet to `write`. The `|| part === 0` guard emits
- *  one (empty-payload) packet even when `payload` is empty, matching both
- *  protocols' original behavior. `writeHeader` fills bytes [0, headerSize).
- *
- *  `pkt` is a caller-owned scratch, reused for EVERY chunk (as MiraboxDriver already
- *  does); its length is the packet size and `write` must consume it synchronously.
- *  Streaming avoids a packet-sized allocation per chunk. */
+/** Split a payload into fixed-size packets, writing a per-protocol header into each, and hand each
+ * finished packet to `write`. The `|| part === 0` guard emits one (empty-payload) packet even when
+ * `payload` is empty, matching both protocols' original behavior. `writeHeader` fills bytes [0, headerSize). */
 export function writeChunks(
   payload: Uint8Array,
   pkt: Uint8Array,
@@ -51,4 +44,11 @@ export function parseButtons(
     result.push({ keyIndex: i, pressed: (data[keyDataOffset + i] ?? 0) !== 0 });
   }
   return result;
+}
+
+/** Build a fixed-size feature report from its non-zero prefix. */
+export function featureReport(size: number, prefix: readonly number[]): Uint8Array {
+  const report = new Uint8Array(size);
+  report.set(prefix);
+  return report;
 }

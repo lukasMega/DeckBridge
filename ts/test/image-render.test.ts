@@ -62,6 +62,7 @@ function makePassthroughModel(): DeviceModel {
       quality: 0.9,
       transform: 'passthrough',
     },
+    wire: { packetSize: 1024, inSize: 512 },
     keyMap: {},
     cora: {
       productId: 0x00a5,
@@ -116,12 +117,9 @@ const SOLID_RED_16X16_JPEG = Buffer.from([
   0xd2, 0xbf, 0x0c, 0x3f, 0xd5, 0x30, 0xa0, 0x02, 0x80, 0x0a, 0x00, 0xff, 0xd9,
 ]);
 
-// renderImage tests (uses the real Rust image-proc FFI transform)
-//
-// NOTE: `imageCache` is a module singleton shared across every case in this
-// file. Each case below uses a distinct source image (the fixture mutated at
-// one byte, or unique passthrough bytes) and/or a fresh model id so that no two
-// cases collide on the same cache key.
+// renderImage tests (uses the real Rust image-proc
+// FFI transform) NOTE: `imageCache` is a module
+// singleton shared across every case in this file.
 
 console.log('\nimage-render: renderImage (Rust sidecar)');
 

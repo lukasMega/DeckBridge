@@ -2,12 +2,9 @@
  *  Image: JPEG, 1024-byte packets, 8-byte header.
  *  Input: report 0x01, input-type byte 0x00, key count (u16 LE), then states. */
 
-import { writeChunks, parseButtons } from './framing.js';
+import { featureReport, writeChunks, parseButtons } from './framing.js';
 
-const PACKET_SIZE = 1024;
 const HEADER_SIZE = 8;
-
-export const GEN2_PACKET_SIZE = PACKET_SIZE;
 
 /** Split native JPEG bytes into gen2 output reports (each 1024 bytes), handing each
  *  to `write`. `scratch` is reused for every chunk — see writeChunks. */
@@ -51,17 +48,10 @@ export function gen2ParseInput(
 
 /** gen2 brightness feature report (32 bytes). */
 export function gen2BrightnessReport(pct: number): Uint8Array {
-  const buf = new Uint8Array(32);
-  buf[0] = 0x03;
-  buf[1] = 0x08;
-  buf[2] = Math.max(0, Math.min(100, pct));
-  return buf;
+  return featureReport(32, [0x03, 0x08, Math.max(0, Math.min(100, pct))]);
 }
 
 /** gen2 reset-to-logo feature report (32 bytes). */
 export function gen2ResetReport(): Uint8Array {
-  const buf = new Uint8Array(32);
-  buf[0] = 0x03;
-  buf[1] = 0x02;
-  return buf;
+  return featureReport(32, [0x03, 0x02]);
 }

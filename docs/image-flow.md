@@ -13,12 +13,12 @@ the generated [Device specs](./device-specs.mdx).
 
 | Connected device | Advertised caps (`model.cora`) | CORA format | Sidecar | `model.image` transform |
 |-----------------|-----------------|-------------|---------|-----------|
-| Mirabox 293V3 (`mirabox-cora`) | MK.2 spoof (PID `0x00a5`, `MK2_CHILD_GEOMETRY`) | gen2 JPEG 72×72 | Yes | `sidecar`: resize 72→112 (lanczos3), rotate 0 |
-| Mirabox 293S (`mirabox-cora-v1`) | MK.2 spoof (PID `0x00a5`, `MK2_CHILD_GEOMETRY`) | gen2 JPEG 72×72 | Yes | `sidecar`: pad 72→85 (edge), rotate 90 |
-| Mirabox K1 Pro (`mirabox-cora`) | Mini spoof (PID `0x0063`, `MINI_CHILD_GEOMETRY`) | gen1 BMP 80×80 | Yes | `sidecar`: crop 6 px/side (80→68) → resize 64, rotate 0 + flipH, BMP→JPEG |
-| Ajazz AKP153E/R rev. 2 (`mirabox-cora`) — untested | MK.2 spoof (PID `0x00a5`, `MK2_CHILD_GEOMETRY`) | gen2 JPEG 72×72 | Yes | identical to the 293V3 (same board, different VID/PID) |
-| Fifine AmpliGame D6 rev. 1 (untested) / rev. 2 (`mirabox-cora`) | MK.2 spoof (PID `0x00a5`, `MK2_CHILD_GEOMETRY`) | gen2 JPEG 72×72 | Yes | identical to the 293V3 (same board, different VID/PID); rev. 2 uses 1024-byte packets, rev. 1 uses 512 |
-| AKP153/E/R, MSD-ONE, GK150K, Vision 01, TMICE Stream Controller (`mirabox-cora-v1`) — untested | MK.2 spoof (PID `0x00a5`, `MK2_CHILD_GEOMETRY`) | gen2 JPEG 72×72 | Yes | identical to the 293S (same board, different VID/PID) |
+| Mirabox 293V3 (`mirabox-cora`) | MK.2 spoof (PID `0x00a5`, `advertiseAs: 'mk2'`) | gen2 JPEG 72×72 | Yes | `sidecar`: resize 72→112 (lanczos3), rotate 0 |
+| Mirabox 293S (`mirabox-cora-v1`) | MK.2 spoof (PID `0x00a5`, `advertiseAs: 'mk2'`) | gen2 JPEG 72×72 | Yes | `sidecar`: pad 72→85 (edge), rotate 90 |
+| Mirabox K1 Pro (`mirabox-cora`) | Mini spoof (PID `0x0063`, `advertiseAs: 'mini'`) | gen1 BMP 80×80 | Yes | `sidecar`: crop 6 px/side (80→68) → resize 64, rotate 0 + flipH, BMP→JPEG |
+| Ajazz AKP153E/R rev. 2 (`mirabox-cora`) — untested | MK.2 spoof (PID `0x00a5`, `advertiseAs: 'mk2'`) | gen2 JPEG 72×72 | Yes | identical to the 293V3 (same board, different VID/PID) |
+| Fifine AmpliGame D6 rev. 1 (untested) / rev. 2 (`mirabox-cora`) | MK.2 spoof (PID `0x00a5`, `advertiseAs: 'mk2'`) | gen2 JPEG 72×72 | Yes | identical to the 293V3 (same board, different VID/PID); rev. 2 uses 1024-byte packets, rev. 1 uses 512 |
+| AKP153/E/R, MSD-ONE, GK150K, Vision 01, TMICE Stream Controller (`mirabox-cora-v1`) — untested | MK.2 spoof (PID `0x00a5`, `advertiseAs: 'mk2'`) | gen2 JPEG 72×72 | Yes | identical to the 293S (same board, different VID/PID) |
 | Stream Deck MK.2 (`elgato-gen2`) | real MK.2 (PID `0x0080`) | gen2 JPEG 72×72 | No | `passthrough` (rotate 0) |
 | Stream Deck Mini (`elgato-gen1`) | real Mini (6 key, 3×2, PID `0x0063`) | gen1 BMP 80×80 BGR | No | `passthrough` (BMP short-circuit) |
 

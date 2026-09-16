@@ -17,7 +17,7 @@ import { CORA_FLAG_VERBATIM, encodeCoraFrame } from './cora-frame.js';
 import { CoraServerBase } from './cora-server-base.js';
 import { describeChildPayload } from './cora-describe.js';
 import type { DeviceConfig } from './elgato-types.js';
-import { buildCapabilitiesPacket, type ChildGeometry, MK2_CHILD_GEOMETRY } from './capabilities.js';
+import { buildCapabilitiesPacket, type ChildGeometry } from './capabilities.js';
 import {
   handleChildVerbatimProbe,
   handleChildFeatureRequest,
@@ -36,8 +36,8 @@ export class ElgatoChildServer extends CoraServerBase {
   private imagePages: Map<number, ImageAssembly> = new Map();
   private gen1ImagePages: Map<number, ImageAssembly> = new Map();
   private warnedOobKeys = new Set<number>();
-  private childGeometry: ChildGeometry = MK2_CHILD_GEOMETRY;
-  private keyStates: Uint8Array = new Uint8Array(this.childGeometry.keyCount);
+  private childGeometry: ChildGeometry;
+  private keyStates: Uint8Array;
   private readonly deviceConfig: DeviceConfig;
   private remoteAddress: string | null = null;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
@@ -61,8 +61,15 @@ export class ElgatoChildServer extends CoraServerBase {
 
   protected componentName = 'elgato-child';
 
-  constructor(port: number, deviceConfig: DeviceConfig, enableOutboundReconnect = true) {
+  constructor(
+    childGeometry: ChildGeometry,
+    port: number,
+    deviceConfig: DeviceConfig,
+    enableOutboundReconnect = true,
+  ) {
     super(port);
+    this.childGeometry = childGeometry;
+    this.keyStates = new Uint8Array(childGeometry.keyCount);
     this.deviceConfig = deviceConfig;
     this.enableOutboundReconnect = enableOutboundReconnect;
     this.getReportHandlers = createGetReportHandlers(

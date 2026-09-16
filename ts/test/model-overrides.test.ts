@@ -248,14 +248,13 @@ test('identity fields are carried through untouched', () => {
   assert.equal(eff.keyCount, MODEL.keyCount);
 });
 
-test('wire stays undefined for a model that has none, unless the override sets it', () => {
-  // elgato-hid models keep their framing in PROTOCOL_STRATEGY, not model.wire.
-  assert.equal(MK2_MODEL.wire, undefined, 'precondition: MK.2 has no wire spec');
-  assert.equal(applyModelOverrides(MK2_MODEL, { image: { rotate: 90 } }).wire, undefined);
+test('wire settings remain model-owned through overrides', () => {
+  assert.equal(MK2_MODEL.wire.packetSize, 1024);
   assert.equal(
-    applyModelOverrides(MK2_MODEL, { wire: { packetSize: 1024 } }).wire?.packetSize,
-    1024,
+    applyModelOverrides(MK2_MODEL, { image: { rotate: 90 } }).wire.packetSize,
+    MK2_MODEL.wire.packetSize,
   );
+  assert.equal(applyModelOverrides(MK2_MODEL, { wire: { packetSize: 512 } }).wire.packetSize, 512);
 });
 
 test('a splash override replaces the model splash wholesale', () => {
@@ -298,12 +297,9 @@ test('revision changes when the image spec changes, and is stable otherwise', ()
 console.log('\ntunableDefaults');
 
 test('EVERY registry model round-trips: tunableDefaults is a valid override', () => {
-  // The invariant behind the Device tuning form: seed the controls from the
-  // device's current spec, press Apply without changing anything, and the server
-  // must accept it. Broken three ways at once before this test existed —
-  // `image.format`/`colorMode` leaked in, `wire.sharedSerial`/
-  // `packetSizeCandidates` leaked in, and the Mini's own `quality: 0` was
-  // rejected. Covers models added later too.
+  // The invariant behind the Device tuning form: seed the
+  // controls from the device's current spec, press Apply
+  // without changing anything, and the server must accept it.
   for (const model of DEVICE_MODELS) {
     const result = validateModelOverride(tunableDefaults(model), model);
     assert.ok(result.ok, `${model.id}: ${result.ok ? '' : result.errors.join('; ')}`);

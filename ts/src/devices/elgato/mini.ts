@@ -1,9 +1,8 @@
 import type { DeviceModel } from '../driver.js';
 
-// Mini key size: 80×80. BMP payload: 54 + 80*80*3 = 19254 bytes → 20 packets.
-// Pixel transform { colorMode:'bgr', rotate:90° CW } matches reference 6-key.ts:39
-// { colorMode:'bgr', rotate:true, yFlip:true } which equals 90° CW.
-// Assumes CORA images are upright (Phase 0 to confirm).
+// Mini key size: 80×80. BMP payload: 54 + 80*80*3 = 19254 bytes → 20 packets. Pixel transform
+// { colorMode:'bgr', rotate:90° CW } matches reference 6-key.ts:39 { colorMode:'bgr',
+// rotate:true, yFlip:true } which equals 90° CW. Assumes CORA images are upright (Phase 0 to confirm).
 export const MINI_MODEL: DeviceModel = {
   id: 'mini',
   vendor: 'elgato',
@@ -31,6 +30,7 @@ export const MINI_MODEL: DeviceModel = {
     // 'passthrough' here is for consistency, per the plan's §4.A note.
     transform: 'passthrough',
   },
+  wire: { packetSize: 1024, inSize: 512 },
   keyMap: {},
   // Preserves today's behavior: coraProductId() falls back to usbProductIds[0] for Elgato.
   cora: { productId: 0x0063, usePhysicalIdentity: true },

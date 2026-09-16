@@ -75,15 +75,23 @@ export const routes: Route[] = [
   post('/api/diagnostics/save', saveDiagnostics),
 ];
 
+type ParsedBody<T> = { body: T } | { error: Response };
+
+async function readJson<T>(req: Request, message = 'invalid JSON'): Promise<ParsedBody<T>> {
+  try {
+    const body = JSON.parse(await req.text()) as T | null;
+    return body === null ? { error: badRequest(message) } : { body };
+  } catch {
+    return { error: badRequest(message) };
+  }
+}
+
 /** Persist one model's device tuning. A validation failure returns the whole
  *  error list so the UI can show every bad field at once. */
 async function setDeviceOverrides({ req, ui }: RouteContext): Promise<Response> {
-  let body: { modelId?: unknown; overrides?: unknown };
-  try {
-    body = JSON.parse(await req.text()) as { modelId?: unknown; overrides?: unknown };
-  } catch {
-    return badRequest('invalid JSON');
-  }
+  const parsed = await readJson<{ modelId?: unknown; overrides?: unknown }>(req);
+  if ('error' in parsed) return parsed.error;
+  const { body } = parsed;
   const err = ui.trySetModelOverride(body.modelId, body.overrides ?? {});
   if (err) return json({ error: err.error }, err.status);
   // The device session closes and reopens (image/wire/keyMap must be in force
@@ -92,12 +100,9 @@ async function setDeviceOverrides({ req, ui }: RouteContext): Promise<Response> 
 }
 
 async function resetDeviceOverrides({ req, ui }: RouteContext): Promise<Response> {
-  let modelId: unknown;
-  try {
-    ({ modelId } = JSON.parse(await req.text()) as { modelId: unknown });
-  } catch {
-    return badRequest('invalid JSON');
-  }
+  const parsed = await readJson<{ modelId: unknown }>(req);
+  if ('error' in parsed) return parsed.error;
+  const { modelId } = parsed.body;
   const err = ui.tryResetModelOverride(modelId);
   return err ? json({ error: err.error }, err.status) : json({ ok: true, reconnecting: true });
 }
@@ -119,24 +124,17 @@ async function saveDiagnostics({ req, ui }: RouteContext): Promise<Response> {
 /** WebUI "Debug logging" toggle. Levels are validated against cli.ts's LOG_LEVELS
  *  (the single source of truth, shared with --log-level and settings.json). */
 async function setLogLevelRoute({ req, ui }: RouteContext): Promise<Response> {
-  let level: unknown;
-  try {
-    ({ level } = JSON.parse(await req.text()) as { level: unknown });
-  } catch {
-    return badRequest('invalid JSON');
-  }
+  const parsed = await readJson<{ level: unknown }>(req);
+  if ('error' in parsed) return parsed.error;
+  const { level } = parsed.body;
   const err = ui.trySetLogLevel(level);
   return err ? json({ error: err.error }, err.status) : json({ ok: true, level });
 }
 
 async function setBrightness({ req, ui }: RouteContext): Promise<Response> {
-  let level: unknown;
-  let dock: unknown;
-  try {
-    ({ level, dock } = JSON.parse(await req.text()) as { level: unknown; dock?: unknown });
-  } catch {
-    return badRequest('invalid JSON');
-  }
+  const parsed = await readJson<{ level: unknown; dock?: unknown }>(req);
+  if ('error' in parsed) return parsed.error;
+  const { level, dock } = parsed.body;
   if (typeof level !== 'number' || level < 0 || level > 100 || !Number.isFinite(level)) {
     return badRequest('level must be a number 0–100');
   }
@@ -208,12 +206,9 @@ function validateExtraKeyBody({
 /** Assign a display widget to one of the selected dock's extra keys (293S 6th
  *  column — display-only). The server renders and refreshes the key itself. */
 async function setExtraKey({ req, ui }: RouteContext): Promise<Response> {
-  let body: ExtraKeyBody;
-  try {
-    body = JSON.parse(await req.text()) as ExtraKeyBody;
-  } catch {
-    return badRequest('invalid JSON');
-  }
+  const parsed = await readJson<ExtraKeyBody>(req);
+  if ('error' in parsed) return parsed.error;
+  const { body } = parsed;
   const invalid = validateExtraKeyBody(body);
   if (invalid) return badRequest(invalid);
   const { wireId, widget, param, intervalMs, timeoutMs, pluginArg } = body;
@@ -234,13 +229,9 @@ interface RunExtraKeyBody {
 
 /** Force an immediate re-run of a command-widget extra key (WebUI "Run now"). */
 async function runExtraKeyNow({ req, ui }: RouteContext): Promise<Response> {
-  let body: RunExtraKeyBody;
-  try {
-    body = JSON.parse(await req.text()) as RunExtraKeyBody;
-  } catch {
-    return badRequest('invalid JSON');
-  }
-  const { wireId } = body;
+  const parsed = await readJson<RunExtraKeyBody>(req);
+  if ('error' in parsed) return parsed.error;
+  const { wireId } = parsed.body;
   if (typeof wireId !== 'number' || !Number.isInteger(wireId) || wireId < 0) {
     return badRequest('wireId must be a non-negative integer');
   }
@@ -249,46 +240,35 @@ async function runExtraKeyNow({ req, ui }: RouteContext): Promise<Response> {
 }
 
 async function selectDock({ req, ui }: RouteContext): Promise<Response> {
-  let index: unknown;
-  try {
-    ({ index } = JSON.parse(await req.text()) as { index: unknown });
-  } catch {
-    return badRequest('invalid JSON');
-  }
+  const parsed = await readJson<{ index: unknown }>(req);
+  if ('error' in parsed) return parsed.error;
+  const { index } = parsed.body;
   const err = ui.trySelectDock(index);
   return err ? json({ error: err.error }, err.status) : json({ ok: true, index });
 }
 
 async function setDriverMode({ req, ui }: RouteContext): Promise<Response> {
-  let mode: unknown;
-  try {
-    ({ mode } = JSON.parse(await req.text()) as { mode: unknown });
-  } catch {
-    return badRequest('invalid JSON');
-  }
+  const parsed = await readJson<{ mode: unknown }>(req);
+  if ('error' in parsed) return parsed.error;
+  const { mode } = parsed.body;
   if (mode !== 'real' && mode !== 'mock') return badRequest('mode must be real or mock');
   ui.emit('switchMode', mode);
   return json({ ok: true, mode });
 }
 
 async function setDeviceModel({ req, ui }: RouteContext): Promise<Response> {
-  try {
-    const { modelId } = JSON.parse(await req.text()) as { modelId: unknown };
-    if (typeof modelId !== 'string') throw new Error('modelId must be string');
-    ui.emit('setModel', modelId);
-    return json({ ok: true, modelId });
-  } catch {
-    return badRequest('invalid request');
-  }
+  const parsed = await readJson<{ modelId: unknown }>(req, 'invalid request');
+  if ('error' in parsed) return parsed.error;
+  const { modelId } = parsed.body;
+  if (typeof modelId !== 'string') return badRequest('invalid request');
+  ui.emit('setModel', modelId);
+  return json({ ok: true, modelId });
 }
 
 async function setBrightnessOverride({ req, ui }: RouteContext): Promise<Response> {
-  let enabled: unknown;
-  try {
-    ({ enabled } = JSON.parse(await req.text()) as { enabled: unknown });
-  } catch {
-    return badRequest('invalid JSON');
-  }
+  const parsed = await readJson<{ enabled: unknown }>(req);
+  if ('error' in parsed) return parsed.error;
+  const { enabled } = parsed.body;
   if (typeof enabled !== 'boolean') return badRequest('enabled must be a boolean');
   ui.notifyBrightnessOverride(enabled);
   return json({ ok: true, enabled: ui.brightnessOverride });
@@ -297,12 +277,9 @@ async function setBrightnessOverride({ req, ui }: RouteContext): Promise<Respons
 const IMAGE_MODE_VALUES = ['resize', 'pad-black', 'pad-average', 'pad-edge', 'default'] as const;
 
 async function setImageMode({ req, ui }: RouteContext): Promise<Response> {
-  let mode: unknown;
-  try {
-    ({ mode } = JSON.parse(await req.text()) as { mode: unknown });
-  } catch {
-    return badRequest('invalid JSON');
-  }
+  const parsed = await readJson<{ mode: unknown }>(req);
+  if ('error' in parsed) return parsed.error;
+  const { mode } = parsed.body;
   if (
     typeof mode !== 'string' ||
     !IMAGE_MODE_VALUES.includes(mode as (typeof IMAGE_MODE_VALUES)[number])
@@ -315,25 +292,17 @@ async function setImageMode({ req, ui }: RouteContext): Promise<Response> {
 }
 
 async function setMockConfig({ req, ui }: RouteContext): Promise<Response> {
-  let parsed: Partial<MockDeviceConfig>;
-  try {
-    parsed = JSON.parse(await req.text()) as Partial<MockDeviceConfig>;
-  } catch {
-    return badRequest('invalid JSON');
-  }
-  return json({ ok: true, mockConfig: ui.applyMockConfig(parsed) });
+  const parsed = await readJson<Partial<MockDeviceConfig>>(req);
+  if ('error' in parsed) return parsed.error;
+  return json({ ok: true, mockConfig: ui.applyMockConfig(parsed.body) });
 }
 
 const MDNS_NAME_MAX_LEN = 63; // sane cap — dns-sd/avahi service instance names aren't unbounded
 
 async function setDeviceMdnsName({ req, ui }: RouteContext): Promise<Response> {
-  let deviceKey: unknown;
-  let name: unknown;
-  try {
-    ({ deviceKey, name } = JSON.parse(await req.text()) as { deviceKey: unknown; name: unknown });
-  } catch {
-    return badRequest('invalid JSON');
-  }
+  const parsed = await readJson<{ deviceKey: unknown; name: unknown }>(req);
+  if ('error' in parsed) return parsed.error;
+  const { deviceKey, name } = parsed.body;
   if (typeof deviceKey !== 'string' || !deviceKey) {
     return badRequest('deviceKey must be a non-empty string');
   }

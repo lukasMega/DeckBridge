@@ -1,19 +1,7 @@
 #!/usr/bin/env node
-// Generates the device comparison docs from ts/src/devices/registry.ts.
-//
-//   node scripts/gen-device-docs.mjs            write the three artifacts
-//   node scripts/gen-device-docs.mjs --check    fail if they are stale
-//
-// Why it lives in ts/scripts/ and not the repo-root scripts/: it imports esbuild, and
-// ESM resolves bare specifiers from the IMPORTING FILE's path, not from cwd. Root
-// scripts/ has no node_modules, so `import 'esbuild'` there dies with
-// ERR_MODULE_NOT_FOUND no matter what the mise task's `dir` is. Same reason
-// gen-splash.mjs lives here.
-//
-// The registry is bundled to ESM and imported: the models are pure data (registry
-// reaches only driver.ts types, types.ts consts and capabilities.ts consts), so nothing
-// FFI or native is pulled in. If that ever stops being true the import throws on
-// `tjs:ffi` under node — a loud failure is the point.
+// Generates the device comparison docs from ts/src/devices/registry.ts. node
+// scripts/gen-device-docs.mjs write the three artifacts node scripts/gen-device-docs.mjs --check fail if they
+// are stale Why it lives in ts/scripts/ and not the repo-root scripts/: it imports esbuild, and ESM resolves bare…
 
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
@@ -391,7 +379,7 @@ const DEFAULT_VISIBLE = {
 const DEFAULTS_LEGEND = {
   identity: `${DASH} = not set. Elgato models omit usagePage/usage: they are matched on product id alone.`,
   image: `${DASH} = field omitted; the effective default applies — resizeFilter triangle · resizeMode resize · padFill edge · crop 0 · sharpen 0 · blur 0 · bmpPpm none (JPEG).`,
-  wire: `${DASH} = no wire spec at all (Elgato models frame in PROTOCOL_STRATEGY) or the field is omitted — reportId 0x00 · chunkPadByte false · chunkDelayMs 0 · sharedSerial false · packetSizeCandidates none, so packetSize is used as written.`,
+  wire: `${DASH} = optional field omitted — reportId 0x00 · heartbeat none · synthesizeKeyUp false · sendStpAfterImage false · chunkPadByte false · chunkDelayMs 0 · sharedSerial false · packetSizeCandidates none, so packetSize is used as written.`,
 };
 
 // cell values
@@ -484,12 +472,9 @@ function backslashEscape(text, chars) {
   return text.replace(new RegExp(`[\\\\${chars}]`, 'g'), (c) => `\\${c}`);
 }
 
-/**
- * Escape `{` and `<` so MDX does not read them as an expression or a tag — but only
- * OUTSIDE inline code spans, where markdown already wins and those characters are
- * literal. The cell-splitting pipe (`pipes`) is escaped everywhere, including inside
- * code spans, because GFM strips table escapes before it parses inline code.
- */
+/** Escape `{` and `<` so MDX does not read them as an
+ * expression or a tag — but only OUTSIDE inline code spans,
+ * where markdown already wins and those characters are literal. */
 function escapeMdx(text, { pipes = false } = {}) {
   const outside = pipes ? '{<|' : '{<';
   const inside = pipes ? '|' : '';
@@ -747,8 +732,8 @@ function specsPage(models, notes) {
   out.push('## Wire spec');
   out.push('');
   out.push(
-    'Low-level framing for the Mirabox CORA protocols. Elgato models have no wire spec — their',
-    'framing lives in `PROTOCOL_STRATEGY` instead.',
+    'Device-owned HID sizes and low-level behavior. Protocol strategies own framing algorithms;',
+    'they never own packet or input report sizes.',
   );
   out.push('');
   out.push('<DeviceTable table="wire" data={deviceData} />');

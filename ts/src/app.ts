@@ -6,7 +6,7 @@ import type { MockDeviceConfig } from './web/server';
 import { MockDriver } from './devices/mock.js';
 import type { ClientApp, CommEntry, ImageModeOverride, LogObject } from './types.js';
 import { ELGATO_CHILD_PORT, ELGATO_TCP_PORT, WEBUI_PORT } from './types.js';
-import { DEVICE_MODELS } from './devices/registry.js';
+import { advertisedGeometry, DEFAULT_MODEL, DEVICE_MODELS } from './devices/registry.js';
 import { log, setWebUILog, setLogLevel, step } from './logger.js';
 import { startLogFile, stopLogFile, activeLogFilePath } from './log-file.js';
 import { setupNativeLibs } from './native-libs.js';
@@ -46,11 +46,9 @@ if (cli.command === 'diagnose') {
   await runDiagnoseCommand(cli.flags);
   tjs.exit(0);
 }
-// Log level, in precedence order: --log-level / $DECKBRIDGE_LOG_LEVEL (both already
-// in env by now) win outright; otherwise settings.json's persisted "logLevel" applies.
-// setLogLevel(), not a plain env read: logger.ts's own module-load env read already
-// happened (as one of this file's imports, above) before this line runs. The winner is
-// written back into env so every USB worker spawned later inherits it at module load.
+// Log level, in precedence order: --log-level /
+// $DECKBRIDGE_LOG_LEVEL (both already in env by now) win
+// outright; otherwise settings.json's persisted "logLevel" applies.
 if (tjs.env.DECKBRIDGE_LOG_LEVEL) {
   setLogLevel(tjs.env.DECKBRIDGE_LOG_LEVEL);
 } else {
@@ -82,8 +80,14 @@ const webui = new WebUIServer(
   DEVICE_MODELS.map((m) => ({ id: m.id, name: m.name, keyCount: m.keyCount })),
   getInitialDriverMode(),
 );
-const server = new ElgatoServer();
-const childServer = new ElgatoChildServer(ELGATO_CHILD_PORT, server.deviceConfig, false);
+const defaultChildGeometry = advertisedGeometry(DEFAULT_MODEL);
+const server = new ElgatoServer(defaultChildGeometry);
+const childServer = new ElgatoChildServer(
+  defaultChildGeometry,
+  ELGATO_CHILD_PORT,
+  server.deviceConfig,
+  false,
+);
 
 let shuttingDown = false;
 let tray: TrayHandle | null = null;
@@ -91,10 +95,8 @@ let tray: TrayHandle | null = null;
 setWebUILog((level, component, message) => webui.log(level, component, message));
 
 // Last-resort handler: txiki hard-aborts the process on an unhandled promise
-// rejection unless preventDefault() is called. Calling it lets shutdown() run
-// the device disconnect handshake / socket teardown / tray kill instead of a
-// raw abort. shutdown() is idempotent, so a rejection storm collapses to one
-// teardown.
+// rejection unless preventDefault() is called. Calling it lets shutdown() run the
+// device disconnect handshake / socket teardown / tray kill instead of a raw abort.
 globalThis.addEventListener('unhandledrejection', (ev: PromiseRejectionEvent) => {
   ev.preventDefault();
   const reason =
@@ -130,19 +132,17 @@ function pushTrayState(): void {
   tray?.push(buildTrayState());
 }
 
-// Extra-dock CORA server pair builder (multi-device). Mirrors the primary
-// wiring above: the childServer gets the SAME server.deviceConfig reference, and
-// each server's serverLog is piped to the shared logger (DeviceSession wires the
-// driver's events but not the servers' — extras would otherwise be silent). No
-// WebUI/comm mirror: the WebUI stays single-device (primary only).
+// Extra-dock CORA server pair builder (multi-device). Mirrors the primary wiring above: the
+// childServer gets the SAME server.deviceConfig reference, and each server's serverLog is piped to the
+// shared logger (DeviceSession wires the driver's events but not the servers' — extras would otherwise be…
 const sessionServersFactory: SessionServersFactory = (identity) => {
-  const s = new ElgatoServer(identity.primaryPort, false, {
+  const s = new ElgatoServer(defaultChildGeometry, identity.primaryPort, false, {
     childPort: identity.childPort,
     mdnsServiceName: identity.mdnsServiceName,
     dockSerial: identity.dockSerial,
     childSerial: identity.childSerial,
   });
-  const cs = new ElgatoChildServer(identity.childPort, s.deviceConfig, false);
+  const cs = new ElgatoChildServer(defaultChildGeometry, identity.childPort, s.deviceConfig, false);
   s.on('serverLog', ({ level, component: c, message: m }: LogObject) => log(level, c, m));
   cs.on('serverLog', ({ level, component: c, message: m }: LogObject) => log(level, c, m));
   return { server: s, childServer: cs };
@@ -364,14 +364,9 @@ log(
 );
 log('info', 'deckBr', '══════════════════════════════════════════════');
 
-// Poll for a conflict with the Elgato desktop app: it is running AND the device
-// slot is free, i.e. it is plausibly the reason we can't open the hardware. When
-// driverConnected we own the device, so there is no conflict by definition and the
-// flag is false regardless of whether the app is running (the diagnostics report
-// probes the process separately — see os-utils.isElgatoAppRunning). Skip the spawn
-// entirely when no WebUI client is connected — nobody is looking at the flag, and a
-// fresh poll happens on the next tick once a client connects. --headless skips this
-// timer entirely: no WebUI client is ever expected to be watching on a headless box.
+// Poll for a conflict with the Elgato desktop app: it
+// is running AND the device slot is free, i.e. it is
+// plausibly the reason we can't open the hardware.
 let _elgatoAppConflict = false;
 if (!headless) {
   setInterval(async () => {

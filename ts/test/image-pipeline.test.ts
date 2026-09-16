@@ -5,15 +5,9 @@ import type { DeviceDriver, DeviceModel } from '../src/devices/driver.js';
 import type { ElgatoChildServer } from '../src/elgato.js';
 import type { WebUIServer } from '../src/web/server/index.js';
 
-// Test harness
-//
-// The image pipeline was refactored (architecture-review P1): the JPEG/BMP
-// transform + LRU cache + key remap + USB write moved OUT of image-pipeline.ts
-// into the worker-side image-render.ts. image-pipeline.ts is now THIN — on each
-// childServer 'image' event it does exactly two things, SYNCHRONOUSLY:
-//   1. webui.notifyImageUpdate(keyIndex, Buffer.from(data), format)
-//   2. getDriver()?.renderCoraImage?.(keyIndex, data, format)   // raw bytes
-// No transform, no cache, no sendImage, no notifyStats on this path.
+// Test harness The image pipeline was refactored (architecture-review
+// P1): the JPEG/BMP transform + LRU cache + key remap + USB write
+// moved OUT of image-pipeline.ts into the worker-side image-render.ts.
 
 let passed = 0;
 let failed = 0;
@@ -102,6 +96,7 @@ function makePassthroughModel(): DeviceModel {
       quality: 0.9,
       transform: 'passthrough',
     },
+    wire: { packetSize: 1024, inSize: 512 },
     keyMap: {},
     cora: {
       productId: 0x00a5,

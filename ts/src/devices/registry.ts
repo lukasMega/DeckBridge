@@ -1,4 +1,6 @@
 import type { DeviceModel } from './driver.js';
+import type { ChildGeometry } from './driver.js';
+import { modelToChildGeometry } from '../capabilities.js';
 import { MK2_MODEL } from './elgato/mk2.js';
 import { MINI_MODEL } from './elgato/mini.js';
 import { MIRABOX_293_MODEL } from './mirabox/mirabox-293.js';
@@ -56,4 +58,25 @@ export function findModel(vid: number, pid: number): DeviceModel | null {
     }
   }
   return null;
+}
+
+/** Resolve geometry emulation through registry ids, never copied dimensions. */
+export function advertisedModel(model: DeviceModel): DeviceModel {
+  if (!model.cora.advertiseAs) return model;
+  const advertised = findModelById(model.cora.advertiseAs);
+  if (!advertised) {
+    throw new Error(`${model.id}: unknown advertised model '${model.cora.advertiseAs}'`);
+  }
+  return advertised;
+}
+
+export function advertisedGeometry(model: DeviceModel): ChildGeometry {
+  return modelToChildGeometry(advertisedModel(model));
+}
+
+for (const model of DEVICE_MODELS) {
+  if (model.wire.packetSize <= 0 || model.wire.inSize <= 0) {
+    throw new Error(`${model.id}: wire sizes must be positive`);
+  }
+  if (model.cora.advertiseAs) advertisedModel(model);
 }

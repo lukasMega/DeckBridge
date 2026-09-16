@@ -1,5 +1,8 @@
 import assert from 'tjs:assert';
 import { padChunkBoundaries } from '../src/mirabox.js';
+import { MIRABOX_K1PRO_MODEL } from '../src/devices/mirabox/mirabox-k1pro.js';
+
+const PACKET_SIZE = MIRABOX_K1PRO_MODEL.wire.packetSize;
 
 let passed = 0;
 let failed = 0;
@@ -43,23 +46,23 @@ console.log('\nk1pro-chunk-pad: padChunkBoundaries');
 
 await test('short payload (< 1023) is unchanged', () => {
   const d = seq(885);
-  assert.ok(bytesEqual(padChunkBoundaries(d, 1024), d));
+  assert.ok(bytesEqual(padChunkBoundaries(d, PACKET_SIZE), d));
 });
 
 await test('pad byte lands at every chunk boundary', () => {
-  const w = padChunkBoundaries(seq(4480), 1024);
+  const w = padChunkBoundaries(seq(4480), PACKET_SIZE);
   for (const at of [1023, 2047, 3071, 4095]) assert.equal(w[at], 0x00);
 });
 
 await test('wire length adds one byte per full payload group', () => {
-  assert.equal(padChunkBoundaries(seq(1354), 1024).length, 1355);
-  assert.equal(padChunkBoundaries(seq(4480), 1024).length, 4484);
+  assert.equal(padChunkBoundaries(seq(1354), PACKET_SIZE).length, 1355);
+  assert.equal(padChunkBoundaries(seq(4480), PACKET_SIZE).length, 4484);
 });
 
 await test('firmware drop reconstructs the original exactly (many sizes)', () => {
   for (const n of [1022, 1023, 1024, 1354, 2046, 2047, 2048, 2437, 4480, 5000]) {
     const d = seq(n);
-    const got = firmwareReceive(padChunkBoundaries(d, 1024), 1024);
+    const got = firmwareReceive(padChunkBoundaries(d, PACKET_SIZE), PACKET_SIZE);
     // device may also drop the pad of a trailing exactly-full chunk; the
     // payload must survive either way, possibly with the pad still attached
     assert.ok(bytesEqual(got.subarray(0, n), d), `payload mangled for n=${n}`);
@@ -69,7 +72,7 @@ await test('firmware drop reconstructs the original exactly (many sizes)', () =>
 
 await test('no full chunk ever ends with a payload byte', () => {
   for (const n of [1023, 1354, 2437, 4480]) {
-    const w = padChunkBoundaries(seq(n), 1024);
+    const w = padChunkBoundaries(seq(n), PACKET_SIZE);
     for (let c = 0; (c + 1) * 1024 <= w.length; c++) {
       assert.equal(w[c * 1024 + 1023], 0x00, `chunk ${c} of n=${n}`);
     }
@@ -79,7 +82,7 @@ await test('no full chunk ever ends with a payload byte', () => {
 await test('matches the hardware-verified round-16 construction', () => {
   // round 16 padded 1354 -> 1355 and 4480 -> 4484 wire bytes (all CLEAN)
   const d = seq(1354);
-  const w = padChunkBoundaries(d, 1024);
+  const w = padChunkBoundaries(d, PACKET_SIZE);
   assert.ok(bytesEqual(w.subarray(0, 1023), d.subarray(0, 1023)));
   assert.equal(w[1023], 0x00);
   assert.ok(bytesEqual(w.subarray(1024), d.subarray(1023)));

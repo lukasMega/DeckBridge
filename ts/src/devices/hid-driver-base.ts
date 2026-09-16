@@ -10,7 +10,6 @@ import type { DeviceModel } from './driver.js';
 import type { KeyState } from '../types.js';
 import { PROTOCOL_STRATEGY, type ProtocolStrategy } from './protocol';
 
-const READ_BUF_SIZE = 512;
 const READ_POLL_MS = 5;
 
 function nullTerm(s: string): string {
@@ -85,7 +84,7 @@ export class ElgatoHidDriver extends HidDeviceBase {
     this._readDeviceInfo();
     this.lastKeyState = Array.from({ length: this.model.keyCount }, () => false);
 
-    this._startReadLoop(hid, READ_BUF_SIZE, READ_POLL_MS, (readBuf, n) =>
+    this._startReadLoop(hid, this.model.wire.inSize, READ_POLL_MS, (readBuf, n) =>
       this._parseInput(readBuf.subarray(0, n)),
     );
 
@@ -102,8 +101,8 @@ export class ElgatoHidDriver extends HidDeviceBase {
     if (!this.device || !this.hidLib) return;
     // Reused scratch, allocated once per driver (as MiraboxDriver does): a fresh
     // 1024 B buffer per chunk was ~10 KB of garbage per key, per frame.
-    if (this._pktScratch.length !== this.strategy.packetSize) {
-      this._pktScratch = new Uint8Array(this.strategy.packetSize);
+    if (this._pktScratch.length !== this.model.wire.packetSize) {
+      this._pktScratch = new Uint8Array(this.model.wire.packetSize);
     }
     this.strategy.writeImage(keyIndex, bytes, this._pktScratch, this._writeBound);
   }

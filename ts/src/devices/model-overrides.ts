@@ -1,13 +1,6 @@
-// Validate + merge user model overrides on top of a registry-resolved DeviceModel.
-//
-// Pure — no I/O, no FFI — so the same functions run on the main thread (probe time)
-// and inside the USB worker (after its own registry lookup). The registry stays
-// untouched ground truth: an override is applied ON TOP of a resolved model, never
-// in place of one, and the excluded fields (VID/PID/protocol/driverKind/geometry)
-// mean no override can smuggle in a different driver.
-//
-// Purpose: calibrate an untested board on the hardware it runs on, then upstream the
-// working values into the registry — see docs/adding-a-device.md.
+// Validate + merge user model overrides on top of a registry-resolved
+// DeviceModel. Pure — no I/O, no FFI — so the same functions run on the main
+// thread (probe time) and inside the USB worker (after its own registry lookup).
 import type {
   DeviceImageSpec,
   DeviceKeyMap,
@@ -255,19 +248,13 @@ export function applyModelOverrides(model: DeviceModel, ov?: DeviceModelOverride
   if (!ov || Object.keys(ov).length === 0) return model;
   const image: DeviceImageSpec = { ...model.image, ...defined(ov.image) };
   const keyMap: DeviceKeyMap = { ...model.keyMap, ...defined(ov.keyMap) };
-  // `wire` is undefined for elgato-hid models (their framing lives in
-  // PROTOCOL_STRATEGY); only materialize it when the override actually sets it.
-  const wirePatch = defined(ov.wire);
-  const wire: DeviceWireSpec | undefined =
-    model.wire || Object.keys(wirePatch).length > 0
-      ? ({ ...model.wire, ...wirePatch } as DeviceWireSpec)
-      : undefined;
+  const wire: DeviceWireSpec = { ...model.wire, ...defined(ov.wire) };
   const splash: DeviceSplashSpec | undefined = ov.splash ?? model.splash;
   return {
     ...model,
     image,
     keyMap,
-    ...(wire ? { wire } : {}),
+    wire,
     ...(splash ? { splash } : {}),
   };
 }
@@ -302,10 +289,9 @@ export function overrideRevision(ov?: DeviceModelOverride): string {
   return h.toString(16).padStart(8, '0');
 }
 
-/** Copy exactly `keys` from `src`, skipping absent ones. Spreading the whole
- *  source object instead would drag in the NON-tunable siblings (`image.format`,
- *  `wire.sharedSerial`, …), and the result would then fail validateModelOverride
- *  — which is what the Device tuning form posts back. */
+/** Copy exactly `keys` from `src`, skipping absent ones. Spreading the whole source object
+ * instead would drag in the NON-tunable siblings (`image.format`, `wire.sharedSerial`, …), and the
+ * result would then fail validateModelOverride — which is what the Device tuning form posts back. */
 function project<T extends object, K extends keyof T>(
   src: T,
   keys: readonly K[],
@@ -317,19 +303,15 @@ function project<T extends object, K extends keyof T>(
   return out;
 }
 
-/** The tunable fields at their current (post-override) values — the seed for the
- *  Device tuning form, so every control starts at what the device is actually
- *  using rather than at a blank.
- *
- *  INVARIANT (asserted for every registry model in model-overrides.test.ts):
- *  `validateModelOverride(tunableDefaults(m), m).ok` — seeding the form and
- *  pressing Apply without touching anything must never be rejected. */
+/** The tunable fields at their current (post-override) values —
+ * the seed for the Device tuning form, so every control starts
+ * at what the device is actually using rather than at a blank. */
 export function tunableDefaults(model: DeviceModel): DeviceModelOverride {
   const { image, keyMap, wire, splash } = model;
   return {
     image: project(image, IMAGE_KEYS),
     keyMap: project(keyMap, KEYMAP_KEYS),
-    ...(wire ? { wire: project(wire, WIRE_KEYS) } : {}),
+    wire: project(wire, WIRE_KEYS),
     ...(splash ? { splash } : {}),
   };
 }

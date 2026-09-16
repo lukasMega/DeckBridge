@@ -2,7 +2,7 @@ import assert from 'tjs:assert';
 import { EventEmitter } from '../src/platform/events-shim.js';
 import { DriverManager } from '../src/driver-manager.js';
 import { ProbePacer, nextProbeDelayMs } from '../src/driver-manager-pacing.js';
-import { DEFAULT_MODEL, DEVICE_MODELS } from '../src/devices/registry.js';
+import { advertisedGeometry, DEFAULT_MODEL, DEVICE_MODELS } from '../src/devices/registry.js';
 import { MIRABOX_293_MODEL } from '../src/devices/mirabox/mirabox-293.js';
 import { MIRABOX_293S_MODEL } from '../src/devices/mirabox/mirabox-293s.js';
 import { MIRABOX_K1PRO_MODEL } from '../src/devices/mirabox/mirabox-k1pro.js';
@@ -148,11 +148,9 @@ function makeFakeWebUI() {
   };
 }
 
-/** A fake "real" driver whose open() rejects while `toggleFailOpen` is true and
- *  resolves once it is flipped false. Models a present-but-unopenable device
- *  (e.g. Input Monitoring denied) that later becomes openable, exercising the
- *  reused-worker reconnect path: open() is retried on the SAME instance, so the
- *  flag flip — not a factory swap — is what turns failure into success. */
+/** A fake "real" driver whose open() rejects while
+ * `toggleFailOpen` is true and resolves once it is
+ * flipped false. Models a present-but-unopenable device (e.g. */
 let toggleFailOpen = true;
 class ToggleRealDriver extends EventEmitter {
   readonly model: DeviceModel;
@@ -177,12 +175,9 @@ class ToggleRealDriver extends EventEmitter {
   setBrightness(): void {}
 }
 
-/**
- * A fake "real" driver whose open() resolves only when the test calls
- * `resolveOpen()`, via a `Promise.withResolvers()` deferred. Lets a test pause
- * mid-probe to exercise the post-await state re-check (E1-a) and the
- * in-flight probe guard (E1-b).
- */
+/** A fake "real" driver whose open() resolves only when the test calls
+ * `resolveOpen()`, via a `Promise.withResolvers()` deferred. Lets a test pause mid-probe
+ * to exercise the post-await state re-check (E1-a) and the in-flight probe guard (E1-b). / */
 class ControllableRealDriver extends EventEmitter {
   readonly model: DeviceModel;
   deviceSerial: string | undefined = 'SN999';
@@ -386,8 +381,7 @@ await test('1. connectMock(model) -> applyDeviceModel pushes PID, geometry, WebU
     'PID matches model',
   );
 
-  // MK.2 (DEFAULT_MODEL) has no advertiseGeometry override; geometry is derived
-  // from the model's own dimensions via modelToChildGeometry().
+  // MK.2 advertises its canonical registry geometry.
   assert.equal(server.setChildGeometryCalls.length, 1, 'server.setChildGeometry called once');
   assert.equal(
     childServer.setChildGeometryCalls.length,
@@ -440,11 +434,9 @@ await test("2. Mock 'key' event -> childServer.sendKeyEvent + webui.notifyKeyEve
 await test("3. switchMode('mock') then connectMock() again -> old mock driver closed exactly once", async () => {
   const { driverManager } = setup();
 
-  // switchMode('mock') sets driverMode='mock' and creates the first mock driver.
-  // A second switchMode('mock') is a no-op while currentDriver is set (early
-  // return in switchMode), so the "replace the active mock driver" path that
-  // closes the old driver lives in connectMock() itself — call it directly,
-  // as driver-manager does when re-applying a model while already in mock mode.
+  // switchMode('mock') sets driverMode='mock' and creates the first mock driver. A second
+  // switchMode('mock') is a no-op while currentDriver is set (early return in switchMode), so the "replace the
+  // active mock driver" path that closes the old driver lives in connectMock() itself — call it directly, as…
   await driverManager.switchMode('mock');
   const first = driverManager.getCurrentDriver();
   assert.ok(first != null, 'first mock driver created');
@@ -469,8 +461,7 @@ await test('4. applyDeviceModel(MIRABOX_293S_MODEL) -> advertises MK.2 geometry/
 
   driverManager.applyDeviceModel(MIRABOX_293S_MODEL);
 
-  const expectedGeo = MIRABOX_293S_MODEL.cora.advertiseGeometry;
-  assert.ok(expectedGeo != null, '293S model declares an advertiseGeometry');
+  const expectedGeo = advertisedGeometry(MIRABOX_293S_MODEL);
 
   assert.equal(server.setDeviceConfigCalls.length, 1, 'setDeviceConfig called once');
   assert.equal(
@@ -483,7 +474,7 @@ await test('4. applyDeviceModel(MIRABOX_293S_MODEL) -> advertises MK.2 geometry/
   assert.deepEqual(
     server.setChildGeometryCalls[0],
     expectedGeo,
-    'server geometry matches advertiseGeometry',
+    'server geometry matches advertised model',
   );
   assert.equal(
     childServer.setChildGeometryCalls.length,
@@ -493,7 +484,7 @@ await test('4. applyDeviceModel(MIRABOX_293S_MODEL) -> advertises MK.2 geometry/
   assert.deepEqual(
     childServer.setChildGeometryCalls[0],
     expectedGeo,
-    'childServer geometry matches advertiseGeometry',
+    'childServer geometry matches advertised model',
   );
 
   assert.equal(
@@ -508,15 +499,11 @@ await test('4. applyDeviceModel(MIRABOX_293S_MODEL) -> advertises MK.2 geometry/
   assert.equal(notified?.id, MIRABOX_293S_MODEL.id, 'notified id is 293s');
   assert.equal(
     notified?.keyCount,
-    expectedGeo?.keyCount,
-    'notified keyCount matches advertiseGeometry',
+    expectedGeo.keyCount,
+    'notified keyCount matches advertised model',
   );
-  assert.equal(
-    notified?.columns,
-    expectedGeo?.columns,
-    'notified columns matches advertiseGeometry',
-  );
-  assert.equal(notified?.rows, expectedGeo?.rows, 'notified rows matches advertiseGeometry');
+  assert.equal(notified?.columns, expectedGeo.columns, 'notified columns matches advertised model');
+  assert.equal(notified?.rows, expectedGeo.rows, 'notified rows matches advertised model');
 });
 
 await test('5. 293S key drop: a wire code mapping to -1 produces no sendKeyEvent', () => {

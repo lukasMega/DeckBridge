@@ -1,5 +1,10 @@
 import assert from 'tjs:assert';
-import { DEVICE_MODELS, DEFAULT_MODEL, findModel } from '../src/devices/registry.js';
+import {
+  advertisedGeometry,
+  DEVICE_MODELS,
+  DEFAULT_MODEL,
+  findModel,
+} from '../src/devices/registry.js';
 import { MK2_MODEL } from '../src/devices/elgato/mk2.js';
 import { MINI_MODEL } from '../src/devices/elgato/mini.js';
 import { MIRABOX_293_MODEL } from '../src/devices/mirabox/mirabox-293.js';
@@ -20,11 +25,7 @@ import {
   TMICE_STREAM_CONTROLLER_MODEL,
 } from '../src/devices/rebadge/akp153-v1-clones.js';
 import { deviceInputToMk2Index } from '../src/translator.js';
-import {
-  modelToChildGeometry,
-  buildCapabilitiesPacket,
-  MK2_CHILD_GEOMETRY,
-} from '../src/capabilities.js';
+import { modelToChildGeometry, buildCapabilitiesPacket } from '../src/capabilities.js';
 import {
   ELGATO_VID,
   CHILD_CAPS_SERIAL_MAX_LEN,
@@ -150,7 +151,7 @@ test('Ajazz AKP153 rev.2 models mirror the 293V3 protocol and wire spec', () => 
 // Fifine AmpliGame D6 (2 revisions of the 293V3 board)
 
 function wireWithoutPacketSize(model: DeviceModel): string {
-  const wire: Record<string, unknown> = { ...model.wire! };
+  const wire: Record<string, unknown> = { ...model.wire };
   delete wire.packetSize;
   return JSON.stringify(wire);
 }
@@ -185,13 +186,12 @@ test('Fifine D6 models mirror the 293V3 image/keyMap/cora/splash spec', () => {
   }
 });
 
-// The revisions differ ONLY in packet size, and the asymmetry is deliberate: rev. 1
-// (0x0007) is documented as 512-byte (companion PR #49), while 512-byte writes render
-// black on rev. 2 (0x0060) per three independent reports (Lyagva PR #1, opendeck-ampgd6
-// PR #4 and PR #5). Do not "fix" this into a single value.
+// The revisions differ ONLY in packet size, and the asymmetry is deliberate: rev. 1 (0x0007)
+// is documented as 512-byte (companion PR #49), while 512-byte writes render black on rev.
+// 2 (0x0060) per three independent reports (Lyagva PR #1, opendeck-ampgd6 PR #4 and PR #5).
 test('Fifine D6 rev. 1 uses 512-byte packets, rev. 2 uses 1024-byte packets', () => {
-  assert.equal(FIFINE_D6_MODEL.wire!.packetSize, 512);
-  assert.equal(FIFINE_D6_REV2_MODEL.wire!.packetSize, 1024);
+  assert.equal(FIFINE_D6_MODEL.wire.packetSize, 512);
+  assert.equal(FIFINE_D6_REV2_MODEL.wire.packetSize, 1024);
 });
 
 test('Fifine D6 models share every wire field except packetSize', () => {
@@ -202,15 +202,15 @@ test('Fifine D6 models use the v3 wire behaviour (press+release, STP after image
   for (const model of [FIFINE_D6_MODEL, FIFINE_D6_REV2_MODEL]) {
     assert.equal(model.protocol, 'mirabox-cora');
     assert.equal(model.driverKind, 'mirabox');
-    assert.equal(model.wire!.inSize, 512);
-    assert.equal(model.wire!.heartbeatMs, 8000);
-    assert.equal(model.wire!.synthesizeKeyUp, false);
-    assert.equal(model.wire!.sendStpAfterImage, true);
+    assert.equal(model.wire.inSize, 512);
+    assert.equal(model.wire.heartbeatMs, 8000);
+    assert.equal(model.wire.synthesizeKeyUp, false);
+    assert.equal(model.wire.sendStpAfterImage, true);
     // Unique per-unit serials (the 0x0060 USB dump shows 81D0DA784037), so no
     // model-id disambiguation in deviceKeyFor().
-    assert.equal(model.wire!.sharedSerial, undefined);
+    assert.equal(model.wire.sharedSerial, undefined);
     // Pacing stays off until hardware proves it necessary (busy-wait on the worker).
-    assert.equal(model.wire!.chunkDelayMs, undefined);
+    assert.equal(model.wire.chunkDelayMs, undefined);
   }
 });
 
@@ -219,12 +219,12 @@ test('Fifine D6 models use the v3 wire behaviour (press+release, STP after image
 // it is what the probe is allowed to choose between, not a description of this model.
 test('Fifine D6 models let the report descriptor arbitrate the packet size', () => {
   for (const model of [FIFINE_D6_MODEL, FIFINE_D6_REV2_MODEL]) {
-    assert.deepEqual(Array.from(model.wire!.packetSizeCandidates!), [512, 1024]);
+    assert.deepEqual(Array.from(model.wire.packetSizeCandidates!), [512, 1024]);
     // Each revision's own default must be one of the candidates, or the probe could
     // never confirm it and the warning would fire on correctly-configured hardware.
     assert.ok(
-      model.wire!.packetSizeCandidates!.includes(model.wire!.packetSize),
-      `${model.id}: packetSize ${model.wire!.packetSize} missing from its own candidates`,
+      model.wire.packetSizeCandidates!.includes(model.wire.packetSize),
+      `${model.id}: packetSize ${model.wire.packetSize} missing from its own candidates`,
     );
   }
 });
@@ -232,7 +232,7 @@ test('Fifine D6 models let the report descriptor arbitrate the packet size', () 
 // The probe is opt-in: hardware-verified models must not be exposed to it.
 test('hardware-verified models do not opt into the packet-size probe', () => {
   for (const model of [MIRABOX_293_MODEL, MIRABOX_293S_MODEL, MIRABOX_K1PRO_MODEL]) {
-    assert.equal(model.wire?.packetSizeCandidates, undefined);
+    assert.equal(model.wire.packetSizeCandidates, undefined);
   }
 });
 
@@ -292,7 +292,7 @@ test('akp153-v1-clones mirror the 293S image/wire/keyMap/cora/splash spec', () =
 
 test('akp153-v1-clones: wire.sharedSerial is true (inherited from the 293S)', () => {
   for (const { model } of V1_CLONES) {
-    assert.equal(model.wire?.sharedSerial, true);
+    assert.equal(model.wire.sharedSerial, true);
   }
 });
 
@@ -557,7 +557,7 @@ test('mirabox-k1pro: cora.productId === 0x0063', () => {
 });
 
 test('mirabox-k1pro: wire.reportId === 0x04', () => {
-  assert.equal(MIRABOX_K1PRO_MODEL.wire!.reportId, 0x04);
+  assert.equal(MIRABOX_K1PRO_MODEL.wire.reportId, 0x04);
 });
 
 test('mirabox-k1pro: keyMap.coraToWireImage deep-equals [5,3,1,6,4,2]', () => {
@@ -602,14 +602,9 @@ test('modelToChildGeometry for mirabox-293s matches model fields', () => {
   assertGeometry(MIRABOX_293S_MODEL);
 });
 
-test('MK2_CHILD_GEOMETRY constant matches mk2 model geometry', () => {
-  const geo = modelToChildGeometry(MK2_MODEL);
-  assert.equal(MK2_CHILD_GEOMETRY.rows, geo.rows);
-  assert.equal(MK2_CHILD_GEOMETRY.columns, geo.columns);
-  assert.equal(MK2_CHILD_GEOMETRY.keyCount, geo.keyCount);
-  assert.equal(MK2_CHILD_GEOMETRY.keyWidth, geo.keyWidth);
-  assert.equal(MK2_CHILD_GEOMETRY.keyHeight, geo.keyHeight);
-  assert.equal(MK2_CHILD_GEOMETRY.productName, geo.productName);
+test('advertised geometry derives from referenced registry model', () => {
+  assert.deepEqual(advertisedGeometry(MIRABOX_293S_MODEL), modelToChildGeometry(MK2_MODEL));
+  assert.deepEqual(advertisedGeometry(MIRABOX_K1PRO_MODEL), modelToChildGeometry(MINI_MODEL));
 });
 
 // buildCapabilitiesPacket (non-MK.2 geometry)

@@ -1,7 +1,6 @@
 // The device-tuning (model override) HTTP surface. Mirrors
 // settings-identity-controller.ts: validation + persistence glue around
-// PersistedSettings, with the pure merge/validate living in
-// devices/model-overrides.ts.
+// PersistedSettings, with the pure merge/validate living in devices/model-overrides.ts.
 import type { PersistedSettings } from './persisted-settings.js';
 import type { DeviceModel, DeviceModelOverride } from '../../devices/driver.js';
 import { findModelById } from '../../devices/registry.js';
@@ -26,10 +25,9 @@ export interface DeviceOverridesView {
    *  Reset works) but `effective` equals the registry defaults, because that is
    *  what the device is actually running. */
   safeMode: boolean;
-  /** The FULL effective spec — for display/diagnostics. Do NOT seed the form from
-   *  this: it carries the non-tunable protocol facts (`format`, `colorMode`,
-   *  `bmpPpm`) too, and POSTing them straight back is rejected by
-   *  validateModelOverride. Seed from `tunable` instead. */
+  /** The FULL effective spec — for display/diagnostics. Do NOT seed the form from this: it
+   * carries the non-tunable protocol facts (`format`, `colorMode`, `bmpPpm`) too, and
+   * POSTing them straight back is rejected by validateModelOverride. Seed from `tunable` instead. */
   effective: Pick<DeviceModel, 'image' | 'keyMap' | 'wire' | 'splash'>;
   /** `effective`, projected down to exactly the fields an override may set — so a
    *  round-trip (seed the form → Apply unchanged) is always valid. */
@@ -77,7 +75,7 @@ export class ModelOverridesController {
       effective: {
         image: effective.image,
         keyMap: effective.keyMap,
-        ...(effective.wire ? { wire: effective.wire } : {}),
+        wire: effective.wire,
         ...(effective.splash ? { splash: effective.splash } : {}),
       },
       tunable: tunableDefaults(effective),

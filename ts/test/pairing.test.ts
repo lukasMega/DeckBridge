@@ -3,9 +3,12 @@ import { ElgatoServer, ElgatoChildServer } from '../src/elgato.js';
 import { ELGATO_VID, ELGATO_PKT_SIZE_RX, ELGATO_CHILD_PORT } from '../src/types.js';
 import { CORA_FLAG_VERBATIM, CORA_FLAG_REQACK, CORA_FLAG_ACKNAK } from '../src/cora-frame.js';
 import { connect, waitForValue, closeAndWait, sendPkt, sendFrame } from './helpers/cora-framer.js';
+import { modelToChildGeometry } from '../src/capabilities.js';
+import { MK2_MODEL } from '../src/devices/elgato/mk2.js';
 
 const PRIMARY_PAIRING_PORT = 25543;
 const CHILD_PAIRING_PORT = 25544;
+const MK2_GEOMETRY = modelToChildGeometry(MK2_MODEL);
 
 // Setup / teardown
 
@@ -29,10 +32,11 @@ console.log(
 
 /* oxlint-disable no-console no-control-regex */
 await runTest('primary double-probe + child double-probe + operational', async () => {
-  const pairingServer = new ElgatoServer(PRIMARY_PAIRING_PORT, true);
+  const pairingServer = new ElgatoServer(MK2_GEOMETRY, PRIMARY_PAIRING_PORT, true);
   pairingServer.keepaliveIntervalMs = 100;
   await pairingServer.start();
   const pairingChildServer = new ElgatoChildServer(
+    MK2_GEOMETRY,
     CHILD_PAIRING_PORT,
     pairingServer.deviceConfig,
     false,

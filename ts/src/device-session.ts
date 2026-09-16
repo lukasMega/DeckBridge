@@ -1,7 +1,6 @@
-// One extra emulated Network Dock (session index 1..MAX_DEVICE_SESSIONS-1):
-// own CORA server pair on strided ports, own mDNS advert + identity, own
-// WorkerHidDriver on its own worker thread. No WebUI/tray coupling — session 0
-// (DriverManager) keeps those, and the WebUI stays primary-only in v1.
+// One extra emulated Network Dock (session index 1..MAX_DEVICE_SESSIONS-1): own CORA server pair on
+// strided ports, own mDNS advert + identity, own WorkerHidDriver on its own worker thread. No
+// WebUI/tray coupling — session 0 (DriverManager) keeps those, and the WebUI stays primary-only in v1.
 import { log } from './logger.js';
 import type { LogLevel } from './logger.js';
 import {
@@ -20,7 +19,7 @@ import type {
   ImageModeOverride,
 } from './types.js';
 import type { DeviceIdentitySettings } from './settings-store.js';
-import { modelToChildGeometry } from './capabilities.js';
+import { advertisedGeometry } from './devices/registry.js';
 import { deviceInputToMk2Index } from './translator.js';
 import { sendSplashImages } from './splash-sender.js';
 import { ExtraKeyWidgets } from './extra-keys.js';
@@ -35,10 +34,9 @@ export interface DeviceInfo {
   firmware?: string;
 }
 
-/** Identity for an extra dock: ports from CORA_PORT_STRIDE off the primary pair (a
- *  runtime resource, legitimately scan-order-dependent), everything else from
- *  device-identity.ts's getOrCreateDeviceIdentity — stable across restart/replug.
- *  The serial suffix must stay within the first 12 chars; see device-identity.ts. */
+/** Identity for an extra dock: ports from CORA_PORT_STRIDE off the primary pair
+ * (a runtime resource, legitimately scan-order-dependent), everything else from
+ * device-identity.ts's getOrCreateDeviceIdentity — stable across restart/replug. */
 export interface SessionIdentity {
   index: number; // 1..MAX_DEVICE_SESSIONS-1 (extras only) — port assignment only
   primaryPort: number; // ELGATO_TCP_PORT + CORA_PORT_STRIDE * index
@@ -77,10 +75,9 @@ function hasInputKeyMap(model: DeviceModel): boolean {
   return model.keyMap.wireInputToCora != null || model.keyMap.inputOffset != null;
 }
 
-/** Wire the driver events shared by the primary (DriverManager) and every
- *  extra session: key dispatch (wire→mk2 mapping + logging), error/log
- *  forwarding, reinit repaint. 'disconnect' differs per owner and stays with
- *  the caller, as do the primary-only WebUI mirrors (comm/imageSent). */
+/** Wire the driver events shared by the primary (DriverManager) and every extra session: key
+ * dispatch (wire→mk2 mapping + logging), error/log forwarding, reinit repaint. 'disconnect'
+ * differs per owner and stays with the caller, as do the primary-only WebUI mirrors (comm/imageSent). */
 export function wireCommonDriverEvents(
   driver: WorkerHidDriver,
   model: DeviceModel,
@@ -116,10 +113,9 @@ export function wireCommonDriverEvents(
   );
 }
 
-/** Server-facing half of DriverManager.applyDeviceModel (no WebUI). Advertises
- *  the model's PID/geometry/identity to the desktop over both CORA ports. Shared
- *  by the primary (via DriverManager) and every extra session so there is ONE
- *  implementation of the CORA identity/geometry push. */
+/** Server-facing half of DriverManager.applyDeviceModel (no WebUI). Advertises the model's
+ * PID/geometry/identity to the desktop over both CORA ports. Shared by the primary (via
+ * DriverManager) and every extra session so there is ONE implementation of the CORA identity/geometry push. */
 export function applyModelToServers(
   server: ElgatoServer,
   childServer: ElgatoChildServer,
@@ -127,7 +123,7 @@ export function applyModelToServers(
   deviceInfo?: DeviceInfo,
 ): void {
   const pid = model.cora.productId;
-  const geo = model.cora.advertiseGeometry ?? modelToChildGeometry(model);
+  const geo = advertisedGeometry(model);
   const configPatch: Partial<DeviceConfig> = { productId: pid };
   if (model.cora.usePhysicalIdentity) {
     if (deviceInfo?.serial) configPatch.childSerialNumber = deviceInfo.serial;
@@ -228,10 +224,9 @@ export class DeviceSession {
       primaryConnected: this.server.hasClient,
       elgatoConnected: this.childServer.hasClient,
       brightness: this.brightness,
-      // Mirrors applyModelToServers: only childSerialNumber/childFirmwareVersion
-      // are ever patched with the physical device's own values, and only when
-      // usePhysicalIdentity is set — everything else is this session's own
-      // fixed SessionIdentity (dockSerial/mdns) or the shared defaults.
+      // Mirrors applyModelToServers: only childSerialNumber/childFirmwareVersion are ever patched
+      // with the physical device's own values, and only when usePhysicalIdentity is set — everything
+      // else is this session's own fixed SessionIdentity (dockSerial/mdns) or the shared defaults.
       dockFirmwareVersion: DEFAULT_DOCK_FIRMWARE_VERSION,
       childFirmwareVersion:
         (usePhysical && this.deviceInfo?.firmware) || DEFAULT_CHILD_FIRMWARE_VERSION,
@@ -276,10 +271,9 @@ export class DeviceSession {
     await this.childServer.start();
     applyModelToServers(this.server, this.childServer, this.model, this.deviceInfo);
     this.wireListeners();
-    // Seed this dock's persisted per-device settings before the splash so it
-    // boots at the user's saved brightness/image-mode. Only push when actually
-    // persisted — an absent value means "use the device/model default", so we
-    // skip the redundant HID write.
+    // Seed this dock's persisted per-device settings before the splash so it boots at
+    // the user's saved brightness/image-mode. Only push when actually persisted — an
+    // absent value means "use the device/model default", so we skip the redundant HID write.
     if (this.initialImageMode !== null) this.driver.setImageOverride(this.initialImageMode);
     if (this.initialBrightness !== undefined) this.driver.setBrightness(this.initialBrightness);
     sendSplashImages(this.driver);
@@ -308,10 +302,9 @@ export class DeviceSession {
       log('info', this.model.id, 'disconnected');
       this.onDisconnect();
     });
-    // Raw CORA image → worker: transform + write off the main thread (P1).
-    // The onImage mirror runs after the driver call — bytes are already on the
-    // main thread, so the mirror costs one callback (the WebUI only encodes/
-    // broadcasts when this dock is the selected preview).
+    // Raw CORA image → worker: transform + write off the main thread (P1). The onImage mirror
+    // runs after the driver call — bytes are already on the main thread, so the mirror costs
+    // one callback (the WebUI only encodes/ broadcasts when this dock is the selected preview).
     this.childServer.on('image', ({ keyIndex, data, format }: ImageEvent) => {
       this.driver.renderCoraImage(keyIndex, data, format);
       this.onImage?.(keyIndex, data, format);

@@ -25,7 +25,7 @@ import { CoraServerBase } from './cora-server-base.js';
 import { describeCoraPayload } from './cora-describe.js';
 import type { DeviceConfig } from './elgato-types.js';
 import { buildFeatureResponse } from './feature-response.js';
-import { buildCapabilitiesPacket, type ChildGeometry, MK2_CHILD_GEOMETRY } from './capabilities.js';
+import { buildCapabilitiesPacket, type ChildGeometry } from './capabilities.js';
 import { MdnsAdvertiser } from './mdns-advertiser.js';
 
 export type { DeviceConfig };
@@ -48,7 +48,7 @@ export class ElgatoServer extends CoraServerBase {
   private readonly skipMdns: boolean;
   readonly childPort: number;
   private mdnsServiceName: string;
-  private childGeometry: ChildGeometry = MK2_CHILD_GEOMETRY;
+  private childGeometry: ChildGeometry;
   private lastAdvertisedPid = -1;
   private lastAdvertisedSerial = '';
 
@@ -86,11 +86,9 @@ export class ElgatoServer extends CoraServerBase {
     void this.mdnsAdvertiser.start();
   }
 
-  /** Live-rename the mDNS service name (WebUI "Device Identity" edit) — the
-   *  advertiser process bakes the name in at spawn (dns-sd/avahi-publish-service
-   *  take it as an argv, not something updatable in place), so this stops the
-   *  old advertiser and spawns a fresh one under the new name. No-op if the
-   *  server hasn't start()ed yet (the new name is picked up by start() itself). */
+  /** Live-rename the mDNS service name (WebUI "Device Identity" edit) — the advertiser process
+   * bakes the name in at spawn (dns-sd/avahi-publish-service take it as an argv, not something
+   * updatable in place), so this stops the old advertiser and spawns a fresh one under the new name. */
   setMdnsServiceName(name: string): void {
     if (name === this.mdnsServiceName) return;
     this.mdnsServiceName = name;
@@ -107,8 +105,14 @@ export class ElgatoServer extends CoraServerBase {
     void this.mdnsAdvertiser.start();
   }
 
-  constructor(port = ELGATO_TCP_PORT, skipMdns = false, opts: ElgatoServerOptions = {}) {
+  constructor(
+    childGeometry: ChildGeometry,
+    port = ELGATO_TCP_PORT,
+    skipMdns = false,
+    opts: ElgatoServerOptions = {},
+  ) {
     super(port);
+    this.childGeometry = childGeometry;
     this.skipMdns = skipMdns;
     this.childPort = opts.childPort ?? ELGATO_CHILD_PORT;
     this.mdnsServiceName = opts.mdnsServiceName ?? MDNS_SERVICE_NAME;
