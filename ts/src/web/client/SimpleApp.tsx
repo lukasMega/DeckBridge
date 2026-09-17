@@ -120,6 +120,9 @@ export function SimpleApp(): preact.JSX.Element {
             {headerBack !== null && <BackButton onClick={headerBack} />}
           </div>
           <div class="topbar-actions">
+            <span class="app-version" title="DeckBridge version">
+              v{__VERSION__}
+            </span>
             <ThemeButton id="themeBtn" />
             {!__SIMPLE_ONLY__ && (
               <button class="ghostbtn" id="advancedBtn" type="button" onClick={switchToAdvanced}>

@@ -28,6 +28,12 @@
 .topbar-actions {
   gap: 10px;
 }
+.app-version {
+  opacity: 0.5;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
 .brand-home {
   display: flex;
   align-items: center;

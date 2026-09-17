@@ -154,6 +154,7 @@ export function AboutPopover({ onClose }: Readonly<{ onClose: () => void }>): pr
           <strong>does not replace the Elgato Network Dock</strong>. For professional or reliable
           setups, use officially supported Elgato hardware.
         </p>
+        <p class="fine app-version">DeckBridge v{__VERSION__}</p>
       </div>
     </div>
   );
