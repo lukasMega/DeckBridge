@@ -5,6 +5,7 @@ import {
   isModelOverridesRecord,
   overrideRevision,
   overrideSummary,
+  pinsImageFit,
   tunableDefaults,
   validateModelOverride,
 } from '../src/devices/model-overrides.js';
@@ -464,6 +465,18 @@ test('rejects non-objects and entries with unknown sections', () => {
   assert.ok(!isModelOverridesRecord([]));
   assert.ok(!isModelOverridesRecord({ 'mirabox-293': 'rotate' }));
   assert.ok(!isModelOverridesRecord({ 'mirabox-293': { bogus: 1 } }));
+});
+
+// pinsImageFit
+
+console.log('\npinsImageFit');
+
+test('true only when tuning sets resizeMode or padFill', () => {
+  assert.ok(pinsImageFit({ image: { resizeMode: 'pad' } }));
+  assert.ok(pinsImageFit({ image: { padFill: 'edge' } }));
+  assert.ok(!pinsImageFit({ image: { rotate: 90 } }));
+  assert.ok(!pinsImageFit({}));
+  assert.ok(!pinsImageFit());
 });
 
 reportSummary();
