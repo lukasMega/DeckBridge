@@ -8,6 +8,7 @@ import type {
   DeviceModel,
   DeviceIdentity,
   ExtraKeyCfg,
+  UpdateInfo,
 } from './ui-types.js';
 import { applyImage } from './key-preview.js';
 import { connectWS } from './ui-ws.js';
@@ -28,6 +29,7 @@ interface InitialState extends Status {
   deviceModels?: DeviceModel[];
   deviceIdentity?: DeviceIdentity;
   extraKeys?: Record<string, ExtraKeyCfg>;
+  updateInfo?: UpdateInfo;
 }
 
 // Simple-only build: never reach the advanced view. Clear any persisted 'advanced'
@@ -55,6 +57,7 @@ void fetch('/api/state')
       deviceModels: st.deviceModels ?? [],
       deviceIdentity: st.deviceIdentity,
       extraKeys: st.extraKeys ?? {},
+      updateInfo: st.updateInfo,
       serverLogs: st.logs ?? [],
       commLogs: st.commLogs ?? [],
       keyEvents: st.keyEvents ?? [],

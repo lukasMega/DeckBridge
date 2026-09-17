@@ -7,7 +7,7 @@
  */
 import { useState } from 'preact/hooks';
 import { useStore } from './store.js';
-import { deriveState, deriveDocks, isMultiDockView } from './ui-helpers.js';
+import { deriveState, deriveDocks, isMultiDockView, updateBadgeVersion } from './ui-helpers.js';
 import { switchToAdvanced } from './simple/handlers.js';
 import { AboutPopover, SettingsPage, HelpScreen } from './simple/overlays.js';
 import { BackButton } from './simple/controls.js';
@@ -23,9 +23,11 @@ import {
 
 export function SimpleApp(): preact.JSX.Element {
   const status = useStore((s) => s.status);
+  const updateInfo = useStore((s) => s.updateInfo);
   const [activeHelp, setActiveHelp] = useState<string | null>(null);
   const [aboutOpen, setAboutOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const updateBadge = updateBadgeVersion(updateInfo);
 
   const deviceState = deriveState(status);
   const docks = deriveDocks(status);
@@ -116,6 +118,9 @@ export function SimpleApp(): preact.JSX.Element {
                 // eslint-disable-next-line @eslint-react/dom-no-dangerously-set-innerhtml -- static trusted SVG icon markup
                 dangerouslySetInnerHTML={{ __html: ICON.gear }}
               />
+              {updateBadge && (
+                <span class="update-dot" title={`DeckBridge v${updateBadge} available`} />
+              )}
             </div>
             {headerBack !== null && <BackButton onClick={headerBack} />}
           </div>

@@ -53,6 +53,14 @@ export interface DiagnosticsSources {
   requirements?: RequirementResult[];
   /** Server path only — absent for the CLI path. */
   state?: StateResponse;
+  /** GitHub-release update check (update-check.ts). */
+  updates?: {
+    enabled: boolean;
+    lastCheckedAt?: number;
+    latest?: string;
+    updateAvailable: boolean;
+    error?: string;
+  };
   comms?: CommEntry[];
   keyEvents?: KeyEventEntry[];
   /** Tail of the log FILE. Empty falls back to `ringLogs`. */
@@ -223,6 +231,18 @@ function elgatoAppText(running: boolean | undefined): string {
   return running ? 'running' : 'not running';
 }
 
+function updatesBlock(updates: DiagnosticsSources['updates']): string {
+  if (!updates) return '';
+  return kvBlock({
+    enabled: updates.enabled,
+    'last checked':
+      updates.lastCheckedAt === undefined ? 'never' : new Date(updates.lastCheckedAt).toISOString(),
+    latest: updates.latest ?? '(unknown)',
+    'update available': updates.updateAvailable,
+    ...(updates.error ? { error: updates.error } : {}),
+  });
+}
+
 function headerBlock(h: DiagnosticsSources['header']): string {
   return kvBlock({
     version: h.version,
@@ -261,6 +281,7 @@ export function buildDiagnostics(src: DiagnosticsSources, opt: DiagnosticsOption
     section('cli flags', kvBlock(src.flags)),
     section('environment (DECKBRIDGE_*)', kvBlock(src.env)),
     section('paths', kvBlock(src.paths)),
+    section('update check', updatesBlock(src.updates)),
     section('model overrides', overridesBlock(src.modelOverrides)),
     section('effective model specs', jsonBlock(src.effectiveModels)),
     section(hidSectionTitle(src.hidEnumerateMs), hidTable(src.hidDevices)),

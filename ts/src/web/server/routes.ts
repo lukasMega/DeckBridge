@@ -69,6 +69,11 @@ export const routes: Route[] = [
   postJson('/api/device-overrides', setDeviceOverrides),
   postJson('/api/device-overrides/reset', resetDeviceOverrides),
 
+  get('/api/update', ({ ui }) => json(ui.updates.info())),
+  post('/api/update/check', async ({ ui }) => json(await ui.updates.check(true))),
+  postJson('/api/update/dismiss', dismissUpdate),
+  postJson('/api/update-check-enabled', setUpdateCheckEnabled),
+
   // text/plain, not JSON: the report is meant to be pasted verbatim into an issue.
   get('/api/diagnostics', async ({ ui, url }) => {
     const redact = url.searchParams.get('redactCommands') === '1';
@@ -109,6 +114,21 @@ async function saveDiagnostics({ req, ui }: RouteContext): Promise<Response> {
   }
   const path = await ui.saveDiagnosticsReport({ redactCommands });
   return path ? json({ ok: true, path }) : json({ error: 'could not write report' }, 500);
+}
+
+/** WebUI "Check for updates" close-button: remembers the version so the badge
+ *  doesn't reappear until a newer one ships. */
+function dismissUpdate({ version }: { version: unknown }, { ui }: RouteContext): Response {
+  if (typeof version !== 'string' || !version)
+    return badRequest('version must be a non-empty string');
+  return json(ui.updates.dismiss(version));
+}
+
+/** WebUI "Check for updates" toggle (opt-out; settings.json `updateCheck`). */
+function setUpdateCheckEnabled({ enabled }: { enabled: unknown }, { ui }: RouteContext): Response {
+  if (typeof enabled !== 'boolean') return badRequest('enabled must be a boolean');
+  ui.updates.setEnabled(enabled);
+  return json({ ok: true, enabled });
 }
 
 /** WebUI "Debug logging" toggle. Levels are validated against cli.ts's LOG_LEVELS

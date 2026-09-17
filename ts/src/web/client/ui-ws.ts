@@ -1,4 +1,12 @@
-import type { Status, Stats, MockConfig, KeyEvent, ServerLog, CommLog } from './ui-types.js';
+import type {
+  Status,
+  Stats,
+  MockConfig,
+  KeyEvent,
+  ServerLog,
+  CommLog,
+  UpdateInfo,
+} from './ui-types.js';
 import { error } from './log.js';
 import { applyImage, clearImage, flashKey, resetPreviews } from './key-preview.js';
 import * as store from './store.js';
@@ -68,6 +76,9 @@ const handlers: Record<string, (d: unknown) => void> = {
   },
   mockConfig: (d) => {
     store.setMockConfig(d as MockConfig);
+  },
+  update: (d) => {
+    store.patch({ updateInfo: d as UpdateInfo });
   },
 };
 

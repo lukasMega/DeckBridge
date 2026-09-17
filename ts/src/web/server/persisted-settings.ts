@@ -12,6 +12,7 @@ import type { DeviceModelOverride } from '../../devices/driver.js';
 import { log } from '../../logger.js';
 import { isExtraKeyConfig } from '../../types.js';
 import type { DockStatus, ExtraKeyConfig } from '../../types.js';
+import type { UpdateState } from '../../update-check.js';
 
 const IMAGE_MODE_SETTINGS = [null, 'resize', 'pad-black', 'pad-average', 'pad-edge'];
 
@@ -103,6 +104,9 @@ export class PersistedSettings {
   /** Opt-in second dock; false = single dock and no extras scan (types.ts
    *  MAX_MULTI_DECK_SESSIONS, driver-manager-extras.ts). */
   multiDeck = false;
+  /** GitHub-release update check opt-out (see update-check.ts). undefined = enabled. */
+  updateCheck: boolean | undefined = undefined;
+  updateState: UpdateState | undefined = undefined;
   private devices: DeviceIdentitySettings[] = [];
   private modelOverrides: Record<string, DeviceModelOverride> = {};
 
@@ -119,6 +123,8 @@ export class PersistedSettings {
     if (typeof saved.selectedDock === 'number') this.selectedDock = saved.selectedDock;
     if (isLogLevel(saved.logLevel)) this.logLevel = saved.logLevel;
     if (typeof saved.multiDeck === 'boolean') this.multiDeck = saved.multiDeck;
+    if (typeof saved.updateCheck === 'boolean') this.updateCheck = saved.updateCheck;
+    if (saved.updateState) this.updateState = saved.updateState;
     this.modelOverrides = sanitizeModelOverrides(saved.modelOverrides);
     if (Array.isArray(saved.devices)) {
       saved.devices.forEach(stripInvalidExtraKeys);
@@ -206,6 +212,17 @@ export class PersistedSettings {
     this.persist();
   }
 
+  /** Persist the update-check opt-out (WebUI "Check for updates" toggle). */
+  setUpdateCheck(enabled: boolean): void {
+    this.updateCheck = enabled;
+    this.persist();
+  }
+
+  setUpdateState(state: UpdateState): void {
+    this.updateState = state;
+    this.persist();
+  }
+
   // Model overrides (device tuning) — see devices/model-overrides.ts
 
   /** Every model's override, by model id. Read by DriverManager at probe time. */
@@ -240,6 +257,8 @@ export class PersistedSettings {
       selectedDock: this.selectedDock,
       ...(this.logLevel !== undefined ? { logLevel: this.logLevel } : {}),
       ...(this.multiDeck ? { multiDeck: true } : {}),
+      ...(this.updateCheck !== undefined ? { updateCheck: this.updateCheck } : {}),
+      ...(this.updateState ? { updateState: this.updateState } : {}),
       ...(this.devices.length > 0 ? { devices: this.devices } : {}),
       ...(Object.keys(this.modelOverrides).length > 0
         ? { modelOverrides: this.modelOverrides }

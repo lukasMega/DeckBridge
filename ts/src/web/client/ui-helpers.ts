@@ -1,4 +1,4 @@
-import type { ClientApp, DockUi, Status } from './ui-types.js';
+import type { ClientApp, DockUi, Status, UpdateInfo } from './ui-types.js';
 import type { DeviceState } from './ui-state.js';
 
 /** " to the Elgato app" / " to the Bitfocus Companion app" / "" — appended
@@ -26,6 +26,13 @@ export function deriveState(s: Status): DeviceState {
  *  a lone dock that isn't the primary (index 0): the primary disconnected
  *  while an extra dock is still live, which deriveState() can't see since it
  *  only reads the primary's own status fields. */
+/** The version to show the topbar update dot for, or null to hide it —
+ *  available, and not the version the user already dismissed. */
+export function updateBadgeVersion(info: UpdateInfo | undefined): string | null {
+  if (info?.updateAvailable !== true || info.latest === info.dismissedVersion) return null;
+  return info.latest ?? null;
+}
+
 export function isMultiDockView(docks: DockUi[]): boolean {
   return docks.length > 1 || (docks.length === 1 && docks[0]!.index !== 0);
 }

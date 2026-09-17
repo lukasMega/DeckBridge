@@ -46,9 +46,17 @@ consent banner is needed, since nothing personal is stored locally or server-sid
 
 ## The DeckBridge app
 
-The binary itself sends nothing anywhere: no telemetry, no update checks, no beacons.
-Everything it records stays on your machine, under the cache directory described in
-[Troubleshooting](./troubleshooting.md).
+The binary sends no telemetry and no beacons. It makes exactly one outbound network
+call on its own: a **release-update check**, on by default. Every 24h (and once ~30s
+after startup) it runs one unauthenticated `GET` to
+`api.github.com/repos/lukasMega/DeckBridge/releases/latest`, carrying only a
+`User-Agent: DeckBridge/<version>` header — no machine id, no usage data, nothing
+else. The result (a version string + release URL) is cached in `settings.json` so a
+restart doesn't repeat the request. Turn it off with the **Check for updates** toggle
+in Settings, or by setting `"updateCheck": false` in `settings.json`.
+
+Everything else it records stays on your machine, under the cache directory described
+in [Troubleshooting](./troubleshooting.md).
 
 One thing to know before sharing: the **diagnostics report** you can generate for a bug
 report includes your `settings.json` verbatim — which means your extra-key shell

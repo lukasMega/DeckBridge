@@ -13,6 +13,7 @@ export type {
   RealDeviceIdentity,
   KeyEventEntry as KeyEvent,
   DeviceModelInfo as DeviceModel,
+  UpdateInfo,
 } from '../contract.js';
 
 // Duplicated from server-side DockStatus (../../types.ts) — web-client cannot
