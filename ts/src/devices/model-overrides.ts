@@ -272,6 +272,14 @@ export function applyModelOverrides(model: DeviceModel, ov?: DeviceModelOverride
   };
 }
 
+/** True when device tuning pins the image fit (`image.resizeMode`/`padFill`).
+ *  The legacy per-device `imageModeOverride` (types.ts, applied last in
+ *  image-render.ts) would otherwise silently overwrite it, making the tuning
+ *  form's "Image fit" control a no-op. Tuning wins; see docs/troubleshooting.md. */
+export function pinsImageFit(ov?: DeviceModelOverride): boolean {
+  return ov?.image?.resizeMode !== undefined || ov?.image?.padFill !== undefined;
+}
+
 /** One-line summary for logs and the diagnostics header, so a bug report from a
  *  tuned device never reads as default behaviour. */
 export function overrideSummary(ov?: DeviceModelOverride): string {

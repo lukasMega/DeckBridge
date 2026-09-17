@@ -6,7 +6,7 @@ import type { ImageModeOverride, KeyEvent } from './types.js';
 import { DEVICE_MODELS } from './devices/registry.js';
 import type { DeviceModel, DeviceModelOverride } from './devices/driver.js';
 import { supportsImageBatching } from './devices/driver.js';
-import { applyModelOverrides, overrideSummary } from './devices/model-overrides.js';
+import { applyModelOverrides, overrideSummary, pinsImageFit } from './devices/model-overrides.js';
 import { imageCache } from './image-cache.js';
 import { ElgatoHidDriver } from './devices/hid-driver-base.js';
 import { MiraboxDriver } from './mirabox.js';
@@ -35,6 +35,9 @@ let openRegistryModel: DeviceModel | null = null;
 // safe: the worker processes messages on its serial promise queue (`queue`
 // below), so 'setImageOverride' is ordered w.r.t. 'image' messages.
 let imageOverride: ImageModeOverride = null;
+// Device tuning pins image fit → the legacy imageOverride is ignored for this
+// device, otherwise it would overwrite resizeMode/padFill on every render.
+let imageFitPinned = false;
 
 /** Driver factory keyed on `model.driverKind` — the single touch-point for
  *  registering a new driver implementation (Path C / 'custom' has none yet). */
@@ -63,6 +66,7 @@ async function handleOpen(
   // Same pure merge the main thread ran, applied on top of OUR registry lookup —
   // driverKind/VID/PID therefore always come from the registry, never the message.
   const model = applyModelOverrides(registryModel, overrides);
+  imageFitPinned = pinsImageFit(overrides);
   // A changed image spec must not be served from entries encoded under the old
   // one. The cache key carries a spec revision too (image-render.ts); clearing
   // here additionally frees the stale entries instead of letting them age out.
@@ -103,6 +107,7 @@ async function handleOpen(
 function applyLiveOverrides(overrides?: DeviceModelOverride): void {
   if (!openRegistryModel) return;
   currentModel = applyModelOverrides(openRegistryModel, overrides);
+  imageFitPinned = pinsImageFit(overrides);
   imageCache.clear();
   info('worker', `${currentModel.id} tuning applied live: ${overrideSummary(overrides)}`);
 }
@@ -116,7 +121,8 @@ async function handleImage(
   deferNotification: boolean,
 ): Promise<void> {
   if (!driver || !currentModel) return;
-  await renderImage(driver, currentModel, keyIndex, bytes, format, imageOverride);
+  const mode = imageFitPinned ? null : imageOverride;
+  await renderImage(driver, currentModel, keyIndex, bytes, format, mode);
   if (!deferNotification) post({ type: 'imageSent', keyIndex });
 }
 
