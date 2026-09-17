@@ -42,7 +42,7 @@ Both are generated from the device registry, so they never drift from the code.
 | Mirabox K1 Pro | 6 buttons (3×2) | 64×64 | mirabox-cora |
 | Fifine AmpliGame D6 (rev. 2) | 15 buttons (5×3) | 112×112 | mirabox-cora |
 | Ajazz AKP153E (rev. 2) | 15 buttons (5×3) | 95×95 | mirabox-cora |
-...
+
 <details>
 <summary>untested devices</summary>
 
