@@ -27,6 +27,7 @@ export const EXPECTED_BASE_URL = '/DeckBridge/';
 export const DOC_ROUTES: readonly string[] = [
   // Standalone page (docs/ARCHITECTURE.md), not in either sidebar.
   'ARCHITECTURE',
+  'mirabox-293s-slow-image-render',
   'introduction',
   'devices',
   'getting-started',
