@@ -31,22 +31,24 @@ Full side-by-side comparison (USB IDs, key grid, panel size, test status):
 DeckBridge uses to drive a deck: **[Device specs](https://lukasmega.github.io/DeckBridge/device-specs)**.
 Both are generated from the device registry, so they never drift from the code.
 
-- Mirabox 293V3 (also matches the HSV293SV3 / "293S V3" refresh — untested)
-- Mirabox 293S
-- Mirabox K1 Pro
-- Fifine AmpliGame D6 (rev. 2)
-- Ajazz AKP153E (rev. 2) — untested
-- Ajazz AKP153R (rev. 2) — untested
-- Fifine AmpliGame D6 — untested
-- Ajazz AKP153 — untested
-- Ajazz AKP153E (rev. 1) — untested
-- Ajazz AKP153R (rev. 1) — untested
-- Mars Gaming MSD-ONE — untested
-- Mad Dog GK150K — untested
-- Risemode Vision 01 — untested
-- TMICE Stream Controller — untested
-- Stream Deck MK.2
-- Stream Deck Mini
+| Device | Grid | Image size | Protocol |
+|---|---|---|---|
+| Stream Deck MK.2 | 15 buttons (5×3) | 72×72 | elgato-gen2 |
+| Stream Deck Mini | 6 buttons (3×2) | 80×80 | elgato-gen1 |
+| Mirabox 293V3 (also matches the HSV293SV3 / "293S V3" refresh — untested) | 15 buttons (5×3) | 112×112 | mirabox-cora |
+| Mirabox 293S | 15 buttons (5×3) | 85×85 | mirabox-cora-v1 |
+| Mirabox K1 Pro | 6 buttons (3×2) | 64×64 | mirabox-cora |
+| Fifine AmpliGame D6 (rev. 2) | 15 buttons (5×3) | 112×112 | mirabox-cora |
+| Fifine AmpliGame D6 — untested | 15 buttons (5×3) | 112×112 | mirabox-cora |
+| Ajazz AKP153E (rev. 2) | 15 buttons (5×3) | 95×95 | mirabox-cora |
+| Ajazz AKP153R (rev. 2) — untested | 15 buttons (5×3) | 112×112 | mirabox-cora |
+| Ajazz AKP153 — untested | 15 buttons (5×3) | 85×85 | mirabox-cora-v1 |
+| Ajazz AKP153E (rev. 1) — untested | 15 buttons (5×3) | 85×85 | mirabox-cora-v1 |
+| Ajazz AKP153R (rev. 1) — untested | 15 buttons (5×3) | 85×85 | mirabox-cora-v1 |
+| Mars Gaming MSD-ONE — untested | 15 buttons (5×3) | 85×85 | mirabox-cora-v1 |
+| Mad Dog GK150K — untested | 15 buttons (5×3) | 85×85 | mirabox-cora-v1 |
+| Risemode Vision 01 — untested | 15 buttons (5×3) | 85×85 | mirabox-cora-v1 |
+| TMICE Stream Controller — untested | 15 buttons (5×3) | 85×85 | mirabox-cora-v1 |
 
 <details>
 <summary>details about supported devices</summary>
