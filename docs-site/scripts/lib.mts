@@ -49,18 +49,20 @@ export const EXPECTED_ROUTES: readonly string[] = ['', 'search', ...DOC_ROUTES];
 
 export const FEED_FILES = ['blog/rss.xml', 'blog/atom.xml', 'blog/feed.json'] as const;
 
-/** Blog post slugs, read from docs-site/blog/*.md frontmatter. */
+/** Blog post slugs, read from docs-site/blog/*.md frontmatter. Drafts are excluded:
+ * the production build omits them, so they emit no route. */
 export function blogPostSlugs(): string[] {
   const blogDir = join(SITE_DIR, 'blog');
 
   return readdirSync(blogDir)
-    .filter((file) => file.endsWith('.md'))
-    .map((file) => {
+    .filter((file) => file.endsWith('.md') || file.endsWith('.mdx'))
+    .flatMap((file) => {
       const source = readFileSync(join(blogDir, file), 'utf8');
       const frontmatter = source.match(/^---\n([\s\S]*?)\n---/)?.[1];
+      if (/^draft:\s*true\s*$/m.test(frontmatter ?? '')) return [];
       const slug = frontmatter?.match(/^slug:\s*([^\s#]+)\s*$/m)?.[1];
       if (!slug) throw new Error(`blog post '${file}' has no frontmatter slug`);
-      return slug;
+      return [slug];
     })
     .sort();
 }
