@@ -1,6 +1,6 @@
 import { MiraboxDriver } from './mirabox.js';
 import { closeSidecar, transformImageForDevice } from './translator.js';
-import type { KeyEvent } from './types.js';
+import { exitOnSigint, logKeyEvents } from './probe-utils.js';
 import { getReportDescriptor, hidSerialForPath, listHidPaths } from './ffi/hidapi.js';
 import { parseOutputReportSize } from './devices/hid-report-descriptor.js';
 import { FIFINE_D6_MODEL, FIFINE_D6_REV2_MODEL } from './devices/fifine/fifine-d6.js';
@@ -240,9 +240,7 @@ if (want('s4')) {
   driver.on('comm', (e: { direction: string; human: string; hex: string }) => {
     if (e.direction === 'rx') console.log(`[s4] rx  ${e.human.padEnd(24)} ${e.hex}`);
   });
-  driver.on('key', (e: KeyEvent) => {
-    console.log(`[s4] key code=0x${e.keyIndex.toString(16).padStart(2, '0')} state=${e.state}`);
-  });
+  logKeyEvents(driver, '[s4] key ');
 }
 
 // Without the key trace there is nothing left to wait for, so close instead of parking
@@ -256,10 +254,4 @@ if (!want('s4')) {
 
 console.log('[done] Ctrl+C to close the device cleanly.');
 
-tjs.addSignalListener('SIGINT', () => {
-  void driver.close().then(() => {
-    closeSidecar();
-    tjs.exit(0);
-    return undefined;
-  });
-});
+exitOnSigint(driver);

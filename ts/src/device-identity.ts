@@ -3,7 +3,7 @@
 // identity across restarts/replugs instead of whatever session slot it lands in.
 // Pure — WebUIServer owns settings.json persistence and calls getOrCreateDeviceIdentity()
 // as a reducer over its in-memory devices array.
-import { DEFAULT_DOCK_SERIAL_NUMBER, DEFAULT_CHILD_SERIAL_NUMBER } from './types.js';
+import { DEFAULT_DOCK_SERIAL_NUMBER, DEFAULT_CHILD_SERIAL_NUMBER, fnv1a } from './types.js';
 import type { DeviceIdentitySettings } from './settings-store.js';
 import type { DeviceModel } from './devices/driver.js';
 
@@ -32,17 +32,6 @@ export function deviceKeyFor(hidPath: string, serial?: string | null, modelId?: 
  *  identifies the device. */
 export function sharedSerialModelId(model: Pick<DeviceModel, 'id' | 'wire'>): string | undefined {
   return model.wire.sharedSerial ? model.id : undefined;
-}
-
-// FNV-1a, 32-bit. Deterministic, no crypto needed — this generates a stable
-// identifier, not a security boundary.
-function fnv1a(str: string): number {
-  let h = 0x811c9dc5;
-  for (let i = 0; i < str.length; i++) {
-    h ^= str.charCodeAt(i);
-    h = Math.imul(h, 0x01000193);
-  }
-  return h >>> 0;
 }
 
 /** `n` deterministic bytes derived from `deviceKey`. Salts the hash input per

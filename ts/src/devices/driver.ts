@@ -154,45 +154,45 @@ export interface DeviceModel {
   driverKind: DriverKind;
 }
 
+// The tunable field names, listed once: they type DeviceModelOverride below and drive
+// the validator/seed tables in devices/model-overrides.ts, which can't drift from them.
+export const IMAGE_OVERRIDE_KEYS = [
+  'rotate',
+  'flipH',
+  'flipV',
+  'width',
+  'height',
+  'quality',
+  'maxBytes',
+  'blur',
+  'sharpen',
+  'crop',
+  'resizeFilter',
+  'resizeMode',
+  'padFill',
+  'transform',
+] as const;
+
+export const WIRE_OVERRIDE_KEYS = [
+  'packetSize',
+  'inSize',
+  'heartbeatMs',
+  'reportId',
+  'chunkDelayMs',
+  'chunkPadByte',
+  'synthesizeKeyUp',
+  'sendStpAfterImage',
+] as const;
+
 /** User-tunable subset of a DeviceModel, persisted per model id under settings.json's
  *  `modelOverrides` (devices/model-overrides.ts). Deep-partial per section, arrays
  *  replace wholesale. Omissions are deliberate: VID/PID/protocol/driverKind/cora.productId
  *  would impersonate a different device, keyCount/rows/columns force a CORA re-pair,
  *  image.format is a protocol fact, and packetSize/inSize are Mirabox-only. */
 export interface DeviceModelOverride {
-  image?: Partial<
-    Pick<
-      DeviceImageSpec,
-      | 'rotate'
-      | 'flipH'
-      | 'flipV'
-      | 'width'
-      | 'height'
-      | 'quality'
-      | 'maxBytes'
-      | 'blur'
-      | 'sharpen'
-      | 'crop'
-      | 'resizeFilter'
-      | 'resizeMode'
-      | 'padFill'
-      | 'transform'
-    >
-  >;
+  image?: Partial<Pick<DeviceImageSpec, (typeof IMAGE_OVERRIDE_KEYS)[number]>>;
   keyMap?: Partial<DeviceKeyMap>;
-  wire?: Partial<
-    Pick<
-      DeviceWireSpec,
-      | 'packetSize'
-      | 'inSize'
-      | 'heartbeatMs'
-      | 'reportId'
-      | 'chunkDelayMs'
-      | 'chunkPadByte'
-      | 'synthesizeKeyUp'
-      | 'sendStpAfterImage'
-    >
-  >;
+  wire?: Partial<Pick<DeviceWireSpec, (typeof WIRE_OVERRIDE_KEYS)[number]>>;
   splash?: DeviceSplashSpec;
 }
 

@@ -88,7 +88,7 @@ sequenceDiagram
 
     PIPE->>HOST: renderCoraImage(keyIndex, data, format)
     HOST-->>REND: postMessage 'image' {keyIndex, bytes, format}
-    Note over REND: key = makeCacheKey(model.id, FNV1a32(full data), override)<br/>cache hit → reuse nativeBytes, skip transform
+    Note over REND: key = model.id : mode : specRevision : FNV1a32(full data)<br/>cache hit → reuse nativeBytes, skip transform
 
     alt bmp in & device bmp [Mini]  OR  transform passthrough [MK.2]
         Note over REND: nativeBytes = data (forwarded unchanged)
@@ -152,7 +152,14 @@ Both views render through the shared `KeyPreview` class (`key-preview.ts`), whic
 Since P1 there is **no main-thread image queue** — the main thread only does the two cheap steps from the Overview (WebUI broadcast, `renderCoraImage()` → one `postMessage`) and returns to the CORA ACK loop. All heavy work runs on the **USB worker**:
 
 - **One FIFO message queue** (`hid-worker.ts`) — the worker processes `'image'` messages in arrival order, each fully completing (transform → cache → `hid_write`) before the next. This preserves per-key (and overall) ordering for free, **without any main-thread write queue**; the old per-key `imageWriteQueue` and the `SIDECAR_CONCURRENCY` round-trip queue were deleted.
-- **LRU cache** (`image-render.ts`, holding the `image-cache.ts` singleton, max `IMAGE_CACHE_SIZE` = 100) — keyed by `makeCacheKey(model.id, FNV-1a-32(full data), override)`. The model id and the image-fit override are part of the key, so the same CORA frame yields separate entries per device and per fit mode. (The hash covers the **whole** buffer — an earlier first/last-4 KB sampling collided a small centred icon with a blank frame for gen1 BMP.) On a hit the Rust transform is skipped entirely (reconnect / static deck → 0 transform calls).
+- **LRU cache** (`image-render.ts`, holding the `image-cache.ts` singleton, max `IMAGE_CACHE_SIZE` = 100) — keyed by `makeCacheKey(model.id, hashJpeg(data), override ?? 'def', revisionFor(model))`, which formats as `modelId:mode:rev:jpegHash`. Three of the four slots exist to stop a stale hit:
+
+  - **model id** — the same CORA frame yields separate entries per device.
+  - **mode** — the WebUI image-fit override (`'def'` when the caller tracks none), so resize ⇄ pad-\* can't serve each other's bytes.
+  - **rev** — `specRevision(model.image)`, a short FNV-1a hash of the *effective* `DeviceImageSpec` (memoised per model in `image-render.ts`'s `_specRevisions` WeakMap). Without it a device-tuning change (rotation, quality, size — see `devices/model-overrides.ts`) would keep serving entries encoded under the **old** spec, and the tweak would appear to do nothing until a restart.
+  - **jpegHash** — FNV-1a-32 over the whole buffer, with the buffer length mixed in first so truncated streams hash differently. (The hash covers the **whole** buffer — an earlier first/last-4 KB sampling collided a small centred icon with a blank frame for gen1 BMP.)
+
+  On a hit the Rust transform is skipped entirely (reconnect / static deck → 0 transform calls).
 
 ## State stored in WebUIServer
 

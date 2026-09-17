@@ -1,19 +1,6 @@
 import assert from 'tjs:assert';
 import { formatCommHex } from '../src/comm-format.js';
-
-let passed = 0;
-let failed = 0;
-
-async function test(name: string, fn: () => void | Promise<void>): Promise<void> {
-  try {
-    await fn();
-    console.log(`  ✓ ${name}`);
-    passed++;
-  } catch (e: unknown) {
-    console.error(`  ✗ ${name}: ${(e as Error).message}`);
-    failed++;
-  }
-}
+import { testAsync as test, summaryExit } from './helpers/harness.js';
 
 // The implementation formatCommHex replaced, kept so the faster lookup-table version
 // is pinned to byte-identical output rather than a few hardcoded strings.
@@ -52,5 +39,4 @@ await test('matches the reference implementation across every byte value and len
   }
 });
 
-console.log(`\n${passed} passed, ${failed} failed`);
-tjs.exit(failed > 0 ? 1 : 0);
+summaryExit();

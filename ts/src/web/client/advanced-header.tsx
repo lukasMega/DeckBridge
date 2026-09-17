@@ -9,6 +9,7 @@ import { useState, useEffect, useRef } from 'preact/hooks';
 import { useStore } from './store.js';
 import { StatusChip, type StatusChipVariant } from './components/StatusChip.js';
 import { ThemeButton } from './components/ThemeButton.js';
+import { fire } from './ui-api.js';
 import type { DeviceModel } from './ui-types.js';
 
 // Uptime formatter (mirrors ui-status.ts)
@@ -29,23 +30,15 @@ function switchToSimple(): void {
 }
 
 function toggleResize(): void {
-  void fetch('/api/resize-toggle', { method: 'POST' });
+  fire('/api/resize-toggle');
 }
 
 function handleImageModeChange(e: Event): void {
-  void fetch('/api/image-mode', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ mode: (e.target as HTMLSelectElement).value }),
-  });
+  fire('/api/image-mode', { mode: (e.target as HTMLSelectElement).value });
 }
 
 function handleModelChange(e: Event): void {
-  void fetch('/api/device-model', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ modelId: (e.target as HTMLSelectElement).value }),
-  });
+  fire('/api/device-model', { modelId: (e.target as HTMLSelectElement).value });
 }
 
 // AdvHeader
@@ -86,12 +79,7 @@ export function AdvHeader(): preact.JSX.Element {
   }, [animEnabled]);
 
   function toggleMode(): void {
-    const nm = status.driverMode === 'mock' ? 'real' : 'mock';
-    void fetch('/api/driver-mode', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ mode: nm }),
-    });
+    fire('/api/driver-mode', { mode: status.driverMode === 'mock' ? 'real' : 'mock' });
   }
 
   function toggleAnim(): void {

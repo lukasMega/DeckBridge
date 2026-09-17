@@ -164,9 +164,11 @@ export default defineConfig([
         { type: 'cora', mode: 'full', pattern: ['src/cora-*.ts', 'src/elgato*.ts', 'src/feature-response.ts'] },
         { type: 'infra', mode: 'full', pattern: ['src/native-libs.ts', 'src/mdns-advertiser.ts', 'src/tray.ts', 'src/settings-store.ts', 'src/device-identity.ts', 'src/os-utils.ts', 'src/log-file.ts'] },
         { type: 'app', mode: 'full', pattern: ['src/app.ts', 'src/driver-manager*.ts', 'src/cora-startup.ts', 'src/device-session.ts', 'src/extra-keys.ts'] },
-        { type: 'dev-entry', mode: 'full', pattern: ['src/mirabox-smoke.ts', 'src/k1pro-probe.ts', 'src/d6-capture.ts'] },
+        { type: 'dev-entry', mode: 'full', pattern: ['src/mirabox-smoke.ts', 'src/k1pro-probe.ts', 'src/d6-capture.ts', 'src/probe-utils.ts'] },
         { type: 'cli', mode: 'full', pattern: ['src/cli-devices.ts', 'src/cli-diagnose.ts'] },
-        { type: 'shared', mode: 'full', pattern: ['src/types.ts', 'src/logger.ts', 'src/capabilities.ts', 'src/comm-format.ts', 'src/cli.ts']
+        // worker-lifecycle.ts is a zero-import leaf (blob-URL spawn + deferred terminate)
+        // shared by the hid worker hosts AND plugin-host — lifecycle only, no protocol.
+        { type: 'shared', mode: 'full', pattern: ['src/types.ts', 'src/logger.ts', 'src/capabilities.ts', 'src/comm-format.ts', 'src/cli.ts', 'src/worker-lifecycle.ts']
         },
       ],
     },
@@ -193,6 +195,7 @@ export default defineConfig([
             { from: { element: { type: 'app' } }, allow: { to: { element: { type: 'app' } } } },
             { from: { element: { type: 'ffi' } }, allow: { to: { element: { type: 'ffi' } } } },
             { from: { element: { type: 'cli' } }, allow: { to: { element: { type: 'cli' } } } },
+            { from: { element: { type: 'dev-entry' } }, allow: { to: { element: { type: 'dev-entry' } } } },
             // mdns-advertiser.ts (infra) needs the native Windows mDNS advertise
             // (ffi/mdns.ts) — a fire-and-forget dlopen call (register) / a blocking
             // dlopen call only on stop(), never device I/O. Other infra files gain

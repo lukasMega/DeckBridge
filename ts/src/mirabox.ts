@@ -98,6 +98,17 @@ export class MiraboxDriver extends HidDeviceBase {
     this._writeScratch = Buffer.alloc(this.pktSize + 1);
   }
 
+  /** Bring the panel to a known state: DIS, brightness, clear all. Sent on open, and
+   *  again after a sleep/wake gap (the device may have dropped into idle mode). */
+  private _writeInitSequence(): void {
+    this.write(this._buildCrt(CMD_DIS));
+    this.write(this._buildLig(DEFAULT_BRIGHTNESS));
+    this.write(this._buildCle(CLEAR_ALL_KEYS));
+    if (this.model.wire.sendStpAfterImage) {
+      this.write(this._buildCrt(CMD_STP));
+    }
+  }
+
   async open(hidPath?: string): Promise<void> {
     this.pktSize = this.model.wire.packetSize;
     this.reportId = this.model.wire.reportId ?? HID_REPORT_ID_BYTE;
@@ -182,12 +193,7 @@ export class MiraboxDriver extends HidDeviceBase {
 
     const wire = this.model.wire;
 
-    this.write(this._buildCrt(CMD_DIS));
-    this.write(this._buildLig(DEFAULT_BRIGHTNESS));
-    this.write(this._buildCle(CLEAR_ALL_KEYS));
-    if (wire.sendStpAfterImage) {
-      this.write(this._buildCrt(CMD_STP));
-    }
+    this._writeInitSequence();
 
     const heartbeatMs = wire.heartbeatMs!;
     this.lastHeartbeatAt = Date.now();
@@ -198,12 +204,7 @@ export class MiraboxDriver extends HidDeviceBase {
       if (gap > heartbeatMs * 2) {
         // Heartbeat was delayed (system sleep) — device may be in idle mode; re-initialize.
         info('hid', `sleep/wake detected (gap=${gap}ms) — re-initializing device`);
-        this.write(this._buildCrt(CMD_DIS));
-        this.write(this._buildLig(DEFAULT_BRIGHTNESS));
-        this.write(this._buildCle(CLEAR_ALL_KEYS));
-        if (wire.sendStpAfterImage) {
-          this.write(this._buildCrt(CMD_STP));
-        }
+        this._writeInitSequence();
         // The CLE ALL above wiped everything on the panel — let the main
         // thread repaint what it owns (extra-key icons; see extra-keys.ts).
         this.emit('reinit');
@@ -344,20 +345,18 @@ export class MiraboxDriver extends HidDeviceBase {
   protected onBeforeClose(): void {
     if (!this.device || !this.hidLib) return;
     const hid = this.hidLib.symbols;
+    // Raw hid_write rather than write(): teardown logs each return code and must not
+    // take write()'s error path or comm tracing on a handle that is about to close.
+    const send = (label: string, pkt: Buffer): void => {
+      const arr = new Uint8Array(pkt.length + 1);
+      arr[0] = this.reportId;
+      arr.set(pkt, 1);
+      const n = hid.hid_write(this.device, arr, arr.length);
+      debug('hid', `disconnect ${label} hid_write → ${n}`);
+    };
     try {
-      const dcPkt = this._buildCleDc();
-      const dcArr = new Uint8Array(dcPkt.length + 1);
-      dcArr[0] = this.reportId;
-      dcArr.set(dcPkt, 1);
-      const dcN = hid.hid_write(this.device, dcArr, dcArr.length);
-      debug('hid', `disconnect CLE-DC hid_write → ${dcN}`);
-
-      const hanPkt = this._buildCrt(CMD_HAN);
-      const hanArr = new Uint8Array(hanPkt.length + 1);
-      hanArr[0] = this.reportId;
-      hanArr.set(hanPkt, 1);
-      const hanN = hid.hid_write(this.device, hanArr, hanArr.length);
-      debug('hid', `disconnect HAN hid_write → ${hanN}`);
+      send('CLE-DC', this._buildCleDc());
+      send('HAN', this._buildCrt(CMD_HAN));
     } catch (e: unknown) {
       warn('hid', `error during disconnect sequence: ${String(e)}`);
     }

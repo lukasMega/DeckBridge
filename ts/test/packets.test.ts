@@ -11,22 +11,9 @@ import {
 import { gen1ParseInput } from '../src/devices/protocol/elgato-gen1.js';
 import { gen2ParseInput } from '../src/devices/protocol/elgato-gen2.js';
 import { MIRABOX_293_MODEL } from '../src/devices/mirabox/mirabox-293.js';
+import { test, summary } from './helpers/harness.js';
 
 const PACKET_SIZE = MIRABOX_293_MODEL.wire.packetSize;
-
-let passed = 0;
-let failed = 0;
-
-function test(name: string, fn: () => void): void {
-  try {
-    fn();
-    console.log(`  ✓ ${name}`);
-    passed++;
-  } catch (e) {
-    console.error(`  ✗ ${name}: ${(e as Error).message}`);
-    failed++;
-  }
-}
 
 // Mirabox packet builders
 
@@ -194,5 +181,4 @@ test('gen1ParseInput: states start right after the report ID', () => {
 
 // Summary
 
-console.log(`\n${passed} passed, ${failed} failed`);
-if (failed > 0) tjs.exit(1);
+summary();

@@ -9,20 +9,7 @@ import {
 import { isExtraKeyConfig } from '../src/types.js';
 import { MIRABOX_293S_MODEL } from '../src/devices/mirabox/mirabox-293s.js';
 import type { DeviceImageSpec } from '../src/devices/driver.js';
-
-let passed = 0;
-let failed = 0;
-
-async function test(name: string, fn: () => void | Promise<void>): Promise<void> {
-  try {
-    await fn();
-    console.log(`  ✓ ${name}`);
-    passed++;
-  } catch (e) {
-    console.error(`  ✗ ${name}: ${(e as Error).message}`);
-    failed++;
-  }
-}
+import { testAsync as test, summary } from './helpers/harness.js';
 
 // renderWidgetLines
 
@@ -356,5 +343,4 @@ await test('forceRun is a no-op for a non-command (or unconfigured) key', () => 
   assert.equal(d.splashed.length, before, 'no repaint scheduled');
 });
 
-console.log(`\n${passed} passed, ${failed} failed`);
-if (failed > 0) tjs.exit(1);
+summary();

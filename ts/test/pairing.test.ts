@@ -5,26 +5,13 @@ import { CORA_FLAG_VERBATIM, CORA_FLAG_REQACK, CORA_FLAG_ACKNAK } from '../src/c
 import { connect, waitForValue, closeAndWait, sendPkt, sendFrame } from './helpers/cora-framer.js';
 import { modelToChildGeometry } from '../src/capabilities.js';
 import { MK2_MODEL } from '../src/devices/elgato/mk2.js';
+import { testAsync as runTest, summaryExit } from './helpers/harness.js';
 
 const PRIMARY_PAIRING_PORT = 25543;
 const CHILD_PAIRING_PORT = 25544;
 const MK2_GEOMETRY = modelToChildGeometry(MK2_MODEL);
 
 // Setup / teardown
-
-let passed = 0;
-let failed = 0;
-
-async function runTest(name: string, fn: () => Promise<void>): Promise<void> {
-  try {
-    await fn();
-    console.log(`  ✓ ${name}`);
-    passed++;
-  } catch (e) {
-    console.error(`  ✗ ${name}: ${(e as Error).message}`);
-    failed++;
-  }
-}
 
 console.log(
   '\npairing: full pairing flow (specific to pairing as Elgato Stream Dec MK.2 to Elgato desktop app',
@@ -271,5 +258,4 @@ await runTest('primary double-probe + child double-probe + operational', async (
 
 // Summary
 
-console.log(`\n${passed} passed, ${failed} failed`);
-tjs.exit(failed > 0 ? 1 : 0);
+summaryExit();

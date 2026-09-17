@@ -10,12 +10,12 @@ import { DragResizer } from './advanced-key-grid.js';
 import { MockConfigForm } from './advanced-mock-config.js';
 import { KeyEventsPanel } from './advanced-key-events.js';
 import { LogConsolePanel } from './advanced-log-panel.js';
-import { SettingsPanel } from './advanced-settings-panel.js';
 import { KeyGridPreview } from './components/KeyGridPreview.js';
 import { Brightness } from './simple/controls.js';
+import { fire } from './ui-api.js';
 
 function postKey(index: number): void {
-  void fetch(`/api/key/${index}`, { method: 'POST' });
+  fire(`/api/key/${index}`);
 }
 
 // Thin layout wrapper so only this subtree re-renders on status changes;
@@ -53,7 +53,6 @@ export function AdvancedApp(): preact.JSX.Element {
             <Brightness />
           </div>
           <MockConfigForm />
-          <SettingsPanel />
           <KeyEventsPanel />
           <LogConsolePanel />
         </aside>

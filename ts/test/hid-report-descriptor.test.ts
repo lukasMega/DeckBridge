@@ -5,20 +5,7 @@ import {
 } from '../src/devices/hid-report-descriptor.js';
 import type { HidapiSymbols } from '../src/ffi/hidapi.js';
 import { FIFINE_D6_REV2_MODEL } from '../src/devices/fifine/fifine-d6.js';
-
-let passed = 0;
-let failed = 0;
-
-function test(name: string, fn: () => void): void {
-  try {
-    fn();
-    passed++;
-    console.log(`  ok ${name}`);
-  } catch (e) {
-    failed++;
-    console.log(`  FAIL ${name}: ${String(e)}`);
-  }
-}
+import { test, summaryExit } from './helpers/harness.js';
 
 // Short-item helpers. Prefix byte = bTag<<4 | bType<<2 | bSize.
 const usagePage = (v: number) => [0x06, v & 0xff, (v >> 8) & 0xff]; // Global, 2 bytes
@@ -305,5 +292,4 @@ test('the captured descriptor also confirms wire.inSize (512 B)', () => {
   assert.equal(fixture.modelInSize, FIFINE_D6_REV2_MODEL.wire.inSize);
 });
 
-console.log(`\n${passed} passed, ${failed} failed`);
-tjs.exit(failed > 0 ? 1 : 0);
+summaryExit();

@@ -5,7 +5,9 @@
  * the store snapshot; new entries append incrementally, tracked by array index.
  */
 import { useState, useEffect, useRef } from 'preact/hooks';
+import type { RefObject } from 'preact';
 import { subscribe as storeSubscribe, getSnapshot } from './store.js';
+import type { StoreState } from './store.js';
 import type { ServerLog, CommLog } from './ui-types.js';
 import { useCopyText } from './use-copy-text.js';
 
@@ -20,26 +22,140 @@ function esc(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
+function fmtTime(ts: number): string {
+  return new Date(ts).toISOString().slice(11, 23);
+}
+
 function buildServerEntry(e: ServerLog): HTMLElement {
   const sp = document.createElement('span');
   const levelClass: Record<string, string> = { error: 'le', warn: 'lw', info: 'li' };
   sp.className = levelClass[e.level] ?? 'li';
-  const t = new Date(e.ts).toISOString().slice(11, 23);
-  sp.textContent = `[${t}] [${e.level.toUpperCase()}] [${e.component}] ${e.message}\n`;
+  sp.textContent = `[${fmtTime(e.ts)}] [${e.level.toUpperCase()}] [${e.component}] ${e.message}\n`;
   return sp;
 }
 
 function buildCommEntry(e: CommLog, showHex: boolean): HTMLElement {
-  const t = new Date(e.ts).toISOString().slice(11, 23);
   const hex = showHex && e.hex ? ` <span class="cx">${e.hex}…</span>` : '';
   const d = document.createElement('div');
   d.className = 'ce';
   d.innerHTML =
-    `<span class="ct">${t}</span>` +
+    `<span class="ct">${fmtTime(e.ts)}</span>` +
     ` <span class="cd cd-${e.direction}">${e.direction === 'rx' ? '↓' : '↑'}${e.direction.toUpperCase()}</span>` +
     ` <span class="cp cp-${e.protocol}">${e.protocol.toUpperCase()}</span>` +
     ` <span class="ch">${esc(e.human)}</span>${hex}`;
   return d;
+}
+
+// useLogPane — one uncontrolled, rAF-flushed log container
+
+interface LogPaneOpts<T> {
+  getLogs: (s: StoreState) => readonly T[];
+  buildEntry: (e: T) => HTMLElement;
+  passes: (e: T) => boolean;
+  filterDeps: unknown[];
+}
+
+/**
+ * Owns the DOM container for one log stream: incremental appends batched into a
+ * DocumentFragment on rAF, scroll anchored to the bottom, trimmed to LOG_MAX, and
+ * fully re-rendered when `filterDeps` change. Both log tabs are instances of this.
+ */
+function useLogPane<T, E extends HTMLElement>(
+  opts: LogPaneOpts<T>,
+): { ref: RefObject<E>; clear: () => void } {
+  const elRef = useRef<E>(null);
+  // Index of the last log entry rendered into the DOM (for incremental appends)
+  const renderedRef = useRef(0);
+  // rAF scheduling flag (mirrors ui-logs.ts serverFlushScheduled / commFlushScheduled)
+  const scheduledRef = useRef(false);
+  // Latest callbacks, so rAF flushes see current filter state without a stale closure
+  // and without adding deps to the mount effect.
+  const optsRef = useRef(opts);
+  useEffect(() => {
+    optsRef.current = opts;
+  });
+
+  function flush(): void {
+    scheduledRef.current = false;
+    const el = elRef.current;
+    if (!el) return;
+    const { getLogs, passes, buildEntry } = optsRef.current;
+    const logs = getLogs(getSnapshot());
+    const from = renderedRef.current;
+    if (from >= logs.length) return;
+    const atBot = el.scrollHeight - el.clientHeight <= el.scrollTop + SCROLL_TOLERANCE;
+    const frag = document.createDocumentFragment();
+    for (let i = from; i < logs.length; i++) {
+      const e = logs[i];
+      if (e !== undefined && passes(e)) frag.appendChild(buildEntry(e));
+    }
+    renderedRef.current = logs.length;
+    el.appendChild(frag);
+    while (el.children.length > LOG_MAX) el.removeChild(el.firstChild!);
+    if (atBot) el.scrollTop = el.scrollHeight;
+  }
+
+  function schedule(): void {
+    if (scheduledRef.current) return;
+    scheduledRef.current = true;
+    requestAnimationFrame(flush);
+  }
+
+  // Mount: initial render + subscribe for live appends
+  useEffect(() => {
+    schedule();
+    let prevLen = optsRef.current.getLogs(getSnapshot()).length;
+    return storeSubscribe(() => {
+      const len = optsRef.current.getLogs(getSnapshot()).length;
+      if (len !== prevLen) {
+        prevLen = len;
+        schedule();
+      }
+    });
+    // eslint-disable-next-line @eslint-react/exhaustive-deps -- mount-only: schedule uses only refs and is effectively stable; adding it would re-subscribe on every render
+  }, []);
+
+  // Filter change: wipe the DOM and re-render from the snapshot
+  useEffect(() => {
+    const el = elRef.current;
+    if (!el) return;
+    el.innerHTML = '';
+    renderedRef.current = 0;
+    schedule();
+    // eslint-disable-next-line @eslint-react/exhaustive-deps -- deps are the caller's filter values; schedule uses only refs, so listing it would re-render every cycle
+  }, opts.filterDeps);
+
+  function clear(): void {
+    const el = elRef.current;
+    if (el) el.innerHTML = '';
+    renderedRef.current = 0;
+  }
+
+  return { ref: elRef, clear };
+}
+
+function FilterCheck({
+  id,
+  label,
+  checked,
+  onChange,
+}: Readonly<{
+  id: string;
+  label: string;
+  checked: boolean;
+  onChange: (checked: boolean) => void;
+}>): preact.JSX.Element {
+  return (
+    <label>
+      <input
+        type="checkbox"
+        id={id}
+        checked={checked}
+        onChange={(e) => onChange((e.target as HTMLInputElement).checked)}
+      />{' '}
+      {label}
+    </label>
+  );
 }
 
 // LogConsolePanel
@@ -60,197 +176,36 @@ export function LogConsolePanel(): preact.JSX.Element {
   const [cfHideKeepalives, setCfHideKeepalives] = useState(false);
   const [cfShowHex, setCfShowHex] = useState(true);
 
-  // DOM container refs (uncontrolled — Preact never touches their children)
-  const logElRef = useRef<HTMLPreElement>(null);
-  const commElRef = useRef<HTMLDivElement>(null);
-
-  // Stable refs to current filter values for use inside rAF callbacks
-  // Avoids stale-closure problem without adding deps to the mount effect.
-  const sfRef = useRef({ level: '', component: '' });
-  const cfRef = useRef({
-    protocol: '',
-    direction: '',
-    hideImages: false,
-    hideKeepalives: false,
-    showHex: true,
+  const server = useLogPane<ServerLog, HTMLPreElement>({
+    getLogs: (s) => s.serverLogs,
+    buildEntry: buildServerEntry,
+    passes: (e) =>
+      (!sfLevel || e.level === sfLevel) &&
+      (!sfComponent || e.component.toLowerCase().includes(sfComponent.toLowerCase())),
+    filterDeps: [sfLevel, sfComponent],
   });
 
-  useEffect(() => {
-    sfRef.current = { level: sfLevel, component: sfComponent };
-  }, [sfLevel, sfComponent]);
-
-  useEffect(() => {
-    cfRef.current = {
-      protocol: cfProtocol,
-      direction: cfDirection,
-      hideImages: cfHideImages,
-      hideKeepalives: cfHideKeepalives,
-      showHex: cfShowHex,
-    };
-  }, [cfProtocol, cfDirection, cfHideImages, cfHideKeepalives, cfShowHex]);
-
-  // Index of the last log entry rendered into the DOM (for incremental appends)
-  const serverRenderedRef = useRef(0);
-  const commRenderedRef = useRef(0);
-
-  // rAF scheduling flags (mirrors ui-logs.ts serverFlushScheduled / commFlushScheduled)
-  const serverFlushScheduledRef = useRef(false);
-  const commFlushScheduledRef = useRef(false);
-
-  // Filter predicates (read current filter state via ref)
-
-  function passesServerFilter(e: ServerLog): boolean {
-    const sf = sfRef.current;
-    return (
-      (!sf.level || e.level === sf.level) &&
-      (!sf.component || e.component.toLowerCase().includes(sf.component.toLowerCase()))
-    );
-  }
-
-  function passesCommFilter(e: CommLog): boolean {
-    const cf = cfRef.current;
-    return (
-      (!cf.protocol || e.protocol === cf.protocol) &&
-      (!cf.direction || e.direction === cf.direction) &&
-      !(cf.hideImages && e.human.includes('image-data chunk')) &&
-      !(cf.hideKeepalives && e.human.includes('keepalive'))
-    );
-  }
-
-  // rAF flush functions (mirrors ui-logs.ts flushServerLogs / flushCommLogs)
-
-  function flushServerLogs(): void {
-    serverFlushScheduledRef.current = false;
-    const logEl = logElRef.current;
-    if (!logEl) return;
-    const logs = getSnapshot().serverLogs;
-    const from = serverRenderedRef.current;
-    if (from >= logs.length) return;
-    const atBot = logEl.scrollHeight - logEl.clientHeight <= logEl.scrollTop + SCROLL_TOLERANCE;
-    const frag = document.createDocumentFragment();
-    for (let i = from; i < logs.length; i++) {
-      const e = logs[i];
-      if (e !== undefined && passesServerFilter(e)) frag.appendChild(buildServerEntry(e));
-    }
-    serverRenderedRef.current = logs.length;
-    logEl.appendChild(frag);
-    while (logEl.children.length > LOG_MAX) logEl.removeChild(logEl.firstChild!);
-    if (atBot) logEl.scrollTop = logEl.scrollHeight;
-  }
-
-  function flushCommLogs(): void {
-    commFlushScheduledRef.current = false;
-    const commEl = commElRef.current;
-    if (!commEl) return;
-    const logs = getSnapshot().commLogs;
-    const from = commRenderedRef.current;
-    if (from >= logs.length) return;
-    const atBot = commEl.scrollHeight - commEl.clientHeight <= commEl.scrollTop + SCROLL_TOLERANCE;
-    const frag = document.createDocumentFragment();
-    const showHex = cfRef.current.showHex;
-    for (let i = from; i < logs.length; i++) {
-      const e = logs[i];
-      if (e !== undefined && passesCommFilter(e)) frag.appendChild(buildCommEntry(e, showHex));
-    }
-    commRenderedRef.current = logs.length;
-    commEl.appendChild(frag);
-    while (commEl.children.length > LOG_MAX) commEl.removeChild(commEl.firstChild!);
-    if (atBot) commEl.scrollTop = commEl.scrollHeight;
-  }
-
-  function scheduleServerFlush(): void {
-    if (serverFlushScheduledRef.current) return;
-    serverFlushScheduledRef.current = true;
-    requestAnimationFrame(flushServerLogs);
-  }
-
-  function scheduleCommFlush(): void {
-    if (commFlushScheduledRef.current) return;
-    commFlushScheduledRef.current = true;
-    requestAnimationFrame(flushCommLogs);
-  }
-
-  // Full wipe + re-render (called when filter state changes)
-
-  function reRenderServerLogs(): void {
-    const logEl = logElRef.current;
-    if (!logEl) return;
-    logEl.innerHTML = '';
-    serverRenderedRef.current = 0;
-    scheduleServerFlush();
-  }
-
-  function reRenderCommLogs(): void {
-    const commEl = commElRef.current;
-    if (!commEl) return;
-    commEl.innerHTML = '';
-    commRenderedRef.current = 0;
-    scheduleCommFlush();
-  }
-
-  // Mount effect: initial render + subscribe for live log appends
-
-  useEffect(() => {
-    scheduleServerFlush();
-    scheduleCommFlush();
-
-    let prevServerLen = getSnapshot().serverLogs.length;
-    let prevCommLen = getSnapshot().commLogs.length;
-
-    const unsub = storeSubscribe(() => {
-      const snap = getSnapshot();
-      if (snap.serverLogs.length !== prevServerLen) {
-        prevServerLen = snap.serverLogs.length;
-        scheduleServerFlush();
-      }
-      if (snap.commLogs.length !== prevCommLen) {
-        prevCommLen = snap.commLogs.length;
-        scheduleCommFlush();
-      }
-    });
-
-    return unsub;
-    // eslint-disable-next-line @eslint-react/exhaustive-deps -- mount-only: scheduleServerFlush/scheduleCommFlush use only refs and are effectively stable; adding them would re-subscribe on every render
-  }, []); // mount-only: flush fns and storeSubscribe are stable
-
-  // Filter-change effects: wipe DOM and re-render with updated filter
-
-  useEffect(() => {
-    reRenderServerLogs();
-    // eslint-disable-next-line @eslint-react/exhaustive-deps -- reRenderServerLogs uses only refs; adding it would re-render on every render cycle
-  }, [sfLevel, sfComponent]); // re-render when server filters change
-
-  useEffect(() => {
-    reRenderCommLogs();
-    // eslint-disable-next-line @eslint-react/exhaustive-deps -- reRenderCommLogs uses only refs; adding it would re-render on every render cycle
-  }, [cfProtocol, cfDirection, cfHideImages, cfHideKeepalives, cfShowHex]); // re-render when comm filters change
-
-  // Clear handlers
-
-  function handleClearServer(): void {
-    const logEl = logElRef.current;
-    if (logEl) logEl.innerHTML = '';
-    serverRenderedRef.current = 0;
-  }
-
-  function handleClearComm(): void {
-    const commEl = commElRef.current;
-    if (commEl) commEl.innerHTML = '';
-    commRenderedRef.current = 0;
-  }
+  const comm = useLogPane<CommLog, HTMLDivElement>({
+    getLogs: (s) => s.commLogs,
+    buildEntry: (e) => buildCommEntry(e, cfShowHex),
+    passes: (e) =>
+      (!cfProtocol || e.protocol === cfProtocol) &&
+      (!cfDirection || e.direction === cfDirection) &&
+      !(cfHideImages && e.human.includes('image-data chunk')) &&
+      !(cfHideKeepalives && e.human.includes('keepalive')),
+    filterDeps: [cfProtocol, cfDirection, cfHideImages, cfHideKeepalives, cfShowHex],
+  });
 
   // Copy all logs (same format as legacy ui-logs.ts)
 
   function handleCopyLogs(): void {
     const snap = getSnapshot();
-    const sl = snap.serverLogs.map((e) => {
-      const t = new Date(e.ts).toISOString().slice(11, 23);
-      return `[${t}] [${e.level.toUpperCase()}] [${e.component}] ${e.message}`;
-    });
+    const sl = snap.serverLogs.map(
+      (e) => `[${fmtTime(e.ts)}] [${e.level.toUpperCase()}] [${e.component}] ${e.message}`,
+    );
     const cl = snap.commLogs.map((e) => {
-      const t = new Date(e.ts).toISOString().slice(11, 23);
       const arrow = e.direction === 'rx' ? '<--' : '-->';
-      return `${t} ${arrow} ${e.protocol.toUpperCase()} ${e.human}${e.hex ? ' ' + e.hex : ''}`;
+      return `${fmtTime(e.ts)} ${arrow} ${e.protocol.toUpperCase()} ${e.human}${e.hex ? ' ' + e.hex : ''}`;
     });
     const text = `**SERVER LOGS:**\n\n${sl.join('\n')}\n\n---\n\n**COMM LOGS:**\n\n${cl.join('\n')}`;
     void copy(text);
@@ -313,7 +268,7 @@ export function LogConsolePanel(): preact.JSX.Element {
             value={sfComponent}
             onInput={(e) => setSfComponent((e.target as HTMLInputElement).value)}
           />
-          <button id="clr-log" class="ghostbtn" type="button" onClick={handleClearServer}>
+          <button id="clr-log" class="ghostbtn" type="button" onClick={server.clear}>
             Clear
           </button>
         </div>
@@ -338,43 +293,29 @@ export function LogConsolePanel(): preact.JSX.Element {
             <option value="rx">RX</option>
             <option value="tx">TX</option>
           </select>
-          <label>
-            <input
-              type="checkbox"
-              id="hide-img"
-              checked={cfHideImages}
-              onChange={(e) => setCfHideImages((e.target as HTMLInputElement).checked)}
-            />{' '}
-            no img
-          </label>
-          <label>
-            <input
-              type="checkbox"
-              id="hide-ka"
-              checked={cfHideKeepalives}
-              onChange={(e) => setCfHideKeepalives((e.target as HTMLInputElement).checked)}
-            />{' '}
-            no keepalive
-          </label>
-          <label>
-            <input
-              type="checkbox"
-              id="show-hex"
-              checked={cfShowHex}
-              onChange={(e) => setCfShowHex((e.target as HTMLInputElement).checked)}
-            />{' '}
-            hex
-          </label>
-          <button id="clr-comm" class="ghostbtn" type="button" onClick={handleClearComm}>
+          <FilterCheck
+            id="hide-img"
+            label="no img"
+            checked={cfHideImages}
+            onChange={setCfHideImages}
+          />
+          <FilterCheck
+            id="hide-ka"
+            label="no keepalive"
+            checked={cfHideKeepalives}
+            onChange={setCfHideKeepalives}
+          />
+          <FilterCheck id="show-hex" label="hex" checked={cfShowHex} onChange={setCfShowHex} />
+          <button id="clr-comm" class="ghostbtn" type="button" onClick={comm.clear}>
             Clear
           </button>
         </div>
       </div>
       <div id="server-tab" class="log-content" style={{ display: isServer ? '' : 'none' }}>
-        <pre id="log-console" ref={logElRef} />
+        <pre id="log-console" ref={server.ref} />
       </div>
       <div id="comm-tab" class="log-content" style={{ display: isServer ? 'none' : '' }}>
-        <div id="comm-console" ref={commElRef} />
+        <div id="comm-console" ref={comm.ref} />
       </div>
     </div>
   );

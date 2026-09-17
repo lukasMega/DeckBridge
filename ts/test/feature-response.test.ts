@@ -15,20 +15,7 @@ import {
   PAYLOAD_TYPE_FEATURE,
 } from '../src/types.js';
 import type { DeviceConfig } from '../src/elgato-types.js';
-
-let passed = 0;
-let failed = 0;
-
-function test(name: string, fn: () => void): void {
-  try {
-    fn();
-    console.log(`  ✓ ${name}`);
-    passed++;
-  } catch (e) {
-    console.error(`  ✗ ${name}: ${(e as Error).message}`);
-    failed++;
-  }
-}
+import { test, summary } from './helpers/harness.js';
 
 // fwVersionBuf
 
@@ -241,5 +228,4 @@ test('FEATURE_GET_DOCK_FW and FEATURE_GET_QUICK_PROBE produce the same fw versio
 
 // Summary
 
-console.log(`\n${passed} passed, ${failed} failed`);
-if (failed > 0) tjs.exit(1);
+summary();

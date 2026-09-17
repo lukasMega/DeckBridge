@@ -8,20 +8,7 @@ import {
   defaultCacheRoot,
 } from '../src/native-libs.js';
 import type { EmbeddedNativeLib } from 'virtual:native-libs';
-
-let passed = 0;
-let failed = 0;
-
-async function test(name: string, fn: () => void | Promise<void>): Promise<void> {
-  try {
-    await fn();
-    console.log(`  ✓ ${name}`);
-    passed++;
-  } catch (e) {
-    console.error(`  ✗ ${name}: ${(e as Error).message}`);
-    failed++;
-  }
-}
+import { testAsync as test, summary } from './helpers/harness.js';
 
 async function gzipBytes(data: Uint8Array): Promise<Uint8Array> {
   const cs = new CompressionStream('gzip');
@@ -210,5 +197,4 @@ try {
   await tjs.remove(ROOT, { recursive: true });
 } catch {}
 
-console.log(`\n${passed} passed, ${failed} failed`);
-if (failed > 0) tjs.exit(1);
+summary();

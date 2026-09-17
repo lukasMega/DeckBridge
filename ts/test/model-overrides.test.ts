@@ -11,20 +11,7 @@ import type { DeviceModel } from '../src/devices/driver.js';
 import { DEVICE_MODELS } from '../src/devices/registry.js';
 import { MIRABOX_293_MODEL } from '../src/devices/mirabox/mirabox-293.js';
 import { MK2_MODEL } from '../src/devices/elgato/mk2.js';
-
-let passed = 0;
-let failed = 0;
-
-function test(name: string, fn: () => void): void {
-  try {
-    fn();
-    console.log(`  ✓ ${name}`);
-    passed++;
-  } catch (e) {
-    console.error(`  ✗ ${name}: ${(e as Error).message}`);
-    failed++;
-  }
-}
+import { test, summary as reportSummary } from './helpers/harness.js';
 
 const MODEL: DeviceModel = MIRABOX_293_MODEL;
 
@@ -390,5 +377,4 @@ test('rejects non-objects and entries with unknown sections', () => {
   assert.ok(!isModelOverridesRecord({ 'mirabox-293': { bogus: 1 } }));
 });
 
-console.log(`\n${passed} passed, ${failed} failed`);
-if (failed > 0) tjs.exit(1);
+reportSummary();

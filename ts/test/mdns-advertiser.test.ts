@@ -2,20 +2,7 @@ import assert from 'tjs:assert';
 import { buildArgs, MdnsAdvertiser } from '../src/mdns-advertiser.js';
 import { MDNS_SERVICE_NAME } from '../src/types.js';
 import { platformName } from '../src/os-utils.ts';
-
-let passed = 0;
-let failed = 0;
-
-async function test(name: string, fn: () => void | Promise<void>): Promise<void> {
-  try {
-    await fn();
-    console.log(`  ✓ ${name}`);
-    passed++;
-  } catch (e) {
-    console.error(`  ✗ ${name}: ${(e as Error).message}`);
-    failed++;
-  }
-}
+import { testAsync as test, summary } from './helpers/harness.js';
 
 // buildArgs
 
@@ -92,5 +79,4 @@ await test('returns a string without throwing', () => {
 
 // Summary
 
-console.log(`\n${passed} passed, ${failed} failed`);
-if (failed > 0) tjs.exit(1);
+summary();

@@ -331,3 +331,38 @@ export interface RealDeviceIdentity {
   serialNumber?: string;
   firmwareVersion?: string;
 }
+
+// Clear-and-null helpers. The guard-clear-forget-to-null sequence was written out
+// at six teardown sites; assigning the return value makes forgetting impossible.
+// Kept as two functions rather than one so neither relies on clearTimeout and
+// clearInterval being interchangeable.
+
+type TimerHandle = Parameters<typeof clearTimeout>[0];
+
+/** `this.t = clearTimer(this.t)` for a setTimeout handle. */
+export function clearTimer(timer: TimerHandle | null): null {
+  if (timer !== null) clearTimeout(timer);
+  return null;
+}
+
+/** `this.t = clearRepeating(this.t)` for a setInterval handle. */
+export function clearRepeating(timer: TimerHandle | null): null {
+  if (timer !== null) clearInterval(timer);
+  return null;
+}
+
+// FNV-1a, 32-bit. Deterministic, no crypto needed — these hashes are stable
+// identifiers and cache keys, never a security boundary.
+export function fnv1a(text: string): number {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < text.length; i++) {
+    h ^= text.charCodeAt(i);
+    h = Math.imul(h, 0x01000193);
+  }
+  return h >>> 0;
+}
+
+/** `fnv1a` as a fixed-width 8-char hex string — the cache-key / spec-revision form. */
+export function fnv1aHex(text: string): string {
+  return fnv1a(text).toString(16).padStart(8, '0');
+}

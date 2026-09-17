@@ -1,6 +1,8 @@
-import { useEffect, useRef, useState } from 'preact/hooks';
+import { useRef, useState } from 'preact/hooks';
 import type { ExtraKeyCfg, ExtraKeyWidget, PluginStatus } from '../ui-types.js';
 import { ICON } from '../ui-icons.js';
+import { fire } from '../ui-api.js';
+import { useDismiss } from '../ui-hooks.js';
 import { Icon } from './Icon.js';
 
 // Interval/timeout bounds mirror types.ts, in seconds for UI.
@@ -28,26 +30,18 @@ export function postExtraKey(
   timeoutMs?: number,
   pluginArg?: string,
 ): void {
-  fetch('/api/extra-key', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      wireId,
-      widget,
-      ...(param ? { param } : {}),
-      ...(intervalMs !== undefined ? { intervalMs } : {}),
-      ...(timeoutMs !== undefined ? { timeoutMs } : {}),
-      ...(pluginArg !== undefined ? { pluginArg } : {}),
-    }),
-  }).catch(() => undefined);
+  fire('/api/extra-key', {
+    wireId,
+    widget,
+    ...(param ? { param } : {}),
+    ...(intervalMs !== undefined ? { intervalMs } : {}),
+    ...(timeoutMs !== undefined ? { timeoutMs } : {}),
+    ...(pluginArg !== undefined ? { pluginArg } : {}),
+  });
 }
 
 function runExtraKeyNow(wireId: number): void {
-  fetch('/api/extra-key/run', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ wireId }),
-  }).catch(() => undefined);
+  fire('/api/extra-key/run', { wireId });
 }
 
 export function paramPlaceholder(widget: ExtraKeyWidget): string {
@@ -56,24 +50,40 @@ export function paramPlaceholder(widget: ExtraKeyWidget): string {
   return 'text (\\n = new line)';
 }
 
-function usePopoverDismiss(
-  anchorRef: { current: HTMLDivElement | null },
-  onClose: () => void,
-): void {
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent): void => {
-      if (e.key === 'Escape') onClose();
-    };
-    const onPointerDown = (e: PointerEvent): void => {
-      if (anchorRef.current && !anchorRef.current.contains(e.target as Node)) onClose();
-    };
-    window.addEventListener('keydown', onKey);
-    window.addEventListener('pointerdown', onPointerDown);
-    return () => {
-      window.removeEventListener('keydown', onKey);
-      window.removeEventListener('pointerdown', onPointerDown);
-    };
-  }, [onClose, anchorRef]);
+/** Seconds input that posts milliseconds. Out-of-range values are ignored rather
+ *  than clamped — the number spinner would otherwise fight the user mid-typing. */
+function SecondsField({
+  label,
+  min,
+  max,
+  value,
+  onCommit,
+}: Readonly<{
+  label: string;
+  min: number;
+  max: number;
+  value: number;
+  onCommit: (ms: number) => void;
+}>): preact.JSX.Element {
+  const handleChange = (e: Event): void => {
+    const s = Number((e.target as HTMLInputElement).value);
+    if (!Number.isFinite(s) || s < min || s > max) return;
+    onCommit(Math.round(s * 1000));
+  };
+
+  return (
+    <label class="xkey-popover-field">
+      <span>{label}</span>
+      <input
+        class="input"
+        type="number"
+        min={min}
+        max={max}
+        value={value}
+        onChange={handleChange}
+      />
+    </label>
+  );
 }
 
 /** Popup to edit command re-run interval, kill-timeout, and force an immediate run. */
@@ -88,22 +98,12 @@ function CommandConfigPopover({
   anchorRef: { current: HTMLDivElement | null };
   onClose: () => void;
 }>): preact.JSX.Element {
-  usePopoverDismiss(anchorRef, onClose);
+  useDismiss(onClose, anchorRef);
 
   const [ran, setRan] = useState(false);
   const intervalS = Math.round((cfg?.intervalMs ?? INTERVAL_DEFAULT_S * 1000) / 1000);
   const timeoutS = Math.round((cfg?.timeoutMs ?? TIMEOUT_DEFAULT_S * 1000) / 1000);
 
-  const handleInterval = (e: Event): void => {
-    const s = Number((e.target as HTMLInputElement).value);
-    if (!Number.isFinite(s) || s < INTERVAL_MIN_S || s > INTERVAL_MAX_S) return;
-    postExtraKey(wireId, 'command', cfg?.param, Math.round(s * 1000), cfg?.timeoutMs);
-  };
-  const handleTimeout = (e: Event): void => {
-    const s = Number((e.target as HTMLInputElement).value);
-    if (!Number.isFinite(s) || s < TIMEOUT_MIN_S || s > TIMEOUT_MAX_S) return;
-    postExtraKey(wireId, 'command', cfg?.param, cfg?.intervalMs, Math.round(s * 1000));
-  };
   const handleRunNow = (): void => {
     runExtraKeyNow(wireId);
     setRan(true);
@@ -111,28 +111,20 @@ function CommandConfigPopover({
 
   return (
     <div class="xkey-popover">
-      <label class="xkey-popover-field">
-        <span>Run every (s)</span>
-        <input
-          class="input"
-          type="number"
-          min={INTERVAL_MIN_S}
-          max={INTERVAL_MAX_S}
-          value={intervalS}
-          onChange={handleInterval}
-        />
-      </label>
-      <label class="xkey-popover-field">
-        <span>Timeout (s)</span>
-        <input
-          class="input"
-          type="number"
-          min={TIMEOUT_MIN_S}
-          max={TIMEOUT_MAX_S}
-          value={timeoutS}
-          onChange={handleTimeout}
-        />
-      </label>
+      <SecondsField
+        label="Run every (s)"
+        min={INTERVAL_MIN_S}
+        max={INTERVAL_MAX_S}
+        value={intervalS}
+        onCommit={(ms) => postExtraKey(wireId, 'command', cfg?.param, ms, cfg?.timeoutMs)}
+      />
+      <SecondsField
+        label="Timeout (s)"
+        min={TIMEOUT_MIN_S}
+        max={TIMEOUT_MAX_S}
+        value={timeoutS}
+        onCommit={(ms) => postExtraKey(wireId, 'command', cfg?.param, cfg?.intervalMs, ms)}
+      />
       <button class="ghostbtn xkey-popover-run" type="button" onClick={handleRunNow}>
         {ran ? 'Ran ✓' : 'Run now'}
       </button>
@@ -154,14 +146,9 @@ function PluginConfigPopover({
   anchorRef: { current: HTMLDivElement | null };
   onClose: () => void;
 }>): preact.JSX.Element {
-  usePopoverDismiss(anchorRef, onClose);
+  useDismiss(onClose, anchorRef);
 
   const intervalS = Math.round((cfg?.intervalMs ?? PLUGIN_INTERVAL_DEFAULT_S * 1000) / 1000);
-  const handleInterval = (e: Event): void => {
-    const s = Number((e.target as HTMLInputElement).value);
-    if (!Number.isFinite(s) || s < INTERVAL_MIN_S || s > INTERVAL_MAX_S) return;
-    postExtraKey(wireId, 'plugin', cfg?.param, Math.round(s * 1000), undefined, cfg?.pluginArg);
-  };
   // Local state owns arg field — polling re-renders would clobber a controlled value.
   const [arg, setArg] = useState(cfg?.pluginArg ?? '');
   const handleArg = (e: Event): void => {
@@ -190,17 +177,13 @@ function PluginConfigPopover({
           onChange={handleArg}
         />
       </label>
-      <label class="xkey-popover-field">
-        <span>Run every (s)</span>
-        <input
-          class="input"
-          type="number"
-          min={INTERVAL_MIN_S}
-          max={INTERVAL_MAX_S}
-          value={intervalS}
-          onChange={handleInterval}
-        />
-      </label>
+      <SecondsField
+        label="Run every (s)"
+        min={INTERVAL_MIN_S}
+        max={INTERVAL_MAX_S}
+        value={intervalS}
+        onCommit={(ms) => postExtraKey(wireId, 'plugin', cfg?.param, ms, undefined, cfg?.pluginArg)}
+      />
       <div class="xkey-popover-status">
         Status: <span class={`xkey-status xkey-status-${st}`}>{STATUS_LABEL[st]}</span>
       </div>

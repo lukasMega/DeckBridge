@@ -14,6 +14,7 @@ import {
   type CoraFrame,
 } from '../src/cora-frame.js';
 import { connect, sendPkt, closeAndWait } from './helpers/cora-framer.js';
+import { testAsync as runTest, summaryExit } from './helpers/harness.js';
 
 const TEST_PORT = 15343;
 const TEST_CHILD_PORT = 15344;
@@ -21,20 +22,6 @@ const MK2_CHILD_GEOMETRY = modelToChildGeometry(MK2_MODEL);
 const MINI_CHILD_GEOMETRY = modelToChildGeometry(MINI_MODEL);
 
 // Setup / teardown
-
-let passed = 0;
-let failed = 0;
-
-async function runTest(name: string, fn: () => void | Promise<void>): Promise<void> {
-  try {
-    await fn();
-    console.log(`  ✓ ${name}`);
-    passed++;
-  } catch (e) {
-    console.error(`  ✗ ${name}: ${(e as Error).message}`);
-    failed++;
-  }
-}
 
 const server = new ElgatoServer(MK2_CHILD_GEOMETRY, TEST_PORT, true);
 server.keepaliveIntervalMs = 100;
@@ -762,5 +749,4 @@ try {
 
 // Summary
 
-console.log(`\n${passed} passed, ${failed} failed`);
-tjs.exit(failed > 0 ? 1 : 0);
+summaryExit();

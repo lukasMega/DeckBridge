@@ -1,6 +1,8 @@
 // Tracks the live per-dock status list + which dock is selected, and resolves per-dock
 // deviceKey/brightness against it (settings.devices[] keyed by deviceKey).
 import type { PersistedSettings } from './persisted-settings.js';
+import { isNonNegInt, nonNegIntError } from './types.js';
+import type { ReqError } from './types.js';
 import type { DockStatus } from '../../types.js';
 import { DEFAULT_BRIGHTNESS } from '../../types.js';
 
@@ -26,10 +28,8 @@ export class DockRegistry {
 
   /** Validate a select-dock request. Index 0 (the primary) is always selectable,
    *  even before a device connects. Returns an HTTP-shaped error, or null. */
-  validateSelect(index: unknown): { error: string; status: number } | null {
-    if (typeof index !== 'number' || !Number.isInteger(index) || index < 0) {
-      return { error: 'index must be a non-negative integer', status: 400 };
-    }
+  validateSelect(index: unknown): ReqError | null {
+    if (!isNonNegInt(index)) return nonNegIntError('index');
     if (index !== 0 && !this.has(index)) {
       return { error: `no dock with index ${index}`, status: 404 };
     }

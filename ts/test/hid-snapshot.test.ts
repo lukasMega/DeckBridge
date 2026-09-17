@@ -1,19 +1,6 @@
 import assert from 'tjs:assert';
 import { hidSnapshot, invalidateHidSnapshot } from '../src/ffi/hidapi.js';
-
-let passed = 0;
-let failed = 0;
-
-async function test(name: string, fn: () => void | Promise<void>): Promise<void> {
-  try {
-    await fn();
-    console.log(`  ✓ ${name}`);
-    passed++;
-  } catch (e) {
-    console.error(`  ✗ ${name}: ${(e as Error).message}`);
-    failed++;
-  }
-}
+import { testAsync as test, summary } from './helpers/harness.js';
 
 // Runs against the real deckbridge-native enumeration (like ffi-mdns.test.ts), so it
 // asserts only device-independent behavior: the CACHING, which is the whole point.
@@ -54,5 +41,4 @@ await test('every row carries the fields presence/path matching needs', () => {
   }
 });
 
-console.log(`\n${passed} passed, ${failed} failed`);
-if (failed > 0) tjs.exit(1);
+summary();

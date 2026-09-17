@@ -15,15 +15,7 @@ import {
   AJAZZ_AKP153R_REV2_MODEL,
 } from '../src/devices/ajazz/akp153-rev2.js';
 import { FIFINE_D6_MODEL, FIFINE_D6_REV2_MODEL } from '../src/devices/fifine/fifine-d6.js';
-import {
-  AJAZZ_AKP153_MODEL,
-  AJAZZ_AKP153E_MODEL,
-  AJAZZ_AKP153R_MODEL,
-  MARS_MSD_ONE_MODEL,
-  MADDOG_GK150K_MODEL,
-  RISEMODE_VISION_01_MODEL,
-  TMICE_STREAM_CONTROLLER_MODEL,
-} from '../src/devices/rebadge/akp153-v1-clones.js';
+import { AKP153_V1_CLONE_MODELS } from '../src/devices/rebadge/akp153-v1-clones.js';
 import { deviceInputToMk2Index } from '../src/translator.js';
 import { modelToChildGeometry, buildCapabilitiesPacket } from '../src/capabilities.js';
 import {
@@ -38,20 +30,7 @@ import {
 } from '../src/types.js';
 import type { DeviceConfig } from '../src/elgato-types.js';
 import type { DeviceModel } from '../src/devices/driver.js';
-
-let passed = 0;
-let failed = 0;
-
-function test(name: string, fn: () => void): void {
-  try {
-    fn();
-    console.log(`  ✓ ${name}`);
-    passed++;
-  } catch (e) {
-    console.error(`  ✗ ${name}: ${(e as Error).message}`);
-    failed++;
-  }
-}
+import { test, summaryExit } from './helpers/harness.js';
 
 // findModel resolution
 
@@ -245,20 +224,17 @@ test('Fifine D6 model ids and names are distinct per revision', () => {
 
 console.log('\ndevice-models: akp153-v1-clones');
 
+// The expected VID/PID per clone id, paired back with the exported model object so a
+// reordered or dropped entry in the clones array fails here rather than silently.
 const V1_CLONES = [
-  { model: AJAZZ_AKP153_MODEL, vid: 0x5548, pid: 0x6674, id: 'ajazz-akp153' },
-  { model: AJAZZ_AKP153E_MODEL, vid: 0x0300, pid: 0x1010, id: 'ajazz-akp153e' },
-  { model: AJAZZ_AKP153R_MODEL, vid: 0x0300, pid: 0x1020, id: 'ajazz-akp153r' },
-  { model: MARS_MSD_ONE_MODEL, vid: 0x0b00, pid: 0x1000, id: 'mars-msd-one' },
-  { model: MADDOG_GK150K_MODEL, vid: 0x0c00, pid: 0x1000, id: 'maddog-gk150k' },
-  { model: RISEMODE_VISION_01_MODEL, vid: 0x0a00, pid: 0x1001, id: 'risemode-vision-01' },
-  {
-    model: TMICE_STREAM_CONTROLLER_MODEL,
-    vid: 0x0500,
-    pid: 0x1001,
-    id: 'tmice-stream-controller',
-  },
-] as const;
+  { vid: 0x5548, pid: 0x6674, id: 'ajazz-akp153' },
+  { vid: 0x0300, pid: 0x1010, id: 'ajazz-akp153e' },
+  { vid: 0x0300, pid: 0x1020, id: 'ajazz-akp153r' },
+  { vid: 0x0b00, pid: 0x1000, id: 'mars-msd-one' },
+  { vid: 0x0c00, pid: 0x1000, id: 'maddog-gk150k' },
+  { vid: 0x0a00, pid: 0x1001, id: 'risemode-vision-01' },
+  { vid: 0x0500, pid: 0x1001, id: 'tmice-stream-controller' },
+].map((clone) => ({ ...clone, model: AKP153_V1_CLONE_MODELS.find((m) => m.id === clone.id)! }));
 
 for (const { model, vid, pid, id } of V1_CLONES) {
   test(`findModel resolves ${id} at 0x${vid.toString(16)}:0x${pid.toString(16)}`, () => {
@@ -297,6 +273,7 @@ test('akp153-v1-clones: wire.sharedSerial is true (inherited from the 293S)', ()
 });
 
 test('akp153-v1-clones: model ids and names are distinct per clone', () => {
+  assert.equal(AKP153_V1_CLONE_MODELS.length, V1_CLONES.length, 'every clone is covered here');
   const ids = new Set(V1_CLONES.map(({ model }) => model.id));
   const names = new Set(V1_CLONES.map(({ model }) => model.name));
   assert.equal(ids.size, V1_CLONES.length, 'all model ids distinct');
@@ -747,5 +724,4 @@ test('buildCapabilitiesPacket uses mirabox-293s geometry correctly', () => {
 
 // Summary
 
-console.log(`\n${passed} passed, ${failed} failed`);
-tjs.exit(failed > 0 ? 1 : 0);
+summaryExit();

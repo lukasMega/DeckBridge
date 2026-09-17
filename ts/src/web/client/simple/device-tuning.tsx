@@ -3,9 +3,12 @@
 // Key-map wizard lives in keymap-learn.tsx.
 import { useCallback, useEffect, useRef, useState } from 'preact/hooks';
 import { Collapsible } from '../components/Collapsible.js';
+import { CheckField, NumberField, SelectField } from '../components/Fields.js';
 import { useStore } from '../store.js';
 import type { StoreState } from '../store.js';
 import { copyLabel, useCopyText } from '../use-copy-text.js';
+import { postJson } from '../ui-api.js';
+import { Feedback, useAsyncAction } from '../ui-async.js';
 import { KeymapLearn } from './keymap-learn.js';
 import type { DeviceImageOverride, DeviceOverridesView } from '../ui-types.js';
 
@@ -32,97 +35,6 @@ const NUMBER_FIELDS: ReadonlyArray<{
   { key: 'blur', label: 'Blur sigma', min: 0, step: 0.1, advanced: true },
   { key: 'crop', label: 'Crop (px per side)', min: 0, advanced: true },
 ];
-
-function numberOrUndefined(raw: string): number | undefined {
-  if (raw.trim() === '') return undefined;
-  const n = Number(raw);
-  return Number.isFinite(n) ? n : undefined;
-}
-
-function NumberField({
-  label,
-  value,
-  min,
-  max,
-  step,
-  onChange,
-}: Readonly<{
-  label: string;
-  value: number | undefined;
-  min: number;
-  max?: number;
-  step?: number;
-  onChange: (v: number | undefined) => void;
-}>): preact.JSX.Element {
-  return (
-    <label class="tuning-field">
-      <span>{label}</span>
-      <input
-        class="input"
-        type="number"
-        min={min}
-        max={max}
-        step={step ?? 1}
-        value={value ?? ''}
-        onInput={(e) => onChange(numberOrUndefined((e.target as HTMLInputElement).value))}
-      />
-    </label>
-  );
-}
-
-function SelectField<T extends string | number>({
-  label,
-  value,
-  options,
-  onChange,
-}: Readonly<{
-  label: string;
-  value: T | undefined;
-  options: readonly T[];
-  onChange: (v: T) => void;
-}>): preact.JSX.Element {
-  return (
-    <label class="tuning-field">
-      <span>{label}</span>
-      <select
-        class="input"
-        value={String(value ?? '')}
-        onChange={(e) => {
-          const raw = (e.target as HTMLSelectElement).value;
-          const match = options.find((o) => String(o) === raw);
-          if (match !== undefined) onChange(match);
-        }}
-      >
-        {options.map((o) => (
-          <option key={String(o)} value={String(o)}>
-            {String(o)}
-          </option>
-        ))}
-      </select>
-    </label>
-  );
-}
-
-function CheckField({
-  label,
-  checked,
-  onChange,
-}: Readonly<{
-  label: string;
-  checked: boolean;
-  onChange: (v: boolean) => void;
-}>): preact.JSX.Element {
-  return (
-    <label class="settings-checkbox">
-      <input
-        type="checkbox"
-        checked={checked}
-        onChange={(e) => onChange((e.target as HTMLInputElement).checked)}
-      />
-      <span>{label}</span>
-    </label>
-  );
-}
 
 function selectedModel(state: StoreState): string | undefined {
   const selectedDock = state.status.selectedDock ?? 0;
@@ -158,9 +70,8 @@ export function DeviceTuningPanel(): preact.JSX.Element {
   const loadSeqRef = useRef(0);
   const [view, setView] = useState<DeviceOverridesView | null>(null);
   const [image, setImage] = useState<DeviceImageOverride>({});
-  const [busy, setBusy] = useState(false);
-  const [status, setStatus] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const action = useAsyncAction();
+  const resetFeedback = action.reset;
   const copy = useCopyText();
 
   const load = useCallback(
@@ -186,10 +97,9 @@ export function DeviceTuningPanel(): preact.JSX.Element {
   useEffect(
     function loadSelectedModel() {
       const ctrl = new AbortController();
-      // eslint-disable-next-line @eslint-react/set-state-in-effect -- selection boundary: feedback from the previous model must disappear before the next request finishes
-      setStatus(null);
-      // eslint-disable-next-line @eslint-react/set-state-in-effect -- selection boundary: errors from the previous model must not describe the newly selected model
-      setError(null);
+      // Selection boundary: feedback for the previous model must disappear before
+      // the next request finishes, and must never describe the newly selected one.
+      resetFeedback();
       void load(ctrl.signal).catch(function handleLoadError() {
         if (!ctrl.signal.aborted) setView(null);
       });
@@ -197,58 +107,38 @@ export function DeviceTuningPanel(): preact.JSX.Element {
         ctrl.abort();
       };
     },
-    [load],
+    [load, resetFeedback],
   );
 
   // Never leave previous dock's controls actionable while its replacement view
   // is loading after a selection change.
   const activeView = matchingView(view, selectedModelId);
 
-  async function apply(): Promise<void> {
-    if (!activeView) return;
-    setBusy(true);
-    setError(null);
-    setStatus(null);
-    try {
-      const r = await fetch('/api/device-overrides', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          modelId: activeView.modelId,
-          overrides: { ...activeView.overrides, image },
-        }),
-      });
-      const parsed = (await r.json()) as { error?: string; reconnecting?: boolean };
-      if (!r.ok) throw new Error(parsed.error ?? `Save failed (${r.status})`);
-      setStatus(parsed.reconnecting ? 'Reapplying — the device reconnects…' : 'Saved.');
+  // Both actions report via setStatus and only then reload: a status published
+  // after the reload could outlive the selection it describes.
+  const apply = (): Promise<void> =>
+    action.run(async () => {
+      if (!activeView) return;
+      const parsed = await postJson<{ reconnecting?: boolean }>(
+        '/api/device-overrides',
+        { modelId: activeView.modelId, overrides: { ...activeView.overrides, image } },
+        'Save failed',
+      );
+      action.setStatus(parsed.reconnecting ? 'Reapplying — the device reconnects…' : 'Saved.');
       await load();
-    } catch (e) {
-      setError((e as Error).message || 'Save failed.');
-    } finally {
-      setBusy(false);
-    }
-  }
+    }, 'Save failed.');
 
-  async function reset(): Promise<void> {
-    if (!activeView) return;
-    setBusy(true);
-    setError(null);
-    setStatus(null);
-    try {
-      const r = await fetch('/api/device-overrides/reset', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ modelId: activeView.modelId }),
-      });
-      if (!r.ok) throw new Error(`Reset failed (${r.status})`);
-      setStatus('Reset to the built-in defaults — the device reconnects…');
+  const resetDefaults = (): Promise<void> =>
+    action.run(async () => {
+      if (!activeView) return;
+      await postJson(
+        '/api/device-overrides/reset',
+        { modelId: activeView.modelId },
+        'Reset failed',
+      );
+      action.setStatus('Reset to the built-in defaults — the device reconnects…');
       await load();
-    } catch (e) {
-      setError((e as Error).message || 'Reset failed.');
-    } finally {
-      setBusy(false);
-    }
-  }
+    }, 'Reset failed.');
 
   if (!activeView) return <EmptyDeviceTuningPanel />;
 
@@ -345,7 +235,7 @@ export function DeviceTuningPanel(): preact.JSX.Element {
           id="tuning-apply"
           class="ghostbtn"
           type="button"
-          disabled={busy}
+          disabled={action.busy}
           onClick={() => void apply()}
         >
           Apply
@@ -354,8 +244,8 @@ export function DeviceTuningPanel(): preact.JSX.Element {
           id="tuning-reset"
           class="ghostbtn"
           type="button"
-          disabled={busy}
-          onClick={() => void reset()}
+          disabled={action.busy}
+          onClick={() => void resetDefaults()}
         >
           Reset to defaults
         </button>
@@ -370,8 +260,7 @@ export function DeviceTuningPanel(): preact.JSX.Element {
           {copyLabel(copy.status, 'Copy overrides as JSON')}
         </button>
       </div>
-      {error && <p class="settings-error">{error}</p>}
-      {status && !error && <p class="settings-status">{status}</p>}
+      <Feedback error={action.error} status={action.status} />
 
       <KeymapLearn view={activeView} onSaved={() => void load()} />
     </Collapsible>

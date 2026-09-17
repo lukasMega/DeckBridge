@@ -5,20 +5,7 @@
 import assert from 'tjs:assert';
 import FFI from 'tjs:ffi';
 import { readWideString } from '../src/ffi/wide-string.js';
-
-let passed = 0;
-let failed = 0;
-
-function test(name: string, fn: () => void): void {
-  try {
-    fn();
-    console.log(`  ✓ ${name}`);
-    passed++;
-  } catch (e) {
-    console.error(`  ✗ ${name}: ${(e as Error).message}`);
-    failed++;
-  }
-}
+import { test, summaryExit } from './helpers/harness.js';
 
 /** Encode `text` the way the host platform's libc would: UTF-32LE everywhere except
  *  Windows (UTF-16LE). Matches WCHAR_BYTES in hidapi.ts. */
@@ -55,5 +42,4 @@ test('null pointer reads as null', () => {
   assert.equal(readWideString(null), null);
 });
 
-console.log(`\n${passed} passed, ${failed} failed`);
-tjs.exit(failed > 0 ? 1 : 0);
+summaryExit();

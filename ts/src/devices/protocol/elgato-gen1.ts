@@ -51,3 +51,14 @@ export function gen1BrightnessReport(pct: number): Uint8Array {
 export function gen1ResetReport(): Uint8Array {
   return featureReport(17, [0x0b, 0x63]);
 }
+
+/** All-black key image: a zeroed BMP of the key's size (all zeros → black pixels). */
+export function gen1BlankImage(keyWidth: number, keyHeight: number): Uint8Array {
+  return new Uint8Array(54 + keyWidth * keyHeight * 3);
+}
+
+/** serial/firmware feature reports: plain ASCII at offset 5, runs to end of report. */
+export const GEN1_INFO_REPORTS = {
+  serial: { reportId: 0x03, offset: 5, lengthPrefixed: false },
+  firmware: { reportId: 0x04, offset: 5, lengthPrefixed: false },
+};

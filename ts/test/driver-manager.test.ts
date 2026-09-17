@@ -17,22 +17,7 @@ import type { WebUIServer } from '../src/web/server/index.js';
 import type { WorkerHidDriver } from '../src/hid-worker-host.js';
 import { generateDeviceIdentity } from '../src/device-identity.js';
 import type { DeviceIdentitySettings } from '../src/settings-store.js';
-
-// Test harness
-
-let passed = 0;
-let failed = 0;
-
-async function test(name: string, fn: () => void | Promise<void>): Promise<void> {
-  try {
-    await fn();
-    console.log(`  ✓ ${name}`);
-    passed++;
-  } catch (e: unknown) {
-    console.error(`  ✗ ${name}: ${(e as Error).message}`);
-    failed++;
-  }
-}
+import { testAsync as test, summaryExit } from './helpers/harness.js';
 
 // Fakes
 
@@ -1174,5 +1159,4 @@ await test('F5. the cold first sweep never triggers a backoff', () => {
 
 // Summary
 
-console.log(`\n${passed} passed, ${failed} failed`);
-tjs.exit(failed > 0 ? 1 : 0);
+summaryExit();

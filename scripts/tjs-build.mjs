@@ -9,41 +9,20 @@
 //   TJS            destination path for the runtime binary (vendor/.../build/tjs)
 //   TXIKI_VERSION  release tag to build (e.g. slim-v26.6.0-6)
 
-import { execFileSync, execSync } from 'node:child_process';
-import { existsSync, mkdirSync, copyFileSync, chmodSync, rmSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
+import { existsSync, mkdirSync, rmSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { platform } from 'node:os';
+import { requireTjsEnv, installTjs, have } from './tjs-common.mjs';
 
-const { TJS, TXIKI_VERSION } = process.env;
-
-if (!TJS || !TXIKI_VERSION) {
-  console.error('TJS and TXIKI_VERSION env vars must be set');
-  process.exit(1);
-}
-
-// Same no-op-when-present contract as tjs-download.mjs: a cached/restored $TJS
-// (CI) or an existing local build must not trigger a multi-minute rebuild on
-// every `mise run test`. Delete $TJS to force a rebuild.
-if (existsSync(TJS)) {
-  console.log(`tjs already present: ${TJS}`);
-  process.exit(0);
-}
+const { TJS, TXIKI_VERSION } = requireTjsEnv();
 
 const isWin = platform() === 'win32';
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const REPO = 'https://github.com/lukasMega/txiki.js-with-slim-builds.git';
 
 // Toolchain preflight: fail with an actionable message, not a build error
-function have(cmd) {
-  try {
-    execSync(`${isWin ? 'where' : 'command -v'} ${cmd}`, { stdio: 'ignore' });
-    return true;
-  } catch {
-    return false;
-  }
-}
-
 const missing = ['git', 'cmake', 'npm'].filter((c) => !have(c));
 if (!isWin && !['cc', 'clang', 'gcc'].some(have)) missing.push('a C/C++ compiler (cc/clang/gcc)');
 
@@ -103,9 +82,7 @@ try {
 
   // Only now that we have a proven slim binary (build-dist.mjs smoke-tests it
   // itself), install it to $TJS.
-  mkdirSync(dirname(TJS), { recursive: true });
-  copyFileSync(builtTjs, TJS);
-  chmodSync(TJS, 0o755);
+  installTjs(builtTjs, TJS);
   console.log(`slim tjs installed: ${TJS}`);
 } catch (err) {
   console.error(`\ntxiki.js source build failed: ${err.message ?? err}`);

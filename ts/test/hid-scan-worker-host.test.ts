@@ -1,20 +1,7 @@
 import assert from 'tjs:assert';
 import { HidScanWorkerHost } from '../src/hid-scan-worker-host.js';
 import type { MainToHidScanWorker } from '../src/hid-scan-worker-protocol.js';
-
-let passed = 0;
-let failed = 0;
-
-async function test(name: string, fn: () => void | Promise<void>): Promise<void> {
-  try {
-    await fn();
-    console.log(`  ✓ ${name}`);
-    passed++;
-  } catch (e) {
-    console.error(`  ✗ ${name}: ${(e as Error).message}`);
-    failed++;
-  }
-}
+import { testAsync as test, summaryExit } from './helpers/harness.js';
 
 class FakeScanWorker {
   readonly posted: MainToHidScanWorker[] = [];
@@ -109,5 +96,4 @@ await test('reset survives a scan already in flight', async () => {
   await second;
 });
 
-console.log(`\n${passed} passed, ${failed} failed`);
-tjs.exit(failed > 0 ? 1 : 0);
+summaryExit();

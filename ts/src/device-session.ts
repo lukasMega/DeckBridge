@@ -9,7 +9,11 @@ import {
   CORA_PORT_STRIDE,
   DEFAULT_DOCK_FIRMWARE_VERSION,
   DEFAULT_CHILD_FIRMWARE_VERSION,
+  DEFAULT_DOCK_SERIAL_NUMBER,
+  DEFAULT_CHILD_SERIAL_NUMBER,
+  DEFAULT_MAC_ADDRESS_STRING,
   DEFAULT_BRIGHTNESS,
+  MDNS_SERVICE_NAME,
 } from './types.js';
 import type {
   ExtraKeyConfig,
@@ -58,6 +62,65 @@ export function sessionIdentity(index: number, identity: DeviceIdentitySettings)
     dockSerial: identity.dockSerial,
     childSerial: identity.childSerial,
     macAddress: identity.macAddress,
+  };
+}
+
+/** The identity fields a dock reports — satisfied by both SessionIdentity (an
+ *  extra) and DeviceIdentitySettings (the primary). */
+type DockIdentity = Omit<SessionIdentity, 'index' | 'primaryPort' | 'childPort'>;
+
+export interface DockStatusInput {
+  model: DeviceModel;
+  index: number;
+  primaryPort: number;
+  /** Undefined only for the primary before its first connect → DEFAULT_* identity. */
+  identity: DockIdentity | undefined;
+  brightness: number;
+  primaryConnected: boolean;
+  elgatoConnected: boolean;
+  /** Absent (not just empty) omits realDeviceIdentity — the pre-connect primary. */
+  deviceInfo: DeviceInfo | undefined;
+}
+
+/** The one place a DockStatus is built: the primary dock (driver-manager-primary)
+ *  and every extra session report the same fields in the same order. */
+// oxlint-disable-next-line complexity -- flat fallback chain, not branching logic
+export function buildDockStatus(s: DockStatusInput): DockStatus {
+  const { model, identity, deviceInfo } = s;
+  // Mirrors applyModelToServers: only childSerialNumber/childFirmwareVersion are ever patched
+  // with the physical device's own values, and only when usePhysicalIdentity is set — everything
+  // else is the dock's own fixed identity (dockSerial/mdns) or the shared defaults.
+  const usePhysical = model.cora.usePhysicalIdentity;
+  return {
+    index: s.index,
+    ...(model.keyMap.extraKeys ? { extraKeys: model.keyMap.extraKeys } : {}),
+    modelId: model.id,
+    modelName: model.name,
+    keyCount: model.keyCount,
+    columns: model.columns,
+    rows: model.rows,
+    primaryPort: s.primaryPort,
+    primaryConnected: s.primaryConnected,
+    elgatoConnected: s.elgatoConnected,
+    brightness: s.brightness,
+    dockFirmwareVersion: DEFAULT_DOCK_FIRMWARE_VERSION,
+    childFirmwareVersion: (usePhysical && deviceInfo?.firmware) || DEFAULT_CHILD_FIRMWARE_VERSION,
+    serialNumber: identity?.dockSerial ?? DEFAULT_DOCK_SERIAL_NUMBER,
+    childSerialNumber:
+      (usePhysical && deviceInfo?.serial) || identity?.childSerial || DEFAULT_CHILD_SERIAL_NUMBER,
+    productId: model.cora.productId,
+    macAddress: identity?.macAddress ?? DEFAULT_MAC_ADDRESS_STRING,
+    mdnsServiceName: identity?.mdnsServiceName ?? MDNS_SERVICE_NAME,
+    deviceKey: identity?.deviceKey ?? '',
+    ...(deviceInfo
+      ? {
+          realDeviceIdentity: {
+            modelName: model.name,
+            ...(deviceInfo.serial ? { serialNumber: deviceInfo.serial } : {}),
+            ...(deviceInfo.firmware ? { firmwareVersion: deviceInfo.firmware } : {}),
+          },
+        }
+      : {}),
   };
 }
 
@@ -211,37 +274,18 @@ export class DeviceSession {
   /** Current dock status for the WebUI (primary index 0 + extras). Pure read —
    *  no side effects. */
   status(): DockStatus {
-    const usePhysical = this.model.cora.usePhysicalIdentity;
-    return {
+    return buildDockStatus({
+      model: this.model,
       index: this.identity.index,
-      ...(this.model.keyMap.extraKeys ? { extraKeys: this.model.keyMap.extraKeys } : {}),
-      modelId: this.model.id,
-      modelName: this.model.name,
-      keyCount: this.model.keyCount,
-      columns: this.model.columns,
-      rows: this.model.rows,
       primaryPort: this.identity.primaryPort,
+      identity: this.identity,
+      brightness: this.brightness,
       primaryConnected: this.server.hasClient,
       elgatoConnected: this.childServer.hasClient,
-      brightness: this.brightness,
-      // Mirrors applyModelToServers: only childSerialNumber/childFirmwareVersion are ever patched
-      // with the physical device's own values, and only when usePhysicalIdentity is set — everything
-      // else is this session's own fixed SessionIdentity (dockSerial/mdns) or the shared defaults.
-      dockFirmwareVersion: DEFAULT_DOCK_FIRMWARE_VERSION,
-      childFirmwareVersion:
-        (usePhysical && this.deviceInfo?.firmware) || DEFAULT_CHILD_FIRMWARE_VERSION,
-      serialNumber: this.identity.dockSerial,
-      childSerialNumber: (usePhysical && this.deviceInfo?.serial) || this.identity.childSerial,
-      productId: this.model.cora.productId,
-      macAddress: this.identity.macAddress,
-      mdnsServiceName: this.identity.mdnsServiceName,
-      deviceKey: this.identity.deviceKey,
-      realDeviceIdentity: {
-        modelName: this.model.name,
-        ...(this.deviceInfo?.serial ? { serialNumber: this.deviceInfo.serial } : {}),
-        ...(this.deviceInfo?.firmware ? { firmwareVersion: this.deviceInfo.firmware } : {}),
-      },
-    };
+      // `?? {}`: an extra dock always reports realDeviceIdentity, even before the
+      // driver knows the serial/firmware.
+      deviceInfo: this.deviceInfo ?? {},
+    });
   }
 
   /** Live-rename this dock's mDNS advert (WebUI "Device Identity" edit) — see

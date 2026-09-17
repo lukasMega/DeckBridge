@@ -578,18 +578,19 @@ async function runKeymapAndDiagnosticsPanels(): Promise<void> {
 
   // Diagnostics: the debug toggle reflects state and posts the opposite level.
   {
-    const stub = stubFetch((url) =>
-      url === '/api/state'
-        ? {
-            payload: {
-              logLevel: 'info',
-              logFilePath: '/home/u/.cache/deckbridge/logs/deckbridge.log',
-            },
-          }
-        : { payload: { ok: true } },
-    );
+    // DiagnosticsPanel takes logLevel/logFilePath as props — SettingsPage owns the
+    // single /api/state read and drills them down, so there is no fetch to stub here.
+    const stub = stubFetch(() => ({ payload: { ok: true } }));
     try {
-      await act(() => render(<DiagnosticsPanel />, root));
+      await act(() =>
+        render(
+          <DiagnosticsPanel
+            logLevel="info"
+            logFilePath="/home/u/.cache/deckbridge/logs/deckbridge.log"
+          />,
+          root,
+        ),
+      );
       await settle();
       check(
         elementText('#toggle-debug-logging').includes('off'),

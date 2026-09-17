@@ -1,8 +1,9 @@
 import { assets } from './assets.js';
 import { checkRequirements } from './requirements.js';
-import { get, post } from './router.js';
+import { get, post, postJson } from './router.js';
 import type { Route, RouteContext } from './router.js';
 import { badRequest, css, html, jpeg, js, json, noContent, notFound, text } from './http.js';
+import { isNonNegInt, nonNegIntMessage } from './types.js';
 import type { MockDeviceConfig } from './types.js';
 import {
   EXTRA_KEY_WIDGETS,
@@ -30,30 +31,30 @@ export const routes: Route[] = [
     return buf ? jpeg(buf) : notFound();
   }),
 
-  post('/api/driver-mode', setDriverMode),
-  post('/api/mock-config', setMockConfig),
-  post('/api/device-model', setDeviceModel),
-  post('/api/brightness', setBrightness),
-  post('/api/brightness-override', setBrightnessOverride),
+  postJson('/api/driver-mode', setDriverMode),
+  postJson('/api/mock-config', setMockConfig),
+  postJson('/api/device-model', setDeviceModel, 'invalid request'),
+  postJson('/api/brightness', setBrightness),
+  postJson('/api/brightness-override', setBrightnessOverride),
   post('/api/resize-toggle', ({ ui }) => {
     ui.notifyResizeToggle(!ui.resizeEnabled);
     return json({ ok: true, enabled: ui.resizeEnabled });
   }),
-  post('/api/image-mode', setImageMode),
+  postJson('/api/image-mode', setImageMode),
   post('/api/key/:n', ({ ui, params }) => {
     const err = ui.trySimulateKey(Number(params.n));
     return err ? json({ error: err.error }, err.status) : noContent();
   }),
-  post('/api/select-dock', selectDock),
-  post('/api/extra-key', setExtraKey),
-  post('/api/extra-key/run', runExtraKeyNow),
+  postJson('/api/select-dock', selectDock),
+  postJson('/api/extra-key', setExtraKey),
+  postJson('/api/extra-key/run', runExtraKeyNow),
   post('/api/settings', setSettings),
   post('/api/settings/open-in-os', async ({ ui }) => {
     await ui.openSettingsFile();
     return json({ ok: true });
   }),
-  post('/api/device-identity/mdns-name', setDeviceMdnsName),
-  post('/api/log-level', setLogLevelRoute),
+  postJson('/api/device-identity/mdns-name', setDeviceMdnsName),
+  postJson('/api/log-level', setLogLevelRoute),
   post('/api/logs/open-in-os', async ({ ui }) => {
     await ui.openLogsFolder();
     return json({ ok: true });
@@ -64,8 +65,8 @@ export const routes: Route[] = [
     const view = ui.deviceOverridesView(modelId);
     return 'error' in view ? json({ error: view.error }, view.status) : json(view);
   }),
-  post('/api/device-overrides', setDeviceOverrides),
-  post('/api/device-overrides/reset', resetDeviceOverrides),
+  postJson('/api/device-overrides', setDeviceOverrides),
+  postJson('/api/device-overrides/reset', resetDeviceOverrides),
 
   // text/plain, not JSON: the report is meant to be pasted verbatim into an issue.
   get('/api/diagnostics', async ({ ui, url }) => {
@@ -75,23 +76,12 @@ export const routes: Route[] = [
   post('/api/diagnostics/save', saveDiagnostics),
 ];
 
-type ParsedBody<T> = { body: T } | { error: Response };
-
-async function readJson<T>(req: Request, message = 'invalid JSON'): Promise<ParsedBody<T>> {
-  try {
-    const body = JSON.parse(await req.text()) as T | null;
-    return body === null ? { error: badRequest(message) } : { body };
-  } catch {
-    return { error: badRequest(message) };
-  }
-}
-
 /** Persist one model's device tuning. A validation failure returns the whole
  *  error list so the UI can show every bad field at once. */
-async function setDeviceOverrides({ req, ui }: RouteContext): Promise<Response> {
-  const parsed = await readJson<{ modelId?: unknown; overrides?: unknown }>(req);
-  if ('error' in parsed) return parsed.error;
-  const { body } = parsed;
+function setDeviceOverrides(
+  body: { modelId?: unknown; overrides?: unknown },
+  { ui }: RouteContext,
+): Response {
   const err = ui.trySetModelOverride(body.modelId, body.overrides ?? {});
   if (err) return json({ error: err.error }, err.status);
   // The device session closes and reopens (image/wire/keyMap must be in force
@@ -99,10 +89,7 @@ async function setDeviceOverrides({ req, ui }: RouteContext): Promise<Response> 
   return json({ ok: true, reconnecting: true });
 }
 
-async function resetDeviceOverrides({ req, ui }: RouteContext): Promise<Response> {
-  const parsed = await readJson<{ modelId: unknown }>(req);
-  if ('error' in parsed) return parsed.error;
-  const { modelId } = parsed.body;
+function resetDeviceOverrides({ modelId }: { modelId: unknown }, { ui }: RouteContext): Response {
   const err = ui.tryResetModelOverride(modelId);
   return err ? json({ error: err.error }, err.status) : json({ ok: true, reconnecting: true });
 }
@@ -123,24 +110,19 @@ async function saveDiagnostics({ req, ui }: RouteContext): Promise<Response> {
 
 /** WebUI "Debug logging" toggle. Levels are validated against cli.ts's LOG_LEVELS
  *  (the single source of truth, shared with --log-level and settings.json). */
-async function setLogLevelRoute({ req, ui }: RouteContext): Promise<Response> {
-  const parsed = await readJson<{ level: unknown }>(req);
-  if ('error' in parsed) return parsed.error;
-  const { level } = parsed.body;
+function setLogLevelRoute({ level }: { level: unknown }, { ui }: RouteContext): Response {
   const err = ui.trySetLogLevel(level);
   return err ? json({ error: err.error }, err.status) : json({ ok: true, level });
 }
 
-async function setBrightness({ req, ui }: RouteContext): Promise<Response> {
-  const parsed = await readJson<{ level: unknown; dock?: unknown }>(req);
-  if ('error' in parsed) return parsed.error;
-  const { level, dock } = parsed.body;
+function setBrightness(
+  { level, dock }: { level: unknown; dock?: unknown },
+  { ui }: RouteContext,
+): Response {
   if (typeof level !== 'number' || level < 0 || level > 100 || !Number.isFinite(level)) {
     return badRequest('level must be a number 0–100');
   }
-  if (dock !== undefined && (typeof dock !== 'number' || !Number.isInteger(dock) || dock < 0)) {
-    return badRequest('dock must be a non-negative integer');
-  }
+  if (dock !== undefined && !isNonNegInt(dock)) return badRequest(nonNegIntMessage('dock'));
   const dockIndex = typeof dock === 'number' ? dock : 0;
   const rounded = Math.round(level);
   ui.emit('setBrightness', rounded, dockIndex);
@@ -178,9 +160,7 @@ function validateExtraKeyBody({
   timeoutMs,
   pluginArg,
 }: ExtraKeyBody): string | null {
-  if (typeof wireId !== 'number' || !Number.isInteger(wireId) || wireId < 0) {
-    return 'wireId must be a non-negative integer';
-  }
+  if (!isNonNegInt(wireId)) return nonNegIntMessage('wireId');
   if (typeof widget !== 'string' || !(EXTRA_KEY_WIDGETS as readonly string[]).includes(widget)) {
     return `widget must be one of: ${EXTRA_KEY_WIDGETS.join(', ')}`;
   }
@@ -205,10 +185,7 @@ function validateExtraKeyBody({
 
 /** Assign a display widget to one of the selected dock's extra keys (293S 6th
  *  column — display-only). The server renders and refreshes the key itself. */
-async function setExtraKey({ req, ui }: RouteContext): Promise<Response> {
-  const parsed = await readJson<ExtraKeyBody>(req);
-  if ('error' in parsed) return parsed.error;
-  const { body } = parsed;
+function setExtraKey(body: ExtraKeyBody, { ui }: RouteContext): Response {
   const invalid = validateExtraKeyBody(body);
   if (invalid) return badRequest(invalid);
   const { wireId, widget, param, intervalMs, timeoutMs, pluginArg } = body;
@@ -228,47 +205,30 @@ interface RunExtraKeyBody {
 }
 
 /** Force an immediate re-run of a command-widget extra key (WebUI "Run now"). */
-async function runExtraKeyNow({ req, ui }: RouteContext): Promise<Response> {
-  const parsed = await readJson<RunExtraKeyBody>(req);
-  if ('error' in parsed) return parsed.error;
-  const { wireId } = parsed.body;
-  if (typeof wireId !== 'number' || !Number.isInteger(wireId) || wireId < 0) {
-    return badRequest('wireId must be a non-negative integer');
-  }
+function runExtraKeyNow({ wireId }: RunExtraKeyBody, { ui }: RouteContext): Response {
+  if (!isNonNegInt(wireId)) return badRequest(nonNegIntMessage('wireId'));
   const err = ui.tryRunExtraKeyNow(wireId);
   return err ? json({ error: err.error }, err.status) : json({ ok: true });
 }
 
-async function selectDock({ req, ui }: RouteContext): Promise<Response> {
-  const parsed = await readJson<{ index: unknown }>(req);
-  if ('error' in parsed) return parsed.error;
-  const { index } = parsed.body;
+function selectDock({ index }: { index: unknown }, { ui }: RouteContext): Response {
   const err = ui.trySelectDock(index);
   return err ? json({ error: err.error }, err.status) : json({ ok: true, index });
 }
 
-async function setDriverMode({ req, ui }: RouteContext): Promise<Response> {
-  const parsed = await readJson<{ mode: unknown }>(req);
-  if ('error' in parsed) return parsed.error;
-  const { mode } = parsed.body;
+function setDriverMode({ mode }: { mode: unknown }, { ui }: RouteContext): Response {
   if (mode !== 'real' && mode !== 'mock') return badRequest('mode must be real or mock');
   ui.emit('switchMode', mode);
   return json({ ok: true, mode });
 }
 
-async function setDeviceModel({ req, ui }: RouteContext): Promise<Response> {
-  const parsed = await readJson<{ modelId: unknown }>(req, 'invalid request');
-  if ('error' in parsed) return parsed.error;
-  const { modelId } = parsed.body;
+function setDeviceModel({ modelId }: { modelId: unknown }, { ui }: RouteContext): Response {
   if (typeof modelId !== 'string') return badRequest('invalid request');
   ui.emit('setModel', modelId);
   return json({ ok: true, modelId });
 }
 
-async function setBrightnessOverride({ req, ui }: RouteContext): Promise<Response> {
-  const parsed = await readJson<{ enabled: unknown }>(req);
-  if ('error' in parsed) return parsed.error;
-  const { enabled } = parsed.body;
+function setBrightnessOverride({ enabled }: { enabled: unknown }, { ui }: RouteContext): Response {
   if (typeof enabled !== 'boolean') return badRequest('enabled must be a boolean');
   ui.notifyBrightnessOverride(enabled);
   return json({ ok: true, enabled: ui.brightnessOverride });
@@ -276,10 +236,7 @@ async function setBrightnessOverride({ req, ui }: RouteContext): Promise<Respons
 
 const IMAGE_MODE_VALUES = ['resize', 'pad-black', 'pad-average', 'pad-edge', 'default'] as const;
 
-async function setImageMode({ req, ui }: RouteContext): Promise<Response> {
-  const parsed = await readJson<{ mode: unknown }>(req);
-  if ('error' in parsed) return parsed.error;
-  const { mode } = parsed.body;
+function setImageMode({ mode }: { mode: unknown }, { ui }: RouteContext): Response {
   if (
     typeof mode !== 'string' ||
     !IMAGE_MODE_VALUES.includes(mode as (typeof IMAGE_MODE_VALUES)[number])
@@ -291,18 +248,16 @@ async function setImageMode({ req, ui }: RouteContext): Promise<Response> {
   return json({ ok: true, mode });
 }
 
-async function setMockConfig({ req, ui }: RouteContext): Promise<Response> {
-  const parsed = await readJson<Partial<MockDeviceConfig>>(req);
-  if ('error' in parsed) return parsed.error;
-  return json({ ok: true, mockConfig: ui.applyMockConfig(parsed.body) });
+function setMockConfig(body: Partial<MockDeviceConfig>, { ui }: RouteContext): Response {
+  return json({ ok: true, mockConfig: ui.applyMockConfig(body) });
 }
 
 const MDNS_NAME_MAX_LEN = 63; // sane cap — dns-sd/avahi service instance names aren't unbounded
 
-async function setDeviceMdnsName({ req, ui }: RouteContext): Promise<Response> {
-  const parsed = await readJson<{ deviceKey: unknown; name: unknown }>(req);
-  if ('error' in parsed) return parsed.error;
-  const { deviceKey, name } = parsed.body;
+function setDeviceMdnsName(
+  { deviceKey, name }: { deviceKey: unknown; name: unknown },
+  { ui }: RouteContext,
+): Response {
   if (typeof deviceKey !== 'string' || !deviceKey) {
     return badRequest('deviceKey must be a non-empty string');
   }

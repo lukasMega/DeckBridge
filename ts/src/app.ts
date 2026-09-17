@@ -12,6 +12,7 @@ import { startLogFile, stopLogFile, activeLogFilePath } from './log-file.js';
 import { setupNativeLibs } from './native-libs.js';
 import { setupImageHandler } from './image-pipeline.js';
 import { DriverManager, getInitialDriverMode } from './driver-manager.js';
+import { macToBytes } from './driver-manager-primary.js';
 import type { SessionServersFactory } from './device-session.js';
 import { startCoraWithRetry } from './cora-startup.js';
 import { isElgatoAppRunning, openPathInOS, platformName } from './os-utils.ts';
@@ -159,15 +160,16 @@ const driverManager = new DriverManager({
 
 setupImageHandler(childServer, webui, () => driverManager.getCurrentDriver());
 
-server.on('serverLog', ({ level, component: c, message: m }: LogObject) => log(level, c, m));
-server.on('comm', (entry: Omit<CommEntry, 'ts'>) => webui.notifyComm(entry));
+// Wiring both halves of the primary CORA pair share (extras get serverLog only —
+// see sessionServersFactory).
+for (const s of [server, childServer]) {
+  s.on('serverLog', ({ level, component: c, message: m }: LogObject) => log(level, c, m));
+  s.on('comm', (entry: Omit<CommEntry, 'ts'>) => webui.notifyComm(entry));
+  s.on('clientAppDetected', (app: ClientApp) => webui.notifyClientApp(app));
+}
+
 server.on('clientConnected', (addr: string) => log('info', 'elgato', `primary connected: ${addr}`));
 server.on('clientDisconnected', () => log('info', 'elgato', 'primary disconnected'));
-server.on('clientAppDetected', (app: ClientApp) => webui.notifyClientApp(app));
-
-childServer.on('comm', (entry: Omit<CommEntry, 'ts'>) => webui.notifyComm(entry));
-childServer.on('serverLog', ({ level, component: c, message: m }: LogObject) => log(level, c, m));
-childServer.on('clientAppDetected', (app: ClientApp) => webui.notifyClientApp(app));
 
 childServer.on('clientConnected', (addr: string) => {
   log('info', 'elgato', `child connected: ${addr}`);
@@ -284,9 +286,7 @@ webui.on('setDeviceMdnsName', (deviceKey: string, name: string) => {
 });
 
 webui.on('mockConfig', (cfg: MockDeviceConfig) => {
-  const macParts = cfg.macAddress.split(':');
-  const macBytes = macParts.length === 6 ? macParts.map((p) => parseInt(p, 16)) : [];
-  server.setDeviceConfig({ ...cfg, macAddress: macBytes.length === 6 ? macBytes : [] });
+  server.setDeviceConfig({ ...cfg, macAddress: macToBytes(cfg.macAddress, []) });
   log(
     'info',
     'deckBr',
@@ -299,15 +299,11 @@ webui.on('mockConfig', (cfg: MockDeviceConfig) => {
 async function shutdown(): Promise<void> {
   if (shuttingDown) return;
   shuttingDown = true;
-  try {
-    tjs.removeSignalListener('SIGINT', sigInt);
-  } catch {}
-  try {
-    tjs.removeSignalListener('SIGTERM', sigTerm);
-  } catch {}
-  try {
-    tjs.removeSignalListener('SIGHUP', sigHup);
-  } catch {}
+  for (const [sig, handler] of signalHandlers) {
+    try {
+      tjs.removeSignalListener(sig, handler);
+    } catch {}
+  }
   log('info', 'deckBr', 'shutting down...');
   driverManager.stopScan();
   await driverManager.stopAllExtraSessions().catch(() => undefined);
@@ -329,39 +325,34 @@ function onSignal(sig?: string): void {
   shutdown().catch(() => tjs.exit(1));
 }
 
-const sigInt = () => onSignal('SIGINT');
-const sigTerm = () => onSignal('SIGTERM');
-const sigHup = () => onSignal('SIGHUP');
-tjs.addSignalListener('SIGINT', sigInt);
-tjs.addSignalListener('SIGTERM', sigTerm);
-tjs.addSignalListener('SIGHUP', sigHup);
+// Kept as [signal, handler] pairs so shutdown() can unregister the exact same
+// function references it registered.
+const signalHandlers = (['SIGINT', 'SIGTERM', 'SIGHUP'] as const).map(
+  (sig) => [sig, () => onSignal(sig)] as const,
+);
+for (const [sig, handler] of signalHandlers) tjs.addSignalListener(sig, handler);
 
-log('info', 'deckBr', '══════════════════════════════════════════════');
-log('info', 'deckBr', `bundle built : ${__BUILD_TIME__}`);
-log('info', 'deckBr', `started      : ${new Date().toISOString()}`);
-log(
-  'info',
-  'deckBr',
-  `cpus         : ${tjs.system.cpus.length}x ${tjs.system.cpus[0]?.model ?? '?'}`,
-);
-log('info', 'deckBr', `txiki.js     : ${tjs.version}`);
-log('info', 'deckBr', `log file     : ${activeLogFilePath() ?? '(disabled)'}`);
-log('debug', 'deckBr', `platform     : ${platformName() || '(unknown)'}`);
-log(
-  'info',
-  'deckBr',
-  `env DECKBRIDGE_NATIVE_LIB = ${tjs.env.DECKBRIDGE_NATIVE_LIB ?? '(not set)'}`,
-);
-log('info', 'deckBr', `env HIDAPI_LIB     = ${tjs.env.HIDAPI_LIB ?? '(not set)'}`);
-log('info', 'deckBr', `env DECKBRIDGE_MOCK      = ${tjs.env.DECKBRIDGE_MOCK ?? '(not set)'}`);
-log('info', 'deckBr', `env DECKBRIDGE_OPEN   = ${tjs.env.DECKBRIDGE_OPEN ?? '(not set)'}`);
-log('info', 'deckBr', `env DECKBRIDGE_DUMP_DIR  = ${tjs.env.DECKBRIDGE_DUMP_DIR ?? '(not set)'}`);
-log(
-  'info',
-  'deckBr',
-  `env DECKBRIDGE_RAW_DUMP_DIR = ${tjs.env.DECKBRIDGE_RAW_DUMP_DIR ?? '(not set)'}`,
-);
-log('info', 'deckBr', '══════════════════════════════════════════════');
+// Startup banner. Label padding is hand-set per line and reproduced verbatim in
+// issue reports — keep the widths as they are.
+const BANNER_RULE = '══════════════════════════════════════════════';
+for (const [level, line] of [
+  ['info', BANNER_RULE],
+  ['info', `bundle built : ${__BUILD_TIME__}`],
+  ['info', `started      : ${new Date().toISOString()}`],
+  ['info', `cpus         : ${tjs.system.cpus.length}x ${tjs.system.cpus[0]?.model ?? '?'}`],
+  ['info', `txiki.js     : ${tjs.version}`],
+  ['info', `log file     : ${activeLogFilePath() ?? '(disabled)'}`],
+  ['debug', `platform     : ${platformName() || '(unknown)'}`],
+  ['info', `env DECKBRIDGE_NATIVE_LIB = ${tjs.env.DECKBRIDGE_NATIVE_LIB ?? '(not set)'}`],
+  ['info', `env HIDAPI_LIB     = ${tjs.env.HIDAPI_LIB ?? '(not set)'}`],
+  ['info', `env DECKBRIDGE_MOCK      = ${tjs.env.DECKBRIDGE_MOCK ?? '(not set)'}`],
+  ['info', `env DECKBRIDGE_OPEN   = ${tjs.env.DECKBRIDGE_OPEN ?? '(not set)'}`],
+  ['info', `env DECKBRIDGE_DUMP_DIR  = ${tjs.env.DECKBRIDGE_DUMP_DIR ?? '(not set)'}`],
+  ['info', `env DECKBRIDGE_RAW_DUMP_DIR = ${tjs.env.DECKBRIDGE_RAW_DUMP_DIR ?? '(not set)'}`],
+  ['info', BANNER_RULE],
+] as const) {
+  log(level, 'deckBr', line);
+}
 
 // Poll for a conflict with the Elgato desktop app: running AND the device slot free
 // plausibly explains why we can't open the hardware. Skipped when no WebUI client is

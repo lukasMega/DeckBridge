@@ -1,22 +1,9 @@
 import assert from 'tjs:assert';
 import { padChunkBoundaries } from '../src/mirabox.js';
 import { MIRABOX_K1PRO_MODEL } from '../src/devices/mirabox/mirabox-k1pro.js';
+import { testAsync as test, summaryExit } from './helpers/harness.js';
 
 const PACKET_SIZE = MIRABOX_K1PRO_MODEL.wire.packetSize;
-
-let passed = 0;
-let failed = 0;
-
-async function test(name: string, fn: () => void | Promise<void>): Promise<void> {
-  try {
-    await fn();
-    console.log(`  ✓ ${name}`);
-    passed++;
-  } catch (e: unknown) {
-    console.error(`  ✗ ${name}: ${(e as Error).message}`);
-    failed++;
-  }
-}
 
 function seq(n: number): Buffer {
   const b = Buffer.alloc(n);
@@ -88,5 +75,4 @@ await test('matches the hardware-verified round-16 construction', () => {
   assert.ok(bytesEqual(w.subarray(1024), d.subarray(1023)));
 });
 
-console.log(`\n${passed} passed, ${failed} failed`);
-tjs.exit(failed > 0 ? 1 : 0);
+summaryExit();

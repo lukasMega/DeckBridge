@@ -11,6 +11,7 @@ import {
   KEY_EVENT_RESERVED_BYTE,
   KEY_EVENT_STATE_OFFSET,
   RECONNECT_DELAY_MS,
+  clearTimer,
 } from './types.js';
 import type { KeyState } from './types.js';
 import { CORA_FLAG_VERBATIM, encodeCoraFrame } from './cora-frame.js';
@@ -111,10 +112,7 @@ export class ElgatoChildServer extends CoraServerBase {
       this.outboundSocket.destroy();
       this.outboundSocket = null;
     }
-    if (this.reconnectTimer) {
-      clearTimeout(this.reconnectTimer);
-      this.reconnectTimer = null;
-    }
+    this.reconnectTimer = clearTimer(this.reconnectTimer);
     await this.stopServer();
   }
 
@@ -295,10 +293,7 @@ export class ElgatoChildServer extends CoraServerBase {
     const addr = this.remoteAddress;
     this.logInfo(`child outbound connect to ${addr}:${ELGATO_CHILD_PORT}`);
     const sock = net.createConnection({ host: addr, port: ELGATO_CHILD_PORT }, () => {
-      if (this.reconnectTimer) {
-        clearTimeout(this.reconnectTimer);
-        this.reconnectTimer = null;
-      }
+      this.reconnectTimer = clearTimer(this.reconnectTimer);
       this.logInfo(`child outbound connected to ${addr}`);
       this.reconnectState = 'idle';
       this.outboundSocket = null;
@@ -330,8 +325,7 @@ export class ElgatoChildServer extends CoraServerBase {
       this.logInfo('destroyed pending outbound socket (inbound client connected)');
     }
     if (this.reconnectTimer) {
-      clearTimeout(this.reconnectTimer);
-      this.reconnectTimer = null;
+      this.reconnectTimer = clearTimer(this.reconnectTimer);
       this.logInfo('cancelled pending outbound reconnect (inbound client connected)');
     }
     this.logInfo(

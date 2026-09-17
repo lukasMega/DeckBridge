@@ -10,20 +10,7 @@ import {
 import { DEFAULT_DOCK_SERIAL_NUMBER, DEFAULT_CHILD_SERIAL_NUMBER } from '../src/types.js';
 import { loadSettings, saveSettings } from '../src/settings-store.js';
 import type { Settings, DeviceIdentitySettings } from '../src/settings-store.js';
-
-let passed = 0;
-let failed = 0;
-
-async function test(name: string, fn: () => void | Promise<void>): Promise<void> {
-  try {
-    await fn();
-    console.log(`  ✓ ${name}`);
-    passed++;
-  } catch (e) {
-    console.error(`  ✗ ${name}: ${(e as Error).message}`);
-    failed++;
-  }
-}
+import { testAsync as test, summary } from './helpers/harness.js';
 
 // deviceKeyFor
 
@@ -265,5 +252,4 @@ try {
 
 // Summary
 
-console.log(`\n${passed} passed, ${failed} failed`);
-if (failed > 0) tjs.exit(1);
+summary();

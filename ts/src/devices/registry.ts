@@ -7,15 +7,7 @@ import { MIRABOX_293S_MODEL } from './mirabox/mirabox-293s.js';
 import { MIRABOX_K1PRO_MODEL } from './mirabox/mirabox-k1pro.js';
 import { AJAZZ_AKP153E_REV2_MODEL, AJAZZ_AKP153R_REV2_MODEL } from './ajazz/akp153-rev2.js';
 import { FIFINE_D6_MODEL, FIFINE_D6_REV2_MODEL } from './fifine/fifine-d6.js';
-import {
-  AJAZZ_AKP153_MODEL,
-  AJAZZ_AKP153E_MODEL,
-  AJAZZ_AKP153R_MODEL,
-  MARS_MSD_ONE_MODEL,
-  MADDOG_GK150K_MODEL,
-  RISEMODE_VISION_01_MODEL,
-  TMICE_STREAM_CONTROLLER_MODEL,
-} from './rebadge/akp153-v1-clones.js';
+import { AKP153_V1_CLONE_MODELS } from './rebadge/akp153-v1-clones.js';
 
 // Probe order: Elgato first (priority over Mirabox), then 293V3 before 293S. Everything
 // after that has a unique VID/PID pair, so its position is cosmetic — the one near-clash,
@@ -30,13 +22,7 @@ export const DEVICE_MODELS: DeviceModel[] = [
   AJAZZ_AKP153R_REV2_MODEL,
   FIFINE_D6_MODEL,
   FIFINE_D6_REV2_MODEL,
-  AJAZZ_AKP153_MODEL,
-  AJAZZ_AKP153E_MODEL,
-  AJAZZ_AKP153R_MODEL,
-  MARS_MSD_ONE_MODEL,
-  MADDOG_GK150K_MODEL,
-  RISEMODE_VISION_01_MODEL,
-  TMICE_STREAM_CONTROLLER_MODEL,
+  ...AKP153_V1_CLONE_MODELS,
 ];
 
 /** Fallback model used when nothing is connected / before a real device is probed. */

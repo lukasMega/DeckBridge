@@ -519,6 +519,15 @@ model's `DeviceModel` here — the registry is the ground truth, and runtime tun
 scaffolding on the way to it. See
 [Device tuning](./troubleshooting.md#device-tuning).
 
+Two `wire` fields are **not** tunable this way on a `driverKind: 'elgato-hid'` model:
+`packetSize` and `inSize` are fixed by the gen1/gen2 protocol, and an override naming
+either is rejected with `wire.<key>: not tunable on <name> — fixed by the <protocol>
+protocol`. A wrong `packetSize` makes the driver chunk short, which the firmware
+discards **silently** — a black panel with no error, which is exactly why this is a
+hard reject rather than a knob. Both stay tunable on Mirabox-family boards (where
+`inSize` is capped at 4096). Setting them in the `DeviceModel` literal below is still
+correct and required; the lock applies to runtime *overrides* only.
+
 :::
 
 ---
