@@ -1,3 +1,5 @@
+<img src="src-tauri/icons/128x128.png" alt="DeckBridge icon" width="96" align="right" />
+
 # DeckBridge
 
 [![views](https://tst.lukasmega.deno.net/badge?site=deckbridge&total=1&label=docs%20views%2030d%20%2B%20all)](https://lukasmega.github.io/deno-kv-analytics/badge)
@@ -39,16 +41,24 @@ Both are generated from the device registry, so they never drift from the code.
 | Mirabox 293S | 15 buttons (5×3) | 85×85 | mirabox-cora-v1 |
 | Mirabox K1 Pro | 6 buttons (3×2) | 64×64 | mirabox-cora |
 | Fifine AmpliGame D6 (rev. 2) | 15 buttons (5×3) | 112×112 | mirabox-cora |
-| Fifine AmpliGame D6 — untested | 15 buttons (5×3) | 112×112 | mirabox-cora |
 | Ajazz AKP153E (rev. 2) | 15 buttons (5×3) | 95×95 | mirabox-cora |
-| Ajazz AKP153R (rev. 2) — untested | 15 buttons (5×3) | 112×112 | mirabox-cora |
-| Ajazz AKP153 — untested | 15 buttons (5×3) | 85×85 | mirabox-cora-v1 |
-| Ajazz AKP153E (rev. 1) — untested | 15 buttons (5×3) | 85×85 | mirabox-cora-v1 |
-| Ajazz AKP153R (rev. 1) — untested | 15 buttons (5×3) | 85×85 | mirabox-cora-v1 |
-| Mars Gaming MSD-ONE — untested | 15 buttons (5×3) | 85×85 | mirabox-cora-v1 |
-| Mad Dog GK150K — untested | 15 buttons (5×3) | 85×85 | mirabox-cora-v1 |
-| Risemode Vision 01 — untested | 15 buttons (5×3) | 85×85 | mirabox-cora-v1 |
-| TMICE Stream Controller — untested | 15 buttons (5×3) | 85×85 | mirabox-cora-v1 |
+...
+<details>
+<summary>untested devices</summary>
+
+| Device | Grid | Image size | Protocol |
+|---|---|---|---|
+| Fifine AmpliGame D6 | 15 buttons (5×3) | 112×112 | mirabox-cora |
+| Ajazz AKP153R (rev. 2) | 15 buttons (5×3) | 112×112 | mirabox-cora |
+| Ajazz AKP153 | 15 buttons (5×3) | 85×85 | mirabox-cora-v1 |
+| Ajazz AKP153E (rev. 1) | 15 buttons (5×3) | 85×85 | mirabox-cora-v1 |
+| Ajazz AKP153R (rev. 1) | 15 buttons (5×3) | 85×85 | mirabox-cora-v1 |
+| Mars Gaming MSD-ONE | 15 buttons (5×3) | 85×85 | mirabox-cora-v1 |
+| Mad Dog GK150K | 15 buttons (5×3) | 85×85 | mirabox-cora-v1 |
+| Risemode Vision 01 | 15 buttons (5×3) | 85×85 | mirabox-cora-v1 |
+| TMICE Stream Controller | 15 buttons (5×3) | 85×85 | mirabox-cora-v1 |
+
+</details>
 
 Mirabox 293V3 also matches the HSV293SV3 / "293S V3" refresh — untested.
 
