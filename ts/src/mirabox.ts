@@ -7,6 +7,7 @@ import { formatCommHex } from './comm-format.js';
 import { CLEAR_ALL_KEYS, DEFAULT_BRIGHTNESS, HID_REPORT_ID_BYTE } from './types.js';
 import type { KeyEvent, KeyState } from './types.js';
 import type { DeviceModel } from './devices/driver.js';
+import { supportsImageBatching } from './devices/driver.js';
 import {
   CMD_DIS,
   CMD_HAN,
@@ -34,6 +35,8 @@ export class MiraboxDriver extends HidDeviceBase {
   private lastHeartbeatAt = 0;
   private pktSize = 1024;
   private reportId = HID_REPORT_ID_BYTE;
+  private imageBatch = false;
+  private pendingStp = false;
   // Reused scratch buffers (single-threaded worker), sized in open(): one image
   // chunk and one report-id-prefixed write frame. Avoids a fresh 1024 B + 1025 B
   // allocation per chunk per image (P5).
@@ -248,10 +251,24 @@ export class MiraboxDriver extends HidDeviceBase {
         // knob for boards that drop back-to-back chunks.
         if (delayMs > 0 && offset < wire.length) this._busyWait(delayMs);
       }
-      this.write(this._buildCrt(CMD_STP));
+      if (this.imageBatch) this.pendingStp = true;
+      else this.write(this._buildCrt(CMD_STP));
     } catch (err) {
       this.emit('error', err instanceof Error ? err : new Error(String(err)));
     }
+  }
+
+  /** Only enabled 293S-family models may defer per-image STP framing. */
+  beginImageBatch(): void {
+    this.imageBatch =
+      supportsImageBatching(this.model) && this.model.wire?.batchImageTransfers === true;
+  }
+
+  endImageBatch(): void {
+    this.imageBatch = false;
+    if (!this.pendingStp) return;
+    this.pendingStp = false;
+    this.write(this._buildCrt(CMD_STP));
   }
 
   // Blocking spin-wait — diagnostic pacing between HID writes. The device sees

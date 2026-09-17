@@ -2,7 +2,7 @@ import type { DeviceModel, DeviceVendor } from '../driver.js';
 import { MIRABOX_293S_MODEL } from '../mirabox/mirabox-293s.js';
 
 /** The 7 v1 rebadges of the 293S board: `protocol_version 1`, 512-byte packets, 3×6
- *  physical grid, keydown-only. NOT HARDWARE-TESTED — every field is inherited verbatim
+ *  physical grid, keydown-only. NOT HARDWARE-TESTED — hardware fields are inherited verbatim
  *  from MIRABOX_293S_MODEL by construction, so it cannot drift. Beware the adjacent-PID
  *  trap against ajazz/akp153-rev2.ts; the table is in ../PROVENANCE.md. */
 function cloneOf293S(o: {
@@ -19,6 +19,8 @@ function cloneOf293S(o: {
     vendor: o.vendor,
     usbVendorId: o.vid,
     usbProductIds: [o.pid],
+    // Only the original 293S has hardware-tested batching; rebadges opt in.
+    wire: { ...MIRABOX_293S_MODEL.wire!, batchImageTransfers: false },
   };
 }
 

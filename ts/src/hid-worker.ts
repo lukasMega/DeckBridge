@@ -5,6 +5,7 @@ import type { MainToWorker, WorkerToMain } from './hid-worker-protocol.js';
 import type { ImageModeOverride, KeyEvent } from './types.js';
 import { DEVICE_MODELS } from './devices/registry.js';
 import type { DeviceModel, DeviceModelOverride } from './devices/driver.js';
+import { supportsImageBatching } from './devices/driver.js';
 import { applyModelOverrides, overrideSummary } from './devices/model-overrides.js';
 import { imageCache } from './image-cache.js';
 import { ElgatoHidDriver } from './devices/hid-driver-base.js';
@@ -98,10 +99,11 @@ async function handleImage(
   keyIndex: number,
   bytes: Uint8Array,
   format: 'jpeg' | 'bmp',
+  deferNotification: boolean,
 ): Promise<void> {
   if (!driver || !currentModel) return;
   await renderImage(driver, currentModel, keyIndex, bytes, format, imageOverride);
-  post({ type: 'imageSent', keyIndex });
+  if (!deferNotification) post({ type: 'imageSent', keyIndex });
 }
 
 /** Transform the splash source image with the caller-supplied spec (which may
@@ -121,13 +123,13 @@ function handleSplashImage(
   driver.sendImage(keyIndex, nativeBytes);
 }
 
-async function handle(msg: MainToWorker): Promise<void> {
+async function handle(msg: MainToWorker, deferNotification: boolean): Promise<void> {
   switch (msg.type) {
     case 'open':
       await handleOpen(msg.modelId, msg.hidPath, msg.overrides);
       break;
     case 'image':
-      await handleImage(msg.keyIndex, msg.bytes, msg.format);
+      await handleImage(msg.keyIndex, msg.bytes, msg.format, deferNotification);
       break;
     case 'sendImage':
       driver?.sendImage(msg.keyIndex, msg.bytes);
@@ -159,8 +161,51 @@ async function handle(msg: MainToWorker): Promise<void> {
 }
 
 let queue: Promise<void> = Promise.resolve();
-scope.addEventListener('message', (ev: MessageEvent) => {
+let pendingImages: MainToWorker[] = [];
+let batchTimer: ReturnType<typeof setTimeout> | null = null;
+
+async function handleImageBatch(images: MainToWorker[]): Promise<void> {
+  const d = driver;
+  if (!(d instanceof MiraboxDriver)) return;
+  d.beginImageBatch();
+  try {
+    for (const msg of images) await handle(msg, true);
+  } finally {
+    d.endImageBatch();
+  }
+  for (const msg of images) {
+    if (msg.type === 'image') post({ type: 'imageSent', keyIndex: msg.keyIndex });
+  }
+}
+
+/** Fixed window, never reset by arrivals: animations cannot postpone flushing. */
+function enqueueImageBatch(): void {
+  if (batchTimer !== null) clearTimeout(batchTimer);
+  batchTimer = null;
+  if (pendingImages.length === 0) return;
+  const images = pendingImages;
+  pendingImages = [];
   queue = queue
-    .then(() => handle(ev.data as MainToWorker))
+    .then(() => handleImageBatch(images))
+    .catch((e: unknown) => post({ type: 'error', message: (e as Error).message }));
+}
+
+scope.addEventListener('message', (ev: MessageEvent) => {
+  const msg = ev.data as MainToWorker;
+  if (
+    currentModel &&
+    supportsImageBatching(currentModel) &&
+    currentModel.wire?.batchImageTransfers === true &&
+    (msg.type === 'image' || msg.type === 'sendImage' || msg.type === 'splashImage')
+  ) {
+    pendingImages.push(msg);
+    if (pendingImages.length === 15) enqueueImageBatch();
+    else if (batchTimer === null) batchTimer = setTimeout(enqueueImageBatch, 16);
+    return;
+  }
+  // Flush earlier images before clear, settings, close, or another open.
+  enqueueImageBatch();
+  queue = queue
+    .then(() => handle(msg, false))
     .catch((e: unknown) => post({ type: 'error', message: (e as Error).message }));
 });
