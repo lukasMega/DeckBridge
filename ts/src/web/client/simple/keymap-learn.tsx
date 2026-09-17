@@ -129,11 +129,7 @@ export function KeymapLearn({
   return (
     <>
       <p class="help-section-label">Key-map learn mode</p>
-      <p class="help-lead">
-        Press each key in the order you are asked. DeckBridge records which raw code the hardware
-        sends for each grid position and builds the map from that — the reliable way to fix a device
-        whose presses land on the wrong key.
-      </p>
+      <p class="help-lead">Fix misplaced key presses. Follow prompts to remap keys.</p>
 
       {!learning && (
         <div class="settings-actions">

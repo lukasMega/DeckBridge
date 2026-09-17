@@ -352,7 +352,7 @@ async function runSettingsPanels(): Promise<void> {
       check(!tuningBody.classList.contains('open'), 'Device tuning is collapsed by default');
       await click('#device-tuning > .collapse-header');
       check(tuningBody.classList.contains('open'), 'Device tuning opens from its header');
-      const rotation = root.querySelector<HTMLSelectElement>('select');
+      const rotation = root.querySelector<HTMLInputElement>('input[name="rotation"]:checked');
       check(rotation?.value === '180', 'Rotation seeds from the effective spec, not the default');
       check(
         root.querySelector('#tuning-apply') !== null &&

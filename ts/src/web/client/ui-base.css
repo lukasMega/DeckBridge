@@ -116,3 +116,14 @@ html[data-mode='advanced'] #advanced-view {
 .key-grid[data-model='mirabox-k1pro'] .key-cell img {
   transform: rotate(90deg) rotateX(180deg);
 }
+/* Label kept for assistive tech where a surrounding group already names the field. */
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}

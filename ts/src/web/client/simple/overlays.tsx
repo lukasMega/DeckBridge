@@ -4,7 +4,6 @@ import { useEffect, useRef, useState } from 'preact/hooks';
 import { ICON } from '../ui-icons.js';
 import { HELP } from '../ui-help.js';
 import { Icon } from './Icon.js';
-import { BackButton } from './controls.js';
 import { Collapsible } from '../components/Collapsible.js';
 import { DiagnosticsPanel } from './diagnostics-panel.js';
 import { MultiDeckPanel } from './multi-deck-panel.js';
@@ -31,6 +30,28 @@ const IDENTITY_FIELDS: ReadonlyArray<{ key: ReadOnlyIdentityKey; label: string }
 
 function formatIdentityValue(key: ReadOnlyIdentityKey, value: string | number): string {
   return key === 'productId' ? `0x${Number(value).toString(16).padStart(4, '0')}` : String(value);
+}
+
+function isSensitiveIdentityKey(key: ReadOnlyIdentityKey): boolean {
+  return key === 'serialNumber' || key === 'childSerialNumber' || key === 'macAddress';
+}
+
+/** Blur is cosmetic (shoulder-surfing/screenshots) — the value stays in the DOM,
+ *  so the hidden state says so rather than reading the value out. */
+function SensitiveValue({ value }: Readonly<{ value: string }>): preact.JSX.Element {
+  const [revealed, setRevealed] = useState(false);
+  return (
+    <button
+      class={`identity-value identity-sensitive${revealed ? ' revealed' : ''}`}
+      type="button"
+      aria-pressed={revealed}
+      aria-label={revealed ? value : 'Hidden — activate to show value'}
+      title={revealed ? 'Hide sensitive value' : 'Show sensitive value'}
+      onClick={() => setRevealed(!revealed)}
+    >
+      {value}
+    </button>
+  );
 }
 
 /** mDNS service name row: editable when the identity has a `deviceKey` (a
@@ -171,7 +192,11 @@ function RealIdentityList({
       </li>
       <li>
         <span class="identity-label">Serial number</span>
-        <code class="identity-value">{realIdentity.serialNumber ?? 'Unavailable'}</code>
+        {realIdentity.serialNumber ? (
+          <SensitiveValue value={realIdentity.serialNumber} />
+        ) : (
+          <code class="identity-value">Unavailable</code>
+        )}
       </li>
       <li>
         <span class="identity-label">Firmware version</span>
@@ -259,11 +284,7 @@ export function SettingsPage({ onBack }: Readonly<{ onBack: () => void }>): prea
 
   return (
     <div class="help">
-      <BackButton onClick={onBack} />
       <h1>Settings</h1>
-      <p class="help-lead">
-        Save your DeckBridge settings to a file, or load a previously saved file.
-      </p>
       <div class="settings-actions">
         <button class="ghostbtn" type="button" onClick={() => void handleExport()}>
           Export settings
@@ -302,7 +323,11 @@ export function SettingsPage({ onBack }: Readonly<{ onBack: () => void }>): prea
           {IDENTITY_FIELDS.map(({ key, label }) => (
             <li key={key}>
               <span class="identity-label">{label}</span>
-              <code class="identity-value">{formatIdentityValue(key, identity[key])}</code>
+              {isSensitiveIdentityKey(key) ? (
+                <SensitiveValue value={formatIdentityValue(key, identity[key])} />
+              ) : (
+                <code class="identity-value">{formatIdentityValue(key, identity[key])}</code>
+              )}
             </li>
           ))}
         </ul>
@@ -340,7 +365,6 @@ export function HelpScreen({
   let n = 0;
   return (
     <div class="help">
-      <BackButton onClick={onBack} />
       {/* eslint-disable-next-line @eslint-react/dom-no-dangerously-set-innerhtml -- static trusted SVG from HELP data */}
       <div class="help-stage panel-inset" dangerouslySetInnerHTML={{ __html: topic.svg() }} />
       <h1>{topic.title}</h1>

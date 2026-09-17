@@ -24,8 +24,20 @@
   background: linear-gradient(180deg, var(--surface) 0%, var(--surface-2) 100%);
 }
 .brand,
+.topbar-left,
 .topbar-actions {
   gap: 10px;
+}
+.brand-home {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
 }
 .mark {
   width: 28px;
@@ -154,6 +166,7 @@
 /* center-aligned flex rows */
 .topbar,
 .brand,
+.topbar-left,
 .topbar-actions,
 .preview-head,
 .dock-card-head,
@@ -1003,9 +1016,14 @@ input[type='range'].range:disabled {
   border-radius: 99px;
   margin-bottom: 18px;
 }
+.topbar .help-back {
+  margin-bottom: 0;
+}
 .help-back svg {
   width: 14px;
   height: 14px;
+  top: 2px;
+  position: relative;
 }
 .help-stage {
   padding: 18px;
@@ -1036,6 +1054,10 @@ input[type='range'].range:disabled {
   text-transform: uppercase;
   color: var(--accent);
   margin: 0 0 10px;
+}
+/* separate a label that follows earlier content; the first one sits tight */
+.help-section-label:not(:first-child) {
+  margin-top: 2em;
 }
 .help-steps {
   list-style: none;
@@ -1260,6 +1282,22 @@ input[type='range'].range:disabled {
   text-align: right;
   overflow-wrap: anywhere;
 }
+.identity-sensitive {
+  filter: blur(5px);
+  user-select: none;
+  cursor: pointer;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  transition: filter 0.15s ease;
+}
+.identity-sensitive:hover,
+.identity-sensitive:focus-visible {
+  filter: blur(3px);
+}
+.identity-sensitive.revealed {
+  filter: none;
+}
 .identity-edit-row {
   gap: 8px;
 }
@@ -1302,8 +1340,65 @@ input[type='range'].range:disabled {
   font-size: 13px;
   color: var(--fg-muted);
 }
+.tuning-group {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.tuning-group-label {
+  margin: 0;
+  color: var(--accent);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.tuning-dimensions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 80px));
+  gap: 8px;
+}
 .tuning-field .input {
   width: 100%;
+}
+.pad-fill-options {
+  display: flex;
+  gap: 6px;
+}
+.rotation-options {
+  flex-wrap: wrap;
+}
+.pad-fill-option {
+  display: flex;
+  position: relative;
+  align-items: center;
+  gap: 3px;
+  min-width: 30px;
+  height: 26px;
+  padding: 0 6px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--fg-muted);
+  cursor: pointer;
+}
+.icon-radio-label {
+  font-family: var(--mono);
+  font-size: 10px;
+}
+.pad-fill-option:has(input:checked) {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+/* the radio itself is visually hidden, so it cannot carry the focus ring */
+.pad-fill-option:has(input:focus-visible) {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.pad-fill-option input {
+  position: absolute;
+  opacity: 0;
 }
 .settings-checkbox {
   display: flex;
@@ -1312,6 +1407,49 @@ input[type='range'].range:disabled {
   font-size: 13px;
   color: var(--fg-muted);
   margin: 0 0 8px;
+}
+.multi-deck-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.multi-deck-row .settings-checkbox {
+  margin: 0;
+}
+.multi-deck-help {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border: 1px solid var(--border);
+  border-radius: 99px;
+  color: var(--fg-muted);
+  cursor: help;
+}
+.multi-deck-help svg {
+  width: 11px;
+  height: 11px;
+}
+.multi-deck-note {
+  margin: 6px 0 0;
+  color: var(--fg-muted);
+  font-size: 12px;
+}
+.tuning-checkboxes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+  margin-bottom: 8px;
+}
+.tuning-checkboxes .settings-checkbox {
+  gap: 4px;
+  margin: 0;
+  font-size: 12px;
+  white-space: nowrap;
+}
+.tuning-checkboxes + .collapsible {
+  margin-top: 1em;
 }
 .settings-json-preview {
   margin: 0 0 6px;
@@ -1401,6 +1539,11 @@ select.input {
 .diag-section > .collapse-header {
   color: var(--warn);
   margin: 0;
+  position: relative;
+}
+.diag-section > .collapse-header .collapse-arrow {
+  position: absolute;
+  right: -8px;
 }
 .diag-section > .collapse-header:hover {
   color: var(--warn);

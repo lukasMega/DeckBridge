@@ -14,8 +14,15 @@ import type { DeviceImageOverride, DeviceOverridesView } from '../ui-types.js';
 
 const ROTATIONS = [0, 90, 180, 270] as const;
 const RESIZE_FILTERS = ['triangle', 'nearest', 'lanczos3'] as const;
-const RESIZE_MODES = ['resize', 'pad'] as const;
-const PAD_FILLS = ['black', 'average', 'edge'] as const;
+const RESIZE_MODE_OPTIONS = [
+  { value: 'resize', icon: '↔', description: 'Resize image to fit' },
+  { value: 'pad', icon: '□', description: 'Pad image to fit' },
+] as const;
+const PAD_FILL_OPTIONS = [
+  { value: 'black', icon: '●', description: 'Black padding' },
+  { value: 'average', icon: '◐', description: 'Average-color padding' },
+  { value: 'edge', icon: '▣', description: 'Edge-color padding' },
+] as const;
 
 /** Numeric fields rendered as a plain number input, with their bounds. Bounds
  *  mirror devices/model-overrides.ts — the server re-validates regardless. */
@@ -30,7 +37,7 @@ const NUMBER_FIELDS: ReadonlyArray<{
   { key: 'width', label: 'Width (px)', min: 8, max: 1024 },
   { key: 'height', label: 'Height (px)', min: 8, max: 1024 },
   { key: 'quality', label: 'JPEG quality (0.05–1)', min: 0.05, max: 1, step: 0.05 },
-  { key: 'maxBytes', label: 'Max image bytes (0 = no cap)', min: 0 },
+  { key: 'maxBytes', label: 'Byte limit (0 = unlimited)', min: 0 },
   { key: 'sharpen', label: 'Sharpen sigma', min: 0, step: 0.1, advanced: true },
   { key: 'blur', label: 'Blur sigma', min: 0, step: 0.1, advanced: true },
   { key: 'crop', label: 'Crop (px per side)', min: 0, advanced: true },
@@ -154,7 +161,8 @@ export function DeviceTuningPanel(): preact.JSX.Element {
   if (!activeView) return <EmptyDeviceTuningPanel />;
 
   const patch = (p: Partial<DeviceImageOverride>): void => setImage({ ...image, ...p });
-  const basic = NUMBER_FIELDS.filter((f) => !f.advanced);
+  const dimensions = NUMBER_FIELDS.filter((f) => f.key === 'width' || f.key === 'height');
+  const basic = NUMBER_FIELDS.filter((f) => !f.advanced && f.key !== 'width' && f.key !== 'height');
   const advanced = NUMBER_FIELDS.filter((f) => f.advanced);
 
   return (
@@ -165,63 +173,121 @@ export function DeviceTuningPanel(): preact.JSX.Element {
       bodyId="device-tuning-body"
     >
       <p class="help-lead">
-        Adjust how images are sent to this model. Changes apply to every unit of{' '}
-        <code>{activeView.modelId}</code> and take effect on reconnect. If the panel goes dark,
-        press Reset, or restart with <code>--no-overrides</code>.
+        Applies model-wide on reconnect. Screen dark? Reset or restart with{' '}
+        <code>--no-overrides</code>.
       </p>
 
       {activeView.safeMode === true && (
         <p class="settings-error" id="tuning-safe-mode">
-          Safe mode (<code>--no-overrides</code>): saved tuning is ignored this session, so the
-          device is running the built-in defaults. Restart without the flag to apply it again.
+          Safe mode: using defaults. Restart without <code>--no-overrides</code> to restore tuning.
         </p>
       )}
 
       <div class="tuning-grid">
-        <SelectField
-          label="Rotation"
-          value={image.rotate ?? 0}
-          options={ROTATIONS}
-          onChange={(rotate) => patch({ rotate })}
-        />
-        <SelectField
-          label="Image fit"
-          value={image.resizeMode ?? 'resize'}
-          options={RESIZE_MODES}
-          onChange={(resizeMode) => patch({ resizeMode })}
-        />
-        <SelectField
-          label="Pad fill (fit = pad)"
-          value={image.padFill ?? 'edge'}
-          options={PAD_FILLS}
-          onChange={(padFill) => patch({ padFill })}
-        />
-        {basic.map((f) => (
-          <NumberField
-            key={f.key}
-            label={f.label}
-            value={image[f.key] as number | undefined}
-            min={f.min}
-            max={f.max}
-            step={f.step}
-            onChange={(v) => patch({ [f.key]: v })}
-          />
-        ))}
+        <div class="tuning-group">
+          <p class="tuning-group-label">Layout</p>
+          <div class="tuning-field">
+            <span>Rotation</span>
+            <div class="pad-fill-options rotation-options" role="radiogroup" aria-label="Rotation">
+              {ROTATIONS.map((rotate) => (
+                <label key={rotate} class="pad-fill-option" title={`Rotate ${rotate} degrees`}>
+                  <input
+                    type="radio"
+                    name="rotation"
+                    value={rotate}
+                    checked={(image.rotate ?? 0) === rotate}
+                    onChange={() => patch({ rotate })}
+                  />
+                  <span>{rotate}°</span>
+                </label>
+              ))}
+            </div>
+          </div>
+          <div class="tuning-field">
+            <span>Image fit</span>
+            <div class="pad-fill-options" role="radiogroup" aria-label="Image fit">
+              {RESIZE_MODE_OPTIONS.map(({ value, icon, description }) => (
+                <label key={value} class="pad-fill-option" title={description}>
+                  <input
+                    type="radio"
+                    name="image-fit"
+                    value={value}
+                    checked={(image.resizeMode ?? 'resize') === value}
+                    onChange={() => patch({ resizeMode: value })}
+                  />
+                  <span aria-hidden="true">{icon}</span>
+                  <span class="icon-radio-label">{value}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+          <div class="tuning-field">
+            <span>Pad fill</span>
+            <div class="pad-fill-options" role="radiogroup" aria-label="Pad fill">
+              {PAD_FILL_OPTIONS.map(({ value, icon, description }) => (
+                <label key={value} class="pad-fill-option" title={description}>
+                  <input
+                    type="radio"
+                    name="pad-fill"
+                    value={value}
+                    checked={(image.padFill ?? 'edge') === value}
+                    onChange={() => patch({ padFill: value })}
+                  />
+                  <span aria-hidden="true">{icon}</span>
+                  <span class="icon-radio-label">{value}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+        </div>
+        <div class="tuning-group">
+          <p class="tuning-group-label">Image</p>
+          <div class="tuning-field" role="group" aria-labelledby="tuning-dimensions-label">
+            <span id="tuning-dimensions-label">Width/Height (px)</span>
+            <div class="tuning-dimensions">
+              {dimensions.map((f) => (
+                <NumberField
+                  key={f.key}
+                  label={f.label}
+                  labelHidden
+                  value={image[f.key] as number | undefined}
+                  min={f.min}
+                  max={f.max}
+                  step={f.step}
+                  onChange={(v) => patch({ [f.key]: v })}
+                />
+              ))}
+            </div>
+          </div>
+          {basic.map((f) => (
+            <NumberField
+              key={f.key}
+              label={f.label}
+              value={image[f.key] as number | undefined}
+              min={f.min}
+              max={f.max}
+              step={f.step}
+              onChange={(v) => patch({ [f.key]: v })}
+            />
+          ))}
+          <div class="tuning-checkboxes">
+            <CheckField
+              label="Flip horizontal"
+              checked={image.flipH ?? false}
+              onChange={(flipH) => patch({ flipH })}
+            />
+            <CheckField
+              label="Flip vertical"
+              checked={image.flipV ?? false}
+              onChange={(flipV) => patch({ flipV })}
+            />
+          </div>
+        </div>
       </div>
-      <CheckField
-        label="Flip horizontally"
-        checked={image.flipH ?? false}
-        onChange={(flipH) => patch({ flipH })}
-      />
-      <CheckField
-        label="Flip vertically"
-        checked={image.flipV ?? false}
-        onChange={(flipV) => patch({ flipV })}
-      />
       {typeof activeView.tunable.wire?.batchImageTransfers === 'boolean' && (
         <CheckField
           id="tuning-batch-image-transfers"
-          label="Batch image transfers"
+          label="Batch transfers"
           checked={batchImageTransfers}
           onChange={setBatchImageTransfers}
         />
@@ -266,7 +332,7 @@ export function DeviceTuningPanel(): preact.JSX.Element {
           disabled={action.busy}
           onClick={() => void resetDefaults()}
         >
-          Reset to defaults
+          Reset
         </button>
         <button
           id="tuning-copy"
@@ -276,7 +342,7 @@ export function DeviceTuningPanel(): preact.JSX.Element {
             void copy.copy(JSON.stringify({ [activeView.modelId]: activeView.overrides }, null, 2))
           }
         >
-          {copyLabel(copy.status, 'Copy overrides as JSON')}
+          {copyLabel(copy.status, 'Copy JSON')}
         </button>
       </div>
       <Feedback error={action.error} status={action.status} />
