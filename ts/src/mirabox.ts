@@ -253,7 +253,7 @@ export class MiraboxDriver extends HidDeviceBase {
   /** Only enabled 293S-family models may defer per-image STP framing. */
   beginImageBatch(): void {
     this.imageBatch =
-      supportsImageBatching(this.model) && this.model.wire?.batchImageTransfers === true;
+      supportsImageBatching(this.model) && this.model.wire.batchImageTransfers === true;
   }
 
   endImageBatch(): void {

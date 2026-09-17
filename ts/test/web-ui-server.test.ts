@@ -855,7 +855,7 @@ await runWebTest(
       const initial = ui.deviceOverridesView(modelId);
       assert.ok(!('error' in initial));
       if ('error' in initial) continue;
-      assert.equal(initial.tunable.wire?.batchImageTransfers, defaultEnabled);
+      assert.equal(initial.tunable.wire!.batchImageTransfers, defaultEnabled);
       assert.equal(
         ui.trySetModelOverride(modelId, { wire: { batchImageTransfers: !defaultEnabled } }),
         null,
@@ -863,7 +863,7 @@ await runWebTest(
       const saved = ui.deviceOverridesView(modelId);
       assert.ok(!('error' in saved));
       if (!('error' in saved))
-        assert.equal(saved.effective.wire?.batchImageTransfers, !defaultEnabled);
+        assert.equal(saved.effective.wire.batchImageTransfers, !defaultEnabled);
       const importRoot = `${TEST_SETTINGS_ROOT}-batch-import`;
       await saveSettings(JSON.parse(ui.getSettingsJson()) as Settings, importRoot);
       const restoredUi = new WebUIServer(undefined, [], 'real', importRoot);

@@ -23,7 +23,7 @@ test('image batching is tunable only on 293S-family boards', () => {
       assert.equal(result.ok, supported, model.id);
     }
     assert.equal(
-      tunableDefaults(model).wire?.batchImageTransfers,
+      tunableDefaults(model).wire!.batchImageTransfers,
       supported ? model.id === 'mirabox-293s' : undefined,
       model.id,
     );
@@ -32,10 +32,10 @@ test('image batching is tunable only on 293S-family boards', () => {
   const invalid = validateModelOverride({ wire: { batchImageTransfers: 1 } }, model);
   assert.equal(invalid.ok, false);
   assert.equal(
-    applyModelOverrides(model, { wire: { batchImageTransfers: false } }).wire?.batchImageTransfers,
+    applyModelOverrides(model, { wire: { batchImageTransfers: false } }).wire.batchImageTransfers,
     false,
   );
-  assert.equal(model.wire?.batchImageTransfers, true, 'override never mutates registry default');
+  assert.equal(model.wire.batchImageTransfers, true, 'override never mutates registry default');
 });
 
 /** The error list for a rejected override, or [] when it validated. */

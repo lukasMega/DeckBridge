@@ -195,7 +195,7 @@ scope.addEventListener('message', (ev: MessageEvent) => {
   if (
     currentModel &&
     supportsImageBatching(currentModel) &&
-    currentModel.wire?.batchImageTransfers === true &&
+    currentModel.wire.batchImageTransfers === true &&
     (msg.type === 'image' || msg.type === 'sendImage' || msg.type === 'splashImage')
   ) {
     pendingImages.push(msg);
