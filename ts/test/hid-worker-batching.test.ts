@@ -82,7 +82,7 @@ async function open(modelId: string, batchImageTransfers?: boolean): Promise<voi
   notificationTags.length = 0;
 }
 
-await test('293S page sends 15 BATs and one final STP', async () => {
+await test('293S page sends 15 BAT packets and one final STP', async () => {
   await open('mirabox-293s');
   for (let keyIndex = 1; keyIndex <= 15; keyIndex++) {
     send({ type: 'sendImage', keyIndex, bytes: new Uint8Array(600) });
