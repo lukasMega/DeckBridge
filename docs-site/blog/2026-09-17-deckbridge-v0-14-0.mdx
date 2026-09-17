@@ -6,29 +6,26 @@ tags: [release, devices, docs]
 date: 2026-09-17
 ---
 
-Deckbridge 0.14.0 closes out a run of releases focused on speed and on diagnosing problems instead of guessing at them: batched image transfers, faster USB discovery, a full diagnostics report, and per-model device tuning.
+Deckbridge 0.14.0 brings faster image transfers and USB discovery, easier diagnostics, and device tuning.
 
 {/* truncate */}
 
 ## Performance
 
-- Batched image transfers on 293S-family devices.
-- One HID enumeration per probe sweep instead of one per model.
-- Adaptive reconnect: 3 s polling while enumeration is fast, backing off to 30 s when it is not.
-- Fewer hot-path allocations, less FFI churn, and quieter WebSocket traffic.
+- Faster image transfers on 293S-family devices.
+- USB discovery scans once per sweep.
+- Reconnect checks run every 3–30 seconds.
+- Less memory overhead and WebSocket traffic.
 
-Batching is the one you can see: a profile switch now paints the whole panel in one sweep instead of key by key. Measured on a Mirabox 293S, ten samples per mode, timing the synchronous host USB writes for a full 15-key page:
+Profile switches now update all keys together. On a Mirabox 293S, median USB transfer time dropped **54.9%** across ten samples per mode.
 
-| Measurement | Original | Batched |
+| Full 15-key page | Before | After |
 | --- | ---: | ---: |
-| Median USB page writes | 1,022.002 ms | 461.040 ms |
-| Mean USB page writes | 1,024.356 ms | 461.071 ms |
-| Minimum | 1,020.708 ms | 459.484 ms |
-| Maximum | 1,041.003 ms | 463.509 ms |
-| Reports per page | 76 | 62 |
-| STP reports per page | 15 | 1 |
+| Median USB transfer | 1,022 ms | 461 ms |
+| USB reports | 76 | 62 |
+| STP reports | 15 | 1 |
 
-Median transfer time fell **54.9%** — roughly **2.22×** throughput. That is more than the 18% drop in report count explains: each STP costs about 0.5 ms to write, but the writes that follow it stall in firmware, so sending one STP per page instead of fifteen removes stalls as well as reports.
+Sending one STP report per page reduces firmware stalls.
 
 <video
   autoPlay
@@ -42,31 +39,35 @@ Median transfer time fell **54.9%** — roughly **2.22×** throughput. That is m
   <source src={require('../../docs/img/batch-improvement.mp4').default} type="video/mp4" />
 </video>
 
-## Diagnostics you can attach to a bug report
+## Diagnostics
 
-`deckbridge diagnose` prints a complete report without starting a server or opening the device, and the Web UI serves the same report from `GET /api/diagnostics`. It includes the resolved device model, capability probes, log excerpts, and your `settings.json`. Commands are included verbatim by default — pass `--redact-commands` if you would rather not share them.
+Run `deckbridge diagnose` to collect device details, logs, and `settings.json`. It runs without starting a server or opening the device. The Web UI provides the same report at `GET /api/diagnostics`.
 
-Deckbridge also writes a rotating log file now (2 MB, 3 files kept). Startup steps are wrapped in paired breadcrumbs, so a freeze leaves the hung step as the last line in the log.
+Commands appear in full by default. Use `--redact-commands` before sharing if needed.
 
-## Device tuning overrides
+Rotating logs keep three files, up to 2 MB each. Startup logs help identify where a freeze occurred.
 
-If a device is almost right but not quite, `modelOverrides` in `settings.json` (and the tuning panel in the Web UI) lets you adjust image, wire, and key-map settings for a model without a code change. Identity fields — VID/PID, protocol, driver kind, geometry — stay fixed on purpose: no override can make Deckbridge pick a different driver. Start with `DECKBRIDGE_NO_OVERRIDES=1` if a tweak makes things worse.
+## Device tuning
 
-See [troubleshooting](/troubleshooting) for both features.
+Use the Web UI tuning panel or `modelOverrides` in `settings.json` to adjust images, communication, and key mapping. Device identity and driver selection stay fixed.
+
+If tuning causes problems, restart with `DECKBRIDGE_NO_OVERRIDES=1`.
+
+See [troubleshooting](/troubleshooting) for details.
 
 ## Device and platform fixes
 
-- macOS: HID enumeration recovers after an unplug/replug instead of wedging.
+- macOS: device discovery recovers after unplugging and reconnecting.
 - AKP153E: stable discovery and corrected icon dimensions.
-- Stream Deck MK.2: fixed splash rotation and the gen2 key offset.
-- Device tuning reloads are now race-proof.
+- Stream Deck MK.2: corrected splash rotation and key offsets.
+- More reliable device tuning reloads.
 
 ## Releases
 
-Every release artifact is scanned for malware, and the VirusTotal links are in the release body. Windows and macOS installer builds are faster, with a retry for the flaky macOS DMG step.
+Release files are scanned for malware. VirusTotal links appear in release notes. Windows and macOS installers build faster.
 
-## In the future release
+## Next release
 
-Deckbridge will dock a single deck by default and stop scanning USB once one is connected. Set `"multiDeck": true` (or use the Settings toggle) to dock a second deck; turning it back off tears the extra dock down.
+Deckbridge will connect one deck by default, then stop USB scanning. Enable `"multiDeck": true` in Settings to connect another. Disabling it disconnects extra decks.
 
-Full changelog and downloads: [deckbridge-v0.14.0](https://github.com/lukasMega/DeckBridge/releases/tag/deckbridge-v0.14.0)
+[Full changelog and downloads](https://github.com/lukasMega/DeckBridge/releases/tag/deckbridge-v0.14.0)
