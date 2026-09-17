@@ -22,6 +22,7 @@ import type {
   DriverMode,
   LogLevel,
   MockDeviceConfig,
+  OverrideChange,
   PluginsInfo,
   ReqError,
   StateResponse,
@@ -176,11 +177,11 @@ export class WebUIServer extends EventEmitter implements WebUIController {
     return this.modelOverrides.view(modelId);
   }
 
-  trySetModelOverride(modelId: unknown, overrides: unknown): ReqError | null {
+  trySetModelOverride(modelId: unknown, overrides: unknown): ReqError | OverrideChange {
     return this.modelOverrides.trySet(modelId, overrides);
   }
 
-  tryResetModelOverride(modelId: unknown): ReqError | null {
+  tryResetModelOverride(modelId: unknown): ReqError | OverrideChange {
     return this.modelOverrides.tryReset(modelId);
   }
 

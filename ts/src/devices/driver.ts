@@ -206,6 +206,9 @@ export interface DeviceModelOverride {
 
 /** Common interface satisfied by every driver (real USB and mock). */
 export interface DeviceDriver extends EventEmitter {
+  /** The effective model this driver is running. Swapped in place by
+   *  `applyOverrides` for a live (image-only) device-tuning change, so callers
+   *  must read it per use rather than caching `driver.model.image`. */
   readonly model: DeviceModel;
   /** `hidPath` (optional) opens a SPECIFIC HID interface — used to drive a second
    *  unit of the same model. Omitted → enumerate + open the first usage-matched
@@ -228,4 +231,9 @@ export interface DeviceDriver extends EventEmitter {
    *  model.image — splash sources are upright). `WorkerHidDriver` only, keeping the
    *  FFI transform and hid_write burst off the main thread. */
   sendSplashImage?(keyIndex: number, bytes: Uint8Array, spec: DeviceImageSpec): void;
+  /** Live device-tuning swap — image-transform fields only, no reopen. The
+   *  caller resolves `effectiveModel` (registry + overrides) and must have
+   *  classified the change as 'live' first (classifyOverrideChange). Absent
+   *  means the caller has to reopen instead. */
+  applyOverrides?(overrides: DeviceModelOverride | undefined, effectiveModel: DeviceModel): void;
 }

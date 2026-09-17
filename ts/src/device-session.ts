@@ -27,7 +27,7 @@ import { advertisedGeometry } from './devices/registry.js';
 import { deviceInputToMk2Index } from './translator.js';
 import { sendSplashImages } from './splash-sender.js';
 import { ExtraKeyWidgets } from './extra-keys.js';
-import type { DeviceModel } from './devices/driver.js';
+import type { DeviceDriver, DeviceModel, DeviceModelOverride } from './devices/driver.js';
 import type { ElgatoServer, ElgatoChildServer } from './elgato.js';
 import type { DeviceConfig } from './elgato-types.js';
 import type { WorkerHidDriver } from './hid-worker-host.js';
@@ -122,6 +122,15 @@ export function buildDockStatus(s: DockStatusInput): DockStatus {
         }
       : {}),
   };
+}
+
+export type DockFrames = Map<number, { data: Buffer; format: 'jpeg' | 'bmp' }>;
+
+/** Re-send a dock's cached CORA frames through its driver — the transform runs
+ *  again, so this is how a live spec change reaches the panel. The frames
+ *  themselves are unchanged, so the WebUI preview is left alone. */
+export function repaintFrames(driver: DeviceDriver, frames: DockFrames): void {
+  for (const [key, { data, format }] of frames) driver.renderCoraImage?.(key, data, format);
 }
 
 /** The CORA server pair for one dock. Built by a SessionServersFactory so this
@@ -234,7 +243,9 @@ export class DeviceSession {
   private readonly server: ElgatoServer;
   private readonly childServer: ElgatoChildServer;
   private readonly driver: WorkerHidDriver;
-  private readonly model: DeviceModel;
+  /** Effective model. Replaced by applyLiveTuning on an image-only device-tuning
+   *  change; CORA geometry/input mapping are unaffected by that section. */
+  private model: DeviceModel;
   private readonly deviceInfo?: DeviceInfo;
   private readonly onDisconnect: () => void;
   private readonly onStatusChange?: () => void;
@@ -286,6 +297,20 @@ export class DeviceSession {
       // driver knows the serial/firmware.
       deviceInfo: this.deviceInfo ?? {},
     });
+  }
+
+  /** Live device tuning (image-only change): swap the spec on this dock's
+   *  worker and re-render its cached CORA frames + extra-key icons, instead of
+   *  tearing the session down and redocking. */
+  applyLiveTuning(
+    overrides: DeviceModelOverride | undefined,
+    effectiveModel: DeviceModel,
+    frames?: DockFrames,
+  ): void {
+    this.driver.applyOverrides(overrides, effectiveModel);
+    this.model = effectiveModel;
+    if (frames) repaintFrames(this.driver, frames);
+    this.extraKeys.repaint();
   }
 
   /** Live-rename this dock's mDNS advert (WebUI "Device Identity" edit) — see

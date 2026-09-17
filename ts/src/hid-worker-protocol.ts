@@ -33,6 +33,13 @@ export type MainToWorker =
   | { type: 'setBrightness'; level: number }
   | { type: 'clearKey'; keyIndex: number }
   | { type: 'setImageOverride'; mode: ImageModeOverride }
+  // Live device-tuning swap — image-transform fields only, so no reopen is
+  // needed. Re-merged on top of the worker's OWN registry entry, exactly like
+  // 'open'. The main thread sends this only when keyMap/wire/splash are
+  // untouched (classifyOverrideChange in devices/model-overrides.ts); the
+  // worker ignores those sections regardless, since the open driver instance
+  // keeps reading the model it opened with.
+  | { type: 'setOverrides'; overrides?: DeviceModelOverride }
   // Runtime log-level change (WebUI "Debug logging"). Without this the USB
   // worker — where the interesting device traffic is — stays at its spawn-time
   // level while the main thread switches to debug.

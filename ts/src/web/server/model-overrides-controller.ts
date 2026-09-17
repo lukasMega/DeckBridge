@@ -6,9 +6,11 @@ import type { DeviceModel, DeviceModelOverride } from '../../devices/driver.js';
 import { findModelById } from '../../devices/registry.js';
 import {
   applyModelOverrides,
+  classifyOverrideChange,
   tunableDefaults,
   validateModelOverride,
 } from '../../devices/model-overrides.js';
+import type { OverrideChangeKind } from '../../devices/model-overrides.js';
 import { overridesDisabled } from '../../cli.js';
 
 /** GET /api/device-overrides payload: the registry values (`defaults`), what the
@@ -79,10 +81,10 @@ export class ModelOverridesController {
     };
   }
 
-  /** Validate + persist one model's override, then ask for a device
-   *  reconnect — image/wire/keyMap must be in force from the next open(), so a
-   *  live patch is not enough. */
-  trySet(modelId: unknown, overrides: unknown): ReqError | null {
+  /** Validate + persist one model's override, then tell the device layer how to
+   *  apply it: an image-only change swaps live, anything else (keyMap/wire/
+   *  splash) must be in force from the next open(), so the session reopens. */
+  trySet(modelId: unknown, overrides: unknown): ReqError | { kind: OverrideChangeKind } {
     if (typeof modelId !== 'string' || !modelId) {
       return { error: 'modelId must be a non-empty string', status: 400 };
     }
@@ -90,20 +92,29 @@ export class ModelOverridesController {
     if (!model) return { error: `unknown modelId '${modelId}'`, status: 404 };
     const result = validateModelOverride(overrides, model);
     if (!result.ok) return { error: result.errors.join('; '), status: 400 };
+    const kind = this.changeKind(modelId, result.value);
     this.host.settings.setModelOverride(modelId, result.value);
-    this.host.emit('modelOverridesChanged', modelId);
-    return null;
+    this.host.emit('modelOverridesChanged', modelId, kind);
+    return { kind };
   }
 
   /** Back to registry defaults for this model. Reachable without a working
    *  device — a bad keyMap can make the panel look dead, and this is the way
    *  back short of `--no-overrides`. */
-  tryReset(modelId: unknown): ReqError | null {
+  tryReset(modelId: unknown): ReqError | { kind: OverrideChangeKind } {
     if (typeof modelId !== 'string' || !modelId) {
       return { error: 'modelId must be a non-empty string', status: 400 };
     }
+    const kind = this.changeKind(modelId, undefined);
     this.host.settings.setModelOverride(modelId, undefined);
-    this.host.emit('modelOverridesChanged', modelId);
-    return null;
+    this.host.emit('modelOverridesChanged', modelId, kind);
+    return { kind };
+  }
+
+  /** In safe mode the device is running registry defaults and must keep running
+   *  them until the next start, so a persisted change touches no session. */
+  private changeKind(modelId: string, next: DeviceModelOverride | undefined): OverrideChangeKind {
+    if (overridesDisabled()) return 'none';
+    return classifyOverrideChange(this.host.settings.overrideFor(modelId), next);
   }
 }

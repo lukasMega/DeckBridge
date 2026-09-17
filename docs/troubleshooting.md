@@ -70,8 +70,10 @@ tuning** fixes them at runtime:
 - **Copy overrides as JSON** — please send working values back, see
   [Adding a device](./adding-a-device.md).
 
-Tuning is stored per model id under `modelOverrides` in `settings.json` and reconnects
-the device on change. If it leaves the panel dark: **Reset to defaults**, or start with
+Tuning is stored per model id under `modelOverrides` in `settings.json`. Image settings
+(rotation, flip, fit, quality, size, sharpen/blur/crop) are swapped into the running
+session and the deck repaints straight away; key-map, wire and splash changes reconnect
+the device, because the driver reads those when it opens the device. If it leaves the panel dark: **Reset to defaults**, or start with
 `./deckbridge run --no-overrides` to ignore all tuning for one session. Active tuning is
 flagged at the top of the diagnostics report.
 

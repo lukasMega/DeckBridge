@@ -8,8 +8,13 @@ import type { DeviceModel, DeviceModelOverride } from './devices/driver.js';
 import type { DriverMode } from './driver-manager-discovery.js';
 import { HID_POLL_INTERVAL_MS, MAX_DEVICE_SESSIONS, MDNS_SERVICE_NAME } from './types.js';
 import type { DockStatus, ExtraKeyConfig } from './types.js';
-import { DEVICE_MODELS } from './devices/registry.js';
-import { DeviceSession, sessionIdentity, type SessionServersFactory } from './device-session.js';
+import { DEVICE_MODELS, findModelById } from './devices/registry.js';
+import {
+  DeviceSession,
+  sessionIdentity,
+  type DockFrames,
+  type SessionServersFactory,
+} from './device-session.js';
 import { deviceKeyFor, sharedSerialModelId } from './device-identity.js';
 import { coraPortConflict } from './cora-startup.js';
 import type { DeviceIdentitySettings } from './settings-store.js';
@@ -53,6 +58,8 @@ export interface ExtraDockCoordinatorDeps {
   onSessionsChanged?: () => void;
   /** Per-dock mirror of raw CORA key images (WebUI selected-dock preview). */
   onImage?: (dockIndex: number, keyIndex: number, data: Uint8Array, format: 'jpeg' | 'bmp') => void;
+  /** This dock's cached CORA frames, for repainting after a live tuning swap. */
+  dockFramesSnapshot?: (dockIndex: number) => DockFrames;
   /** Per-device "ignore brightness from Elgato app" override, resolved by the
    *  dock's deviceKey (each dock has its own persisted flag). */
   isBrightnessOverride: (deviceKey: string) => boolean;
@@ -358,6 +365,23 @@ export class ExtraDockCoordinator {
       const status = session.status();
       if (modelId && status.modelId !== modelId) continue;
       await this.teardownExtraSession(hidPath, status.index);
+    }
+  }
+
+  /** Image-only tuning change: swap the spec on each matching live session and
+   *  repaint it, no teardown. `modelId` '' means "every model". */
+  applyLiveDeviceTuning(modelId: string): void {
+    for (const session of this.extraSessions.values()) {
+      const driver = session.getDriver();
+      if (modelId && driver.model.id !== modelId) continue;
+      const registryModel = findModelById(driver.model.id);
+      if (!registryModel) continue;
+      const { model, override } = this.deps.effectiveModelFor(registryModel);
+      session.applyLiveTuning(
+        override,
+        model,
+        this.deps.dockFramesSnapshot?.(session.status().index),
+      );
     }
   }
 

@@ -1,14 +1,20 @@
 import { EventEmitter } from 'node:events';
-import type { DeviceDriver, DeviceModel } from './driver.js';
+import type { DeviceDriver, DeviceModel, DeviceModelOverride } from './driver.js';
 import type { KeyState } from '../types.js';
 import { MOCK_KEY_PRESS_DURATION_MS } from '../types.js';
 
 export class MockDriver extends EventEmitter implements DeviceDriver {
-  readonly model: DeviceModel;
+  model: DeviceModel;
 
   constructor(model: DeviceModel) {
     super();
     this.model = model;
+  }
+
+  /** Live device-tuning swap. No device to repaint — the mock only carries the
+   *  model so status/diagnostics report the tuned values. */
+  applyOverrides(_overrides: DeviceModelOverride | undefined, effectiveModel: DeviceModel): void {
+    this.model = effectiveModel;
   }
 
   async open(_hidPath?: string): Promise<void> {}

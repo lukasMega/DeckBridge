@@ -26,6 +26,9 @@ const post = scope.postMessage.bind(scope);
 type AnyRealDriver = ElgatoHidDriver | MiraboxDriver;
 let driver: AnyRealDriver | null = null;
 let currentModel: DeviceModel | null = null;
+// Registry entry behind currentModel, kept so a live tuning swap ('setOverrides')
+// re-merges from the registry instead of layering on an already-merged model.
+let openRegistryModel: DeviceModel | null = null;
 
 // WebUI runtime image-mode override (resize ⇄ pad-black/avg/edge), set via
 // 'setImageOverride'. null = use the model default. Module-level state is
@@ -71,6 +74,7 @@ async function handleOpen(
   const d = createDriver(model);
   driver = d;
   currentModel = model;
+  openRegistryModel = registryModel;
 
   d.on('key', (e: KeyEvent) => post({ type: 'key', keyIndex: e.keyIndex, state: e.state }));
   d.on('error', (err: Error) => post({ type: 'error', message: err.message }));
@@ -91,6 +95,16 @@ async function handleOpen(
   } catch (err) {
     post({ type: 'opened', ok: false, error: (err as Error).message });
   }
+}
+
+/** Live device-tuning swap: re-derive the effective model from OUR registry entry
+ *  and drop the cache. The open driver instance is deliberately untouched — it
+ *  reads nothing from `model.image`, so its wire behaviour cannot change here. */
+function applyLiveOverrides(overrides?: DeviceModelOverride): void {
+  if (!openRegistryModel) return;
+  currentModel = applyModelOverrides(openRegistryModel, overrides);
+  imageCache.clear();
+  info('worker', `${currentModel.id} tuning applied live: ${overrideSummary(overrides)}`);
 }
 
 /** Render one CORA image frame: transform (via image-render.ts) + notify main
@@ -123,6 +137,15 @@ function handleSplashImage(
   driver.sendImage(keyIndex, nativeBytes);
 }
 
+/** Non-device state changes: no HID I/O, they only steer the next render. */
+function handleSetting(
+  msg: Extract<MainToWorker, { type: 'setImageOverride' | 'setOverrides' | 'setLogLevel' }>,
+): void {
+  if (msg.type === 'setImageOverride') imageOverride = msg.mode;
+  else if (msg.type === 'setOverrides') applyLiveOverrides(msg.overrides);
+  else setLogLevel(msg.level);
+}
+
 async function handle(msg: MainToWorker, deferNotification: boolean): Promise<void> {
   switch (msg.type) {
     case 'open':
@@ -143,20 +166,18 @@ async function handle(msg: MainToWorker, deferNotification: boolean): Promise<vo
     case 'clearKey':
       driver?.clearKey(msg.keyIndex);
       break;
-    case 'setImageOverride':
-      imageOverride = msg.mode;
-      break;
-    case 'setLogLevel':
-      setLogLevel(msg.level);
-      break;
     case 'close': {
       const d = driver;
       driver = null;
       currentModel = null;
+      openRegistryModel = null;
       await d?.close().catch(() => undefined);
       post({ type: 'closed' });
       break;
     }
+    // setImageOverride / setOverrides / setLogLevel — no device I/O.
+    default:
+      handleSetting(msg);
   }
 }
 
