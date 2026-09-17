@@ -35,7 +35,7 @@ Both are generated from the device registry, so they never drift from the code.
 |---|---|---|---|
 | Stream Deck MK.2 | 15 buttons (5×3) | 72×72 | elgato-gen2 |
 | Stream Deck Mini | 6 buttons (3×2) | 80×80 | elgato-gen1 |
-| Mirabox 293V3 (also matches the HSV293SV3 / "293S V3" refresh — untested) | 15 buttons (5×3) | 112×112 | mirabox-cora |
+| Mirabox 293V3 | 15 buttons (5×3) | 112×112 | mirabox-cora |
 | Mirabox 293S | 15 buttons (5×3) | 85×85 | mirabox-cora-v1 |
 | Mirabox K1 Pro | 6 buttons (3×2) | 64×64 | mirabox-cora |
 | Fifine AmpliGame D6 (rev. 2) | 15 buttons (5×3) | 112×112 | mirabox-cora |
@@ -49,6 +49,8 @@ Both are generated from the device registry, so they never drift from the code.
 | Mad Dog GK150K — untested | 15 buttons (5×3) | 85×85 | mirabox-cora-v1 |
 | Risemode Vision 01 — untested | 15 buttons (5×3) | 85×85 | mirabox-cora-v1 |
 | TMICE Stream Controller — untested | 15 buttons (5×3) | 85×85 | mirabox-cora-v1 |
+
+Mirabox 293V3 also matches the HSV293SV3 / "293S V3" refresh — untested.
 
 <details>
 <summary>details about supported devices</summary>
