@@ -17,7 +17,18 @@ Deckbridge 0.14.0 closes out a run of releases focused on speed and on diagnosin
 - Adaptive reconnect: 3 s polling while enumeration is fast, backing off to 30 s when it is not.
 - Fewer hot-path allocations, less FFI churn, and quieter WebSocket traffic.
 
-Batching is the one you can see: a profile switch now paints the whole panel in one sweep instead of key by key.
+Batching is the one you can see: a profile switch now paints the whole panel in one sweep instead of key by key. Measured on a Mirabox 293S, ten samples per mode, timing the synchronous host USB writes for a full 15-key page:
+
+| Measurement | Original | Batched |
+| --- | ---: | ---: |
+| Median USB page writes | 1,022.002 ms | 461.040 ms |
+| Mean USB page writes | 1,024.356 ms | 461.071 ms |
+| Minimum | 1,020.708 ms | 459.484 ms |
+| Maximum | 1,041.003 ms | 463.509 ms |
+| Reports per page | 76 | 62 |
+| STP reports per page | 15 | 1 |
+
+Median transfer time fell **54.9%** — roughly **2.22×** throughput. That is more than the 18% drop in report count explains: each STP costs about 0.5 ms to write, but the writes that follow it stall in firmware, so sending one STP per page instead of fifteen removes stalls as well as reports.
 
 <video
   autoPlay
