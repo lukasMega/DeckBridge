@@ -6,6 +6,9 @@
 // OS socket buffer drains faster than frames are produced. Add backpressure here before
 // streaming anything larger.
 
+/** tjs rejects with plain values as well as Errors; callbacks here take an Error. */
+const asError = (e: unknown): Error => (e instanceof Error ? e : new Error(String(e)));
+
 type DataCb = (chunk: Buffer) => void;
 type CloseCb = (hadError: boolean) => void;
 type ErrorCb = (err: Error) => void;
@@ -49,7 +52,7 @@ export class NodeLikeSocket {
       }
     } catch (e) {
       hadError = true;
-      const err = e instanceof Error ? e : new Error(String(e));
+      const err = asError(e);
       for (const cb of this._cbs.error) cb(err);
     } finally {
       reader.releaseLock();
@@ -73,7 +76,7 @@ export class NodeLikeSocket {
   write(data: Uint8Array): void {
     if (this._destroyed || !this._writer) return;
     void this._writer.write(data).catch((e: unknown) => {
-      const err = e instanceof Error ? e : new Error(String(e));
+      const err = asError(e);
       queueMicrotask(() => {
         for (const handler of this._cbs.error) {
           handler(err);
@@ -123,7 +126,7 @@ export class NodeLikeServer {
         cb();
         await this._acceptLoop(info.readable);
       } catch (e) {
-        const err = e instanceof Error ? e : new Error(String(e));
+        const err = asError(e);
         for (const ecb of this._errorCbs) ecb(err);
       }
     })();
@@ -181,7 +184,7 @@ export function createConnection(
       nodeSocket._attach(info.readable, info.writable, info.remoteAddress);
       cb();
     } catch (e) {
-      nodeSocket._emitError(e instanceof Error ? e : new Error(String(e)));
+      nodeSocket._emitError(asError(e));
     }
   })();
   return nodeSocket;

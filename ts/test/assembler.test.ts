@@ -15,19 +15,7 @@ import {
   GEN1_IMAGE_LAST_OFFSET,
 } from '../src/types.js';
 
-let passed = 0;
-let failed = 0;
-
-function test(name: string, fn: () => void): void {
-  try {
-    fn();
-    console.log(`  ✓ ${name}`);
-    passed++;
-  } catch (e) {
-    console.error(`  ✗ ${name}: ${(e as Error).message}`);
-    failed++;
-  }
-}
+import { test, summary } from './helpers/harness.js';
 
 function makeChunkPkt(keyIndex: number, partIndex: number, isLast: boolean, data: Buffer): Buffer {
   const pkt = Buffer.alloc(1024);
@@ -461,5 +449,4 @@ test('gen1: after a drop, a normal small image for the same key still assembles'
   assert.equal(pages.size, 0);
 });
 
-console.log(`\n${passed} passed, ${failed} failed`);
-if (failed > 0) tjs.exit(1);
+summary();

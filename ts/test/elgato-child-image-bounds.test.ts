@@ -9,25 +9,14 @@ import {
   DEFAULT_CHILD_SERIAL_NUMBER,
   ELGATO_MK2_PID,
 } from '../src/types.js';
-import { MINI_CHILD_GEOMETRY } from '../src/capabilities.js';
+import { modelToChildGeometry } from '../src/capabilities.js';
+import { MINI_MODEL } from '../src/devices/elgato/mini.js';
 import { CORA_FLAG_VERBATIM, CORA_FLAG_REQACK } from '../src/cora-frame.js';
 import { connect, sendFrame } from './helpers/cora-framer.js';
+import { testAsync as runTest, summaryExit } from './helpers/harness.js';
 
 const CHILD_BOUNDS_PORT = 25555;
-
-let passed = 0;
-let failed = 0;
-
-async function runTest(name: string, fn: () => Promise<void>): Promise<void> {
-  try {
-    await fn();
-    console.log(`  ✓ ${name}`);
-    passed++;
-  } catch (e) {
-    console.error(`  ✗ ${name}: ${(e as Error).message}`);
-    failed++;
-  }
-}
+const MINI_CHILD_GEOMETRY = modelToChildGeometry(MINI_MODEL);
 
 /** Build a gen2 image-chunk packet (PAYLOAD_TYPE_OUTPUT_REPORT/IMG_CMD_WRITE)
  *  matching the layout in assembler.test.ts's makeChunkPkt. */
@@ -62,7 +51,12 @@ await runTest(
       macAddress: [0x02, 0x00, 0x00, 0x00, 0x00, 0x01],
     };
 
-    const childServer = new ElgatoChildServer(CHILD_BOUNDS_PORT, deviceConfig, false);
+    const childServer = new ElgatoChildServer(
+      MINI_CHILD_GEOMETRY,
+      CHILD_BOUNDS_PORT,
+      deviceConfig,
+      false,
+    );
     childServer.keepaliveIntervalMs = 100;
     // MINI_CHILD_GEOMETRY has keyCount=6, so key 200 is far out of range.
     childServer.setChildGeometry(MINI_CHILD_GEOMETRY);
@@ -126,5 +120,4 @@ await runTest(
   },
 );
 
-console.log(`\n${passed} passed, ${failed} failed`);
-tjs.exit(failed > 0 ? 1 : 0);
+summaryExit();

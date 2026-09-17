@@ -24,3 +24,15 @@ export const text = (body: string): Response =>
   });
 export const jpeg = (body: Buffer): Response =>
   new Response(body, { headers: { 'Content-Type': 'image/jpeg', 'Cache-Control': 'no-store' } });
+
+export type ParsedBody<T> = { body: T } | { error: Response };
+
+/** Parse a request body as JSON, or hand back the 400 response to return as-is. */
+export async function readJson<T>(req: Request, message = 'invalid JSON'): Promise<ParsedBody<T>> {
+  try {
+    const body = JSON.parse(await req.text()) as T | null;
+    return body === null ? { error: badRequest(message) } : { body };
+  } catch {
+    return { error: badRequest(message) };
+  }
+}

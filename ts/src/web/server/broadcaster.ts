@@ -1,4 +1,8 @@
-import { SSE_KEEPALIVE_INTERVAL_MS, STATS_BROADCAST_INTERVAL_MS } from '../../types.js';
+import {
+  SSE_KEEPALIVE_INTERVAL_MS,
+  STATS_BROADCAST_INTERVAL_MS,
+  clearRepeating,
+} from '../../types.js';
 
 function wsMsg(event: string, data: unknown): string {
   return JSON.stringify({ event, data });
@@ -46,10 +50,8 @@ export class Broadcaster {
   }
 
   stop(): void {
-    if (this.keepaliveTimer !== null) clearInterval(this.keepaliveTimer);
-    if (this.statsTimer !== null) clearInterval(this.statsTimer);
-    this.keepaliveTimer = null;
-    this.statsTimer = null;
+    this.keepaliveTimer = clearRepeating(this.keepaliveTimer);
+    this.statsTimer = clearRepeating(this.statsTimer);
     for (const ws of this.clients) {
       try {
         ws.close();

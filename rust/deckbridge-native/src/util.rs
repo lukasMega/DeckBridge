@@ -1,3 +1,12 @@
+use std::panic::{catch_unwind, AssertUnwindSafe};
+
+/// Panic guard shared by every `extern "C"` entry point: unwinding across the FFI
+/// boundary is undefined behaviour, so a caught panic returns `default` instead
+/// (the workspace profile keeps `panic = "unwind"` for exactly this).
+pub(crate) fn ffi_guard<T>(default: T, f: impl FnOnce() -> T) -> T {
+    catch_unwind(AssertUnwindSafe(f)).unwrap_or(default)
+}
+
 pub(crate) fn write_err(msg: &str, err_buf: *mut u8, err_cap: usize) {
     if err_buf.is_null() || err_cap == 0 {
         return;
@@ -13,17 +22,13 @@ pub(crate) fn write_err(msg: &str, err_buf: *mut u8, err_cap: usize) {
 }
 
 pub(crate) fn write_u32_le(buf: &mut [u8], off: usize, v: u32) {
-    buf[off] = (v & 0xff) as u8;
-    buf[off + 1] = ((v >> 8) & 0xff) as u8;
-    buf[off + 2] = ((v >> 16) & 0xff) as u8;
-    buf[off + 3] = ((v >> 24) & 0xff) as u8;
+    buf[off..off + 4].copy_from_slice(&v.to_le_bytes());
 }
 
 pub(crate) fn write_i32_le(buf: &mut [u8], off: usize, v: i32) {
-    write_u32_le(buf, off, v as u32);
+    buf[off..off + 4].copy_from_slice(&v.to_le_bytes());
 }
 
 pub(crate) fn write_u16_le(buf: &mut [u8], off: usize, v: u16) {
-    buf[off] = (v & 0xff) as u8;
-    buf[off + 1] = ((v >> 8) & 0xff) as u8;
+    buf[off..off + 2].copy_from_slice(&v.to_le_bytes());
 }

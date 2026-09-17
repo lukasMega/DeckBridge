@@ -1,4 +1,5 @@
-import type { DeviceModel } from './driver.js';
+import type { ChildGeometry, DeviceModel } from './driver.js';
+import { modelToChildGeometry } from '../capabilities.js';
 import { MK2_MODEL } from './elgato/mk2.js';
 import { MINI_MODEL } from './elgato/mini.js';
 import { MIRABOX_293_MODEL } from './mirabox/mirabox-293.js';
@@ -6,15 +7,7 @@ import { MIRABOX_293S_MODEL } from './mirabox/mirabox-293s.js';
 import { MIRABOX_K1PRO_MODEL } from './mirabox/mirabox-k1pro.js';
 import { AJAZZ_AKP153E_REV2_MODEL, AJAZZ_AKP153R_REV2_MODEL } from './ajazz/akp153-rev2.js';
 import { FIFINE_D6_MODEL, FIFINE_D6_REV2_MODEL } from './fifine/fifine-d6.js';
-import {
-  AJAZZ_AKP153_MODEL,
-  AJAZZ_AKP153E_MODEL,
-  AJAZZ_AKP153R_MODEL,
-  MARS_MSD_ONE_MODEL,
-  MADDOG_GK150K_MODEL,
-  RISEMODE_VISION_01_MODEL,
-  TMICE_STREAM_CONTROLLER_MODEL,
-} from './rebadge/akp153-v1-clones.js';
+import { AKP153_V1_CLONE_MODELS } from './rebadge/akp153-v1-clones.js';
 
 // Probe order: Elgato first (priority over Mirabox), then 293V3 before 293S. Everything
 // after that has a unique VID/PID pair, so its position is cosmetic — the one near-clash,
@@ -29,13 +22,7 @@ export const DEVICE_MODELS: DeviceModel[] = [
   AJAZZ_AKP153R_REV2_MODEL,
   FIFINE_D6_MODEL,
   FIFINE_D6_REV2_MODEL,
-  AJAZZ_AKP153_MODEL,
-  AJAZZ_AKP153E_MODEL,
-  AJAZZ_AKP153R_MODEL,
-  MARS_MSD_ONE_MODEL,
-  MADDOG_GK150K_MODEL,
-  RISEMODE_VISION_01_MODEL,
-  TMICE_STREAM_CONTROLLER_MODEL,
+  ...AKP153_V1_CLONE_MODELS,
 ];
 
 /** Fallback model used when nothing is connected / before a real device is probed. */
@@ -56,4 +43,21 @@ export function findModel(vid: number, pid: number): DeviceModel | null {
     }
   }
   return null;
+}
+
+/** The model whose geometry `model` emulates over CORA — itself unless it sets
+ *  `cora.advertiseAs`. Resolved through registry ids, never copied dimensions, so an
+ *  emulating model can't drift from the one it impersonates. device-models.test.ts
+ *  asserts every `advertiseAs` resolves, so the throw is a can't-happen guard. */
+function advertisedModel(model: DeviceModel): DeviceModel {
+  if (!model.cora.advertiseAs) return model;
+  const advertised = findModelById(model.cora.advertiseAs);
+  if (!advertised) {
+    throw new Error(`${model.id}: unknown advertised model '${model.cora.advertiseAs}'`);
+  }
+  return advertised;
+}
+
+export function advertisedGeometry(model: DeviceModel): ChildGeometry {
+  return modelToChildGeometry(advertisedModel(model));
 }

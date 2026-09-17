@@ -13,12 +13,12 @@ the generated [Device specs](./device-specs.mdx).
 
 | Connected device | Advertised caps (`model.cora`) | CORA format | Sidecar | `model.image` transform |
 |-----------------|-----------------|-------------|---------|-----------|
-| Mirabox 293V3 (`mirabox-cora`) | MK.2 spoof (PID `0x00a5`, `MK2_CHILD_GEOMETRY`) | gen2 JPEG 72×72 | Yes | `sidecar`: resize 72→112 (lanczos3), rotate 0 |
-| Mirabox 293S (`mirabox-cora-v1`) | MK.2 spoof (PID `0x00a5`, `MK2_CHILD_GEOMETRY`) | gen2 JPEG 72×72 | Yes | `sidecar`: pad 72→85 (edge), rotate 90 |
-| Mirabox K1 Pro (`mirabox-cora`) | Mini spoof (PID `0x0063`, `MINI_CHILD_GEOMETRY`) | gen1 BMP 80×80 | Yes | `sidecar`: crop 6 px/side (80→68) → resize 64, rotate 0 + flipH, BMP→JPEG |
-| Ajazz AKP153E/R rev. 2 (`mirabox-cora`) — untested | MK.2 spoof (PID `0x00a5`, `MK2_CHILD_GEOMETRY`) | gen2 JPEG 72×72 | Yes | identical to the 293V3 (same board, different VID/PID) |
-| Fifine AmpliGame D6 rev. 1 (untested) / rev. 2 (`mirabox-cora`) | MK.2 spoof (PID `0x00a5`, `MK2_CHILD_GEOMETRY`) | gen2 JPEG 72×72 | Yes | identical to the 293V3 (same board, different VID/PID); rev. 2 uses 1024-byte packets, rev. 1 uses 512 |
-| AKP153/E/R, MSD-ONE, GK150K, Vision 01, TMICE Stream Controller (`mirabox-cora-v1`) — untested | MK.2 spoof (PID `0x00a5`, `MK2_CHILD_GEOMETRY`) | gen2 JPEG 72×72 | Yes | identical to the 293S (same board, different VID/PID) |
+| Mirabox 293V3 (`mirabox-cora`) | MK.2 spoof (PID `0x00a5`, `advertiseAs: 'mk2'`) | gen2 JPEG 72×72 | Yes | `sidecar`: resize 72→112 (lanczos3), rotate 0 |
+| Mirabox 293S (`mirabox-cora-v1`) | MK.2 spoof (PID `0x00a5`, `advertiseAs: 'mk2'`) | gen2 JPEG 72×72 | Yes | `sidecar`: pad 72→85 (edge), rotate 90 |
+| Mirabox K1 Pro (`mirabox-cora`) | Mini spoof (PID `0x0063`, `advertiseAs: 'mini'`) | gen1 BMP 80×80 | Yes | `sidecar`: crop 6 px/side (80→68) → resize 64, rotate 0 + flipH, BMP→JPEG |
+| Ajazz AKP153E/R rev. 2 (`mirabox-cora`) — untested | MK.2 spoof (PID `0x00a5`, `advertiseAs: 'mk2'`) | gen2 JPEG 72×72 | Yes | identical to the 293V3 (same board, different VID/PID) |
+| Fifine AmpliGame D6 rev. 1 (untested) / rev. 2 (`mirabox-cora`) | MK.2 spoof (PID `0x00a5`, `advertiseAs: 'mk2'`) | gen2 JPEG 72×72 | Yes | identical to the 293V3 (same board, different VID/PID); rev. 2 uses 1024-byte packets, rev. 1 uses 512 |
+| AKP153/E/R, MSD-ONE, GK150K, Vision 01, TMICE Stream Controller (`mirabox-cora-v1`) — untested | MK.2 spoof (PID `0x00a5`, `advertiseAs: 'mk2'`) | gen2 JPEG 72×72 | Yes | identical to the 293S (same board, different VID/PID) |
 | Stream Deck MK.2 (`elgato-gen2`) | real MK.2 (PID `0x0080`) | gen2 JPEG 72×72 | No | `passthrough` (rotate 0) |
 | Stream Deck Mini (`elgato-gen1`) | real Mini (6 key, 3×2, PID `0x0063`) | gen1 BMP 80×80 BGR | No | `passthrough` (BMP short-circuit) |
 
@@ -88,7 +88,7 @@ sequenceDiagram
 
     PIPE->>HOST: renderCoraImage(keyIndex, data, format)
     HOST-->>REND: postMessage 'image' {keyIndex, bytes, format}
-    Note over REND: key = makeCacheKey(model.id, FNV1a32(full data), override)<br/>cache hit → reuse nativeBytes, skip transform
+    Note over REND: key = model.id : mode : specRevision : FNV1a32(full data)<br/>cache hit → reuse nativeBytes, skip transform
 
     alt bmp in & device bmp [Mini]  OR  transform passthrough [MK.2]
         Note over REND: nativeBytes = data (forwarded unchanged)
@@ -152,7 +152,14 @@ Both views render through the shared `KeyPreview` class (`key-preview.ts`), whic
 Since P1 there is **no main-thread image queue** — the main thread only does the two cheap steps from the Overview (WebUI broadcast, `renderCoraImage()` → one `postMessage`) and returns to the CORA ACK loop. All heavy work runs on the **USB worker**:
 
 - **One FIFO message queue** (`hid-worker.ts`) — the worker processes `'image'` messages in arrival order, each fully completing (transform → cache → `hid_write`) before the next. This preserves per-key (and overall) ordering for free, **without any main-thread write queue**; the old per-key `imageWriteQueue` and the `SIDECAR_CONCURRENCY` round-trip queue were deleted.
-- **LRU cache** (`image-render.ts`, holding the `image-cache.ts` singleton, max `IMAGE_CACHE_SIZE` = 100) — keyed by `makeCacheKey(model.id, FNV-1a-32(full data), override)`. The model id and the image-fit override are part of the key, so the same CORA frame yields separate entries per device and per fit mode. (The hash covers the **whole** buffer — an earlier first/last-4 KB sampling collided a small centred icon with a blank frame for gen1 BMP.) On a hit the Rust transform is skipped entirely (reconnect / static deck → 0 transform calls).
+- **LRU cache** (`image-render.ts`, holding the `image-cache.ts` singleton, max `IMAGE_CACHE_SIZE` = 100) — keyed by `makeCacheKey(model.id, hashJpeg(data), override ?? 'def', revisionFor(model))`, which formats as `modelId:mode:rev:jpegHash`. Three of the four slots exist to stop a stale hit:
+
+  - **model id** — the same CORA frame yields separate entries per device.
+  - **mode** — the WebUI image-fit override (`'def'` when the caller tracks none), so resize ⇄ pad-\* can't serve each other's bytes.
+  - **rev** — `specRevision(model.image)`, a short FNV-1a hash of the *effective* `DeviceImageSpec` (memoised per model in `image-render.ts`'s `_specRevisions` WeakMap). Without it a device-tuning change (rotation, quality, size — see `devices/model-overrides.ts`) would keep serving entries encoded under the **old** spec, and the tweak would appear to do nothing until a restart.
+  - **jpegHash** — FNV-1a-32 over the whole buffer, with the buffer length mixed in first so truncated streams hash differently. (The hash covers the **whole** buffer — an earlier first/last-4 KB sampling collided a small centred icon with a blank frame for gen1 BMP.)
+
+  On a hit the Rust transform is skipped entirely (reconnect / static deck → 0 transform calls).
 
 ## State stored in WebUIServer
 

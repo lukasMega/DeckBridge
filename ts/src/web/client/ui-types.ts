@@ -1,3 +1,20 @@
+// Wire DTOs live in the `web-contract` leaf (../contract.ts) — the one element
+// web-client may import besides itself, type-only. Re-exported here under the
+// names the client already uses, so call sites keep importing from ui-types.
+import type { ClientApp, ExtraKeyWidget } from '../contract.js';
+
+export type {
+  ClientApp,
+  ExtraKeyWidget,
+  PluginStatus,
+  PluginsInfo,
+  Stats,
+  DeviceIdentity,
+  RealDeviceIdentity,
+  KeyEventEntry as KeyEvent,
+  DeviceModelInfo as DeviceModel,
+} from '../contract.js';
+
 // Duplicated from server-side DockStatus (../../types.ts) — web-client cannot
 // import server/shared types (boundaries: web-client imports only web-client).
 export interface DockUi {
@@ -14,11 +31,6 @@ export interface DockUi {
   extraKeys?: number[]; // wire ids of keys outside the emulated grid (293S 6th column)
 }
 
-// Duplicated from server-side ExtraKeyConfig (../../types.ts, see boundaries
-// note above). One extra key's display-widget assignment (the keys have no
-// switches — the server renders and refreshes them).
-export type ExtraKeyWidget = 'none' | 'clock' | 'date' | 'text' | 'weather' | 'command' | 'plugin';
-
 export interface ExtraKeyCfg {
   widget: ExtraKeyWidget;
   param?: string; // text: content; weather: "lat,lon"; plugin: plugin file name
@@ -26,21 +38,6 @@ export interface ExtraKeyCfg {
   timeoutMs?: number; // command widget only: kill-timeout
   pluginArg?: string; // plugin widget only: per-key argument (ctx.param)
 }
-
-// Live status of one plugin-widget key — mirrors server-side PluginStatus
-// (plugin-host.ts, reached via GET /api/plugins; see boundaries note above).
-export type PluginStatus = 'pending' | 'ok' | 'err' | 'disabled';
-
-// GET /api/plugins payload — mirrors server-side PluginsInfo (web/server/types.ts).
-export interface PluginsInfo {
-  dir: string;
-  files: string[];
-  status: Record<string, PluginStatus>;
-}
-
-// Which CORA client we detected — duplicated from server-side ClientApp
-// (../../types.ts, see boundaries note above).
-export type ClientApp = 'elgato' | 'bitfocus' | 'unknown';
 
 export interface Status {
   driverMode: 'real' | 'mock';
@@ -60,13 +57,6 @@ export interface Status {
   selectedDock?: number;
 }
 
-export interface Stats {
-  uptimeMs: number;
-  elgatoRxPkts: number;
-  elgatoTxPkts: number;
-  imagesSent: number;
-}
-
 export interface MockConfig {
   dockFirmwareVersion?: string;
   serialNumber?: string;
@@ -74,37 +64,6 @@ export interface MockConfig {
   childSerialNumber?: string;
   productId?: number;
   macAddress?: string;
-}
-
-// The identifiers actually sent to the Elgato app for the currently active
-// device (mock or real) — shown read-only under Settings.
-export interface DeviceIdentity {
-  dockFirmwareVersion: string;
-  childFirmwareVersion: string;
-  serialNumber: string;
-  childSerialNumber: string;
-  productId: number;
-  macAddress: string;
-  mdnsServiceName: string;
-  // Present only for a real (non-mock) dock with a persisted identity — lets
-  // the Settings page edit mdnsServiceName via POST /api/device-identity/mdns-name.
-  deviceKey?: string;
-}
-
-export interface RealDeviceIdentity {
-  modelName: string;
-  serialNumber?: string;
-  firmwareVersion?: string;
-}
-
-export interface KeyEvent {
-  ts: number;
-  mk2Index: number;
-  state: 'up' | 'down';
-  /** Raw device wire id, pre-keyMap. Absent for identity-mapped models and in
-   *  mock mode — key-map learn mode (keymap-learn.tsx) needs it to derive a
-   *  correct map on hardware. */
-  wireId?: number;
 }
 
 /** Tunable subset of a DeviceModel — mirrors server-side DeviceModelOverride
@@ -178,9 +137,4 @@ export interface CommLog {
   protocol: string;
   human: string;
   hex?: string;
-}
-export interface DeviceModel {
-  id: string;
-  name: string;
-  keyCount: number;
 }

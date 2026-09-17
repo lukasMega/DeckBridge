@@ -25,6 +25,7 @@ export const MK2_MODEL: DeviceModel = {
     quality: 0.95,
     transform: 'passthrough',
   },
+  wire: { packetSize: 1024, inSize: 512 },
   keyMap: {},
   // Preserves today's behavior: coraProductId() falls back to usbProductIds[0] for Elgato.
   cora: { productId: 0x0080, usePhysicalIdentity: true },

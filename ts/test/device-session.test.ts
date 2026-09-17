@@ -17,22 +17,7 @@ import type { ChildGeometry } from '../src/capabilities.js';
 import type { DeviceConfig } from '../src/elgato-types.js';
 import type { DeviceModel } from '../src/devices/driver.js';
 import type { WorkerHidDriver } from '../src/hid-worker-host.js';
-
-// Test harness
-
-let passed = 0;
-let failed = 0;
-
-async function test(name: string, fn: () => void | Promise<void>): Promise<void> {
-  try {
-    await fn();
-    console.log(`  ✓ ${name}`);
-    passed++;
-  } catch (e: unknown) {
-    console.error(`  ✗ ${name}: ${(e as Error).message}`);
-    failed++;
-  }
-}
+import { testAsync as test, summaryExit } from './helpers/harness.js';
 
 // Fakes
 
@@ -423,5 +408,4 @@ await test('stop() is idempotent and closes driver + both servers', async () => 
 
 // Summary
 
-console.log(`\n${passed} passed, ${failed} failed`);
-tjs.exit(failed > 0 ? 1 : 0);
+summaryExit();

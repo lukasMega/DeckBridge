@@ -8,9 +8,8 @@ import type { HidapiSymbols } from '../ffi/hidapi.js';
 import { HidDeviceBase } from './hid-connection.js';
 import type { DeviceModel } from './driver.js';
 import type { KeyState } from '../types.js';
-import { PROTOCOL_STRATEGY, type ProtocolStrategy } from './protocol';
+import { PROTOCOL_STRATEGY, type InfoReport, type ProtocolStrategy } from './protocol';
 
-const READ_BUF_SIZE = 512;
 const READ_POLL_MS = 5;
 
 function nullTerm(s: string): string {
@@ -28,6 +27,9 @@ export class ElgatoHidDriver extends HidDeviceBase {
   hidPath: string | undefined = undefined;
   /** Reused output-report buffer, sized on first sendImage (see sendImage). */
   private _pktScratch: Uint8Array = new Uint8Array(0);
+  /** Built on first clearKey, then kept: a gen1 blank is a ~19 KB allocation and
+   *  clearKey runs on the USB worker thread. */
+  private _blankImage: Uint8Array | undefined = undefined;
   /** Bound once so sendImage doesn't allocate a closure per image. */
   private readonly _writeBound = (pkt: Uint8Array): void => this._write(pkt);
 
@@ -85,7 +87,7 @@ export class ElgatoHidDriver extends HidDeviceBase {
     this._readDeviceInfo();
     this.lastKeyState = Array.from({ length: this.model.keyCount }, () => false);
 
-    this._startReadLoop(hid, READ_BUF_SIZE, READ_POLL_MS, (readBuf, n) =>
+    this._startReadLoop(hid, this.model.wire.inSize, READ_POLL_MS, (readBuf, n) =>
       this._parseInput(readBuf.subarray(0, n)),
     );
 
@@ -102,47 +104,15 @@ export class ElgatoHidDriver extends HidDeviceBase {
     if (!this.device || !this.hidLib) return;
     // Reused scratch, allocated once per driver (as MiraboxDriver does): a fresh
     // 1024 B buffer per chunk was ~10 KB of garbage per key, per frame.
-    if (this._pktScratch.length !== this.strategy.packetSize) {
-      this._pktScratch = new Uint8Array(this.strategy.packetSize);
+    if (this._pktScratch.length !== this.model.wire.packetSize) {
+      this._pktScratch = new Uint8Array(this.model.wire.packetSize);
     }
     this.strategy.writeImage(keyIndex, bytes, this._pktScratch, this._writeBound);
   }
 
   clearKey(keyIndex: number): void {
-    // Send a solid-black image for this key.
-    if (this.model.protocol === 'elgato-gen1') {
-      const bmpSize = 54 + this.model.keyWidth * this.model.keyHeight * 3;
-      const blank = new Uint8Array(bmpSize); // all zeros → black BMP pixels
-      this.sendImage(keyIndex, blank);
-    } else {
-      // Minimal 1×1 black JPEG (upscaled to the key size by firmware)
-      const TINY_BLACK_JPEG = new Uint8Array([
-        0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46, 0x00, 0x01, 0x01, 0x00, 0x00,
-        0x01, 0x00, 0x01, 0x00, 0x00, 0xff, 0xdb, 0x00, 0x43, 0x00, 0x08, 0x06, 0x06, 0x07, 0x06,
-        0x05, 0x08, 0x07, 0x07, 0x07, 0x09, 0x09, 0x08, 0x0a, 0x0c, 0x14, 0x0d, 0x0c, 0x0b, 0x0b,
-        0x0c, 0x19, 0x12, 0x13, 0x0f, 0x14, 0x1d, 0x1a, 0x1f, 0x1e, 0x1d, 0x1a, 0x1c, 0x1c, 0x20,
-        0x24, 0x2e, 0x27, 0x20, 0x22, 0x2c, 0x23, 0x1c, 0x1c, 0x28, 0x37, 0x29, 0x2c, 0x30, 0x31,
-        0x34, 0x34, 0x34, 0x1f, 0x27, 0x39, 0x3d, 0x38, 0x32, 0x3c, 0x2e, 0x33, 0x34, 0x32, 0xff,
-        0xc0, 0x00, 0x0b, 0x08, 0x00, 0x01, 0x00, 0x01, 0x01, 0x01, 0x11, 0x00, 0xff, 0xc4, 0x00,
-        0x1f, 0x00, 0x00, 0x01, 0x05, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x00, 0x00, 0x00, 0x00,
-        0x00, 0x00, 0x00, 0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b,
-        0xff, 0xc4, 0x00, 0xb5, 0x10, 0x00, 0x02, 0x01, 0x03, 0x03, 0x02, 0x04, 0x03, 0x05, 0x05,
-        0x04, 0x04, 0x00, 0x00, 0x01, 0x7d, 0x01, 0x02, 0x03, 0x00, 0x04, 0x11, 0x05, 0x12, 0x21,
-        0x31, 0x41, 0x06, 0x13, 0x51, 0x61, 0x07, 0x22, 0x71, 0x14, 0x32, 0x81, 0x91, 0xa1, 0x08,
-        0x23, 0x42, 0xb1, 0xc1, 0x15, 0x52, 0xd1, 0xf0, 0x24, 0x33, 0x62, 0x72, 0x82, 0x09, 0x0a,
-        0x16, 0x17, 0x18, 0x19, 0x1a, 0x25, 0x26, 0x27, 0x28, 0x29, 0x2a, 0x34, 0x35, 0x36, 0x37,
-        0x38, 0x39, 0x3a, 0x43, 0x44, 0x45, 0x46, 0x47, 0x48, 0x49, 0x4a, 0x53, 0x54, 0x55, 0x56,
-        0x57, 0x58, 0x59, 0x5a, 0x63, 0x64, 0x65, 0x66, 0x67, 0x68, 0x69, 0x6a, 0x73, 0x74, 0x75,
-        0x76, 0x77, 0x78, 0x79, 0x7a, 0x83, 0x84, 0x85, 0x86, 0x87, 0x88, 0x89, 0x8a, 0x93, 0x94,
-        0x95, 0x96, 0x97, 0x98, 0x99, 0x9a, 0xa2, 0xa3, 0xa4, 0xa5, 0xa6, 0xa7, 0xa8, 0xa9, 0xaa,
-        0xb2, 0xb3, 0xb4, 0xb5, 0xb6, 0xb7, 0xb8, 0xb9, 0xba, 0xc2, 0xc3, 0xc4, 0xc5, 0xc6, 0xc7,
-        0xc8, 0xc9, 0xca, 0xd2, 0xd3, 0xd4, 0xd5, 0xd6, 0xd7, 0xd8, 0xd9, 0xda, 0xe1, 0xe2, 0xe3,
-        0xe4, 0xe5, 0xe6, 0xe7, 0xe8, 0xe9, 0xea, 0xf1, 0xf2, 0xf3, 0xf4, 0xf5, 0xf6, 0xf7, 0xf8,
-        0xf9, 0xfa, 0xff, 0xda, 0x00, 0x08, 0x01, 0x01, 0x00, 0x00, 0x3f, 0x00, 0xfb, 0x00, 0xff,
-        0xd9,
-      ]);
-      this.sendImage(keyIndex, TINY_BLACK_JPEG);
-    }
+    this._blankImage ??= this.strategy.blankImage(this.model.keyWidth, this.model.keyHeight);
+    this.sendImage(keyIndex, this._blankImage);
   }
 
   setBrightness(level: number): void {
@@ -183,49 +153,29 @@ export class ElgatoHidDriver extends HidDeviceBase {
   private _readDeviceInfo(): void {
     if (!this.device || !this.hidLib) return;
     const hid = this.hidLib.symbols;
+    const { serial, firmware } = this.strategy.infoReports;
+    const buf = new Uint8Array(32);
     try {
-      if (this.model.protocol === 'elgato-gen1') {
-        this._readGen1Info(hid);
-      } else if (this.model.protocol === 'elgato-gen2') {
-        this._readGen2Info(hid);
-      }
+      this.deviceSerial = this._readInfoString(hid, buf, serial) ?? this.deviceSerial;
+      this.deviceFirmware = this._readInfoString(hid, buf, firmware) ?? this.deviceFirmware;
     } catch {
       // Feature report read failure must not abort open()
     }
   }
 
-  private _readGen1Info(hid: HidapiSymbols): void {
-    const buf = new Uint8Array(32);
-    // serial: report 0x03, ASCII at offset 5
-    buf[0] = 0x03;
-    const n = hid.hid_get_feature_report(this.device, buf, 32);
-    if (n > 5) this.deviceSerial = nullTerm(String.fromCharCode(...buf.slice(5, n)));
-    // firmware: report 0x04, ASCII at offset 5
+  /** Read one ASCII device-info feature report into the shared `buf`. Undefined
+   *  when the device returns fewer bytes than the value's offset. */
+  private _readInfoString(
+    hid: HidapiSymbols,
+    buf: Uint8Array,
+    report: InfoReport,
+  ): string | undefined {
     buf.fill(0);
-    buf[0] = 0x04;
-    const n2 = hid.hid_get_feature_report(this.device, buf, 32);
-    if (n2 > 5) this.deviceFirmware = nullTerm(String.fromCharCode(...buf.slice(5, n2)));
-  }
-
-  private _readGen2Info(hid: HidapiSymbols): void {
-    const buf = new Uint8Array(32);
-    // serial: report 0x06, length byte at byte 1, data from byte 2
-    buf[0] = 0x06;
-    const n = hid.hid_get_feature_report(this.device, buf, 32);
-    if (n > 2) {
-      this.deviceSerial = nullTerm(
-        String.fromCharCode(...buf.slice(2, 2 + Math.min(buf[1]!, n - 2))),
-      );
-    }
-    // firmware: report 0x05, ASCII at offset 6, length-prefixed at byte 1
-    buf.fill(0);
-    buf[0] = 0x05;
-    const n2 = hid.hid_get_feature_report(this.device, buf, 32);
-    if (n2 > 6) {
-      this.deviceFirmware = nullTerm(
-        String.fromCharCode(...buf.slice(6, 6 + Math.min(buf[1]!, n2 - 6))),
-      );
-    }
+    buf[0] = report.reportId;
+    const n = hid.hid_get_feature_report(this.device, buf, buf.length);
+    if (n <= report.offset) return undefined;
+    const end = report.lengthPrefixed ? report.offset + Math.min(buf[1]!, n - report.offset) : n;
+    return nullTerm(String.fromCharCode(...buf.slice(report.offset, end)));
   }
 
   // Reset-to-logo so stale images are cleared while the device is still open.

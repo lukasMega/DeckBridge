@@ -8,6 +8,8 @@
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { useStore } from '../store.js';
 import { copyLabel, useCopyText } from '../use-copy-text.js';
+import { postJson } from '../ui-api.js';
+import { Feedback } from '../ui-async.js';
 import type { DeviceOverridesView, KeyEvent } from '../ui-types.js';
 
 /** Grid geometry for the prompts. The server advertises rows/columns on the
@@ -99,10 +101,9 @@ export function KeymapLearn({
     setSession((prev) => ({ ...prev, error: null }));
     try {
       const wireInputToCora = deriveWireInputToCora(recorded);
-      const r = await fetch('/api/device-overrides', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
+      await postJson(
+        '/api/device-overrides',
+        {
           modelId: view.modelId,
           overrides: {
             ...view.overrides,
@@ -111,10 +112,9 @@ export function KeymapLearn({
             // offset alongside an explicit map is a trap for the next reader.
             keyMap: { ...view.overrides.keyMap, wireInputToCora, inputOffset: undefined },
           },
-        }),
-      });
-      const parsed = (await r.json()) as { error?: string };
-      if (!r.ok) throw new Error(parsed.error ?? `Save failed (${r.status})`);
+        },
+        'Save failed',
+      );
       setSaved(true);
       setSession((prev) => ({ ...prev, learning: false }));
       onSaved();
@@ -186,8 +186,7 @@ export function KeymapLearn({
         </>
       )}
 
-      {error && <p class="settings-error">{error}</p>}
-      {saved && !error && <p class="settings-status">Key map saved — the device reconnects…</p>}
+      <Feedback error={error} status={saved ? 'Key map saved — the device reconnects…' : null} />
     </>
   );
 }

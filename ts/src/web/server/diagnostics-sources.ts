@@ -17,54 +17,50 @@ import { settingsPath } from '../../settings-store.js';
 import { isElgatoAppRunning, openPathInOS, platformName } from '../../os-utils.ts';
 import { versionText } from '../../cli.js';
 
-/** Everything the report needs that only the running server knows. */
-export interface LiveDiagnosticsInputs {
+/** The fields both the resolved inputs and the raw args carry verbatim. */
+interface DiagnosticsInputsBase {
   cacheRoot?: string;
   logPath: string;
   logLevel: string;
   uptimeMs: number;
+  state: StateResponse;
+  settingsJson: string;
+}
+
+/** Everything the report needs that only the running server knows. */
+export interface LiveDiagnosticsInputs extends DiagnosticsInputsBase {
   modelOverrides: Record<string, DeviceModelOverride>;
   effectiveModels: Record<string, unknown>;
-  state: StateResponse;
   comms: CommEntry[];
   keyEvents: KeyEventEntry[];
   ringLogs: LogEntry[];
-  settingsJson: string;
 }
 
 /** The live-source assembly, expressed against the two controllers/buffers the
  *  report reads from — so WebUIServer hands over references, not fifteen
  *  closures. */
-export function liveDiagnosticsInputs(args: {
-  cacheRoot?: string;
-  logPath: string;
-  logLevel: string;
-  uptimeMs: number;
-  overrides: ModelOverridesController;
-  state: StateResponse;
-  activity: { comms: CommEntry[]; keyEvents: KeyEventEntry[]; logs: LogEntry[] };
-  settingsJson: string;
-}): LiveDiagnosticsInputs {
-  const modelOverrides = args.overrides.all();
+export function liveDiagnosticsInputs(
+  args: DiagnosticsInputsBase & {
+    overrides: ModelOverridesController;
+    activity: { comms: CommEntry[]; keyEvents: KeyEventEntry[]; logs: LogEntry[] };
+  },
+): LiveDiagnosticsInputs {
+  const { overrides, activity, ...rest } = args;
+  const modelOverrides = overrides.all();
   // Post-override spec of every model the user has tuned — so a report from a
   // tuned device shows what it is actually running, not the registry default.
   const effectiveModels: Record<string, unknown> = {};
   for (const modelId of Object.keys(modelOverrides)) {
-    const view = args.overrides.view(modelId);
+    const view = overrides.view(modelId);
     if (!('error' in view)) effectiveModels[modelId] = view.effective;
   }
   return {
-    cacheRoot: args.cacheRoot,
-    logPath: args.logPath,
-    logLevel: args.logLevel,
-    uptimeMs: args.uptimeMs,
+    ...rest,
     modelOverrides,
     effectiveModels,
-    state: args.state,
-    comms: args.activity.comms,
-    keyEvents: args.activity.keyEvents,
-    ringLogs: args.activity.logs,
-    settingsJson: args.settingsJson,
+    comms: activity.comms,
+    keyEvents: activity.keyEvents,
+    ringLogs: activity.logs,
   };
 }
 

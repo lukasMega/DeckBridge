@@ -2,20 +2,7 @@ import assert from 'tjs:assert';
 import { hashJpeg, makeCacheKey, imageCache, specRevision } from '../src/image-cache.js';
 import type { DeviceImageSpec } from '../src/devices/driver.js';
 import { IMAGE_CACHE_SIZE } from '../src/types.js';
-
-let passed = 0;
-let failed = 0;
-
-function test(name: string, fn: () => void): void {
-  try {
-    fn();
-    console.log(`  ✓ ${name}`);
-    passed++;
-  } catch (e) {
-    console.error(`  ✗ ${name}: ${(e as Error).message}`);
-    failed++;
-  }
-}
+import { test, summaryExit } from './helpers/harness.js';
 
 // hashJpeg
 
@@ -259,6 +246,4 @@ test('recency: get promotes a key so it survives the next eviction', () => {
 
 // Summary
 
-console.log(`\n${passed} passed, ${failed} failed`);
-// @ts-ignore — tjs is a runtime global
-tjs.exit(failed > 0 ? 1 : 0);
+summaryExit();

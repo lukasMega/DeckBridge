@@ -3,6 +3,7 @@
  *  so blocking hid_write never stalls the CORA/WebUI event loop. */
 import { EventEmitter } from 'node:events';
 import workerSource from 'virtual:hid-worker';
+import { revokeBlobUrl, spawnWorker, terminateDeferred } from './worker-lifecycle.js';
 import type { MainToWorker, WorkerToMain } from './hid-worker-protocol.js';
 import type {
   DeviceDriver,
@@ -55,9 +56,8 @@ export class WorkerHidDriver extends EventEmitter implements DeviceDriver {
       return Promise.reject(new Error('open already in flight'));
     }
     if (!this.worker) {
-      const url = URL.createObjectURL(new Blob([workerSource], { type: 'application/javascript' }));
+      const { worker: w, url } = spawnWorker(workerSource);
       this.objectUrl = url;
-      const w = new Worker(url, { type: 'module' });
       this.worker = w;
       w.addEventListener('message', (e: MessageEvent) =>
         this.onWorkerMessage(e.data as WorkerToMain),
@@ -207,35 +207,15 @@ export class WorkerHidDriver extends EventEmitter implements DeviceDriver {
     this.worker?.postMessage(msg);
   }
 
-  /** Null the refs synchronously (open()'s reject path is observed immediately
-   *  by callers), but defer the native terminate(). Calling Worker.terminate()
-   *  synchronously from inside an onmessage/onerror callback — e.g. the
-   *  throwaway "unknown modelId" worker that posts an error then is torn down
-   *  at once — races txiki's worker libuv loop mid-flush and SIGSEGVs.
-   *  `delayMs` lets the worker thread settle to idle before it's killed: 0 (a
-   *  bare macrotask) is enough when the worker can't be mid native call (open
-   *  failure, graceful close already drained via 'close'), but a physical
-   *  disconnect can land mid an in-flight FFI image transform or hid_write, so
-   *  that path passes CLOSE_GRACE_MS instead. */
+  /** Null the refs synchronously, then defer the native terminate() — see
+   *  terminateDeferred (worker-lifecycle.ts) for the txiki libuv-loop footgun and
+   *  what `delayMs` buys: 0 when the worker can't be mid native call (open
+   *  failure, graceful close), CLOSE_GRACE_MS on a physical disconnect. */
   private cleanupWorker(delayMs = 0): void {
     const w = this.worker;
     this.worker = null;
-    if (w) {
-      setTimeout(() => {
-        try {
-          w.terminate();
-        } catch {
-          /* gone */
-        }
-      }, delayMs);
-    }
-    if (this.objectUrl) {
-      try {
-        URL.revokeObjectURL(this.objectUrl);
-      } catch {
-        /* ignore */
-      }
-      this.objectUrl = null;
-    }
+    if (w) terminateDeferred(w, delayMs);
+    if (this.objectUrl) revokeBlobUrl(this.objectUrl);
+    this.objectUrl = null;
   }
 }

@@ -6,20 +6,7 @@ import {
   getImageEntry,
   clearImageStore,
 } from '../src/web/client/key-preview.js';
-
-let passed = 0;
-let failed = 0;
-
-function test(name: string, fn: () => void): void {
-  try {
-    fn();
-    console.log(`  ✓ ${name}`);
-    passed++;
-  } catch (e) {
-    console.error(`  ✗ ${name}: ${(e as Error).message}`);
-    failed++;
-  }
-}
+import { test, summary } from './helpers/harness.js';
 
 // imageSrc
 
@@ -79,5 +66,4 @@ test('clearImage on a missing key is a no-op', () => {
 
 // Summary
 
-console.log(`\n${passed} passed, ${failed} failed`);
-if (failed > 0) tjs.exit(1);
+summary();

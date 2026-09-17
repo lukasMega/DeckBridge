@@ -1,6 +1,6 @@
 import { MiraboxDriver } from './mirabox.js';
-import { transformImageForDevice, closeSidecar } from './translator.js';
-import type { KeyEvent } from './types.js';
+import { transformImageForDevice } from './translator.js';
+import { exitOnSigint, logKeyEvents } from './probe-utils.js';
 import { MIRABOX_293_MODEL } from './devices/mirabox/mirabox-293.js';
 
 // 1×1 red pixel BMP (58 bytes). The image-proc sidecar's load_from_memory
@@ -19,14 +19,6 @@ mirabox.sendImage(11, jpeg);
 console.log('[mirabox] test image sent to key imgId=11 (top-left)');
 console.log('[mirabox] press keys to test... (Ctrl+C to exit)');
 
-mirabox.on('key', (e: KeyEvent) => {
-  console.log(`[key] code=0x${e.keyIndex.toString(16).padStart(2, '0')} state=${e.state}`);
-});
+logKeyEvents(mirabox);
 
-tjs.addSignalListener('SIGINT', () => {
-  void mirabox.close().then(() => {
-    closeSidecar();
-    tjs.exit(0);
-    return undefined;
-  });
-});
+exitOnSigint(mirabox);

@@ -1,6 +1,6 @@
 // Stage renderers — one per device state (see deriveState in ui-helpers).
-import { useState, useEffect } from 'preact/hooks';
 import { useStore } from '../store.js';
+import { useFetched } from '../ui-api.js';
 import { ICON } from '../ui-icons.js';
 import type { DockUi } from '../ui-types.js';
 import { Icon } from './Icon.js';
@@ -127,23 +127,10 @@ export function StageDeviceNoElgato({
 export function StageNoDevice({
   onHelp,
 }: Readonly<{ onHelp: (id: string) => void }>): preact.JSX.Element {
-  const [hidapiMissing, setHidapiMissing] = useState(false);
-
-  useEffect(() => {
-    const controller = new AbortController();
-    fetch('/api/requirements', { signal: controller.signal })
-      .then((r) => (r.ok ? (r.json() as Promise<Array<{ name: string; ok: boolean }>>) : null))
-      .then((results) => {
-        if (!results) return undefined;
-        const hidapi = results.find((r) => r.name === 'libhidapi');
-        if (hidapi !== undefined && !hidapi.ok) setHidapiMissing(true);
-        return undefined;
-      })
-      .catch((err: unknown) => {
-        if (err instanceof Error && err.name === 'AbortError') return;
-      });
-    return () => controller.abort();
-  }, []);
+  // Best-effort: a failed read leaves data null, so the warning stays hidden.
+  const requirements = useFetched<Array<{ name: string; ok: boolean }>>('/api/requirements');
+  const hidapi = requirements.data?.find((r) => r.name === 'libhidapi');
+  const hidapiMissing = hidapi !== undefined && !hidapi.ok;
 
   return (
     <>

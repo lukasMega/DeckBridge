@@ -1,4 +1,5 @@
 import scanWorkerSource from 'virtual:hid-scan-worker';
+import { spawnWorker } from './worker-lifecycle.js';
 import type { HidDeviceInfo } from './ffi/hidapi.js';
 import type { MainToHidScanWorker, HidScanWorkerToMain } from './hid-scan-worker-protocol.js';
 import { log } from './logger.js';
@@ -15,9 +16,9 @@ interface ScanWorkerLike {
 
 type ScanWorkerFactory = () => ScanWorkerLike;
 
+// Process-lifetime worker: never terminated, so the blob URL is never revoked.
 function defaultWorkerFactory(): ScanWorkerLike {
-  const url = URL.createObjectURL(new Blob([scanWorkerSource], { type: 'application/javascript' }));
-  return new Worker(url, { type: 'module' });
+  return spawnWorker(scanWorkerSource).worker;
 }
 
 /** One process-lifetime discovery worker. Concurrent callers share one native scan,

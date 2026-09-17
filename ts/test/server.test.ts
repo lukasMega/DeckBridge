@@ -2,7 +2,9 @@ import assert from 'tjs:assert';
 import { ElgatoServer, ElgatoChildServer } from '../src/elgato.js';
 import { ELGATO_VID, ELGATO_PKT_SIZE_RX, NETWORK_DOCK_PID } from '../src/types.js';
 import type { DockStatus } from '../src/types.js';
-import { MK2_CHILD_GEOMETRY, MINI_CHILD_GEOMETRY } from '../src/capabilities.js';
+import { modelToChildGeometry } from '../src/capabilities.js';
+import { MK2_MODEL } from '../src/devices/elgato/mk2.js';
+import { MINI_MODEL } from '../src/devices/elgato/mini.js';
 import {
   CORA_MAGIC,
   encodeCoraFrame,
@@ -12,29 +14,23 @@ import {
   type CoraFrame,
 } from '../src/cora-frame.js';
 import { connect, sendPkt, closeAndWait } from './helpers/cora-framer.js';
+import { testAsync as runTest, summaryExit } from './helpers/harness.js';
 
 const TEST_PORT = 15343;
 const TEST_CHILD_PORT = 15344;
+const MK2_CHILD_GEOMETRY = modelToChildGeometry(MK2_MODEL);
+const MINI_CHILD_GEOMETRY = modelToChildGeometry(MINI_MODEL);
 
 // Setup / teardown
 
-let passed = 0;
-let failed = 0;
-
-async function runTest(name: string, fn: () => void | Promise<void>): Promise<void> {
-  try {
-    await fn();
-    console.log(`  ✓ ${name}`);
-    passed++;
-  } catch (e) {
-    console.error(`  ✗ ${name}: ${(e as Error).message}`);
-    failed++;
-  }
-}
-
-const server = new ElgatoServer(TEST_PORT, true);
+const server = new ElgatoServer(MK2_CHILD_GEOMETRY, TEST_PORT, true);
 server.keepaliveIntervalMs = 100;
-const childServer = new ElgatoChildServer(TEST_CHILD_PORT, server.deviceConfig, false);
+const childServer = new ElgatoChildServer(
+  MK2_CHILD_GEOMETRY,
+  TEST_CHILD_PORT,
+  server.deviceConfig,
+  false,
+);
 childServer.keepaliveIntervalMs = 100;
 
 await server.start();
@@ -52,10 +48,9 @@ try {
     };
     server.on('serverLog', onServerLog);
     try {
-      // After start(), the bootstrap error handler must log instead of
-      // rejecting an already-settled promise. Reach into the underlying
-      // NodeLikeServer's registered error callbacks and invoke the one
-      // installed by startServer().
+      // After start(), the bootstrap error handler must log instead of rejecting
+      // an already-settled promise. Reach into the underlying NodeLikeServer's
+      // registered error callbacks and invoke the one installed by startServer().
       const netServer = (server as unknown as { server: { _errorCbs: Array<(e: Error) => void> } })
         .server;
       assert.ok(netServer._errorCbs.length > 0, 'expected at least one registered error handler');
@@ -389,9 +384,10 @@ const TAKEOVER_CHILD_PORT = 15346;
 console.log('\nelgato child server: takeover race (E3)');
 
 {
-  const takeoverServer = new ElgatoServer(15345, true);
+  const takeoverServer = new ElgatoServer(MK2_CHILD_GEOMETRY, 15345, true);
   takeoverServer.keepaliveIntervalMs = 100;
   const takeoverChildServer = new ElgatoChildServer(
+    MK2_CHILD_GEOMETRY,
     TAKEOVER_CHILD_PORT,
     takeoverServer.deviceConfig,
     true, // enableOutboundReconnect
@@ -445,8 +441,8 @@ console.log('\nelgato child server: takeover race (E3)');
 console.log('\nelgato server: multi-device identity');
 
 await runTest('two instances on distinct port pairs start and stop cleanly', async () => {
-  const a = new ElgatoServer(15351, true, { childPort: 15352 });
-  const b = new ElgatoServer(15353, true, { childPort: 15354 });
+  const a = new ElgatoServer(MK2_CHILD_GEOMETRY, 15351, true, { childPort: 15352 });
+  const b = new ElgatoServer(MK2_CHILD_GEOMETRY, 15353, true, { childPort: 15354 });
   try {
     await a.start();
     await b.start();
@@ -460,7 +456,9 @@ await runTest('two instances on distinct port pairs start and stop cleanly', asy
 
 await runTest('opts.childPort is written into capabilities packet at offset 126', async () => {
   const CUSTOM_CHILD_PORT = 25344;
-  const s = new ElgatoServer(15355, true, { childPort: CUSTOM_CHILD_PORT });
+  const s = new ElgatoServer(MK2_CHILD_GEOMETRY, 15355, true, {
+    childPort: CUSTOM_CHILD_PORT,
+  });
   s.keepaliveIntervalMs = 100;
   await s.start();
   try {
@@ -477,7 +475,7 @@ await runTest('opts.childPort is written into capabilities packet at offset 126'
 });
 
 await runTest('opts.dockSerial and opts.childSerial land in deviceConfig', () => {
-  const s = new ElgatoServer(15357, true, {
+  const s = new ElgatoServer(MK2_CHILD_GEOMETRY, 15357, true, {
     dockSerial: 'DOCK123ABCDEF',
     childSerial: 'CHILD456ABCDEF',
   });
@@ -751,5 +749,4 @@ try {
 
 // Summary
 
-console.log(`\n${passed} passed, ${failed} failed`);
-tjs.exit(failed > 0 ? 1 : 0);
+summaryExit();

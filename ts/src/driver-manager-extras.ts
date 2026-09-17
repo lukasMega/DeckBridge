@@ -11,6 +11,7 @@ import type { DockStatus, ExtraKeyConfig } from './types.js';
 import { DEVICE_MODELS } from './devices/registry.js';
 import { DeviceSession, sessionIdentity, type SessionServersFactory } from './device-session.js';
 import { deviceKeyFor, sharedSerialModelId } from './device-identity.js';
+import { coraPortConflict } from './cora-startup.js';
 import type { DeviceIdentitySettings } from './settings-store.js';
 
 export interface ExtraDockCoordinatorDeps {
@@ -60,13 +61,16 @@ export interface ExtraDockCoordinatorDeps {
   extraKeyConfigFor: (deviceKey: string, wireId: number) => ExtraKeyConfig | undefined;
 }
 
+// Index 0 is the primary dock, so extras draw from 1..MAX_DEVICE_SESSIONS-1.
+const freshIndexPool = () => Array.from({ length: MAX_DEVICE_SESSIONS - 1 }, (_, k) => k + 1);
+
 export class ExtraDockCoordinator {
   private readonly deps: ExtraDockCoordinatorDeps;
 
   // Keyed by hidPath (physical unit), NOT model.id — lets N same-model units
   // each hold their own session.
   private extraSessions = new Map<string, DeviceSession>();
-  private freeIndices: number[] = Array.from({ length: MAX_DEVICE_SESSIONS - 1 }, (_, k) => k + 1);
+  private freeIndices: number[] = freshIndexPool();
   private scanTimer: ReturnType<typeof setInterval> | null = null;
   private scanInFlight = false;
   private extraCreateInFlight = false;
@@ -253,11 +257,8 @@ export class ExtraDockCoordinator {
       // Almost always a bind error — another DeckBridge / Elgato dock owns the
       // port. Stop the session (closes this freshly-opened worker — fine, it's
       // not the churny unopenable-device case) and free the index for a retry.
-      log(
-        'error',
-        'coord',
-        `CORA port ${identity.primaryPort}/${identity.childPort} in use — is another DeckBridge / Elgato dock running? (${(e as Error).message})`,
-      );
+      const { primaryPort, childPort } = identity;
+      log('error', 'coord', coraPortConflict(primaryPort, childPort, (e as Error).message));
       this.extraSessions.delete(hidPath);
       await session.stop();
       this.releaseIndex(index);
@@ -281,7 +282,7 @@ export class ExtraDockCoordinator {
   async stopAllExtraSessions(): Promise<void> {
     const sessions = [...this.extraSessions.values()];
     this.extraSessions.clear();
-    this.freeIndices = Array.from({ length: MAX_DEVICE_SESSIONS - 1 }, (_, k) => k + 1);
+    this.freeIndices = freshIndexPool();
     for (const s of sessions) {
       await s.stop();
     }
@@ -291,34 +292,21 @@ export class ExtraDockCoordinator {
   /** Route a WebUI brightness change to the extra dock with this index.
    *  Returns false when no live extra session has the index. */
   setDockBrightness(index: number, level: number): boolean {
-    for (const s of this.extraSessions.values()) {
-      if (s.identity.index === index) {
-        s.setBrightness(level);
-        return true;
-      }
-    }
-    return false;
+    const session = this.sessionAt(index);
+    if (!session) return false;
+    session.setBrightness(level);
+    return true;
   }
 
   /** Repaint the extra-key icons of the extra dock with this index (WebUI
    *  config change). No-op when no live extra session has the index. */
   repaintExtraKeys(index: number): void {
-    for (const s of this.extraSessions.values()) {
-      if (s.identity.index === index) {
-        s.repaintExtraKeys();
-        return;
-      }
-    }
+    this.sessionAt(index)?.repaintExtraKeys();
   }
 
   /** WebUI "Run now" for a command-widget extra key on the extra dock with this index. */
   forceRunExtraKey(index: number, wireId: number): void {
-    for (const s of this.extraSessions.values()) {
-      if (s.identity.index === index) {
-        s.forceRunExtraKey(wireId);
-        return;
-      }
-    }
+    this.sessionAt(index)?.forceRunExtraKey(wireId);
   }
 
   /** Tear down the extra docks running `modelId` ('' = all) so the next scan
@@ -341,22 +329,16 @@ export class ExtraDockCoordinator {
   /** The driver behind the extra dock with this index, for app.ts's per-dock
    *  image-mode apply + repaint. null when no live extra session has the index. */
   getDriverForDock(index: number): WorkerHidDriver | null {
-    for (const s of this.extraSessions.values()) {
-      if (s.identity.index === index) return s.getDriver();
-    }
-    return null;
+    return this.sessionAt(index)?.getDriver() ?? null;
   }
 
   /** Live-rename the extra dock matching `deviceKey`'s mDNS advert (WebUI
    *  "Device Identity" edit). No-op if no live extra session has that key. */
   applyMdnsNameForDeviceKey(deviceKey: string, name: string): boolean {
-    for (const s of this.extraSessions.values()) {
-      if (s.identity.deviceKey === deviceKey) {
-        s.updateMdnsServiceName(name);
-        return true;
-      }
-    }
-    return false;
+    const session = this.findSession((s) => s.identity.deviceKey === deviceKey);
+    if (!session) return false;
+    session.updateMdnsServiceName(name);
+    return true;
   }
 
   /** Current status of every live extra dock, sorted by index (ascending). */
@@ -364,6 +346,17 @@ export class ExtraDockCoordinator {
     return [...this.extraSessions.values()]
       .map((s) => s.status())
       .toSorted((a, b) => a.index - b.index);
+  }
+
+  /** First live extra session satisfying `match`, or null — the WebUI addresses
+   *  docks by index or deviceKey, never by the hidPath the map is keyed on. */
+  private findSession(match: (s: DeviceSession) => boolean): DeviceSession | null {
+    for (const s of this.extraSessions.values()) if (match(s)) return s;
+    return null;
+  }
+
+  private sessionAt(index: number): DeviceSession | null {
+    return this.findSession((s) => s.identity.index === index);
   }
 
   /** Lowest free session index (1..MAX_DEVICE_SESSIONS-1), or null if exhausted. */

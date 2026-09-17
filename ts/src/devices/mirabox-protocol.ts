@@ -33,7 +33,7 @@ function zeroPad(len: number): number[] {
   return Array.from({ length: len }, () => 0);
 }
 
-export function buildCrt(cmd: number[], extra: number[] = [], pktSize = 1024): Buffer {
+export function buildCrt(cmd: number[], extra: number[], pktSize: number): Buffer {
   const buf = Buffer.alloc(pktSize, 0);
   let off = 0;
   for (const b of CRT) buf[off++] = b;
@@ -42,7 +42,7 @@ export function buildCrt(cmd: number[], extra: number[] = [], pktSize = 1024): B
   return buf;
 }
 
-export function buildBat(jpegLen: number, keyId: number, pktSize = 1024): Buffer {
+export function buildBat(jpegLen: number, keyId: number, pktSize: number): Buffer {
   return buildCrt(
     [0x42, 0x41, 0x54],
     [...zeroPad(BAT_PADDING_BYTES), (jpegLen >> 8) & 0xff, jpegLen & 0xff, keyId],
@@ -50,11 +50,10 @@ export function buildBat(jpegLen: number, keyId: number, pktSize = 1024): Buffer
   );
 }
 
-/** Wire-encode an image for firmware that drops the last byte of every full
- *  pktSize chunk (K1 Pro): insert one sacrificial 0x00 after every
- *  (pktSize - 1) payload bytes, so no full chunk ever ends in payload and the
- *  device's drop reconstructs the original byte stream exactly. */
-export function padChunkBoundaries(data: Uint8Array, pktSize = 1024): Buffer {
+/** Wire-encode an image for firmware that drops the last byte of every full pktSize chunk (K1
+ * Pro): insert one sacrificial 0x00 after every (pktSize - 1) payload bytes, so no full chunk
+ * ever ends in payload and the device's drop reconstructs the original byte stream exactly. */
+export function padChunkBoundaries(data: Uint8Array, pktSize: number): Buffer {
   const payload = pktSize - 1;
   if (data.length < payload) return Buffer.from(data);
   const groups = Math.floor(data.length / payload);
@@ -67,17 +66,17 @@ export function padChunkBoundaries(data: Uint8Array, pktSize = 1024): Buffer {
   return out;
 }
 
-export function buildLig(brightness: number, pktSize = 1024): Buffer {
+export function buildLig(brightness: number, pktSize: number): Buffer {
   return buildCrt([0x4c, 0x49, 0x47], [...zeroPad(LIG_PADDING_BYTES), brightness], pktSize);
 }
 
-export function buildCle(keyId: number, pktSize = 1024): Buffer {
+export function buildCle(keyId: number, pktSize: number): Buffer {
   return buildCrt([0x43, 0x4c, 0x45], [...zeroPad(CLE_PADDING_BYTES), keyId], pktSize);
 }
 
 // CLE carrying the "DC" (disconnect) marker at bytes 10–11 ('D','C') — tells the
 // device the host is detaching so it returns to idle instead of holding stale
 // images. Distinct from buildCle(keyId), which clears a single key.
-export function buildCleDc(pktSize = 1024): Buffer {
+export function buildCleDc(pktSize: number): Buffer {
   return buildCrt([0x43, 0x4c, 0x45], [...zeroPad(CLE_PADDING_BYTES - 1), 0x44, 0x43], pktSize);
 }

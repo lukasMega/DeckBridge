@@ -1,5 +1,6 @@
 // Module-level handlers (no closure capture — hoisted out of components).
 import { deeplink, showToast } from '../ui-helpers.js';
+import { fire } from '../ui-api.js';
 
 export function openSdApp(e: MouseEvent): void {
   e.preventDefault();
@@ -26,9 +27,5 @@ export function switchToAdvanced(): void {
 }
 
 export function postBrightnessOverride(e: Event): void {
-  fetch('/api/brightness-override', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ enabled: (e.target as HTMLSelectElement).value === 'ignore' }),
-  }).catch(() => undefined);
+  fire('/api/brightness-override', { enabled: (e.target as HTMLSelectElement).value === 'ignore' });
 }

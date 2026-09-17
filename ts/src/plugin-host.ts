@@ -6,6 +6,7 @@
  *  and after MAX_CONSECUTIVE_KILLS respawns the plugins are disabled (ERR) until
  *  their config changes, so a crash-looping plugin can't burn the CPU. */
 import pluginWorkerSource from 'virtual:plugin-worker';
+import { revokeBlobUrl, spawnWorker, terminateDeferred } from './worker-lifecycle.js';
 import { pluginsDir } from './settings-store.js';
 import { log } from './logger.js';
 import type { MainToPluginWorker, PluginWorkerToMain } from './plugin-worker-protocol.js';
@@ -16,7 +17,11 @@ const MAX_CONSECUTIVE_KILLS = 3;
 const STALE_MS = 3000; // a key not re-requested this long (≥2 scheduler ticks) is dropped
 const FETCH_TIMEOUT_MS = 10_000;
 
-export type PluginStatus = 'pending' | 'ok' | 'err' | 'disabled';
+// Reaches the browser verbatim in the GET /api/plugins payload, so it is owned
+// by the web-contract leaf (web/contract.ts) rather than declared twice.
+import type { PluginStatus } from './web/contract.js';
+export type { PluginStatus };
+
 export interface PluginValue {
   /** undefined = no value yet; null = plugin returned null (clear the key). */
   value: string | null | undefined;
@@ -32,10 +37,7 @@ export interface WorkerLike {
 export type WorkerFactory = () => WorkerLike;
 
 function defaultWorkerFactory(): WorkerLike {
-  const url = URL.createObjectURL(
-    new Blob([pluginWorkerSource], { type: 'application/javascript' }),
-  );
-  const w = new Worker(url, { type: 'module' });
+  const { worker: w, url } = spawnWorker(pluginWorkerSource);
   return {
     // oxlint-disable-next-line unicorn/require-post-message-target-origin -- Worker.postMessage takes no targetOrigin
     postMessage: (m) => w.postMessage(m),
@@ -43,11 +45,7 @@ function defaultWorkerFactory(): WorkerLike {
       try {
         w.terminate();
       } finally {
-        try {
-          URL.revokeObjectURL(url);
-        } catch {
-          /* ignore */
-        }
+        revokeBlobUrl(url);
       }
     },
     addEventListener: (t, l) => w.addEventListener(t, l as EventListener),
@@ -197,10 +195,8 @@ export class PluginHost {
     const w = this.worker;
     this.worker = null;
     this.awaitingPong = false;
-    // Defer terminate a macrotask: killing a worker synchronously from inside an
-    // onmessage/onerror callback races txiki's worker libuv loop (see
-    // hid-worker-host.cleanupWorker for the same footgun).
-    if (w) setTimeout(() => w.terminate(), 0);
+    // Deferred a macrotask — see terminateDeferred (worker-lifecycle.ts).
+    if (w) terminateDeferred(w);
   }
 
   private hbTick(): void {

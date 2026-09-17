@@ -1,6 +1,7 @@
 // tjs:ffi bindings for libhidapi.
 import FFI from 'tjs:ffi';
 import { debug, info, warn } from '../logger.js';
+import { decodeNulTerminated, guardedCall, LIST_BUF_BYTES, TSV_ABSENT } from './native-load.js';
 
 export const POINTER = 'pointer';
 export const STRING = 'string';
@@ -169,6 +170,15 @@ function loadHidEnum(): { symbols: HidEnumSymbols; close(): void } | null {
   }
 }
 
+/** Lazy-load the enum lib and call into it. A missing lib or a throw degrades to
+ *  `fallback`: enumeration is best-effort, never fatal to the caller. */
+function hidEnumCall<T>(name: string, fallback: T, fn: (sym: HidEnumSymbols) => T): T {
+  _hidEnumLib ??= loadHidEnum();
+  const lib = _hidEnumLib;
+  if (!lib) return fallback;
+  return guardedCall(name, fallback, () => fn(lib.symbols));
+}
+
 // ---------------------------------------------------------------------------
 // Enumeration snapshot
 //
@@ -217,9 +227,6 @@ export function invalidateHidSnapshot(): void {
   _snapshot = [];
 }
 
-/** TSV absent-field marker written by mirabox_hid_list_all. */
-const TSV_ABSENT = '-';
-
 function matchesModel(
   d: HidDeviceInfo,
   vid: number,
@@ -257,24 +264,17 @@ function nativeFindHidPath(
   usage: number,
   pid: number,
 ): string | null {
-  _hidEnumLib ??= loadHidEnum();
-  const lib = _hidEnumLib;
-  if (!lib) return null;
-  try {
+  return hidEnumCall<string | null>('mirabox_hid_find_path', null, (sym) => {
     const buf = new Uint8Array(512);
-    const found = lib.symbols.mirabox_hid_find_path(vid, pid, usagePage, usage, buf, buf.length);
+    const found = sym.mirabox_hid_find_path(vid, pid, usagePage, usage, buf, buf.length);
     if (!found) {
       debug('ffi', 'mirabox_hid_find_path: no device found');
       return null;
     }
-    const end = buf.indexOf(0);
-    const path = new TextDecoder().decode(buf.subarray(0, end >= 0 ? end : buf.length));
+    const path = decodeNulTerminated(buf);
     debug('ffi', `mirabox_hid_find_path: found path=${path}`);
     return path;
-  } catch (e) {
-    warn('ffi', `mirabox_hid_find_path threw: ${String(e)}`);
-    return null;
-  }
+  });
 }
 
 /** Every HID device path matching this VID+usagePage+usage (+optional PID),
@@ -294,20 +294,14 @@ export function listHidPaths(vid: number, usagePage: number, usage: number, pid 
 }
 
 function nativeListHidPaths(vid: number, usagePage: number, usage: number, pid: number): string[] {
-  _hidEnumLib ??= loadHidEnum();
-  const lib = _hidEnumLib;
-  if (!lib) return [];
-  try {
+  return hidEnumCall<string[]>('mirabox_hid_list_paths', [], (sym) => {
     const buf = new Uint8Array(4096);
-    const count = lib.symbols.mirabox_hid_list_paths(vid, pid, usagePage, usage, buf, buf.length);
+    const count = sym.mirabox_hid_list_paths(vid, pid, usagePage, usage, buf, buf.length);
     if (count <= 0) return [];
-    const end = buf.indexOf(0);
-    const text = new TextDecoder().decode(buf.subarray(0, end >= 0 ? end : buf.length));
-    return text.split('\n').filter((s) => s.length > 0);
-  } catch (e) {
-    warn('ffi', `mirabox_hid_list_paths threw: ${String(e)}`);
-    return [];
-  }
+    return decodeNulTerminated(buf)
+      .split('\n')
+      .filter((s) => s.length > 0);
+  });
 }
 
 /** True if a HID device with this VID+PID is connected, via deckbridge-native
@@ -324,15 +318,11 @@ export function hidDevicePresent(vid: number, pid: number): boolean {
 }
 
 function nativeHidDevicePresent(vid: number, pid: number): boolean {
-  _hidEnumLib ??= loadHidEnum();
-  const lib = _hidEnumLib;
-  if (!lib) return false;
-  try {
-    return lib.symbols.mirabox_hid_present(vid, pid) === 1;
-  } catch (e) {
-    warn('ffi', `mirabox_hid_present threw: ${String(e)}`);
-    return false;
-  }
+  return hidEnumCall(
+    'mirabox_hid_present',
+    false,
+    (sym) => sym.mirabox_hid_present(vid, pid) === 1,
+  );
 }
 
 /** USB serial-number string of the device at `hidPath` (from deckbridge-native
@@ -352,19 +342,11 @@ export function hidSerialForPath(hidPath: string): string | null {
 }
 
 function nativeHidSerialForPath(hidPath: string): string | null {
-  _hidEnumLib ??= loadHidEnum();
-  const lib = _hidEnumLib;
-  if (!lib) return null;
-  try {
+  return hidEnumCall<string | null>('mirabox_hid_serial_for_path', null, (sym) => {
     const buf = new Uint8Array(256);
-    const found = lib.symbols.mirabox_hid_serial_for_path(hidPath, buf, buf.length);
-    if (!found) return null;
-    const end = buf.indexOf(0);
-    return new TextDecoder().decode(buf.subarray(0, end >= 0 ? end : buf.length));
-  } catch (e) {
-    warn('ffi', `mirabox_hid_serial_for_path threw: ${String(e)}`);
-    return null;
-  }
+    const found = sym.mirabox_hid_serial_for_path(hidPath, buf, buf.length);
+    return found ? decodeNulTerminated(buf) : null;
+  });
 }
 
 /** One row of the unfiltered HID enumeration (see listAllHidDevices). */
@@ -380,13 +362,7 @@ export interface HidDeviceInfo {
   path: string;
 }
 
-// A machine with several composite HID devices can enumerate well over a hundred
-// interfaces; 512 KB holds a few thousand rows before the native side truncates
-// cleanly. Sized generously because device PRESENCE is now answered from this
-// enumeration (hidSnapshot) — a truncated tail would read as "device unplugged".
-const LIST_ALL_BUF_BYTES = 512 * 1024;
-
-export function parseHidRow(line: string): HidDeviceInfo | null {
+function parseHidRow(line: string): HidDeviceInfo | null {
   const f = line.split('\t');
   if (f.length !== 9) return null;
   return {
@@ -402,6 +378,14 @@ export function parseHidRow(line: string): HidDeviceInfo | null {
   };
 }
 
+/** Rows of the NUL-terminated TSV block a native enumeration writes into `buf`. */
+export function parseHidRows(buf: Uint8Array): HidDeviceInfo[] {
+  return decodeNulTerminated(buf)
+    .split('\n')
+    .map(parseHidRow)
+    .filter((d): d is HidDeviceInfo => d !== null);
+}
+
 /** Full diagnostic enumeration plus duration. A four-figure `tookMs` identifies
  * the hostile HID stack behavior which operational supported-only scans avoid. */
 export function listAllHidDevicesTimed(): { devices: HidDeviceInfo[]; tookMs: number } {
@@ -415,23 +399,11 @@ export function listAllHidDevicesTimed(): { devices: HidDeviceInfo[]; tookMs: nu
  *  does *not* recognize; a VID/PID-filtered call by definition cannot. Returns
  *  [] when deckbridge-native is unavailable. */
 export function listAllHidDevices(): HidDeviceInfo[] {
-  _hidEnumLib ??= loadHidEnum();
-  const lib = _hidEnumLib;
-  if (!lib) return [];
-  try {
-    const buf = new Uint8Array(LIST_ALL_BUF_BYTES);
-    const count = lib.symbols.mirabox_hid_list_all(buf, buf.length);
-    if (count <= 0) return [];
-    const end = buf.indexOf(0);
-    const text = new TextDecoder().decode(buf.subarray(0, end >= 0 ? end : buf.length));
-    return text
-      .split('\n')
-      .map(parseHidRow)
-      .filter((d): d is HidDeviceInfo => d !== null);
-  } catch (e) {
-    warn('ffi', `mirabox_hid_list_all threw: ${String(e)}`);
-    return [];
-  }
+  return hidEnumCall<HidDeviceInfo[]>('mirabox_hid_list_all', [], (sym) => {
+    const buf = new Uint8Array(LIST_BUF_BYTES);
+    const count = sym.mirabox_hid_list_all(buf, buf.length);
+    return count <= 0 ? [] : parseHidRows(buf);
+  });
 }
 
 export function getHidapiSystemCandidates(): string[] {

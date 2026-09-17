@@ -47,58 +47,6 @@ function growOut(): void {
   OUT = new Uint8Array(OUT.length * 2);
 }
 
-function callImageProc(
-  bytes: Uint8Array,
-  width: number,
-  height: number,
-  maxBytes: number,
-  quality: number,
-  skipResize: boolean,
-  rotate: number,
-  flipH: boolean,
-  flipV: boolean,
-  bmp: boolean,
-  bmpPpm: number,
-  blurSigma: number,
-  resizeFilter: number,
-  sharpenSigma: number,
-  fillMode: number,
-  cropPx: number,
-): Buffer {
-  const { symbols } = load();
-  for (;;) {
-    const n = symbols.image_proc_transform(
-      bytes,
-      bytes.length,
-      width,
-      height,
-      maxBytes,
-      Math.round(quality * 100),
-      skipResize ? 1 : 0,
-      rotate,
-      flipH ? 1 : 0,
-      flipV ? 1 : 0,
-      bmp ? 1 : 0,
-      bmpPpm,
-      Math.round(blurSigma * 10),
-      resizeFilter,
-      Math.round(sharpenSigma * 10),
-      fillMode,
-      cropPx,
-      OUT,
-      OUT.length,
-      ERR,
-      ERR.length,
-    );
-    if (n === -2) {
-      growOut();
-      continue;
-    }
-    if (n < 0) throwImageProcError(n);
-    return Buffer.from(OUT.subarray(0, n));
-  }
-}
-
 /** Map a DeviceImageSpec's resizeFilter to the FFI `resize_filter: u32` enum.
  *  0 = Triangle (default), 1 = Nearest, 2 = Lanczos3. */
 export function resizeFilterFor(spec: DeviceImageSpec): number {
@@ -149,24 +97,38 @@ export function applyOverride(spec: DeviceImageSpec, mode: ImageModeOverride): D
 /** Transform a CORA JPEG for an Elgato device according to its DeviceImageSpec.
  *  Returns JPEG bytes for gen2 (MK.2) or BMP bytes for gen1 (Mini). */
 export function transformImageForDevice(jpeg: Uint8Array, spec: DeviceImageSpec): Buffer {
-  return callImageProc(
-    jpeg,
-    spec.width,
-    spec.height,
-    spec.maxBytes,
-    spec.quality,
-    false,
-    spec.rotate,
-    spec.flipH,
-    spec.flipV,
-    spec.format === 'bmp',
-    spec.bmpPpm ?? 2835,
-    spec.blur ?? 0,
-    resizeFilterFor(spec),
-    spec.sharpen ?? 0,
-    fillModeFor(spec),
-    spec.crop ?? 0,
-  );
+  const { symbols } = load();
+  for (;;) {
+    const n = symbols.image_proc_transform(
+      jpeg,
+      jpeg.length,
+      spec.width,
+      spec.height,
+      spec.maxBytes,
+      Math.round(spec.quality * 100),
+      0, // skip_resize: no caller needs it
+      spec.rotate,
+      spec.flipH ? 1 : 0,
+      spec.flipV ? 1 : 0,
+      spec.format === 'bmp' ? 1 : 0,
+      spec.bmpPpm ?? 2835,
+      Math.round((spec.blur ?? 0) * 10),
+      resizeFilterFor(spec),
+      Math.round((spec.sharpen ?? 0) * 10),
+      fillModeFor(spec),
+      spec.crop ?? 0,
+      OUT,
+      OUT.length,
+      ERR,
+      ERR.length,
+    );
+    if (n === -2) {
+      growOut();
+      continue;
+    }
+    if (n < 0) throwImageProcError(n);
+    return Buffer.from(OUT.subarray(0, n));
+  }
 }
 
 /** Close the image-proc dylib handle. Kept for backwards-compatibility with

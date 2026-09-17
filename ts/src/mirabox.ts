@@ -26,14 +26,13 @@ import {
 export { parseAckReport, buildCrt, buildBat, padChunkBoundaries, buildLig, buildCle, buildCleDc };
 
 export class MiraboxDriver extends HidDeviceBase {
-  /** HID path this instance was opened with (path-based open only — see
-   *  open()). Undefined on the VID/PID-fallback path (off-macOS only), or
-   *  before open() completes. Used to derive a stable per-device identity
-   *  (device-identity.ts) — NOT just for the open() call itself. */
+  /** HID path this instance was opened with (path-based open only — see open()). Undefined on
+   * the VID/PID-fallback path (off-macOS only), or before open() completes. Used to derive a
+   * stable per-device identity (device-identity.ts) — NOT just for the open() call itself. */
   hidPath: string | undefined = undefined;
   private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
   private lastHeartbeatAt = 0;
-  private pktSize = 1024;
+  private pktSize: number;
   private reportId = HID_REPORT_ID_BYTE;
   private imageBatch = false;
   private pendingStp = false;
@@ -45,6 +44,7 @@ export class MiraboxDriver extends HidDeviceBase {
 
   constructor(private readonly model: DeviceModel) {
     super();
+    this.pktSize = model.wire.packetSize;
   }
 
   private _buildCrt(cmd: number[], extra: number[] = []): Buffer {
@@ -82,14 +82,12 @@ export class MiraboxDriver extends HidDeviceBase {
     return null;
   }
 
-  /** Replace `pktSize` (and the scratch buffers sized from it) with the output-report
-   *  size the device itself declares — but only for models that set
-   *  `wire.packetSizeCandidates`, and only when the report descriptor is unambiguous and
-   *  agrees on one of those candidates. Any doubt at all leaves the model constant in
-   *  place, so this is a no-op for every hardware-verified model.
-   *  See devices/hid-report-descriptor.ts for why this is worth probing at all. */
+  /** Replace `pktSize` (and the buffers sized from it) with the output-report size the
+   *  device declares — only for models setting `wire.packetSizeCandidates`, and only
+   *  when the report descriptor is unambiguous and agrees on one candidate. Mutates
+   *  `pktSize`, so open() re-seeds it from the model on every (re)connect. */
   private _adoptProbedPacketSize(hid: HidapiSymbols, dev: unknown): void {
-    const candidates = this.model.wire?.packetSizeCandidates;
+    const candidates = this.model.wire.packetSizeCandidates;
     if (!candidates) return;
     const probed = probeOutputReportSize(hid, dev, candidates);
     if (probed === null || probed === this.pktSize) return;
@@ -103,9 +101,20 @@ export class MiraboxDriver extends HidDeviceBase {
     this._writeScratch = Buffer.alloc(this.pktSize + 1);
   }
 
+  /** Bring the panel to a known state: DIS, brightness, clear all. Sent on open, and
+   *  again after a sleep/wake gap (the device may have dropped into idle mode). */
+  private _writeInitSequence(): void {
+    this.write(this._buildCrt(CMD_DIS));
+    this.write(this._buildLig(DEFAULT_BRIGHTNESS));
+    this.write(this._buildCle(CLEAR_ALL_KEYS));
+    if (this.model.wire.sendStpAfterImage) {
+      this.write(this._buildCrt(CMD_STP));
+    }
+  }
+
   async open(hidPath?: string): Promise<void> {
-    this.pktSize = this.model.wire!.packetSize;
-    this.reportId = this.model.wire?.reportId ?? HID_REPORT_ID_BYTE;
+    this.pktSize = this.model.wire.packetSize;
+    this.reportId = this.model.wire.reportId ?? HID_REPORT_ID_BYTE;
     this._chunkScratch = Buffer.alloc(this.pktSize);
     this._writeScratch = Buffer.alloc(this.pktSize + 1);
 
@@ -116,11 +125,10 @@ export class MiraboxDriver extends HidDeviceBase {
     const usagePage = this.model.usagePage!;
     const usage = this.model.usage!;
 
-    // Prefer path-based open (filters by usage_page/usage, same as node-hid).
-    // hid_open(VID, PID) picks the first IOKit interface which may be system-claimed on macOS.
-    // Explicit hidPath (multi-device: a specific unit) skips enumeration and
-    // opens that exact interface. Absent → enumerate + open the first
-    // usage-matched path (primary probe / single device).
+    // Prefer path-based open (filters by usage_page/usage, same as node-hid):
+    // hid_open(VID, PID) picks the first IOKit interface, which macOS may have claimed.
+    // An explicit hidPath (a specific unit) skips enumeration; absent → enumerate and
+    // open the first usage-matched path.
     let dev: unknown = null;
     const path = hidPath ?? this.findDevicePath(vid, pids, usagePage, usage);
     if (path) {
@@ -130,13 +138,11 @@ export class MiraboxDriver extends HidDeviceBase {
         debug('hid', 'hid_open_path succeeded');
         this.hidPath = path;
       } else if (IS_MACOS) {
-        // Device is present (enumeration matched the vendor interface) but the
-        // open was refused (e.g. half-seated cable, missing Input Monitoring).
-        // Do NOT fall through to hid_open(VID/PID): on macOS that opens the
-        // device's first IOKit interface — a keyboard/consumer collection — and
-        // a permission-denied open of it SIGBUSes the whole process. Release the
-        // IOHIDManager (so the host's worker.terminate() is safe) and fail
-        // loudly so scheduleReconnect() keeps the app alive and retries.
+        // Present (enumeration matched) but open refused — half-seated cable, missing
+        // Input Monitoring. Do NOT fall through to hid_open(VID/PID): on macOS that
+        // opens the first IOKit interface (keyboard/consumer collection) and a denied
+        // open of it SIGBUSes. Release IOHIDManager so worker.terminate() is safe, then
+        // fail loudly and let scheduleReconnect() retry.
         this._releaseLibAfterFailedOpen();
         throw new Error(
           `device present but hid_open_path failed (path=${path}). On macOS this is ` +
@@ -149,13 +155,10 @@ export class MiraboxDriver extends HidDeviceBase {
       }
     }
 
-    // Fall back to hid_open(VID, PID), off macOS only — one attempt per PID.
-    // On macOS this opens the first IOKit interface (often a keyboard) and
-    // segfaults on a denied/absent open, so the path-based open above is the
-    // only safe route there; elsewhere it's a useful fallback when enumeration
-    // found no usage-matched path. scheduleReconnect() in app.ts handles retries.
-    // Only for the no-explicit-path case: with a targeted hidPath, a VID/PID
-    // open could grab the WRONG (or the primary's) unit, so let it fail instead.
+    // Fall back to hid_open(VID, PID), off macOS only (there it opens the first IOKit
+    // interface, often a keyboard, and segfaults on a denied/absent open; elsewhere it
+    // covers enumeration finding no usage-matched path). No-explicit-path case only —
+    // with a targeted hidPath a VID/PID open could grab the wrong unit.
     if (isNullPtr(dev) && !IS_MACOS && hidPath === undefined) {
       for (const pid of pids) {
         debug('hid', `hid_open(vid=0x${vid.toString(16)}, pid=0x${pid.toString(16)})`);
@@ -168,10 +171,9 @@ export class MiraboxDriver extends HidDeviceBase {
     }
 
     if (isNullPtr(dev)) {
-      // Release the IOHIDManager that hid_init() scheduled on this worker thread
-      // (via hid_exit, no dlclose) so the host's worker.terminate() does not
-      // SIGBUS — see _releaseLibAfterFailedOpen. The worker is terminated right
-      // after this throw; scheduleReconnect() retries on a fresh worker.
+      // Release the IOHIDManager that hid_init() scheduled on this worker thread (via hid_exit, no
+      // dlclose) so the host's worker.terminate() does not SIGBUS — see _releaseLibAfterFailedOpen.
+      // The worker is terminated right after this throw; scheduleReconnect() retries on a fresh worker.
       this._releaseLibAfterFailedOpen();
       throw new Error(
         `Mirabox device not found (VID=0x${vid.toString(16)} PIDs=${Array.from(pids).join(',')})`,
@@ -187,19 +189,14 @@ export class MiraboxDriver extends HidDeviceBase {
 
     // Polling loop: hid_read_timeout blocks ≤5ms — safe on single-threaded event loop
     // because data is available immediately or not at all in practice.
-    const inSize = this.model.wire!.inSize;
+    const inSize = this.model.wire.inSize;
     this._startReadLoop(hid, inSize, 5, (readBuf, n) =>
       this.parseInput(Buffer.from(readBuf.subarray(0, n))),
     );
 
-    const wire = this.model.wire!;
+    const wire = this.model.wire;
 
-    this.write(this._buildCrt(CMD_DIS));
-    this.write(this._buildLig(DEFAULT_BRIGHTNESS));
-    this.write(this._buildCle(CLEAR_ALL_KEYS));
-    if (wire.sendStpAfterImage) {
-      this.write(this._buildCrt(CMD_STP));
-    }
+    this._writeInitSequence();
 
     const heartbeatMs = wire.heartbeatMs!;
     this.lastHeartbeatAt = Date.now();
@@ -210,12 +207,7 @@ export class MiraboxDriver extends HidDeviceBase {
       if (gap > heartbeatMs * 2) {
         // Heartbeat was delayed (system sleep) — device may be in idle mode; re-initialize.
         info('hid', `sleep/wake detected (gap=${gap}ms) — re-initializing device`);
-        this.write(this._buildCrt(CMD_DIS));
-        this.write(this._buildLig(DEFAULT_BRIGHTNESS));
-        this.write(this._buildCle(CLEAR_ALL_KEYS));
-        if (wire.sendStpAfterImage) {
-          this.write(this._buildCrt(CMD_STP));
-        }
+        this._writeInitSequence();
         // The CLE ALL above wiped everything on the panel — let the main
         // thread repaint what it owns (extra-key icons; see extra-keys.ts).
         this.emit('reinit');
@@ -234,9 +226,9 @@ export class MiraboxDriver extends HidDeviceBase {
     if (!this.device || !this.hidLib) return;
     // An explicit argument (k1pro-probe) wins; otherwise the model supplies the
     // pacing — see DeviceWireSpec.chunkDelayMs.
-    const delayMs = chunkDelayMs ?? this.model.wire?.chunkDelayMs ?? 0;
+    const delayMs = chunkDelayMs ?? this.model.wire.chunkDelayMs ?? 0;
     try {
-      const wire = this.model.wire?.chunkPadByte ? padChunkBoundaries(jpeg, this.pktSize) : jpeg;
+      const wire = this.model.wire.chunkPadByte ? padChunkBoundaries(jpeg, this.pktSize) : jpeg;
       this.write(this._buildBat(wire.length, imageKeyId));
       const chunk = this._chunkScratch;
       let offset = 0;
@@ -261,7 +253,7 @@ export class MiraboxDriver extends HidDeviceBase {
   /** Only enabled 293S-family models may defer per-image STP framing. */
   beginImageBatch(): void {
     this.imageBatch =
-      supportsImageBatching(this.model) && this.model.wire?.batchImageTransfers === true;
+      supportsImageBatching(this.model) && this.model.wire.batchImageTransfers === true;
   }
 
   endImageBatch(): void {
@@ -283,7 +275,7 @@ export class MiraboxDriver extends HidDeviceBase {
 
   clearKey(imageKeyId: number): void {
     this.write(this._buildCle(imageKeyId));
-    if (this.model.wire!.sendStpAfterImage) {
+    if (this.model.wire.sendStpAfterImage) {
       this.write(this._buildCrt(CMD_STP));
     }
   }
@@ -349,7 +341,7 @@ export class MiraboxDriver extends HidDeviceBase {
     }
     const { keyIndex, stateByte } = parsed;
 
-    if (this.model.wire!.synthesizeKeyUp) {
+    if (this.model.wire.synthesizeKeyUp) {
       // v1 only sends keydown; synthesize a keyup immediately after.
       this.emitComm(
         `ACK key=0x${keyIndex.toString(16).padStart(2, '0')} down (synthesized up)`,
@@ -370,20 +362,18 @@ export class MiraboxDriver extends HidDeviceBase {
   protected onBeforeClose(): void {
     if (!this.device || !this.hidLib) return;
     const hid = this.hidLib.symbols;
+    // Raw hid_write rather than write(): teardown logs each return code and must not
+    // take write()'s error path or comm tracing on a handle that is about to close.
+    const send = (label: string, pkt: Buffer): void => {
+      const arr = new Uint8Array(pkt.length + 1);
+      arr[0] = this.reportId;
+      arr.set(pkt, 1);
+      const n = hid.hid_write(this.device, arr, arr.length);
+      debug('hid', `disconnect ${label} hid_write → ${n}`);
+    };
     try {
-      const dcPkt = this._buildCleDc();
-      const dcArr = new Uint8Array(dcPkt.length + 1);
-      dcArr[0] = this.reportId;
-      dcArr.set(dcPkt, 1);
-      const dcN = hid.hid_write(this.device, dcArr, dcArr.length);
-      debug('hid', `disconnect CLE-DC hid_write → ${dcN}`);
-
-      const hanPkt = this._buildCrt(CMD_HAN);
-      const hanArr = new Uint8Array(hanPkt.length + 1);
-      hanArr[0] = this.reportId;
-      hanArr.set(hanPkt, 1);
-      const hanN = hid.hid_write(this.device, hanArr, hanArr.length);
-      debug('hid', `disconnect HAN hid_write → ${hanN}`);
+      send('CLE-DC', this._buildCleDc());
+      send('HAN', this._buildCrt(CMD_HAN));
     } catch (e: unknown) {
       warn('hid', `error during disconnect sequence: ${String(e)}`);
     }

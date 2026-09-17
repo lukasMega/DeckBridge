@@ -7,6 +7,7 @@ import { useStore } from '../store.js';
 import { useCopyText } from '../use-copy-text.js';
 import { ICON } from '../ui-icons.js';
 import { CORA_PORT } from '../ui-state.js';
+import { fire } from '../ui-api.js';
 import { Icon, HelpButton } from './Icon.js';
 import { postBrightnessOverride, restartElgatoApp } from './handlers.js';
 
@@ -189,13 +190,7 @@ export function Brightness({
     const v = parseInt((e.target as HTMLInputElement).value, 10);
     setLocalVal(v);
     if (_brightnessDebounce !== null) clearTimeout(_brightnessDebounce);
-    _brightnessDebounce = setTimeout(() => {
-      fetch('/api/brightness', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ level: v, dock }),
-      }).catch(() => undefined);
-    }, 100);
+    _brightnessDebounce = setTimeout(() => fire('/api/brightness', { level: v, dock }), 100);
   };
 
   const handleMouseDown = (): void => {

@@ -33,23 +33,16 @@ export interface StateResponseInputs {
 }
 
 export function buildStateResponse(input: StateResponseInputs): StateResponse {
+  // `rest` is spread last, so the response keeps its original key order.
+  const { snapshot, imageVersions, imageKeys, activity, ...rest } = input;
   const images: Record<string, number> = {};
-  for (const key of input.imageKeys) images[String(key)] = input.imageVersions.versionFor(key);
+  for (const key of imageKeys) images[String(key)] = imageVersions.versionFor(key);
   return {
-    ...input.snapshot,
+    ...snapshot,
     images,
-    logs: input.activity.logs,
-    commLogs: input.activity.comms,
-    keyEvents: input.activity.keyEvents,
-    stats: input.stats,
-    mockConfig: input.mockConfig,
-    resizeEnabled: input.resizeEnabled,
-    brightnessOverride: input.brightnessOverride,
-    deviceModels: input.deviceModels,
-    deviceIdentity: input.deviceIdentity,
-    realDeviceIdentity: input.realDeviceIdentity,
-    extraKeys: input.extraKeys,
-    logLevel: input.logLevel,
-    logFilePath: input.logFilePath,
+    logs: activity.logs,
+    commLogs: activity.comms,
+    keyEvents: activity.keyEvents,
+    ...rest,
   };
 }

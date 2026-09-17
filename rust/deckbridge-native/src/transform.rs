@@ -1,10 +1,9 @@
 use crate::bmp::encode_bmp;
 use crate::jpeg::encode_jpeg;
 use crate::pad::pad_to_canvas;
-use crate::util::write_err;
+use crate::util::{ffi_guard, write_err};
 use image::imageops::FilterType;
 use std::io::Cursor;
-use std::panic::{catch_unwind, AssertUnwindSafe};
 
 /// Private transform helper: decode, rotate/flip, resize, encode (JPEG or BMP).
 /// EXIF auto-rotate is intentionally not performed (dropped for binary size — see plan).
@@ -53,43 +52,32 @@ pub(crate) fn transform(
         }
     }
 
-    if fill_mode == 0 {
-        img = match rotate {
-            90 => img.rotate90(),
-            180 => img.rotate180(),
-            270 => img.rotate270(),
-            _ => img,
-        };
-        if flip_h {
-            img = img.fliph();
-        }
-        if flip_v {
-            img = img.flipv();
-        }
-
-        if !skip_resize {
-            let filter = match resize_filter {
-                1 => FilterType::Nearest,
-                2 => FilterType::Lanczos3,
-                _ => FilterType::Triangle,
-            };
-            img = img.resize_exact(width, height, filter);
-        }
-    } else {
-        // Pad in the SOURCE frame (bias is anchored pre-rotation), then rotate/flip.
+    // Pad in the SOURCE frame (bias is anchored pre-rotation), then rotate/flip.
+    if fill_mode != 0 {
         img = pad_to_canvas(&img, width, height, fill_mode);
-        img = match rotate {
-            90 => img.rotate90(),
-            180 => img.rotate180(),
-            270 => img.rotate270(),
-            _ => img,
+    }
+
+    img = match rotate {
+        90 => img.rotate90(),
+        180 => img.rotate180(),
+        270 => img.rotate270(),
+        _ => img,
+    };
+    if flip_h {
+        img = img.fliph();
+    }
+    if flip_v {
+        img = img.flipv();
+    }
+
+    // Resize only in fill_mode 0 — a pad already produced a width×height canvas.
+    if fill_mode == 0 && !skip_resize {
+        let filter = match resize_filter {
+            1 => FilterType::Nearest,
+            2 => FilterType::Lanczos3,
+            _ => FilterType::Triangle,
         };
-        if flip_h {
-            img = img.fliph();
-        }
-        if flip_v {
-            img = img.flipv();
-        }
+        img = img.resize_exact(width, height, filter);
     }
 
     if blur_sigma_tenths > 0 {
@@ -164,7 +152,7 @@ pub unsafe extern "C" fn image_proc_transform(
     err_buf: *mut u8,
     err_cap: usize,
 ) -> i32 {
-    let result = catch_unwind(AssertUnwindSafe(|| {
+    ffi_guard(-3, || {
         if jpeg_in.is_null() || out_buf.is_null() {
             write_err("null pointer argument", err_buf, err_cap);
             return -1i32;
@@ -208,6 +196,5 @@ pub unsafe extern "C" fn image_proc_transform(
                 -1
             }
         }
-    }));
-    result.unwrap_or(-3)
+    })
 }

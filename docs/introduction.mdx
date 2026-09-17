@@ -53,9 +53,10 @@ ships in two revisions that differ only in USB packet size: 512 bytes for PID `0
 a different USB VID/PID, so they reuse the 293S model verbatim.
 
 :::caution[Platform status]
-DeckBridge is currently **tested on macOS only**, and the GitHub releases currently
-ship **macOS builds only**. Linux and Windows support exists in the code but is
-untested and not yet released.
+DeckBridge is **hardware-tested on macOS only**. The GitHub releases ship macOS
+(`arm64`, `x86_64`), Linux (`x86_64`, `arm64`) and Windows (`x86_64`, NSIS installer)
+builds, but the Linux and Windows ones get far less real-world use — see
+[Headless Linux](./headless-linux.md) for the Linux caveats (glibc 2.38+).
 :::
 
 :::warning[Disclaimer]

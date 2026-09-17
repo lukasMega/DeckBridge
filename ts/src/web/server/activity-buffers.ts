@@ -6,6 +6,7 @@ import {
   COMM_BUFFER_MAX,
   COMM_BROADCAST_FLUSH_MS,
   LOG_BUFFER_MAX,
+  clearRepeating,
 } from '../../types.js';
 
 /** Ring buffers for log / CORA-comm / key-event entries, each broadcast to WS
@@ -68,10 +69,7 @@ export class ActivityBuffers {
   }
 
   private stopFlush(): void {
-    if (this.flushTimer !== null) {
-      clearInterval(this.flushTimer);
-      this.flushTimer = null;
-    }
+    this.flushTimer = clearRepeating(this.flushTimer);
   }
 
   private flush(): void {

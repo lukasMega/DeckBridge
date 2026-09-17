@@ -265,6 +265,11 @@ UI is always localhost-only.
   instance on the same machine.
 - **No auth or encryption** — the CORA ports trust the LAN; see
   [Network ports](#network-ports).
+- **Elgato desktop app: 2-device cap per computer** — the Elgato app itself, not
+  DeckBridge, only pairs **two** network docks on one computer: one via `127.0.0.1`
+  and one via the machine's real LAN IP (e.g. `192.168.1.42`). Adding a third
+  (even a different IP) fails in the Elgato app. To reach more DeckBridge devices
+  from one computer, pair the extras from a *different* computer on the LAN.
 
 ### Environment variables
 

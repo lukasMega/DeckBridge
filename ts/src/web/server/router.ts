@@ -1,3 +1,4 @@
+import { readJson } from './http.js';
 import type { WebUIController } from './types.js';
 
 export interface RouteContext {
@@ -21,6 +22,19 @@ function route(method: string, path: string, handler: RouteHandler): Route {
 
 export const get = (path: string, handler: RouteHandler): Route => route('GET', path, handler);
 export const post = (path: string, handler: RouteHandler): Route => route('POST', path, handler);
+
+/** `post`, with the JSON body already parsed — a parse failure short-circuits to 400.
+ *  T exists only to be inferred from `handler`, so each route's body type flows in. */
+// eslint-disable-next-line @typescript-eslint/no-unnecessary-type-parameters -- see above
+export const postJson = <T>(
+  path: string,
+  handler: (body: T, ctx: RouteContext) => Response | Promise<Response>,
+  message?: string,
+): Route =>
+  post(path, async (ctx) => {
+    const parsed = await readJson<T>(ctx.req, message);
+    return 'error' in parsed ? parsed.error : handler(parsed.body, ctx);
+  });
 
 export interface RouteMatch {
   handler: RouteHandler;

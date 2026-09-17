@@ -1,27 +1,26 @@
 // Device identity resolution + the settings.json import/export surface (the write path itself
 // lives in persisted-settings.ts — this is just the WebUIServer-facing glue around it).
-import type { PersistedSettings } from './persisted-settings.js';
 import type { Settings, DeviceIdentitySettings } from '../../settings-store.js';
 import { defaultMockConfig } from './mock-config.js';
-import type { DeviceIdentity, DriverMode, MockDeviceConfig } from './types.js';
-import type { DockStatus, ImageModeOverride } from '../../types.js';
+import type {
+  ControllerHost,
+  DeviceIdentity,
+  DriverMode,
+  MockDeviceConfig,
+  ReqError,
+} from './types.js';
+import type { ImageModeOverride } from '../../types.js';
 import { MDNS_SERVICE_NAME } from '../../types.js';
-
-type ReqError = { error: string; status: number };
 
 export class SettingsIdentityController {
   constructor(
+    private readonly host: ControllerHost,
     private readonly applyLogLevel: (level: unknown) => void,
-    private readonly settings: PersistedSettings,
     private readonly driverMode: () => DriverMode,
     private readonly mockConfig: () => MockDeviceConfig,
-    private readonly selectedDockStatus: () => DockStatus | undefined,
-    private readonly selectedDock: () => number,
-    private readonly selectedDeviceKey: () => string,
     private readonly imageModeOverride: () => ImageModeOverride,
     private readonly trySelectDock: (index: unknown) => ReqError | null,
     private readonly broadcastSelectedDeviceState: () => void,
-    private readonly emit: (event: string, ...args: unknown[]) => boolean,
   ) {}
 
   /** Identifiers sent to the Elgato app for the SELECTED dock (Settings, read-only): mockConfig in
@@ -31,7 +30,7 @@ export class SettingsIdentityController {
     if (this.driverMode() === 'mock') {
       return { ...this.mockConfig(), mdnsServiceName: MDNS_SERVICE_NAME };
     }
-    const dock = this.selectedDockStatus();
+    const dock = this.host.selectedDockStatus();
     if (!dock) return { ...defaultMockConfig(), mdnsServiceName: MDNS_SERVICE_NAME };
     return {
       dockFirmwareVersion: dock.dockFirmwareVersion,
@@ -47,21 +46,21 @@ export class SettingsIdentityController {
 
   /** Stable identity for `deviceKey` — called by DriverManager/DeviceSession on connect. */
   getOrCreateIdentity(deviceKey: string, defaultMdnsName: string): DeviceIdentitySettings {
-    return this.settings.getOrCreateIdentity(deviceKey, defaultMdnsName);
+    return this.host.settings.getOrCreateIdentity(deviceKey, defaultMdnsName);
   }
 
   /** WebUI "Device Identity" edit: rename `deviceKey`'s persisted mDNS name. Caller (app.ts) still
    *  pushes the change live via DriverManager.applyMdnsNameForDeviceKey. */
   updateMdnsName(deviceKey: string, name: string): boolean {
-    return this.settings.updateMdnsName(deviceKey, name);
+    return this.host.settings.updateMdnsName(deviceKey, name);
   }
 
   json(): string {
-    return this.settings.json();
+    return this.host.settings.json();
   }
 
   openFile(): Promise<void> {
-    return this.settings.openFile();
+    return this.host.settings.openFile();
   }
 
   /** Parse `raw`, validate it's an object, assign known fields, persist. Throws on malformed
@@ -77,11 +76,11 @@ export class SettingsIdentityController {
     // importModelOverrides, never thrown — an imported file must not be able to
     // poison runtime state. '' = "all models", the sessions reopen either way.
     if (Object.hasOwn(parsed, 'modelOverrides')) {
-      this.settings.importModelOverrides(s.modelOverrides);
-      this.emit('modelOverridesChanged', '');
+      this.host.settings.importModelOverrides(s.modelOverrides);
+      this.host.emit('modelOverridesChanged', '');
     }
     // devices[] first, so the selected dock's entry is in place before we (re)select + re-apply.
-    if (this.settings.importDevices(s.devices)) this.reapplySelectedDeviceLive();
+    if (this.host.settings.importDevices(s.devices)) this.reapplySelectedDeviceLive();
     // selectedDock is best-effort — an index absent on this host (file imported from a machine
     // with more docks) is ignored; trySelectDock() fires its own broadcast + reapply on change.
     if (typeof s.selectedDock === 'number' && Number.isInteger(s.selectedDock)) {
@@ -92,11 +91,11 @@ export class SettingsIdentityController {
   /** Push the selected dock's persisted brightness/override/imageMode to its driver + WS clients
    *  (used after a settings import). */
   private reapplySelectedDeviceLive(): void {
-    const idx = this.selectedDock();
+    const idx = this.host.selectedDock();
     this.broadcastSelectedDeviceState();
-    this.emit('setImageOverride', this.imageModeOverride(), idx);
-    this.emit('extraKeyChanged', idx);
-    const e = this.settings.entryFor(this.selectedDeviceKey());
-    if (typeof e?.brightness === 'number') this.emit('setBrightness', e.brightness, idx);
+    this.host.emit('setImageOverride', this.imageModeOverride(), idx);
+    this.host.emit('extraKeyChanged', idx);
+    const e = this.host.settings.entryFor(this.host.selectedDeviceKey());
+    if (typeof e?.brightness === 'number') this.host.emit('setBrightness', e.brightness, idx);
   }
 }

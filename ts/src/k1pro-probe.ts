@@ -1,6 +1,5 @@
 import { MiraboxDriver } from './mirabox.js';
-import { closeSidecar } from './translator.js';
-import type { KeyEvent } from './types.js';
+import { exitOnSigint, logKeyEvents } from './probe-utils.js';
 import { MIRABOX_K1PRO_MODEL } from './devices/mirabox/mirabox-k1pro.js';
 
 // K1 Pro probe round 3+: file-driven A/B harness.
@@ -54,14 +53,6 @@ for (let cora = 0; cora < names.length; cora++) {
 console.log('[probe] sent — note per position: CLEAN or ARTIFACT (and how it looks).');
 console.log('[probe] Ctrl+C to exit.');
 
-driver.on('key', (e: KeyEvent) => {
-  console.log(`[key] code=0x${e.keyIndex.toString(16).padStart(2, '0')} state=${e.state}`);
-});
+logKeyEvents(driver);
 
-tjs.addSignalListener('SIGINT', () => {
-  void driver.close().then(() => {
-    closeSidecar();
-    tjs.exit(0);
-    return undefined;
-  });
-});
+exitOnSigint(driver);

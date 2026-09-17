@@ -15,56 +15,54 @@ interface RenderTarget {
   sendImage(keyIndex: number, bytes: Uint8Array): void;
 }
 
-// Diagnostic JPEG dump (DECKBRIDGE_DUMP_DIR)
-// When set, every device-bound image produced by the transform is also written
-// to disk for offline diffing. Checked once at module load so the normal (unset)
-// case has zero overhead.
-const DUMP_DIR: string | undefined = tjs.env.DECKBRIDGE_DUMP_DIR || undefined;
-let _dumpSeq = 0;
+// Diagnostic image dumps. Both are off unless their env var is set, checked once at
+// module load so the normal case has zero overhead.
 
-if (DUMP_DIR) {
-  tjs.makeDir(DUMP_DIR, { recursive: true }).catch((err: unknown) => {
-    warn('image', `failed to create DECKBRIDGE_DUMP_DIR ${DUMP_DIR}: ${String(err)}`);
+/** Resolve a dump dir from `envVar`, creating it in the background. */
+function dumpDir(envVar: string): string | undefined {
+  const dir = tjs.env[envVar] || undefined;
+  if (!dir) return undefined;
+  tjs.makeDir(dir, { recursive: true }).catch((err: unknown) => {
+    // An already-existing dump dir is success, not a failure to warn about.
+    const msg = String(err);
+    if (!msg.includes('EEXIST')) warn('image', `failed to create ${envVar} ${dir}: ${msg}`);
+  });
+  return dir;
+}
+
+function writeDump(path: string, bytes: Uint8Array): void {
+  tjs.writeFile(path, bytes).catch((err: unknown) => {
+    warn('image', `failed to write dump ${path}: ${String(err)}`);
   });
 }
 
+function seqTag(seq: number): string {
+  return String(seq).padStart(4, '0');
+}
+
+// DECKBRIDGE_DUMP_DIR: every device-bound image produced by the transform, for
+// offline diffing.
+const DUMP_DIR = dumpDir('DECKBRIDGE_DUMP_DIR');
+let _dumpSeq = 0;
+
 function dumpNativeBytes(keyIndex: number, nativeBytes: Buffer): void {
   if (!DUMP_DIR) return;
-  const seq = String(_dumpSeq++).padStart(4, '0');
-  const path = `${DUMP_DIR}/key${keyIndex}-${seq}.jpg`;
-  tjs.writeFile(path, nativeBytes).catch((err: unknown) => {
-    warn('image', `failed to write dump ${path}: ${String(err)}`);
-  });
+  writeDump(`${DUMP_DIR}/key${keyIndex}-${seqTag(_dumpSeq++)}.jpg`, nativeBytes);
 }
 
 // DECKBRIDGE_RAW_DUMP_DIR: dumps each received CORA image beside its transform result,
 // paired by seq, newest RAW_DUMP_KEEP kept as a ring buffer. Pairing is race-free because
 // both writes happen on the worker thread, which processes images serially. Independent
 // of DECKBRIDGE_DUMP_DIR (transform output only, own naming).
-const RAW_DUMP_DIR: string | undefined = tjs.env.DECKBRIDGE_RAW_DUMP_DIR || undefined;
+const RAW_DUMP_DIR = dumpDir('DECKBRIDGE_RAW_DUMP_DIR');
 const RAW_DUMP_KEEP = 30;
 let _rawSeq = 0;
 // Each entry holds the file paths written for one received image (raw, then its
 // transform). Newest last; pruned to RAW_DUMP_KEEP entries on each new arrival.
 const _rawDumpPairs: string[][] = [];
 
-if (RAW_DUMP_DIR) {
-  tjs.makeDir(RAW_DUMP_DIR, { recursive: true }).catch((err: unknown) => {
-    // An already-existing dump dir is success, not a failure to warn about.
-    const msg = String(err);
-    if (msg.includes('EEXIST')) return;
-    warn('image', `failed to create DECKBRIDGE_RAW_DUMP_DIR ${RAW_DUMP_DIR}: ${msg}`);
-  });
-}
-
 function dumpExt(format: 'jpeg' | 'bmp'): string {
   return format === 'jpeg' ? 'jpg' : 'bmp';
-}
-
-function writeRawDumpFile(path: string, bytes: Uint8Array): void {
-  tjs.writeFile(path, bytes).catch((err: unknown) => {
-    warn('image', `failed to write raw dump ${path}: ${String(err)}`);
-  });
 }
 
 /** Save the raw CORA image, assign it a seq, and prune the ring. Returns a
@@ -77,9 +75,8 @@ function dumpRawReceived(
 ): { seq: number; files: string[] } | null {
   if (!RAW_DUMP_DIR) return null;
   const seq = _rawSeq++;
-  const tag = String(seq).padStart(4, '0');
-  const inPath = `${RAW_DUMP_DIR}/${tag}_key${keyIndex}_in.${dumpExt(format)}`;
-  writeRawDumpFile(inPath, coraBytes);
+  const inPath = `${RAW_DUMP_DIR}/${seqTag(seq)}_key${keyIndex}_in.${dumpExt(format)}`;
+  writeDump(inPath, coraBytes);
   const files = [inPath];
   _rawDumpPairs.push(files);
   while (_rawDumpPairs.length > RAW_DUMP_KEEP) {
@@ -97,9 +94,8 @@ function dumpTransformed(
   devFormat: 'jpeg' | 'bmp',
 ): void {
   if (!handle) return;
-  const tag = String(handle.seq).padStart(4, '0');
-  const outPath = `${RAW_DUMP_DIR}/${tag}_key${keyIndex}_out.${dumpExt(devFormat)}`;
-  writeRawDumpFile(outPath, nativeBytes);
+  const outPath = `${RAW_DUMP_DIR}/${seqTag(handle.seq)}_key${keyIndex}_out.${dumpExt(devFormat)}`;
+  writeDump(outPath, nativeBytes);
   handle.files.push(outPath);
 }
 

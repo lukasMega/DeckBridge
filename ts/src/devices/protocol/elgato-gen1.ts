@@ -2,12 +2,9 @@
  *  Image: BMP (19254 bytes), 1024-byte packets, 16-byte header, 1-based key index.
  *  Input: report 0x01, button states at data[0..keyCount] (after stripping report ID). */
 
-import { writeChunks, parseButtons } from './framing.js';
+import { featureReport, writeChunks, parseButtons } from './framing.js';
 
-const PACKET_SIZE = 1024;
 const HEADER_SIZE = 16;
-
-export const GEN1_PACKET_SIZE = PACKET_SIZE;
 
 /** Split native BMP bytes into gen1 output reports (each 1024 bytes), handing each
  *  to `write`. `scratch` is reused for every chunk — see writeChunks. */
@@ -47,20 +44,21 @@ export function gen1ParseInput(
 
 /** gen1 brightness feature report (17 bytes). */
 export function gen1BrightnessReport(pct: number): Uint8Array {
-  const buf = new Uint8Array(17);
-  buf[0] = 0x05;
-  buf[1] = 0x55;
-  buf[2] = 0xaa;
-  buf[3] = 0xd1;
-  buf[4] = 0x01;
-  buf[5] = Math.max(0, Math.min(100, pct));
-  return buf;
+  return featureReport(17, [0x05, 0x55, 0xaa, 0xd1, 0x01, Math.max(0, Math.min(100, pct))]);
 }
 
 /** gen1 reset-to-logo feature report (17 bytes). */
 export function gen1ResetReport(): Uint8Array {
-  const buf = new Uint8Array(17);
-  buf[0] = 0x0b;
-  buf[1] = 0x63;
-  return buf;
+  return featureReport(17, [0x0b, 0x63]);
 }
+
+/** All-black key image: a zeroed BMP of the key's size (all zeros → black pixels). */
+export function gen1BlankImage(keyWidth: number, keyHeight: number): Uint8Array {
+  return new Uint8Array(54 + keyWidth * keyHeight * 3);
+}
+
+/** serial/firmware feature reports: plain ASCII at offset 5, runs to end of report. */
+export const GEN1_INFO_REPORTS = {
+  serial: { reportId: 0x03, offset: 5, lengthPrefixed: false },
+  firmware: { reportId: 0x04, offset: 5, lengthPrefixed: false },
+};

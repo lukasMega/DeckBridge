@@ -102,7 +102,8 @@ flowchart TD
 ### Concurrency model
 
 DeckBridge's core loop runs on **two threads**, connected only by `postMessage`, per connected
-device:
+device. Two further worker types sit outside that loop (HID enumeration and plugins) — see
+*Supporting workers* below, for **four** thread contexts in total:
 
 - **Main thread** — the CORA TCP servers (Elgato primary/child), the WebUI HTTP/WebSocket server,
   and the orchestration forwarding each received CORA image to the worker. It must stay responsive:
@@ -122,8 +123,28 @@ the browser immediately while the device updates in parallel on the worker. USB 
 thread; the WebUI rides the main thread's spare time. Mock mode stays on the main thread.
 
 **Multi-device**: this whole pair (CORA server pair + worker thread) repeats per physical device.
-A separate, much lighter third worker type also exists for plugins (lazily spawned, not part of
-the CORA/image path).
+
+#### Supporting workers
+
+Two lighter worker types sit outside the CORA/image hot path:
+
+- **HID scan worker** ([hid-scan-worker.ts](../ts/src/hid-scan-worker.ts), proxied by
+  `HidScanWorkerHost` in [hid-scan-worker-host.ts](../ts/src/hid-scan-worker-host.ts), message
+  types in [hid-scan-worker-protocol.ts](../ts/src/hid-scan-worker-protocol.ts)) — owns HID
+  **enumeration**. `hid_enumerate` can block for seconds on Windows and on a wedged macOS HID
+  interface, so it never runs on the main thread, where it would stall the CORA ACK loop. One
+  worker for the whole process lifetime; the host coalesces concurrent callers onto a single
+  native scan, so a fixed probe timer cannot queue duplicate scans behind a blocked interface.
+  It builds its VID/PID match list from `DEVICE_MODELS` directly and calls
+  `scanSupportedHidDevicesTimed()` ([ffi/hid-discovery.ts](../ts/src/ffi/hid-discovery.ts)),
+  returning both the device list and the elapsed time — the latter is what feeds the adaptive
+  probe backoff below. A `reset` message triggers `resetHidDiscovery()`, which **must** run on
+  this thread: a new `IOHIDManager` binds to the run loop of whichever thread called `hid_init`.
+- **Plugin worker** ([plugin-worker.ts](../ts/src/plugin-worker.ts), proxied by
+  [plugin-host.ts](../ts/src/plugin-host.ts)) — runs plugin-widget code for side keys, lazily
+  spawned and not part of the CORA/image path. A crash/CPU isolation boundary, **not** a
+  capability sandbox; the host supervises it with a `HEARTBEAT_MS` (2 s) ping and kills/restarts
+  a wedged worker, giving up after `MAX_CONSECUTIVE_KILLS` (3).
 
 To keep image bursts from flooding the WebUI, per-chunk CORA tx/ACK and keepalive logs are `debug`
 level, and `WebUIServer.notifyComm()` batches comm entries into one `commBatch` message every ~100 ms
@@ -169,10 +190,11 @@ main process.
 ([cli.ts](../ts/src/cli.ts)) is the very first thing `app.ts` does, before anything else runs,
 because `version`/`help`/`devices` must exit immediately and any flags must land in `tjs.env`
 before other modules read it. `parseCliArgs()` is a hand-rolled, zero-dependency parser (deliberately
-kept dependency-free — it must not import anything else in the tree) recognizing one of four
-commands (`run` (default), `devices`, `version`, `help`) plus flags: `--mock`, `--bind`,
-`--webui-port`, `--no-webui`, `--open`, `--headless`, `--log-level`, `--cache-dir`, `-h/--help`,
-`-V/--version`. `applyFlagsToEnv()` normalizes flags into the corresponding `DECKBRIDGE_*` env vars
+kept dependency-free — it must not import anything else in the tree) recognizing one of five
+commands (`run` (default), `devices`, `diagnose`, `version`, `help`) plus flags: `--mock`, `--bind`,
+`--webui-port`, `--no-webui`, `--open`, `--headless`, `--log-level`, `--no-overrides`,
+`--cache-dir`, `-h/--help`, `-V/--version`, and the `diagnose`-only `--out` and
+`--redact-commands`. `applyFlagsToEnv()` normalizes flags into the corresponding `DECKBRIDGE_*` env vars
 (flags override pre-existing env vars, which override defaults), so every downstream reader
 (including the HID worker thread, since env is process-wide) keeps using its existing env-var reads
 unchanged.
@@ -183,9 +205,18 @@ unchanged.
 `app.ts` calls `tjs.exit(0)`. Not wired into any `mise` task or `package.json` bin; it's invoked
 directly (`./deckbridge devices`).
 
+`diagnose` ([cli-diagnose.ts](../ts/src/cli-diagnose.ts)) writes a diagnostics report for bug
+reports and exits — no server, and enumeration-only (never `hid_open`, same rule as above). It
+shares its builder with `GET /api/diagnostics`: `web/server/diagnostics.ts` is a **pure** function
+over injected sources, which is what lets both emit an identical report. The report embeds
+settings.json verbatim, commands and all, by decision — `--redact-commands` opts out, and a review
+notice is the report's first line. `--out <path>` overrides the default cache-dir location.
+
 ## HID device detection
 
-At startup `app.ts` constructs a `DriverManager` ([driver-manager.ts](../ts/src/driver-manager.ts)); its `probeAndOpen()` iterates `DEVICE_MODELS` in priority order and returns the first device that opens. If none, it retries every 3 s (`HID_POLL_INTERVAL_MS`).
+At startup `app.ts` constructs a `DriverManager` ([driver-manager.ts](../ts/src/driver-manager.ts)); its `probeAndOpen()` iterates `DEVICE_MODELS` in priority order and returns the first device that opens. `driver-manager.ts` delegates two concerns: `driver-manager-discovery.ts` resolves mode/deps and runs the default presence check, and `driver-manager-pacing.ts` decides when to retry.
+
+The retry interval is **adaptive, not fixed**. `ProbePacer` starts at `HID_POLL_INTERVAL_MS` (3 s) and keeps it while the scan stays fast; once a scan takes `SLOW_ENUMERATE_MS` (250 ms) or longer, `pacer.note()` doubles the delay on each subsequent slow scan, capped at `RECONNECT_BACKOFF_MAX_MS` (30 s). The enumeration timing comes from the HID scan worker, so a machine where `hid_enumerate` is pathologically slow backs off instead of spending its main thread on a scan every 3 s.
 
 ### Probe order
 
@@ -297,11 +328,11 @@ If `DECKBRIDGE_NATIVE_LIB` is unset, path-based open is skipped and the driver f
 
 Full walkthrough: [docs/adding-a-device.md](adding-a-device.md). In short:
 
-1. Create a `DeviceModel` ([driver.ts](../ts/src/devices/driver.ts)) under `devices/elgato/` or `devices/mirabox/`; most behavior is in the nested specs (`image`, `wire` (Mirabox), `keyMap`, `cora`, optional `splash`).
+1. Create a `DeviceModel` ([driver.ts](../ts/src/devices/driver.ts)) under `devices/elgato/` or `devices/mirabox/`; most behavior is in the nested specs (`image`, required `wire`, `keyMap`, `cora`, optional `splash`).
 2. Add to `DEVICE_MODELS` in [registry.ts](../ts/src/devices/registry.ts) — list position is probe priority.
 3. Set `usagePage`+`usage` only for a vendor-specific HID interface (all Mirabox use `0xffa0`/`1`); undefined for standard Elgato VID+PID.
 4. Set `driverKind` — `'elgato-hid'` or `'mirabox'`; `createDriver()` in [hid-worker.ts](../ts/src/hid-worker.ts) is the single registration point.
-5. For a new wire protocol beyond the four variants, add a `DeviceProtocol` literal: Elgato variants implement pack/parse under [protocol/](https://github.com/lukasMega/DeckBridge/tree/main/ts/src/devices/protocol) (in `PROTOCOL_STRATEGY`); Mirabox variants are driven by `wire` fields in `mirabox.ts`.
+5. For a new wire protocol beyond the four variants, add a `DeviceProtocol` literal: Elgato variants implement pack/parse behavior under [protocol/](https://github.com/lukasMega/DeckBridge/tree/main/ts/src/devices/protocol) (in `PROTOCOL_STRATEGY`); packet and input sizes remain model-owned in `wire`. Mirabox variants are driven by `wire` fields in `mirabox.ts`.
 
 ## CORA device capabilities
 
@@ -314,7 +345,7 @@ every extra dock. Each model's `cora`
 spec (`DeviceCoraSpec`) drives it:
 
 1. **PID** — `model.cora.productId`. Elgato models use their real USB PID; Mirabox 293/293S advertise `ELGATO_MK2_PID`; K1 Pro advertises the Mini PID (`0x0063`).
-2. **Geometry** — `model.cora.advertiseGeometry ?? modelToChildGeometry(model)`. Mirabox 293/293S pin `MK2_CHILD_GEOMETRY` (advertise as MK.2); K1 Pro pins `MINI_CHILD_GEOMETRY`; Elgato models derive geometry from their own dimensions.
+2. **Geometry** — `advertisedGeometry(model)` resolves `model.cora.advertiseAs` through the registry, then derives geometry from that canonical model. Mirabox 293/293S reference `mk2`; K1 Pro references `mini`; Elgato models omit the reference and use their own geometry. No copied geometry constants exist.
 3. **Identity** — when `model.cora.usePhysicalIdentity` is true (Elgato only), the device's real serial/firmware (read by the worker) is patched into the config; Mirabox keeps the default dock identity.
 
 It then applies the change to both CORA servers and the WebUI:
@@ -492,12 +523,18 @@ if it is unset or the spawn fails, `startTray()` returns `null` and the app runs
 
 ## Build pipeline
 
-Three esbuild passes (`build.mjs`): the generic USB worker (`hid-worker.ts`) is bundled into a
-self-contained ESM **string**, embedded into the main bundle via the virtual module
-`virtual:hid-worker`; the plugin worker (`plugin-worker.ts`, see
-[Plugins and extra-key widgets](#plugins-and-extra-key-widgets)) is bundled the same way as
-`virtual:plugin-worker`. (The browser-side `ui-entry.ts` subtree is bundled the same way too and
-embedded as text via the `ui-ts-as-text` plugin.)
+Four esbuild passes (`build.mjs`). Each worker is bundled into a self-contained ESM **string**
+and embedded into the main bundle through a virtual module:
+
+| Pass | Entry | Virtual module | Also written to (debug) |
+|---|---|---|---|
+| 1 | `hid-worker.ts` (generic USB worker — Mirabox + Elgato gen1/gen2) | `virtual:hid-worker` | `dist/hid-worker.js` |
+| 2 | `hid-scan-worker.ts` (HID enumeration, see [Supporting workers](#supporting-workers)) | `virtual:hid-scan-worker` | `dist/hid-scan-worker.js` |
+| 3 | `plugin-worker.ts` (see [Plugins and extra-key widgets](#plugins-and-extra-key-widgets)) | `virtual:plugin-worker` | `dist/plugin-worker.js` |
+| 4 | `app.ts` + rest of `src` | — | `dist/bundle.js` |
+
+(The browser-side `ui-entry.ts` subtree is bundled the same way too and embedded as text via the
+`ui-ts-as-text` plugin.)
 
 Native dylibs (`libdeckbridge_native`, `libhidapi`) are **gzip+base64-encoded** into `bundle.js` at
 build time (default on; `EMBED_NATIVE_LIBS=0` / `--no-embed` to disable), making the bundle
@@ -509,20 +546,25 @@ build time (default on; `EMBED_NATIVE_LIBS=0` / `--no-embed` to disable), making
 
 flowchart LR
     WTS["hid-worker.ts<br/>(+ mirabox.ts, hid-driver-base.ts, ffi/hidapi.ts)"]
+    SWTS["hid-scan-worker.ts<br/>(+ devices/registry.ts, ffi/hid-discovery.ts)"]
     PWTS["plugin-worker.ts"]
     TS["app.ts<br/>+ rest of src"]
-    EB1["esbuild pass 1<br/>bundle worker"]
-    EBP["esbuild pass 2<br/>bundle plugin worker"]
+    EB1["esbuild pass 1<br/>bundle USB worker"]
+    EBS["esbuild pass 2<br/>bundle HID scan worker"]
+    EBP["esbuild pass 3<br/>bundle plugin worker"]
     WSTR["worker ESM string"]
+    SWSTR["scan worker ESM string"]
     PWSTR["plugin worker ESM string"]
-    EB2["esbuild pass 3<br/>bundle main"]
+    EB2["esbuild pass 4<br/>bundle main"]
     BUNDLE["ts/dist/bundle.js<br/>~560 kB ESM<br/>(worker strings + native dylibs inlined)"]
     TJSC["tjs compile<br/>QuickJS bytecode"]
     BIN["./deckbridge<br/>standalone binary"]
 
     WTS --> EB1 --> WSTR
+    SWTS --> EBS --> SWSTR
     PWTS --> EBP --> PWSTR
     WSTR -->|"virtual:hid-worker"| EB2
+    SWSTR -->|"virtual:hid-scan-worker"| EB2
     PWSTR -->|"virtual:plugin-worker"| EB2
     TS --> EB2 --> BUNDLE
     BUNDLE -->|"embed bytecode"| TJSC --> BIN
@@ -640,12 +682,14 @@ flowchart TD
 
 ```mermaid
 graph LR
-    CLI["cli.ts · cli-devices.ts<br/>flag parsing / devices / version / help"]
+    CLI["cli.ts · cli-devices.ts · cli-diagnose.ts<br/>flag parsing / devices / diagnose / version / help"]
     APP["app.ts<br/>entry point + event wiring"]
 
     DM["driver-manager.ts<br/>coordinator · probe · mode switch"]
     DM_P["driver-manager-primary.ts<br/>PrimaryDock (identity, brightness,<br/>saved-frame replay)"]
     DM_E["driver-manager-extras.ts<br/>ExtraDockCoordinator (scan · claim HID paths)"]
+    DM_D["driver-manager-discovery.ts<br/>mode/deps resolve · presence check"]
+    DM_PACE["driver-manager-pacing.ts<br/>ProbePacer (adaptive retry backoff)"]
     DS["device-session.ts<br/>DeviceSession · applyModelToServers<br/>wireCommonDriverEvents"]
     DID["device-identity.ts<br/>deviceKeyFor · generateMacAddress/Serial (pure)"]
     IP["image-pipeline.ts<br/>setupImageHandler"]
@@ -659,6 +703,11 @@ graph LR
     HID_BASE["devices/hid-driver-base.ts<br/>ElgatoHidDriver"]
     MIR["mirabox.ts<br/>MiraboxDriver (USB HID)"]
     REND["image-render.ts<br/>worker-side transform + cache + write"]
+
+    HOST_SCAN["hid-scan-worker-host.ts<br/>HidScanWorkerHost (coalesces scans)"]
+    WRK_SCAN["hid-scan-worker.ts<br/>HID enumeration worker entry"]
+    PROTO_SCAN["hid-scan-worker-protocol.ts<br/>scan worker message types"]
+    HID_DISC["ffi/hid-discovery.ts<br/>scanSupportedHidDevicesTimed · resetHidDiscovery"]
 
     HOST_PLG["plugin-host.ts<br/>PluginHost (lazy spawn/heartbeat)"]
     WRK_PLG["plugin-worker.ts<br/>runs a plugin's fetch()/interval"]
@@ -694,6 +743,13 @@ graph LR
     CORA_START --> ELG
     DM --> DM_P
     DM --> DM_E
+    DM --> DM_D
+    DM --> DM_PACE
+    DM --> HOST_SCAN
+    HOST_SCAN -.->|"postMessage (thread boundary)"| WRK_SCAN
+    HOST_SCAN --> PROTO_SCAN
+    WRK_SCAN --> PROTO_SCAN
+    WRK_SCAN --> HID_DISC
     DM_P --> DS
     DM_E --> DS
     DS --> HOST_HID
@@ -746,16 +802,21 @@ deckbridge/
 │   ├── package.json    ← dev deps: esbuild, typescript/tsgo (@typescript/native-preview), eventemitter3, preact, lint/coverage tooling (oxlint/eslint, istanbul, knip)
 │   ├── test/           ← *.test.ts suite (run on the txiki.js runtime; see "Testing")
 │   ├── src/   (see the Module map above for relationships)
-│   │   ├── cli.ts · cli-devices.ts   ← flag parsing (run/devices/version/help), device-list subcommand
+│   │   ├── cli.ts · cli-devices.ts · cli-diagnose.ts   ← flag parsing (run/devices/diagnose/version/help),
+│   │   │                                                  device-list and diagnostics-report subcommands
 │   │   ├── app.ts · driver-manager.ts · driver-manager-primary.ts · driver-manager-extras.ts
+│   │   │   · driver-manager-discovery.ts · driver-manager-pacing.ts
 │   │   │   · device-session.ts · device-identity.ts · image-pipeline.ts · splash-sender.ts · logger.ts
+│   │   │   · log-file.ts
 │   │   │       ← main-thread composition: probe/open, applyDeviceModel, multi-dock sessions,
-│   │   │         CORA image → WebUI + worker
+│   │   │         adaptive probe backoff, CORA image → WebUI + worker, rotating log file
 │   │   ├── extra-keys.ts · plugin-host.ts   ← non-grid key widgets (clock/date/text/weather/command/plugin),
 │   │   │                                       lazily-spawned plugin-worker host
 │   │   ├── settings-store.ts   ← settings.json load/save (atomic write), pluginsDir()
 │   │   ├── hid-worker-host.ts · hid-worker.ts · hid-worker-protocol.ts · image-render.ts · mirabox.ts
 │   │   │       ← USB worker: WorkerHidDriver proxy, createDriver(), worker-side transform+cache+write
+│   │   ├── hid-scan-worker-host.ts · hid-scan-worker.ts · hid-scan-worker-protocol.ts
+│   │   │       ← HID enumeration worker: one coalesced native scan, off the CORA thread
 │   │   ├── plugin-worker.ts · plugin-worker-protocol.ts   ← plugin worker entry + its message protocol
 │   │   ├── elgato.ts · elgato-server.ts · elgato-child-server.ts · elgato-child-payload.ts
 │   │   │   · elgato-child-report-handlers.ts · cora-server-base.ts · cora-startup.ts
@@ -765,14 +826,16 @@ deckbridge/
 │   │   ├── native-libs.ts · mdns-advertiser.ts · tray.ts · os-utils.ts · comm-format.ts · types.ts · elgato-types.ts
 │   │   │       ← native-lib extraction, mDNS, tray sidecar, browser-open/platform-name, wire-trace hex, shared types
 │   │   ├── mirabox-smoke.ts · k1pro-probe.ts · d6-capture.ts · *.d.ts · assets/   ← hardware probes, ambient types, splash JPEGs, font atlas
-│   │   ├── ffi/          ← hidapi.ts (libhidapi) · image-proc.ts (libdeckbridge_native, DECKBRIDGE_NATIVE_LIB)
+│   │   ├── ffi/          ← hidapi.ts (libhidapi) · hid-discovery.ts (timed enumeration + reset)
+│   │   │                    · image-proc.ts (libdeckbridge_native, DECKBRIDGE_NATIVE_LIB)
 │   │   ├── devices/      ← driver.ts (DeviceModel + specs) · registry.ts · hid-connection.ts (HidDeviceBase)
 │   │   │                    · hid-driver-base.ts (ElgatoHidDriver) · mock.ts · elgato/ · mirabox/ · protocol/
 │   │   ├── platform/     ← tcp.ts · buffer-shim.ts · events-shim.ts (shims over txiki globals)
 │   │   └── web/          ← server/ (WebUIServer + activity-buffers/dock-registry/image-channel/
 │   │                          persisted-settings/settings-identity-controller/extra-keys-controller/
 │   │                          mock-config/web-request-guard/…) · client/ (browser UI)
-│   └── dist/             ← bundle.js (~560 kB, worker + native dylibs inlined) · hid-worker.js (debug)
+│   └── dist/             ← bundle.js (~560 kB, workers + native dylibs inlined)
+│                            · hid-worker.js · hid-scan-worker.js · plugin-worker.js (debug copies)
 ├── rust/
 │   ├── deckbridge-native/   ← JPEG resize/rotate + HID path-enum cdylib (FFI via DECKBRIDGE_NATIVE_LIB);
 │   │                          Cargo features: jpeg-upstream (default) / jpeg-fork, HID behind `usb`

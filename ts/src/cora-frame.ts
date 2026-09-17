@@ -10,6 +10,9 @@ export const CORA_FLAG_REQACK = 0x4000;
 export const CORA_FLAG_ACKNAK = 0x0200;
 export const CORA_FLAG_RESULT = 0x0100;
 
+/** Flags on every verbatim GET_REPORT / probe reply the child server sends. */
+export const CORA_VERBATIM_RESULT = CORA_FLAG_RESULT | CORA_FLAG_VERBATIM;
+
 export function coraFlagString(flags: number): string {
   const parts: string[] = [];
   if (flags & CORA_FLAG_VERBATIM) parts.push('VERB');

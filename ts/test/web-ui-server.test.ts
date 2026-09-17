@@ -9,35 +9,11 @@ import { Broadcaster } from '../src/web/server/broadcaster.js';
 import { saveSettings } from '../src/settings-store.js';
 import type { Settings } from '../src/settings-store.js';
 import type { DockStatus } from '../src/types.js';
+import { test, testAsync as runWebTest, summaryExit } from './helpers/harness.js';
 
 // Isolate settings.json writes from the real user cache dir — every mutator
 // that touches a persisted field now writes to disk (see settings-store.ts).
 const TEST_SETTINGS_ROOT = `${tjs.tmpDir}/webui-server-test-settings-${tjs.pid}`;
-
-let passed = 0;
-let failed = 0;
-
-function test(name: string, fn: () => void): void {
-  try {
-    fn();
-    console.log(`  ✓ ${name}`);
-    passed++;
-  } catch (e) {
-    console.error(`  ✗ ${name}: ${(e as Error).message}`);
-    failed++;
-  }
-}
-
-async function runWebTest(name: string, fn: () => Promise<void>): Promise<void> {
-  try {
-    await fn();
-    console.log(`  ✓ ${name}`);
-    passed++;
-  } catch (e) {
-    console.error(`  ✗ ${name}: ${(e as Error).message}`);
-    failed++;
-  }
-}
 
 // isValidMacAddress
 
@@ -879,7 +855,7 @@ await runWebTest(
       const initial = ui.deviceOverridesView(modelId);
       assert.ok(!('error' in initial));
       if ('error' in initial) continue;
-      assert.equal(initial.tunable.wire?.batchImageTransfers, defaultEnabled);
+      assert.equal(initial.tunable.wire!.batchImageTransfers, defaultEnabled);
       assert.equal(
         ui.trySetModelOverride(modelId, { wire: { batchImageTransfers: !defaultEnabled } }),
         null,
@@ -887,7 +863,7 @@ await runWebTest(
       const saved = ui.deviceOverridesView(modelId);
       assert.ok(!('error' in saved));
       if (!('error' in saved))
-        assert.equal(saved.effective.wire?.batchImageTransfers, !defaultEnabled);
+        assert.equal(saved.effective.wire.batchImageTransfers, !defaultEnabled);
       const importRoot = `${TEST_SETTINGS_ROOT}-batch-import`;
       await saveSettings(JSON.parse(ui.getSettingsJson()) as Settings, importRoot);
       const restoredUi = new WebUIServer(undefined, [], 'real', importRoot);
@@ -1102,5 +1078,4 @@ await runWebTest(
 
 // Summary
 
-console.log(`\n${passed} passed, ${failed} failed`);
-tjs.exit(failed > 0 ? 1 : 0);
+summaryExit();

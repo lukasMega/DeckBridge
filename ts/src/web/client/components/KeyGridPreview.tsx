@@ -1,7 +1,11 @@
-// Live key-grid preview card — shared by the simple stages/dock cards and the
+// Key-grid preview card — shared by the simple stages/dock cards and the
 // advanced grid section. Wraps the imperative KeyPreview renderer; the extra
 // options (showIndex/flash/onKeyClick/clickable) default off so the simple
 // view's behavior is unchanged.
+//
+// `live={false}` renders the same card chrome with inert cells and no renderer:
+// the server mirrors only the selected dock's images, so unselected dock cards
+// need the shell but not a KeyPreview instance.
 import { useEffect, useRef } from 'preact/hooks';
 import { KeyPreview } from '../key-preview.js';
 
@@ -11,6 +15,8 @@ export function KeyGridPreview({
   dimmed,
   modelId,
   label = 'Live preview',
+  live = true,
+  badge,
   showIndex,
   flash,
   onKeyClick,
@@ -22,6 +28,10 @@ export function KeyGridPreview({
   modelId?: string;
   /** Header label (left side of the card head). */
   label?: string;
+  /** false = inert cells, no KeyPreview instance (unselected dock cards). */
+  live?: boolean;
+  /** Overrides the default Live/Paused head badge. */
+  badge?: string;
   /** Render the key index in each cell (advanced grid). */
   showIndex?: boolean;
   /** Flash a cell border on key press (advanced grid). */
@@ -38,7 +48,7 @@ export function KeyGridPreview({
   /* eslint-disable @eslint-react/exhaustive-deps -- intentional mount-only: creates KeyPreview once; prop changes handled by the effect below */
   useEffect(() => {
     const el = gridRef.current;
-    if (!el) return;
+    if (!el || !live) return;
     // Create the KeyPreview instance once; broadcast() auto-prunes on disconnect
     const kp = new KeyPreview(el, { showIndex, flash, onKeyClick });
     previewRef.current = kp;
@@ -64,9 +74,17 @@ export function KeyGridPreview({
     <div class={cls}>
       <div class="preview-head">
         <span class="preview-label">{label}</span>
-        <span class="live-dot">{dimmed ? 'Paused' : 'Live'}</span>
+        <span class="live-dot">{badge ?? (dimmed ? 'Paused' : 'Live')}</span>
       </div>
-      <div ref={gridRef} />
+      {live ? (
+        <div ref={gridRef} />
+      ) : (
+        <div class="key-grid" style={`grid-template-columns:repeat(${columns},1fr)`}>
+          {Array.from({ length: keyCount }, (_, i) => (
+            <div class="key-cell" key={i} />
+          ))}
+        </div>
+      )}
     </div>
   );
 }

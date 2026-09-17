@@ -200,15 +200,6 @@ body.no-anim * {
   margin-top: 8px;
 }
 
-/* ── settings (raw JSON) panel ── */
-#settings-textarea {
-  width: 100%;
-  resize: vertical;
-}
-#settings-save {
-  margin-top: 8px;
-}
-
 /* ── Log panel ── */
 .log-panel {
   flex: 1;

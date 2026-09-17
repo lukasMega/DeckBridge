@@ -25,6 +25,7 @@ import {
 } from 'node:fs';
 import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { have } from './tjs-common.mjs';
 
 const die = (msg) => {
   console.error(msg);
@@ -136,14 +137,6 @@ if (existsSync(csv)) {
 // xz/LZMA compresses these binaries noticeably better than zip-deflate.
 // Best-effort only: skip silently (never fail the build) if xz or tar are absent.
 const tarxzFile = join(distRoot, `${distName}.tar.xz`);
-const have = (cmd) => {
-  try {
-    execSync(`command -v ${cmd}`, { stdio: 'ignore' });
-    return true;
-  } catch {
-    return false;
-  }
-};
 if (have('xz') && have('tar')) {
   rmSync(tarxzFile, { force: true });
   try {

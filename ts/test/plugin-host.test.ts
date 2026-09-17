@@ -2,20 +2,7 @@ import assert from 'tjs:assert';
 import { PluginHost, listPluginFiles, pluginKeyStatus } from '../src/plugin-host.js';
 import type { WorkerLike } from '../src/plugin-host.js';
 import type { MainToPluginWorker, PluginWorkerToMain } from '../src/plugin-worker-protocol.js';
-
-let passed = 0;
-let failed = 0;
-
-async function runTest(name: string, fn: () => void | Promise<void>): Promise<void> {
-  try {
-    await fn();
-    console.log(`  ✓ ${name}`);
-    passed++;
-  } catch (e) {
-    console.error(`  ✗ ${name}: ${(e as Error).message}`);
-    failed++;
-  }
-}
+import { testAsync as runTest, summaryExit } from './helpers/harness.js';
 
 const macrotask = (): Promise<void> => new Promise((r) => setTimeout(r, 0));
 
@@ -289,7 +276,6 @@ await runTest('an unconfigured key reports pending (singleton WebUI API)', () =>
   assert.equal(pluginKeyStatus('never-configured.js', 'arg'), 'pending');
 });
 
-console.log(`\n${passed} passed, ${failed} failed`);
 // Force exit: the host's heartbeat interval / fetch-timeout timers would keep
 // the event loop alive otherwise (same reason as hid-worker-host.test).
-tjs.exit(failed > 0 ? 1 : 0);
+summaryExit();

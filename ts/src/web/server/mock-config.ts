@@ -10,7 +10,7 @@ import {
   MOCK_SERIAL_MAX_LEN,
   MOCK_PRODUCT_ID_MASK,
 } from '../../types.js';
-import type { MockDeviceConfig } from './types.js';
+import type { MockDeviceConfig, ReqError } from './types.js';
 
 /** Default identity fields, shared by the mock driver config and the identity
  *  fallback shown before the first notifyDocks. */
@@ -54,7 +54,7 @@ export function validateSimulatedKey(
   n: number,
   keyCount: number,
   driverMode: 'real' | 'mock',
-): { error: string; status: number } | null {
+): ReqError | null {
   if (n < 0 || n >= keyCount) {
     return { error: `key index must be 0–${keyCount - 1}`, status: 400 };
   }

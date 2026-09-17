@@ -1,10 +1,6 @@
 // Display widgets for physical keys outside the emulated CORA grid
-// (model.keyMap.extraKeys — 293S 6th column, wire ids 16/17/18). Those keys
-// have no switches (display-only, verified on hardware), so each shows a
-// server-rendered value: clock, date, custom text, or weather. The text is
-// composed from a packed bitmap font into a small BMP and shipped through the
-// splash path (the worker transform decodes/rotates/encodes for the device),
-// so the main thread never runs the FFI transform or the hid_write burst itself.
+// (model.keyMap.extraKeys — 293S 6th column, wire ids 16/17/18). Those keys have no
+// switches, so each shows a server-rendered value: clock, date, text, or weather.
 import { FONT_BIG, FONT_SMALL, fontGlyphIndex } from './assets/font-atlas.js';
 import type { BitmapFont } from './assets/font-atlas.js';
 import {
@@ -14,7 +10,7 @@ import {
 } from './types.js';
 import type { DeviceDriver } from './devices/driver.js';
 import { splashSpec } from './splash-sender.js';
-import { platformName } from './os-utils.js';
+import { platformName, readText } from './os-utils.js';
 import { log } from './logger.js';
 import { pluginValueFor, type PluginStatus } from './plugin-host.js';
 
@@ -184,12 +180,9 @@ interface CacheEntry<T> {
   inflight: boolean;
 }
 
-/** Cached value for `key` (module-level caches: the same param — location or
- *  command string — is fetched once and shared across keys and docks). Kicks
- *  off a background `fetchValue` at most every `refreshMs`, one in flight per
- *  key; `onUpdate` repaints on completion. Failures log a warning, not debug —
- *  an invisible failure leaves the key stale with no clue (exactly how the
- *  missing-TLS build bit us). */
+/** Cached value for `key` (module-level: same param — location or command string —
+ *  fetched once, shared across keys/docks). Kicks off a background `fetchValue` at
+ *  most every `refreshMs`, one in flight per key; `onUpdate` repaints on completion. */
 function cachedValue<T>(
   cache: Map<string, CacheEntry<T>>,
   key: string,
@@ -254,13 +247,10 @@ function weatherTempFor(param: string | undefined, onUpdate: () => void): number
   return cachedValue(weatherCache, `${lat},${lon}`, WEATHER_REFRESH_MS, fetchTemp, onUpdate);
 }
 
-// Custom command (runs the param via the shell, shows its stdout)
-//
-// SECURITY: this executes an arbitrary shell command taken from the dock's
-// WebUI config. The WebUI has no auth and binds all interfaces by default, so
-// anyone who can reach :3000 can set a command that runs on this host. It is
-// opt-in per key and meant for a trusted personal LAN — the same local-tool
-// pragmatism as the weather widget's cleartext HTTP.
+// Custom command (runs the param via the shell, shows its stdout).
+// SECURITY: arbitrary shell command from the WebUI config. Loopback-only by default
+// (webuiBindAddr()), but `--bind` on the LAN lets anyone reaching :3000 run a command
+// on this host. Opt-in per key, trusted personal LAN only.
 
 const commandCache = new Map<string, CacheEntry<string>>();
 
@@ -271,14 +261,7 @@ async function runCommand(cmd: string, timeoutMs: number): Promise<string> {
   const p = tjs.spawn(args, { stdout: 'pipe', stderr: 'ignore' });
   const killer = setTimeout(() => p.kill(), timeoutMs);
   try {
-    const dec = new TextDecoder();
-    let out = '';
-    const reader = p.stdout.getReader();
-    for (;;) {
-      const { value, done } = await reader.read();
-      if (done) break;
-      out += dec.decode(value, { stream: true });
-    }
+    const out = await readText(p.stdout);
     await p.wait();
     return out;
   } finally {
@@ -308,11 +291,9 @@ function forceRunCommand(param: string | undefined, timeoutMs: number, onUpdate:
 
 // Per-dock scheduler
 
-/** Ticks once a second, re-renders every configured widget, and repaints a key
- *  only when its rendered content actually changed (clock → one repaint per
- *  minute; idle cost is a few string compares). One instance per connected
- *  dock; start() on connect, stop() on disconnect, repaint() on a WebUI config
- *  change or the driver's 'reinit' (sleep/wake CLE ALL wipes the panels). */
+/** Ticks once a second, re-renders every configured widget, and repaints a key only
+ *  when its content changed (clock → one repaint per minute; idle cost is a few string
+ *  compares). One instance per connected dock. */
 export class ExtraKeyWidgets {
   private readonly driver: DeviceDriver;
   private readonly configFor: (wireId: number) => ExtraKeyConfig | undefined;

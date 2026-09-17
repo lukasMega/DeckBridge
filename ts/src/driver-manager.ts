@@ -6,9 +6,8 @@ import { MockDriver } from './devices/mock.js';
 import type { KeyEvent, CommEntry, DockStatus } from './types.js';
 import type { DeviceDriver, DeviceModel, DeviceModelOverride } from './devices/driver.js';
 import { applyModelOverrides, overrideSummary } from './devices/model-overrides.js';
-import { DEVICE_MODELS, DEFAULT_MODEL } from './devices/registry.js';
+import { advertisedGeometry, DEVICE_MODELS, DEFAULT_MODEL } from './devices/registry.js';
 import { sendSplashImages } from './splash-sender.js';
-import { modelToChildGeometry } from './capabilities.js';
 import { applyModelToServers, wireCommonDriverEvents } from './device-session.js';
 import { PrimaryDock } from './driver-manager-primary.js';
 import { ProbePacer } from './driver-manager-pacing.js';
@@ -163,10 +162,9 @@ export class DriverManager {
   /** The user's device tuning for `modelId`, or undefined in safe mode
    *  (`--no-overrides`) / when nothing is persisted. */
   private overrideFor(modelId: string): DeviceModelOverride | undefined {
-    // Safe mode (`run --no-overrides`): a bad keyMap can make a device look dead,
-    // and the WebUI Reset button is no help if the user can't get that far. Shared
-    // with the WebUI's own view, so the panel never claims tuning the device isn't
-    // actually running.
+    // Safe mode (`run --no-overrides`): a bad keyMap can make a device look dead, and the
+    // WebUI Reset button is no help if the user can't get that far. Shared with the
+    // WebUI's own view, so the panel never claims tuning the device isn't actually running.
     if (overridesDisabled()) return undefined;
     return this.deps.webui.modelOverrideFor(modelId);
   }
@@ -202,7 +200,7 @@ export class DriverManager {
     this.primary.deviceInfo = deviceInfo;
     // Server-facing push shared with extras (device-session.ts); the WebUI half is primary-only.
     applyModelToServers(this.deps.server, this.deps.childServer, model, deviceInfo);
-    const geo = model.cora.advertiseGeometry ?? modelToChildGeometry(model);
+    const geo = advertisedGeometry(model);
     this.deps.webui.notifyDeviceModel({
       id: model.id,
       name: model.name,
@@ -377,11 +375,9 @@ export class DriverManager {
     this.deps.onDocksChanged?.();
   }
 
-  /** Device tuning changed (WebUI / settings import): close the affected
-   *  session(s) so the 3 s reconnect tick reopens them with the new spec.
-   *  image/wire/keyMap must already be correct at open() and at the first
-   *  splash, so a live patch would not do. `modelId` '' means "all models".
-   *  No-op in mock mode beyond a model re-apply — there is no worker to reopen. */
+  /** Device tuning changed (WebUI / settings import): close the affected session(s) so the 3 s
+   * reconnect tick reopens them with the new spec. image/wire/keyMap must already be correct at
+   * open() and at the first splash, so a live patch would not do. `modelId` '' means "all models". */
   async reloadDeviceTuning(modelId: string): Promise<void> {
     if (this.driverMode === 'mock') {
       const current = this.currentDriver;
