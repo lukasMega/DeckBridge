@@ -67,6 +67,8 @@ export interface DeviceWireSpec {
   inSize: number; // HID read buffer size
   heartbeatMs?: number; // undefined = no heartbeat
   synthesizeKeyUp?: boolean; // v1 sends keydown only — synthesize the keyup
+  /** One STP per image batch on supported 293S-family boards. */
+  batchImageTransfers?: boolean;
   sendStpAfterImage?: boolean; // v3 sends CRT STP after image/clear; v1 doesn't
   /** HID report-ID prefix byte: 0x00 (293 default) or 0x04 (K1 Pro). Defaults to 0x00. */
   reportId?: number;
@@ -154,6 +156,11 @@ export interface DeviceModel {
   driverKind: DriverKind;
 }
 
+/** Only the 512-byte, keydown-only 293S board family supports this tuning. */
+export function supportsImageBatching(model: DeviceModel): boolean {
+  return model.driverKind === 'mirabox' && model.protocol === 'mirabox-cora-v1';
+}
+
 // The tunable field names, listed once: they type DeviceModelOverride below and drive
 // the validator/seed tables in devices/model-overrides.ts, which can't drift from them.
 export const IMAGE_OVERRIDE_KEYS = [
@@ -182,6 +189,7 @@ export const WIRE_OVERRIDE_KEYS = [
   'chunkPadByte',
   'synthesizeKeyUp',
   'sendStpAfterImage',
+  'batchImageTransfers',
 ] as const;
 
 /** User-tunable subset of a DeviceModel, persisted per model id under settings.json's

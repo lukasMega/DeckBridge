@@ -7,6 +7,7 @@ import {
 } from '../src/web/server/web-ui-server.js';
 import { Broadcaster } from '../src/web/server/broadcaster.js';
 import { saveSettings } from '../src/settings-store.js';
+import type { Settings } from '../src/settings-store.js';
 import type { DockStatus } from '../src/types.js';
 import { test, testAsync as runWebTest, summaryExit } from './helpers/harness.js';
 
@@ -841,6 +842,47 @@ console.log('\nWebUIServer device tuning + log level');
 /** A registry model id every build has, so these tests don't depend on the
  *  probe order or on hardware. */
 const TUNED_MODEL = 'mirabox-293';
+
+await runWebTest(
+  'batch transfer tuning persists, resets, and rejects unsupported devices',
+  async () => {
+    const ui = new WebUIServer(undefined, [], 'real', TEST_SETTINGS_ROOT);
+    for (const [modelId, defaultEnabled] of [
+      ['mirabox-293s', true],
+      ['ajazz-akp153', false],
+    ] as const) {
+      assert.equal(ui.tryResetModelOverride(modelId), null);
+      const initial = ui.deviceOverridesView(modelId);
+      assert.ok(!('error' in initial));
+      if ('error' in initial) continue;
+      assert.equal(initial.tunable.wire?.batchImageTransfers, defaultEnabled);
+      assert.equal(
+        ui.trySetModelOverride(modelId, { wire: { batchImageTransfers: !defaultEnabled } }),
+        null,
+      );
+      const saved = ui.deviceOverridesView(modelId);
+      assert.ok(!('error' in saved));
+      if (!('error' in saved))
+        assert.equal(saved.effective.wire?.batchImageTransfers, !defaultEnabled);
+      const importRoot = `${TEST_SETTINGS_ROOT}-batch-import`;
+      await saveSettings(JSON.parse(ui.getSettingsJson()) as Settings, importRoot);
+      const restoredUi = new WebUIServer(undefined, [], 'real', importRoot);
+      await restoredUi.start(false);
+      const persisted = restoredUi.deviceOverridesView(modelId);
+      assert.ok(!('error' in persisted));
+      if (!('error' in persisted))
+        assert.equal(persisted.tunable.wire?.batchImageTransfers, !defaultEnabled);
+      await restoredUi.stop();
+      assert.equal(ui.tryResetModelOverride(modelId), null);
+      const reset = ui.deviceOverridesView(modelId);
+      if (!('error' in reset))
+        assert.equal(reset.tunable.wire?.batchImageTransfers, defaultEnabled);
+    }
+    assert.ok(
+      ui.trySetModelOverride('fifine-d6', { wire: { batchImageTransfers: true } }) !== null,
+    );
+  },
+);
 
 test('device-overrides view seeds from the registry when nothing is persisted', () => {
   const ui = new WebUIServer(undefined, [], 'real', TEST_SETTINGS_ROOT);

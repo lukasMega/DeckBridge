@@ -245,8 +245,7 @@ for (const { model, vid, pid, id } of V1_CLONES) {
   });
 }
 
-// Each clone is a literal spec-mirror of the 293S: verified fields must stay
-// byte-identical, so retuning the 293S can't silently desync 7 clones.
+// Hardware fields mirror the 293S; experimental batching stays opt-in on clones.
 test('akp153-v1-clones mirror the 293S image/wire/keyMap/cora/splash spec', () => {
   for (const { model } of V1_CLONES) {
     assert.equal(model.protocol, MIRABOX_293S_MODEL.protocol);
@@ -259,7 +258,7 @@ test('akp153-v1-clones mirror the 293S image/wire/keyMap/cora/splash spec', () =
     assert.equal(model.keyWidth, MIRABOX_293S_MODEL.keyWidth);
     assert.equal(model.keyHeight, MIRABOX_293S_MODEL.keyHeight);
     assert.equal(JSON.stringify(model.image), JSON.stringify(MIRABOX_293S_MODEL.image));
-    assert.equal(JSON.stringify(model.wire), JSON.stringify(MIRABOX_293S_MODEL.wire));
+    assert.deepEqual(model.wire, { ...MIRABOX_293S_MODEL.wire, batchImageTransfers: false });
     assert.equal(JSON.stringify(model.keyMap), JSON.stringify(MIRABOX_293S_MODEL.keyMap));
     assert.equal(JSON.stringify(model.cora), JSON.stringify(MIRABOX_293S_MODEL.cora));
     assert.equal(JSON.stringify(model.splash), JSON.stringify(MIRABOX_293S_MODEL.splash));

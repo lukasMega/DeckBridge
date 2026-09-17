@@ -242,6 +242,8 @@ const SECOND_OVERRIDES_VIEW: DeviceOverridesView = {
   ...OVERRIDES_VIEW,
   modelId: 'mirabox-293s',
   modelName: 'Mirabox 293S',
+  defaults: { ...OVERRIDES_VIEW.defaults, wire: { batchImageTransfers: true } },
+  tunable: { ...OVERRIDES_VIEW.tunable, wire: { batchImageTransfers: true } },
 };
 
 interface StubCall {
@@ -285,6 +287,52 @@ async function settle(): Promise<void> {
 /** Minimum status the learn-mode grid prompts need. */
 const baseStatus = { driverMode: 'real' as const, driverConnected: true, elgatoConnected: true };
 
+async function checkBatchImageTransferTuning(): Promise<void> {
+  for (const [modelId, enabled] of [
+    ['mirabox-293s', true],
+    ['ajazz-akp153', false],
+  ] as const) {
+    const view: DeviceOverridesView = {
+      ...SECOND_OVERRIDES_VIEW,
+      modelId,
+      tunable: { ...SECOND_OVERRIDES_VIEW.tunable, wire: { batchImageTransfers: enabled } },
+      overrides: { wire: { chunkDelayMs: 2 } },
+    };
+    const stub = stubFetch((_url, init) => ({
+      payload: init?.method === 'POST' ? { reconnecting: true } : view,
+    }));
+    try {
+      await act(() => patch({ status: { ...baseStatus, modelId } }));
+      await act(() => render(<DeviceTuningPanel />, root));
+      await settle();
+      const checkbox = root.querySelector<HTMLInputElement>('#tuning-batch-image-transfers');
+      check(
+        checkbox !== null && checkbox.checked === enabled,
+        `${modelId} batching toggle seeds correctly`,
+      );
+      await act(() => checkbox!.click());
+      await click('#tuning-apply');
+      await settle();
+      const posted = stub.calls.find((call) => call.method === 'POST')?.body as {
+        modelId: string;
+        overrides: { wire: Record<string, unknown> };
+      };
+      check(
+        posted.modelId === modelId && posted.overrides.wire.batchImageTransfers === !enabled,
+        `${modelId} batching toggle posts edited value`,
+      );
+      check(
+        posted.overrides.wire.chunkDelayMs === 2,
+        'Batch toggle preserves other wire overrides',
+      );
+    } finally {
+      stub.restore();
+      await act(() => render(null, root));
+      await act(() => patch({ status: baseStatus }));
+    }
+  }
+}
+
 async function runSettingsPanels(): Promise<void> {
   // Device tuning: renders the effective spec, not a blank form.
   {
@@ -293,6 +341,10 @@ async function runSettingsPanels(): Promise<void> {
       await act(() => render(<DeviceTuningPanel />, root));
       await settle();
       check(root.textContent.includes('Mirabox 293V3'), 'Device tuning names the model');
+      check(
+        root.querySelector('#tuning-batch-image-transfers') === null,
+        'Batching control is absent on unsupported models',
+      );
       const tuningBody = root.querySelector('#device-tuning-body')!;
       check(!tuningBody.classList.contains('open'), 'Device tuning is collapsed by default');
       await click('#device-tuning > .collapse-header');
@@ -309,6 +361,8 @@ async function runSettingsPanels(): Promise<void> {
       await act(() => render(null, root));
     }
   }
+
+  await checkBatchImageTransferTuning();
 
   // A validation failure surfaces the server's error list.
   {

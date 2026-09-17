@@ -4,6 +4,7 @@
 import {
   IMAGE_OVERRIDE_KEYS,
   WIRE_OVERRIDE_KEYS,
+  supportsImageBatching,
   type DeviceImageSpec,
   type DeviceKeyMap,
   type DeviceModel,
@@ -120,6 +121,7 @@ const WIRE_FIELDS: Record<WireOverrideKey, FieldSpec> = {
   chunkPadByte: { kind: 'boolean' },
   synthesizeKeyUp: { kind: 'boolean' },
   sendStpAfterImage: { kind: 'boolean' },
+  batchImageTransfers: { kind: 'boolean' },
 };
 
 const TRANSFORM_OVERRIDE_FIELDS: SectionFields = {
@@ -217,6 +219,11 @@ function validateSection(
 
 function validateWire(raw: unknown, model: DeviceModel, errors: Errors): void {
   if (!validateSection(raw, WIRE_FIELDS, 'wire', model, errors)) return;
+  if (raw.batchImageTransfers !== undefined && !supportsImageBatching(model)) {
+    errors.push(
+      `wire.batchImageTransfers: not tunable on ${model.name} — requires a 293S-family board`,
+    );
+  }
   if (model.driverKind !== 'elgato-hid') return;
   for (const key of ELGATO_FIXED_WIRE_KEYS) {
     if (raw[key] !== undefined) {
@@ -306,8 +313,11 @@ function project<T extends object, K extends keyof T>(
 /** The wire fields this model actually accepts as an override — everything for a Mirabox
  *  board, minus the protocol-fixed sizes for an elgato-hid one (ELGATO_FIXED_WIRE_KEYS). */
 function tunableWireKeys(model: DeviceModel): readonly WireOverrideKey[] {
-  if (model.driverKind !== 'elgato-hid') return WIRE_OVERRIDE_KEYS;
-  return WIRE_OVERRIDE_KEYS.filter((k) => !ELGATO_FIXED_WIRE_KEYS.includes(k as never));
+  return WIRE_OVERRIDE_KEYS.filter(
+    (key) =>
+      (key !== 'batchImageTransfers' || supportsImageBatching(model)) &&
+      (model.driverKind !== 'elgato-hid' || !ELGATO_FIXED_WIRE_KEYS.includes(key as never)),
+  );
 }
 
 /** Tunable fields at their current (post-override) values — seeds the Device tuning

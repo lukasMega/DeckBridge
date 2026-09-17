@@ -5,7 +5,15 @@ import { MIRABOX_293S_MODEL } from '../mirabox/mirabox-293s.js';
 type CloneSpec = readonly [string, string, DeviceVendor, number, number];
 
 function cloneOf293S([id, name, vendor, vid, pid]: CloneSpec): DeviceModel {
-  return { ...MIRABOX_293S_MODEL, id, name, vendor, usbVendorId: vid, usbProductIds: [pid] };
+  return {
+    ...MIRABOX_293S_MODEL,
+    id,
+    name,
+    vendor,
+    usbVendorId: vid,
+    usbProductIds: [pid],
+    wire: { ...MIRABOX_293S_MODEL.wire, batchImageTransfers: false },
+  };
 }
 
 const V1_CLONE_SPECS: readonly CloneSpec[] = [
@@ -22,7 +30,7 @@ const V1_CLONE_SPECS: readonly CloneSpec[] = [
 ];
 
 /** The 7 v1 rebadges of the 293S board: `protocol_version 1`, 512-byte packets, 3×6
- *  physical grid, keydown-only. NOT HARDWARE-TESTED — every field is inherited verbatim
+ *  physical grid, keydown-only. NOT HARDWARE-TESTED — hardware fields are inherited verbatim
  *  from MIRABOX_293S_MODEL by construction, so it cannot drift. Beware the adjacent-PID
  *  trap against ajazz/akp153-rev2.ts; the table is in ../PROVENANCE.md. */
 export const AKP153_V1_CLONE_MODELS: readonly DeviceModel[] = V1_CLONE_SPECS.map(cloneOf293S);

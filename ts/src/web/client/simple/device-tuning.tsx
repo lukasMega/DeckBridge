@@ -70,6 +70,7 @@ export function DeviceTuningPanel(): preact.JSX.Element {
   const loadSeqRef = useRef(0);
   const [view, setView] = useState<DeviceOverridesView | null>(null);
   const [image, setImage] = useState<DeviceImageOverride>({});
+  const [batchImageTransfers, setBatchImageTransfers] = useState(false);
   const action = useAsyncAction();
   const resetFeedback = action.reset;
   const copy = useCopyText();
@@ -90,6 +91,7 @@ export function DeviceTuningPanel(): preact.JSX.Element {
       // `tunable` mirrors active settable values without rejected protocol facts.
       // Reloading intentionally discards drafts so edits never follow another dock.
       setImage({ ...data.tunable.image });
+      setBatchImageTransfers(data.tunable.wire?.batchImageTransfers === true);
     },
     [selectedModelId],
   );
@@ -121,7 +123,16 @@ export function DeviceTuningPanel(): preact.JSX.Element {
       if (!activeView) return;
       const parsed = await postJson<{ reconnecting?: boolean }>(
         '/api/device-overrides',
-        { modelId: activeView.modelId, overrides: { ...activeView.overrides, image } },
+        {
+          modelId: activeView.modelId,
+          overrides: {
+            ...activeView.overrides,
+            image,
+            ...(typeof activeView.tunable.wire?.batchImageTransfers === 'boolean'
+              ? { wire: { ...activeView.overrides.wire, batchImageTransfers } }
+              : {}),
+          },
+        },
         'Save failed',
       );
       action.setStatus(parsed.reconnecting ? 'Reapplying — the device reconnects…' : 'Saved.');
@@ -207,6 +218,14 @@ export function DeviceTuningPanel(): preact.JSX.Element {
         checked={image.flipV ?? false}
         onChange={(flipV) => patch({ flipV })}
       />
+      {typeof activeView.tunable.wire?.batchImageTransfers === 'boolean' && (
+        <CheckField
+          id="tuning-batch-image-transfers"
+          label="Batch image transfers"
+          checked={batchImageTransfers}
+          onChange={setBatchImageTransfers}
+        />
+      )}
 
       <Collapsible title="Advanced">
         <div class="tuning-grid">

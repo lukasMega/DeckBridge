@@ -42,6 +42,7 @@ export const MIRABOX_293S_MODEL: DeviceModel = {
     heartbeatMs: 8000,
     synthesizeKeyUp: true,
     sendStpAfterImage: false,
+    batchImageTransfers: true,
     // v1 firmware reports the same hardcoded serial on every unit — see
     // DeviceWireSpec.sharedSerial. All 7 rebadge clones inherit this by spreading
     // this model's wire spec (ts/src/devices/rebadge/akp153-v1-clones.ts).
