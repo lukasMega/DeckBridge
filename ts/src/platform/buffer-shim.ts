@@ -40,6 +40,18 @@ function bytesFromString(s: string, enc: Encoding): Uint8Array {
   }
 }
 
+/** Resolve write()'s three Node overloads into its (offset, length, encoding) triple. */
+function normalizeWriteArgs(
+  offset?: number | Encoding,
+  length?: number | Encoding,
+  encoding?: Encoding,
+): { off: number; len: number | undefined; enc: Encoding } {
+  if (typeof offset === 'string') return { off: 0, len: undefined, enc: offset };
+  const off = offset ?? 0;
+  if (typeof length === 'string') return { off, len: undefined, enc: length };
+  return { off, len: length, enc: encoding ?? 'utf8' };
+}
+
 // Instance behaviour only. Static factories are attached below (see `Buffer`), NOT declared
 // here: declaring a static `from` on a Uint8Array subclass triggers TS2417 (incompatible with
 // Uint8Array's generic static `from`).
@@ -128,19 +140,7 @@ class BufferClass extends Uint8Array {
     length?: number | Encoding,
     encoding?: Encoding,
   ): number {
-    let off = 0;
-    let len: number | undefined;
-    let enc: Encoding = 'utf8';
-    if (typeof offset === 'string') {
-      enc = offset;
-    } else {
-      if (offset !== undefined) off = offset;
-      if (typeof length === 'string') enc = length;
-      else {
-        if (length !== undefined) len = length;
-        if (encoding !== undefined) enc = encoding;
-      }
-    }
+    const { off, len, enc } = normalizeWriteArgs(offset, length, encoding);
     const bytes = bytesFromString(value, enc);
     const writable = Math.max(this.length - off, 0);
     const max = len === undefined ? writable : Math.min(len, writable);

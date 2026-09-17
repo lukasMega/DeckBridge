@@ -172,59 +172,62 @@ export class ElgatoChildServer extends CoraServerBase {
         ),
         payload,
       );
-
-      const byte0 = payload[0]!;
-      const byte1 = payload.length > 1 ? payload[1]! : 0;
-      const isVerbatim = (flags & CORA_FLAG_VERBATIM) !== 0;
-
-      // Only Bitfocus Companion's CORA client queries the legacy
-      // secondary-detect report — the genuine Elgato app never sends it (see
-      // .claude/plans/2026-07-14_try-distinguish-bitfocus-companion-connection.md).
-      if (isVerbatim && byte0 === REPORT_SECONDARY_DETECT) {
-        this.emit('clientAppDetected', 'bitfocus');
-      }
-
-      if (
-        isVerbatim &&
-        handleChildVerbatimProbe(byte0, hidOp, messageId, this.deviceConfig, this.sendFrameFn)
-      )
-        return;
-      if (
-        byte0 === PAYLOAD_TYPE_FEATURE &&
-        handleChildFeatureRequest(
-          byte1,
-          hidOp,
-          messageId,
-          this.buildSelfDeviceInfoFn,
-          this.sendFrameFn,
-        )
-      )
-        return;
-      if (hidOp === HID_OP_GET_REPORT) {
-        this.handleGetReport(byte0, flags, hidOp, messageId, payload);
-        return;
-      }
-      if (hidOp === HID_OP_SEND_REPORT || byte0 === PAYLOAD_TYPE_FEATURE) {
-        this.handleSendReport(payload, flags, hidOp, messageId);
-        return;
-      }
-      handleChildOutputReportPacket(
-        byte0,
-        byte1,
-        flags,
-        hidOp,
-        messageId,
-        payload,
-        this.sessionStartTs ? Date.now() - this.sessionStartTs : 0,
-        this.emitLogFn,
-        this.sendAckNakFn,
-        this.handleImageChunkFn,
-        this.handleGen1ImageChunkFn,
-      );
+      this.routeChildPacket(flags, hidOp, messageId, payload);
     } catch (err) {
       this.emitLog('error', `child handleCoraPacket error: ${(err as Error).message}`);
       this.emitLog('debug', `child handleCoraPacket stack: ${(err as Error).stack}`);
     }
+  }
+
+  private routeChildPacket(flags: number, hidOp: number, messageId: number, payload: Buffer): void {
+    const byte0 = payload[0]!;
+    const byte1 = payload.length > 1 ? payload[1]! : 0;
+    const isVerbatim = (flags & CORA_FLAG_VERBATIM) !== 0;
+
+    // Only Bitfocus Companion's CORA client queries the legacy
+    // secondary-detect report — the genuine Elgato app never sends it (see
+    // .claude/plans/2026-07-14_try-distinguish-bitfocus-companion-connection.md).
+    if (isVerbatim && byte0 === REPORT_SECONDARY_DETECT) {
+      this.emit('clientAppDetected', 'bitfocus');
+    }
+
+    if (
+      isVerbatim &&
+      handleChildVerbatimProbe(byte0, hidOp, messageId, this.deviceConfig, this.sendFrameFn)
+    )
+      return;
+    if (
+      byte0 === PAYLOAD_TYPE_FEATURE &&
+      handleChildFeatureRequest(
+        byte1,
+        hidOp,
+        messageId,
+        this.buildSelfDeviceInfoFn,
+        this.sendFrameFn,
+      )
+    )
+      return;
+    if (hidOp === HID_OP_GET_REPORT) {
+      this.handleGetReport(byte0, flags, hidOp, messageId, payload);
+      return;
+    }
+    if (hidOp === HID_OP_SEND_REPORT || byte0 === PAYLOAD_TYPE_FEATURE) {
+      this.handleSendReport(payload, flags, hidOp, messageId);
+      return;
+    }
+    handleChildOutputReportPacket(
+      byte0,
+      byte1,
+      flags,
+      hidOp,
+      messageId,
+      payload,
+      this.sessionStartTs ? Date.now() - this.sessionStartTs : 0,
+      this.emitLogFn,
+      this.sendAckNakFn,
+      this.handleImageChunkFn,
+      this.handleGen1ImageChunkFn,
+    );
   }
 
   private handleGetReport(

@@ -13,12 +13,12 @@ import { applyModelToServers, wireCommonDriverEvents } from './device-session.js
 import { PrimaryDock } from './driver-manager-primary.js';
 import { ProbePacer } from './driver-manager-pacing.js';
 import { ExtraDockCoordinator } from './driver-manager-extras.js';
-import { deviceKeyFor, sharedSerialModelId } from './device-identity.js';
 import { HidScanWorkerHost } from './hid-scan-worker-host.js';
 import {
   defaultListModelPaths,
   defaultPresenceCheck,
   getInitialDriverMode,
+  resolveRealDeviceIdentity,
   type DriverManagerDeps,
   type DriverMode,
 } from './driver-manager-discovery.js';
@@ -319,61 +319,60 @@ export class DriverManager {
     this.reconnecting = false;
     if (this.deps.getShuttingDown() || this.driverMode !== 'real') return;
 
-    if (!this.realDriver) {
-      if (this.probeInFlight) return;
-      this.probeInFlight = true;
-      let found: WorkerHidDriver | null = null;
-      try {
-        log('info', 'hid', 'probing USB devices...');
-        found = await this.probeAndOpen();
-      } finally {
-        this.probeInFlight = false;
-      }
-
-      // Re-check after the await: switchMode()/shutdown during the awaited probe
-      // (the E1-a race) must not install a leaked worker.
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- driverMode is mutated across the await
-      if (this.deps.getShuttingDown() || this.driverMode !== 'real') {
-        if (found) await closeDriver(found);
-        return;
-      }
-
-      if (!found) {
-        log('warn', 'hid', `no device found — retrying in ${this.pacer.delayMs / 1000}s`);
-        this.deps.webui.notifyElgatoDevicePresent(this.elgatoHardwarePresent());
-        this.scheduleReconnect();
-        this.deps.onTrayChange();
-        return;
-      }
-      this.deps.webui.notifyElgatoDevicePresent(false);
-      this.realDriver = found;
-      // Stable USB-serial key, else the (volatile) hidPath, else a per-model
-      // key (VID/PID-fallback open, no usage-matched path) — same as extras.
-      const hidPath = found.hidPath;
-      const serial = hidPath ? cachedDiscoverySerial(hidPath) : null;
-      this.primary.resolveIdentity(
-        deviceKeyFor(
-          hidPath ?? `model:${found.model.id}`,
-          serial,
-          sharedSerialModelId(found.model),
-        ),
-      );
-      this.applyDeviceModel(found.model, {
-        serial: found.deviceSerial ?? serial ?? undefined,
-        firmware: found.deviceFirmware,
-      });
-    }
+    // null = nothing to activate: probe already in flight, no device found, or
+    // the session was torn down across the probe await (each case having done
+    // its own notify/schedule work inside acquireRealDriver).
+    const driver = this.realDriver ?? (await this.acquireRealDriver());
+    if (!driver) return;
 
     this.reconnectAttemptCount = 0;
-    log('info', 'hid', `connected: ${this.realDriver.model.name}`);
-    this.currentDriver = this.realDriver;
-    this.primary.seedFromIdentity(this.realDriver);
+    log('info', 'hid', `connected: ${driver.model.name}`);
+    this.currentDriver = driver;
+    this.primary.seedFromIdentity(driver);
     this.deps.webui.notifyDriverStatus('real', true);
     this.deps.onTrayChange();
-    sendSplashImages(this.realDriver);
-    this.primary.repaintFromSavedFrames(this.realDriver);
-    this.primary.startWidgets(this.realDriver);
+    sendSplashImages(driver);
+    this.primary.repaintFromSavedFrames(driver);
+    this.primary.startWidgets(driver);
     this.deps.onDocksChanged?.();
+  }
+
+  /** Probe + open + identity resolution. Returns the installed driver, or null
+   *  when the caller must not proceed to activation. */
+  private async acquireRealDriver(): Promise<WorkerHidDriver | null> {
+    if (this.probeInFlight) return null;
+    this.probeInFlight = true;
+    let found: WorkerHidDriver | null = null;
+    try {
+      log('info', 'hid', 'probing USB devices...');
+      found = await this.probeAndOpen();
+    } finally {
+      this.probeInFlight = false;
+    }
+
+    // Re-check after the await: switchMode()/shutdown during the awaited probe
+    // (the E1-a race) must not install a leaked worker.
+    if (this.deps.getShuttingDown() || this.driverMode !== 'real') {
+      if (found) await closeDriver(found);
+      return null;
+    }
+
+    if (!found) {
+      log('warn', 'hid', `no device found — retrying in ${this.pacer.delayMs / 1000}s`);
+      this.deps.webui.notifyElgatoDevicePresent(this.elgatoHardwarePresent());
+      this.scheduleReconnect();
+      this.deps.onTrayChange();
+      return null;
+    }
+    this.deps.webui.notifyElgatoDevicePresent(false);
+    this.realDriver = found;
+    const { deviceKey, serial } = resolveRealDeviceIdentity(found.hidPath, found.model);
+    this.primary.resolveIdentity(deviceKey);
+    this.applyDeviceModel(found.model, {
+      serial: found.deviceSerial ?? serial ?? undefined,
+      firmware: found.deviceFirmware,
+    });
+    return found;
   }
 
   /** Device tuning changed (WebUI / settings import): close the affected session(s) so the 3 s

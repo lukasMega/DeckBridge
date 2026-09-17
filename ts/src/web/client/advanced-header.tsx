@@ -10,7 +10,7 @@ import { useStore } from './store.js';
 import { StatusChip, type StatusChipVariant } from './components/StatusChip.js';
 import { ThemeButton } from './components/ThemeButton.js';
 import { fire } from './ui-api.js';
-import type { DeviceModel } from './ui-types.js';
+import type { DeviceModel, Stats, Status } from './ui-types.js';
 
 // Uptime formatter (mirrors ui-status.ts)
 
@@ -41,54 +41,17 @@ function handleModelChange(e: Event): void {
   fire('/api/device-model', { modelId: (e.target as HTMLSelectElement).value });
 }
 
-// AdvHeader
+interface HeaderChips {
+  mbVariant: StatusChipVariant;
+  mbText: string;
+  modeBtnText: string;
+  modeBtnActive: boolean;
+  elVariant: StatusChipVariant;
+  elText: string;
+}
 
-export function AdvHeader(): preact.JSX.Element {
-  const status = useStore((s) => s.status);
-  const stats = useStore((s) => s.stats);
-  const resizeEnabled = useStore((s) => s.resizeEnabled);
-  const imageMode = useStore((s) => s.imageMode);
-  const deviceModels = useStore((s) => s.deviceModels);
-
-  // Live uptime ticks locally from uptimeMs
-  const [uptime, setUptime] = useState(() => fmtUp(stats.uptimeMs));
-  // Initialized to 0; the stats.uptimeMs effect fires on mount (before the interval) and sets the real value.
-  const uptimeBaseRef = useRef(0);
-  const uptimeMsRef = useRef(stats.uptimeMs);
-
-  useEffect(() => {
-    uptimeMsRef.current = stats.uptimeMs;
-    uptimeBaseRef.current = Date.now();
-    // eslint-disable-next-line @eslint-react/set-state-in-effect -- syncing display from server data; must stay in effect
-    setUptime(fmtUp(stats.uptimeMs));
-  }, [stats.uptimeMs]);
-
-  useEffect(() => {
-    const tid = setInterval(() => {
-      setUptime(fmtUp(uptimeMsRef.current + (Date.now() - uptimeBaseRef.current)));
-    }, 1000);
-    return () => clearInterval(tid);
-  }, []);
-
-  // Anim toggle (local — not in store; body class side effect)
-  const [animEnabled, setAnimEnabled] = useState(
-    () => localStorage.getItem('animEnabled') !== 'false',
-  );
-  useEffect(() => {
-    document.body.classList.toggle('no-anim', !animEnabled);
-  }, [animEnabled]);
-
-  function toggleMode(): void {
-    fire('/api/driver-mode', { mode: status.driverMode === 'mock' ? 'real' : 'mock' });
-  }
-
-  function toggleAnim(): void {
-    const next = !animEnabled;
-    setAnimEnabled(next);
-    localStorage.setItem('animEnabled', String(next));
-  }
-
-  // MB chip derivation (mirrors ui-status.ts applyStatus)
+// Chip derivation (mirrors ui-status.ts applyStatus)
+function deriveChips(status: Status): HeaderChips {
   let mbVariant: StatusChipVariant = 'dim';
   let mbText = 'REAL · DISCONNECTED';
   let modeBtnText = 'Switch to Mock';
@@ -102,13 +65,139 @@ export function AdvHeader(): preact.JSX.Element {
     mbVariant = 'ok';
     mbText = 'REAL · CONNECTED';
   }
-
   const elVariant: StatusChipVariant = status.elgatoConnected ? 'ok' : 'dim';
   const elText = status.elgatoConnected
     ? `ELGATO · ${status.elgatoRemoteAddr ?? 'CONNECTED'}`
     : 'ELGATO · WAITING';
+  return { mbVariant, mbText, modeBtnText, modeBtnActive, elVariant, elText };
+}
 
-  const modelDisabled = status.driverMode === 'real' && status.driverConnected;
+/** Live uptime string: server-supplied uptimeMs, ticked locally each second. */
+function useUptime(uptimeMs: number): string {
+  const [uptime, setUptime] = useState(() => fmtUp(uptimeMs));
+  // Initialized to 0; the uptimeMs effect fires on mount (before the interval) and sets the real value.
+  const uptimeBaseRef = useRef(0);
+  const uptimeMsRef = useRef(uptimeMs);
+
+  useEffect(
+    function syncUptimeFromServer() {
+      uptimeMsRef.current = uptimeMs;
+      uptimeBaseRef.current = Date.now();
+      // eslint-disable-next-line @eslint-react/set-state-in-effect -- syncing display from server data; must stay in effect
+      setUptime(fmtUp(uptimeMs));
+    },
+    [uptimeMs],
+  );
+
+  useEffect(function startUptimeTicker() {
+    const tid = setInterval(function tickUptime() {
+      setUptime(fmtUp(uptimeMsRef.current + (Date.now() - uptimeBaseRef.current)));
+    }, 1000);
+    return function stopUptimeTicker() {
+      clearInterval(tid);
+    };
+  }, []);
+
+  return uptime;
+}
+
+/** Anim toggle (local — not in store; body class side effect). */
+function useAnimToggle(): [boolean, () => void] {
+  const [animEnabled, setAnimEnabled] = useState(
+    () => localStorage.getItem('animEnabled') !== 'false',
+  );
+  useEffect(
+    function applyAnimBodyClass() {
+      document.body.classList.toggle('no-anim', !animEnabled);
+    },
+    [animEnabled],
+  );
+
+  function toggleAnim(): void {
+    const next = !animEnabled;
+    setAnimEnabled(next);
+    localStorage.setItem('animEnabled', String(next));
+  }
+
+  return [animEnabled, toggleAnim];
+}
+
+function ModelSelect({
+  deviceModels,
+  status,
+}: Readonly<{
+  deviceModels: DeviceModel[];
+  status: Status;
+}>): preact.JSX.Element | null {
+  if (deviceModels.length === 0) return null;
+  return (
+    <select
+      id="model-select"
+      class="input"
+      onChange={handleModelChange}
+      disabled={status.driverMode === 'real' && status.driverConnected}
+      value={status.modelId ?? ''}
+    >
+      {deviceModels.map((m: DeviceModel) => (
+        <option key={m.id} value={m.id}>
+          {m.name} ({m.keyCount} key{m.keyCount !== 1 ? 's' : ''})
+        </option>
+      ))}
+    </select>
+  );
+}
+
+function HeaderStats({
+  stats,
+  uptime,
+}: Readonly<{ stats: Stats; uptime: string }>): preact.JSX.Element {
+  return (
+    <div id="stats-in-header">
+      <div class="si">
+        <span class="sl">UPTIME</span>
+        <span class="sv" id="s-up-hdr">
+          {uptime}
+        </span>
+      </div>
+      <div class="si">
+        <span class="sl">RX</span>
+        <span class="sv" id="s-rx-hdr">
+          {stats.elgatoRxPkts}
+        </span>
+      </div>
+      <div class="si">
+        <span class="sl">TX</span>
+        <span class="sv" id="s-tx-hdr">
+          {stats.elgatoTxPkts}
+        </span>
+      </div>
+      <div class="si">
+        <span class="sl">IMGS</span>
+        <span class="sv" id="s-img-hdr">
+          {stats.imagesSent}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+// AdvHeader
+
+export function AdvHeader(): preact.JSX.Element {
+  const status = useStore((s) => s.status);
+  const stats = useStore((s) => s.stats);
+  const resizeEnabled = useStore((s) => s.resizeEnabled);
+  const imageMode = useStore((s) => s.imageMode);
+  const deviceModels = useStore((s) => s.deviceModels);
+
+  const uptime = useUptime(stats.uptimeMs);
+  const [animEnabled, toggleAnim] = useAnimToggle();
+
+  function toggleMode(): void {
+    fire('/api/driver-mode', { mode: status.driverMode === 'mock' ? 'real' : 'mock' });
+  }
+
+  const { mbVariant, mbText, modeBtnText, modeBtnActive, elVariant, elText } = deriveChips(status);
 
   return (
     <header>
@@ -130,21 +219,7 @@ export function AdvHeader(): preact.JSX.Element {
       >
         {modeBtnText}
       </button>
-      {deviceModels.length > 0 && (
-        <select
-          id="model-select"
-          class="input"
-          onChange={handleModelChange}
-          disabled={modelDisabled}
-          value={status.modelId ?? ''}
-        >
-          {deviceModels.map((m: DeviceModel) => (
-            <option key={m.id} value={m.id}>
-              {m.name} ({m.keyCount} key{m.keyCount !== 1 ? 's' : ''})
-            </option>
-          ))}
-        </select>
-      )}
+      <ModelSelect deviceModels={deviceModels} status={status} />
       <button
         id="resize-toggle"
         type="button"
@@ -174,32 +249,7 @@ export function AdvHeader(): preact.JSX.Element {
       >
         FX
       </button>
-      <div id="stats-in-header">
-        <div class="si">
-          <span class="sl">UPTIME</span>
-          <span class="sv" id="s-up-hdr">
-            {uptime}
-          </span>
-        </div>
-        <div class="si">
-          <span class="sl">RX</span>
-          <span class="sv" id="s-rx-hdr">
-            {stats.elgatoRxPkts}
-          </span>
-        </div>
-        <div class="si">
-          <span class="sl">TX</span>
-          <span class="sv" id="s-tx-hdr">
-            {stats.elgatoTxPkts}
-          </span>
-        </div>
-        <div class="si">
-          <span class="sl">IMGS</span>
-          <span class="sv" id="s-img-hdr">
-            {stats.imagesSent}
-          </span>
-        </div>
-      </div>
+      <HeaderStats stats={stats} uptime={uptime} />
       <ThemeButton />
     </header>
   );
