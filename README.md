@@ -26,6 +26,18 @@ else to install.
 > real hardware — protocol quirks, per-device HID report formats and image pipelines only
 > show up on an actual deck.
 
+
+<img src="docs/readme-overview.svg" alt="DeckBridge overview: USB Stream Deck connects via HID to DeckBridge, which speaks CORA/TCP over the LAN to the Elgato Stream Deck app and HTTP/WS to a local Web UI" width="720" />
+
+DeckBridge sits between the USB deck and the Elgato app: it speaks HID to the deck
+and CORA (Elgato's network-dock protocol) to the app, so the app treats it like real
+Elgato hardware over the network. The Web UI is a side channel for status/config.
+
+You still use the Elgato Stream Deck app as normal — DeckBridge just lets it drive
+third-party USB decks (Mirabox, Ajazz, Fifine, …) that Elgato's app doesn't natively
+support. Set it up once, then forget it: run DeckBridge in the background (tray icon)
+and it stays out of the way.
+
 ## Supported devices
 
 Full side-by-side comparison (USB IDs, key grid, panel size, test status):
