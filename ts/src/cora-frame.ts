@@ -83,23 +83,34 @@ export class CoraFrameReader {
     this.buffer = Buffer.concat([this.buffer, chunk]);
   }
 
+  private hasMagicAtStart(): boolean {
+    return (
+      this.buffer[0] === CORA_MAGIC[0] &&
+      this.buffer[1] === CORA_MAGIC[1] &&
+      this.buffer[2] === CORA_MAGIC[2] &&
+      this.buffer[3] === CORA_MAGIC[3]
+    );
+  }
+
+  /** Skip ahead to the next magic. false = none left; keep only the trailing
+   *  bytes that could still be a split magic and stop draining. */
+  private resyncToMagic(): boolean {
+    const idx = this.buffer.indexOf(CORA_MAGIC, 1);
+    if (idx === -1) {
+      if (this.buffer.length >= CORA_HEADER_SIZE) {
+        this.buffer = this.buffer.subarray(this.buffer.length - 3) as Buffer;
+      }
+      return false;
+    }
+    this.buffer = this.buffer.subarray(idx) as Buffer;
+    return true;
+  }
+
   drainFrames(): CoraFrame[] {
     const frames: CoraFrame[] = [];
     while (this.buffer.length >= CORA_HEADER_SIZE) {
-      if (
-        this.buffer[0] !== CORA_MAGIC[0] ||
-        this.buffer[1] !== CORA_MAGIC[1] ||
-        this.buffer[2] !== CORA_MAGIC[2] ||
-        this.buffer[3] !== CORA_MAGIC[3]
-      ) {
-        const idx = this.buffer.indexOf(CORA_MAGIC, 1);
-        if (idx === -1) {
-          if (this.buffer.length >= CORA_HEADER_SIZE) {
-            this.buffer = this.buffer.subarray(this.buffer.length - 3) as Buffer;
-          }
-          break;
-        }
-        this.buffer = this.buffer.subarray(idx) as Buffer;
+      if (!this.hasMagicAtStart()) {
+        if (!this.resyncToMagic()) break;
         continue;
       }
       const declaredLen = this.buffer.readUInt32LE(12);

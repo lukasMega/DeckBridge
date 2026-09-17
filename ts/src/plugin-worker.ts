@@ -100,8 +100,7 @@ function effectiveInterval(rp: RunningPlugin, plugin: PluginModule): number {
 /** Import a plugin once, then poll it until its config is removed. A load
  *  failure is terminal (posts one error, stops); a per-poll throw is transient
  *  (posts an error, keeps polling — a network blip shouldn't wedge the key). */
-async function pollLoop(rp: RunningPlugin): Promise<void> {
-  let plugin: PluginModule;
+async function loadPlugin(rp: RunningPlugin): Promise<PluginModule | null> {
   try {
     // Plain absolute path, NOT a file:// URL (Phase 0 S1: file:// fails).
     const mod = (await import(rp.path)) as { default?: PluginModule };
@@ -109,12 +108,29 @@ async function pollLoop(rp: RunningPlugin): Promise<void> {
     if (!candidate || typeof candidate.fetch !== 'function') {
       throw new Error('plugin must `export default { async fetch(ctx) { … } }`');
     }
-    plugin = candidate;
+    return candidate;
   } catch (e) {
     post({ type: 'error', key: rp.key, message: `load failed: ${(e as Error).message}` });
     running.delete(rp.key);
-    return;
+    return null;
   }
+}
+
+/** Post one poll result. Throws on a non-string, non-nullish return — the
+ *  caller's catch turns that into the same transient error a throw gets. */
+function postPollResult(rp: RunningPlugin, result: unknown): void {
+  if (result === null || result === undefined) {
+    post({ type: 'value', key: rp.key, value: null });
+  } else if (typeof result === 'string') {
+    post({ type: 'value', key: rp.key, value: result.slice(0, PLUGIN_VALUE_MAX) });
+  } else {
+    throw new Error('fetch() must return a string or null');
+  }
+}
+
+async function pollLoop(rp: RunningPlugin): Promise<void> {
+  const plugin = await loadPlugin(rp);
+  if (!plugin) return;
 
   const name = pluginName(rp.path);
   // Read through a function so TS doesn't narrow `cancelled` to always-false
@@ -133,13 +149,7 @@ async function pollLoop(rp: RunningPlugin): Promise<void> {
     try {
       const result = await plugin.fetch(ctx);
       if (stopped()) break;
-      if (result === null || result === undefined) {
-        post({ type: 'value', key: rp.key, value: null });
-      } else if (typeof result === 'string') {
-        post({ type: 'value', key: rp.key, value: result.slice(0, PLUGIN_VALUE_MAX) });
-      } else {
-        throw new Error('fetch() must return a string or null');
-      }
+      postPollResult(rp, result);
     } catch (e) {
       if (stopped()) break;
       post({ type: 'error', key: rp.key, message: (e as Error).message });

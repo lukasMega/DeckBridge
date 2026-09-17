@@ -70,6 +70,8 @@ e2e/playwright-report/
 graphify-out/
 .playwright-mcp/
 tmp/
+# oxfmt/oxlint atomic-write leftovers from a crashed run
+_tmp_*
 **/.cmd-history.txt
 bundle-sizes*.csv
 CLAUDE.md
