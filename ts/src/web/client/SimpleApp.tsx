@@ -10,6 +10,7 @@ import { useStore } from './store.js';
 import { deriveState, deriveDocks, isMultiDockView } from './ui-helpers.js';
 import { switchToAdvanced } from './simple/handlers.js';
 import { AboutPopover, SettingsPage, HelpScreen } from './simple/overlays.js';
+import { BackButton } from './simple/controls.js';
 import { ICON } from './ui-icons.js';
 import { ThemeButton } from './components/ThemeButton.js';
 import {
@@ -33,8 +34,15 @@ export function SimpleApp(): preact.JSX.Element {
   const closeAbout = (): void => setAboutOpen(false);
   const openSettings = (): void => setSettingsOpen(true);
   const closeSettings = (): void => setSettingsOpen(false);
+  const goHome = (): void => {
+    setSettingsOpen(false);
+    setActiveHelp(null);
+  };
   const handleHelp = (id: string): void => setActiveHelp(id);
   const handleBack = (): void => setActiveHelp(null);
+  let headerBack: (() => void) | null = null;
+  if (settingsOpen) headerBack = closeSettings;
+  else if (activeHelp !== null) headerBack = handleBack;
 
   let stageContent: preact.JSX.Element;
   if (settingsOpen) {
@@ -61,50 +69,55 @@ export function SimpleApp(): preact.JSX.Element {
     <>
       <div class="app">
         <div class="topbar">
-          <div class="brand">
-            <span class="mark" aria-hidden="true">
-              <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-                <circle cx="3.4" cy="8" r="2" fill="white" fill-opacity="0.95" />
-                <circle cx="12.6" cy="8" r="2" fill="white" fill-opacity="0.95" />
-                <path
-                  d="M5.4 8h5.2"
-                  stroke="white"
-                  stroke-opacity="0.95"
-                  stroke-width="1.6"
-                  stroke-linecap="round"
-                />
-              </svg>
-            </span>
-            <span class="wordmark">DeckBridge</span>
-            <button
-              class="iconbtn circle"
-              id="aboutBtn"
-              aria-label="About DeckBridge"
-              title="About DeckBridge"
-              type="button"
-              onClick={openAbout}
-            >
-              <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-                <circle cx="8" cy="8" r="7" stroke="currentColor" stroke-width="1.4" />
-                <circle cx="8" cy="4.8" r="0.95" fill="currentColor" />
-                <path
-                  d="M8 7.2v4.2"
-                  stroke="currentColor"
-                  stroke-width="1.5"
-                  stroke-linecap="round"
-                />
-              </svg>
-            </button>
-            <button
-              class="iconbtn circle"
-              id="settingsBtn"
-              aria-label="Settings"
-              title="Settings"
-              type="button"
-              onClick={openSettings}
-              // eslint-disable-next-line @eslint-react/dom-no-dangerously-set-innerhtml -- static trusted SVG icon markup
-              dangerouslySetInnerHTML={{ __html: ICON.gear }}
-            />
+          <div class="topbar-left">
+            <div class="brand">
+              <button class="brand-home" type="button" title="Home" onClick={goHome}>
+                <span class="mark" aria-hidden="true">
+                  <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                    <circle cx="3.4" cy="8" r="2" fill="white" fill-opacity="0.95" />
+                    <circle cx="12.6" cy="8" r="2" fill="white" fill-opacity="0.95" />
+                    <path
+                      d="M5.4 8h5.2"
+                      stroke="white"
+                      stroke-opacity="0.95"
+                      stroke-width="1.6"
+                      stroke-linecap="round"
+                    />
+                  </svg>
+                </span>
+                <span class="wordmark">DeckBridge</span>
+              </button>
+              <button
+                class="iconbtn circle"
+                id="aboutBtn"
+                aria-label="About DeckBridge"
+                title="About DeckBridge"
+                type="button"
+                onClick={openAbout}
+              >
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                  <circle cx="8" cy="8" r="7" stroke="currentColor" stroke-width="1.4" />
+                  <circle cx="8" cy="4.8" r="0.95" fill="currentColor" />
+                  <path
+                    d="M8 7.2v4.2"
+                    stroke="currentColor"
+                    stroke-width="1.5"
+                    stroke-linecap="round"
+                  />
+                </svg>
+              </button>
+              <button
+                class="iconbtn circle"
+                id="settingsBtn"
+                aria-label="Settings"
+                title="Settings"
+                type="button"
+                onClick={openSettings}
+                // eslint-disable-next-line @eslint-react/dom-no-dangerously-set-innerhtml -- static trusted SVG icon markup
+                dangerouslySetInnerHTML={{ __html: ICON.gear }}
+              />
+            </div>
+            {headerBack !== null && <BackButton onClick={headerBack} />}
           </div>
           <div class="topbar-actions">
             <ThemeButton id="themeBtn" />

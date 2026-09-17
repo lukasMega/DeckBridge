@@ -6,6 +6,12 @@
 import { useState } from 'preact/hooks';
 import { Collapsible } from '../components/Collapsible.js';
 import { CheckField } from '../components/Fields.js';
+import { ICON } from '../ui-icons.js';
+import { Icon } from './Icon.js';
+
+const MULTI_DECK_HELP =
+  'DeckBridge uses one deck and stops scanning USB once it is connected. ' +
+  'Turn this on for a second deck — it gets its own dock in the Elgato app. Maximum two.';
 import { postJson } from '../ui-api.js';
 import { Feedback, useAsyncAction } from '../ui-async.js';
 
@@ -30,21 +36,16 @@ export function MultiDeckPanel({
 
   return (
     <Collapsible title="Multiple decks" bodyId="multi-deck-body">
-      <p class="help-lead">
-        By default DeckBridge uses one deck and stops looking for further USB devices once it is
-        connected. Turn this on to use a second supported deck at the same time — it gets its own
-        Network Dock entry in the Elgato app. Maximum two decks.
-      </p>
-      <CheckField
-        id="toggle-multi-deck"
-        label="Use two decks at once"
-        checked={on}
-        onChange={(next) => void toggle(next)}
-      />
-      <p class="fine small">
-        Turning this off disconnects the second deck. Its settings are kept, so turning it back on
-        restores the dock.
-      </p>
+      <div class="multi-deck-row">
+        <CheckField
+          id="toggle-multi-deck"
+          label="Use two decks"
+          checked={on}
+          onChange={(next) => void toggle(next)}
+        />
+        <Icon class="multi-deck-help" html={ICON.help} title={MULTI_DECK_HELP} />
+      </div>
+      <p class="multi-deck-note">Disconnects second deck. Settings stay saved.</p>
       <Feedback error={action.error} status={action.status} />
     </Collapsible>
   );

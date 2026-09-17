@@ -10,8 +10,7 @@ import { Feedback, useAsyncAction } from '../ui-async.js';
 
 /** Shown next to both report buttons and repeated as the report's own first line
  *  (diagnostics.ts REVIEW_NOTICE) — the file outlives this screen. */
-const PRIVACY_NOTE =
-  'Includes your settings, extra-key commands and local paths. Review before posting publicly.';
+const PRIVACY_NOTE = 'Contains settings, commands and paths. Review before sharing.';
 
 const TROUBLESHOOTING_URL = 'https://deckbridge.dev/docs/troubleshooting';
 
@@ -73,10 +72,9 @@ export function DiagnosticsPanel({
   return (
     <Collapsible title={'Logging & diagnostics'} class="diag-section" bodyId="diagnostics-body">
       <p class="help-lead">
-        Reporting a problem? Turn on debug logging, reproduce it, then create a report and attach it
-        to your issue.{' '}
+        Enable debug logging. Reproduce problem. Create report.{' '}
         <a href={TROUBLESHOOTING_URL} target="_blank" rel="noopener">
-          Troubleshooting guide
+          Troubleshooting
         </a>
       </p>
       <div class="settings-actions">
@@ -105,7 +103,7 @@ export function DiagnosticsPanel({
           disabled={action.busy}
           onClick={() => void download()}
         >
-          Create diagnostics report
+          Create report
         </button>
         <button
           id="save-diagnostics"
@@ -119,7 +117,7 @@ export function DiagnosticsPanel({
       </div>
       <CheckField
         id="redact-commands"
-        label="Hide my commands (omit extra-key commands and plugin arguments)"
+        label="Hide commands and plugin arguments"
         checked={redact}
         onChange={setRedact}
       />

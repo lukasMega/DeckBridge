@@ -43,7 +43,32 @@ Sending one STP report per page reduces firmware stalls.
 
 Run `deckbridge diagnose` to collect device details, logs, and `settings.json`. It runs without starting a server or opening the device. The Web UI provides the same report at `GET /api/diagnostics`.
 
-Commands appear in full by default. Use `--redact-commands` before sharing if needed.
+Settings → **Logging & diagnostics** does the same in one click: turn on debug logging, reproduce the problem, then create the report.
+
+<video
+  autoPlay
+  loop
+  muted
+  playsInline
+  width={600}
+  aria-label="Opening DeckBridge settings and expanding the Logging and diagnostics panel"
+>
+  <source src={require('../../docs/img/webui-diagnostics-tour.webm').default} type="video/webm" />
+  <source src={require('../../docs/img/webui-diagnostics-tour.mp4').default} type="video/mp4" />
+</video>
+
+<img
+  src={require('../../docs/img/webui-diagnostics.png').default}
+  alt="The Logging and diagnostics panel in DeckBridge settings, light theme"
+  width={454}
+/>
+<img
+  src={require('../../docs/img/webui-diagnostics-dark.png').default}
+  alt="The Logging and diagnostics panel in DeckBridge settings, dark theme"
+  width={454}
+/>
+
+Commands appear in full by default. Tick **Hide commands and plugin arguments** — or pass `--redact-commands` on the CLI — before sharing.
 
 Rotating logs keep three files, up to 2 MB each. Startup logs help identify where a freeze occurred.
 
@@ -51,7 +76,32 @@ Rotating logs keep three files, up to 2 MB each. Startup logs help identify wher
 
 Use the Web UI tuning panel or `modelOverrides` in `settings.json` to adjust images, communication, and key mapping. Device identity and driver selection stay fixed.
 
-If tuning causes problems, restart with `DECKBRIDGE_NO_OVERRIDES=1`.
+Rotation, image fit and pad fill sit under **Layout**; size, quality and byte limit under **Image**. Values apply to every unit of that model and take effect on reconnect.
+
+<video
+  autoPlay
+  loop
+  muted
+  playsInline
+  width={600}
+  aria-label="Opening DeckBridge settings and expanding the device tuning panel"
+>
+  <source src={require('../../docs/img/webui-device-tuning-tour.webm').default} type="video/webm" />
+  <source src={require('../../docs/img/webui-device-tuning-tour.mp4').default} type="video/mp4" />
+</video>
+
+<img
+  src={require('../../docs/img/webui-device-tuning.png').default}
+  alt="The device tuning panel in DeckBridge settings, light theme"
+  width={454}
+/>
+<img
+  src={require('../../docs/img/webui-device-tuning-dark.png').default}
+  alt="The device tuning panel in DeckBridge settings, dark theme"
+  width={454}
+/>
+
+If tuning causes problems, press **Reset** — or restart with `DECKBRIDGE_NO_OVERRIDES=1` to ignore saved overrides for the session.
 
 See [troubleshooting](/troubleshooting) for details.
 

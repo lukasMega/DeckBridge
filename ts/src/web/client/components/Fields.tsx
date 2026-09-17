@@ -10,6 +10,7 @@ function numberOrUndefined(raw: string): number | undefined {
 
 export function NumberField({
   label,
+  labelHidden,
   value,
   min,
   max,
@@ -17,6 +18,8 @@ export function NumberField({
   onChange,
 }: Readonly<{
   label: string;
+  /** Visually drop the label where a surrounding group already names the field. */
+  labelHidden?: boolean;
   value: number | undefined;
   min: number;
   max?: number;
@@ -25,7 +28,7 @@ export function NumberField({
 }>): preact.JSX.Element {
   return (
     <label class="tuning-field">
-      <span>{label}</span>
+      {labelHidden === true ? <span class="visually-hidden">{label}</span> : <span>{label}</span>}
       <input
         class="input"
         type="number"

@@ -34,7 +34,11 @@ test('every doc page has exactly one h1', () => {
 test('blog list renders posts and one h1', () => {
   const html = readPage('blog');
   assert.equal((html.match(/<h1[\s>]/g) ?? []).length, 1, 'blog list page h1');
-  assert.match(html, /<header class=db-blog-intro>[\s\S]*?<h1>Blog<\/h1>/, 'blog list has no visible introduction heading');
+  assert.match(
+    html,
+    /<header class=db-blog-intro>[\s\S]*?<h1>Blog<\/h1>/,
+    'blog list has no visible introduction heading',
+  );
   assert.match(html, /href=\/?DeckBridge\/blog\/v0-10-0\/?/, 'blog list has no post link');
 });
 
