@@ -11,6 +11,11 @@ $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent $PSScriptRoot
 
 if (-not (Test-Path $Target)) { Write-Error "stamp-exe: missing target $Target"; exit 1 }
+if (-not (Test-Path $Rcedit)) { Write-Error "stamp-exe: missing rcedit $Rcedit"; exit 1 }
+
+# PowerShell's `&` call operator won't resolve a bare relative name (unlike cmd's
+# PATH-plus-cwd lookup), so a plain "rcedit.exe" fails with "not recognized".
+$Rcedit = (Resolve-Path $Rcedit).Path
 
 $ver = (Get-Content (Join-Path $root "ts/package.json") -Raw | ConvertFrom-Json).version
 $ico = Join-Path $root "src-tauri/icons/icon.ico"
