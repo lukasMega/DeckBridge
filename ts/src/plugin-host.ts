@@ -17,7 +17,11 @@ const MAX_CONSECUTIVE_KILLS = 3;
 const STALE_MS = 3000; // a key not re-requested this long (≥2 scheduler ticks) is dropped
 const FETCH_TIMEOUT_MS = 10_000;
 
-export type PluginStatus = 'pending' | 'ok' | 'err' | 'disabled';
+// Reaches the browser verbatim in the GET /api/plugins payload, so it is owned
+// by the web-contract leaf (web/contract.ts) rather than declared twice.
+import type { PluginStatus } from './web/contract.js';
+export type { PluginStatus };
+
 export interface PluginValue {
   /** undefined = no value yet; null = plugin returned null (clear the key). */
   value: string | null | undefined;

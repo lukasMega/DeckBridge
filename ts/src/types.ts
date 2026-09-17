@@ -1,3 +1,10 @@
+// WebUI wire types live in the `web-contract` leaf (web/contract.ts) so the
+// browser tier shares one declaration instead of mirroring ours. Re-exported
+// here so every existing `types.js` import keeps working.
+import type { ExtraKeyWidget, KeyState, RealDeviceIdentity } from './web/contract.js';
+
+export type { ClientApp, ExtraKeyWidget, KeyState, RealDeviceIdentity } from './web/contract.js';
+
 export const ELGATO_VID = 0x0fd9;
 export const ELGATO_MK2_PID = 0x00a5;
 export const ELGATO_TCP_PORT = 5343;
@@ -176,13 +183,6 @@ export const REPORT_SERIAL_NUMBER = 0x06;
 export const REPORT_SECONDARY_DETECT = 0x08;
 export const REPORT_DEVICE_INFO = 0x0b;
 
-export type KeyState = 'down' | 'up';
-
-// Which CORA client we detected on the current session — 'elgato' and
-// 'bitfocus' are only set once a client-specific query is observed (see
-// elgato-server.ts / elgato-child-server.ts), 'unknown' otherwise.
-export type ClientApp = 'elgato' | 'bitfocus' | 'unknown';
-
 export interface KeyEvent {
   keyIndex: number;
   state: KeyState;
@@ -231,8 +231,7 @@ export const EXTRA_KEY_WIDGETS = [
   'weather',
   'command',
   'plugin',
-] as const;
-export type ExtraKeyWidget = (typeof EXTRA_KEY_WIDGETS)[number];
+] as const satisfies readonly ExtraKeyWidget[];
 
 /** Cap on the widget param (text content / weather "lat,lon" / shell command /
  *  plugin file name) and on the plugin per-key argument (pluginArg). */
@@ -324,12 +323,6 @@ export interface DockStatus {
   // column). Present only when the model has any — the WebUI renders the
   // extra-keys panel off this.
   extraKeys?: readonly number[];
-}
-
-export interface RealDeviceIdentity {
-  modelName: string;
-  serialNumber?: string;
-  firmwareVersion?: string;
 }
 
 // Clear-and-null helpers. The guard-clear-forget-to-null sequence was written out

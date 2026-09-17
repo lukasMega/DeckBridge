@@ -149,6 +149,9 @@ export default defineConfig([
       'boundaries/elements': [
         { type: 'web-client', mode: 'full', pattern: 'src/web/client/**' },
         { type: 'web-server', mode: 'full', pattern: 'src/web/server/**' },
+        // Zero-import leaf of HTTP/WS wire DTOs; the single G1 exception (type-only)
+        // so browser and server share one declaration instead of mirroring each other.
+        { type: 'web-contract', mode: 'full', pattern: 'src/web/contract.ts' },
         { type: 'ffi', mode: 'full', pattern: 'src/ffi/**' },
         { type: 'platform', mode: 'full', pattern: 'src/platform/**' },
         { type: 'assets', mode: 'full', pattern: 'src/assets/**' },
@@ -212,6 +215,20 @@ export default defineConfig([
             {
               from: { element: { type: '!web-client' } },
               allow: { to: { element: { type: ['shared', 'worker-ipc'] } } },
+            },
+            // The one G1 exception: `web/contract.ts` is a zero-import leaf of WebUI wire
+            // DTOs, and this edge is *type-only*, so it grants no capability and cannot
+            // cycle. A type not sent over the wire does not belong in it.
+            {
+              from: {
+                element: {
+                  type: ['web-client', 'web-server', 'shared', 'plugin-worker-host'],
+                },
+              },
+              allow: { to: { element: { type: 'web-contract' } }, dependency: { kind: 'type' } },
+              message:
+                'web/contract.ts is the type-only WebUI wire contract; only web-client, ' +
+                'web-server, shared (types.ts) and plugin-host.ts may import it.',
             },
             // `devices/driver.ts` defines the cross-tier DeviceDriver/DeviceModel contract types;
             // any non-browser tier may depend on it for *types only*, never for runtime device code.

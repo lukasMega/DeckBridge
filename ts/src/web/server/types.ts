@@ -1,5 +1,4 @@
 import type {
-  KeyState,
   CommEntry,
   ExtraKeyConfig,
   ImageModeOverride,
@@ -7,7 +6,14 @@ import type {
   RealDeviceIdentity,
   ClientApp,
 } from '../../types.js';
-import type { PluginStatus } from '../../plugin-host.js';
+import type {
+  DeviceIdentity,
+  DeviceModelInfo,
+  KeyEventEntry,
+  MockDeviceConfig,
+  PluginsInfo,
+  Stats,
+} from '../contract.js';
 import type { DeviceOverridesView } from './model-overrides-controller.js';
 import type { DiagnosticsOptions } from './diagnostics.js';
 import type { PersistedSettings } from './persisted-settings.js';
@@ -44,43 +50,16 @@ export interface ControllerHost {
   selectedDockStatus(): DockStatus | undefined;
 }
 
-/** Payload for GET /api/plugins — the extra-key plugin widget's WebUI data:
- *  the plugins dir (for the empty-state hint), the *.js files found there
- *  (dropdown), and the live status of each plugin-widget key on the selected
- *  dock (keyed by wire id). */
-export interface PluginsInfo {
-  dir: string;
-  files: string[];
-  status: Record<string, PluginStatus>;
-}
-
-export interface Stats {
-  uptimeMs: number;
-  elgatoRxPkts: number;
-  elgatoTxPkts: number;
-  imagesSent: number;
-}
-
-export interface MockDeviceConfig {
-  dockFirmwareVersion: string;
-  childFirmwareVersion: string;
-  serialNumber: string;
-  childSerialNumber: string;
-  productId: number;
-  macAddress: string;
-}
-
-/** The identifiers actually sent to the Elgato Stream Deck app over the
- *  network (mDNS advertisement + CORA device-info/capabilities frames) for
- *  whichever device is currently active — `mockConfig` while driverMode is
- *  'mock', the real dock's fixed identity otherwise. Read-only, shown under
- *  Settings for reference. */
-export interface DeviceIdentity extends MockDeviceConfig {
-  mdnsServiceName: string;
-  // Present only for a real (non-mock) dock with a persisted identity — lets
-  // the WebUI edit mdnsServiceName via POST /api/device-identity/mdns-name.
-  deviceKey?: string;
-}
+// Wire DTOs shared with the browser live in the `web-contract` leaf
+// (../contract.ts); re-exported so server call sites keep importing from here.
+export type {
+  PluginsInfo,
+  Stats,
+  MockDeviceConfig,
+  DeviceIdentity,
+  KeyEventEntry,
+  DeviceModelInfo,
+} from '../contract.js';
 
 export type LogLevel = 'debug' | 'info' | 'warn' | 'error';
 export type DriverMode = 'real' | 'mock';
@@ -90,23 +69,6 @@ export interface LogEntry {
   level: LogLevel;
   component: string;
   message: string;
-}
-
-export interface KeyEventEntry {
-  ts: number;
-  mk2Index: number;
-  state: KeyState;
-  /** Raw device wire id the press arrived on, before keyMap translation.
-   *  Absent for models with no input keyMap (identity) and in mock mode. This is
-   *  what key-map learn mode records to derive `wireInputToCora` on hardware —
-   *  the mapped index alone can't, since a wrong map is the thing being fixed. */
-  wireId?: number;
-}
-
-export interface DeviceModelInfo {
-  id: string;
-  name: string;
-  keyCount: number;
 }
 
 export interface StatusSnapshot {
