@@ -48,6 +48,9 @@ Both are generated from the device registry, so they never drift from the code.
 - Stream Deck MK.2
 - Stream Deck Mini
 
+<details>
+<summary>details about supported devices</summary>
+
 Hardware-tested on macOS: Stream Deck MK.2, Stream Deck Mini, 293V3, 293S, K1 Pro, and
 Fifine AmpliGame D6 (rev. 2). The Ajazz AKP153 rev. 2 models, the Fifine AmpliGame D6 rev. 1, the 7 v1
 rebadges of the 293S board (Ajazz AKP153/E/R rev. 1, Mars Gaming MSD-ONE, Mad Dog GK150K,
@@ -58,6 +61,8 @@ D6 ships in two revisions that differ only in USB packet size: 512 bytes for PID
 1024 bytes for PID `0x0060`); the 7 v1 rebadges are the same hardware as the 293S behind
 a different USB VID/PID, so they reuse the 293S model verbatim — report anything that
 misbehaves.
+
+</details>
 
 > **Platform status:** DeckBridge is currently **tested on macOS only**.
 

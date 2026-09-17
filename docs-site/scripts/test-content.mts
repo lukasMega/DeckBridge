@@ -30,9 +30,12 @@ test('every doc page has exactly one h1', () => {
   }
 });
 
+// The theme renders no h1 on the list page; src/theme/Navbar/Content supplies one
+// inside .navbar__inner for this route only.
 test('blog list renders posts and one h1', () => {
   const html = readPage('blog');
   assert.equal((html.match(/<h1[\s>]/g) ?? []).length, 1, 'blog list page h1');
+  assert.match(html, /<h1 class=sr-only>[^<]*<\/h1><a class=navbar__brand/, 'blog list h1 is not beside the navbar brand');
   assert.match(html, /href=\/?DeckBridge\/blog\/v0-10-0\/?/, 'blog list has no post link');
 });
 
