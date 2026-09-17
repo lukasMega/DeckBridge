@@ -7,6 +7,7 @@ import { Icon } from './Icon.js';
 import { BackButton } from './controls.js';
 import { Collapsible } from '../components/Collapsible.js';
 import { DiagnosticsPanel } from './diagnostics-panel.js';
+import { MultiDeckPanel } from './multi-deck-panel.js';
 import { DeviceTuningPanel } from './device-tuning.js';
 import { postJson, useFetched } from '../ui-api.js';
 import { Feedback, useAsyncAction, type AsyncAction } from '../ui-async.js';
@@ -142,6 +143,7 @@ interface SettingsState {
   realDeviceIdentity?: RealDeviceIdentity;
   logLevel?: string;
   logFilePath?: string;
+  multiDeck?: boolean;
 }
 
 /** null logLevel = state not read yet, which DiagnosticsPanel renders as unknown. */
@@ -311,6 +313,7 @@ export function SettingsPage({ onBack }: Readonly<{ onBack: () => void }>): prea
       <p class="help-section-label">Real device identity</p>
       <RealIdentityList realIdentity={realIdentity} />
 
+      <MultiDeckPanel enabled={state.data ? (state.data.multiDeck ?? false) : null} />
       <DiagnosticsPanel {...diagnosticsProps(state.data)} />
       <DeviceTuningPanel />
 

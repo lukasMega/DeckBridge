@@ -126,6 +126,7 @@ await test('logLevel and modelOverrides round-trip through save/load', async () 
   const data: Settings = {
     selectedDock: 0,
     logLevel: 'debug',
+    multiDeck: true,
     modelOverrides: {
       'ajazz-akp153e-rev2': {
         image: { rotate: 180, flipV: true },
@@ -144,6 +145,7 @@ await test('a file without the new keys still loads (purely additive schema)', a
   const result = await loadSettings(dir);
   assert.equal(result.selectedDock, 1);
   assert.equal(result.logLevel, undefined);
+  assert.equal(result.multiDeck, undefined, 'absent multiDeck means the single-deck default');
   assert.equal(result.modelOverrides, undefined);
 });
 

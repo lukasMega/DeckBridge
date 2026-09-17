@@ -100,6 +100,9 @@ export class PersistedSettings {
   /** undefined = not persisted; the level then comes from the CLI flag / env /
    *  the build-time default (see PersistedLogLevel). */
   logLevel: PersistedLogLevel | undefined = undefined;
+  /** Opt-in second dock; false = single dock and no extras scan (types.ts
+   *  MAX_MULTI_DECK_SESSIONS, driver-manager-extras.ts). */
+  multiDeck = false;
   private devices: DeviceIdentitySettings[] = [];
   private modelOverrides: Record<string, DeviceModelOverride> = {};
 
@@ -115,6 +118,7 @@ export class PersistedSettings {
     const saved = await loadSettings(this.cacheRoot);
     if (typeof saved.selectedDock === 'number') this.selectedDock = saved.selectedDock;
     if (isLogLevel(saved.logLevel)) this.logLevel = saved.logLevel;
+    if (typeof saved.multiDeck === 'boolean') this.multiDeck = saved.multiDeck;
     this.modelOverrides = sanitizeModelOverrides(saved.modelOverrides);
     if (Array.isArray(saved.devices)) {
       saved.devices.forEach(stripInvalidExtraKeys);
@@ -196,6 +200,12 @@ export class PersistedSettings {
     this.persist();
   }
 
+  /** Persist the multi-deck opt-in (WebUI "Use two decks at once"). */
+  setMultiDeck(enabled: boolean): void {
+    this.multiDeck = enabled;
+    this.persist();
+  }
+
   // Model overrides (device tuning) — see devices/model-overrides.ts
 
   /** Every model's override, by model id. Read by DriverManager at probe time. */
@@ -229,6 +239,7 @@ export class PersistedSettings {
     return {
       selectedDock: this.selectedDock,
       ...(this.logLevel !== undefined ? { logLevel: this.logLevel } : {}),
+      ...(this.multiDeck ? { multiDeck: true } : {}),
       ...(this.devices.length > 0 ? { devices: this.devices } : {}),
       ...(Object.keys(this.modelOverrides).length > 0
         ? { modelOverrides: this.modelOverrides }

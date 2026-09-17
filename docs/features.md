@@ -83,9 +83,10 @@ a regular **Network device** at `localhost`; the deck behaves like Elgato hardwa
 - **Works with non-Elgato decks** — [supported](./introduction.mdx#supported-devices)
   Mirabox / Ajazz decks present themselves to the app as an Elgato model it already
   knows, so nothing changes app-side.
-- **Multiple decks (distinct models)** — extra connected decks of a different model each
-  appear as their own network dock, with per-deck pairing cards, a selectable live
-  preview, and per-deck brightness in the web UI; see
+- **Multiple decks (opt-in, max 2)** — off by default: DeckBridge uses one deck and stops
+  looking for further USB devices once it is connected. Switch it on in Settings and a
+  second deck appears as its own network dock, with per-deck pairing cards, a selectable
+  live preview, and per-deck brightness in the web UI; see
   [Multiple decks](#multiple-decks) for the walkthrough and
   [Limitations](#limitations) for the rules and caveats.
 - **Per-device image pipeline** — resizes, rotates, and (for the K1 Pro) re-encodes every
@@ -149,8 +150,12 @@ DeckBridge is for personal and hobby use, and does not replace the Elgato Networ
 
 ## Multiple decks
 
-Plug in a second deck (a **different model** — see [Limitations](#limitations)) and it
-becomes its own network dock: own mDNS name, own CORA port pair
+**Off by default.** DeckBridge drives a single deck and, once that deck is connected,
+stops scanning USB for other supported devices entirely. To use two decks at once, open
+**Settings → Multiple decks** in the web UI and turn on *Use two decks at once* (stored as
+`"multiDeck": true` in settings.json). Two decks is the maximum.
+
+With it on, a second deck becomes its own network dock: own mDNS name, own CORA port pair
 (see [Network ports](#network-ports)). The web UI lists every connected deck as a card:
 
 1. **Pair one at a time.** Each deck shows in the Elgato app as a separate Network Dock.
@@ -164,6 +169,8 @@ becomes its own network dock: own mDNS name, own CORA port pair
    Elgato app, unless "Ignore brightness from Elgato app" is on).
 
 Unplugging an extra deck removes its card; replugging brings it back automatically.
+Turning the setting back off disconnects the second deck (its settings are kept, so
+switching it on again restores the dock).
 
 ## Permissions
 

@@ -3,6 +3,7 @@ import { overridesDisabled } from './cli.js';
 import { cachedDiscoverySerial, installDiscoverySnapshot } from './ffi/hid-discovery.js';
 import { WorkerHidDriver, closeDriver } from './hid-worker-host.js';
 import { MockDriver } from './devices/mock.js';
+import { MAX_MULTI_DECK_SESSIONS } from './types.js';
 import type { KeyEvent, CommEntry, DockStatus } from './types.js';
 import type { DeviceDriver, DeviceModel, DeviceModelOverride } from './devices/driver.js';
 import { applyModelOverrides, overrideSummary } from './devices/model-overrides.js';
@@ -457,7 +458,14 @@ export class DriverManager {
 
   // Multi-device (extra docks): thin delegation to ExtraDockCoordinator
 
-  /** Begin polling for extra devices to expose as their own docks. Idempotent. */
+  /** Multi-deck opt-in: off (the default) = one dock and no USB scanning once it
+   *  is up; switching it off tears down a live second dock. `cap` is a test seam
+   *  — production always takes the constant. */
+  setMultiDeck(enabled: boolean, cap: number = MAX_MULTI_DECK_SESSIONS): Promise<void> {
+    return this.extraCoordinator.setMaxDocks(enabled ? cap : 1);
+  }
+
+  /** Begin polling for extra docks. Idempotent; no-op until multi-deck is on. */
   startScan(): void {
     this.extraCoordinator.startScan();
   }

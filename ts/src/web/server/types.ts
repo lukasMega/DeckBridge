@@ -116,6 +116,9 @@ export interface StateResponse extends StatusSnapshot {
    *  debug logging and find the file. */
   logLevel: string;
   logFilePath: string;
+  /** Multi-deck opt-in (settings.json `multiDeck`). Read once per Settings-page
+   *  mount, like logLevel — it is not in the status snapshot. */
+  multiDeck: boolean;
 }
 
 /**
@@ -145,6 +148,7 @@ export interface WebUIController {
   applySettingsJson(raw: string): void;
   openSettingsFile(): Promise<void>;
   trySetLogLevel(level: unknown): ReqError | null;
+  setMultiDeck(enabled: boolean): void;
   openLogsFolder(): Promise<void>;
   deviceOverridesView(modelId?: unknown): DeviceOverridesView | ReqError;
   trySetModelOverride(modelId: unknown, overrides: unknown): ReqError | null;
