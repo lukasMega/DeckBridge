@@ -47,8 +47,8 @@ unchanged and is only valid at CORA-native resolution with no rotation, flip or 
 
 ## Wire spec
 
-Low-level framing for the Mirabox CORA protocols. Elgato models have no wire spec — their
-framing lives in `PROTOCOL_STRATEGY` instead.
+Device-owned HID sizes and low-level behavior. Protocol strategies own framing algorithms;
+they never own packet or input report sizes.
 
 <DeviceTable table="wire" data={deviceData} />
 
@@ -147,14 +147,7 @@ keyMap: {
 }
 cora: {
   "productId": 0x00a5,
-  "advertiseGeometry": {
-    "rows": 3,
-    "columns": 5,
-    "keyCount": 15,
-    "keyWidth": 72,
-    "keyHeight": 72,
-    "productName": "Stream Deck MK.2"
-  },
+  "advertiseAs": "mk2",
   "usePhysicalIdentity": false
 }
 splash: {
@@ -228,14 +221,7 @@ keyMap: {
 }
 cora: {
   "productId": 0x00a5,
-  "advertiseGeometry": {
-    "rows": 3,
-    "columns": 5,
-    "keyCount": 15,
-    "keyWidth": 72,
-    "keyHeight": 72,
-    "productName": "Stream Deck MK.2"
-  },
+  "advertiseAs": "mk2",
   "usePhysicalIdentity": false
 }
 splash: {
@@ -280,14 +266,7 @@ keyMap: {
 }
 cora: {
   "productId": 0x0063,
-  "advertiseGeometry": {
-    "rows": 2,
-    "columns": 3,
-    "keyCount": 6,
-    "keyWidth": 80,
-    "keyHeight": 80,
-    "productName": "Stream Deck Mini"
-  },
+  "advertiseAs": "mini",
   "usePhysicalIdentity": false
 }
 splash: {
@@ -352,14 +331,7 @@ keyMap: {
 }
 cora: {
   "productId": 0x00a5,
-  "advertiseGeometry": {
-    "rows": 3,
-    "columns": 5,
-    "keyCount": 15,
-    "keyWidth": 72,
-    "keyHeight": 72,
-    "productName": "Stream Deck MK.2"
-  },
+  "advertiseAs": "mk2",
   "usePhysicalIdentity": false
 }
 splash: {
@@ -406,14 +378,7 @@ keyMap: {
 }
 cora: {
   "productId": 0x00a5,
-  "advertiseGeometry": {
-    "rows": 3,
-    "columns": 5,
-    "keyCount": 15,
-    "keyWidth": 72,
-    "keyHeight": 72,
-    "productName": "Stream Deck MK.2"
-  },
+  "advertiseAs": "mk2",
   "usePhysicalIdentity": false
 }
 splash: {
@@ -460,14 +425,7 @@ keyMap: {
 }
 cora: {
   "productId": 0x00a5,
-  "advertiseGeometry": {
-    "rows": 3,
-    "columns": 5,
-    "keyCount": 15,
-    "keyWidth": 72,
-    "keyHeight": 72,
-    "productName": "Stream Deck MK.2"
-  },
+  "advertiseAs": "mk2",
   "usePhysicalIdentity": false
 }
 splash: {
@@ -514,14 +472,7 @@ keyMap: {
 }
 cora: {
   "productId": 0x00a5,
-  "advertiseGeometry": {
-    "rows": 3,
-    "columns": 5,
-    "keyCount": 15,
-    "keyWidth": 72,
-    "keyHeight": 72,
-    "productName": "Stream Deck MK.2"
-  },
+  "advertiseAs": "mk2",
   "usePhysicalIdentity": false
 }
 splash: {
@@ -595,14 +546,7 @@ keyMap: {
 }
 cora: {
   "productId": 0x00a5,
-  "advertiseGeometry": {
-    "rows": 3,
-    "columns": 5,
-    "keyCount": 15,
-    "keyWidth": 72,
-    "keyHeight": 72,
-    "productName": "Stream Deck MK.2"
-  },
+  "advertiseAs": "mk2",
   "usePhysicalIdentity": false
 }
 splash: {
@@ -676,14 +620,7 @@ keyMap: {
 }
 cora: {
   "productId": 0x00a5,
-  "advertiseGeometry": {
-    "rows": 3,
-    "columns": 5,
-    "keyCount": 15,
-    "keyWidth": 72,
-    "keyHeight": 72,
-    "productName": "Stream Deck MK.2"
-  },
+  "advertiseAs": "mk2",
   "usePhysicalIdentity": false
 }
 splash: {
@@ -757,14 +694,7 @@ keyMap: {
 }
 cora: {
   "productId": 0x00a5,
-  "advertiseGeometry": {
-    "rows": 3,
-    "columns": 5,
-    "keyCount": 15,
-    "keyWidth": 72,
-    "keyHeight": 72,
-    "productName": "Stream Deck MK.2"
-  },
+  "advertiseAs": "mk2",
   "usePhysicalIdentity": false
 }
 splash: {
@@ -838,14 +768,7 @@ keyMap: {
 }
 cora: {
   "productId": 0x00a5,
-  "advertiseGeometry": {
-    "rows": 3,
-    "columns": 5,
-    "keyCount": 15,
-    "keyWidth": 72,
-    "keyHeight": 72,
-    "productName": "Stream Deck MK.2"
-  },
+  "advertiseAs": "mk2",
   "usePhysicalIdentity": false
 }
 splash: {
@@ -919,14 +842,7 @@ keyMap: {
 }
 cora: {
   "productId": 0x00a5,
-  "advertiseGeometry": {
-    "rows": 3,
-    "columns": 5,
-    "keyCount": 15,
-    "keyWidth": 72,
-    "keyHeight": 72,
-    "productName": "Stream Deck MK.2"
-  },
+  "advertiseAs": "mk2",
   "usePhysicalIdentity": false
 }
 splash: {
@@ -1000,14 +916,7 @@ keyMap: {
 }
 cora: {
   "productId": 0x00a5,
-  "advertiseGeometry": {
-    "rows": 3,
-    "columns": 5,
-    "keyCount": 15,
-    "keyWidth": 72,
-    "keyHeight": 72,
-    "productName": "Stream Deck MK.2"
-  },
+  "advertiseAs": "mk2",
   "usePhysicalIdentity": false
 }
 splash: {
@@ -1081,14 +990,7 @@ keyMap: {
 }
 cora: {
   "productId": 0x00a5,
-  "advertiseGeometry": {
-    "rows": 3,
-    "columns": 5,
-    "keyCount": 15,
-    "keyWidth": 72,
-    "keyHeight": 72,
-    "productName": "Stream Deck MK.2"
-  },
+  "advertiseAs": "mk2",
   "usePhysicalIdentity": false
 }
 splash: {

@@ -11,20 +11,7 @@ import type { DeviceModel } from '../src/devices/driver.js';
 import { DEVICE_MODELS } from '../src/devices/registry.js';
 import { MIRABOX_293_MODEL } from '../src/devices/mirabox/mirabox-293.js';
 import { MK2_MODEL } from '../src/devices/elgato/mk2.js';
-
-let passed = 0;
-let failed = 0;
-
-function test(name: string, fn: () => void): void {
-  try {
-    fn();
-    console.log(`  ✓ ${name}`);
-    passed++;
-  } catch (e) {
-    console.error(`  ✗ ${name}: ${(e as Error).message}`);
-    failed++;
-  }
-}
+import { test, summary as reportSummary } from './helpers/harness.js';
 
 const MODEL: DeviceModel = MIRABOX_293_MODEL;
 
@@ -36,7 +23,7 @@ test('image batching is tunable only on 293S-family boards', () => {
       assert.equal(result.ok, supported, model.id);
     }
     assert.equal(
-      tunableDefaults(model).wire?.batchImageTransfers,
+      tunableDefaults(model).wire!.batchImageTransfers,
       supported ? model.id === 'mirabox-293s' : undefined,
       model.id,
     );
@@ -45,10 +32,10 @@ test('image batching is tunable only on 293S-family boards', () => {
   const invalid = validateModelOverride({ wire: { batchImageTransfers: 1 } }, model);
   assert.equal(invalid.ok, false);
   assert.equal(
-    applyModelOverrides(model, { wire: { batchImageTransfers: false } }).wire?.batchImageTransfers,
+    applyModelOverrides(model, { wire: { batchImageTransfers: false } }).wire.batchImageTransfers,
     false,
   );
-  assert.equal(model.wire?.batchImageTransfers, true, 'override never mutates registry default');
+  assert.equal(model.wire.batchImageTransfers, true, 'override never mutates registry default');
 });
 
 /** The error list for a rejected override, or [] when it validated. */
@@ -271,14 +258,13 @@ test('identity fields are carried through untouched', () => {
   assert.equal(eff.keyCount, MODEL.keyCount);
 });
 
-test('wire stays undefined for a model that has none, unless the override sets it', () => {
-  // elgato-hid models keep their framing in PROTOCOL_STRATEGY, not model.wire.
-  assert.equal(MK2_MODEL.wire, undefined, 'precondition: MK.2 has no wire spec');
-  assert.equal(applyModelOverrides(MK2_MODEL, { image: { rotate: 90 } }).wire, undefined);
+test('wire settings remain model-owned through overrides', () => {
+  assert.equal(MK2_MODEL.wire.packetSize, 1024);
   assert.equal(
-    applyModelOverrides(MK2_MODEL, { wire: { packetSize: 1024 } }).wire?.packetSize,
-    1024,
+    applyModelOverrides(MK2_MODEL, { image: { rotate: 90 } }).wire.packetSize,
+    MK2_MODEL.wire.packetSize,
   );
+  assert.equal(applyModelOverrides(MK2_MODEL, { wire: { packetSize: 512 } }).wire.packetSize, 512);
 });
 
 test('a splash override replaces the model splash wholesale', () => {
@@ -321,12 +307,9 @@ test('revision changes when the image spec changes, and is stable otherwise', ()
 console.log('\ntunableDefaults');
 
 test('EVERY registry model round-trips: tunableDefaults is a valid override', () => {
-  // The invariant behind the Device tuning form: seed the controls from the
-  // device's current spec, press Apply without changing anything, and the server
-  // must accept it. Broken three ways at once before this test existed —
-  // `image.format`/`colorMode` leaked in, `wire.sharedSerial`/
-  // `packetSizeCandidates` leaked in, and the Mini's own `quality: 0` was
-  // rejected. Covers models added later too.
+  // The invariant behind the Device tuning form: seed the
+  // controls from the device's current spec, press Apply
+  // without changing anything, and the server must accept it.
   for (const model of DEVICE_MODELS) {
     const result = validateModelOverride(tunableDefaults(model), model);
     assert.ok(result.ok, `${model.id}: ${result.ok ? '' : result.errors.join('; ')}`);
@@ -343,6 +326,49 @@ test('the seed carries no non-tunable protocol fields', () => {
       assert.ok(!(excluded in (seed.wire ?? {})), `${model.id}: wire.${excluded} leaked`);
     }
   }
+});
+
+test('the seed omits the sizes elgato-hid models cannot tune', () => {
+  for (const model of DEVICE_MODELS.filter((m) => m.driverKind === 'elgato-hid')) {
+    const wire = tunableDefaults(model).wire ?? {};
+    assert.ok(!('packetSize' in wire), `${model.id}: wire.packetSize leaked into the seed`);
+    assert.ok(!('inSize' in wire), `${model.id}: wire.inSize leaked into the seed`);
+  }
+  // …and a Mirabox board still gets them: the packet size is the knob an untested
+  // rebadge is calibrated with (see wire.packetSizeCandidates).
+  const wire = tunableDefaults(MIRABOX_293_MODEL).wire ?? {};
+  assert.equal(wire.packetSize, MIRABOX_293_MODEL.wire.packetSize);
+  assert.equal(wire.inSize, MIRABOX_293_MODEL.wire.inSize);
+});
+
+// wire: protocol-fixed sizes
+
+console.log('\nvalidateModelOverride: wire sizes');
+
+test('elgato-hid models reject packetSize/inSize overrides', () => {
+  for (const key of ['packetSize', 'inSize'] as const) {
+    const result = validateModelOverride({ wire: { [key]: 512 } }, MK2_MODEL);
+    assert.ok(!result.ok, `wire.${key} must be rejected for an elgato-hid model`);
+    assert.ok(
+      !result.ok && result.errors.some((e) => e.startsWith(`wire.${key}: not tunable`)),
+      `wire.${key}: expected a "not tunable" error, got ${result.ok ? '' : result.errors.join('; ')}`,
+    );
+  }
+});
+
+test('mirabox models still accept a packetSize override', () => {
+  const result = validateModelOverride({ wire: { packetSize: 512 } }, MIRABOX_293_MODEL);
+  assert.ok(result.ok, 'the packet size is the calibration knob for a Mirabox board');
+});
+
+// An unbounded inSize is allocated as a read buffer on the USB worker thread.
+test('inSize is bounded on both sides', () => {
+  const tooBig = validateModelOverride({ wire: { inSize: 2_000_000_000 } }, MIRABOX_293_MODEL);
+  assert.ok(!tooBig.ok, 'a 2 GB read buffer must be rejected');
+  const tooSmall = validateModelOverride({ wire: { inSize: 0 } }, MIRABOX_293_MODEL);
+  assert.ok(!tooSmall.ok, 'a zero-length read buffer must be rejected');
+  const ok = validateModelOverride({ wire: { inSize: 1024 } }, MIRABOX_293_MODEL);
+  assert.ok(ok.ok, 'a plausible read buffer must still be accepted');
 });
 
 test('seeds from the model and validates against it', () => {
@@ -374,5 +400,4 @@ test('rejects non-objects and entries with unknown sections', () => {
   assert.ok(!isModelOverridesRecord({ 'mirabox-293': { bogus: 1 } }));
 });
 
-console.log(`\n${passed} passed, ${failed} failed`);
-if (failed > 0) tjs.exit(1);
+reportSummary();

@@ -1,30 +1,6 @@
 import assert from 'tjs:assert';
 import { parentDir, isAbsolutePath, resolveTrayBin } from '../src/tray.js';
-
-let passed = 0;
-let failed = 0;
-
-function test(name: string, fn: () => void): void {
-  try {
-    fn();
-    console.log(`  ✓ ${name}`);
-    passed++;
-  } catch (e) {
-    console.error(`  ✗ ${name}: ${(e as Error).message}`);
-    failed++;
-  }
-}
-
-async function asyncTest(name: string, fn: () => Promise<void>): Promise<void> {
-  try {
-    await fn();
-    console.log(`  ✓ ${name}`);
-    passed++;
-  } catch (e) {
-    console.error(`  ✗ ${name}: ${(e as Error).message}`);
-    failed++;
-  }
-}
+import { test, testAsync as asyncTest, summary } from './helpers/harness.js';
 
 // parentDir
 
@@ -130,5 +106,4 @@ await asyncTest('returns "" when the env var is unset and no sidecar exists', as
 
 // Summary
 
-console.log(`\n${passed} passed, ${failed} failed`);
-if (failed > 0) tjs.exit(1);
+summary();

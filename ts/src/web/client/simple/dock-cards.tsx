@@ -5,36 +5,13 @@
 import { useStore } from '../store.js';
 import type { DockUi } from '../ui-types.js';
 import { ICON } from '../ui-icons.js';
+import { fire } from '../ui-api.js';
 import { ManualAddPanel, RestartNote } from './controls.js';
 import { KeyGridPreview } from '../components/KeyGridPreview.js';
 import { StatusChip } from '../components/StatusChip.js';
 
 function postSelectDock(index: number): void {
-  fetch('/api/select-dock', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ index }),
-  }).catch(() => undefined);
-}
-
-function StaticKeyGrid({
-  keyCount,
-  columns,
-}: Readonly<{ keyCount: number; columns: number }>): preact.JSX.Element {
-  const cells = [];
-  for (let i = 0; i < keyCount; i++) cells.push(<div class="key-cell" key={i} />);
-
-  return (
-    <div class="preview panel-inset dimmed">
-      <div class="preview-head">
-        <span class="preview-label">Preview</span>
-        <span class="live-dot">Click to view</span>
-      </div>
-      <div class="key-grid" style={`grid-template-columns:repeat(${columns},1fr)`}>
-        {cells}
-      </div>
-    </div>
-  );
+  fire('/api/select-dock', { index });
 }
 
 function DockChip({ dock }: Readonly<{ dock: DockUi }>): preact.JSX.Element {
@@ -88,15 +65,27 @@ export function DockCard({
         <span class="dock-card-name">{dock.modelName}</span>
         <DockChip dock={dock} />
       </div>
+      {/* Distinct keys force a remount when this card is (de)selected: both
+          branches are the same component, and KeyGridPreview builds its
+          KeyPreview in a mount-only effect that a prop flip would not re-run. */}
       {selected ? (
         <KeyGridPreview
+          key="live"
           keyCount={dock.keyCount}
           columns={dock.columns}
           dimmed={!dock.elgatoConnected}
           modelId={dock.modelId}
         />
       ) : (
-        <StaticKeyGrid keyCount={dock.keyCount} columns={dock.columns} />
+        <KeyGridPreview
+          key="static"
+          keyCount={dock.keyCount}
+          columns={dock.columns}
+          dimmed
+          live={false}
+          label="Preview"
+          badge="Click to view"
+        />
       )}
       {!dock.elgatoConnected &&
         (dock.primaryConnected ? (

@@ -1,34 +1,15 @@
 import { MiraboxDriver } from './mirabox.js';
 import { closeSidecar, transformImageForDevice } from './translator.js';
-import type { KeyEvent } from './types.js';
+import { exitOnSigint, logKeyEvents } from './probe-utils.js';
 import { getReportDescriptor, hidSerialForPath, listHidPaths } from './ffi/hidapi.js';
 import { parseOutputReportSize } from './devices/hid-report-descriptor.js';
 import { FIFINE_D6_MODEL, FIFINE_D6_REV2_MODEL } from './devices/fifine/fifine-d6.js';
 import type { DeviceModel } from './devices/driver.js';
 
-// Fifine AmpliGame D6 capture probe — the "the unit goes back tomorrow" harness.
-//
-// Phase B of .claude/plans/2026-09-10_fifine-d6-support.md is already complete for
-// rev. 2 (0x0060). What it did NOT do is record the things that can only be read off
-// physical hardware and never reconstructed afterwards. This probe captures those:
-//
-//   S1  identity + the RAW HID report descriptor  -> ts/test/fixtures/<id>.report-descriptor.json
-//       hid-report-descriptor.test.ts currently only exercises hand-built synthetic
-//       descriptors (vendorDescriptor()). A real one turns the B4' packet-size probe
-//       into a hardware-backed regression test.
-//   S2  brightness sweep — settles the open B3 note ("is LIG visibly non-linear vs the
-//       293V3, i.e. does buildLig want companion's (x/100)^0.75 gamma?").
-//   S3  JPEG size ladder — `maxBytes: 10240` on this model is INHERITED from the 293V3
-//       and was never measured on a D6. If the firmware takes more, key quality is
-//       being left on the table; if it takes less, we are relying on luck.
-//   S4  raw input-report trace — every rx report printed as hex, so key wire codes can
-//       be replayed into parseAckReport() as a fixture later.
-//
-// Usage:  mise run d6-capture            (all stages, then S4 until Ctrl+C)
-//         mise run d6-capture -- s1      (one stage; s1|s2|s3|s4, comma-separated)
-//
-// Read-only as far as the device's persistent state goes: every stage either reads, or
-// writes images/brightness that a replug resets.
+// Fifine AmpliGame D6 capture probe — records things only readable off physical hardware:
+// S1 HID report descriptor, S2 brightness sweep (linearity vs 293V3), S3 JPEG size ladder
+// (untested maxBytes), S4 raw input-report trace. Usage: mise run d6-capture [-- s1,s2,s3,s4].
+// Leaves no persistent state: every stage reads, or writes state a replug resets.
 
 const args = (tjs.args[3] ?? 's1,s2,s3,s4').toLowerCase();
 const want = (stage: string): boolean => args.includes(stage);
@@ -36,10 +17,9 @@ const want = (stage: string): boolean => args.includes(stage);
 const FIXTURE_DIR = 'test/fixtures';
 const VID = 0x3142;
 
-/** Probe-local subclass: `device`/`hidLib` are `protected` on HidDeviceBase, which is
- *  exactly the seam a diagnostic needs — the raw descriptor must come off the SAME open
- *  handle the driver uses (re-opening it on macOS risks the IOHIDManager churn that
- *  mirabox.ts's _workerHidLib comment warns about). */
+/** Probe-local subclass exposing HidDeviceBase's protected `device`/`hidLib`: the raw
+ *  descriptor must come off the SAME open handle the driver uses, since re-opening on
+ *  macOS risks IOHIDManager churn (see mirabox.ts's _workerHidLib comment). */
 class CaptureDriver extends MiraboxDriver {
   /** The descriptor bytes hidapi reports for the open interface, or null if this build
    *  of hidapi predates hid_get_report_descriptor. */
@@ -108,7 +88,7 @@ if (want('s1')) {
     }
     const parsedText = parsed === null ? 'null (refused)' : `${parsed} B`;
     console.log(
-      `[s1] parseOutputReportSize -> ${parsedText}   model says ${model.wire!.packetSize} B`,
+      `[s1] parseOutputReportSize -> ${parsedText}   model says ${model.wire.packetSize} B`,
     );
     const out = `${FIXTURE_DIR}/${model.id}.report-descriptor.json`;
     await tjs.writeFile(
@@ -125,8 +105,8 @@ if (want('s1')) {
             platform: 'macOS',
             capturedAt: new Date().toISOString().slice(0, 10),
             parsedOutputReportSize: parsed,
-            modelPacketSize: model.wire!.packetSize,
-            modelInSize: model.wire!.inSize,
+            modelPacketSize: model.wire.packetSize,
+            modelInSize: model.wire.inSize,
             descriptorHex: hex(desc),
           },
           null,
@@ -196,19 +176,10 @@ if (want('s2')) {
   console.log('[s2] if 50% looks much brighter than half of 100%, buildLig wants a gamma.');
 }
 
-// S3: JPEG size ladder — what does the firmware actually accept?
-// Random noise is the only content that reliably produces a LARGE jpeg at 112x112, but
-// noise ALONE is useless as a verdict: colourful static is exactly what a "broken image"
-// looks like, so the observer cannot tell a clean 22 KB render from a corrupt one.
-//
-// So each key is noise PLUS three landmarks that only survive a fully-received image:
-//   - a 4 px white frame on all four edges  (a truncated/torn JPEG loses the bottom edge)
-//   - a solid colour band across the top    (per-key identity)
-//   - N black tally squares in that band    (N = key number, so keys can't be confused)
-// Verdict: frame closed on all four sides + right tally count = that size rendered clean.
-//
-// Every step is capped by maxBytes so the sizes land near the targets instead of wherever
-// q=100 happens to fall (the encoder's own ceiling here is ~21.8 KB at 112x112).
+// S3: JPEG size ladder — noise maximizes size but static looks like a torn image, so
+// each key adds a white edge frame, a colour band, and N tally squares — landmarks
+// that only survive a fully-received image. maxBytes caps each step near its target
+// (encoder ceiling is ~21.8 KB at 112x112 uncapped).
 if (want('s3')) {
   const BANDS: [number, number, number][] = [
     [255, 255, 255],
@@ -269,9 +240,7 @@ if (want('s4')) {
   driver.on('comm', (e: { direction: string; human: string; hex: string }) => {
     if (e.direction === 'rx') console.log(`[s4] rx  ${e.human.padEnd(24)} ${e.hex}`);
   });
-  driver.on('key', (e: KeyEvent) => {
-    console.log(`[s4] key code=0x${e.keyIndex.toString(16).padStart(2, '0')} state=${e.state}`);
-  });
+  logKeyEvents(driver, '[s4] key ');
 }
 
 // Without the key trace there is nothing left to wait for, so close instead of parking
@@ -285,10 +254,4 @@ if (!want('s4')) {
 
 console.log('[done] Ctrl+C to close the device cleanly.');
 
-tjs.addSignalListener('SIGINT', () => {
-  void driver.close().then(() => {
-    closeSidecar();
-    tjs.exit(0);
-    return undefined;
-  });
-});
+exitOnSigint(driver);

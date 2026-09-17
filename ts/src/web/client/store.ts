@@ -67,39 +67,37 @@ export function subscribe(fn: () => void): () => void {
 
 // Mutators
 
-export function setStatus(status: Status): void {
-  state = { ...state, status };
+function setField<K extends keyof StoreState>(key: K, value: StoreState[K]): void {
+  state = { ...state, [key]: value };
   notify();
+}
+
+export function setStatus(status: Status): void {
+  setField('status', status);
 }
 
 export function setStats(stats: Stats): void {
-  state = { ...state, stats };
-  notify();
+  setField('stats', stats);
 }
 
 export function setMockConfig(mockConfig: MockConfig): void {
-  state = { ...state, mockConfig };
-  notify();
+  setField('mockConfig', mockConfig);
 }
 
 export function setBrightness(brightness: number): void {
-  state = { ...state, brightness };
-  notify();
+  setField('brightness', brightness);
 }
 
 export function setBrightnessOverride(brightnessOverride: boolean): void {
-  state = { ...state, brightnessOverride };
-  notify();
+  setField('brightnessOverride', brightnessOverride);
 }
 
 export function setResizeEnabled(resizeEnabled: boolean): void {
-  state = { ...state, resizeEnabled };
-  notify();
+  setField('resizeEnabled', resizeEnabled);
 }
 
 export function setImageMode(imageMode: string | null): void {
-  state = { ...state, imageMode };
-  notify();
+  setField('imageMode', imageMode);
 }
 
 export function addServerLog(entry: ServerLog): void {
@@ -107,8 +105,7 @@ export function addServerLog(entry: ServerLog): void {
     state.serverLogs.length >= LOG_MAX
       ? [...state.serverLogs.slice(1), entry]
       : [...state.serverLogs, entry];
-  state = { ...state, serverLogs };
-  notify();
+  setField('serverLogs', serverLogs);
 }
 
 export function addCommLog(entry: CommLog): void {
@@ -116,14 +113,12 @@ export function addCommLog(entry: CommLog): void {
     state.commLogs.length >= LOG_MAX
       ? [...state.commLogs.slice(1), entry]
       : [...state.commLogs, entry];
-  state = { ...state, commLogs };
-  notify();
+  setField('commLogs', commLogs);
 }
 
 export function addKeyEvent(entry: KeyEvent): void {
   const keyEvents = [entry, ...state.keyEvents].slice(0, KE_MAX);
-  state = { ...state, keyEvents };
-  notify();
+  setField('keyEvents', keyEvents);
 }
 
 export function patch(partial: Partial<StoreState>): void {
@@ -133,9 +128,9 @@ export function patch(partial: Partial<StoreState>): void {
 
 // Local port of useSyncExternalStore (UPSTREAM: preact/compat/src/hooks.js, preact
 // 10.29.8 — re-diff on upgrade); importing it drags in all of compat, +5,556 bytes
-// minified. Do not "simplify" the two effects: the double-check in each closes the
-// mount race, and re-running the layout effect whenever `getSnapshot` changes identity
-// is what keeps an inline selector reading the latest selector, not the mount-time one.
+// minified. Do not "simplify" the two effects: the double-check closes the mount race,
+// and re-running the layout effect on a new `getSnapshot` identity is what keeps an
+// inline selector reading the latest selector, not the mount-time one.
 
 interface StoreInstance<T> {
   value: T;
@@ -192,13 +187,11 @@ function shallowEqual(a: unknown, b: unknown): boolean {
   return keys.every((k) => Object.hasOwn(bv, k) && Object.is(av[k], bv[k]));
 }
 
-// Select during rendering, against the local useSyncExternalStore above.
-//
-// useSyncExternalStore compares consecutive getSnapshot() results with Object.is and
-// re-renders until two agree, so a selector that builds a *fresh* object or array per
-// call (`(s) => ({ a: s.x })`, `(s) => s.list.filter(…)`) would loop forever
-// ("getSnapshot should be cached"). Memoize on shallow equality to hand such selectors
-// back a stable reference; selectors returning primitives or stored refs are unaffected.
+// Select during rendering, against the local useSyncExternalStore above. It compares
+// consecutive getSnapshot() results with Object.is and re-renders until two agree, so a
+// selector building a *fresh* object per call (`(s) => ({ a: s.x })`) would loop forever
+// ("getSnapshot should be cached"). Memoizing on shallow equality hands those a stable
+// reference; selectors returning primitives or stored refs are unaffected.
 export function useStore<T>(selector: (s: StoreState) => T): T {
   const cacheRef = useRef<{ value: T } | undefined>(undefined);
   return useSyncExternalStore(subscribe, (): T => {

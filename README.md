@@ -81,6 +81,7 @@ deckbridge [command] [flags]
 Commands:
   run                 Start the bridge (default when no command given)
   devices             List detected stream deck HID devices, then exit
+  diagnose            Write a diagnostics report (for bug reports), then exit
   version             Print version/build info, then exit
   help                Print usage, then exit
 
@@ -92,9 +93,17 @@ Flags (for run):
   --open                    Auto-open browser (desktop convenience)
   --headless                Shorthand: no tray, no browser open, skip Elgato-app poll
   --log-level <lvl>         debug|info|warn|error|silent (runtime override)
+  --no-overrides            Safe mode: ignore settings.json modelOverrides
   --cache-dir <path>        Settings + native-lib extraction root (default: XDG cache dir)
   -h, --help                Show this help
   -V, --version             Show version
+
+Flags (for diagnose):
+  --out <path>              Write the report here instead of the cache dir
+  --redact-commands         Replace extra-key commands/plugin args with <redacted>
+
+Log level precedence: --log-level > $DECKBRIDGE_LOG_LEVEL > settings.json
+"logLevel" > the level baked in at build time.
 ```
 
 For unattended Linux (Raspberry Pi / DietPi) under systemd, see

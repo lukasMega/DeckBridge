@@ -6,20 +6,7 @@ import {
   REVIEW_NOTICE,
 } from '../src/web/server/diagnostics.js';
 import type { DiagnosticsSources } from '../src/web/server/diagnostics.js';
-
-let passed = 0;
-let failed = 0;
-
-function test(name: string, fn: () => void): void {
-  try {
-    fn();
-    console.log(`  ✓ ${name}`);
-    passed++;
-  } catch (e) {
-    console.error(`  ✗ ${name}: ${(e as Error).message}`);
-    failed++;
-  }
-}
+import { test, summary } from './helpers/harness.js';
 
 const SETTINGS_WITH_COMMANDS = JSON.stringify(
   {
@@ -335,5 +322,4 @@ test('is prefixed, timestamped, and free of characters Windows rejects', () => {
   assert.ok(!name.includes(':'), 'no colons — Windows rejects them in filenames');
 });
 
-console.log(`\n${passed} passed, ${failed} failed`);
-if (failed > 0) tjs.exit(1);
+summary();

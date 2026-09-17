@@ -6,19 +6,7 @@ import assert from 'tjs:assert';
 // builders (cora-frame, feature-response, packets, pairing) lean on copy/writeUInt*/toString being
 // byte-exact.
 
-let passed = 0;
-let failed = 0;
-
-function tst(name: string, fn: () => void): void {
-  try {
-    fn();
-    console.log(`  ✓ ${name}`);
-    passed++;
-  } catch (e) {
-    console.error(`  ✗ ${name}: ${(e as Error).message}`);
-    failed++;
-  }
-}
+import { test as tst, summary } from './helpers/harness.js';
 
 // Calls with an intentionally-unsupported encoding (type-erased) to test the throw paths.
 // eslint-disable-next-line @typescript-eslint/unbound-method -- Buffer.from is a static method; no this-binding risk
@@ -379,5 +367,4 @@ tst('from rejects an unsupported encoding', () => {
   assert.ok(expectThrow(() => fromLoose('xx', 'utf16le')));
 });
 
-console.log(`\n${passed} passed, ${failed} failed`);
-if (failed > 0) tjs.exit(1);
+summary();

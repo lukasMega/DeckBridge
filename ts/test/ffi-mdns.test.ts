@@ -1,19 +1,6 @@
 import assert from 'tjs:assert';
 import { isNativeMdnsAvailable, mdnsAdvertiseStart, mdnsAdvertiseStop } from '../src/ffi/mdns.js';
-
-let passed = 0;
-let failed = 0;
-
-async function test(name: string, fn: () => void | Promise<void>): Promise<void> {
-  try {
-    await fn();
-    console.log(`  ✓ ${name}`);
-    passed++;
-  } catch (e) {
-    console.error(`  ✗ ${name}: ${(e as Error).message}`);
-    failed++;
-  }
-}
+import { testAsync as test, summary } from './helpers/harness.js';
 
 // The mdns_advertise_start/_stop symbols are compiled into libdeckbridge_native
 // only for target_os=windows (rust/deckbridge-native/src/mdns_windows.rs), so on
@@ -37,5 +24,4 @@ await test('mdnsAdvertiseStop() is a safe no-op when nothing was started', () =>
   mdnsAdvertiseStop();
 });
 
-console.log(`\n${passed} passed, ${failed} failed`);
-if (failed > 0) tjs.exit(1);
+summary();

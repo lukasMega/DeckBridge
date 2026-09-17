@@ -4,3 +4,7 @@
 [toolchain]
 channel = "1.95"
 components = ["clippy", "rustfmt"]
+# mdns_windows.rs is `#[cfg(target_os = "windows")]`, so a host-only clippy run
+# never sees it. rustup auto-installs the targets listed here, which keeps the
+# cross-target pass in `mise run rust-lint` working without a manual setup step.
+targets = ["x86_64-pc-windows-msvc"]

@@ -6,21 +6,24 @@ import {
   ELGATO_TCP_PORT,
   DEFAULT_BRIGHTNESS,
   DEFAULT_MAC_ADDRESS,
-  DEFAULT_MAC_ADDRESS_STRING,
-  DEFAULT_DOCK_FIRMWARE_VERSION,
-  DEFAULT_CHILD_FIRMWARE_VERSION,
-  DEFAULT_DOCK_SERIAL_NUMBER,
-  DEFAULT_CHILD_SERIAL_NUMBER,
   MDNS_SERVICE_NAME,
 } from './types.js';
 import type { DockStatus } from './types.js';
 import { DEFAULT_MODEL } from './devices/registry.js';
 import { ExtraKeyWidgets } from './extra-keys.js';
+import { buildDockStatus } from './device-session.js';
 import type { DeviceInfo } from './device-session.js';
 import type { DeviceDriver, DeviceModel } from './devices/driver.js';
 import type { ElgatoServer } from './elgato.js';
 import type { WebUIServer } from './web/server';
 import type { DeviceIdentitySettings } from './settings-store.js';
+
+/** "aa:bb:cc:dd:ee:ff" → the 6 bytes CORA's deviceConfig wants, else `fallback`
+ *  (a persisted identity and the mock config both feed setDeviceConfig). */
+export function macToBytes(mac: string, fallback: number[]): number[] {
+  const parts = mac.split(':');
+  return parts.length === 6 ? parts.map((p) => parseInt(p, 16)) : fallback;
+}
 
 export interface PrimaryDockDeps {
   webui: WebUIServer;
@@ -63,10 +66,8 @@ export class PrimaryDock {
   resolveIdentity(deviceKey: string): void {
     const identity = this.deps.webui.getOrCreateDeviceIdentity(deviceKey, MDNS_SERVICE_NAME);
     this.identity = identity;
-    const macParts = identity.macAddress.split(':');
-    const macBytes =
-      macParts.length === 6 ? macParts.map((p) => parseInt(p, 16)) : [...DEFAULT_MAC_ADDRESS];
-    this.deps.server.setDeviceConfig({ serialNumber: identity.dockSerial, macAddress: macBytes });
+    const macAddress = macToBytes(identity.macAddress, [...DEFAULT_MAC_ADDRESS]);
+    this.deps.server.setDeviceConfig({ serialNumber: identity.dockSerial, macAddress });
     this.deps.server.setMdnsServiceName(identity.mdnsServiceName);
   }
 
@@ -144,42 +145,18 @@ export class PrimaryDock {
     this.widgets?.forceRun(wireId);
   }
 
-  /** Dock status for the WebUI. Mirrors DeviceSession.status() but with the
-   *  primary's fixed port + hardcoded-default fallbacks. */
-  // oxlint-disable-next-line complexity -- flat fallback chain, not branching logic
+  /** Dock status for the WebUI. Same builder as DeviceSession.status(), with the
+   *  primary's fixed port and (pre-connect) its DEFAULT_* identity fallbacks. */
   status(primaryConnected: boolean, elgatoConnected: boolean): DockStatus {
-    const { model, deviceInfo, identity } = this;
-    const usePhysical = model.cora.usePhysicalIdentity;
-    return {
+    return buildDockStatus({
+      model: this.model,
       index: 0,
-      ...(model.keyMap.extraKeys ? { extraKeys: model.keyMap.extraKeys } : {}),
-      modelId: model.id,
-      modelName: model.name,
-      keyCount: model.keyCount,
-      columns: model.columns,
-      rows: model.rows,
       primaryPort: ELGATO_TCP_PORT,
+      identity: this.identity,
+      brightness: this.brightness,
       primaryConnected,
       elgatoConnected,
-      brightness: this.brightness,
-      dockFirmwareVersion: DEFAULT_DOCK_FIRMWARE_VERSION,
-      childFirmwareVersion: (usePhysical && deviceInfo?.firmware) || DEFAULT_CHILD_FIRMWARE_VERSION,
-      serialNumber: identity?.dockSerial ?? DEFAULT_DOCK_SERIAL_NUMBER,
-      childSerialNumber:
-        (usePhysical && deviceInfo?.serial) || identity?.childSerial || DEFAULT_CHILD_SERIAL_NUMBER,
-      productId: model.cora.productId,
-      macAddress: identity?.macAddress ?? DEFAULT_MAC_ADDRESS_STRING,
-      mdnsServiceName: identity?.mdnsServiceName ?? MDNS_SERVICE_NAME,
-      deviceKey: identity?.deviceKey ?? '',
-      ...(deviceInfo
-        ? {
-            realDeviceIdentity: {
-              modelName: model.name,
-              ...(deviceInfo.serial ? { serialNumber: deviceInfo.serial } : {}),
-              ...(deviceInfo.firmware ? { firmwareVersion: deviceInfo.firmware } : {}),
-            },
-          }
-        : {}),
-    };
+      deviceInfo: this.deviceInfo,
+    });
   }
 }

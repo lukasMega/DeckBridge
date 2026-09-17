@@ -14,21 +14,39 @@ function notFoundMsg(value: string, envVar: string): string {
   return value ? `Not found: ${value}` : `Not found (${envVar} not set)`;
 }
 
-async function fileExists(path: string): Promise<boolean> {
+/** Run `argv` silently: true on exit 0, false on any other exit, null when the
+ *  spawn itself failed (binary missing / not permitted). */
+async function spawnOk(argv: string[]): Promise<boolean | null> {
   try {
-    // Windows has no `test` built-in; use cmd /c if exist instead.
-    const p =
-      FFI.suffix === 'dll'
-        ? tjs.spawn(['cmd', '/c', `if exist "${path}" (exit 0) else (exit 1)`], {
-            stdout: 'ignore',
-            stderr: 'ignore',
-          })
-        : tjs.spawn(['test', '-f', path], { stdout: 'ignore', stderr: 'ignore' });
-    const { exit_status } = await p.wait();
+    const { exit_status } = await tjs.spawn(argv, { stdout: 'ignore', stderr: 'ignore' }).wait();
     return exit_status === 0;
   } catch {
-    return false;
+    return null;
   }
+}
+
+async function fileExists(path: string): Promise<boolean> {
+  // Windows has no `test` built-in; use cmd /c if exist instead.
+  const argv =
+    FFI.suffix === 'dll'
+      ? ['cmd', '/c', `if exist "${path}" (exit 0) else (exit 1)`]
+      : ['test', '-f', path];
+  return (await spawnOk(argv)) === true;
+}
+
+function binaryResult(
+  name: string,
+  path: string,
+  ok: boolean,
+  notFound: string,
+  installHint: string,
+): RequirementResult {
+  return {
+    name,
+    ok,
+    message: ok ? `Found: ${path}` : notFound,
+    installHint: ok ? undefined : installHint,
+  };
 }
 
 async function checkBinary(
@@ -38,12 +56,7 @@ async function checkBinary(
 ): Promise<RequirementResult> {
   const path = tjs.env[envVar] ?? '';
   const ok = path !== '' && (await fileExists(path));
-  return {
-    name,
-    ok,
-    message: ok ? `Found: ${path}` : notFoundMsg(path, envVar),
-    installHint: ok ? undefined : installHint,
-  };
+  return binaryResult(name, path, ok, notFoundMsg(path, envVar), installHint);
 }
 
 // Not checkBinary(): the tray is found via $DECKBRIDGE_TRAY_BIN *or* a sidecar
@@ -52,14 +65,13 @@ async function checkBinary(
 async function checkTray(): Promise<RequirementResult> {
   const path = await resolveTrayBin();
   const ok = path !== '' && (await fileExists(path));
-  return {
-    name: 'tray',
+  return binaryResult(
+    'tray',
+    path,
     ok,
-    message: ok
-      ? `Found: ${path}`
-      : 'Not found (no deckbridge-tray next to the executable, DECKBRIDGE_TRAY_BIN not set)',
-    installHint: ok ? undefined : 'Run: mise run tray-rs',
-  };
+    'Not found (no deckbridge-tray next to the executable, DECKBRIDGE_TRAY_BIN not set)',
+    'Run: mise run tray-rs',
+  );
 }
 
 function checkLibhidapi(): Promise<RequirementResult> {
@@ -88,16 +100,6 @@ function checkLibhidapi(): Promise<RequirementResult> {
   });
 }
 
-async function dnsSdOnPath(): Promise<boolean> {
-  try {
-    const p = tjs.spawn(['cmd', '/c', 'where dns-sd'], { stdout: 'ignore', stderr: 'ignore' });
-    const { exit_status } = await p.wait();
-    return exit_status === 0;
-  } catch {
-    return false;
-  }
-}
-
 // mDNS: built-in on macOS (Bonjour) and Windows (native since Win10 1803),
 // requires avahi-daemon on Linux
 async function checkMdns(): Promise<RequirementResult> {
@@ -112,7 +114,7 @@ async function checkMdns(): Promise<RequirementResult> {
         message: 'Native mDNS advertise available (Windows Dnsapi)',
       };
     }
-    const dnsSd = await dnsSdOnPath();
+    const dnsSd = (await spawnOk(['cmd', '/c', 'where dns-sd'])) === true;
     return {
       name: 'mdns',
       ok: dnsSd,
@@ -124,21 +126,16 @@ async function checkMdns(): Promise<RequirementResult> {
         : 'Install Bonjour Print Services for Windows for the dns-sd fallback',
     };
   }
-  try {
-    const p = tjs.spawn(['pgrep', 'avahi-daemon'], { stdout: 'ignore', stderr: 'ignore' });
-    const { exit_status } = await p.wait();
-    const ok = exit_status === 0;
-    return {
-      name: 'mdns',
-      ok,
-      message: ok ? 'avahi-daemon running' : 'avahi-daemon not running',
-      installHint: ok
-        ? undefined
-        : 'sudo apt install avahi-daemon && sudo systemctl start avahi-daemon',
-    };
-  } catch {
-    return { name: 'mdns', ok: false, message: 'Cannot check avahi-daemon' };
-  }
+  const ok = await spawnOk(['pgrep', 'avahi-daemon']);
+  if (ok === null) return { name: 'mdns', ok: false, message: 'Cannot check avahi-daemon' };
+  return {
+    name: 'mdns',
+    ok,
+    message: ok ? 'avahi-daemon running' : 'avahi-daemon not running',
+    installHint: ok
+      ? undefined
+      : 'sudo apt install avahi-daemon && sudo systemctl start avahi-daemon',
+  };
 }
 
 export async function checkRequirements(): Promise<RequirementResult[]> {

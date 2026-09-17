@@ -123,8 +123,14 @@ Ready-to-use example plugins live in
 [`examples/plugins/`](https://github.com/lukasMega/DeckBridge/tree/main/deckbridge/examples/plugins)
 in the repository:
 
-- **`worldclock.js`** — the minimal plugin: shows `HH:MM` at a fixed UTC offset passed via
-  `ctx.param` (e.g. `-5`, `+9`, `5.5`). Pure computation, no network.
+- **`hello.js`** — the smallest possible plugin: shows `ctx.param` (or `"hi"`) plus a tick
+  counter, re-rendered on the default 5 s interval. Copy this file to start a new plugin.
+- **`worldclock.js`** — shows `HH:MM` at a fixed UTC offset passed via `ctx.param`
+  (e.g. `-5`, `+9`, `5.5`). Pure computation, no network.
+- **`countdown.js`** — counts down to a target timestamp, or up from a past one (prefixed
+  `+`). `ctx.param` is the target with an optional `|label`: `2026-12-31T23:59`,
+  `2026-08-01|vacation`, or a bare `15:30` for today at that time. Runs at a 1 s interval
+  and repaints only when the text changes.
 - **`home-assistant.js`** — fetches a Home Assistant entity's state over the REST API
   (`GET {baseUrl}/api/states/{entity}` with a bearer token) and shows its state and unit.
   `ctx.param` format: `baseUrl|token|entity` (plain http — no TLS).

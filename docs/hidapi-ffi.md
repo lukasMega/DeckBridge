@@ -118,6 +118,6 @@ mirabox_hid_present(uint16 vid, uint16 pid)        → int  (1=found, 0=not; pre
 
 ## Related docs
 
-- The development repo's `ARCHITECTURE.md` → **libhidapi loading** / **HID path enumeration** sections (the canonical reference; not part of this public docs site).
+- [ARCHITECTURE.md](./ARCHITECTURE.md) → **libhidapi loading** / **HID path enumeration** sections (the canonical reference; a deep-dive page, not listed in the sidebar).
 - `rust/README.md` → how `DECKBRIDGE_NATIVE_LIB` is wired and the open-fallback flow.
 - [Adding a Device](./adding-a-device.md) → using `loadHidapi` / `findHidPath` from a new device driver.

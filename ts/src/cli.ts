@@ -111,26 +111,19 @@ function parseCommandWord(
   return { command: word as CliCommand, consumed: 1 };
 }
 
-/** Flags that take no value — just set a boolean. */
-const BOOLEAN_FLAGS: Record<string, (flags: CliFlags) => void> = {
-  '--mock': (f) => {
-    f.mock = true;
-  },
-  '--no-webui': (f) => {
-    f.noWebui = true;
-  },
-  '--open': (f) => {
-    f.open = true;
-  },
-  '--headless': (f) => {
-    f.headless = true;
-  },
-  '--redact-commands': (f) => {
-    f.redactCommands = true;
-  },
-  '--no-overrides': (f) => {
-    f.noOverrides = true;
-  },
+/** Derived so a typo'd flag target is a compile error, not a silent no-op. */
+type BooleanFlagKey = {
+  [K in keyof CliFlags]: CliFlags[K] extends boolean ? K : never;
+}[keyof CliFlags];
+
+/** Flags that take no value — just set their boolean. */
+const BOOLEAN_FLAGS: Record<string, BooleanFlagKey> = {
+  '--mock': 'mock',
+  '--no-webui': 'noWebui',
+  '--open': 'open',
+  '--headless': 'headless',
+  '--redact-commands': 'redactCommands',
+  '--no-overrides': 'noOverrides',
 };
 
 /** Flags that consume the following arg as a value. Returns an error message,
@@ -188,12 +181,12 @@ function parseFlagArgs(args: string[], startIndex: number): FlagsParseResult {
   for (let i = startIndex; i < args.length; i++) {
     const a = args[i]!;
     const overrideCommand = COMMAND_OVERRIDE_FLAGS[a];
-    const setBoolean = BOOLEAN_FLAGS[a];
+    const booleanKey = BOOLEAN_FLAGS[a];
     const setValue = VALUE_FLAGS[a];
     if (overrideCommand) {
       commandOverride = overrideCommand;
-    } else if (setBoolean) {
-      setBoolean(flags);
+    } else if (booleanKey) {
+      flags[booleanKey] = true;
     } else if (setValue) {
       const v = args[++i];
       if (v === undefined) return { ok: false, error: `${a} requires a value` };

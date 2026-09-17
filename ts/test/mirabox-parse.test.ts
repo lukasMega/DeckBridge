@@ -1,20 +1,7 @@
 import assert from 'tjs:assert';
 import { parseAckReport, buildCrt, buildBat, buildLig, buildCle } from '../src/mirabox.js';
 import { CMD_STP } from '../src/devices/mirabox-protocol.js';
-
-let passed = 0;
-let failed = 0;
-
-async function test(name: string, fn: () => void | Promise<void>): Promise<void> {
-  try {
-    await fn();
-    console.log(`  ✓ ${name}`);
-    passed++;
-  } catch (e: unknown) {
-    console.error(`  ✗ ${name}: ${(e as Error).message}`);
-    failed++;
-  }
-}
+import { testAsync as test, summaryExit } from './helpers/harness.js';
 
 console.log('\nmirabox-parse: parseAckReport');
 
@@ -96,5 +83,4 @@ await test('a 10 KiB image splits into 20 chunks at 512 and 10 at 1024', () => {
   assert.equal(Math.ceil(jpegLen / 1024), 10);
 });
 
-console.log(`\n${passed} passed, ${failed} failed`);
-tjs.exit(failed > 0 ? 1 : 0);
+summaryExit();

@@ -5,20 +5,7 @@ import {
 } from '../src/devices/hid-report-descriptor.js';
 import type { HidapiSymbols } from '../src/ffi/hidapi.js';
 import { FIFINE_D6_REV2_MODEL } from '../src/devices/fifine/fifine-d6.js';
-
-let passed = 0;
-let failed = 0;
-
-function test(name: string, fn: () => void): void {
-  try {
-    fn();
-    passed++;
-    console.log(`  ok ${name}`);
-  } catch (e) {
-    failed++;
-    console.log(`  FAIL ${name}: ${String(e)}`);
-  }
-}
+import { test, summaryExit } from './helpers/harness.js';
 
 // Short-item helpers. Prefix byte = bTag<<4 | bType<<2 | bSize.
 const usagePage = (v: number) => [0x06, v & 0xff, (v >> 8) & 0xff]; // Global, 2 bytes
@@ -204,10 +191,9 @@ test('a 4-byte report count does not sign-flip', () => {
   assert.ok(size === null || size > 0, `expected null or a positive size, got ${String(size)}`);
 });
 
-// probeOutputReportSize
-// The candidate whitelist is what lets the probe overrule a model constant at all:
-// it can only ever pick between sizes the model already declared valid, so a
-// descriptor we misread (or one Windows reconstructed oddly) can't invent a new size.
+// probeOutputReportSize The candidate whitelist is what lets the probe overrule a model
+// constant at all: it can only ever pick between sizes the model already declared valid,
+// so a descriptor we misread (or one Windows reconstructed oddly) can't invent a new size.
 
 console.log('\nhid-report-descriptor: probeOutputReportSize');
 
@@ -271,11 +257,9 @@ test('refuses an unparsable descriptor even when hidapi returns bytes', () => {
   assert.equal(probeOutputReportSize(hid, DEV, [512, 1024]), null);
 });
 
-// the real thing: a descriptor captured off hardware
-// Everything above is a descriptor we wrote ourselves, so it can only prove the walker
-// is self-consistent. This block runs it against the bytes a physical Fifine D6 rev. 2
-// actually returned from hid_get_report_descriptor (captured by `mise run d6-capture`,
-// macOS 2026-09-12) — the one thing that cannot be reconstructed once the unit is gone.
+// the real thing: a descriptor captured off hardware Everything above is a
+// descriptor we wrote ourselves, so it can only prove the walker is
+// self-consistent. This block runs it against the bytes a physical Fifine D6 rev.
 
 console.log('\nhid-report-descriptor: real captured descriptor (Fifine D6 rev. 2)');
 
@@ -288,13 +272,13 @@ const fixture = JSON.parse(new TextDecoder().decode(await tjs.readFile(FIXTURE))
 const real = new Uint8Array(fixture.descriptorHex.split(' ').map((h) => parseInt(h, 16)));
 
 test('the captured descriptor parses to the model packet size (1024 B)', () => {
-  assert.equal(parseOutputReportSize(real), FIFINE_D6_REV2_MODEL.wire!.packetSize);
+  assert.equal(parseOutputReportSize(real), FIFINE_D6_REV2_MODEL.wire.packetSize);
   assert.equal(parseOutputReportSize(real), fixture.parsedOutputReportSize);
 });
 
 test('the probe adopts it against the model candidate list', () => {
   const hid = hidReturning(real) as HidapiSymbols;
-  const probed = probeOutputReportSize(hid, DEV, FIFINE_D6_REV2_MODEL.wire!.packetSizeCandidates!);
+  const probed = probeOutputReportSize(hid, DEV, FIFINE_D6_REV2_MODEL.wire.packetSizeCandidates!);
   assert.equal(probed, 1024);
 });
 
@@ -302,11 +286,10 @@ test('the probe adopts it against the model candidate list', () => {
 // driver hardcodes (`wire.inSize`, used to size the hid_read_timeout buffer). Assert the
 // descriptor agrees: Report Count 0x0200 (512) followed by an Input item.
 test('the captured descriptor also confirms wire.inSize (512 B)', () => {
-  const want = [...reportCount2(FIFINE_D6_REV2_MODEL.wire!.inSize), ...input];
+  const want = [...reportCount2(FIFINE_D6_REV2_MODEL.wire.inSize), ...input];
   const hay = Array.from(real).join(',');
   assert.ok(hay.includes(want.join(',')), `no 512-byte Input item in ${fixture.descriptorHex}`);
-  assert.equal(fixture.modelInSize, FIFINE_D6_REV2_MODEL.wire!.inSize);
+  assert.equal(fixture.modelInSize, FIFINE_D6_REV2_MODEL.wire.inSize);
 });
 
-console.log(`\n${passed} passed, ${failed} failed`);
-tjs.exit(failed > 0 ? 1 : 0);
+summaryExit();

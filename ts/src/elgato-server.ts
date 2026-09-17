@@ -25,7 +25,7 @@ import { CoraServerBase } from './cora-server-base.js';
 import { describeCoraPayload } from './cora-describe.js';
 import type { DeviceConfig } from './elgato-types.js';
 import { buildFeatureResponse } from './feature-response.js';
-import { buildCapabilitiesPacket, type ChildGeometry, MK2_CHILD_GEOMETRY } from './capabilities.js';
+import { buildCapabilitiesPacket, type ChildGeometry } from './capabilities.js';
 import { MdnsAdvertiser } from './mdns-advertiser.js';
 
 export type { DeviceConfig };
@@ -48,7 +48,7 @@ export class ElgatoServer extends CoraServerBase {
   private readonly skipMdns: boolean;
   readonly childPort: number;
   private mdnsServiceName: string;
-  private childGeometry: ChildGeometry = MK2_CHILD_GEOMETRY;
+  private childGeometry: ChildGeometry;
   private lastAdvertisedPid = -1;
   private lastAdvertisedSerial = '';
 
@@ -71,44 +71,60 @@ export class ElgatoServer extends CoraServerBase {
     this.childGeometry = geo;
   }
 
+  /** What restartMdns()'s unchanged-identity early return compares against. Must be
+   *  written by every path that (re)advertises, or the next restart respawns for nothing. */
+  private rememberAdvertised(productId: number, serial: string): void {
+    this.lastAdvertisedPid = productId;
+    this.lastAdvertisedSerial = serial;
+  }
+
+  /** A fresh advertiser carrying the current name + identity, not yet started. */
+  private spawnAdvertiser(): MdnsAdvertiser {
+    const advertiser = new MdnsAdvertiser(
+      this.port,
+      (level, message) => this.emitLog(level, message),
+      this.mdnsServiceName,
+    );
+    this.rememberAdvertised(this.deviceConfig.productId, this.deviceConfig.serialNumber);
+    advertiser.updateIdentity(this.lastAdvertisedPid, this.lastAdvertisedSerial);
+    return advertiser;
+  }
+
   restartMdns(productId: number): void {
-    if (!this.mdnsAdvertiser) return;
+    const advertiser = this.mdnsAdvertiser;
+    if (!advertiser) return;
     if (
       this.lastAdvertisedPid === productId &&
       this.lastAdvertisedSerial === this.deviceConfig.serialNumber
     ) {
       return; // identity unchanged — avoid respawn churn
     }
-    this.lastAdvertisedPid = productId;
-    this.lastAdvertisedSerial = this.deviceConfig.serialNumber;
-    this.mdnsAdvertiser.stop();
-    this.mdnsAdvertiser.updateIdentity(productId, this.deviceConfig.serialNumber);
-    void this.mdnsAdvertiser.start();
+    this.rememberAdvertised(productId, this.deviceConfig.serialNumber);
+    advertiser.stop();
+    advertiser.updateIdentity(productId, this.deviceConfig.serialNumber);
+    void advertiser.start();
   }
 
-  /** Live-rename the mDNS service name (WebUI "Device Identity" edit) — the
-   *  advertiser process bakes the name in at spawn (dns-sd/avahi-publish-service
-   *  take it as an argv, not something updatable in place), so this stops the
-   *  old advertiser and spawns a fresh one under the new name. No-op if the
-   *  server hasn't start()ed yet (the new name is picked up by start() itself). */
+  /** Live-rename the mDNS service name (WebUI "Device Identity" edit). dns-sd and
+   *  avahi-publish-service take the name as an argv, so it can't be updated in place:
+   *  stop the old advertiser and spawn a fresh one. No-op before start(). */
   setMdnsServiceName(name: string): void {
     if (name === this.mdnsServiceName) return;
     this.mdnsServiceName = name;
     if (!this.mdnsAdvertiser) return;
     this.mdnsAdvertiser.stop();
-    this.mdnsAdvertiser = new MdnsAdvertiser(
-      this.port,
-      (level, message) => this.emitLog(level, message),
-      this.mdnsServiceName,
-    );
-    this.mdnsAdvertiser.updateIdentity(this.deviceConfig.productId, this.deviceConfig.serialNumber);
-    this.lastAdvertisedPid = this.deviceConfig.productId;
-    this.lastAdvertisedSerial = this.deviceConfig.serialNumber;
+    this.mdnsAdvertiser = this.spawnAdvertiser();
     void this.mdnsAdvertiser.start();
   }
 
-  constructor(port = ELGATO_TCP_PORT, skipMdns = false, opts: ElgatoServerOptions = {}) {
+  constructor(
+    childGeometry: ChildGeometry,
+    port = ELGATO_TCP_PORT,
+    skipMdns = false,
+    opts: ElgatoServerOptions = {},
+  ) {
     super(port);
+    this.childGeometry = childGeometry;
     this.skipMdns = skipMdns;
     this.childPort = opts.childPort ?? ELGATO_CHILD_PORT;
     this.mdnsServiceName = opts.mdnsServiceName ?? MDNS_SERVICE_NAME;
@@ -118,18 +134,9 @@ export class ElgatoServer extends CoraServerBase {
 
   async start(): Promise<void> {
     await this.startServer();
-    if (!this.skipMdns) {
-      this.mdnsAdvertiser = new MdnsAdvertiser(
-        this.port,
-        (level, message) => this.emitLog(level, message),
-        this.mdnsServiceName,
-      );
-      this.mdnsAdvertiser.updateIdentity(
-        this.deviceConfig.productId,
-        this.deviceConfig.serialNumber,
-      );
-      await this.mdnsAdvertiser.start();
-    }
+    if (this.skipMdns) return;
+    this.mdnsAdvertiser = this.spawnAdvertiser();
+    await this.mdnsAdvertiser.start();
   }
 
   async stop(): Promise<void> {
@@ -183,52 +190,51 @@ export class ElgatoServer extends CoraServerBase {
     const byte1 = payload[1]!;
     this.emitComm('rx', describeCoraPayload(payload, flags, hidOp, messageId), payload);
 
-    if (byte0 === PAYLOAD_TYPE_FEATURE && byte1 === FEATURE_KEEPALIVE_ACK) {
-      this.emitLog('info', `primary keepalive ACK seq=${payload.length > 2 ? payload[2] : '?'}`);
-      return;
-    }
+    if (byte0 !== PAYLOAD_TYPE_FEATURE) return;
 
-    if (byte0 === PAYLOAD_TYPE_FEATURE && byte1 === FEATURE_GET_DEVICE_INFO) {
-      this.sendFrame(
-        this.buildDeviceInfo(),
-        CORA_FLAG_RESULT,
-        hidOp,
-        messageId,
-        `CORA device-info VID=0x${ELGATO_VID.toString(16)} PID=0x${NETWORK_DOCK_PID.toString(16)} [msgId=${messageId}]`,
-      );
-      return;
-    }
+    switch (byte1) {
+      case FEATURE_KEEPALIVE_ACK:
+        this.emitLog('info', `primary keepalive ACK seq=${payload.length > 2 ? payload[2] : '?'}`);
+        return;
 
-    if (byte0 === PAYLOAD_TYPE_FEATURE && byte1 === FEATURE_GET_CAPABILITIES) {
-      const pid = this.deviceConfig.productId.toString(16).padStart(4, '0');
-      this.emitLog('info', `0x1c handler fired — PID=0x${pid} port=${this.childPort}`);
-      const r = this.buildChildDeviceInfo();
-      this.sendFrame(
-        r,
-        CORA_FLAG_RESULT,
-        hidOp,
-        messageId,
-        `CORA 0x1c child-device-info PID=0x${pid} port=${this.childPort} [msgId=${messageId}]`,
-      );
-      return;
-    }
+      case FEATURE_GET_DEVICE_INFO:
+        this.sendFrame(
+          this.buildDeviceInfo(),
+          CORA_FLAG_RESULT,
+          hidOp,
+          messageId,
+          `CORA device-info VID=0x${ELGATO_VID.toString(16)} PID=0x${NETWORK_DOCK_PID.toString(16)} [msgId=${messageId}]`,
+        );
+        return;
 
-    if (byte0 === PAYLOAD_TYPE_FEATURE) {
-      // 0x87/0x8f are only ever queried by the genuine Elgato desktop app —
-      // Bitfocus Companion's CORA client never asks for them (see
-      // .claude/plans/2026-07-14_try-distinguish-bitfocus-companion-connection.md).
-      if (byte1 === FEATURE_GET_CHILD_FW || byte1 === FEATURE_GET_QUICK_PROBE) {
-        this.emit('clientAppDetected', 'elgato');
+      case FEATURE_GET_CAPABILITIES: {
+        const pid = this.deviceConfig.productId.toString(16).padStart(4, '0');
+        this.emitLog('info', `0x1c handler fired — PID=0x${pid} port=${this.childPort}`);
+        this.sendFrame(
+          this.buildChildDeviceInfo(),
+          CORA_FLAG_RESULT,
+          hidOp,
+          messageId,
+          `CORA 0x1c child-device-info PID=0x${pid} port=${this.childPort} [msgId=${messageId}]`,
+        );
+        return;
       }
-      this.emitLog('info', `primary ${nonVerbFeatureLabel(byte1)} msgId=${messageId}`);
-      const r = buildFeatureResponse(byte1, this.deviceConfig, ELGATO_PKT_SIZE_RX);
-      this.sendFrame(
-        r,
-        CORA_FLAG_RESULT,
-        hidOp,
-        messageId,
-        `CORA feature response 0x${byte1.toString(16).padStart(2, '0')} [msgId=${messageId}]`,
-      );
+
+      default:
+        // 0x87/0x8f are only ever queried by the genuine Elgato desktop app —
+        // Bitfocus Companion's CORA client never asks for them (see
+        // .claude/plans/2026-07-14_try-distinguish-bitfocus-companion-connection.md).
+        if (byte1 === FEATURE_GET_CHILD_FW || byte1 === FEATURE_GET_QUICK_PROBE) {
+          this.emit('clientAppDetected', 'elgato');
+        }
+        this.emitLog('info', `primary ${nonVerbFeatureLabel(byte1)} msgId=${messageId}`);
+        this.sendFrame(
+          buildFeatureResponse(byte1, this.deviceConfig, ELGATO_PKT_SIZE_RX),
+          CORA_FLAG_RESULT,
+          hidOp,
+          messageId,
+          `CORA feature response 0x${byte1.toString(16).padStart(2, '0')} [msgId=${messageId}]`,
+        );
     }
   }
 }

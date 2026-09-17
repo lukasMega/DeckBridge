@@ -2,15 +2,14 @@
  * inventory remains in hidapi.ts for explicit diagnostics only. */
 import FFI from 'tjs:ffi';
 import { debug, warn } from '../logger.js';
-import { BUFFER, INT, SIZE_T, STRING, parseHidRow, type HidDeviceInfo } from './hidapi.js';
+import { BUFFER, INT, SIZE_T, STRING, parseHidRows, type HidDeviceInfo } from './hidapi.js';
+import { guardedCall, LIST_BUF_BYTES, TSV_ABSENT } from './native-load.js';
 
 interface DiscoverySymbols {
   mirabox_hid_list_supported(filterSpec: string, buf: Uint8Array, bufLen: number): number;
   mirabox_hid_reset(): number;
 }
 
-const LIST_BUF_BYTES = 512 * 1024;
-const TSV_ABSENT = '-';
 let lib: { symbols: DiscoverySymbols; close(): void } | null = null;
 let snapshot: HidDeviceInfo[] = [];
 
@@ -70,13 +69,9 @@ export function cachedDiscoveryPaths(
  * rest of the process lifetime. */
 export function resetHidDiscovery(): boolean {
   lib ??= loadDiscovery();
-  if (!lib) return false;
-  try {
-    return lib.symbols.mirabox_hid_reset() === 1;
-  } catch (e) {
-    warn('ffi', `mirabox_hid_reset threw: ${String(e)}`);
-    return false;
-  }
+  const l = lib;
+  if (!l) return false;
+  return guardedCall('mirabox_hid_reset', false, () => l.symbols.mirabox_hid_reset() === 1);
 }
 
 export function scanSupportedHidDevicesTimed(
@@ -84,7 +79,8 @@ export function scanSupportedHidDevicesTimed(
 ): { devices: HidDeviceInfo[]; tookMs: number } {
   const t0 = Date.now();
   lib ??= loadDiscovery();
-  if (!lib) return { devices: [], tookMs: Date.now() - t0 };
+  const l = lib;
+  if (!l) return { devices: [], tookMs: Date.now() - t0 };
   const filterSpec = [
     ...new Set(
       pairs.map(
@@ -93,19 +89,10 @@ export function scanSupportedHidDevicesTimed(
       ),
     ),
   ].join(',');
-  try {
+  const devices = guardedCall<HidDeviceInfo[]>('mirabox_hid_list_supported', [], () => {
     const buf = new Uint8Array(LIST_BUF_BYTES);
-    const count = lib.symbols.mirabox_hid_list_supported(filterSpec, buf, buf.length);
-    if (count <= 0) return { devices: [], tookMs: Date.now() - t0 };
-    const end = buf.indexOf(0);
-    const text = new TextDecoder().decode(buf.subarray(0, end >= 0 ? end : buf.length));
-    const devices = text
-      .split('\n')
-      .map(parseHidRow)
-      .filter((d): d is HidDeviceInfo => d !== null);
-    return { devices, tookMs: Date.now() - t0 };
-  } catch (e) {
-    warn('ffi', `mirabox_hid_list_supported threw: ${String(e)}`);
-    return { devices: [], tookMs: Date.now() - t0 };
-  }
+    const count = l.symbols.mirabox_hid_list_supported(filterSpec, buf, buf.length);
+    return count <= 0 ? [] : parseHidRows(buf);
+  });
+  return { devices, tookMs: Date.now() - t0 };
 }

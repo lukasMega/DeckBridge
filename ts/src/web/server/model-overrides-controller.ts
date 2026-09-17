@@ -1,8 +1,7 @@
 // The device-tuning (model override) HTTP surface. Mirrors
 // settings-identity-controller.ts: validation + persistence glue around
-// PersistedSettings, with the pure merge/validate living in
-// devices/model-overrides.ts.
-import type { PersistedSettings } from './persisted-settings.js';
+// PersistedSettings, with the pure merge/validate living in devices/model-overrides.ts.
+import type { ControllerHost, ReqError } from './types.js';
 import type { DeviceModel, DeviceModelOverride } from '../../devices/driver.js';
 import { findModelById } from '../../devices/registry.js';
 import {
@@ -11,8 +10,6 @@ import {
   validateModelOverride,
 } from '../../devices/model-overrides.js';
 import { overridesDisabled } from '../../cli.js';
-
-type ReqError = { error: string; status: number };
 
 /** GET /api/device-overrides payload: the registry values (`defaults`), what the
  *  user has set (`overrides`), what the device is actually running (`effective`),
@@ -26,10 +23,9 @@ export interface DeviceOverridesView {
    *  Reset works) but `effective` equals the registry defaults, because that is
    *  what the device is actually running. */
   safeMode: boolean;
-  /** The FULL effective spec — for display/diagnostics. Do NOT seed the form from
-   *  this: it carries the non-tunable protocol facts (`format`, `colorMode`,
-   *  `bmpPpm`) too, and POSTing them straight back is rejected by
-   *  validateModelOverride. Seed from `tunable` instead. */
+  /** The FULL effective spec — for display/diagnostics. Do NOT seed the form from this: it
+   * carries the non-tunable protocol facts (`format`, `colorMode`, `bmpPpm`) too, and
+   * POSTing them straight back is rejected by validateModelOverride. Seed from `tunable` instead. */
   effective: Pick<DeviceModel, 'image' | 'keyMap' | 'wire' | 'splash'>;
   /** `effective`, projected down to exactly the fields an override may set — so a
    *  round-trip (seed the form → Apply unchanged) is always valid. */
@@ -38,19 +34,18 @@ export interface DeviceOverridesView {
 
 export class ModelOverridesController {
   constructor(
-    private readonly settings: PersistedSettings,
+    private readonly host: ControllerHost,
     /** Model id of the currently selected dock — the default target when a
      *  request omits `modelId`. */
     private readonly selectedModelId: () => string,
-    private readonly emit: (event: string, ...args: unknown[]) => boolean,
   ) {}
 
   overrideFor(modelId: string): DeviceModelOverride | undefined {
-    return this.settings.overrideFor(modelId);
+    return this.host.settings.overrideFor(modelId);
   }
 
   all(): Record<string, DeviceModelOverride> {
-    return this.settings.allModelOverrides();
+    return this.host.settings.allModelOverrides();
   }
 
   /** Registry defaults + persisted override + the resulting effective spec.
@@ -62,7 +57,7 @@ export class ModelOverridesController {
     const id = modelId ?? this.selectedModelId();
     const model = findModelById(id);
     if (!model) return { error: `unknown modelId '${id}'`, status: 404 };
-    const overrides = this.settings.overrideFor(id) ?? {};
+    const overrides = this.host.settings.overrideFor(id) ?? {};
     // Safe mode: report what the device is RUNNING, not what is stored — the one
     // time a user is looking at this panel is when a bad override made the device
     // look dead, and a view that disagreed with the hardware would mislead them.
@@ -77,7 +72,7 @@ export class ModelOverridesController {
       effective: {
         image: effective.image,
         keyMap: effective.keyMap,
-        ...(effective.wire ? { wire: effective.wire } : {}),
+        wire: effective.wire,
         ...(effective.splash ? { splash: effective.splash } : {}),
       },
       tunable: tunableDefaults(effective),
@@ -95,8 +90,8 @@ export class ModelOverridesController {
     if (!model) return { error: `unknown modelId '${modelId}'`, status: 404 };
     const result = validateModelOverride(overrides, model);
     if (!result.ok) return { error: result.errors.join('; '), status: 400 };
-    this.settings.setModelOverride(modelId, result.value);
-    this.emit('modelOverridesChanged', modelId);
+    this.host.settings.setModelOverride(modelId, result.value);
+    this.host.emit('modelOverridesChanged', modelId);
     return null;
   }
 
@@ -107,8 +102,8 @@ export class ModelOverridesController {
     if (typeof modelId !== 'string' || !modelId) {
       return { error: 'modelId must be a non-empty string', status: 400 };
     }
-    this.settings.setModelOverride(modelId, undefined);
-    this.emit('modelOverridesChanged', modelId);
+    this.host.settings.setModelOverride(modelId, undefined);
+    this.host.emit('modelOverridesChanged', modelId);
     return null;
   }
 }

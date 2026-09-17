@@ -1,20 +1,12 @@
 import assert from 'tjs:assert';
-import { gen1WriteImage, GEN1_PACKET_SIZE } from '../src/devices/protocol/elgato-gen1.js';
-import { gen2WriteImage, GEN2_PACKET_SIZE } from '../src/devices/protocol/elgato-gen2.js';
+import { gen1WriteImage } from '../src/devices/protocol/elgato-gen1.js';
+import { gen2WriteImage } from '../src/devices/protocol/elgato-gen2.js';
+import { MINI_MODEL } from '../src/devices/elgato/mini.js';
+import { MK2_MODEL } from '../src/devices/elgato/mk2.js';
+import { testAsync as test, summaryExit } from './helpers/harness.js';
 
-let passed = 0;
-let failed = 0;
-
-async function test(name: string, fn: () => void | Promise<void>): Promise<void> {
-  try {
-    await fn();
-    console.log(`  ✓ ${name}`);
-    passed++;
-  } catch (e: unknown) {
-    console.error(`  ✗ ${name}: ${(e as Error).message}`);
-    failed++;
-  }
-}
+const GEN1_PACKET_SIZE = MINI_MODEL.wire.packetSize;
+const GEN2_PACKET_SIZE = MK2_MODEL.wire.packetSize;
 
 // The SAME reused scratch is handed to `write` for every chunk, so collecting must
 // copy — that is the contract hid-driver-base's blocking hid_write relies on.
@@ -118,10 +110,9 @@ await test('empty payload still emits exactly one packet', () => {
 });
 
 await test('an exact multiple of the payload size does not emit a trailing packet', () => {
-  const pkts = collect(gen2WriteImage, 0, body((1024 - 8) * 2), GEN2_PACKET_SIZE);
+  const pkts = collect(gen2WriteImage, 0, body((GEN2_PACKET_SIZE - 8) * 2), GEN2_PACKET_SIZE);
   assert.equal(pkts.length, 2);
   assert.equal(pkts[1]![3], 1); // last chunk flagged
 });
 
-console.log(`\n${passed} passed, ${failed} failed`);
-tjs.exit(failed > 0 ? 1 : 0);
+summaryExit();

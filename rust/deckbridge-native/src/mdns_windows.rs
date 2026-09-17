@@ -11,8 +11,8 @@
 //! `stop` deregisters synchronously, mirroring how the TS side's `stop()` kills
 //! the `dns-sd` subprocess synchronously on the other platforms.
 
+use crate::util::ffi_guard;
 use std::ffi::c_char;
-use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::ptr::null_mut;
 use std::sync::Mutex;
 
@@ -66,7 +66,7 @@ pub unsafe extern "C" fn mdns_advertise_start(
     port: u16,
     txt_kv: *const c_char,
 ) -> i32 {
-    let result = catch_unwind(AssertUnwindSafe(|| {
+    ffi_guard(0, || {
         if name.is_null() || service_type.is_null() {
             return 0;
         }
@@ -74,6 +74,7 @@ pub unsafe extern "C" fn mdns_advertise_start(
         let name = unsafe { std::ffi::CStr::from_ptr(name) }
             .to_string_lossy()
             .into_owned();
+        // SAFETY: as above — a valid null-terminated C string per the fn contract.
         let service_type = unsafe { std::ffi::CStr::from_ptr(service_type) }
             .to_string_lossy()
             .into_owned();
@@ -144,8 +145,7 @@ pub unsafe extern "C" fn mdns_advertise_start(
 
         *guard = Some(ActiveRegistration { instance });
         1
-    }));
-    result.unwrap_or(0)
+    })
 }
 
 /// SAFETY: `instance` must be a live pointer previously returned by
@@ -171,11 +171,11 @@ unsafe fn deregister(instance: *mut DNS_SERVICE_INSTANCE) {
 /// only `stop()` (app shutdown) may block; `start()` never does.
 #[no_mangle]
 pub extern "C" fn mdns_advertise_stop() {
-    let _ = catch_unwind(AssertUnwindSafe(|| {
+    ffi_guard((), || {
         let mut guard = ACTIVE.lock().unwrap_or_else(|e| e.into_inner());
         if let Some(active) = guard.take() {
             // SAFETY: active.instance was registered by a prior advertise_start.
             unsafe { deregister(active.instance) };
         }
-    }));
+    });
 }

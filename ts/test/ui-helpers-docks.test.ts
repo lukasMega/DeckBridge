@@ -1,20 +1,7 @@
 import assert from 'tjs:assert';
 import { deriveDocks } from '../src/web/client/ui-helpers.js';
 import type { Status } from '../src/web/client/ui-types.js';
-
-let passed = 0;
-let failed = 0;
-
-function test(name: string, fn: () => void): void {
-  try {
-    fn();
-    console.log(`  ✓ ${name}`);
-    passed++;
-  } catch (e) {
-    console.error(`  ✗ ${name}: ${(e as Error).message}`);
-    failed++;
-  }
-}
+import { test, summaryExit } from './helpers/harness.js';
 
 const baseStatus: Status = {
   driverMode: 'real',
@@ -110,5 +97,4 @@ test('empty docks array → falls through to legacy synthesis', () => {
 
 // Summary
 
-console.log(`\n${passed} passed, ${failed} failed`);
-tjs.exit(failed > 0 ? 1 : 0);
+summaryExit();

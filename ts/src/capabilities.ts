@@ -13,24 +13,6 @@ import type { DeviceModel, ChildGeometry } from './devices/driver.js';
 
 export type { ChildGeometry };
 
-export const MK2_CHILD_GEOMETRY: ChildGeometry = {
-  rows: 3,
-  columns: 5,
-  keyCount: 15,
-  keyWidth: 72,
-  keyHeight: 72,
-  productName: 'Stream Deck MK.2',
-};
-
-export const MINI_CHILD_GEOMETRY: ChildGeometry = {
-  rows: 2,
-  columns: 3,
-  keyCount: 6,
-  keyWidth: 80,
-  keyHeight: 80,
-  productName: 'Stream Deck Mini',
-};
-
 export function modelToChildGeometry(model: DeviceModel): ChildGeometry {
   return {
     rows: model.rows,
@@ -45,7 +27,7 @@ export function modelToChildGeometry(model: DeviceModel): ChildGeometry {
 export function buildCapabilitiesPacket(
   config: DeviceConfig,
   port: number,
-  geometry: ChildGeometry = MK2_CHILD_GEOMETRY,
+  geometry: ChildGeometry,
 ): Buffer {
   const pkt = Buffer.alloc(ELGATO_PKT_SIZE_RX);
   pkt[0] = PKT_EVENT;

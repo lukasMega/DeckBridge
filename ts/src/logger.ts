@@ -68,10 +68,18 @@ export function setWorkerPost(fn: WorkerPostFn): void {
   _workerPost = fn;
 }
 
-function ts(): string {
-  const d = new Date();
+/** `HH:MM:SS.mmm`. Shared with log-file.ts so console and file lines match. */
+export function formatTime(d: Date = new Date()): string {
   return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}:${String(d.getSeconds()).padStart(2, '0')}.${String(d.getMilliseconds()).padStart(3, '0')}`;
 }
+
+/** Padded so the `[component]` column lines up. Also the log file's tags. */
+export const LEVEL_TAG: Record<LogLevel, string> = {
+  debug: 'DEBUG',
+  info: 'INFO ',
+  warn: 'WARN ',
+  error: 'ERROR',
+};
 
 // In a worker thread `_workerPost` is set: forward to the main thread, which
 // re-logs through this same module (console + WebUI). Doing BOTH the local
@@ -81,7 +89,7 @@ function ts(): string {
 export function debug(component: string, message: string): void {
   if (currentLevel <= 0) {
     if (_workerPost) return _workerPost({ type: 'log', level: 'debug', component, message });
-    console.debug(`${ts()} DEBUG [${component}] ${message}`);
+    console.debug(`${formatTime()} ${LEVEL_TAG.debug} [${component}] ${message}`);
     _webuiLog?.('debug', component, message);
     _fileSink?.('debug', component, message, Date.now());
   }
@@ -90,7 +98,7 @@ export function debug(component: string, message: string): void {
 export function info(component: string, message: string): void {
   if (currentLevel <= 1) {
     if (_workerPost) return _workerPost({ type: 'log', level: 'info', component, message });
-    console.log(`${ts()} INFO  [${component}] ${message}`);
+    console.log(`${formatTime()} ${LEVEL_TAG.info} [${component}] ${message}`);
     _webuiLog?.('info', component, message);
     _fileSink?.('info', component, message, Date.now());
   }
@@ -99,7 +107,7 @@ export function info(component: string, message: string): void {
 export function warn(component: string, message: string): void {
   if (currentLevel <= 2) {
     if (_workerPost) return _workerPost({ type: 'log', level: 'warn', component, message });
-    console.warn(`${ts()} WARN  [${component}] ${message}`);
+    console.warn(`${formatTime()} ${LEVEL_TAG.warn} [${component}] ${message}`);
     _webuiLog?.('warn', component, message);
     _fileSink?.('warn', component, message, Date.now());
   }
@@ -108,7 +116,7 @@ export function warn(component: string, message: string): void {
 export function error(component: string, message: string): void {
   if (currentLevel <= 3) {
     if (_workerPost) return _workerPost({ type: 'log', level: 'error', component, message });
-    console.error(`${ts()} ERROR [${component}] ${message}`);
+    console.error(`${formatTime()} ${LEVEL_TAG.error} [${component}] ${message}`);
     _webuiLog?.('error', component, message);
     _fileSink?.('error', component, message, Date.now());
   }

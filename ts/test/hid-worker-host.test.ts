@@ -2,20 +2,7 @@ import assert from 'tjs:assert';
 import { WorkerHidDriver } from '../src/hid-worker-host.js';
 import { DEFAULT_MODEL } from '../src/devices/registry.js';
 import type { DeviceModel } from '../src/devices/driver.js';
-
-let passed = 0;
-let failed = 0;
-
-async function runTest(name: string, fn: () => void | Promise<void>): Promise<void> {
-  try {
-    await fn();
-    console.log(`  ✓ ${name}`);
-    passed++;
-  } catch (e) {
-    console.error(`  ✗ ${name}: ${(e as Error).message}`);
-    failed++;
-  }
-}
+import { testAsync as runTest, summaryExit } from './helpers/harness.js';
 
 console.log('\nhid-worker-host: failed open cleanup');
 
@@ -82,7 +69,6 @@ await runTest('setImageOverride posts {type: setImageOverride, mode}', () => {
   ]);
 });
 
-console.log(`\n${passed} passed, ${failed} failed`);
 // Force exit: drivers that hit a failed open keep their worker alive (the fix),
 // which would otherwise keep the event loop running and hang the test runner.
-tjs.exit(failed > 0 ? 1 : 0);
+summaryExit();

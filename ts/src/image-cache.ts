@@ -1,4 +1,4 @@
-import { IMAGE_CACHE_SIZE } from './types.js';
+import { fnv1aHex, IMAGE_CACHE_SIZE } from './types.js';
 import type { DeviceImageSpec } from './devices/driver.js';
 
 export interface CacheEntry {
@@ -72,13 +72,7 @@ export function makeCacheKey(modelId: string, jpegHash: string, mode = 'def', re
  *  devices/model-overrides.ts) would keep serving entries encoded under the OLD
  *  spec, and the tweak would appear to do nothing until a restart. */
 export function specRevision(spec: DeviceImageSpec): string {
-  const text = JSON.stringify(spec);
-  let h = 0x811c9dc5;
-  for (let i = 0; i < text.length; i++) {
-    h ^= text.charCodeAt(i);
-    h = Math.imul(h, 0x01000193) >>> 0;
-  }
-  return h.toString(16).padStart(8, '0');
+  return fnv1aHex(JSON.stringify(spec));
 }
 
 export const imageCache = new LruCache<string, CacheEntry>(IMAGE_CACHE_SIZE);

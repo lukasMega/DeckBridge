@@ -9,6 +9,7 @@ import {
   EVENT_SUBTYPE_KEEPALIVE,
   bindAddr,
   CLIENT_EVICTION_GRACE_MS,
+  clearRepeating,
 } from './types.js';
 import {
   CORA_FLAG_ACKNAK,
@@ -134,10 +135,7 @@ export abstract class CoraServerBase extends EventEmitter {
   }
 
   private clearKeepalive(): void {
-    if (this.keepaliveTimer) {
-      clearInterval(this.keepaliveTimer);
-      this.keepaliveTimer = null;
-    }
+    this.keepaliveTimer = clearRepeating(this.keepaliveTimer);
   }
 
   protected abstract onClientConnected(socket: net.Socket): void;

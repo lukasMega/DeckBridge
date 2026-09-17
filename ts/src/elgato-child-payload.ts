@@ -22,7 +22,7 @@ import {
   SECONDARY_DETECT_RESPONSE_SIZE,
 } from './types.js';
 import type { ImageEvent } from './types.js';
-import { CORA_FLAG_RESULT, CORA_FLAG_VERBATIM, CORA_FLAG_REQACK } from './cora-frame.js';
+import { CORA_FLAG_RESULT, CORA_FLAG_REQACK, CORA_VERBATIM_RESULT } from './cora-frame.js';
 import { assembleImageChunk, assembleGen1ImageChunk } from './image-assembler.js';
 import type { DeviceConfig } from './elgato-types.js';
 import { buildFwReport, buildVidPidReport } from './feature-response.js';
@@ -39,6 +39,23 @@ export type LogFn = (level: 'debug' | 'info' | 'warn' | 'error', message: string
 
 // gen1 (Mini) probes — sent by desktop when PID identifies a gen1 device.
 // 0xa1 = device-info probe; 0xa4 = firmware-version probe (0xa0 + USB HID report id).
+/** The verbatim reply for `byte0`, or null when it is not a probe we answer. */
+function buildVerbatimProbeReport(byte0: number, deviceConfig: DeviceConfig): Buffer | null {
+  switch (byte0) {
+    case REPORT_SECONDARY_DETECT: {
+      const r = Buffer.alloc(SECONDARY_DETECT_RESPONSE_SIZE);
+      r[0] = REPORT_SECONDARY_DETECT;
+      return r;
+    }
+    case 0xa1:
+      return buildVidPidReport(0xa1, 32, ELGATO_VID, deviceConfig.productId, 2, 4);
+    case 0xa4:
+      return buildFwReport(0xa4, 32, 5, deviceConfig.childFirmwareVersion);
+    default:
+      return null;
+  }
+}
+
 export function handleChildVerbatimProbe(
   byte0: number,
   hidOp: number,
@@ -46,26 +63,10 @@ export function handleChildVerbatimProbe(
   deviceConfig: DeviceConfig,
   sendFrame: SendFrameFn,
 ): boolean {
-  switch (byte0) {
-    case REPORT_SECONDARY_DETECT: {
-      const r = Buffer.alloc(SECONDARY_DETECT_RESPONSE_SIZE);
-      r[0] = REPORT_SECONDARY_DETECT;
-      sendFrame(r, CORA_FLAG_RESULT | CORA_FLAG_VERBATIM, hidOp, messageId);
-      return true;
-    }
-    case 0xa1: {
-      const r = buildVidPidReport(0xa1, 32, ELGATO_VID, deviceConfig.productId, 2, 4);
-      sendFrame(r, CORA_FLAG_RESULT | CORA_FLAG_VERBATIM, hidOp, messageId);
-      return true;
-    }
-    case 0xa4: {
-      const r = buildFwReport(0xa4, 32, 5, deviceConfig.childFirmwareVersion);
-      sendFrame(r, CORA_FLAG_RESULT | CORA_FLAG_VERBATIM, hidOp, messageId);
-      return true;
-    }
-    default:
-      return false;
-  }
+  const r = buildVerbatimProbeReport(byte0, deviceConfig);
+  if (!r) return false;
+  sendFrame(r, CORA_VERBATIM_RESULT, hidOp, messageId);
+  return true;
 }
 
 export function handleChildFeatureRequest(

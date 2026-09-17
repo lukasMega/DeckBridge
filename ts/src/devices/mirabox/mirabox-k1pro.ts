@@ -1,5 +1,4 @@
 import type { DeviceModel } from '../driver.js';
-import { MINI_CHILD_GEOMETRY } from '../../capabilities.js';
 
 // K1 Pro: 6 LCD keys (3×2) + 3 rotary encoders (encoders ignored for now —
 // their input codes fall outside wireInputToCora and are dropped).
@@ -32,15 +31,9 @@ export const MIRABOX_K1PRO_MODEL: DeviceModel = {
     // trim 6 px from every side (→ 68×68) before the 64×64 resize so the art
     // fills the key instead of sitting inside a margin.
     crop: 6,
-    // The K1 Pro firmware drops the last byte of every full 1024-B image
-    // chunk; wire.chunkPadByte compensates with a sacrificial pad byte per
-    // chunk, which makes multi-chunk transfers fully reliable (probe round 16:
-    // 2/3/5-chunk files clean at q90-q100). Remaining real constraints:
-    // baseline, single interleaved scan (vendored rust/jpeg-encoder fork),
-    // JPEG header through SOS within the first 1023 payload bytes (always true
-    // for our ~370 B headers). 4096 caps the stepper well above any q90 64x64
-    // encode (busiest dump: ~2.4 KB); hardware-verified clean up to 4484 B.
-    // See .claude/plans/K1Pro/jpeg-artifact-findings.md.
+    // The K1 Pro firmware drops the last byte of every full 1024-B image chunk;
+    // wire.chunkPadByte compensates with a sacrificial pad byte per chunk, which makes
+    // multi-chunk transfers fully reliable (probe round 16: 2/3/5-chunk files clean at q90-q100).
     maxBytes: 4096,
     quality: 0.9,
     resizeFilter: 'lanczos3',
@@ -61,7 +54,7 @@ export const MIRABOX_K1PRO_MODEL: DeviceModel = {
   },
   cora: {
     productId: 0x0063,
-    advertiseGeometry: MINI_CHILD_GEOMETRY,
+    advertiseAs: 'mini',
     usePhysicalIdentity: false,
   },
   // Splash sources are upright (not Mini-oriented), so they keep the original

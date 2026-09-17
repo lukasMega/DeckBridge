@@ -9,20 +9,7 @@ import {
 } from '../src/cora-frame.js';
 import { MAX_RECEIVE_BUFFER } from '../src/types.js';
 import { setWebUILog, type LogLevel } from '../src/logger.js';
-
-let passed = 0;
-let failed = 0;
-
-function test(name: string, fn: () => void): void {
-  try {
-    fn();
-    console.log(`  ✓ ${name}`);
-    passed++;
-  } catch (e) {
-    console.error(`  ✗ ${name}: ${(e as Error).message}`);
-    failed++;
-  }
-}
+import { test, summary } from './helpers/harness.js';
 
 // Helpers
 
@@ -353,5 +340,4 @@ test('oversized payloadLength header is dropped, logs one warn, resyncs to next 
 
 // Summary
 
-console.log(`\n${passed} passed, ${failed} failed`);
-if (failed > 0) tjs.exit(1);
+summary();

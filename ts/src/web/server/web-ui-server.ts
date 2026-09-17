@@ -17,11 +17,13 @@ import { ActivityBuffers } from './activity-buffers.js';
 import { defaultMockConfig, mergeMockConfig, validateSimulatedKey } from './mock-config.js';
 import { PersistedSettings } from './persisted-settings.js';
 import type {
+  ControllerHost,
   DeviceModelInfo,
   DriverMode,
   LogLevel,
   MockDeviceConfig,
   PluginsInfo,
+  ReqError,
   StateResponse,
   Stats,
   StatusSnapshot,
@@ -44,8 +46,6 @@ import { liveDiagnosticsInputs } from './diagnostics-sources.js';
 import type { DiagnosticsOptions } from './diagnostics.js';
 
 export { isAllowedWebRequest, isValidMacAddress, pickFallbackPort } from './web-request-guard.js';
-
-type ReqError = { error: string; status: number };
 
 export class WebUIServer extends EventEmitter implements WebUIController {
   private server: TjsServeServer | null = null;
@@ -121,54 +121,42 @@ export class WebUIServer extends EventEmitter implements WebUIController {
       (event, payload) => this.bus.broadcast(event, payload),
       initialDriverMode,
     );
-    this.devicePrefs = new DevicePrefsController(
-      this.settings,
-      () => this.dockRegistry.selectedDeviceKey(),
-      () => this.selectedDock,
-      () => this.dockRegistry.selectedBrightness(),
-      (event, payload) => this.bus.broadcast(event, payload),
-      (event, ...args) => this.emit(event, ...args),
+    const host: ControllerHost = {
+      settings: this.settings,
+      emit: (event, ...args) => this.emit(event, ...args),
+      broadcast: (event, payload) => this.bus.broadcast(event, payload),
+      selectedDeviceKey: () => this.dockRegistry.selectedDeviceKey(),
+      selectedDock: () => this.selectedDock,
+      selectedDockStatus: () => this.dockRegistry.selectedStatus(),
+    };
+    this.devicePrefs = new DevicePrefsController(host, () =>
+      this.dockRegistry.selectedBrightness(),
     );
-    this.extraKeys = new ExtraKeysController(
-      this.settings,
-      this.bus,
-      () => this.dockRegistry.selectedDeviceKey(),
-      () => this.dockRegistry.selectedStatus(),
-      (event, ...args) => this.emit(event, ...args),
-    );
+    this.extraKeys = new ExtraKeysController(host, this.bus);
     this.settingsIdentity = new SettingsIdentityController(
+      host,
       (level) => this.trySetLogLevel(level),
-      this.settings,
       () => this.status.driverMode,
       () => this.mockConfig,
-      () => this.dockRegistry.selectedStatus(),
-      () => this.selectedDock,
-      () => this.dockRegistry.selectedDeviceKey(),
       () => this.imageModeOverride,
       (index) => this.trySelectDock(index),
       () => this.broadcastSelectedDeviceState(),
-      (event, ...args) => this.emit(event, ...args),
     );
     this.modelOverrides = new ModelOverridesController(
-      this.settings,
+      host,
       () => this.dockRegistry.selectedStatus()?.modelId ?? this.status.modelId,
-      (event, ...args) => this.emit(event, ...args),
     );
-    this.logging = new LoggingController(
-      this.settings,
-      () =>
-        liveDiagnosticsInputs({
-          cacheRoot: this.settingsCacheRoot,
-          logPath: this.logFilePath(),
-          logLevel: this.logLevel(),
-          uptimeMs: Date.now() - this.startTime,
-          overrides: this.modelOverrides,
-          state: this.fullState(),
-          activity: this.activity,
-          settingsJson: this.getSettingsJson(),
-        }),
-      (event, payload) => this.bus.broadcast(event, payload),
-      (event, ...args) => this.emit(event, ...args),
+    this.logging = new LoggingController(host, () =>
+      liveDiagnosticsInputs({
+        cacheRoot: this.settingsCacheRoot,
+        logPath: this.logFilePath(),
+        logLevel: this.logLevel(),
+        uptimeMs: Date.now() - this.startTime,
+        overrides: this.modelOverrides,
+        state: this.fullState(),
+        activity: this.activity,
+        settingsJson: this.getSettingsJson(),
+      }),
     );
   }
 

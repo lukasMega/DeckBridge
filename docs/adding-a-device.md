@@ -101,7 +101,6 @@ Create `ts/src/devices/<brand>/<model>.ts` — the single source of truth:
 // ts/src/devices/acme/acme-x5.ts
 import type { DeviceModel } from '../driver.js';
 import { IMAGE_JPEG_QUALITY, ELGATO_MK2_PID } from '../../types.js';
-import { MK2_CHILD_GEOMETRY } from '../../capabilities.js';
 
 const ACME_VID = 0xabcd;
 const ACME_PIDS = [0x0001, 0x0002] as const;
@@ -135,7 +134,8 @@ export const ACME_X5_MODEL: DeviceModel = {
     transform: 'sidecar',     // 'passthrough' only valid for rotate:0/no-flip/no-cap gen2-style devices
   },
 
-  // wire: {…}  // Mirabox-only byte-level framing; omit for elgato-hid (see Step 3).
+  // Required HID sizes plus protocol-specific behavior (see Step 3).
+  wire: { packetSize: 1024, inSize: 512 },
 
   // CORA (MK.2, 0-based row-major) ↔ device wire ids; empty = identity. See Step 4.
   // keyMap: { coraToWireImage: [...], wireInputToCora: [...], imageOffset, inputOffset }
@@ -144,7 +144,7 @@ export const ACME_X5_MODEL: DeviceModel = {
   // What this device advertises to the Elgato desktop over CORA.
   cora: {
     productId: ELGATO_MK2_PID,        // PID the desktop sees; non-Elgato spoof MK.2
-    advertiseGeometry: MK2_CHILD_GEOMETRY, // omit to derive from this model
+    advertiseAs: 'mk2',                   // omit to use this model's geometry
     usePhysicalIdentity: false,       // true = forward real serial/firmware (Elgato only)
   },
 
@@ -191,7 +191,7 @@ export const ACME_X5_MODEL: DeviceModel = {
 | Field | Meaning |
 |---|---|
 | `productId` | The PID the Elgato desktop sees in CORA capabilities. Elgato devices typically advertise their real PID (`usbProductIds[0]`); non-Elgato devices spoof `ELGATO_MK2_PID` so the desktop recognizes a known model. |
-| `advertiseGeometry` | Geometry sent in CORA capabilities. Omit to derive it from this model's own `rows`/`columns`/`keyCount`/`keyWidth`/`keyHeight`. Non-Elgato devices typically set this to `MK2_CHILD_GEOMETRY` so they present as a 15-key MK.2 regardless of physical layout. |
+| `advertiseAs` | Registry model id whose geometry is sent in CORA capabilities. Omit to derive geometry from this model. Non-Elgato devices typically use `'mk2'`; Mini-like devices use `'mini'`. Dimensions are never copied. |
 | `usePhysicalIdentity` | `true` forwards the device's real serial number / firmware version (Elgato devices only — the desktop expects them to match). `false` (Mirabox/third-party) keeps the configured mock identity. |
 
 ### `keyMap` field reference — translating between CORA and device key indices
@@ -254,7 +254,7 @@ Choose one of three paths, matching the model's `driverKind` to the implementati
 
 Set `driverKind: 'elgato-hid'` and `protocol: 'elgato-gen1'`/`'elgato-gen2'`.
 `ElgatoHidDriver` looks up byte-framing from `PROTOCOL_STRATEGY` by `model.protocol` — no
-new driver code.
+new driver code. Packet and input report sizes still come from `model.wire`.
 
 ### Path B — new HID packet format, same open/read/write pattern
 
@@ -263,23 +263,21 @@ Set `driverKind: 'elgato-hid'` with a new `protocol`, write the framing function
 
 ```typescript
 // ts/src/devices/protocol/acme-v1.ts
-const PACKET_SIZE = 1024;
 const HEADER_SIZE = 10;  // whatever your captures showed
-const PAYLOAD_SIZE = PACKET_SIZE - HEADER_SIZE;
 
-/** Encode a JPEG for key `keyIndex` into output report buffers. */
-export function acmePackImage(keyIndex: number, jpegBytes: Uint8Array): Uint8Array[] {
-  const packets: Uint8Array[] = [];
-  for (let offset = 0, part = 0; offset < jpegBytes.length || part === 0; offset += PAYLOAD_SIZE, part++) {
-    const chunk = jpegBytes.subarray(offset, offset + PAYLOAD_SIZE);
-    const isLast = offset + PAYLOAD_SIZE >= jpegBytes.length;
-    const pkt = new Uint8Array(PACKET_SIZE);
-    pkt[0] = 0x02; pkt[1] = keyIndex; pkt[2] = isLast ? 1 : 0; pkt[3] = part & 0xff; // header
-    pkt.set(chunk, HEADER_SIZE);
-    packets.push(pkt);
-    if (isLast) break;
-  }
-  return packets;
+/** Framing uses caller scratch; model.wire.packetSize owns its size. */
+export function acmeWriteImage(
+  keyIndex: number,
+  jpegBytes: Uint8Array,
+  scratch: Uint8Array,
+  write: (packet: Uint8Array) => void,
+): void {
+  writeChunks(jpegBytes, scratch, HEADER_SIZE, (packet, part, isLast) => {
+    packet[0] = 0x02;
+    packet[1] = keyIndex;
+    packet[2] = isLast ? 1 : 0;
+    packet[3] = part & 0xff;
+  }, write);
 }
 
 /** Parse an input report into key states. Return null if not a button report. */
@@ -302,12 +300,12 @@ export function acmeResetReport(): Uint8Array {
 
 ```typescript
 // ts/src/devices/protocol/index.ts — add one entry, touch zero call-sites in hid-driver-base.ts
-import { acmePackImage, acmeParseInput, acmeBrightnessReport, acmeResetReport } from './acme-v1.js';
+import { acmeWriteImage, acmeParseInput, acmeBrightnessReport, acmeResetReport } from './acme-v1.js';
 
 export const PROTOCOL_STRATEGY: Partial<Record<DeviceProtocol, ProtocolStrategy>> = {
   // ...existing entries...
   'acme-v1': {
-    packImage: acmePackImage,
+    writeImage: acmeWriteImage,
     parseInput: acmeParseInput,
     brightnessReport: acmeBrightnessReport,
     resetReport: acmeResetReport,
@@ -418,9 +416,8 @@ export class AcmeDriver extends EventEmitter {
   `_releaseLibAfterFailedOpen` in `devices/hid-connection.ts`).
 - Load `hidapi` through a module-level `_workerHidLib` singleton (as the sample and both real drivers do) so a GC or premature `dlclose()` can't unload it mid-callback. Only clear it in `_cleanup()` after a successful open was closed.
 - If the device needs a heartbeat, use `setInterval` and cancel it in `_cleanup`.
-- Read byte-level framing constants (packet size, heartbeat interval, quirks) from
-  `model.wire` rather than hardcoding them — that's what lets `MiraboxDriver` serve
-  both `mirabox-cora` and `mirabox-cora-v1` from one class.
+- Read HID sizes and byte-level behavior from `model.wire` rather than hardcoding them.
+  Protocol strategies own framing algorithms only.
 
 ---
 
@@ -521,6 +518,15 @@ When the values are right, hit **Copy overrides as JSON** and paste them into th
 model's `DeviceModel` here — the registry is the ground truth, and runtime tuning is
 scaffolding on the way to it. See
 [Device tuning](./troubleshooting.md#device-tuning).
+
+Two `wire` fields are **not** tunable this way on a `driverKind: 'elgato-hid'` model:
+`packetSize` and `inSize` are fixed by the gen1/gen2 protocol, and an override naming
+either is rejected with `wire.<key>: not tunable on <name> — fixed by the <protocol>
+protocol`. A wrong `packetSize` makes the driver chunk short, which the firmware
+discards **silently** — a black panel with no error, which is exactly why this is a
+hard reject rather than a knob. Both stay tunable on Mirabox-family boards (where
+`inSize` is capped at 4096). Setting them in the `DeviceModel` literal below is still
+correct and required; the lock applies to runtime *overrides* only.
 
 :::
 

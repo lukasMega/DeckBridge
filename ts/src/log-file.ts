@@ -7,7 +7,7 @@
 // Main thread only. A worker forwards its lines via postMessage and the main
 // thread re-logs them through logger.ts, so there is exactly one writer and one
 // file handle; see FileSinkFn in logger.ts.
-import { setFileSink, warn } from './logger.js';
+import { formatTime, LEVEL_TAG, setFileSink, warn } from './logger.js';
 import type { LogLevel } from './logger.js';
 import { defaultCacheRoot } from './native-libs.js';
 
@@ -19,13 +19,6 @@ export const LOG_FILES_KEPT = 3;
  *  ACK hot path (same rationale as activity-buffers.ts). warn/error flush at
  *  once — a hang must not swallow the last line before the stall. */
 export const LOG_FLUSH_MS = 250;
-
-const LEVEL_TAG: Record<LogLevel, string> = {
-  debug: 'DEBUG',
-  info: 'INFO ',
-  warn: 'WARN ',
-  error: 'ERROR',
-};
 
 export function logDir(cacheRoot: string = defaultCacheRoot()): string {
   return `${cacheRoot}/logs`;
@@ -47,12 +40,7 @@ export function formatLine(
   message: string,
   ts: number,
 ): string {
-  const d = new Date(ts);
-  const hh = String(d.getHours()).padStart(2, '0');
-  const mm = String(d.getMinutes()).padStart(2, '0');
-  const ss = String(d.getSeconds()).padStart(2, '0');
-  const ms = String(d.getMilliseconds()).padStart(3, '0');
-  return `${hh}:${mm}:${ss}.${ms} ${LEVEL_TAG[level]} [${component}] ${message}`;
+  return `${formatTime(new Date(ts))} ${LEVEL_TAG[level]} [${component}] ${message}`;
 }
 
 interface FileHandleLike {

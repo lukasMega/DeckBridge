@@ -5,7 +5,8 @@
 // (caught below), so callers don't need to gate on FFI.suffix themselves.
 import FFI from 'tjs:ffi';
 import { STRING, UINT16, INT } from './hidapi.ts';
-import { debug, warn } from '../logger.js';
+import { debug } from '../logger.js';
+import { guardedCall } from './native-load.js';
 
 const DECKBRIDGE_NATIVE_LIB = 'DECKBRIDGE_NATIVE_LIB';
 
@@ -59,20 +60,16 @@ export function mdnsAdvertiseStart(
 ): boolean {
   const l = load();
   if (!l) return false;
-  try {
-    return l.symbols.mdns_advertise_start(name, serviceType, port, txtKv) === 1;
-  } catch (e) {
-    warn('ffi', `mdns_advertise_start threw: ${String(e)}`);
-    return false;
-  }
+  return guardedCall(
+    'mdns_advertise_start',
+    false,
+    () => l.symbols.mdns_advertise_start(name, serviceType, port, txtKv) === 1,
+  );
 }
 
 /** Stops native mDNS advertise (no-op if never started / unavailable). */
 export function mdnsAdvertiseStop(): void {
-  if (!lib) return;
-  try {
-    lib.symbols.mdns_advertise_stop();
-  } catch (e) {
-    warn('ffi', `mdns_advertise_stop threw: ${String(e)}`);
-  }
+  const l = lib;
+  if (!l) return;
+  guardedCall<void>('mdns_advertise_stop', undefined, () => l.symbols.mdns_advertise_stop());
 }

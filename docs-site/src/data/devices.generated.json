@@ -293,7 +293,7 @@
           "defaultVisible": false
         }
       ],
-      "legend": "— = no wire spec at all (Elgato models frame in PROTOCOL_STRATEGY) or the field is omitted — reportId 0x00 · chunkPadByte false · chunkDelayMs 0 · sharedSerial false · packetSizeCandidates none, so packetSize is used as written."
+      "legend": "— = optional field omitted — reportId 0x00 · heartbeat none · synthesizeKeyUp false · sendStpAfterImage false · chunkPadByte false · chunkDelayMs 0 · sharedSerial false · packetSizeCandidates none, so packetSize is used as written."
     }
   },
   "models": [
@@ -342,8 +342,8 @@
         },
         "wire": {
           "name": "Stream Deck MK.2",
-          "packetSize": "—",
-          "inSize": "—",
+          "packetSize": "1024",
+          "inSize": "512",
           "heartbeatMs": "—",
           "synthesizeKeyUp": "—",
           "sendStpAfterImage": "—",
@@ -400,8 +400,8 @@
         },
         "wire": {
           "name": "Stream Deck Mini",
-          "packetSize": "—",
-          "inSize": "—",
+          "packetSize": "1024",
+          "inSize": "512",
           "heartbeatMs": "—",
           "synthesizeKeyUp": "—",
           "sendStpAfterImage": "—",
