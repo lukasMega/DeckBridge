@@ -8,6 +8,7 @@
 //
 // Purpose: calibrate an untested board on the hardware it runs on, then upstream the
 // working values into the registry — see docs/adding-a-device.md.
+import { supportsImageBatching } from './driver.js';
 import type {
   DeviceImageSpec,
   DeviceKeyMap,
@@ -60,6 +61,7 @@ const WIRE_KEYS = [
   'chunkPadByte',
   'synthesizeKeyUp',
   'sendStpAfterImage',
+  'batchImageTransfers',
 ] as const;
 const SECTION_KEYS = ['image', 'keyMap', 'wire', 'splash'] as const;
 
@@ -192,7 +194,7 @@ function validateKeyMap(raw: unknown, model: DeviceModel, errors: Errors): void 
   checkNumber(raw.imageOffset, 'keyMap.imageOffset', errors, { integer: true });
 }
 
-function validateWire(raw: unknown, errors: Errors): void {
+function validateWire(raw: unknown, model: DeviceModel, errors: Errors): void {
   if (!isPlainObject(raw)) {
     errors.push('wire: must be an object');
     return;
@@ -206,6 +208,12 @@ function validateWire(raw: unknown, errors: Errors): void {
   checkBoolean(raw.chunkPadByte, 'wire.chunkPadByte', errors);
   checkBoolean(raw.synthesizeKeyUp, 'wire.synthesizeKeyUp', errors);
   checkBoolean(raw.sendStpAfterImage, 'wire.sendStpAfterImage', errors);
+  checkBoolean(raw.batchImageTransfers, 'wire.batchImageTransfers', errors);
+  if (raw.batchImageTransfers !== undefined && !supportsImageBatching(model)) {
+    errors.push(
+      `wire.batchImageTransfers: not tunable on ${model.name} — requires a 293S-family board`,
+    );
+  }
 }
 
 function validateSplash(raw: unknown, errors: Errors): void {
@@ -236,7 +244,7 @@ export function validateModelOverride(raw: unknown, model: DeviceModel): Validat
   rejectUnknownKeys(raw, SECTION_KEYS, 'override', errors);
   if (raw.image !== undefined) validateImage(raw.image, errors);
   if (raw.keyMap !== undefined) validateKeyMap(raw.keyMap, model, errors);
-  if (raw.wire !== undefined) validateWire(raw.wire, errors);
+  if (raw.wire !== undefined) validateWire(raw.wire, model, errors);
   if (raw.splash !== undefined) validateSplash(raw.splash, errors);
   if (errors.length > 0) return { ok: false, errors };
   return { ok: true, value: raw };
@@ -329,7 +337,16 @@ export function tunableDefaults(model: DeviceModel): DeviceModelOverride {
   return {
     image: project(image, IMAGE_KEYS),
     keyMap: project(keyMap, KEYMAP_KEYS),
-    ...(wire ? { wire: project(wire, WIRE_KEYS) } : {}),
+    ...(wire
+      ? {
+          wire: project(
+            wire,
+            WIRE_KEYS.filter(
+              (key) => key !== 'batchImageTransfers' || supportsImageBatching(model),
+            ),
+          ),
+        }
+      : {}),
     ...(splash ? { splash } : {}),
   };
 }

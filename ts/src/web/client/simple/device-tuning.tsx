@@ -104,17 +104,20 @@ function SelectField<T extends string | number>({
 }
 
 function CheckField({
+  id,
   label,
   checked,
   onChange,
 }: Readonly<{
   label: string;
+  id?: string;
   checked: boolean;
   onChange: (v: boolean) => void;
 }>): preact.JSX.Element {
   return (
     <label class="settings-checkbox">
       <input
+        id={id}
         type="checkbox"
         checked={checked}
         onChange={(e) => onChange((e.target as HTMLInputElement).checked)}
@@ -158,6 +161,7 @@ export function DeviceTuningPanel(): preact.JSX.Element {
   const loadSeqRef = useRef(0);
   const [view, setView] = useState<DeviceOverridesView | null>(null);
   const [image, setImage] = useState<DeviceImageOverride>({});
+  const [batchImageTransfers, setBatchImageTransfers] = useState(false);
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -179,6 +183,7 @@ export function DeviceTuningPanel(): preact.JSX.Element {
       // `tunable` mirrors active settable values without rejected protocol facts.
       // Reloading intentionally discards drafts so edits never follow another dock.
       setImage({ ...data.tunable.image });
+      setBatchImageTransfers(data.tunable.wire?.batchImageTransfers === true);
     },
     [selectedModelId],
   );
@@ -215,7 +220,13 @@ export function DeviceTuningPanel(): preact.JSX.Element {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           modelId: activeView.modelId,
-          overrides: { ...activeView.overrides, image },
+          overrides: {
+            ...activeView.overrides,
+            image,
+            ...(typeof activeView.tunable.wire?.batchImageTransfers === 'boolean'
+              ? { wire: { ...activeView.overrides.wire, batchImageTransfers } }
+              : {}),
+          },
         }),
       });
       const parsed = (await r.json()) as { error?: string; reconnecting?: boolean };
@@ -317,6 +328,21 @@ export function DeviceTuningPanel(): preact.JSX.Element {
         checked={image.flipV ?? false}
         onChange={(flipV) => patch({ flipV })}
       />
+
+      {typeof activeView.tunable.wire?.batchImageTransfers === 'boolean' && (
+        <div>
+          <CheckField
+            id="tuning-batch-image-transfers"
+            label="Batch image transfers"
+            checked={batchImageTransfers}
+            onChange={setBatchImageTransfers}
+          />
+          <p class="help-lead">
+            Group page updates for faster transfers. Enabled by default on Mirabox 293S. Other
+            293S-family devices default off. Apply reconnects USB; restart unnecessary.
+          </p>
+        </div>
+      )}
 
       <Collapsible title="Advanced">
         <div class="tuning-grid">
