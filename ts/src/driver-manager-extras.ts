@@ -61,8 +61,10 @@ export interface ExtraDockCoordinatorDeps {
   extraKeyConfigFor: (deviceKey: string, wireId: number) => ExtraKeyConfig | undefined;
 }
 
-// Index 0 is the primary dock, so extras draw from 1..MAX_DEVICE_SESSIONS-1.
-const freshIndexPool = () => Array.from({ length: MAX_DEVICE_SESSIONS - 1 }, (_, k) => k + 1);
+// Index 0 is the primary dock, so extras draw from 1..maxDocks-1 — an empty pool
+// (maxDocks 1, the default) is what makes single-deck mode dock nothing.
+const freshIndexPool = (maxDocks: number) =>
+  Array.from({ length: Math.max(0, maxDocks - 1) }, (_, k) => k + 1);
 
 export class ExtraDockCoordinator {
   private readonly deps: ExtraDockCoordinatorDeps;
@@ -70,8 +72,13 @@ export class ExtraDockCoordinator {
   // Keyed by hidPath (physical unit), NOT model.id — lets N same-model units
   // each hold their own session.
   private extraSessions = new Map<string, DeviceSession>();
-  private freeIndices: number[] = freshIndexPool();
+  /** Total docks allowed, primary included. 1 (the default) = single deck: no
+   *  extras pool, and the scan timer never runs. Raised by setMaxDocks(). */
+  private maxDocks = 1;
+  private freeIndices: number[] = freshIndexPool(1);
   private scanTimer: ReturnType<typeof setInterval> | null = null;
+  /** app.ts asked for scanning; whether it actually runs also depends on maxDocks. */
+  private scanWanted = false;
   private scanInFlight = false;
   private extraCreateInFlight = false;
 
@@ -79,23 +86,56 @@ export class ExtraDockCoordinator {
     this.deps = deps;
   }
 
-  /** Begin polling for extra distinct-model devices to expose as their own
-   *  docks. Idempotent. Extras are created only after the primary connects
-   *  (see scanExtras) so the primary probe claims its device first. */
+  /** Ask for polling of extra devices to expose as their own docks. Idempotent,
+   *  and deferred: nothing is scanned until multi-deck is enabled
+   *  (setMaxDocks > 1), so startup order between the two calls is free. Extras
+   *  are created only after the primary connects (see scanExtras) so the primary
+   *  probe claims its device first. */
   startScan(): void {
-    if (this.scanTimer !== null) return;
+    this.scanWanted = true;
+    this.syncTimer();
+  }
+
+  stopScan(): void {
+    this.scanWanted = false;
+    this.syncTimer();
+  }
+
+  /** Raise/lower the dock cap (WebUI multi-deck toggle, via DriverManager).
+   *  Dropping back to a single deck tears down every extra dock — leaving one
+   *  live would keep an mDNS advert and a CORA port pair up with no UI to
+   *  remove them. */
+  async setMaxDocks(maxDocks: number): Promise<void> {
+    const next = Math.min(Math.max(1, Math.trunc(maxDocks)), MAX_DEVICE_SESSIONS);
+    if (next === this.maxDocks) return;
+    this.maxDocks = next;
+    if (next <= 1) {
+      // Teardown BEFORE the timer sync, so no tick can race an in-flight create.
+      await this.stopAllExtraSessions();
+    } else {
+      const held = new Set([...this.extraSessions.values()].map((s) => s.identity.index));
+      this.freeIndices = freshIndexPool(next).filter((i) => !held.has(i));
+    }
+    this.syncTimer();
+    log('info', 'coord', `dock cap: ${next}`);
+  }
+
+  /** The timer runs only when app.ts wants scanning AND a second dock is allowed
+   *  — single-deck mode must not enumerate USB every tick, which is the whole
+   *  point of the default. */
+  private syncTimer(): void {
+    const shouldRun = this.scanWanted && this.maxDocks > 1;
+    if (shouldRun === (this.scanTimer !== null)) return;
+    if (!shouldRun) {
+      if (this.scanTimer !== null) clearInterval(this.scanTimer);
+      this.scanTimer = null;
+      return;
+    }
     this.scanTimer = setInterval(() => {
       this.scanExtras().catch((e: unknown) =>
         log('error', 'coord', `scanExtras failed: ${(e as Error).message}`),
       );
     }, HID_POLL_INTERVAL_MS);
-  }
-
-  stopScan(): void {
-    if (this.scanTimer !== null) {
-      clearInterval(this.scanTimer);
-      this.scanTimer = null;
-    }
   }
 
   /** Test-only seam: run one extra-device scan pass synchronously-awaitable,
@@ -105,6 +145,7 @@ export class ExtraDockCoordinator {
   }
 
   private scanTarget(): WorkerHidDriver | null {
+    if (this.maxDocks <= 1) return null; // single-deck default: never dock a second unit
     if (this.deps.getShuttingDown()) return null;
     if (this.deps.getDriverMode() !== 'real') return null;
     if (this.deps.isProbeInFlight()) return null;
@@ -200,13 +241,12 @@ export class ExtraDockCoordinator {
       return;
     }
 
-    const index = this.allocIndex();
+    // Re-check after the open() await: setMaxDocks(1) during it already ran
+    // stopAllExtraSessions(), so inserting this session now would orphan a dock
+    // the user just switched off. Mirrors the post-snapshot scanTarget re-check.
+    const index = this.maxDocks > 1 ? this.allocIndex() : null;
     if (index === null) {
-      log(
-        'warn',
-        'coord',
-        `no free session index (max ${MAX_DEVICE_SESSIONS}) — closing ${model.id}`,
-      );
+      log('warn', 'coord', `no free session index (cap ${this.maxDocks}) — closing ${model.id}`);
       await closeDriver(driver);
       return;
     }
@@ -282,7 +322,7 @@ export class ExtraDockCoordinator {
   async stopAllExtraSessions(): Promise<void> {
     const sessions = [...this.extraSessions.values()];
     this.extraSessions.clear();
-    this.freeIndices = freshIndexPool();
+    this.freeIndices = freshIndexPool(this.maxDocks);
     for (const s of sessions) {
       await s.stop();
     }

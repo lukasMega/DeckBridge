@@ -30,6 +30,7 @@ export interface StateResponseInputs {
   extraKeys: Record<string, ExtraKeyConfig>;
   logLevel: string;
   logFilePath: string;
+  multiDeck: boolean;
 }
 
 export function buildStateResponse(input: StateResponseInputs): StateResponse {

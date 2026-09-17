@@ -9,7 +9,7 @@ import { MIRABOX_K1PRO_MODEL } from '../src/devices/mirabox/mirabox-k1pro.js';
 import type { SessionIdentity, SessionServers } from '../src/device-session.js';
 import type { DeviceModel, DeviceModelOverride } from '../src/devices/driver.js';
 import type { CommEntry, KeyState } from '../src/types.js';
-import { ELGATO_TCP_PORT } from '../src/types.js';
+import { ELGATO_TCP_PORT, MAX_DEVICE_SESSIONS, MAX_MULTI_DECK_SESSIONS } from '../src/types.js';
 import type { ChildGeometry } from '../src/capabilities.js';
 import type { DeviceConfig } from '../src/elgato-types.js';
 import type { ElgatoServer, ElgatoChildServer } from '../src/elgato.js';
@@ -703,7 +703,7 @@ class FactoryChildServer extends EventEmitter {
 /** Build a coordinator-enabled DriverManager: a session-servers factory (records
  *  identities + servers), a presence set the test can mutate, and a driver
  *  factory that records every driver made (so tests can emit 'disconnect'). */
-function setupCoord() {
+function setupCoord(maxDocks: number = MAX_MULTI_DECK_SESSIONS) {
   const server = makeFakeServer();
   const childServer = makeFakeChildServer();
   const webui = makeFakeWebUI();
@@ -745,6 +745,10 @@ function setupCoord() {
   });
   driverManager.__setPresenceCheck((m) => present.has(m.id));
   driverManager.__setListModelPaths(resolvePaths);
+  // Multi-deck is opt-in and off by default; these tests exercise the enabled
+  // path. Raising the cap takes effect synchronously (only LOWERING it awaits a
+  // session teardown), so the returned promise needs no await here.
+  void driverManager.setMultiDeck(maxDocks > 1, maxDocks);
   driverManager.__setRealDriverFactory((m) => {
     const d = new CoordFakeDriver(m);
     // Mirror the real driver: the primary probe opens with no explicit path and
@@ -990,8 +994,10 @@ await test('D1. two units of the SAME model → primary claims one path, extra o
 });
 
 await test('D2. disconnecting one same-model extra tears down only that unit; the other survives', async () => {
+  // Three docks: above the multi-deck opt-in's cap of 2, so the index pool is
+  // opened to the structural ceiling for this one test.
   const { driverManager, identities, serversByIndex, driversByPath, present, pathsByModel } =
-    setupCoord();
+    setupCoord(MAX_DEVICE_SESSIONS);
   present.add(DEFAULT_MODEL.id);
   pathsByModel.set(DEFAULT_MODEL.id, ['hid:mk2:a', 'hid:mk2:b', 'hid:mk2:c']);
 
@@ -1013,6 +1019,72 @@ await test('D2. disconnecting one same-model extra tears down only that unit; th
   await driverManager.__scanOnce();
   assert.equal(identities.length, 3, 'unit b re-docks into the freed index');
   assert.equal(identities[2]?.index, 1, 'freed index 1 reused');
+});
+
+// Multi-deck opt-in (settings.json `multiDeck`) — single deck is the default.
+
+await test('M1. multi-deck OFF (default): a second device is never docked', async () => {
+  const { driverManager, identities, present } = setupCoord(1);
+  present.add(DEFAULT_MODEL.id);
+  present.add(MIRABOX_293_MODEL.id);
+
+  await driverManager.tryRealConnect();
+  await driverManager.__scanOnce();
+
+  assert.equal(identities.length, 0, 'no extra dock while multi-deck is off');
+  assert.equal(driverManager.getDockStatuses().length, 1, 'primary only');
+});
+
+await test('M2. multi-deck OFF: startScan() installs no timer, so nothing enumerates', async () => {
+  const { driverManager, present } = setupCoord(1);
+  present.add(DEFAULT_MODEL.id);
+  present.add(MIRABOX_293_MODEL.id);
+  await driverManager.tryRealConnect();
+
+  let enumerations = 0;
+  driverManager.__setListModelPaths((m) => {
+    enumerations++;
+    return present.has(m.id) ? [`hid:${m.id}`] : [];
+  });
+
+  driverManager.startScan();
+  await new Promise<void>((r) => setTimeout(r, 30));
+  driverManager.stopScan();
+  assert.equal(enumerations, 0, 'the extras scan never ran with multi-deck off');
+});
+
+await test('M3. setMultiDeck(true) allows exactly ONE extra; a third unit is refused', async () => {
+  const { driverManager, identities, present, pathsByModel } = setupCoord(1);
+  present.add(DEFAULT_MODEL.id);
+  pathsByModel.set(DEFAULT_MODEL.id, ['hid:mk2:a', 'hid:mk2:b', 'hid:mk2:c']);
+
+  await driverManager.tryRealConnect(); // primary claims hid:mk2:a
+  await driverManager.setMultiDeck(true);
+
+  await driverManager.__scanOnce();
+  assert.equal(identities.length, 1, 'second unit docks');
+  await driverManager.__scanOnce();
+  assert.equal(identities.length, 1, 'third unit refused — cap is 2 docks total');
+  assert.equal(driverManager.getDockStatuses().length, 2, 'primary + one extra');
+});
+
+await test('M4. setMultiDeck(false) tears a live extra dock down', async () => {
+  const { driverManager, identities, serversByIndex, present } = setupCoord();
+  present.add(DEFAULT_MODEL.id);
+  present.add(MIRABOX_293_MODEL.id);
+
+  await driverManager.tryRealConnect();
+  await driverManager.__scanOnce();
+  assert.equal(identities.length, 1, 'extra up before the toggle');
+
+  await driverManager.setMultiDeck(false);
+  assert.equal(serversByIndex.get(1)?.server.stopCalls, 1, 'extra primary server stopped');
+  assert.equal(serversByIndex.get(1)?.childServer.stopCalls, 1, 'extra child server stopped');
+  assert.equal(driverManager.getDockStatuses().length, 1, 'back to the primary alone');
+
+  // And it stays down: no re-dock on a later tick.
+  await driverManager.__scanOnce();
+  assert.equal(identities.length, 1, 'no new extra created while multi-deck is off');
 });
 
 // Device tuning (settings.json modelOverrides — see devices/model-overrides.ts)

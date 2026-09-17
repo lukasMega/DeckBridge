@@ -39,6 +39,10 @@ export type PersistedLogLevel = 'debug' | 'info' | 'warn' | 'error' | 'silent';
 export interface Settings {
   selectedDock?: number;
   logLevel?: PersistedLogLevel;
+  /** Opt-in multi-deck: dock a second supported device as its own headless CORA
+   *  dock (max MAX_MULTI_DECK_SESSIONS). Absent/false = a single dock, and no USB
+   *  scanning at all once it is connected. */
+  multiDeck?: boolean;
   devices?: DeviceIdentitySettings[];
   /** Per-MODEL device tuning (rotation/flip/size/quality/keyMap — see
    *  devices/model-overrides.ts), keyed by model id.

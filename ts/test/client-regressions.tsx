@@ -6,6 +6,7 @@ import { CopyChip } from '../src/web/client/simple/controls.js';
 import { LogConsolePanel } from '../src/web/client/advanced-log-panel.js';
 import { DeviceTuningPanel } from '../src/web/client/simple/device-tuning.js';
 import { DiagnosticsPanel } from '../src/web/client/simple/diagnostics-panel.js';
+import { MultiDeckPanel } from '../src/web/client/simple/multi-deck-panel.js';
 import { KeymapLearn } from '../src/web/client/simple/keymap-learn.js';
 import { DockList } from '../src/web/client/simple/dock-cards.js';
 import type { DeviceOverridesView, DockUi } from '../src/web/client/ui-types.js';
@@ -667,6 +668,29 @@ async function runKeymapAndDiagnosticsPanels(): Promise<void> {
         elementText('#toggle-debug-logging').includes('on'),
         'The toggle updates after a successful post',
       );
+    } finally {
+      stub.restore();
+      await act(() => render(null, root));
+    }
+  }
+
+  // Multi-deck: the opt-in toggle reflects state and posts the opposite value.
+  {
+    const stub = stubFetch(() => ({ payload: { ok: true } }));
+    try {
+      await act(() => render(<MultiDeckPanel enabled={false} />, root));
+      await settle();
+      const box = (): HTMLInputElement | null => root.querySelector('#toggle-multi-deck');
+      check(box()?.checked === false, 'Multi-deck toggle starts off (the default)');
+
+      await click('#toggle-multi-deck');
+      await settle();
+      const post = stub.calls.find((c) => c.url === '/api/multi-deck');
+      check(
+        (post?.body as { enabled?: boolean } | undefined)?.enabled === true,
+        'Enabling posts enabled:true',
+      );
+      check(box()?.checked === true, 'The toggle updates after a successful post');
     } finally {
       stub.restore();
       await act(() => render(null, root));

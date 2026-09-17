@@ -231,6 +231,14 @@ webui.on('setLogLevel', (level: string) => {
   log('info', 'deckBr', `log level set to ${level}`);
 });
 
+// Multi-deck opt-in toggled (WebUI or settings import): raise/lower the dock cap.
+// Switching it off tears down a live second dock.
+webui.on('setMultiDeck', (enabled: boolean) => {
+  driverManager.setMultiDeck(enabled).catch((err: unknown) => {
+    log('error', 'deckBr', `setMultiDeck(${enabled}) failed: ${(err as Error).message}`);
+  });
+});
+
 // Device tuning changed: reopen the affected session(s) so the new image/wire/
 // keyMap spec is in force from the next open() and the first splash.
 webui.on('modelOverridesChanged', (modelId: string) => {
@@ -432,9 +440,12 @@ if (driverManager.getDriverMode() === 'mock') {
   driverManager.tryRealConnect().catch((e: unknown) => log('error', 'hid', String(e)));
 }
 
-// Begin polling for extra distinct-model docks. Safe in mock mode: scanExtras()
-// guards on driverMode==='real' and a connected primary, so it's a no-op until
-// a real primary is up.
+// Seed the dock cap from settings.json before asking for scanning. Multi-deck is
+// opt-in: with it off (the default) startScan() installs no timer at all, so a
+// connected single deck ends USB enumeration for good.
+await driverManager.setMultiDeck(webui.multiDeckEnabled());
+// Safe in mock mode: scanExtras() guards on driverMode==='real' and a connected
+// primary, so it's a no-op until a real primary is up.
 driverManager.startScan();
 
 log('info', 'deckBr', 'startup complete — entering event loop');

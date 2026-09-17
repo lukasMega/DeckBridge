@@ -55,6 +55,7 @@ export const routes: Route[] = [
   }),
   postJson('/api/device-identity/mdns-name', setDeviceMdnsName),
   postJson('/api/log-level', setLogLevelRoute),
+  postJson('/api/multi-deck', setMultiDeckRoute),
   post('/api/logs/open-in-os', async ({ ui }) => {
     await ui.openLogsFolder();
     return json({ ok: true });
@@ -113,6 +114,14 @@ async function saveDiagnostics({ req, ui }: RouteContext): Promise<Response> {
 function setLogLevelRoute({ level }: { level: unknown }, { ui }: RouteContext): Response {
   const err = ui.trySetLogLevel(level);
   return err ? json({ error: err.error }, err.status) : json({ ok: true, level });
+}
+
+/** WebUI "Use two decks at once" toggle. Disabling it also disconnects a live
+ *  second dock (DriverManager.setMultiDeck). */
+function setMultiDeckRoute({ enabled }: { enabled: unknown }, { ui }: RouteContext): Response {
+  if (typeof enabled !== 'boolean') return badRequest('enabled must be a boolean');
+  ui.setMultiDeck(enabled);
+  return json({ ok: true, enabled });
 }
 
 function setBrightness(

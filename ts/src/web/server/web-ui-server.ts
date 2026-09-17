@@ -384,7 +384,19 @@ export class WebUIServer extends EventEmitter implements WebUIController {
       extraKeys: this.selectedExtraKeyConfigs(),
       logLevel: this.logLevel(),
       logFilePath: this.logFilePath(),
+      multiDeck: this.settings.multiDeck,
     });
+  }
+
+  /** Persist the multi-deck opt-in and let app.ts push the new cap to
+   *  DriverManager ('setMultiDeck'). Validated by the route. */
+  setMultiDeck(enabled: boolean): void {
+    this.settings.setMultiDeck(enabled);
+    this.emit('setMultiDeck', enabled);
+  }
+
+  multiDeckEnabled(): boolean {
+    return this.settings.multiDeck;
   }
 
   // Extra keys (293S 6th column — see extra-keys.ts / extra-keys-controller.ts)

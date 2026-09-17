@@ -72,6 +72,12 @@ export class SettingsIdentityController {
     }
     const s = parsed as Settings;
     if (s.logLevel !== undefined) this.applyLogLevel(s.logLevel);
+    // Multi-deck travels with the file: importing one that enables it must
+    // actually raise the cap, not just persist the flag (app.ts listens).
+    if (typeof s.multiDeck === 'boolean') {
+      this.host.settings.setMultiDeck(s.multiDeck);
+      this.host.emit('setMultiDeck', s.multiDeck);
+    }
     // Device tuning: invalid entries are dropped with a warn inside
     // importModelOverrides, never thrown — an imported file must not be able to
     // poison runtime state. '' = "all models", the sessions reopen either way.

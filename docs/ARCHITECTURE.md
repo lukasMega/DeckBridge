@@ -363,10 +363,14 @@ mock-mode startup, and a WebUI model-selector change.
 
 ## Multi-device: extra docks
 
-DeckBridge can run more than one emulated Network Dock at once — one **primary** dock (the only one
-with WebUI/tray coupling) plus up to `MAX_DEVICE_SESSIONS - 1` (= 3) **extra**, headless docks, one
-per additional physical HID device found. `driver-manager.ts` is now a thin coordinator over two
-extracted pieces:
+DeckBridge runs **one** dock by default: once the primary device is connected it stops scanning USB
+altogether, and no extra dock is created. Setting `"multiDeck": true` in settings.json (the
+Settings → *Multiple decks* toggle in the web UI) raises the cap to `MAX_MULTI_DECK_SESSIONS` (= 2)
+docks — one **primary** (the only one with WebUI/tray coupling) plus one **extra**, headless dock.
+Turning it back off tears the extra dock down. `MAX_DEVICE_SESSIONS` (= 4) remains the structural
+ceiling: it sizes the session-index/CORA-port space, not the user-facing limit.
+
+`driver-manager.ts` is a thin coordinator over two extracted pieces:
 
 - **`PrimaryDock`** ([driver-manager-primary.ts](../ts/src/driver-manager-primary.ts)) — the
   index-0 dock's presentation state: identity resolution, brightness, extra-key widgets, and
@@ -375,7 +379,9 @@ extracted pieces:
   its own scan timer (every `HID_POLL_INTERVAL_MS`) over HID paths not already claimed by the primary
   or another extra dock, and spins up a [`DeviceSession`](../ts/src/device-session.ts) per newly
   found physical unit (`createExtraSession()`), keyed by HID path with a pool of free session
-  indices (1..3, lowest wins).
+  indices (1..cap-1, lowest wins). With multi-deck off the pool is **empty and the timer never
+  runs** — that is what makes a single connected deck the end of all USB enumeration, rather than a
+  3 s tick for the life of the process.
 
 A **`DeviceSession`** is a fully self-contained extra dock: its own CORA server pair on ports
 strided by `CORA_PORT_STRIDE` (`5343 + 2·index` / `5344 + 2·index`), its own mDNS advertisement and

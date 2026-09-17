@@ -95,12 +95,12 @@ directory it doesn't have.
 | 3000 | TCP | Web UI — bound to `127.0.0.1` by default. Start with `--bind 0.0.0.0` to expose it on the LAN (see below), or keep the default and use an SSH tunnel: `ssh -L 3000:localhost:3000 pi@<host>`, then open `http://localhost:3000` locally. |
 | 5343 | TCP | CORA main server — the Elgato app connects here |
 | 5344 | TCP | CORA child server — image/data channel |
-| +2 per extra dock | TCP | Each additional connected deck (different model) gets its own CORA pair, e.g. 5345/5346 for a second dock |
+| 5345/5346 | TCP | Second deck's CORA pair — only when `"multiDeck": true` is set in settings.json (off by default) |
 | 5353 | UDP | mDNS (`_elg._tcp`), via `avahi-daemon` |
 
-If you run a firewall (`ufw`, `nftables`), allow inbound TCP 5343/5344 (+2 per
-extra dock) and UDP 5353 from your LAN. Add TCP 3000 only if you expose the web
-UI with `--bind 0.0.0.0`.
+If you run a firewall (`ufw`, `nftables`), allow inbound TCP 5343/5344 (plus
+5345/5346 if you enable multiple decks) and UDP 5353 from your LAN. Add TCP 3000
+only if you expose the web UI with `--bind 0.0.0.0`.
 
 ### Reaching the web UI from another machine
 

@@ -14,8 +14,13 @@ export const ELGATO_CHILD_PORT = 5344;
 // Multi-device: extra docks use a fixed port stride off the primary pair, so
 // session i listens on primary ELGATO_TCP_PORT+2i and child ELGATO_CHILD_PORT+2i.
 export const CORA_PORT_STRIDE = 2;
-// Session 0 (primary singleton) + up to 3 extra docks of distinct models.
+// Structural ceiling on session indices (and therefore CORA port pairs):
+// session 0 (primary singleton) + up to 3 extra docks.
 export const MAX_DEVICE_SESSIONS = 4;
+// How many docks the opt-in "multiple decks" setting actually allows (primary +
+// one extra). Without it DeckBridge runs a single dock and stops scanning USB
+// once that dock is up — see driver-manager-extras.ts.
+export const MAX_MULTI_DECK_SESSIONS = 2;
 export const ELGATO_KEEPALIVE_MS = 2000;
 export const ELGATO_IMAGE_HEADER_SIZE = 8;
 
