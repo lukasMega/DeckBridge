@@ -220,13 +220,13 @@ jobs:
           path: src-tauri/target/release/bundle/dmg/*.dmg
           if-no-files-found: error
 
-  # Windows is packaged differently: instead of a raw zip, the binary is wrapped
-  # in a Tauri v2 supervisor shell (src-tauri/) and shipped as an NSIS installer
-  # (Scoop/winget-friendly, no Gatekeeper/SmartScreen friction via Scoop). The
-  # relay binary + deckbridge-tray ride along as Tauri sidecars (externalBin), so they
-  # must be renamed to the MSVC target triple before `pnpm tauri build` (G2).
+  # Windows ships two artifacts from one job: an NSIS installer (Scoop/winget-friendly)
+  # and a portable zip. The installer wraps the binary in a Tauri v2 supervisor shell
+  # (src-tauri/); the relay binary + deckbridge-tray ride along as Tauri sidecars
+  # (externalBin), so they must be renamed to the MSVC target triple before
+  # `pnpm tauri build` (G2). The portable zip is the same binaries, unwrapped.
   build-windows:
-    name: Build windows-x86_64 (Tauri NSIS)
+    name: Build windows-x86_64 (NSIS + portable)
     needs: prepare
     if: needs.prepare.outputs.should_build == 'true'
     runs-on: windows-latest
@@ -293,10 +293,30 @@ jobs:
         working-directory: src-tauri
         run: pnpm install --frozen-lockfile
 
+      # Fetch the runtime up front (normally a `compile` dependency) so the icon
+      # can be stamped into it before it is copied into the relay binary.
+      - name: Set up txiki.js runtime
+        run: mise run tjs-setup
+
+      # `tjs compile` copies $TJS and appends the bytecode as a PE overlay, so the
+      # icon must go into tjs.exe BEFORE compiling — rcedit on the finished binary
+      # would rewrite the PE and lose that trailing payload.
+      - name: Stamp icon + version info into the runtime
+        shell: pwsh
+        run: |
+          Invoke-WebRequest -Uri "https://github.com/electron/rcedit/releases/download/v2.0.0/rcedit-x64.exe" -OutFile rcedit.exe
+          ./scripts/stamp-exe.ps1 -Target "vendor/txiki.js/build/tjs.exe" -Rcedit "rcedit.exe"
+
       # Produces the Windows relay binary (deckbridge[.exe]) via the same build
       # chain the other platforms use. txiki's `compile` emits a PE executable.
       - name: Compile relay binary
         run: mise run compile
+
+      # The tray binary is a plain cargo build (no overlay), so it can be stamped
+      # after the fact — unlike the relay, which inherits the runtime's icon.
+      - name: Stamp icon + version info into the tray binary
+        shell: pwsh
+        run: ./scripts/stamp-exe.ps1 -Target "rust/target/release/deckbridge-tray.exe" -Rcedit "rcedit.exe"
 
       # Boot the just-compiled binary in mock mode (no HID device needed),
       # poll the WebUI until it responds, then kill it — mirrors the
@@ -330,6 +350,17 @@ jobs:
           }
           Write-Host "Smoke test OK: WebUI responded 200"
           Stop-Process -Id $proc.Id -Force
+
+      # Portable artifact: the same relay binary + tray, zipped, no installer.
+      # Runs before the sidecar staging so it packages the as-compiled binaries.
+      - name: Package portable zip
+        run: node scripts/package.mjs "${{ needs.prepare.outputs.package_version }}"
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: windows-x86_64-portable
+          path: dist/*.zip
+          if-no-files-found: error
 
       # Tauri's bundler only picks up the sidecar whose filename matches the
       # build's target triple (G2), so copy both binaries into src-tauri/binaries/

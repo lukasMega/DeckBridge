@@ -106,6 +106,10 @@ description = "Compile to standalone binary (simple-only UI — this is what rel
 depends = ["build"]
 run = "node scripts/compile.mjs"
 
+[tasks.icons]
+description = "Regenerate app + tray icons from the BridgeMark vector (needs rsvg-convert; commit the result)"
+run = "node scripts/gen-icons.mjs"
+
 [tasks.sync-version]
 description = "Stamp ts/package.json's version into Cargo.toml/tauri.conf.json (CI-only, don't commit the result)"
 run = "node scripts/sync-version.mjs"

@@ -45,9 +45,18 @@ if (!version) {
 }
 
 // Platform
-const osMap = { darwin: { name: 'macos', lib: 'dylib' }, linux: { name: 'linux', lib: 'so' } };
+const osMap = {
+  darwin: { name: 'macos', lib: 'dylib' },
+  linux: { name: 'linux', lib: 'so' },
+  win32: { name: 'windows', lib: 'dll' },
+};
 const os = osMap[process.platform];
 if (!os) die(`error: unsupported OS: ${process.platform}`);
+
+// Windows executables keep their .exe suffix inside the zip; hidapi.dll is embedded
+// in the binary and extracted at runtime (native-libs.ts), so the zip stays portable.
+const isWindows = process.platform === 'win32';
+const exe = isWindows ? '.exe' : '';
 
 const archMap = { x64: 'x86_64', arm64: 'arm64' };
 const archName = archMap[process.arch];
@@ -65,8 +74,9 @@ const distDir = join(distRoot, distName);
 const zipFile = join(distRoot, `${distName}.zip`);
 
 // Verify build artifacts
-const mainBin = join(root, srcBin);
-const trayBin = join(root, 'rust', 'target', 'release', 'deckbridge-tray');
+// txiki's compile may emit `deckbridge` without the .exe suffix on Windows.
+const mainBin = existsSync(join(root, `${srcBin}${exe}`)) ? join(root, `${srcBin}${exe}`) : join(root, srcBin);
+const trayBin = join(root, 'rust', 'target', 'release', `deckbridge-tray${exe}`);
 const iconsDir = join(root, 'rust', 'deckbridge-tray', 'icons');
 
 // Optional system tray
@@ -88,15 +98,15 @@ if (missing.length) {
 rmSync(distDir, { recursive: true, force: true });
 mkdirSync(distDir, { recursive: true });
 
-copyFileSync(mainBin, join(distDir, 'deckbridge'));
-chmodSync(join(distDir, 'deckbridge'), 0o755);
+copyFileSync(mainBin, join(distDir, `deckbridge${exe}`));
+if (!isWindows) chmodSync(join(distDir, 'deckbridge'), 0o755);
 
 if (includeTray) {
-  copyFileSync(trayBin, join(distDir, 'deckbridge-tray'));
+  copyFileSync(trayBin, join(distDir, `deckbridge-tray${exe}`));
   for (const f of readdirSync(iconsDir).filter((f) => f.endsWith('.png'))) {
     copyFileSync(join(iconsDir, f), join(distDir, f));
   }
-  chmodSync(join(distDir, 'deckbridge-tray'), 0o755);
+  if (!isWindows) chmodSync(join(distDir, 'deckbridge-tray'), 0o755);
   console.log('Including system tray: deckbridge-tray + icons');
 } else {
   console.log('Excluding system tray (INCLUDE_TRAY=0): omitting deckbridge-tray + icons');
@@ -109,8 +119,19 @@ if (existsSync(licenseSrc)) copyFileSync(licenseSrc, join(distDir, 'LICENSE-hida
 // Zip (primary artifact)
 // -9: maximum deflate compression (smaller download).
 // -X: exclude macOS extended attributes (resource forks) that cause warnings/non-zero exit
+// Windows runners ship no `zip`; PowerShell's Compress-Archive keeps the same layout.
 rmSync(zipFile, { force: true });
-const zip = spawnSync('zip', ['-9', '-qrX', basename(zipFile), distName], { cwd: distRoot, stdio: 'inherit' });
+const zip = isWindows
+  ? spawnSync(
+      'powershell',
+      [
+        '-NoProfile',
+        '-Command',
+        `Compress-Archive -Path '${distName}' -DestinationPath '${basename(zipFile)}' -CompressionLevel Optimal -Force`,
+      ],
+      { cwd: distRoot, stdio: 'inherit' },
+    )
+  : spawnSync('zip', ['-9', '-qrX', basename(zipFile), distName], { cwd: distRoot, stdio: 'inherit' });
 if (zip.status !== 0 || !existsSync(zipFile)) die('error: zip was not created');
 console.log(`Created: ${zipFile}`);
 
