@@ -11,9 +11,9 @@ import {
 import type { DockStatus } from './types.js';
 import { DEFAULT_MODEL } from './devices/registry.js';
 import { ExtraKeyWidgets } from './extra-keys.js';
-import { buildDockStatus } from './device-session.js';
+import { buildDockStatus, repaintFrames } from './device-session.js';
 import type { DeviceInfo } from './device-session.js';
-import type { DeviceDriver, DeviceModel } from './devices/driver.js';
+import type { DeviceDriver, DeviceModel, DeviceModelOverride } from './devices/driver.js';
 import type { ElgatoServer } from './elgato.js';
 import type { WebUIServer } from './web/server';
 import type { DeviceIdentitySettings } from './settings-store.js';
@@ -118,6 +118,20 @@ export class PrimaryDock {
       driver.renderCoraImage?.(key, data, format);
       this.deps.webui.notifyDockImage(0, key, data, format);
     }
+  }
+
+  /** Live device tuning (image-only change): swap the spec on the running
+   *  driver and re-render what is on the panel, instead of a close→reopen. */
+  applyLiveTuning(
+    driver: DeviceDriver,
+    overrides: DeviceModelOverride | undefined,
+    effectiveModel: DeviceModel,
+  ): void {
+    driver.applyOverrides?.(overrides, effectiveModel);
+    this.model = effectiveModel;
+    repaintFrames(driver, this.deps.webui.dockFramesSnapshot(0));
+    // Extra-key icons are rendered by the widget scheduler, not by CORA frames.
+    this.repaintWidgets();
   }
 
   /** (Re)start the extra-key widget scheduler. No-op for models without

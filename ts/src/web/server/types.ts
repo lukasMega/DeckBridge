@@ -15,10 +15,17 @@ import type {
   Stats,
 } from '../contract.js';
 import type { DeviceOverridesView } from './model-overrides-controller.js';
+import type { OverrideChangeKind } from '../../devices/model-overrides.js';
 import type { DiagnosticsOptions } from './diagnostics.js';
 import type { PersistedSettings } from './persisted-settings.js';
 
 /** A rejected request: the message the WebUI shows, plus its HTTP status. */
+/** Result of a persisted device-tuning change: how the live session applies it
+ *  (see classifyOverrideChange). */
+export interface OverrideChange {
+  kind: OverrideChangeKind;
+}
+
 export interface ReqError {
   error: string;
   status: number;
@@ -151,8 +158,8 @@ export interface WebUIController {
   setMultiDeck(enabled: boolean): void;
   openLogsFolder(): Promise<void>;
   deviceOverridesView(modelId?: unknown): DeviceOverridesView | ReqError;
-  trySetModelOverride(modelId: unknown, overrides: unknown): ReqError | null;
-  tryResetModelOverride(modelId: unknown): ReqError | null;
+  trySetModelOverride(modelId: unknown, overrides: unknown): ReqError | OverrideChange;
+  tryResetModelOverride(modelId: unknown): ReqError | OverrideChange;
   buildDiagnosticsReport(opt?: DiagnosticsOptions): Promise<string>;
   saveDiagnosticsReport(opt?: DiagnosticsOptions): Promise<string | null>;
 }

@@ -7,16 +7,19 @@ import { MAX_MULTI_DECK_SESSIONS } from './types.js';
 import type { KeyEvent, CommEntry, DockStatus } from './types.js';
 import type { DeviceDriver, DeviceModel, DeviceModelOverride } from './devices/driver.js';
 import { applyModelOverrides, overrideSummary } from './devices/model-overrides.js';
+import type { OverrideChangeKind } from './devices/model-overrides.js';
 import { advertisedGeometry, DEVICE_MODELS, DEFAULT_MODEL } from './devices/registry.js';
 import { sendSplashImages } from './splash-sender.js';
 import { applyModelToServers, wireCommonDriverEvents } from './device-session.js';
 import { PrimaryDock } from './driver-manager-primary.js';
+import { applyTuningChange } from './driver-manager-tuning.js';
 import { ProbePacer } from './driver-manager-pacing.js';
 import { ExtraDockCoordinator } from './driver-manager-extras.js';
 import { HidScanWorkerHost } from './hid-scan-worker-host.js';
 import {
   defaultListModelPaths,
   defaultPresenceCheck,
+  elgatoHardwarePresent,
   getInitialDriverMode,
   resolveRealDeviceIdentity,
   type DriverManagerDeps,
@@ -108,6 +111,7 @@ export class DriverManager {
       onSessionsChanged: () => this.deps.onDocksChanged?.(),
       onImage: (dockIndex, keyIndex, data, format) =>
         deps.webui.notifyDockImage(dockIndex, keyIndex, Buffer.from(data), format),
+      dockFramesSnapshot: (dockIndex) => deps.webui.dockFramesSnapshot(dockIndex),
       isBrightnessOverride: (deviceKey) => deps.webui.isBrightnessOverride(deviceKey),
       extraKeyConfigFor: (deviceKey, wireId) => deps.webui.extraKeyConfigFor(deviceKey, wireId),
     });
@@ -265,14 +269,6 @@ export class DriverManager {
     });
   }
 
-  /** Elgato-branded model enumerated on USB — gates the "Elgato app is blocking
-   *  access" screen so it can't fire without Elgato hardware present. */
-  private elgatoHardwarePresent(): boolean {
-    return DEVICE_MODELS.some(
-      (model) => model.driverKind === 'elgato-hid' && this.isModelPresent(model),
-    );
-  }
-
   /** Presence sweep = one supported-device enumeration inside the dedicated worker.
    * Every per-model query reads its installed snapshot. Duration remains the pacer's
    * input, but even a stalled scan cannot starve CORA or WebUI work (issue #67.2). */
@@ -359,7 +355,7 @@ export class DriverManager {
 
     if (!found) {
       log('warn', 'hid', `no device found — retrying in ${this.pacer.delayMs / 1000}s`);
-      this.deps.webui.notifyElgatoDevicePresent(this.elgatoHardwarePresent());
+      this.deps.webui.notifyElgatoDevicePresent(elgatoHardwarePresent(this.isModelPresent));
       this.scheduleReconnect();
       this.deps.onTrayChange();
       return null;
@@ -375,26 +371,32 @@ export class DriverManager {
     return found;
   }
 
-  /** Device tuning changed (WebUI / settings import): close the affected session(s) so the 3 s
-   * reconnect tick reopens them with the new spec. image/wire/keyMap must already be correct at
-   * open() and at the first splash, so a live patch would not do. `modelId` '' means "all models". */
-  async reloadDeviceTuning(modelId: string): Promise<void> {
-    if (this.driverMode === 'mock') {
-      const current = this.currentDriver;
-      if (current) await this.connectMock(current.model);
-      return;
-    }
-    await this.extraCoordinator.reloadDeviceTuning(modelId);
-    const driver = this.realDriver;
-    if (!driver || (modelId && driver.model.id !== modelId)) return;
-    log('info', 'driverMgr', `reopening ${driver.model.id} to apply device tuning`);
-    this.currentDriver = null;
-    this.realDriver = null;
-    this.deps.webui.notifyDriverStatus('real', false);
-    await closeDriver(driver);
-    // The disconnect handler is detached by closeDriver, so schedule explicitly.
-    this.scheduleReconnect();
-    this.deps.onDocksChanged?.();
+  /** Device tuning changed (WebUI / settings import) — driver-manager-tuning.ts
+   *  decides live-swap vs reopen; this class owns the reopen lifecycle. */
+  async reloadDeviceTuning(modelId: string, kind: OverrideChangeKind = 'reopen'): Promise<void> {
+    await applyTuningChange(
+      {
+        primary: this.primary,
+        extras: this.extraCoordinator,
+        driverMode: this.driverMode,
+        currentDriver: this.currentDriver,
+        realDriver: this.realDriver,
+        overrideFor: (id) => this.overrideFor(id),
+        connectMock: (model) => this.connectMock(model),
+        // Close the session so the reconnect tick reopens it with the new spec.
+        reopenSession: async (driver) => {
+          this.currentDriver = null;
+          this.realDriver = null;
+          this.deps.webui.notifyDriverStatus('real', false);
+          await closeDriver(driver);
+          // The disconnect handler is detached by closeDriver, so schedule explicitly.
+          this.scheduleReconnect();
+          this.deps.onDocksChanged?.();
+        },
+      },
+      modelId,
+      kind,
+    );
   }
 
   /** WebUI extra-key config change — repaint (config resolves per tick, no re-wire). */

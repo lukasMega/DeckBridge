@@ -1,4 +1,5 @@
 import type { DeviceModel } from './devices/driver.js';
+import { DEVICE_MODELS } from './devices/registry.js';
 import { cachedDiscoveryPaths, cachedDiscoverySerial } from './ffi/hid-discovery.js';
 import { deviceKeyFor, sharedSerialModelId } from './device-identity.js';
 import type { ElgatoServer, ElgatoChildServer } from './elgato.js';
@@ -37,6 +38,12 @@ export function resolveRealDeviceIdentity(
     deviceKey: deviceKeyFor(hidPath ?? `model:${model.id}`, serial, sharedSerialModelId(model)),
     serial,
   };
+}
+
+/** Any Elgato-branded model enumerated on USB — gates the "Elgato app is blocking
+ *  access" screen so it can't fire without Elgato hardware present. */
+export function elgatoHardwarePresent(isModelPresent: (model: DeviceModel) => boolean): boolean {
+  return DEVICE_MODELS.some((model) => model.driverKind === 'elgato-hid' && isModelPresent(model));
 }
 
 export function defaultListModelPaths(model: DeviceModel): string[] {

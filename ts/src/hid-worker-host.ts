@@ -29,8 +29,8 @@ export class WorkerHidDriver extends EventEmitter implements DeviceDriver {
   /** The EFFECTIVE model (registry entry with the user's device tuning already
    *  applied — see devices/model-overrides.ts). `overrides` is forwarded to the
    *  worker so it can re-derive the same thing from its own registry copy. */
-  readonly model: DeviceModel;
-  private readonly overrides: DeviceModelOverride | undefined;
+  model: DeviceModel;
+  private overrides: DeviceModelOverride | undefined;
   deviceSerial: string | undefined = undefined;
   deviceFirmware: string | undefined = undefined;
   /** HID path the worker opened this device with — see device-identity.ts. */
@@ -115,6 +115,17 @@ export class WorkerHidDriver extends EventEmitter implements DeviceDriver {
    *  I/O — the worker just stores the mode for the next 'image' render. */
   setImageOverride(mode: ImageModeOverride): void {
     this.post({ type: 'setImageOverride', mode });
+  }
+
+  /** Live device-tuning swap (image fields only — see classifyOverrideChange).
+   *  `effectiveModel` is resolved by the caller from the same registry entry;
+   *  the worker re-merges from its own copy, so this can never change the
+   *  driver. Keeping `overrides` current also means a later reopen sends the
+   *  new set. The caller repaints — this only changes the spec. */
+  applyOverrides(overrides: DeviceModelOverride | undefined, effectiveModel: DeviceModel): void {
+    this.overrides = overrides;
+    this.model = effectiveModel;
+    this.post({ type: 'setOverrides', overrides });
   }
 
   /** Runtime log-level change — no device I/O, the worker just re-filters. */

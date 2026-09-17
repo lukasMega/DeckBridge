@@ -286,6 +286,38 @@ export function overrideSummary(ov?: DeviceModelOverride): string {
   return parts.length > 0 ? parts.join(' ') : 'none';
 }
 
+/** What applying a new override over the previous one costs the live device.
+ *  'live' = image-transform fields only, swappable in place (no driver reads
+ *  model.image — only image-render.ts/translator.ts do); 'reopen' = keyMap,
+ *  wire or splash changed, all of which are read at open(). */
+export type OverrideChangeKind = 'none' | 'live' | 'reopen';
+
+const OPEN_TIME_SECTIONS = ['keyMap', 'wire', 'splash'] as const;
+
+/** Canonical form of one override section: key order and absent-vs-undefined
+ *  normalized, so `{}`, `undefined` and `{ rotate: undefined }` all compare equal. */
+function sectionKey(
+  ov: DeviceModelOverride | undefined,
+  section: (typeof SECTION_KEYS)[number],
+): string {
+  const value = ov?.[section];
+  if (!value || typeof value !== 'object') return '';
+  const entries = Object.entries(value as Record<string, unknown>)
+    .filter(([, v]) => v !== undefined)
+    .toSorted(([a], [b]) => (a < b ? -1 : 1));
+  return entries.length > 0 ? JSON.stringify(entries) : '';
+}
+
+export function classifyOverrideChange(
+  prev: DeviceModelOverride | undefined,
+  next: DeviceModelOverride | undefined,
+): OverrideChangeKind {
+  for (const section of OPEN_TIME_SECTIONS) {
+    if (sectionKey(prev, section) !== sectionKey(next, section)) return 'reopen';
+  }
+  return sectionKey(prev, 'image') === sectionKey(next, 'image') ? 'none' : 'live';
+}
+
 /** Short stable hash of an override, mixed into the image-cache key so a spec
  *  change can't be served a stale entry (see image-render.ts). '' when there is
  *  no override, keeping cache keys identical to the pre-override format. */

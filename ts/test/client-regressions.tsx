@@ -473,11 +473,17 @@ async function runSettingsPanels(): Promise<void> {
         (posted?.body as { modelId?: string } | undefined)?.modelId === 'mirabox-293s',
         'Apply targets selected dock model',
       );
-      check(root.textContent.includes('Saved.'), 'Apply shows selected model status');
+      check(
+        root.textContent.includes('Applied to the device.'),
+        'Apply shows selected model status',
+      );
 
       await act(() => patch({ status: { ...baseStatus, selectedDock: 0, docks } }));
       await settle();
-      check(!root.textContent.includes('Saved.'), 'Dock selection clears stale status');
+      check(
+        !root.textContent.includes('Applied to the device.'),
+        'Dock selection clears stale status',
+      );
     } finally {
       stub.restore();
       await act(() => render(null, root));

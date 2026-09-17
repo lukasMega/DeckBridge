@@ -636,7 +636,7 @@ await test('9. E1-b: in-flight guard — a second tryRealConnect() during a prob
 /** Fake driver whose open() always succeeds — models a present, openable extra
  *  (or primary) device. Records disconnect wiring via the EventEmitter base. */
 class CoordFakeDriver extends EventEmitter {
-  readonly model: DeviceModel;
+  model: DeviceModel;
   deviceSerial: string | undefined = 'SN';
   deviceFirmware: string | undefined = '1.0';
   /** Set by open(): the specific unit's path (multi-device), mirroring the real
@@ -645,9 +645,15 @@ class CoordFakeDriver extends EventEmitter {
   hidPath: string | undefined = undefined;
   closeCalls = 0;
   brightnessCalls: number[] = [];
+  renderCalls: number[] = [];
+  applyOverridesCalls: (DeviceModelOverride | undefined)[] = [];
   constructor(model: DeviceModel) {
     super();
     this.model = model;
+  }
+  applyOverrides(overrides: DeviceModelOverride | undefined, effectiveModel: DeviceModel): void {
+    this.applyOverridesCalls.push(overrides);
+    this.model = effectiveModel;
   }
   open(hidPath?: string): Promise<void> {
     this.hidPath = hidPath;
@@ -657,7 +663,9 @@ class CoordFakeDriver extends EventEmitter {
     this.closeCalls++;
     return Promise.resolve();
   }
-  renderCoraImage(): void {}
+  renderCoraImage(keyIndex: number): void {
+    this.renderCalls.push(keyIndex);
+  }
   sendSplashImage(): void {}
   sendImage(): void {}
   clearKey(): void {}
@@ -1021,6 +1029,23 @@ await test('D2. disconnecting one same-model extra tears down only that unit; th
   assert.equal(identities[2]?.index, 1, 'freed index 1 reused');
 });
 
+await test('C9. live tuning reaches an extra dock without tearing its session down', async () => {
+  const { driverManager, driversByPath, present, serversByIndex } = setupCoord();
+  present.add(DEFAULT_MODEL.id);
+  present.add(MIRABOX_293_MODEL.id);
+  await driverManager.tryRealConnect();
+  await driverManager.__scanOnce();
+  const extra = driversByPath.get(`hid:${MIRABOX_293_MODEL.id}`);
+  assert.ok(extra !== undefined, 'precondition: the second device docked');
+
+  await driverManager.reloadDeviceTuning(MIRABOX_293_MODEL.id, 'live');
+
+  assert.equal(extra!.applyOverridesCalls.length, 1, 'the extra dock swapped its spec');
+  assert.equal(extra!.closeCalls, 0, 'and was never closed');
+  assert.equal(serversByIndex.get(1)?.server.stopCalls, 0, 'its CORA servers stayed up');
+  assert.equal(driverManager.getDockStatuses().length, 2, 'both docks still present');
+});
+
 // Multi-deck opt-in (settings.json `multiDeck`) — single deck is the default.
 
 await test('M1. multi-deck OFF (default): a second device is never docked', async () => {
@@ -1093,7 +1118,7 @@ await test('M4. setMultiDeck(false) tears a live extra dock down', async () => {
  *  manager handed the factory. Stands in for WorkerHidDriver, which would
  *  forward the same pair to the worker in its 'open' message. */
 class CapturingDriver extends EventEmitter {
-  readonly model: DeviceModel;
+  model: DeviceModel;
   readonly overrides: DeviceModelOverride | undefined;
   deviceSerial: string | undefined = 'SN-TUNED';
   deviceFirmware: string | undefined = '1.0';
@@ -1112,10 +1137,18 @@ class CapturingDriver extends EventEmitter {
   setBrightness(): void {}
   clearKey(): void {}
   sendImage(): void {}
-  renderCoraImage(): void {}
+  renderCoraImage(keyIndex: number): void {
+    this.renderCalls.push(keyIndex);
+  }
   sendSplashImage(): void {}
   setImageOverride(): void {}
   setLogLevel(): void {}
+  renderCalls: number[] = [];
+  applyOverridesCalls: { overrides: DeviceModelOverride | undefined; modelId: string }[] = [];
+  applyOverrides(overrides: DeviceModelOverride | undefined, effectiveModel: DeviceModel): void {
+    this.applyOverridesCalls.push({ overrides, modelId: effectiveModel.id });
+    this.model = effectiveModel;
+  }
 }
 
 await test('E1. probe hands the worker the EFFECTIVE model plus the raw override', async () => {
@@ -1191,6 +1224,69 @@ await test('E4. no override → the registry model reaches the driver unchanged'
   await driverManager.tryRealConnect();
   assert.ok(created[0]?.model === firstModel, 'same object, not a copy');
   assert.equal(created[0]?.overrides, undefined, 'nothing forwarded to the worker');
+});
+
+/** Connect a CapturingDriver for the first registry model and return it. */
+async function connectCapturing(
+  driverManager: ReturnType<typeof setup>['driverManager'],
+): Promise<CapturingDriver> {
+  const firstModel = DEVICE_MODELS[0]!;
+  const created: CapturingDriver[] = [];
+  driverManager.__setRealDriverFactory((model, ov) => {
+    const d = new CapturingDriver(model, ov);
+    created.push(d);
+    return d as unknown as WorkerHidDriver;
+  });
+  driverManager.__setPresenceCheck((m) => m.id === firstModel.id);
+  await driverManager.tryRealConnect();
+  return created[0]!;
+}
+
+await test('E5. an image-only tuning change is applied live — no close, no reconnect', async () => {
+  const { webui, driverManager } = setup();
+  const firstModel = DEVICE_MODELS[0]!;
+  const driver = await connectCapturing(driverManager);
+  // Two frames the Elgato app already pushed: the live swap must repaint them,
+  // or the panel keeps images encoded under the old spec.
+  webui.dockFrames.set(
+    0,
+    new Map([
+      [0, { data: new Uint8Array([1]), format: 'jpeg' as const }],
+      [3, { data: new Uint8Array([2]), format: 'jpeg' as const }],
+    ]),
+  );
+  webui.modelOverrideFor = () => ({ image: { rotate: 90 } });
+
+  await driverManager.reloadDeviceTuning(firstModel.id, 'live');
+
+  assert.equal(driverManager.getCurrentDriver(), driver, 'the session stayed up');
+  assert.equal(driver.applyOverridesCalls.length, 1, 'the spec was swapped on the driver');
+  assert.deepEqual(driver.applyOverridesCalls[0]?.overrides, { image: { rotate: 90 } });
+  assert.equal(driverManager.getCurrentDriver()?.model.image.rotate, 90, 'tuned spec is visible');
+  assert.deepEqual(driver.renderCalls, [0, 3], 'both cached frames were re-rendered');
+});
+
+await test('E6. a wire/keyMap change still closes the session and reconnects', async () => {
+  const { driverManager } = setup();
+  const firstModel = DEVICE_MODELS[0]!;
+  const driver = await connectCapturing(driverManager);
+
+  await driverManager.reloadDeviceTuning(firstModel.id, 'reopen');
+
+  assert.equal(driverManager.getCurrentDriver(), null, 'the session was torn down');
+  assert.equal(driver.applyOverridesCalls.length, 0, 'no live swap on a reopen change');
+});
+
+await test('E7. an unchanged override touches neither the driver nor the session', async () => {
+  const { driverManager } = setup();
+  const firstModel = DEVICE_MODELS[0]!;
+  const driver = await connectCapturing(driverManager);
+
+  await driverManager.reloadDeviceTuning(firstModel.id, 'none');
+
+  assert.equal(driverManager.getCurrentDriver(), driver, 'the session stayed up');
+  assert.equal(driver.applyOverridesCalls.length, 0, 'nothing pushed to the worker');
+  assert.deepEqual(driver.renderCalls, [], 'and nothing repainted');
 });
 
 // F. Probe pacing under slow HID enumeration (issue #67.2)

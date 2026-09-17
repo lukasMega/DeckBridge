@@ -1,6 +1,7 @@
 import assert from 'tjs:assert';
 import {
   applyModelOverrides,
+  classifyOverrideChange,
   isModelOverridesRecord,
   overrideRevision,
   overrideSummary,
@@ -382,6 +383,71 @@ test('round-trips: applying the defaults yields the same effective spec', () => 
   const eff = applyModelOverrides(MODEL, tunableDefaults(MODEL));
   assert.deepEqual(eff.image, MODEL.image);
   assert.deepEqual(eff.keyMap, MODEL.keyMap);
+});
+
+// classifyOverrideChange
+
+console.log('\nclassifyOverrideChange');
+
+test('an unchanged override needs no device work', () => {
+  assert.equal(classifyOverrideChange(undefined, undefined), 'none');
+  assert.equal(classifyOverrideChange({}, undefined), 'none');
+  assert.equal(classifyOverrideChange({ image: {} }, {}), 'none');
+  assert.equal(
+    classifyOverrideChange(
+      { image: { rotate: 90, quality: 0.8 } },
+      { image: { quality: 0.8, rotate: 90 } },
+    ),
+    'none',
+    'key order is not a change',
+  );
+  assert.equal(
+    classifyOverrideChange(
+      { image: { rotate: 90 } },
+      { image: { rotate: 90, quality: undefined } },
+    ),
+    'none',
+    'an undefined value is the same as an absent one',
+  );
+});
+
+test('an image-only change applies live', () => {
+  assert.equal(classifyOverrideChange(undefined, { image: { rotate: 180 } }), 'live');
+  assert.equal(classifyOverrideChange({ image: { rotate: 180 } }, undefined), 'live');
+  assert.equal(
+    classifyOverrideChange({ image: { rotate: 180, quality: 0.5 } }, { image: { rotate: 180 } }),
+    'live',
+    'clearing one image field is still live',
+  );
+  assert.equal(
+    classifyOverrideChange(
+      { image: { rotate: 90 }, wire: { chunkDelayMs: 2 } },
+      { image: { rotate: 270 }, wire: { chunkDelayMs: 2 } },
+    ),
+    'live',
+    'an untouched wire section does not force a reopen',
+  );
+});
+
+// keyMap/wire/splash are read by the driver at open() (chunking, read buffer,
+// input decode, first splash), so they cannot be swapped under a live session.
+test('keyMap, wire or splash changes force a reopen', () => {
+  assert.equal(classifyOverrideChange(undefined, { wire: { chunkDelayMs: 1 } }), 'reopen');
+  assert.equal(classifyOverrideChange({ wire: { chunkDelayMs: 1 } }, {}), 'reopen');
+  assert.equal(classifyOverrideChange(undefined, { keyMap: { imageOffset: 1 } }), 'reopen');
+  assert.equal(
+    classifyOverrideChange({ keyMap: { imageOffset: 1 } }, { keyMap: { imageOffset: 2 } }),
+    'reopen',
+  );
+  assert.equal(classifyOverrideChange(undefined, { splash: { keys: [0] } }), 'reopen');
+  assert.equal(
+    classifyOverrideChange(
+      { image: { rotate: 90 } },
+      { image: { rotate: 0 }, wire: { reportId: 2 } },
+    ),
+    'reopen',
+    'a mixed change reopens',
+  );
 });
 
 // isModelOverridesRecord

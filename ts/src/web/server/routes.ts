@@ -83,16 +83,18 @@ function setDeviceOverrides(
   body: { modelId?: unknown; overrides?: unknown },
   { ui }: RouteContext,
 ): Response {
-  const err = ui.trySetModelOverride(body.modelId, body.overrides ?? {});
-  if (err) return json({ error: err.error }, err.status);
-  // The device session closes and reopens (image/wire/keyMap must be in force
-  // from the next open) — the UI shows a brief "reapplying…" state on this flag.
-  return json({ ok: true, reconnecting: true });
+  const r = ui.trySetModelOverride(body.modelId, body.overrides ?? {});
+  if ('error' in r) return json({ error: r.error }, r.status);
+  // An image-only change is swapped into the running session and the deck is
+  // repainted; keyMap/wire/splash need the next open(), so the session reopens
+  // and the UI shows a brief "reapplying…" state on this flag.
+  return json({ ok: true, reconnecting: r.kind === 'reopen' });
 }
 
 function resetDeviceOverrides({ modelId }: { modelId: unknown }, { ui }: RouteContext): Response {
-  const err = ui.tryResetModelOverride(modelId);
-  return err ? json({ error: err.error }, err.status) : json({ ok: true, reconnecting: true });
+  const r = ui.tryResetModelOverride(modelId);
+  if ('error' in r) return json({ error: r.error }, r.status);
+  return json({ ok: true, reconnecting: r.kind === 'reopen' });
 }
 
 /** Write the report next to settings.json and reveal it in the OS file manager —

@@ -142,19 +142,25 @@ export function DeviceTuningPanel(): preact.JSX.Element {
         },
         'Save failed',
       );
-      action.setStatus(parsed.reconnecting ? 'Reapplying — the device reconnects…' : 'Saved.');
+      action.setStatus(
+        parsed.reconnecting ? 'Reapplying — the device reconnects…' : 'Applied to the device.',
+      );
       await load();
     }, 'Save failed.');
 
   const resetDefaults = (): Promise<void> =>
     action.run(async () => {
       if (!activeView) return;
-      await postJson(
+      const parsed = await postJson<{ reconnecting?: boolean }>(
         '/api/device-overrides/reset',
         { modelId: activeView.modelId },
         'Reset failed',
       );
-      action.setStatus('Reset to the built-in defaults — the device reconnects…');
+      action.setStatus(
+        parsed.reconnecting
+          ? 'Reset to the built-in defaults — the device reconnects…'
+          : 'Reset to the built-in defaults.',
+      );
       await load();
     }, 'Reset failed.');
 
@@ -173,8 +179,8 @@ export function DeviceTuningPanel(): preact.JSX.Element {
       bodyId="device-tuning-body"
     >
       <p class="help-lead">
-        Applies model-wide on reconnect. Screen dark? Reset or restart with{' '}
-        <code>--no-overrides</code>.
+        Applies model-wide: image settings take effect straight away, key-map and wire changes
+        reconnect the device. Screen dark? Reset or restart with <code>--no-overrides</code>.
       </p>
 
       {activeView.safeMode === true && (

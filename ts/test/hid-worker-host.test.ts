@@ -69,6 +69,30 @@ await runTest('setImageOverride posts {type: setImageOverride, mode}', () => {
   ]);
 });
 
+console.log('\nhid-worker-host: applyOverrides');
+
+await runTest('applyOverrides posts the overrides and swaps the effective model', () => {
+  const overrides = { image: { rotate: 90 as const } };
+  const effective = { ...unknownModel, image: { ...unknownModel.image, rotate: 90 as const } };
+  const driver = new WorkerHidDriver(unknownModel);
+  const posted: unknown[] = [];
+  (driver as unknown as { worker: { postMessage: (m: unknown) => void } }).worker = {
+    postMessage: (m: unknown) => posted.push(m),
+  };
+
+  driver.applyOverrides(overrides, effective);
+
+  assert.deepEqual(posted, [{ type: 'setOverrides', overrides }]);
+  assert.equal(driver.model.image.rotate, 90, 'callers read the tuned spec off driver.model');
+
+  // A later reopen must carry the NEW override, not the constructor's.
+  posted.length = 0;
+  void driver.open();
+  assert.deepEqual(posted, [
+    { type: 'open', modelId: unknownModel.id, hidPath: undefined, overrides },
+  ]);
+});
+
 // Force exit: drivers that hit a failed open keep their worker alive (the fix),
 // which would otherwise keep the event loop running and hang the test runner.
 summaryExit();

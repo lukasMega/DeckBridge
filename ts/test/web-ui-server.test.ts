@@ -851,14 +851,17 @@ await runWebTest(
       ['mirabox-293s', true],
       ['ajazz-akp153', false],
     ] as const) {
-      assert.equal(ui.tryResetModelOverride(modelId), null);
+      ui.tryResetModelOverride(modelId);
       const initial = ui.deviceOverridesView(modelId);
       assert.ok(!('error' in initial));
       if ('error' in initial) continue;
       assert.equal(initial.tunable.wire!.batchImageTransfers, defaultEnabled);
-      assert.equal(
-        ui.trySetModelOverride(modelId, { wire: { batchImageTransfers: !defaultEnabled } }),
-        null,
+      assert.ok(
+        !(
+          'error' in
+          ui.trySetModelOverride(modelId, { wire: { batchImageTransfers: !defaultEnabled } })
+        ),
+        'batching toggles on a supported board',
       );
       const saved = ui.deviceOverridesView(modelId);
       assert.ok(!('error' in saved));
@@ -873,13 +876,14 @@ await runWebTest(
       if (!('error' in persisted))
         assert.equal(persisted.tunable.wire?.batchImageTransfers, !defaultEnabled);
       await restoredUi.stop();
-      assert.equal(ui.tryResetModelOverride(modelId), null);
+      ui.tryResetModelOverride(modelId);
       const reset = ui.deviceOverridesView(modelId);
       if (!('error' in reset))
         assert.equal(reset.tunable.wire?.batchImageTransfers, defaultEnabled);
     }
     assert.ok(
-      ui.trySetModelOverride('fifine-d6', { wire: { batchImageTransfers: true } }) !== null,
+      'error' in ui.trySetModelOverride('fifine-d6', { wire: { batchImageTransfers: true } }),
+      'batching is rejected on a model without the 293S board',
     );
   },
 );
@@ -923,9 +927,8 @@ test('the form seed round-trips: POSTing `tunable` unchanged is accepted', () =>
     const view = ui.deviceOverridesView(modelId);
     assert.ok(!('error' in view), `${modelId} resolves`);
     if ('error' in view) continue;
-    assert.equal(
-      ui.trySetModelOverride(modelId, view.tunable),
-      null,
+    assert.ok(
+      !('error' in ui.trySetModelOverride(modelId, view.tunable)),
       `${modelId}: the seed the UI renders must be a valid override`,
     );
     ui.tryResetModelOverride(modelId);
@@ -951,7 +954,7 @@ test('a seeded-then-edited override is still accepted', () => {
   assert.ok(!('error' in view));
   if ('error' in view) return;
   const edited = { ...view.overrides, image: { ...view.tunable.image, rotate: 90 as const } };
-  assert.equal(ui.trySetModelOverride(TUNED_MODEL, edited), null);
+  assert.ok(!('error' in ui.trySetModelOverride(TUNED_MODEL, edited)), 'the edited seed applies');
   const after = ui.deviceOverridesView(TUNED_MODEL);
   assert.ok(!('error' in after) && after.effective.image.rotate === 90);
   ui.tryResetModelOverride(TUNED_MODEL);
@@ -965,7 +968,9 @@ test('device-overrides view 404s on an unknown model id', () => {
 
 test('a valid override persists and shows up in the effective spec', () => {
   const ui = new WebUIServer(undefined, [], 'real', TEST_SETTINGS_ROOT);
-  assert.equal(ui.trySetModelOverride(TUNED_MODEL, { image: { rotate: 180 } }), null);
+  assert.deepEqual(ui.trySetModelOverride(TUNED_MODEL, { image: { rotate: 180 } }), {
+    kind: 'live',
+  });
   const view = ui.deviceOverridesView(TUNED_MODEL);
   assert.ok(!('error' in view));
   if (!('error' in view)) assert.equal(view.effective.image.rotate, 180);
@@ -977,7 +982,8 @@ test('a valid override persists and shows up in the effective spec', () => {
 
 test('an invalid override is rejected with the full error list, nothing persisted', () => {
   const ui = new WebUIServer(undefined, [], 'real', TEST_SETTINGS_ROOT);
-  const err = ui.trySetModelOverride(TUNED_MODEL, { image: { rotate: 45, quality: 9 } });
+  const r = ui.trySetModelOverride(TUNED_MODEL, { image: { rotate: 45, quality: 9 } });
+  const err = 'error' in r ? r : null;
   assert.ok(err !== null, 'rejected');
   assert.equal(err?.status, 400);
   assert.ok(err?.error.includes('image.rotate'), err?.error);
@@ -989,7 +995,7 @@ test('reset clears the override', () => {
   const ui = new WebUIServer(undefined, [], 'real', TEST_SETTINGS_ROOT);
   ui.trySetModelOverride(TUNED_MODEL, { image: { rotate: 90 } });
   assert.ok(ui.modelOverrideFor(TUNED_MODEL) !== undefined, 'precondition: tuned');
-  assert.equal(ui.tryResetModelOverride(TUNED_MODEL), null);
+  assert.deepEqual(ui.tryResetModelOverride(TUNED_MODEL), { kind: 'live' });
   assert.equal(ui.modelOverrideFor(TUNED_MODEL), undefined);
 });
 

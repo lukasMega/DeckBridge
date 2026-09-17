@@ -7,6 +7,7 @@ import { MockDriver } from './devices/mock.js';
 import type { ClientApp, CommEntry, ImageModeOverride, LogObject } from './types.js';
 import { ELGATO_CHILD_PORT, ELGATO_TCP_PORT, WEBUI_PORT } from './types.js';
 import { advertisedGeometry, DEFAULT_MODEL, DEVICE_MODELS } from './devices/registry.js';
+import type { OverrideChangeKind } from './devices/model-overrides.js';
 import { log, setWebUILog, setLogLevel, step } from './logger.js';
 import { startLogFile, stopLogFile, activeLogFilePath } from './log-file.js';
 import { setupNativeLibs } from './native-libs.js';
@@ -239,10 +240,11 @@ webui.on('setMultiDeck', (enabled: boolean) => {
   });
 });
 
-// Device tuning changed: reopen the affected session(s) so the new image/wire/
-// keyMap spec is in force from the next open() and the first splash.
-webui.on('modelOverridesChanged', (modelId: string) => {
-  driverManager.reloadDeviceTuning(modelId).catch((err: unknown) => {
+// Device tuning changed: an image-only change is swapped into the live
+// session(s) and repainted; keyMap/wire/splash reopen so the new spec is in
+// force from the next open() and the first splash.
+webui.on('modelOverridesChanged', (modelId: string, kind: OverrideChangeKind = 'reopen') => {
+  driverManager.reloadDeviceTuning(modelId, kind).catch((err: unknown) => {
     log('error', 'deckBr', `reloadDeviceTuning(${modelId}) failed: ${(err as Error).message}`);
   });
 });
