@@ -21,6 +21,7 @@ import { parseCli, userArgs, applyFlagsToEnv, versionText, USAGE_TEXT, isLogLeve
 import { runDevicesCommand } from './cli-devices.js';
 import { runDiagnoseCommand } from './cli-diagnose.js';
 import { loadSettings } from './settings-store.js';
+import { STARTUP_DELAY_MS, CHECK_INTERVAL_MS } from './update-check.js';
 
 const openBrowser = openPathInOS;
 
@@ -92,6 +93,7 @@ const childServer = new ElgatoChildServer(
 
 let shuttingDown = false;
 let tray: TrayHandle | null = null;
+let updateCheckTimer: ReturnType<typeof setInterval> | null = null;
 
 setWebUILog((level, component, message) => webui.log(level, component, message));
 
@@ -315,6 +317,7 @@ async function shutdown(): Promise<void> {
     } catch {}
   }
   log('info', 'deckBr', 'shutting down...');
+  if (updateCheckTimer) clearInterval(updateCheckTimer);
   driverManager.stopScan();
   await driverManager.stopAllExtraSessions().catch(() => undefined);
   const prev = driverManager.getCurrentDriver();
@@ -378,6 +381,17 @@ if (!headless) {
       webui.notifyElgatoAppConflict(next);
     }
   }, 2000);
+}
+
+// GitHub-release update check (update-check.ts): a delayed start keeps it off the
+// blocking startup path; mock mode never touches the network. Failures log at
+// debug — an offline user is the normal case, see update-controller.ts.
+if (tjs.env.DECKBRIDGE_MOCK !== '1') {
+  const runUpdateCheck = (): void => {
+    void webui.updates.check(false).catch((e: unknown) => log('debug', 'update', String(e)));
+  };
+  setTimeout(runUpdateCheck, STARTUP_DELAY_MS);
+  updateCheckTimer = setInterval(runUpdateCheck, CHECK_INTERVAL_MS);
 }
 
 // --no-webui: settings still load (see WebUIServer.start), the HTTP/WS listener doesn't.

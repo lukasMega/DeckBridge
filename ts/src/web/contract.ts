@@ -71,3 +71,16 @@ export interface DeviceModelInfo {
   name: string;
   keyCount: number;
 }
+
+/** GET /api/update / POST /api/update/check reply, and the `update` WS
+ *  broadcast payload — see update-check.ts. */
+export interface UpdateInfo {
+  enabled: boolean;
+  current: string;
+  latest?: string;
+  updateAvailable: boolean;
+  releaseUrl?: string;
+  lastCheckedAt?: number;
+  dismissedVersion?: string;
+  error?: 'no-curl' | 'network' | 'parse';
+}

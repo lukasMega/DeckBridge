@@ -100,6 +100,13 @@ function sourcesFor(
     hidEnumerateMs: hidEnum.tookMs,
     deviceRows: enumerateDevices().map(toDeviceRow),
     state: live.state,
+    updates: {
+      enabled: live.state.updateInfo.enabled,
+      lastCheckedAt: live.state.updateInfo.lastCheckedAt,
+      latest: live.state.updateInfo.latest,
+      updateAvailable: live.state.updateInfo.updateAvailable,
+      error: live.state.updateInfo.error,
+    },
     comms: live.comms,
     keyEvents: live.keyEvents,
     logTail,

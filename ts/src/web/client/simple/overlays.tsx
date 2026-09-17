@@ -7,11 +7,12 @@ import { Icon } from './Icon.js';
 import { Collapsible } from '../components/Collapsible.js';
 import { DiagnosticsPanel } from './diagnostics-panel.js';
 import { MultiDeckPanel } from './multi-deck-panel.js';
+import { UpdatePanel } from './update-panel.js';
 import { DeviceTuningPanel } from './device-tuning.js';
 import { postJson, useFetched } from '../ui-api.js';
 import { Feedback, useAsyncAction, type AsyncAction } from '../ui-async.js';
 import { useDismiss } from '../ui-hooks.js';
-import type { DeviceIdentity, RealDeviceIdentity } from '../ui-types.js';
+import type { DeviceIdentity, RealDeviceIdentity, UpdateInfo } from '../ui-types.js';
 
 /** Labels for the identifiers DeckBridge actually sends to the Elgato app,
  *  in the order they're most useful for troubleshooting/pairing. mDNS service
@@ -166,6 +167,7 @@ interface SettingsState {
   logLevel?: string;
   logFilePath?: string;
   multiDeck?: boolean;
+  updateInfo?: UpdateInfo;
 }
 
 /** null logLevel = state not read yet, which DiagnosticsPanel renders as unknown. */
@@ -177,6 +179,10 @@ function diagnosticsProps(state: SettingsState | null): {
     logLevel: state ? (state.logLevel ?? 'info') : null,
     logFilePath: state?.logFilePath ?? '',
   };
+}
+
+function updateInfoFor(state: SettingsState | null): UpdateInfo | null {
+  return state?.updateInfo ?? null;
 }
 
 /** Identity reported by the physical USB device. Absent in mock mode. */
@@ -340,6 +346,7 @@ export function SettingsPage({ onBack }: Readonly<{ onBack: () => void }>): prea
       <RealIdentityList realIdentity={realIdentity} />
 
       <MultiDeckPanel enabled={state.data ? (state.data.multiDeck ?? false) : null} />
+      <UpdatePanel info={updateInfoFor(state.data)} />
       <DiagnosticsPanel {...diagnosticsProps(state.data)} />
       <DeviceTuningPanel />
 

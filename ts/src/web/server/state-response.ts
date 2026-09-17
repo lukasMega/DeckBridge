@@ -11,6 +11,7 @@ import type {
   StateResponse,
   Stats,
   StatusSnapshot,
+  UpdateInfo,
 } from './types.js';
 import type { CommEntry, ExtraKeyConfig, RealDeviceIdentity } from '../../types.js';
 
@@ -31,6 +32,7 @@ export interface StateResponseInputs {
   logLevel: string;
   logFilePath: string;
   multiDeck: boolean;
+  updateInfo: UpdateInfo;
 }
 
 export function buildStateResponse(input: StateResponseInputs): StateResponse {

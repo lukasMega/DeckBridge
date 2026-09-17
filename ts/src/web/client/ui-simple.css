@@ -34,6 +34,13 @@
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
+.update-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent);
+  flex: none;
+}
 .brand-home {
   display: flex;
   align-items: center;

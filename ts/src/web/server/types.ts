@@ -13,11 +13,13 @@ import type {
   MockDeviceConfig,
   PluginsInfo,
   Stats,
+  UpdateInfo,
 } from '../contract.js';
 import type { DeviceOverridesView } from './model-overrides-controller.js';
 import type { OverrideChangeKind } from '../../devices/model-overrides.js';
 import type { DiagnosticsOptions } from './diagnostics.js';
 import type { PersistedSettings } from './persisted-settings.js';
+import type { UpdateController } from './update-controller.js';
 
 /** A rejected request: the message the WebUI shows, plus its HTTP status. */
 /** Result of a persisted device-tuning change: how the live session applies it
@@ -66,6 +68,7 @@ export type {
   DeviceIdentity,
   KeyEventEntry,
   DeviceModelInfo,
+  UpdateInfo,
 } from '../contract.js';
 
 export type LogLevel = 'debug' | 'info' | 'warn' | 'error';
@@ -126,6 +129,8 @@ export interface StateResponse extends StatusSnapshot {
   /** Multi-deck opt-in (settings.json `multiDeck`). Read once per Settings-page
    *  mount, like logLevel — it is not in the status snapshot. */
   multiDeck: boolean;
+  /** GitHub-release update check (update-check.ts) — cached, no network. */
+  updateInfo: UpdateInfo;
 }
 
 /**
@@ -162,4 +167,5 @@ export interface WebUIController {
   tryResetModelOverride(modelId: unknown): ReqError | OverrideChange;
   buildDiagnosticsReport(opt?: DiagnosticsOptions): Promise<string>;
   saveDiagnosticsReport(opt?: DiagnosticsOptions): Promise<string | null>;
+  readonly updates: UpdateController;
 }

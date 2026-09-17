@@ -9,7 +9,8 @@ import { DiagnosticsPanel } from '../src/web/client/simple/diagnostics-panel.js'
 import { MultiDeckPanel } from '../src/web/client/simple/multi-deck-panel.js';
 import { KeymapLearn } from '../src/web/client/simple/keymap-learn.js';
 import { DockList } from '../src/web/client/simple/dock-cards.js';
-import type { DeviceOverridesView, DockUi } from '../src/web/client/ui-types.js';
+import { updateBadgeVersion } from '../src/web/client/ui-helpers.js';
+import type { DeviceOverridesView, DockUi, UpdateInfo } from '../src/web/client/ui-types.js';
 
 const root = document.createElement('div');
 document.body.appendChild(root);
@@ -209,6 +210,7 @@ async function run(): Promise<void> {
   await runSettingsPanels();
   await runKeymapAndDiagnosticsPanels();
   await runMultiDockCards();
+  runUpdateBadge();
 }
 
 // Device tuning + diagnostics panels (simple/device-tuning.tsx,
@@ -746,6 +748,41 @@ function cellCounts(card: HTMLElement): { live: number; inert: number } {
     live: card.querySelectorAll('button.key-cell').length,
     inert: card.querySelectorAll('div.key-cell').length,
   };
+}
+
+function baseUpdateInfo(): UpdateInfo {
+  return { enabled: true, current: '0.14.1', updateAvailable: false };
+}
+
+function runUpdateBadge(): void {
+  check(updateBadgeVersion(undefined) === null, 'Update badge: no state yet renders nothing');
+  check(
+    updateBadgeVersion({ ...baseUpdateInfo(), updateAvailable: false, latest: '0.15.0' }) === null,
+    'Update badge: hidden when no update is available',
+  );
+  check(
+    updateBadgeVersion({ ...baseUpdateInfo(), updateAvailable: true, latest: '0.15.0' }) ===
+      '0.15.0',
+    'Update badge: shown when an update is available',
+  );
+  check(
+    updateBadgeVersion({
+      ...baseUpdateInfo(),
+      updateAvailable: true,
+      latest: '0.15.0',
+      dismissedVersion: '0.15.0',
+    }) === null,
+    'Update badge: hidden once the current latest version was dismissed',
+  );
+  check(
+    updateBadgeVersion({
+      ...baseUpdateInfo(),
+      updateAvailable: true,
+      latest: '0.16.0',
+      dismissedVersion: '0.15.0',
+    }) === '0.16.0',
+    'Update badge: reappears for a newer version than the one dismissed',
+  );
 }
 
 async function runMultiDockCards(): Promise<void> {

@@ -10,6 +10,7 @@ import { defaultCacheRoot } from './native-libs.js';
 import { SERIAL_KEY_PREFIX } from './device-identity.js';
 import type { ExtraKeyConfig, ImageModeOverride } from './types.js';
 import type { DeviceModelId, DeviceModelOverride } from './devices/driver.js';
+import type { UpdateState } from './update-check.js';
 
 /** One physical device's persisted state, keyed by device-identity.ts's
  *  deviceKeyFor() (v1: the HID path). Holds both the stable identity
@@ -54,6 +55,11 @@ export interface Settings {
    *  untested board, destined to be upstreamed into the registry, not per-unit
    *  taste. Per-unit settings (brightness/imageMode) stay in devices[]. */
   modelOverrides?: Record<DeviceModelId, DeviceModelOverride>;
+  /** GitHub-release update check (update-check.ts). Absent `updateCheck` = on
+   *  (opt-out); `updateState` caches the last result so a 30x/day restarter
+   *  doesn't burn the unauthenticated GitHub rate limit. */
+  updateCheck?: boolean;
+  updateState?: UpdateState;
 }
 
 const SETTINGS_FILE = 'settings.json';

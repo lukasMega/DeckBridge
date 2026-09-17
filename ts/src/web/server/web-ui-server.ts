@@ -45,6 +45,7 @@ import { LoggingController } from './logging-controller.js';
 import { DevicePrefsController } from './device-prefs-controller.js';
 import { liveDiagnosticsInputs } from './diagnostics-sources.js';
 import type { DiagnosticsOptions } from './diagnostics.js';
+import { UpdateController } from './update-controller.js';
 
 export { isAllowedWebRequest, isValidMacAddress, pickFallbackPort } from './web-request-guard.js';
 
@@ -59,8 +60,8 @@ export class WebUIServer extends EventEmitter implements WebUIController {
   private readonly modelOverrides: ModelOverridesController;
   private readonly logging: LoggingController;
   private readonly devicePrefs: DevicePrefsController;
+  readonly updates: UpdateController;
   private readonly imageChannel = new ImageChannel(this.bus, () => this.selectedDock);
-
   get imageState(): Map<number, Buffer> {
     return this.imageChannel.imageState;
   }
@@ -87,7 +88,6 @@ export class WebUIServer extends EventEmitter implements WebUIController {
   get imageModeOverride(): ImageModeOverride {
     return this.devicePrefs.imageModeOverride;
   }
-
   private readonly status: StatusPublisher;
   private readonly stats: Stats = { uptimeMs: 0, elgatoRxPkts: 0, elgatoTxPkts: 0, imagesSent: 0 };
   private readonly startTime = Date.now();
@@ -159,10 +159,10 @@ export class WebUIServer extends EventEmitter implements WebUIController {
         settingsJson: this.getSettingsJson(),
       }),
     );
+    this.updates = new UpdateController(host, __VERSION__);
   }
 
   // Device tuning (model overrides) — see devices/model-overrides.ts
-
   /** Read by DriverManager at probe time; undefined = registry defaults. */
   modelOverrideFor(modelId: string): DeviceModelOverride | undefined {
     return this.modelOverrides.overrideFor(modelId);
@@ -386,6 +386,7 @@ export class WebUIServer extends EventEmitter implements WebUIController {
       logLevel: this.logLevel(),
       logFilePath: this.logFilePath(),
       multiDeck: this.settings.multiDeck,
+      updateInfo: this.updates.info(),
     });
   }
 

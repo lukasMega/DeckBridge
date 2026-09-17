@@ -60,6 +60,17 @@ commands, plugin arguments, local paths — because that is often the buggy part
 commands out: `./deckbridge diagnose --redact-commands`, or tick **Hide my commands** in
 the web UI. See also [Privacy](./privacy.md).
 
+## Update check
+
+DeckBridge checks GitHub for a newer release on startup and every 24h — notify only,
+never a download or self-update. It sends one plain `GET` to the GitHub releases API
+carrying just a `User-Agent: DeckBridge/<version>` header; see
+[Privacy](./privacy.md#the-deckbridge-app) for exactly what that call sends. Turn it off
+with **Settings → Check for updates**, or `"updateCheck": false` in `settings.json`. No
+curl on the system (Linux minimal installs) silently disables the check — it never
+blocks startup or shows an error, but the diagnostics report's **update check** section
+will say so.
+
 ## Device tuning
 
 Some boards are supported from documentation, not hardware we own. **Settings → Device
