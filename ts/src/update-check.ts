@@ -67,7 +67,7 @@ export function parseSemver(s: string): [number, number, number] | null {
 }
 
 /** Numeric triple compare — no pre-release ordering needed. Anything
- *  unparseable ⇒ false (never nag on garbage). */
+ *  unparsable ⇒ false (never nag on garbage). */
 export function isNewer(latest: string, current: string): boolean {
   const a = parseSemver(latest);
   const b = parseSemver(current);

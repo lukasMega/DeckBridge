@@ -38,7 +38,7 @@ await test('isNewer: an older version is not newer', () => {
   assert.equal(isNewer('1.2.3', '1.2.4'), false);
 });
 
-await test('isNewer: unparseable input never nags (false, not throw)', () => {
+await test('isNewer: unparsable input never nags (false, not throw)', () => {
   assert.equal(isNewer('not-a-version', '1.2.3'), false);
   assert.equal(isNewer('1.2.3', 'not-a-version'), false);
 });
