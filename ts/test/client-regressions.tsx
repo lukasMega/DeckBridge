@@ -7,7 +7,8 @@ import { LogConsolePanel } from '../src/web/client/advanced-log-panel.js';
 import { DeviceTuningPanel } from '../src/web/client/simple/device-tuning.js';
 import { DiagnosticsPanel } from '../src/web/client/simple/diagnostics-panel.js';
 import { KeymapLearn } from '../src/web/client/simple/keymap-learn.js';
-import type { DeviceOverridesView } from '../src/web/client/ui-types.js';
+import { DockList } from '../src/web/client/simple/dock-cards.js';
+import type { DeviceOverridesView, DockUi } from '../src/web/client/ui-types.js';
 
 const root = document.createElement('div');
 document.body.appendChild(root);
@@ -206,6 +207,7 @@ async function run(): Promise<void> {
 
   await runSettingsPanels();
   await runKeymapAndDiagnosticsPanels();
+  await runMultiDockCards();
 }
 
 // Device tuning + diagnostics panels (simple/device-tuning.tsx,
@@ -669,6 +671,97 @@ async function runKeymapAndDiagnosticsPanels(): Promise<void> {
       stub.restore();
       await act(() => render(null, root));
     }
+  }
+}
+
+// Multi-dock cards (simple/dock-cards.tsx). Mock mode only ever produces one
+// dock, so this is the only CI coverage of the selected/unselected branch — the
+// branch that shipped B1 (missing `compact` class) and nearly shipped B4 (empty
+// grid after selection).
+const DOCKS: DockUi[] = [
+  {
+    index: 0,
+    modelId: 'mirabox-293s',
+    modelName: 'Mirabox 293S',
+    keyCount: 15,
+    columns: 5,
+    rows: 3,
+    primaryPort: 5343,
+    primaryConnected: true,
+    elgatoConnected: true,
+  },
+  {
+    index: 1,
+    modelId: 'fifine-d6',
+    modelName: 'Fifine D6',
+    keyCount: 6,
+    columns: 3,
+    rows: 2,
+    primaryPort: 5345,
+    primaryConnected: true,
+    elgatoConnected: true,
+  },
+];
+
+function dockCard(index: number): HTMLElement {
+  const card = root.querySelectorAll<HTMLElement>('.dock-card')[index];
+  if (!card) throw new Error(`Missing dock card ${index}`);
+  return card;
+}
+
+/** Live grids are built by KeyPreview (`<button class="key-cell">`); the static
+ *  branch renders plain `<div class="key-cell">`. */
+function cellCounts(card: HTMLElement): { live: number; inert: number } {
+  return {
+    live: card.querySelectorAll('button.key-cell').length,
+    inert: card.querySelectorAll('div.key-cell').length,
+  };
+}
+
+async function runMultiDockCards(): Promise<void> {
+  const stub = stubFetch(() => ({ payload: { ok: true } }));
+  try {
+    await act(() => patch({ status: { ...baseStatus, docks: DOCKS, selectedDock: 0 } }));
+    await act(() => render(<DockList docks={DOCKS} onHelp={noop} />, root));
+    await settle();
+    check(root.querySelectorAll('.dock-card').length === 2, 'Both dock cards render');
+    check(
+      cellCounts(dockCard(0)).live === 15 && cellCounts(dockCard(0)).inert === 0,
+      'The selected dock card renders a live grid',
+    );
+    check(
+      cellCounts(dockCard(1)).inert === 6 && cellCounts(dockCard(1)).live === 0,
+      'An unselected dock card renders the static grid',
+    );
+    // B1: the 6-key compact class must be computed for the static branch too.
+    check(
+      dockCard(1).querySelector('.preview')?.classList.contains('compact') === true,
+      'An unselected 6-key dock card is sized compact',
+    );
+
+    await act(() => dockCard(1).click());
+    await settle();
+    const post = stub.calls.find((c) => c.url === '/api/select-dock');
+    check(
+      (post?.body as { index?: number } | undefined)?.index === 1,
+      'Clicking an unselected dock card posts its index',
+    );
+
+    // B4: both branches are the same component type and KeyPreview is built in a
+    // mount-only effect, so the grid is populated only if selection remounts it.
+    await act(() => patch({ status: { ...baseStatus, docks: DOCKS, selectedDock: 1 } }));
+    await settle();
+    check(
+      cellCounts(dockCard(1)).live === 6,
+      'Selecting a previously-unselected dock card rebuilds its live grid',
+    );
+    check(
+      cellCounts(dockCard(0)).inert === 15 && cellCounts(dockCard(0)).live === 0,
+      'Deselecting a dock card falls back to the static grid',
+    );
+  } finally {
+    stub.restore();
+    await act(() => render(null, root));
   }
 }
 

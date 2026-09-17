@@ -189,6 +189,13 @@ run = "node ../scripts/tauri-check-stubs.mjs && cargo check"
 # fmt-check (member crates only — the vendored jpeg-encoder fork is excluded),
 # clippy for both mutually-exclusive JPEG backends, then the unit tests.
 # Sequential: parallel cargo races on rustup component downloads.
+#
+# The last clippy pass is the only one that sees mdns_windows.rs (it is
+# `#[cfg(target_os = "windows")]`, so a host-only run skips the module entirely
+# and a `-D warnings` failure there stays invisible until a Windows build).
+# `usb` is off because hidapi's build script needs a real Windows toolchain to
+# cross-compile; mdns_windows does not depend on it. Target comes from
+# rust/rust-toolchain.toml, so rustup installs it on first use.
 [tasks.rust-lint]
 description = "Rust fmt-check + clippy + tests"
 dir = "rust"
@@ -197,6 +204,7 @@ cargo fmt --check -p deckbridge-native -p deckbridge-tray
 cargo clippy --workspace --all-targets -- -D warnings
 cargo clippy -p deckbridge-native --no-default-features --features jpeg-fork,usb --all-targets -- -D warnings
 cargo test --workspace
+cargo clippy -p deckbridge-native --target x86_64-pc-windows-msvc --no-default-features --features jpeg-upstream --all-targets -- -D warnings
 """
 
 [tasks.format]
