@@ -323,6 +323,7 @@ export function createTelemetry(deps: TelemetryDeps): Telemetry {
       osVersion: parseOsVersion(os, rawVersion),
       now: at,
     });
+    log('debug', 'telemetry', `payload ${JSON.stringify(payload)}`);
     await deps.send(encodePayload(payload), deps.currentVersion);
   }
 
