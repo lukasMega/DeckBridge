@@ -7,6 +7,14 @@
  *  about. Single const so the number can move if vendors extend budgets. */
 export const MIN_DWELL_MS = 5 * 60 * 1000;
 
+/** setTimeout jitter can fire a hair under MIN_DWELL_MS and re-trip the dwell
+ *  gate. Add this to the schedule delay, not MIN_DWELL_MS alone. */
+export const PING_SCHEDULE_SLACK_MS = 2000;
+
+/** Retry cadence once dwell has passed. ping() is idempotent per UTC day
+ *  (telemetry.ts), so a suppressed ping gets retried same day, not next. */
+export const PING_RETRY_INTERVAL_MS = 60 * 60 * 1000;
+
 export type SuppressReason = 'kill-switch' | 'mock' | 'ci' | 'dwell' | null;
 
 /** Automation markers. Any one present suppresses; the list is deliberately

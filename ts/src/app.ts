@@ -22,7 +22,7 @@ import { runDevicesCommand } from './cli-devices.js';
 import { runDiagnoseCommand } from './cli-diagnose.js';
 import { loadSettings } from './settings-store.js';
 import { STARTUP_DELAY_MS, CHECK_INTERVAL_MS } from './update-check.js';
-import { MIN_DWELL_MS } from './telemetry-env.js';
+import { MIN_DWELL_MS, PING_SCHEDULE_SLACK_MS, PING_RETRY_INTERVAL_MS } from './telemetry-env.js';
 
 const openBrowser = openPathInOS;
 
@@ -396,14 +396,14 @@ if (tjs.env.DECKBRIDGE_MOCK !== '1') {
   setTimeout(runUpdateCheck, STARTUP_DELAY_MS);
   updateCheckTimer = setInterval(runUpdateCheck, CHECK_INTERVAL_MS);
 
-  // Own delay, not the update check's 30 s: MIN_DWELL_MS is what keeps CI and
-  // sandbox runs from beaconing (telemetry-env.ts), and the wait lets a device
-  // plugged in at boot enumerate before the ping calls it "no device".
+  // Own delay, not the update check's 30 s: MIN_DWELL_MS keeps CI/sandbox runs
+  // from beaconing (telemetry-env.ts) and lets a boot-time device enumerate
+  // before the ping calls it "no device". Slack absorbs setTimeout jitter.
   const runPing = (): void => {
     void webui.updates.ping().catch((e: unknown) => log('debug', 'telemetry', String(e)));
   };
-  setTimeout(runPing, MIN_DWELL_MS);
-  telemetryTimer = setInterval(runPing, CHECK_INTERVAL_MS);
+  setTimeout(runPing, MIN_DWELL_MS + PING_SCHEDULE_SLACK_MS);
+  telemetryTimer = setInterval(runPing, PING_RETRY_INTERVAL_MS);
 }
 
 // --no-webui: settings still load (see WebUIServer.start), the HTTP/WS listener doesn't.
