@@ -42,6 +42,7 @@ export interface TelemetryPayload {
   v: string;
   dv: string;
   tz: string;
+  country: string;
 }
 
 // pure
@@ -63,6 +64,8 @@ export function utcDay(now: Date): string {
   return now.toISOString().slice(0, 10);
 }
 
+const pad = (n: number): string => String(n).padStart(2, '0');
+
 /** `UTC+02:00` — the offset, never the IANA zone: no `Intl` in this build, and a
  *  zone is a far sharper fingerprint than ~38 offsets. Shifts with DST, so one
  *  install spans two buckets a year. */
@@ -72,7 +75,6 @@ export function tzOffset(now: Date): string {
   if (!Number.isFinite(minutes) || Math.abs(minutes) > 16 * 60) return 'unknown';
   const sign = minutes < 0 ? '-' : '+';
   const abs = Math.abs(minutes);
-  const pad = (n: number): string => String(n).padStart(2, '0');
   return `UTC${sign}${pad(Math.floor(abs / 60))}:${pad(abs % 60)}`;
 }
 
@@ -116,6 +118,14 @@ function parseLinuxVersion(text: string): string {
   return version ? `${id}-${version}` : id;
 }
 
+/** Locale hint only, never IP geolocation. Keep language + region and discard
+ *  encoding, modifiers and script subtags. Never invent a missing region. */
+export function normalizeLocale(raw: string): string {
+  const locale = raw.trim().split(/[.@]/, 1)[0] ?? '';
+  const match = /^([a-z]{2,3})(?:[-_][a-z]{4})?[-_]([a-z]{2})$/i.exec(locale);
+  return match ? `${match[1]!.toLowerCase()}-${match[2]!.toUpperCase()}` : 'unknown';
+}
+
 export interface PayloadInput {
   version: string;
   platform: string;
@@ -123,6 +133,7 @@ export interface PayloadInput {
   /** Already bucketed by `parseOsVersion`; `unknown` when detection failed. */
   osVersion: string;
   now: Date;
+  locale?: string;
 }
 
 /** Deduped + sorted so two docks of one model count once and the same hardware
@@ -130,7 +141,7 @@ export interface PayloadInput {
  *  real answer (the app runs fine with no device plugged in). */
 export function buildPayload(input: PayloadInput): TelemetryPayload {
   const ids = [...new Set(input.modelIds.filter((id) => MODEL_ID.test(id)))]
-    .sort((a, b) => a.localeCompare(b))
+    .toSorted((a, b) => a.localeCompare(b))
     .slice(0, MAX_DEVICE_IDS);
   return {
     os: normalizeOs(input.platform),
@@ -138,6 +149,7 @@ export function buildPayload(input: PayloadInput): TelemetryPayload {
     v: input.version,
     dv: ids.length > 0 ? ids.join(',') : 'none',
     tz: tzOffset(input.now),
+    country: normalizeLocale(input.locale ?? ''),
   };
 }
 
@@ -203,6 +215,36 @@ export async function readOsVersion(os: TelemetryOs): Promise<string> {
   return '';
 }
 
+/** OS locale, including GUI launches without LANG. Same bounded probe as the
+ *  OS version; failures leave the locale unknown without losing the ping. */
+export async function readLocale(os: TelemetryOs): Promise<string> {
+  try {
+    const env = typeof tjs !== 'undefined' ? tjs.env : {};
+    const locale = env.LC_ALL || env.LC_MESSAGES || env.LANG || '';
+    if (normalizeLocale(locale) !== 'unknown') return locale;
+    if (os !== 'macos' && os !== 'windows') return '';
+    const cmd =
+      os === 'macos'
+        ? ['defaults', 'read', '-g', 'AppleLocale']
+        : ['powershell', '-NoProfile', '-NonInteractive', '-Command', '(Get-Culture).Name'];
+    const p = tjs.spawn(cmd, { stdout: 'pipe', stderr: 'ignore' });
+    const killer = setTimeout(() => {
+      try {
+        p.kill();
+      } catch {}
+    }, OS_VERSION_TIMEOUT_MS);
+    try {
+      const out = await readText(p.stdout);
+      await p.wait();
+      return out;
+    } finally {
+      clearTimeout(killer);
+    }
+  } catch {
+    return '';
+  }
+}
+
 /** Fire the beacon and forget it. Resolves on every outcome — a missing curl, an
  *  offline machine and a dead collector are all normal, and none of them may
  *  surface anywhere a user would see. `p.kill()` guards a curl that outlives
@@ -260,6 +302,12 @@ export interface TelemetryDeps {
   platform?: () => string;
   /** Injected so tests never spawn; defaults to `readOsVersion`. */
   readOsVersion?: (os: TelemetryOs) => Promise<string>;
+  readLocale?: (os: TelemetryOs) => Promise<string>;
+  /** Last locale the WebUI's browser reported (`navigator.language`, see
+   *  web-ui-server.ts). Used only when the OS-level probe comes back
+   *  `unknown` — a headless/CLI run with no browser ever attached leaves this
+   *  undefined, which is a real answer, not a failure. */
+  browserLocale?: () => string | undefined;
   /** Environment veto (telemetry-env.ts). Read fresh each ping so the dwell
    *  clock advances between ticks. Defaults to the real environment (fail
    *  closed), which also means a test that wants a ping must inject one. */
@@ -286,6 +334,7 @@ export function createTelemetry(deps: TelemetryDeps): Telemetry {
   const now = deps.now ?? ((): Date => new Date());
   const platform = deps.platform ?? ((): string => '');
   const readVersion = deps.readOsVersion ?? readOsVersion;
+  const localeReader = deps.readLocale ?? readLocale;
   const suppress = deps.suppress ?? envSuppressReason;
 
   async function ping(): Promise<void> {
@@ -316,12 +365,25 @@ export function createTelemetry(deps: TelemetryDeps): Telemetry {
     } catch {
       // best-effort; the dim has an `unknown` bucket for this
     }
+    let locale = '';
+    try {
+      locale = await localeReader(os);
+    } catch {
+      // best-effort, like the OS-version probe
+    }
+    // The OS probe misses a GUI launch with no LANG on Linux, and any locale
+    // txiki.js/the shell doesn't expose — the browser rendering the WebUI
+    // already resolved one, so fall back to that rather than filing `unknown`.
+    if (normalizeLocale(locale) === 'unknown') {
+      locale = deps.browserLocale?.() ?? locale;
+    }
     const payload = buildPayload({
       version: deps.currentVersion,
       platform: platform(),
       modelIds: deps.modelIds(),
       osVersion: parseOsVersion(os, rawVersion),
       now: at,
+      locale,
     });
     log('debug', 'telemetry', `payload ${JSON.stringify(payload)}`);
     await deps.send(encodePayload(payload), deps.currentVersion);

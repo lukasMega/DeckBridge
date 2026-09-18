@@ -72,9 +72,11 @@ export class WebUIServer extends EventEmitter implements WebUIController {
     return this.dockRegistry.selectedDock;
   }
   resizeEnabled = true;
+  setBrowserLocale(locale: string): void {
+    this.settings.browserLocale = locale;
+  }
 
-  // brightness/brightnessOverride/imageModeOverride live per-device in
-  // settings.devices[] — see device-prefs-controller.ts.
+  // brightness/brightnessOverride/imageModeOverride live per-device in settings.devices[] — see device-prefs-controller.ts.
   get brightnessOverride(): boolean {
     return this.devicePrefs.brightnessOverride;
   }
@@ -189,9 +191,8 @@ export class WebUIServer extends EventEmitter implements WebUIController {
   // headless too), but the HTTP/WS listener + broadcast timers never start — notify*/log/snapshot become no-ops.
   async start(listen = true): Promise<void> {
     await this.settings.load(); // direct load — no broadcasts/hardware events fire before anything listens
-    // app.ts already applied the persisted level before startup (it re-reads
-    // settings.json to get it in force from the first log line); this only
-    // mirrors the resolved value for /api/state.
+    // app.ts already applied the persisted level before startup (it re-reads settings.json to
+    // get it in force from the first log line); this only mirrors the resolved value for /api/state.
     if (!listen) return;
     this._port = await resolveListenPort(this._port);
     this.server = tjs.serve({
@@ -390,8 +391,7 @@ export class WebUIServer extends EventEmitter implements WebUIController {
     });
   }
 
-  /** Persist the multi-deck opt-in and let app.ts push the new cap to
-   *  DriverManager ('setMultiDeck'). Validated by the route. */
+  /** Persist the multi-deck opt-in and let app.ts push the new cap to DriverManager ('setMultiDeck'). Validated by the route. */
   setMultiDeck(enabled: boolean): void {
     this.settings.setMultiDeck(enabled);
     this.emit('setMultiDeck', enabled);

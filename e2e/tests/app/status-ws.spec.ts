@@ -1,8 +1,9 @@
+import { gotoApp } from '../../helpers/goto.js';
 import { expect, test } from '../../fixtures/app.js';
 
 test.describe('live status channel', () => {
   test('/api/ws pushes a status snapshot on connect', async ({ page, app }) => {
-    await page.goto(`${app.baseURL}/`);
+    await gotoApp(page, `${app.baseURL}/`);
 
     const first = await page.evaluate(
       () =>
@@ -11,8 +12,12 @@ test.describe('live status channel', () => {
           const timer = setTimeout(() => reject(new Error('no frame within 10s')), 10_000);
           ws.addEventListener('message', (ev) => {
             clearTimeout(timer);
+            const data = String(ev.data);
+            // Wait for the close handshake, not just the call: resolving before it lands
+            // leaves Lightpanda's CDP session mid-teardown when the next test's fixture
+            // tears down this context, and that has stalled a later navigation.
+            ws.addEventListener('close', () => resolve(data));
             ws.close();
-            resolve(String(ev.data));
           });
           ws.addEventListener('error', () => {
             clearTimeout(timer);
@@ -30,7 +35,7 @@ test.describe('live status channel', () => {
   });
 
   test('a simulated key press round-trips HTTP → driver → WS', async ({ page, app }) => {
-    await page.goto(`${app.baseURL}/`);
+    await gotoApp(page, `${app.baseURL}/`);
 
     // POST /api/key/:n is mock-only (409 otherwise). It reaches the driver, which reports
     // the press back through notifyKeyEvent → broadcaster, so this exercises the whole
@@ -47,8 +52,11 @@ test.describe('live status channel', () => {
             const msg = JSON.parse(String(ev.data)) as { event: string };
             if (msg.event !== 'keyEvent') return;
             clearTimeout(timer);
+            const data = String(ev.data);
+            // See the /api/ws snapshot test above: wait for the close handshake, not
+            // just the call, or the next test's context teardown can race it.
+            ws.addEventListener('close', () => resolve(data));
             ws.close();
-            resolve(String(ev.data));
           });
           ws.addEventListener('error', () => {
             clearTimeout(timer);
@@ -66,7 +74,7 @@ test.describe('live status channel', () => {
   });
 
   test('renders the mock-mode stage', async ({ page, app }) => {
-    await page.goto(`${app.baseURL}/`);
+    await gotoApp(page, `${app.baseURL}/`);
     // driverConnected && !elgatoConnected => StageDeviceNoElgato (ui-helpers.ts deriveState).
     const stage = page.locator('#stage');
     await expect(stage).toContainText('Almost there');
@@ -74,7 +82,7 @@ test.describe('live status channel', () => {
   });
 
   test('renders a full key grid for the default model', async ({ page, app }) => {
-    await page.goto(`${app.baseURL}/`);
+    await gotoApp(page, `${app.baseURL}/`);
     const grid = page.locator('.key-grid');
     await expect(grid).toHaveCount(1);
     await expect(grid).toHaveAttribute('data-model', /.+/);

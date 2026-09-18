@@ -1,3 +1,4 @@
+import { gotoApp } from '../../helpers/goto.js';
 import { expect, test } from '../../fixtures/app.js';
 
 test.describe('web UI boot', () => {
@@ -15,7 +16,7 @@ test.describe('web UI boot', () => {
   });
 
   test('/api/state reports a connected mock driver', async ({ page, app }) => {
-    await page.goto(`${app.baseURL}/`);
+    await gotoApp(page, `${app.baseURL}/`);
     const state = await page.evaluate(async () => {
       const res = await fetch('/api/state');
       return { status: res.status, body: (await res.json()) as Record<string, unknown> };
@@ -28,7 +29,7 @@ test.describe('web UI boot', () => {
   });
 
   test('serves the client bundle and 404s unknown paths', async ({ page, app }) => {
-    await page.goto(`${app.baseURL}/`);
+    await gotoApp(page, `${app.baseURL}/`);
     const probe = await page.evaluate(async () => {
       const js = await fetch('/ui.js');
       const missing = await fetch('/definitely-not-a-route');
