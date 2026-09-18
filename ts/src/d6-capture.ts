@@ -1,6 +1,6 @@
 import { MiraboxDriver } from './mirabox.js';
 import { closeSidecar, transformImageForDevice } from './translator.js';
-import { exitOnSigint, logKeyEvents } from './probe-utils.js';
+import { exitOnSigint, initProbeLibs, logKeyEvents } from './probe-utils.js';
 import { getReportDescriptor, hidSerialForPath, listHidPaths } from './ffi/hidapi.js';
 import { parseOutputReportSize } from './devices/hid-report-descriptor.js';
 import { FIFINE_D6_MODEL, FIFINE_D6_REV2_MODEL } from './devices/fifine/fifine-d6.js';
@@ -42,6 +42,8 @@ const rnd = (): number => (Math.random() * 256) | 0;
 // S1: which unit is this, and what does it say about itself?
 // PID decides the model (and with it the packet size), so resolve it by enumeration
 // before opening anything — exactly the order the B0 runbook step prescribes.
+await initProbeLibs();
+
 let model: DeviceModel | null = null;
 const serials: string[] = [];
 for (const candidate of [FIFINE_D6_REV2_MODEL, FIFINE_D6_MODEL]) {

@@ -279,12 +279,12 @@ run = """
 """
 
 [tasks.k1pro-probe]
-description = "K1 Pro JPEG size-threshold probe - same pixels, COM-padded sizes (requires K1 Pro; Input Monitoring/sudo)"
+description = "K1 Pro JPEG size-threshold probe - same pixels, COM-padded sizes (requires K1 Pro; Input Monitoring). Usage: mise run k1pro-probe [-- /path/to/jpeg-dir]"
 depends = ["tjs-setup", "deckbridge-native"]
 dir = "ts"
 run = """
-  node build.mjs --probe
-  DECKBRIDGE_NATIVE_LIB=$DECKBRIDGE_NATIVE_LIB $TJS run dist/k1pro-probe.js
+  node build.mjs --probe k1pro-probe
+  DECKBRIDGE_NATIVE_LIB=$DECKBRIDGE_NATIVE_LIB $TJS run dist/k1pro-probe.js ${1:-}
 """
 
 [tasks.d6-capture]
