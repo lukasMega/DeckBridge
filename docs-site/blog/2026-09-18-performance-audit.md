@@ -107,7 +107,7 @@ word's top byte lane can never leave that lane — `(d<<24)·P mod 2³²` collap
 quarter of all single-byte edits land there. Byte-wise FNV never has this problem because
 every byte enters at lane 0 with the whole remaining chain to diffuse through.
 
-A final avalanche cannot rescue it, which is the part worth internalising: `fmix32` is a
+A final avalanche cannot rescue it, which is the part worth remembering: `fmix32` is a
 bijection, so by the time you apply it the collisions have already happened. The fix is one
 operation *inside* the loop — `h ^= h >>> 15` — which diffuses high bits back down. Zero
 collisions, and the speedup survives.
