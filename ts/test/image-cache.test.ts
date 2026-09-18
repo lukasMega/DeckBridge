@@ -90,6 +90,85 @@ test('large buffer: differing length (same prefix) → different hash', () => {
   assert.notEqual(hashJpeg(a), hashJpeg(b));
 });
 
+// Word-wise hashing — both halves (aligned words + 0-3 byte tail) and every
+// position within a word. See docs/image-flow.md#image-cache-hash
+
+console.log('\nhashJpeg — word-wise coverage');
+
+test('every byte position matters, at every length mod 4', () => {
+  for (const size of [1, 2, 3, 4, 5, 6, 7, 8, 9, 4095, 4096, 4097, 4098, 4099]) {
+    const base = makeBuf(size);
+    const h0 = hashJpeg(base);
+    for (let i = 0; i < size; i++) {
+      const mutated = makeBuf(size);
+      mutated[i] = (mutated[i]! ^ 0xff) & 0xff;
+      assert.notEqual(
+        hashJpeg(mutated),
+        h0,
+        `size=${size}: flipping byte ${i} did not change hash`,
+      );
+    }
+  }
+});
+
+test('tail bytes past the last full word are hashed', () => {
+  // 4099 bytes = 1024 words + a 3-byte tail. Only the tail differs.
+  for (const tail of [1, 2, 3]) {
+    const a = makeBuf(4096 + tail);
+    const b = makeBuf(4096 + tail);
+    b[4096 + tail - 1] = (b[4096 + tail - 1]! ^ 0xff) & 0xff;
+    assert.notEqual(hashJpeg(a), hashJpeg(b), `tail length ${tail} not covered`);
+  }
+});
+
+test('byte-order within a word matters (swapped bytes → different hash)', () => {
+  const a = new Uint8Array([0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08]);
+  const b = new Uint8Array([0x04, 0x03, 0x02, 0x01, 0x08, 0x07, 0x06, 0x05]);
+  assert.notEqual(hashJpeg(a), hashJpeg(b));
+});
+
+test('unaligned view (byteOffset % 4 !== 0) hashes deterministically', () => {
+  const backing = makeBuf(SAMPLE_SIZE + 8);
+  const view = backing.subarray(1, SAMPLE_SIZE + 1);
+  assert.equal(view.byteOffset % 4, 1, 'test needs a genuinely unaligned view');
+  assert.equal(hashJpeg(view), hashJpeg(view));
+  // Content-sensitive on the byte fallback path too.
+  const other = backing.subarray(5, SAMPLE_SIZE + 5);
+  assert.notEqual(hashJpeg(view), hashJpeg(other));
+});
+
+// Regression: without the in-loop xorshift this family bucketed into 256 digests
+// (5053 collisions per 20k). docs/image-flow.md#image-cache-hash
+test('lane-3 (top byte of each word) mutations do not bucket', () => {
+  const size = 8262;
+  const words = size >> 2;
+  const seen = new Set<string>();
+  const N = 20000;
+  for (let i = 0; i < N; i++) {
+    const buf = new Uint8Array(size); // all-zero, like an icon-on-black frame
+    buf[(i % words) * 4 + 3] = (((i / words) | 0) + 1) & 0xff;
+    seen.add(hashJpeg(buf));
+  }
+  assert.ok(seen.size > N - 200, `lane-3 mutations bucketed: only ${seen.size}/${N} distinct`);
+});
+
+test('no collisions across 20k realistic single-byte variants', () => {
+  const size = 8262; // a typical CORA JPEG
+  const seen = new Set<string>();
+  const N = 20000;
+  // (position, delta) walks a distinct pair per iteration, so no input repeats —
+  // a repeat would understate the distinct count and hide a real collision.
+  for (let i = 0; i < N; i++) {
+    const at = i % size;
+    const delta = ((i / size) | 0) + 1;
+    const mutated = makeBuf(size);
+    mutated[at] = (mutated[at]! ^ delta) & 0xff;
+    seen.add(hashJpeg(mutated));
+  }
+  // Birthday expectation at 20k inputs over 32 bits is ~47 collisions.
+  assert.ok(seen.size > N - 200, `expected >${N - 200} distinct hashes, got ${seen.size}`);
+});
+
 // makeCacheKey
 
 console.log('\nmakeCacheKey');
