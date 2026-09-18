@@ -12,6 +12,8 @@ Plug your deck into any computer, run DeckBridge there, and the Elgato app on an
 on the same network finds it like real Elgato hardware. One small program (<5 MB), nothing
 else to install.
 
+<img src="docs/readme-flow.svg" alt="Data flow: USB Stream Deck to your computer running DeckBridge, then to the Elgato app or Bitfocus Companion over WiFi" width="680" />
+
 **📖 Documentation:** <https://lukasmega.github.io/DeckBridge/>
 
 > **⚠️ Experimental project:** DeckBridge is experimental. The author does not plan to add
@@ -28,8 +30,6 @@ else to install.
 
 
 [//]: # (<img src="docs/readme-overview.svg" alt="DeckBridge overview: USB Stream Deck exchanges HID with DeckBridge, which exchanges CORA/TCP over the LAN with the Elgato Stream Deck app and serves HTTP/WS to a local Web UI" width="720" />)
-
-<img src="docs/readme-flow.svg" alt="Data flow: USB Stream Deck to your computer running DeckBridge, then to the Elgato app or Bitfocus Companion over WiFi" width="680" />
 
 DeckBridge sits between the USB deck and the Elgato app: it speaks HID to the deck
 and CORA (Elgato's network-dock protocol) to the app, so the app treats it like real
