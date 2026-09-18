@@ -1,0 +1,85 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 150" width="640" height="150" role="img"
+     aria-label="Data flow: USB Stream Deck to your computer running DeckBridge, then to the Elgato app or Bitfocus Companion over WiFi">
+  <style>
+    /* one file for both themes: GitHub renders the SVG in its own document, so
+       prefers-color-scheme follows the reader's theme */
+    :root {
+      --border: #6e7781;
+      --border-accent: #0969da;
+      --accent-fill: #cfe4fc;
+      --fg: #24292f;
+      --fg-dim: #57606a;
+      --accent: #0969da;
+      --ok: #1a7f37;
+      --surface: #ffffff;
+      --inset: #d8dce1;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --border: #8b949e;
+        --border-accent: #58a6ff;
+        --accent-fill: #1f3f61;
+        --fg: #e6edf3;
+        --fg-dim: #9198a1;
+        --accent: #58a6ff;
+        --ok: #3fb950;
+        --surface: #22272e;
+        --inset: #3d444d;
+      }
+    }
+    text { font-family: -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif; }
+    .box { fill: none; stroke: var(--border); stroke-width: 2; }
+    .box-active { fill: var(--accent-fill); stroke: var(--border-accent); stroke-width: 2.5; }
+    .title { fill: var(--fg); font: 600 14px sans-serif; }
+    .sub { fill: var(--fg-dim); font: 500 11px sans-serif; }
+    .accent-text { fill: var(--accent); font: 600 12px sans-serif; }
+    .ok { fill: var(--ok); font: 600 11px sans-serif; }
+    .wire { stroke: var(--border); stroke-width: 2; }
+    .edge-label { fill: var(--fg-dim); font: 500 10px ui-monospace, monospace; }
+    .deck-body { fill: var(--surface); stroke: var(--border); stroke-width: 2; }
+    .deck-key { fill: var(--inset); }
+    .deck-key-on { fill: var(--accent); }
+    .packet { fill: var(--accent); }
+  </style>
+
+  <!-- wires -->
+  <line class="wire" x1="170" y1="75" x2="240" y2="75" />
+  <line class="wire" x1="400" y1="75" x2="470" y2="75" />
+  <text class="edge-label" x="205" y="66" text-anchor="middle">USB</text>
+  <text class="edge-label" x="435" y="66" text-anchor="middle">WiFi / LAN</text>
+
+  <!-- mini stream-deck glyph above the first node -->
+  <g aria-hidden="true">
+    <rect class="deck-body" x="60" y="8" width="70" height="34" rx="6" />
+    <rect class="deck-key" x="67" y="14" width="14" height="8" rx="2" />
+    <rect class="deck-key-on" x="88" y="14" width="14" height="8" rx="2" />
+    <rect class="deck-key" x="109" y="14" width="14" height="8" rx="2" />
+    <rect class="deck-key" x="67" y="28" width="14" height="8" rx="2" />
+    <rect class="deck-key" x="88" y="28" width="14" height="8" rx="2" />
+    <rect class="deck-key" x="109" y="28" width="14" height="8" rx="2" />
+  </g>
+
+  <!-- boxes -->
+  <rect class="box" x="20" y="48" width="150" height="54" rx="12" />
+  <text class="title" x="95" y="74" text-anchor="middle">USB Stream Deck</text>
+  <text class="sub" x="95" y="92" text-anchor="middle">Mirabox · Ajazz · Mini</text>
+
+  <rect class="box-active" x="240" y="48" width="160" height="54" rx="12" />
+  <text class="title" x="320" y="74" text-anchor="middle">DeckBridge</text>
+  <text class="accent-text" x="320" y="92" text-anchor="middle">Your computer</text>
+
+  <text class="sub" x="545" y="34" text-anchor="middle">or Bitfocus Companion</text>
+  <rect class="box" x="470" y="48" width="150" height="54" rx="12" />
+  <text class="title" x="545" y="74" text-anchor="middle">Elgato app</text>
+  <text class="ok" x="545" y="92" text-anchor="middle">✓ accepts it</text>
+
+  <!-- packets: animated via SMIL (GitHub sanitizes CSS @keyframes out of embedded SVGs, SMIL survives) -->
+  <circle class="packet" cx="170" cy="75" r="5">
+    <animateMotion path="M0,0 L300,0" dur="3s" repeatCount="indefinite" />
+    <animate attributeName="opacity" values="0;1;1;0" keyTimes="0;0.08;0.92;1" dur="3s" repeatCount="indefinite" />
+  </circle>
+  <circle class="packet" cx="470" cy="75" r="5" opacity="0.6">
+    <animateMotion path="M0,0 L-300,0" dur="3s" begin="1.5s" repeatCount="indefinite" />
+    <animate attributeName="opacity" values="0;0.6;0.6;0" keyTimes="0;0.08;0.92;1" dur="3s" begin="1.5s" repeatCount="indefinite" />
+  </circle>
+</svg>
