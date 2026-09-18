@@ -7,3 +7,6 @@ devices:
 docs:
   label: Docs
   description: Documentation and site changes
+performance:
+  label: Performance
+  description: Profiling, benchmarks and optimization work

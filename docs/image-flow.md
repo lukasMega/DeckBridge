@@ -157,9 +157,45 @@ Since P1 there is **no main-thread image queue** — the main thread only does t
   - **model id** — the same CORA frame yields separate entries per device.
   - **mode** — the WebUI image-fit override (`'def'` when the caller tracks none), so resize ⇄ pad-\* can't serve each other's bytes.
   - **rev** — `specRevision(model.image)`, a short FNV-1a hash of the *effective* `DeviceImageSpec` (memoised per model in `image-render.ts`'s `_specRevisions` WeakMap). Without it a device-tuning change (rotation, quality, size — see `devices/model-overrides.ts`) would keep serving entries encoded under the **old** spec, and the tweak would appear to do nothing until a restart.
-  - **jpegHash** — FNV-1a-32 over the whole buffer, with the buffer length mixed in first so truncated streams hash differently. (The hash covers the **whole** buffer — an earlier first/last-4 KB sampling collided a small centred icon with a blank frame for gen1 BMP.)
+  - **jpegHash** — `hashJpeg()`, a word-wise FNV-1a-32 over the whole buffer. See [Image-cache hash](#image-cache-hash).
 
   On a hit the Rust transform is skipped entirely (reconnect / static deck → 0 transform calls).
+
+### Image-cache hash
+
+`hashJpeg()` (`ts/src/image-cache.ts`) runs on the USB worker for **every** image, hit or
+miss, *before* the cache lookup — so a cache hit pays it in full. Three constraints shaped
+it, and each one has already been violated once:
+
+**It must cover the whole buffer.** An earlier version sampled only the first/last 4 KB
+above 8 KB. For gen1 BMP (80×80×3 ≈ 19 KB) those samples are just the top/bottom border
+rows, so a small centred icon on a black background hashed identically to a blank black
+frame — the cached black transform was served and the key rendered black.
+
+**It must not be byte-at-a-time.** In QuickJS (no JIT) the byte loop measured 1.60 ms on
+an 8 KB CORA JPEG and 3.72 ms on a 19 KB gen1 BMP — *more* than the 0.91 ms native
+transform it exists to avoid. Reading the 4-byte-aligned prefix through a `Uint32Array`
+cuts interpreter iterations 4× and measured **4.2×** end-to-end (0.38 ms / 0.88 ms), i.e.
+a 15-key profile load drops from 24.0 ms to 5.7 ms (JPEG) and 55.8 ms to 13.2 ms (BMP).
+Every byte still contributes.
+
+**The in-loop xorshift is load-bearing.** `FNV_PRIME` is `0x01000193` = 2²⁴ + 0x193, so
+the multiply carries bits *upward only*. Consuming a whole word at a time, a delta confined
+to a word's top byte lane never leaves that lane — `(d<<24)·P mod 2³²` = `(d·0x93 mod 256)<<24`
+— leaving just 256 reachable digests for every such change. Measured **5053 collisions in
+20 000 single-byte variants**; the byte-wise version had 0. `h ^= h >>> 15` inside the loop
+diffuses high→low and restores 0. A final avalanche cannot substitute for it: `fmix32` is a
+bijection, so by then the collisions have already happened. A `rotl13` variant performs
+identically; a full murmur3 body also fixes it but is only 1.7× (3 multiplies + 2 rotates
+per word) and was rejected.
+
+Two accepted properties: an **unaligned** `byteOffset` falls back to the byte path and
+digests differently from the same bytes aligned — that can only cause a cache *miss*
+(a re-transform), never a false hit. And the digest is **platform-endian**, which is fine
+because it is an in-process cache key, never persisted or sent over the wire.
+
+Regression tests for all of the above (including the lane-3 family by name) are in
+`ts/test/image-cache.test.ts`.
 
 ## State stored in WebUIServer
 
