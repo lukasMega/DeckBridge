@@ -5,9 +5,12 @@ import {
   createTelemetry,
   encodePayload,
   normalizeOs,
+  parseOsVersion,
   shouldPing,
+  tzOffset,
   utcDay,
 } from '../src/telemetry.js';
+import type { SuppressReason } from '../src/telemetry-env.js';
 import { testAsync as test, summary } from './helpers/harness.js';
 
 /** Mirrors the collector's decode: JSON.parse(decodeURIComponent(atob(v))). */
@@ -45,18 +48,87 @@ await test('is UTC, so client and collector agree on the day', () => {
   assert.equal(utcDay(new Date('2026-09-19T00:00:00Z')), '2026-09-19');
 });
 
+// tzOffset
+
+console.log('\ntzOffset');
+
+/** `tzOffset` reads the host's own offset, so a real Date would make every
+ *  assertion depend on the runner's TZ. Only the one method is used. */
+function dateAtOffset(minutesBehindUtc: number): Date {
+  return { getTimezoneOffset: () => minutesBehindUtc } as Date;
+}
+
+await test('formats the offset, not the IANA zone', () => {
+  assert.equal(tzOffset(dateAtOffset(-120)), 'UTC+02:00');
+  assert.equal(tzOffset(dateAtOffset(0)), 'UTC+00:00');
+  assert.equal(tzOffset(dateAtOffset(300)), 'UTC-05:00');
+});
+
+await test('handles the half- and quarter-hour zones', () => {
+  assert.equal(tzOffset(dateAtOffset(-330)), 'UTC+05:30'); // India
+  assert.equal(tzOffset(dateAtOffset(-345)), 'UTC+05:45'); // Nepal
+});
+
+await test('a nonsense offset is "unknown", not a bogus bucket', () => {
+  assert.equal(tzOffset(dateAtOffset(-5000)), 'unknown');
+  assert.equal(tzOffset(dateAtOffset(Number.NaN)), 'unknown');
+});
+
+// parseOsVersion
+
+console.log('\nparseOsVersion');
+
+await test('macOS keeps the major only', () => {
+  assert.equal(parseOsVersion('macos', '26.6.2\n'), 'macos-26');
+  assert.equal(parseOsVersion('macos', '15'), 'macos-15');
+});
+
+await test('Windows 11 is split from 10 by build number, not version', () => {
+  const ver = (b: string): string => `Microsoft Windows [Version 10.0.${b}]`;
+  assert.equal(parseOsVersion('windows', ver('26100.4652')), 'windows-11');
+  assert.equal(parseOsVersion('windows', ver('22000.0')), 'windows-11');
+  assert.equal(parseOsVersion('windows', ver('19045.3803')), 'windows-10');
+});
+
+await test('linux reads id + version from os-release', () => {
+  assert.equal(parseOsVersion('linux', 'ID=ubuntu\nVERSION_ID="24.04"\n'), 'ubuntu-24.04');
+});
+
+await test('a rolling distro has no VERSION_ID — the id alone is the answer', () => {
+  assert.equal(parseOsVersion('linux', 'ID=arch\nNAME="Arch Linux"\n'), 'arch');
+});
+
+await test('unparsable input never guesses', () => {
+  assert.equal(parseOsVersion('macos', ''), 'unknown');
+  assert.equal(parseOsVersion('windows', 'access is denied.'), 'unknown');
+  assert.equal(parseOsVersion('linux', 'NAME="Something"\n'), 'unknown');
+  assert.equal(parseOsVersion('unknown', '1.2.3'), 'unknown');
+});
+
 // buildPayload
 
 console.log('\nbuildPayload');
 
-const base = { version: '0.14.3', platform: 'macOS' };
+const base = {
+  version: '0.14.3',
+  platform: 'macOS',
+  osVersion: 'macos-26',
+  now: dateAtOffset(-120),
+};
 
 await test('no device connected is a real answer, not an omission', () => {
   assert.deepEqual(buildPayload({ ...base, modelIds: [] }), {
     os: 'macos',
+    ov: 'macos-26',
     v: '0.14.3',
     dv: 'none',
+    tz: 'UTC+02:00',
   });
+});
+
+await test('an off-vocabulary os version is dropped, never forwarded raw', () => {
+  assert.equal(buildPayload({ ...base, osVersion: '26.6.2', modelIds: [] }).ov, 'unknown');
+  assert.equal(buildPayload({ ...base, osVersion: '', modelIds: [] }).ov, 'unknown');
 });
 
 await test('two docks of one model count once', () => {
@@ -91,7 +163,13 @@ console.log('\nencodePayload / beaconUrl');
 
 await test('round-trips through the collector decode', () => {
   const encoded = encodePayload(buildPayload({ ...base, modelIds: ['mirabox-293s'] }));
-  assert.deepEqual(decodePayload(encoded), { os: 'macos', v: '0.14.3', dv: 'mirabox-293s' });
+  assert.deepEqual(decodePayload(encoded), {
+    os: 'macos',
+    ov: 'macos-26',
+    v: '0.14.3',
+    dv: 'mirabox-293s',
+    tz: 'UTC+02:00',
+  });
 });
 
 await test('percent-encodes base64 — a raw + would decode back as a space', () => {
@@ -141,8 +219,22 @@ interface Harness {
   ping: () => Promise<void>;
 }
 
+/** A real Date carrying a pinned offset, so `tz` doesn't depend on the runner's
+ *  TZ. The own property shadows Date.prototype.getTimezoneOffset. */
+function fixedDate(iso: string, offsetMinutes: number): Date {
+  const d = new Date(iso);
+  Object.defineProperty(d, 'getTimezoneOffset', { value: () => offsetMinutes });
+  return d;
+}
+
 function harness(
-  opts: { enabled?: boolean; version?: string; lastPingDay?: string; modelIds?: string[] } = {},
+  opts: {
+    enabled?: boolean;
+    version?: string;
+    lastPingDay?: string;
+    modelIds?: string[];
+    suppress?: SuppressReason;
+  } = {},
 ): Harness {
   const sent: Sent[] = [];
   const days: string[] = [];
@@ -160,8 +252,10 @@ function harness(
       sent.push({ encoded, version });
       return Promise.resolve();
     },
-    now: () => new Date('2026-09-18T12:00:00Z'),
+    now: () => fixedDate('2026-09-18T12:00:00Z', -120),
     platform: () => 'Linux',
+    readOsVersion: () => Promise.resolve('ID=ubuntu\nVERSION_ID="24.04"\n'),
+    suppress: () => opts.suppress ?? null,
   });
   return { sent, days, ping: () => t.ping() };
 }
@@ -172,10 +266,34 @@ await test('sends the OS, version and device model, and records the day', async 
   assert.equal(h.sent.length, 1);
   assert.deepEqual(decodePayload(h.sent[0]!.encoded), {
     os: 'linux',
+    ov: 'ubuntu-24.04',
     v: '0.14.3',
     dv: 'mirabox-293s',
+    tz: 'UTC+02:00',
   });
   assert.deepEqual(h.days, ['2026-09-18']);
+});
+
+await test('a thrown OS-version probe degrades the dim, it does not lose the ping', async () => {
+  const sent: Sent[] = [];
+  const t = createTelemetry({
+    currentVersion: '0.14.3',
+    isEnabled: () => true,
+    getLastPingDay: () => undefined,
+    setLastPingDay: () => {},
+    modelIds: () => [],
+    send: (encoded, version) => {
+      sent.push({ encoded, version });
+      return Promise.resolve();
+    },
+    now: () => fixedDate('2026-09-18T12:00:00Z', 0),
+    platform: () => 'Windows',
+    readOsVersion: () => Promise.reject(new Error('spawn failed')),
+    suppress: () => null,
+  });
+  await t.ping();
+  assert.equal(sent.length, 1);
+  assert.equal(decodePayload(sent[0]!.encoded).ov, 'unknown');
 });
 
 await test('a second call the same day is a no-op', async () => {
@@ -215,8 +333,10 @@ await test('the day is marked before the send, so a dead collector is not retrie
     },
     modelIds: () => [],
     send: () => Promise.reject(new Error('collector down')),
-    now: () => new Date('2026-09-18T12:00:00Z'),
+    now: () => fixedDate('2026-09-18T12:00:00Z', -120),
     platform: () => 'macOS',
+    readOsVersion: () => Promise.resolve('26.6.2\n'),
+    suppress: () => null,
   });
   let threw = false;
   try {
@@ -226,6 +346,25 @@ await test('the day is marked before the send, so a dead collector is not retrie
   }
   assert.ok(threw, 'the rejection propagates to the caller, which logs it at debug');
   assert.equal(lastPingDay, '2026-09-18');
+});
+
+await test('a suppressed environment never sends, and never writes settings', async () => {
+  for (const reason of ['kill-switch', 'mock', 'ci', 'dwell'] as const) {
+    const h = harness({ suppress: reason });
+    await h.ping();
+    assert.equal(h.sent.length, 0, reason);
+    // `a7sDay` untouched is the point: a CI job or a sandbox detonation must not
+    // consume the machine's ping for that day.
+    assert.equal(h.days.length, 0, reason);
+  }
+});
+
+await test('suppression is checked before the day gate, so the day survives it', async () => {
+  const blocked = harness({ suppress: 'dwell' });
+  await blocked.ping();
+  const allowed = harness();
+  await allowed.ping();
+  assert.equal(allowed.sent.length, 1);
 });
 
 // Summary

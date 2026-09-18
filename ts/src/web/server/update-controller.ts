@@ -32,12 +32,15 @@ export class UpdateController {
     return this.checker.toInfo();
   }
 
-  /** Runs the (possibly cached) check and broadcasts the result. Also fires the
-   *  daily usage ping — separately gated (telemetry.ts), so the update check's
-   *  own 20 h cache never suppresses it, and its failures never reach the
-   *  caller: telemetry must not be able to break the update check. */
+  /** Daily usage ping, on its own timer (app.ts): the dwell gate rejects a
+   *  session's first minutes, which on the shared 24 h interval cost a whole
+   *  day. Never throws — telemetry must not break anything. */
+  async ping(): Promise<void> {
+    await this.telemetry.ping();
+  }
+
+  /** Runs the (possibly cached) check and broadcasts the result. */
   async check(force: boolean): Promise<UpdateInfo> {
-    void this.telemetry.ping().catch(() => {});
     const info = await this.checker.check(force);
     this.host.broadcast('update', info);
     return info;

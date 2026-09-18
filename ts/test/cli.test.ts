@@ -19,6 +19,7 @@ const ENV_KEYS = [
   'DECKBRIDGE_CACHE_DIR',
   'DECKBRIDGE_LOG_LEVEL',
   'DECKBRIDGE_NO_OVERRIDES',
+  'DECKBRIDGE_NO_TELEMETRY',
 ] as const;
 
 function snapshotEnv(): Record<string, string | undefined> {
@@ -41,6 +42,7 @@ const NO_FLAGS: CliFlags = {
   headless: false,
   redactCommands: false,
   noOverrides: false,
+  noTelemetry: false,
 };
 
 // userArgs(): both invocation shapes
@@ -301,6 +303,7 @@ test('combined flags all land correctly', () => {
       cacheDir: OTHER_CACHE_DIR,
       redactCommands: false,
       noOverrides: false,
+      noTelemetry: false,
     });
   }
 });

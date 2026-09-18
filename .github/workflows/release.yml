@@ -18,6 +18,12 @@ on:
 permissions:
   contents: read
 
+# Belt and braces alongside telemetry-env.ts's CI detection — this matters most
+# here, where the jobs run *packaged release binaries* (e2e, smoke) whose semver
+# would otherwise pass the ping's version gate.
+env:
+  DECKBRIDGE_NO_TELEMETRY: '1'
+
 jobs:
   prepare:
     name: Prepare release metadata
@@ -396,6 +402,12 @@ jobs:
       contents: write
 
     steps:
+      # Needed for .github/scripts/vt-upload.sh.
+      - uses: actions/checkout@v5
+        with:
+          sparse-checkout: .github/scripts
+          ref: ${{ github.sha }}
+
       - uses: actions/download-artifact@v8
         with:
           path: artifacts
@@ -414,17 +426,22 @@ jobs:
         run: clamscan --recursive --infected artifacts
 
       # VirusTotal may share uploads. Throttle free API requests.
+      # Own script instead of ghaction-virustotal: that action aborts the whole
+      # step on the first transient 5xx, losing the links for every later file.
       - name: Upload release artifacts to VirusTotal
         id: virustotal
         continue-on-error: true
-        uses: crazy-max/ghaction-virustotal@936d8c5c00afe97d3d9a1af26d017cfdf26800a2 # v5.0.0
-        with:
-          vt_api_key: ${{ secrets.VIRUSTOTAL_API_KEY }}
-          request_rate: 4
-          files: |
-            artifacts/*.zip
-            artifacts/*-setup.exe
-            artifacts/*.dmg
+        env:
+          VT_API_KEY: ${{ secrets.VIRUSTOTAL_API_KEY }}
+          VT_OUT: ${{ github.workspace }}/vt-analysis.txt
+        run: |
+          if [ -z "${VT_API_KEY:-}" ]; then
+            echo "::warning::VIRUSTOTAL_API_KEY not set; skipping scan uploads"
+            : > "$VT_OUT"
+            exit 0
+          fi
+          chmod +x .github/scripts/vt-upload.sh
+          .github/scripts/vt-upload.sh artifacts/*.zip artifacts/*-setup.exe artifacts/*.dmg
 
       - name: Generate SHA256SUMS
         run: |
@@ -432,28 +449,31 @@ jobs:
           sha256sum ./*.zip ./*-setup.exe ./*.dmg > SHA256SUMS.txt
           cat SHA256SUMS.txt
 
-      # The VirusTotal step outputs `analysis` as `path/to/file=url,path/to/file=url`
-      # (empty when the upload step failed or was skipped). Render it as a table so
-      # each published artifact links to its own scan report.
+      # vt-analysis.txt holds one `path/to/file=url` line per successful upload.
+      # Every published artifact gets a row; ones VirusTotal refused say so rather
+      # than silently vanishing from the table.
       - name: Build release body
         env:
-          VT_ANALYSIS: ${{ steps.virustotal.outputs.analysis }}
+          VT_OUT: ${{ github.workspace }}/vt-analysis.txt
         run: |
           {
             echo "see docs: https://lukasmega.github.io/DeckBridge/"
             echo
             echo "## VirusTotal scans"
             echo
-            if [ -n "$VT_ANALYSIS" ]; then
-              echo "| Artifact | Report |"
-              echo "| --- | --- |"
-              echo "$VT_ANALYSIS" | tr ',' '\n' | while IFS='=' read -r file url; do
-                [ -n "$file" ] || continue
+            echo "| Artifact | Report |"
+            echo "| --- | --- |"
+            for file in artifacts/*.zip artifacts/*-setup.exe artifacts/*.dmg; do
+              [ -f "$file" ] || continue
+              url=$(grep -F "${file}=" "$VT_OUT" 2>/dev/null | head -n1 | cut -d= -f2-)
+              if [ -n "$url" ]; then
                 echo "| \`$(basename "$file")\` | [analysis]($url) |"
-              done
-            else
-              echo "_Scan unavailable for this release._"
-            fi
+              else
+                echo "| \`$(basename "$file")\` | _scan unavailable_ |"
+              fi
+            done
+            echo
+            echo "Verify downloads against \`SHA256SUMS.txt\`."
           } > release-body.md
           cat release-body.md
 

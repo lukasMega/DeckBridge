@@ -21,6 +21,9 @@ export interface CliFlags {
   /** `run`: ignore settings.json's `modelOverrides` for this session (safe mode
    *  — a bad keyMap override can make a device look dead). */
   noOverrides: boolean;
+  /** `run`: never send the daily usage ping (telemetry-env.ts). Same effect as
+   *  `DECKBRIDGE_NO_TELEMETRY=1` or settings.json `"a7s": false`. */
+  noTelemetry: boolean;
 }
 
 export interface ParsedCli {
@@ -58,6 +61,7 @@ Flags (for run):
   --headless                Shorthand: no tray, no browser open, skip Elgato-app poll
   --log-level <lvl>         debug|info|warn|error|silent (runtime override)
   --no-overrides            Safe mode: ignore settings.json modelOverrides
+  --no-telemetry            Never send the daily ping
   --cache-dir <path>        Settings + native-lib extraction root (default: XDG cache dir)
   -h, --help                Show this help
   -V, --version             Show version
@@ -124,6 +128,7 @@ const BOOLEAN_FLAGS: Record<string, BooleanFlagKey> = {
   '--headless': 'headless',
   '--redact-commands': 'redactCommands',
   '--no-overrides': 'noOverrides',
+  '--no-telemetry': 'noTelemetry',
 };
 
 /** Flags that consume the following arg as a value. Returns an error message,
@@ -175,6 +180,7 @@ function parseFlagArgs(args: string[], startIndex: number): FlagsParseResult {
     headless: false,
     redactCommands: false,
     noOverrides: false,
+    noTelemetry: false,
   };
   let commandOverride: CliCommand | null = null;
 
@@ -238,4 +244,5 @@ export function applyFlagsToEnv(flags: CliFlags): void {
   if (flags.cacheDir !== undefined) tjs.env.DECKBRIDGE_CACHE_DIR = flags.cacheDir;
   if (flags.logLevel !== undefined) tjs.env.DECKBRIDGE_LOG_LEVEL = flags.logLevel;
   if (flags.noOverrides) tjs.env.DECKBRIDGE_NO_OVERRIDES = '1';
+  if (flags.noTelemetry) tjs.env.DECKBRIDGE_NO_TELEMETRY = '1';
 }
