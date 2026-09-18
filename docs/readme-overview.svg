@@ -1,37 +1,108 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 200" width="720" height="200" font-family="-apple-system, Segoe UI, Helvetica, Arial, sans-serif">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-6 -8 734 216" width="720" height="212"
+     font-family="Excalifont, Virgil, 'Comic Sans MS', 'Segoe Print', 'Bradley Hand', 'Chalkboard SE', cursive">
+  <style>
+    /* one file for both themes: GitHub renders the SVG in its own document, so
+       prefers-color-scheme follows the reader's theme */
+    :root {
+      --ink: #24292f;
+      --muted: #57606a;
+      --line: #6e7781;
+      --hachure: #d8dce1;
+      --accent: #0969da;
+      --accent-hachure: #9ed0f8;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --ink: #e6edf3;
+        --muted: #9198a1;
+        --line: #8b949e;
+        --hachure: #3d444d;
+        --accent: #58a6ff;
+        --accent-hachure: #1f4f86;
+      }
+    }
+    .ink { fill: var(--ink); }
+    .muted { fill: var(--muted); }
+    .accent-text { fill: var(--accent); }
+    .stroke { stroke: var(--line); }
+    .stroke-accent { stroke: var(--accent); }
+    .hachure-line { stroke: var(--hachure); }
+    .hachure-line-accent { stroke: var(--accent-hachure); }
+  </style>
   <defs>
-    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
-      <path d="M0,0 L10,5 L0,10 z" fill="#6e7781"/>
-    </marker>
+    <!-- excalidraw-style hachure fills: parallel 45° strokes, not solid -->
+    <pattern id="hachure-blue" width="9" height="9" patternUnits="userSpaceOnUse" patternTransform="rotate(-41)">
+      <line class="hachure-line-accent" x1="0" y1="0" x2="0" y2="9" stroke-width="1.4"/>
+    </pattern>
+    <pattern id="hachure-grey" width="10" height="10" patternUnits="userSpaceOnUse" patternTransform="rotate(-41)">
+      <line class="hachure-line" x1="0" y1="0" x2="0" y2="10" stroke-width="1.2"/>
+    </pattern>
   </defs>
 
-  <!-- USB Stream Deck -->
-  <rect x="10" y="60" width="150" height="60" rx="8" fill="#f6f8fa" stroke="#6e7781" stroke-width="1.5"/>
-  <text x="85" y="85" text-anchor="middle" font-size="13" fill="#24292f">USB Stream Deck</text>
-  <text x="85" y="102" text-anchor="middle" font-size="11" fill="#6e7781">(Mirabox / Ajazz / Elgato / ...)</text>
+  <g stroke-linecap="round" stroke-linejoin="round" fill="none">
 
-  <!-- DeckBridge -->
-  <rect x="285" y="50" width="150" height="80" rx="8" fill="#ddf4ff" stroke="#0969da" stroke-width="1.5"/>
-  <text x="360" y="85" text-anchor="middle" font-size="14" font-weight="600" fill="#0969da">DeckBridge</text>
-  <text x="360" y="103" text-anchor="middle" font-size="11" fill="#57606a">HID ↔ CORA bridge</text>
+    <!-- USB Stream Deck -->
+    <path class="stroke" d="M13,60.5 Q85,58.4 158.5,60.8 Q161.2,90 159.4,119.6 Q85,121.8 11.3,119.2 Q8.6,90 12.2,61.3"
+          fill="url(#hachure-grey)" stroke-width="1.7"/>
+    <path class="stroke" d="M14.6,62.4 Q84,59.9 157.2,62.2 Q159.8,91 158.1,117.8 Q86,120.3 12.6,117.6 Q10.4,89 13.6,63"
+          stroke-width="1.1" opacity="0.65"/>
+    <text class="ink" x="85" y="85" text-anchor="middle" font-size="13.5" stroke="none">USB Stream Deck</text>
+    <text class="muted" x="85" y="103" text-anchor="middle" font-size="9.5" stroke="none">(Mirabox / Ajazz / Elgato / ...)</text>
 
-  <!-- Elgato app -->
-  <rect x="560" y="10" width="150" height="60" rx="8" fill="#f6f8fa" stroke="#6e7781" stroke-width="1.5"/>
-  <text x="635" y="35" text-anchor="middle" font-size="13" fill="#24292f">Elgato Stream</text>
-  <text x="635" y="52" text-anchor="middle" font-size="13" fill="#24292f">Deck app</text>
+    <!-- DeckBridge -->
+    <path class="stroke-accent" d="M288,50.6 Q360,48.2 433.6,51.1 Q436.4,90 434.2,129.4 Q360,131.9 286.2,129.1 Q283.5,90 287.1,51.4"
+          fill="url(#hachure-blue)" stroke-width="2"/>
+    <path class="stroke-accent" d="M289.8,52.6 Q359,50 432.2,52.6 Q435,91 432.8,127.6 Q361,130.2 287.7,127.5 Q285.3,89 288.6,53.2"
+          stroke-width="1.2" opacity="0.6"/>
+    <text class="accent-text" x="360" y="86" text-anchor="middle" font-size="15.5" stroke="none">DeckBridge</text>
+    <text class="ink" x="360" y="105" text-anchor="middle" font-size="11.5" stroke="none">HID ↔ CORA bridge</text>
 
-  <!-- Web UI -->
-  <rect x="560" y="130" width="150" height="60" rx="8" fill="#f6f8fa" stroke="#6e7781" stroke-width="1.5"/>
-  <text x="635" y="155" text-anchor="middle" font-size="13" fill="#24292f">Web UI</text>
-  <text x="635" y="172" text-anchor="middle" font-size="11" fill="#6e7781">Set it up once, then forget it.</text>
+    <!-- Elgato Stream Deck app -->
+    <path class="stroke" d="M563,10.6 Q635,8.3 708.6,11.2 Q711.3,40 709.4,69.5 Q635,71.8 561.2,69.1 Q558.7,40 562.1,11.4"
+          fill="url(#hachure-grey)" stroke-width="1.7"/>
+    <path class="stroke" d="M564.6,12.5 Q634,9.8 707.3,12.4 Q709.9,41 708.1,67.7 Q636,70.3 562.6,67.6 Q560.4,39 563.6,13.1"
+          stroke-width="1.1" opacity="0.65"/>
+    <text class="ink" x="635" y="35" text-anchor="middle" font-size="13.5" stroke="none">Elgato Stream</text>
+    <text class="ink" x="635" y="53" text-anchor="middle" font-size="13.5" stroke="none">Deck app</text>
 
-  <!-- arrows -->
-  <line x1="160" y1="90" x2="280" y2="90" stroke="#6e7781" stroke-width="1.5" marker-end="url(#arrow)"/>
-  <text x="220" y="82" text-anchor="middle" font-size="10" fill="#6e7781">HID</text>
+    <!-- Web UI -->
+    <path class="stroke" d="M563,130.6 Q635,128.3 708.6,131.2 Q711.3,160 709.4,189.5 Q635,191.8 561.2,189.1 Q558.7,160 562.1,131.4"
+          fill="url(#hachure-grey)" stroke-width="1.7"/>
+    <path class="stroke" d="M564.6,132.5 Q634,129.8 707.3,132.4 Q709.9,161 708.1,187.7 Q636,190.3 562.6,187.6 Q560.4,159 563.6,133.1"
+          stroke-width="1.1" opacity="0.65"/>
+    <text class="ink" x="635" y="155" text-anchor="middle" font-size="13.5" stroke="none">Web UI</text>
+    <text class="muted" x="635" y="173" text-anchor="middle" font-size="9.5" stroke="none">Set it up once, then forget it.</text>
 
-  <line x1="435" y1="75" x2="555" y2="40" stroke="#6e7781" stroke-width="1.5" marker-end="url(#arrow)"/>
-  <text x="500" y="47" text-anchor="middle" font-size="10" fill="#6e7781">CORA / TCP, LAN</text>
+    <!-- HID: deck -> DeckBridge -->
+    <g class="stroke">
+      <path d="M163,90.4 Q220,87.2 279,89.6" stroke-width="1.7"/>
+      <path d="M164.5,92 Q221,89.4 278,91.3" stroke-width="1" opacity="0.6"/>
+      <path d="M270,83.6 Q276,87 280,89.8" stroke-width="1.7"/>
+      <path d="M269.4,96.2 Q276,93 280,89.8" stroke-width="1.7"/>
+      <path d="M174.1,94.9 Q168,93.2 162.6,90.6" stroke-width="1.7"/>
+      <path d="M173.6,84.7 Q167,86.8 162.6,90.6" stroke-width="1.7"/>
+    </g>
+    <text class="muted" x="220" y="80" text-anchor="middle" font-size="11" stroke="none">HID</text>
 
-  <line x1="435" y1="105" x2="555" y2="150" stroke="#6e7781" stroke-width="1.5" marker-end="url(#arrow)"/>
-  <text x="505" y="140" text-anchor="middle" font-size="10" fill="#6e7781">HTTP/WS</text>
+    <!-- CORA/TCP: DeckBridge -> Elgato app -->
+    <g class="stroke">
+      <path d="M438,74.6 Q497,58.5 556,40.6" stroke-width="1.7"/>
+      <path d="M439.5,76.6 Q498,60.6 555,42.4" stroke-width="1" opacity="0.6"/>
+      <path d="M545.4,36.6 Q551,38.6 556.6,40.4" stroke-width="1.7"/>
+      <path d="M549.6,48.9 Q553,44.6 556.6,40.4" stroke-width="1.7"/>
+      <path d="M449.9,76.4 Q444,75.6 437.6,74.4" stroke-width="1.7"/>
+      <path d="M447.1,66.6 Q442,70.5 437.6,74.4" stroke-width="1.7"/>
+    </g>
+    <text class="muted" x="488" y="41" text-anchor="middle" font-size="10.5" stroke="none">CORA / TCP, LAN</text>
+
+    <!-- HTTP/WS: DeckBridge -> Web UI -->
+    <g class="stroke">
+      <path d="M438,105.4 Q497,127.8 556,150.6" stroke-width="1.7"/>
+      <path d="M439.5,103.6 Q498,125.9 555,148.6" stroke-width="1" opacity="0.6"/>
+      <path d="M545.2,147.6 Q551,149.2 556.8,150.8" stroke-width="1.7"/>
+      <path d="M551.6,138.4 Q554,144.8 556.8,150.8" stroke-width="1.7"/>
+    </g>
+    <text class="muted" x="487" y="148" text-anchor="middle" font-size="10.5" stroke="none">HTTP/WS</text>
+
+  </g>
 </svg>

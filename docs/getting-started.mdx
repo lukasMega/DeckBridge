@@ -79,12 +79,23 @@ Packaged releases show current status:
 |  ![Yellow tray icon](./img/tray-usb-only.png)  | **yellow** | deck connected and ready for pairing with Elgato app |
 |    ![Green tray icon](./img/tray-full.png)     | **green**  | deck open *and* Elgato app connected                 |
 
+On macOS the icon sits in the menu bar. Click it for status plus **Open Web UI**,
+**Check Requirements** and **Quit**:
+
+<img
+  src={require('./img/tray-macos.png').default}
+  alt='DeckBridge green tray icon in the macOS menu bar, with its menu open showing the status line "Mirabox 293S Stream Deck + Elgato app connected" and the Open Web UI, Check Requirements and Quit items'
+  width={610}
+  className="img-center"
+/>
+
 ## 4. Pair with the Elgato app
 
 Open Elgato Stream Deck or Companion on any computer using the **same LAN**. Follow the
 web UI. It shows the exact pairing address and port.
 
 <ThemedImage
+  className="img-center"
   alt="DeckBridge web UI showing the guided pairing card with the connected Stream Deck MK.2 and the network address to add in the Elgato app"
   sources={{
     light: require('./img/webui-simple.png').default,

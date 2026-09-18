@@ -27,7 +27,7 @@ else to install.
 > show up on an actual deck.
 
 
-<img src="docs/readme-overview.svg" alt="DeckBridge overview: USB Stream Deck connects via HID to DeckBridge, which speaks CORA/TCP over the LAN to the Elgato Stream Deck app and HTTP/WS to a local Web UI" width="720" />
+<img src="docs/readme-overview.svg" alt="DeckBridge overview: USB Stream Deck exchanges HID with DeckBridge, which exchanges CORA/TCP over the LAN with the Elgato Stream Deck app and serves HTTP/WS to a local Web UI" width="720" />
 
 DeckBridge sits between the USB deck and the Elgato app: it speaks HID to the deck
 and CORA (Elgato's network-dock protocol) to the app, so the app treats it like real
