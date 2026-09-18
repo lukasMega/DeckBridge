@@ -16,9 +16,7 @@ export class TelemetryController {
   constructor(host: ControllerHost, currentVersion: string, docks: () => DockStatus[]) {
     this.telemetry = createTelemetry({
       currentVersion,
-      // `updateCheck: false` disables this too: that toggle reads as "no
-      // background network calls", not "no update check specifically".
-      isEnabled: () => (host.settings.a7s ?? true) && (host.settings.updateCheck ?? true),
+      isEnabled: () => host.settings.a7s ?? true,
       getLastPingDay: () => host.settings.a7sDay,
       setLastPingDay: (day) => host.settings.setTelemetryDay(day),
       modelIds: () => docks().map((d) => d.modelId),

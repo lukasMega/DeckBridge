@@ -14,6 +14,7 @@ import { listAllHidDevicesTimed } from '../../ffi/hidapi.js';
 import { tailLogFile } from '../../log-file.js';
 import { defaultCacheRoot } from '../../native-libs.js';
 import { settingsPath } from '../../settings-store.js';
+import { MIN_DWELL_MS, suppressReason } from '../../telemetry-env.js';
 import { isElgatoAppRunning, openPathInOS, platformName } from '../../os-utils.ts';
 import { versionText } from '../../cli.js';
 
@@ -67,9 +68,20 @@ export function liveDiagnosticsInputs(
 /** `tjs.env` entries DeckBridge itself reads. None are secrets, and a wrong path
  *  in one of them is a common root cause, so values are shown verbatim. */
 export function deckbridgeEnv(): Record<string, string> {
-  return Object.fromEntries(
-    Object.entries(tjs.env).filter(([k]) => k.startsWith('DECKBRIDGE_') || k === 'HIDAPI_LIB'),
-  );
+  return {
+    ...Object.fromEntries(
+      Object.entries(tjs.env).filter(([k]) => k.startsWith('DECKBRIDGE_') || k === 'HIDAPI_LIB'),
+    ),
+    // Synthetic: "why no ping" is otherwise invisible in a bug report. The
+    // dwell gate is skipped on purpose — `diagnose`'s own uptime says nothing
+    // about the app's, so this answers what the *environment* allows.
+    '(telemetry)': telemetryEnvState(),
+  };
+}
+
+function telemetryEnvState(): string {
+  const reason = suppressReason({ env: tjs.env, uptimeMs: MIN_DWELL_MS });
+  return reason ? `suppressed (${reason})` : `eligible after ${MIN_DWELL_MS / 60000} min uptime`;
 }
 
 function sourcesFor(

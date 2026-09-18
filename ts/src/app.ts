@@ -22,6 +22,7 @@ import { runDevicesCommand } from './cli-devices.js';
 import { runDiagnoseCommand } from './cli-diagnose.js';
 import { loadSettings } from './settings-store.js';
 import { STARTUP_DELAY_MS, CHECK_INTERVAL_MS } from './update-check.js';
+import { MIN_DWELL_MS } from './telemetry-env.js';
 
 const openBrowser = openPathInOS;
 
@@ -94,6 +95,7 @@ const childServer = new ElgatoChildServer(
 let shuttingDown = false;
 let tray: TrayHandle | null = null;
 let updateCheckTimer: ReturnType<typeof setInterval> | null = null;
+let telemetryTimer: ReturnType<typeof setInterval> | null = null;
 
 setWebUILog((level, component, message) => webui.log(level, component, message));
 
@@ -318,6 +320,7 @@ async function shutdown(): Promise<void> {
   }
   log('info', 'deckBr', 'shutting down...');
   if (updateCheckTimer) clearInterval(updateCheckTimer);
+  if (telemetryTimer) clearInterval(telemetryTimer);
   driverManager.stopScan();
   await driverManager.stopAllExtraSessions().catch(() => undefined);
   const prev = driverManager.getCurrentDriver();
@@ -387,14 +390,20 @@ if (!headless) {
 // blocking startup path; mock mode never touches the network. Failures log at
 // debug — an offline user is the normal case, see update-controller.ts.
 if (tjs.env.DECKBRIDGE_MOCK !== '1') {
-  // check() also fires the daily usage ping (telemetry.ts) — same timer, same
-  // opt-out. The 30 s delay gives a device plugged in at boot time to enumerate,
-  // so the day's ping isn't filed as "no device".
   const runUpdateCheck = (): void => {
     void webui.updates.check(false).catch((e: unknown) => log('debug', 'update', String(e)));
   };
   setTimeout(runUpdateCheck, STARTUP_DELAY_MS);
   updateCheckTimer = setInterval(runUpdateCheck, CHECK_INTERVAL_MS);
+
+  // Own delay, not the update check's 30 s: MIN_DWELL_MS is what keeps CI and
+  // sandbox runs from beaconing (telemetry-env.ts), and the wait lets a device
+  // plugged in at boot enumerate before the ping calls it "no device".
+  const runPing = (): void => {
+    void webui.updates.ping().catch((e: unknown) => log('debug', 'telemetry', String(e)));
+  };
+  setTimeout(runPing, MIN_DWELL_MS);
+  telemetryTimer = setInterval(runPing, CHECK_INTERVAL_MS);
 }
 
 // --no-webui: settings still load (see WebUIServer.start), the HTTP/WS listener doesn't.

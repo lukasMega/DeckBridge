@@ -17,6 +17,11 @@ concurrency:
 permissions:
   contents: read
 
+# Belt and braces: telemetry-env.ts already suppresses the daily usage ping on any
+# CI marker. This covers a runner that stops setting `CI`/`GITHUB_ACTIONS`.
+env:
+  DECKBRIDGE_NO_TELEMETRY: '1'
+
 jobs:
   # ── TS: lint (oxlint + eslint) • types (tsgo) • test (tjs) • knip • format ──
   checks:
