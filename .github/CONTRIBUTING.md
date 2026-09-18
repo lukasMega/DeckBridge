@@ -2,7 +2,8 @@
 
 Thanks for your interest in improving **deckbridge** — a standalone binary (no
 Node.js) that bridges a USB stream deck to Elgato software over TCP/CORA, built
-on [slim txiki.js build](https://github.com/lukasMega/txiki.js-with-slim-builds)
+on 
+[slim txiki.js build]([https://github.com/lukasMega/txiki.js-with-slim-builds](https://lukasmega.github.io/txiki.js-with-slim-builds/docs/slim-builds/))
 based on [txiki.js](https://github.com/saghul/txiki.js) (QuickJS-ng + libuv + libffi).
 TypeScript source in `deckbridge/ts/src/`, Rust cdylib in
 `deckbridge/rust/deckbridge-native/`.
