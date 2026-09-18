@@ -22,6 +22,7 @@ export class TelemetryController {
       modelIds: () => docks().map((d) => d.modelId),
       send: (encoded, version) => sendBeacon(encoded, version),
       platform: platformName,
+      browserLocale: () => host.settings.browserLocale,
     });
   }
 

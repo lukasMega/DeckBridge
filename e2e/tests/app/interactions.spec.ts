@@ -1,9 +1,10 @@
 import { click, pressEscape } from '../../helpers/click.js';
+import { gotoApp } from '../../helpers/goto.js';
 import { expect, test } from '../../fixtures/app.js';
 
 test.describe('the controls a user touches first', () => {
   test('theme button cycles light → dark → auto', async ({ page, app }) => {
-    await page.goto(`${app.baseURL}/`);
+    await gotoApp(page, `${app.baseURL}/`);
     // ThemeButton reads localStorage at mount, so seed it for a deterministic start.
     await page.evaluate(() => localStorage.setItem('deckbridge.theme', 'light'));
     await page.reload({ waitUntil: 'load' });
@@ -22,7 +23,7 @@ test.describe('the controls a user touches first', () => {
   });
 
   test('About popover opens and closes on Escape', async ({ page, app }) => {
-    await page.goto(`${app.baseURL}/`);
+    await gotoApp(page, `${app.baseURL}/`);
     await click(page.locator('#aboutBtn'));
     await expect(page.locator('.popover h2')).toHaveText('What is DeckBridge?');
 
@@ -32,7 +33,7 @@ test.describe('the controls a user touches first', () => {
   });
 
   test('Settings page opens and backs out', async ({ page, app }) => {
-    await page.goto(`${app.baseURL}/`);
+    await gotoApp(page, `${app.baseURL}/`);
     await click(page.locator('#settingsBtn'));
     await expect(page.locator('.help h1')).toHaveText('Settings');
 
@@ -42,7 +43,7 @@ test.describe('the controls a user touches first', () => {
   });
 
   test('help chip opens the matching topic and returns', async ({ page, app }) => {
-    await page.goto(`${app.baseURL}/`);
+    await gotoApp(page, `${app.baseURL}/`);
     // data-help is the closest thing to a test id in ts/src (ids live in ui-help.ts).
     // Only the network-device chip is on screen in this stage — the plug-in/open-app
     // chips belong to the "no device" stage, which mock mode never reaches.

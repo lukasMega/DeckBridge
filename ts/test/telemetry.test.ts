@@ -5,6 +5,7 @@ import {
   createTelemetry,
   encodePayload,
   normalizeOs,
+  normalizeLocale,
   parseOsVersion,
   shouldPing,
   tzOffset,
@@ -83,8 +84,9 @@ await test('macOS keeps the major only', () => {
   assert.equal(parseOsVersion('macos', '15'), 'macos-15');
 });
 
+const ver = (b: string): string => `Microsoft Windows [Version 10.0.${b}]`;
+
 await test('Windows 11 is split from 10 by build number, not version', () => {
-  const ver = (b: string): string => `Microsoft Windows [Version 10.0.${b}]`;
   assert.equal(parseOsVersion('windows', ver('26100.4652')), 'windows-11');
   assert.equal(parseOsVersion('windows', ver('22000.0')), 'windows-11');
   assert.equal(parseOsVersion('windows', ver('19045.3803')), 'windows-10');
@@ -105,6 +107,17 @@ await test('unparsable input never guesses', () => {
   assert.equal(parseOsVersion('unknown', '1.2.3'), 'unknown');
 });
 
+await test('locale keeps language and region while discarding OS formatting', () => {
+  assert.equal(normalizeLocale('pl_PL.UTF-8'), 'pl-PL');
+  assert.equal(normalizeLocale('en-UK'), 'en-UK');
+  assert.equal(normalizeLocale('en_GB'), 'en-GB');
+  assert.equal(normalizeLocale('zh-Hant-TW'), 'zh-TW');
+  assert.equal(normalizeLocale('sr_RS@latin'), 'sr-RS');
+  for (const raw of ['', 'C', 'POSIX', 'en', 'invalid locale']) {
+    assert.equal(normalizeLocale(raw), 'unknown');
+  }
+});
+
 // buildPayload
 
 console.log('\nbuildPayload');
@@ -113,6 +126,7 @@ const base = {
   version: '0.14.3',
   platform: 'macOS',
   osVersion: 'macos-26',
+  locale: 'pl_PL.UTF-8',
   now: dateAtOffset(-120),
 };
 
@@ -123,6 +137,7 @@ await test('no device connected is a real answer, not an omission', () => {
     v: '0.14.3',
     dv: 'none',
     tz: 'UTC+02:00',
+    country: 'pl-PL',
   });
 });
 
@@ -169,6 +184,7 @@ await test('round-trips through the collector decode', () => {
     v: '0.14.3',
     dv: 'mirabox-293s',
     tz: 'UTC+02:00',
+    country: 'pl-PL',
   });
 });
 
@@ -234,6 +250,8 @@ function harness(
     lastPingDay?: string;
     modelIds?: string[];
     suppress?: SuppressReason;
+    readLocale?: string;
+    browserLocale?: string;
   } = {},
 ): Harness {
   const sent: Sent[] = [];
@@ -255,6 +273,8 @@ function harness(
     now: () => fixedDate('2026-09-18T12:00:00Z', -120),
     platform: () => 'Linux',
     readOsVersion: () => Promise.resolve('ID=ubuntu\nVERSION_ID="24.04"\n'),
+    readLocale: () => Promise.resolve(opts.readLocale ?? 'pl_PL.UTF-8'),
+    browserLocale: () => opts.browserLocale,
     suppress: () => opts.suppress ?? null,
   });
   return { sent, days, ping: () => t.ping() };
@@ -270,6 +290,7 @@ await test('sends the OS, version and device model, and records the day', async 
     v: '0.14.3',
     dv: 'mirabox-293s',
     tz: 'UTC+02:00',
+    country: 'pl-PL',
   });
   assert.deepEqual(h.days, ['2026-09-18']);
 });
@@ -294,6 +315,24 @@ await test('a thrown OS-version probe degrades the dim, it does not lose the pin
   await t.ping();
   assert.equal(sent.length, 1);
   assert.equal(decodePayload(sent[0]!.encoded).ov, 'unknown');
+});
+
+await test('an unreadable OS locale falls back to the browser-reported one', async () => {
+  const h = harness({ readLocale: '', browserLocale: 'en-GB' });
+  await h.ping();
+  assert.equal(decodePayload(h.sent[0]!.encoded).country, 'en-GB');
+});
+
+await test('a working OS locale wins over the browser fallback', async () => {
+  const h = harness({ readLocale: 'pl_PL.UTF-8', browserLocale: 'en-GB' });
+  await h.ping();
+  assert.equal(decodePayload(h.sent[0]!.encoded).country, 'pl-PL');
+});
+
+await test('no browser ever connected leaves it unknown, same as before', async () => {
+  const h = harness({ readLocale: '' });
+  await h.ping();
+  assert.equal(decodePayload(h.sent[0]!.encoded).country, 'unknown');
 });
 
 await test('a second call the same day is a no-op', async () => {

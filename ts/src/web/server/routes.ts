@@ -56,6 +56,7 @@ export const routes: Route[] = [
   postJson('/api/device-identity/mdns-name', setDeviceMdnsName),
   postJson('/api/log-level', setLogLevelRoute),
   postJson('/api/multi-deck', setMultiDeckRoute),
+  postJson('/api/browser-locale', setBrowserLocaleRoute),
   post('/api/logs/open-in-os', async ({ ui }) => {
     await ui.openLogsFolder();
     return json({ ok: true });
@@ -144,6 +145,17 @@ function setMultiDeckRoute({ enabled }: { enabled: unknown }, { ui }: RouteConte
   if (typeof enabled !== 'boolean') return badRequest('enabled must be a boolean');
   ui.setMultiDeck(enabled);
   return json({ ok: true, enabled });
+}
+
+/** Browser's `navigator.language`, sent once on WebUI load. Fallback for
+ *  telemetry.ts's locale dim when the OS-level probe fails. Length-capped —
+ *  same reasoning as telemetry.ts's other closed-vocabulary fields: an
+ *  unbounded string is an unbounded fingerprint, not just an unbounded key. */
+function setBrowserLocaleRoute({ locale }: { locale: unknown }, { ui }: RouteContext): Response {
+  if (typeof locale !== 'string' || !locale || locale.length > 35)
+    return badRequest('locale must be a non-empty string of at most 35 characters');
+  ui.setBrowserLocale(locale);
+  return json({ ok: true });
 }
 
 function setBrightness(

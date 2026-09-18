@@ -1,4 +1,5 @@
 import { click, usingChromium } from '../../helpers/click.js';
+import { gotoApp } from '../../helpers/goto.js';
 import { expect, test } from '../../fixtures/app.js';
 
 /** Wait until the mock driver is connected again. A 'reopen' change really does
@@ -100,7 +101,7 @@ test.describe('device tuning applies without a reconnect', () => {
     app,
   }) => {
     test.skip(!usingChromium, 'page-side POST wedges a later Lightpanda navigation');
-    await page.goto(`${app.baseURL}/`);
+    await gotoApp(page, `${app.baseURL}/`);
     await click(page.locator('#settingsBtn'));
 
     // The collapsible renders its body whether or not it is expanded, and

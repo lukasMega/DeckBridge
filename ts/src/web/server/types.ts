@@ -149,6 +149,7 @@ export interface WebUIController {
   notifyBrightness(level: number): void;
   notifyResizeToggle(enabled: boolean): void;
   notifyBrightnessOverride(enabled: boolean): void;
+  setBrowserLocale(locale: string): void;
   notifyImageMode(mode: ImageModeOverride): void;
   applyMockConfig(parsed: Partial<MockDeviceConfig>): MockDeviceConfig;
   trySimulateKey(n: number): ReqError | null;

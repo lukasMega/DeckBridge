@@ -110,6 +110,10 @@ export class PersistedSettings {
   /** Daily usage ping opt-out (see telemetry.ts). undefined = enabled. */
   a7s: boolean | undefined = undefined;
   a7sDay: string | undefined = undefined;
+  /** Browser's navigator.language (telemetry's OS-locale fallback). Ephemeral —
+   *  deliberately absent from current()/persist(), since the browser resends it
+   *  on every load. */
+  browserLocale: string | undefined = undefined;
   private devices: DeviceIdentitySettings[] = [];
   private modelOverrides: Record<string, DeviceModelOverride> = {};
 

@@ -5,7 +5,8 @@
  * the stages, overlays, and controls live under ./simple/.
  * The ADVANCED view is untouched legacy code.
  */
-import { useState } from 'preact/hooks';
+import { useEffect, useState } from 'preact/hooks';
+import { fire } from './ui-api.js';
 import { useStore } from './store.js';
 import { deriveState, deriveDocks, isMultiDockView, updateBadgeVersion } from './ui-helpers.js';
 import { switchToAdvanced } from './simple/handlers.js';
@@ -28,6 +29,12 @@ export function SimpleApp(): preact.JSX.Element {
   const [aboutOpen, setAboutOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const updateBadge = updateBadgeVersion(updateInfo);
+
+  // Telemetry's fallback when the OS-level locale probe fails (see
+  // telemetry.ts) — best-effort, fire-and-forget like every other beacon.
+  useEffect(function postBrowserLocale() {
+    if (navigator.language) fire('/api/browser-locale', { locale: navigator.language });
+  }, []);
 
   const deviceState = deriveState(status);
   const docks = deriveDocks(status);

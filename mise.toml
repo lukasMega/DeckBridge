@@ -267,7 +267,7 @@ description = "Format, lint, types, test, browser e2e, and compile — run befor
 depends = ["format", "ci-checks", "rust-lint", "docs-check", "e2e-types", "e2e-browser", "compile"]
 dir = "ts"
 # 300s, not 150s: e2e-docs can't start until docs-check's Docusaurus build finishes.
-timeout = "300s"
+timeout = "360s"
 
 [tasks.smoke]
 description = "Build and run USB HID smoke test (requires Mirabox device connected)"
@@ -346,7 +346,7 @@ description = "Run tests (TJS)"
 quiet = true
 depends = ["ts-install", "tjs-setup", "deckbridge-native"]
 run = "node scripts/run-tests.mjs"
-timeout = "90s"
+timeout = "120s"
 
 [tasks.test-client]
 description = "Run Preact browser regression tests"

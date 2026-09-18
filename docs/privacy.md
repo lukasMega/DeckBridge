@@ -58,12 +58,15 @@ request. Turn it off with the **Check for updates** toggle in Settings, or by se
 `"updateCheck": false` in `settings.json`.
 
 A **daily usage ping**, on its own timer (first one 5 minutes after startup — see
-below for why). One request per UTC day, carrying five things:
+below for why). One request per UTC day, carrying six things:
 
 - **OS family** — `macos` / `windows` / `linux`.
 - **OS major version** — `windows-11`, `macos-26`, `ubuntu-24.04`. Never the patch level.
 - **DeckBridge version**.
 - **Connected deck model ids**, or `none`.
+- **Country locale hint** — `pl-PL` or `en-GB`, from OS language and region settings,
+  falling back to the WebUI browser's own language if the OS setting can't be read.
+  This is not physical location or IP geolocation; unavailable locales are `unknown`.
 - **UTC offset** — `UTC+02:00`. The offset, never the named timezone.
 
 The collector stores aggregate counters only: no row per install, no visitor id,
