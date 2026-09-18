@@ -98,7 +98,7 @@ await test('a rolling distro has no VERSION_ID — the id alone is the answer', 
   assert.equal(parseOsVersion('linux', 'ID=arch\nNAME="Arch Linux"\n'), 'arch');
 });
 
-await test('unparseable input never guesses', () => {
+await test('unparsable input never guesses', () => {
   assert.equal(parseOsVersion('macos', ''), 'unknown');
   assert.equal(parseOsVersion('windows', 'access is denied.'), 'unknown');
   assert.equal(parseOsVersion('linux', 'NAME="Something"\n'), 'unknown');
