@@ -107,6 +107,9 @@ export class PersistedSettings {
   /** GitHub-release update check opt-out (see update-check.ts). undefined = enabled. */
   updateCheck: boolean | undefined = undefined;
   updateState: UpdateState | undefined = undefined;
+  /** Daily usage ping opt-out (see telemetry.ts). undefined = enabled. */
+  a7s: boolean | undefined = undefined;
+  a7sDay: string | undefined = undefined;
   private devices: DeviceIdentitySettings[] = [];
   private modelOverrides: Record<string, DeviceModelOverride> = {};
 
@@ -125,6 +128,8 @@ export class PersistedSettings {
     if (typeof saved.multiDeck === 'boolean') this.multiDeck = saved.multiDeck;
     if (typeof saved.updateCheck === 'boolean') this.updateCheck = saved.updateCheck;
     if (saved.updateState) this.updateState = saved.updateState;
+    if (typeof saved.a7s === 'boolean') this.a7s = saved.a7s;
+    if (typeof saved.a7sDay === 'string') this.a7sDay = saved.a7sDay;
     this.modelOverrides = sanitizeModelOverrides(saved.modelOverrides);
     if (Array.isArray(saved.devices)) {
       saved.devices.forEach(stripInvalidExtraKeys);
@@ -223,6 +228,12 @@ export class PersistedSettings {
     this.persist();
   }
 
+  /** Record the UTC day of the latest usage ping (telemetry.ts). */
+  setTelemetryDay(day: string): void {
+    this.a7sDay = day;
+    this.persist();
+  }
+
   // Model overrides (device tuning) — see devices/model-overrides.ts
 
   /** Every model's override, by model id. Read by DriverManager at probe time. */
@@ -259,6 +270,8 @@ export class PersistedSettings {
       ...(this.multiDeck ? { multiDeck: true } : {}),
       ...(this.updateCheck !== undefined ? { updateCheck: this.updateCheck } : {}),
       ...(this.updateState ? { updateState: this.updateState } : {}),
+      ...(this.a7s !== undefined ? { a7s: this.a7s } : {}),
+      ...(this.a7sDay ? { a7sDay: this.a7sDay } : {}),
       ...(this.devices.length > 0 ? { devices: this.devices } : {}),
       ...(Object.keys(this.modelOverrides).length > 0
         ? { modelOverrides: this.modelOverrides }

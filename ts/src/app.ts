@@ -387,6 +387,9 @@ if (!headless) {
 // blocking startup path; mock mode never touches the network. Failures log at
 // debug — an offline user is the normal case, see update-controller.ts.
 if (tjs.env.DECKBRIDGE_MOCK !== '1') {
+  // check() also fires the daily usage ping (telemetry.ts) — same timer, same
+  // opt-out. The 30 s delay gives a device plugged in at boot time to enumerate,
+  // so the day's ping isn't filed as "no device".
   const runUpdateCheck = (): void => {
     void webui.updates.check(false).catch((e: unknown) => log('debug', 'update', String(e)));
   };

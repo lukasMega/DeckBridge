@@ -159,7 +159,7 @@ export class WebUIServer extends EventEmitter implements WebUIController {
         settingsJson: this.getSettingsJson(),
       }),
     );
-    this.updates = new UpdateController(host, __VERSION__);
+    this.updates = new UpdateController(host, __VERSION__, () => this.dockRegistry.list());
   }
 
   // Device tuning (model overrides) — see devices/model-overrides.ts

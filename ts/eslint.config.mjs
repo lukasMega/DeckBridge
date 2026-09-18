@@ -165,7 +165,7 @@ export default defineConfig([
         { type: 'transform', mode: 'full', pattern: ['src/translator.ts', 'src/image-render.ts', 'src/splash-sender.ts'] },
         { type: 'image-main', mode: 'full', pattern: ['src/image-pipeline.ts', 'src/image-cache.ts', 'src/image-assembler.ts'] },
         { type: 'cora', mode: 'full', pattern: ['src/cora-*.ts', 'src/elgato*.ts', 'src/feature-response.ts'] },
-        { type: 'infra', mode: 'full', pattern: ['src/native-libs.ts', 'src/mdns-advertiser.ts', 'src/tray.ts', 'src/settings-store.ts', 'src/device-identity.ts', 'src/os-utils.ts', 'src/log-file.ts', 'src/update-check.ts'] },
+        { type: 'infra', mode: 'full', pattern: ['src/native-libs.ts', 'src/mdns-advertiser.ts', 'src/tray.ts', 'src/settings-store.ts', 'src/device-identity.ts', 'src/os-utils.ts', 'src/log-file.ts', 'src/update-check.ts', 'src/telemetry.ts'] },
         { type: 'app', mode: 'full', pattern: ['src/app.ts', 'src/driver-manager*.ts', 'src/cora-startup.ts', 'src/device-session.ts', 'src/extra-keys.ts'] },
         { type: 'dev-entry', mode: 'full', pattern: ['src/mirabox-smoke.ts', 'src/k1pro-probe.ts', 'src/d6-capture.ts', 'src/probe-utils.ts'] },
         { type: 'cli', mode: 'full', pattern: ['src/cli-devices.ts', 'src/cli-diagnose.ts'] },
@@ -385,7 +385,19 @@ export default defineConfig([
             // ── dev entries can reach worker-tier code directly ──
             {
               from: { element: { type: 'dev-entry' } },
-              allow: { to: { element: { type: ['devices', 'transform', 'ffi', 'image-main'] } } },
+              // assets: k1pro-probe.ts paints the splash checkmark when it has no input files
+              allow: {
+                to: { element: { type: ['devices', 'transform', 'ffi', 'image-main', 'assets'] } },
+              },
+            },
+            // A probe bundle embeds the native libs but has no app.ts to extract them,
+            // so probe-utils.ts must run native-libs.ts's setup itself or hidapi
+            // resolution falls through to whatever the host system happens to have.
+            {
+              from: { element: { type: 'dev-entry' } },
+              allow: { to: { element: { type: 'infra' } } },
+              message:
+                'dev-entry may import infra ONLY for native-libs.ts (extracting the embedded libs a probe bundle carries).',
             },
 
             // ── tier C (browser): web-client is isolated; only same-element (internal) above. ──
