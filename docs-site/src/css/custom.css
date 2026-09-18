@@ -745,3 +745,12 @@ html[data-theme='dark'] img[alt$='light theme'] {
     flex-basis: 100%;
   }
 }
+
+/* screenshots read better centered in the column; the blog rule stays below the
+   alt-suffix theme switcher's specificity, so hidden variants stay hidden */
+.img-center,
+.blog-wrapper .markdown img,
+.blog-wrapper .markdown video {
+  display: block;
+  margin: 1rem auto;
+}
