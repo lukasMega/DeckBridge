@@ -130,12 +130,29 @@ function buildTrayState(): TrayState {
     const attempts = driverManager.getReconnectAttemptCount();
     status = attempts > 0 ? `No device (attempt ${attempts})` : 'No device';
   }
-  return { icon, status, reconnectAttempts: driverManager.getReconnectAttemptCount() };
+  const update = webui.updates.info();
+  let updateText = 'Using latest version';
+  if (!update.enabled) {
+    updateText = 'Update checks disabled';
+  } else if (update.updateAvailable) {
+    updateText = `Update available: v${update.latest ?? '?'}`;
+  } else if (update.lastCheckedAt === undefined) {
+    updateText = 'Checking for updates…';
+  }
+  return {
+    icon,
+    status,
+    reconnectAttempts: driverManager.getReconnectAttemptCount(),
+    updateAvailable: update.updateAvailable && update.latest !== update.dismissedVersion,
+    updateText,
+  };
 }
 
 function pushTrayState(): void {
   tray?.push(buildTrayState());
 }
+
+webui.updates.setOnChange(pushTrayState);
 
 // Extra-dock CORA server pair builder (multi-device). Mirrors the primary wiring
 // above: the childServer shares the SAME server.deviceConfig reference, and each
@@ -432,6 +449,7 @@ if (headless) {
       }),
     );
     tray = spawned;
+    if (spawned) pushTrayState();
     log('info', 'tray', spawned ? `started: ${trayBin}` : `failed to spawn: ${trayBin}`);
   } else {
     log(

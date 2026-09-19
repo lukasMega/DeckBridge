@@ -1,5 +1,5 @@
 import assert from 'tjs:assert';
-import { parentDir, isAbsolutePath, resolveTrayBin } from '../src/tray.js';
+import { parentDir, isAbsolutePath, resolveTrayBin, serializeTrayState } from '../src/tray.js';
 import { test, testAsync as asyncTest, summary } from './helpers/harness.js';
 
 // parentDir
@@ -56,6 +56,23 @@ test('relative path with directory → false', () => {
 
 test('drive letter without colon → false', () => {
   assert.ok(!isAbsolutePath('Ctray.exe'));
+});
+
+// Tray state serialization
+
+console.log('\nTray state serialization');
+
+test('updateAvailable round-trips through TCP JSON', () => {
+  const line = serializeTrayState({
+    icon: 'full',
+    status: 'Connected',
+    reconnectAttempts: 0,
+    updateAvailable: true,
+    updateText: 'Update available: v1.2.3',
+  });
+  const state = JSON.parse(line) as { updateAvailable: boolean; updateText: string };
+  assert.equal(state.updateAvailable, true);
+  assert.equal(state.updateText, 'Update available: v1.2.3');
 });
 
 // TrayProcess.close() kills the spawned process (L1)

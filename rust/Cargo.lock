@@ -227,6 +227,7 @@ dependencies = [
 name = "deckbridge-tray"
 version = "0.1.0"
 dependencies = [
+ "image",
  "png",
  "serde",
  "serde_json",
