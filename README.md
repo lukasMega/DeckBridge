@@ -16,7 +16,8 @@ else to install.
 
 **📖 Documentation:** <https://lukasmega.github.io/DeckBridge/>
 
-> **⚠️ Experimental project:** DeckBridge is experimental. The author does not plan to add
+> [!WARNING]
+> **⚠ Experimental project:** DeckBridge is experimental. The author does not plan to add
 > support for devices beyond those already listed as supported, but will accept reasonable
 > pull requests for new devices when they include proof that the hardware works. DeckBridge
 > supports only 6-button (3×2) grids like the Stream Deck Mini and grids with up to 15
@@ -42,10 +43,8 @@ and it stays out of the way.
 
 ## Supported devices
 
-Full side-by-side comparison (USB IDs, key grid, panel size, test status):
-**[Supported devices](https://lukasmega.github.io/DeckBridge/devices)**. Every value
+See **[Supported devices](https://lukasmega.github.io/DeckBridge/devices)**. Every value
 DeckBridge uses to drive a deck: **[Device specs](https://lukasmega.github.io/DeckBridge/device-specs)**.
-Both are generated from the device registry, so they never drift from the code.
 
 | Device | Grid | Image size | Protocol |
 |---|---|---|---|
@@ -76,19 +75,19 @@ Both are generated from the device registry, so they never drift from the code.
 
 Mirabox 293V3 also matches the HSV293SV3 / "293S V3" refresh — untested.
 
-<details>
-<summary>details about supported devices</summary>
-
-Hardware-tested on macOS: Stream Deck MK.2, Stream Deck Mini, 293V3, 293S, K1 Pro, and
-Fifine AmpliGame D6 (rev. 2). The Ajazz AKP153 rev. 2 models, the Fifine AmpliGame D6 rev. 1, the 7 v1
-rebadges of the 293S board (Ajazz AKP153/E/R rev. 1, Mars Gaming MSD-ONE, Mad Dog GK150K,
-Risemode Vision 01, TMICE Stream Controller), and the Linux/Windows builds are implemented
-but not hardware-verified. The Ajazz rev. 2 boards and the Fifine D6 are the same hardware
-as the 293V3 behind a different USB VID/PID, so they reuse the 293V3 model verbatim (the
-D6 ships in two revisions that differ only in USB packet size: 512 bytes for PID `0x0007`,
-1024 bytes for PID `0x0060`); the 7 v1 rebadges are the same hardware as the 293S behind
-a different USB VID/PID, so they reuse the 293S model verbatim — report anything that
-misbehaves.
+> [!NOTE] <details><summary>details about supported devices</summary>
+> Hardware-tested on macOS: Stream Deck MK.2, Stream Deck Mini, 293V3, 293S, K1 Pro, and
+> Fifine AmpliGame D6 (rev. 2).
+> <br/><br>
+> The Ajazz AKP153 rev. 2 models, the Fifine AmpliGame D6 rev. 1, the 7 v1
+> rebadges of the 293S board (Ajazz AKP153/E/R rev. 1, Mars Gaming MSD-ONE, Mad Dog GK150K,
+> Risemode Vision 01, TMICE Stream Controller), and the Linux/Windows builds are implemented
+> but not hardware-verified. The Ajazz rev. 2 boards and the Fifine D6 are the same hardware
+> as the 293V3 behind a different USB VID/PID, so they reuse the 293V3 model verbatim (the
+> D6 ships in two revisions that differ only in USB packet size: 512 bytes for PID `0x0007`,
+> 1024 bytes for PID `0x0060`); the 7 v1 rebadges are the same hardware as the 293S behind
+> a different USB VID/PID, so they reuse the 293S model verbatim — report anything that
+> misbehaves.
 
 </details>
 
