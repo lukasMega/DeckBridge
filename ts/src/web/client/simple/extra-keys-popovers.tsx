@@ -110,7 +110,7 @@ function CommandConfigPopover({
   };
 
   return (
-    <div class="xkey-popover">
+    <div class="xkey-popover floating-surface">
       <SecondsField
         label="Run every (s)"
         min={INTERVAL_MIN_S}
@@ -164,7 +164,7 @@ function PluginConfigPopover({
   const st = status ?? 'pending';
 
   return (
-    <div class="xkey-popover">
+    <div class="xkey-popover floating-surface">
       <label class="xkey-popover-field xkey-popover-arg">
         <span>Argument</span>
         <input

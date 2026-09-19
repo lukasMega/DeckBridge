@@ -5,6 +5,7 @@ import { ICON } from '../ui-icons.js';
 import { HELP } from '../ui-help.js';
 import { Icon } from './Icon.js';
 import { Collapsible } from '../components/Collapsible.js';
+import { IdentityRow } from '../components/IdentityRow.js';
 import { DiagnosticsPanel } from './diagnostics-panel.js';
 import { MultiDeckPanel } from './multi-deck-panel.js';
 import { UpdatePanel } from './update-panel.js';
@@ -70,10 +71,9 @@ function MdnsNameEditor({
 
   if (!identity.deviceKey) {
     return (
-      <li>
-        <span class="identity-label">mDNS service name</span>
+      <IdentityRow label="mDNS service name">
         <code class="identity-value">{identity.mdnsServiceName}</code>
-      </li>
+      </IdentityRow>
     );
   }
 
@@ -93,8 +93,7 @@ function MdnsNameEditor({
 
   return (
     <>
-      <li class="identity-editable">
-        <span class="identity-label">mDNS service name</span>
+      <IdentityRow class="identity-editable" label="mDNS service name">
         <span class="identity-edit-row">
           <input
             class="input"
@@ -112,7 +111,7 @@ function MdnsNameEditor({
             {save.busy ? 'Saving…' : 'Save'}
           </button>
         </span>
-      </li>
+      </IdentityRow>
       {save.error && (
         <li class="identity-error-row">
           <p class="settings-error">{save.error}</p>
@@ -131,7 +130,7 @@ export function AboutPopover({ onClose }: Readonly<{ onClose: () => void }>): pr
 
   return (
     <div class="scrim" onClick={handleScrimClick}>
-      <div class="popover">
+      <div class="popover floating-surface">
         <button
           class="pop-close circle"
           aria-label="Close"
@@ -193,22 +192,19 @@ function RealIdentityList({
 
   return (
     <ul class="identity-list panel-inset">
-      <li>
-        <span class="identity-label">Model</span>
+      <IdentityRow label="Model">
         <code class="identity-value">{realIdentity.modelName}</code>
-      </li>
-      <li>
-        <span class="identity-label">Serial number</span>
+      </IdentityRow>
+      <IdentityRow label="Serial number">
         {realIdentity.serialNumber ? (
           <SensitiveValue value={realIdentity.serialNumber} />
         ) : (
           <code class="identity-value">Unavailable</code>
         )}
-      </li>
-      <li>
-        <span class="identity-label">Firmware version</span>
+      </IdentityRow>
+      <IdentityRow label="Firmware version">
         <code class="identity-value">{realIdentity.firmwareVersion ?? 'Unavailable'}</code>
-      </li>
+      </IdentityRow>
     </ul>
   );
 }
@@ -328,14 +324,13 @@ export function SettingsPage({ onBack }: Readonly<{ onBack: () => void }>): prea
             }}
           />
           {IDENTITY_FIELDS.map(({ key, label }) => (
-            <li key={key}>
-              <span class="identity-label">{label}</span>
+            <IdentityRow key={key} label={label}>
               {isSensitiveIdentityKey(key) ? (
                 <SensitiveValue value={formatIdentityValue(key, identity[key])} />
               ) : (
                 <code class="identity-value">{formatIdentityValue(key, identity[key])}</code>
               )}
-            </li>
+            </IdentityRow>
           ))}
         </ul>
       ) : (

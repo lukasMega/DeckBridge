@@ -155,9 +155,6 @@ body.no-anim * {
   display: flex;
   gap: 8px;
 }
-.ke .dn {
-  color: var(--accent);
-}
 .ke .up {
   color: var(--fg-dim);
 }
@@ -266,15 +263,11 @@ body.no-anim * {
   line-height: 1.5;
   background: var(--inset);
   padding: 6px 8px;
-  margin: 0;
   white-space: pre-wrap;
   word-break: break-all;
 }
 .li {
   color: var(--fg-muted);
-}
-.lw {
-  color: var(--wait);
 }
 .le {
   color: var(--warn);
@@ -299,15 +292,9 @@ body.no-anim * {
 .ce:hover {
   background: var(--surface-2);
 }
-.ct {
-  color: var(--fg-dim);
-}
 .cd {
   font-weight: 600;
   margin: 0 4px;
-}
-.cd-rx {
-  color: var(--accent);
 }
 .cd-tx {
   color: var(--ok);
@@ -319,17 +306,23 @@ body.no-anim * {
   border-radius: 2px;
   font-weight: 500;
 }
-.cp-elgato {
-  color: var(--accent);
-}
-.cp-mirabox {
-  color: var(--wait);
-}
 .ch {
   color: var(--fg);
 }
 .cx {
-  color: var(--fg-dim);
   font-size: 10px;
   margin-left: 8px;
+}
+.ke .dn,
+.cd-rx,
+.cp-elgato {
+  color: var(--accent);
+}
+.ct,
+.cx {
+  color: var(--fg-dim);
+}
+.lw,
+.cp-mirabox {
+  color: var(--wait);
 }

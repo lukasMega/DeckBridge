@@ -5,6 +5,7 @@
 import { useState } from 'preact/hooks';
 import { Collapsible } from '../components/Collapsible.js';
 import { CheckField } from '../components/Fields.js';
+import { IdentityRow } from '../components/IdentityRow.js';
 import { postJson } from '../ui-api.js';
 import { Feedback, useAsyncAction } from '../ui-async.js';
 
@@ -124,14 +125,12 @@ export function DiagnosticsPanel({
       <p class="fine small">{PRIVACY_NOTE}</p>
       {logFilePath !== '' && (
         <ul class="identity-list panel-inset">
-          <li>
-            <span class="identity-label">Log file</span>
+          <IdentityRow label="Log file">
             <code class="identity-value">{logFilePath}</code>
-          </li>
-          <li>
-            <span class="identity-label">Log level</span>
+          </IdentityRow>
+          <IdentityRow label="Log level">
             <code class="identity-value">{level}</code>
-          </li>
+          </IdentityRow>
         </ul>
       )}
       <Feedback error={action.error} status={action.status} />

@@ -50,7 +50,7 @@ export function DockCard({
   };
   return (
     <div
-      class={selected ? 'dock-card dock-card--selected' : 'dock-card'}
+      class={selected ? 'dock-card surface-card dock-card--selected' : 'dock-card surface-card'}
       role="button"
       tabIndex={0}
       onClick={select}

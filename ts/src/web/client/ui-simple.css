@@ -8,10 +8,6 @@
   max-width: 500px;
   /* auto margins (not body centering) so a taller-than-viewport app stays scrollable */
   margin: auto;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--r-lg);
-  box-shadow: var(--shadow-3);
   overflow: hidden;
   display: flex;
   flex-direction: column;
@@ -46,7 +42,6 @@
   align-items: center;
   gap: 10px;
   border: 0;
-  padding: 0;
   background: transparent;
   color: inherit;
   font: inherit;
@@ -73,7 +68,6 @@
 .xkey-config-btn {
   appearance: none;
   border: none;
-  padding: 0;
   cursor: pointer;
   color: var(--fg-dim);
   background: transparent;
@@ -97,12 +91,16 @@
   display: inline-flex;
   align-items: center;
 }
-.ghostbtn {
-  font-family: var(--font);
-  font-size: 13px;
+.ghostbtn,
+.b-mode-select,
+.xkey-config-btn {
   color: var(--fg-muted);
   background: var(--surface);
   border: 1px solid var(--border);
+}
+.ghostbtn {
+  font-family: var(--font);
+  font-size: 13px;
   box-shadow: var(--shadow-1);
   transition: 0.15s;
   gap: 5px;
@@ -145,7 +143,6 @@
 }
 .linkbtn {
   appearance: none;
-  padding: 0;
   border: none;
   background: none;
   font: inherit;
@@ -287,11 +284,14 @@
   color: var(--ok);
   letter-spacing: 0.04em;
 }
-.live-dot::before {
-  content: '';
+.live-dot::before,
+.chip-dot {
   width: 6px;
   height: 6px;
   border-radius: 50%;
+}
+.live-dot::before {
+  content: '';
   background: var(--ok);
   box-shadow: 0 0 0 0 var(--ok-soft);
   animation: live 1.8s ease-out infinite;
@@ -352,15 +352,19 @@
   grid-template-columns: 1fr;
   gap: 12px;
 }
-.dock-card {
-  padding: 13px;
+.surface-card {
   border-radius: var(--r-md);
   border: 1px solid var(--border);
   background: var(--surface);
   box-shadow: var(--shadow-1);
+}
+.dock-card {
+  padding: 13px;
   cursor: pointer;
 }
-.dock-card:focus-visible {
+/* .pad-fill-option: the radio itself is visually hidden, so it cannot carry the focus ring */
+.dock-card:focus-visible,
+.pad-fill-option:has(input:focus-visible) {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
@@ -413,9 +417,6 @@
 }
 /* plain leading dot for chips without an icon/spinner (StatusChip) */
 .chip-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
   background: currentColor;
   flex: none;
 }
@@ -457,11 +458,20 @@
   gap: 13px;
 }
 .b-label,
+.xkeys-label,
+.xkey-pos,
+.b-mode-select {
+  font-weight: 600;
+  flex: none;
+}
+.b-label,
+.xkeys-label,
+.xkey-pos {
+  color: var(--fg-muted);
+}
+.b-label,
 .xkeys-label {
   font-size: 13px;
-  font-weight: 600;
-  color: var(--fg-muted);
-  flex: none;
 }
 .brightness .b-ico {
   color: var(--fg-dim);
@@ -469,13 +479,8 @@
 }
 .b-mode-select {
   font-size: 13px;
-  font-weight: 600;
-  color: var(--fg-muted);
-  flex: none;
   padding: 4px 8px;
-  border: 1px solid var(--border);
   border-radius: 6px;
-  background: var(--surface);
   cursor: pointer;
 }
 .fader {
@@ -488,7 +493,6 @@ input[type='range'].range {
   appearance: none;
   width: 100%;
   height: 8px;
-  margin: 0;
   border-radius: 99px;
   cursor: pointer;
   background:
@@ -553,10 +557,7 @@ input[type='range'].range:disabled {
 }
 .xkey-pos {
   font-size: 12px;
-  font-weight: 600;
-  color: var(--fg-muted);
   width: 52px;
-  flex: none;
 }
 /* rides .input; UI font + surface bg for the widget dropdowns.
    Double class: .input is declared later in this file and would win otherwise */
@@ -577,9 +578,6 @@ input[type='range'].range:disabled {
   flex: none;
   width: 30px;
   height: 30px;
-  color: var(--fg-muted);
-  background: var(--surface);
-  border: 1px solid var(--border);
   border-radius: 8px;
 }
 .xkey-config-btn:hover {
@@ -594,11 +592,6 @@ input[type='range'].range:disabled {
   right: 0;
   z-index: 30;
   width: 190px;
-  background: var(--surface);
-  color: var(--fg);
-  border: 1px solid var(--border);
-  border-radius: var(--r-lg);
-  box-shadow: var(--shadow-3);
   padding: 14px;
   animation: rise 0.16s cubic-bezier(0.2, 0.9, 0.3, 1.1) both;
 }
@@ -626,15 +619,8 @@ input[type='range'].range:disabled {
   font-size: 13px;
   color: var(--fg-muted);
 }
-.xkey-status-ok {
-  color: var(--ok);
-}
 .xkey-status-pending {
   color: var(--wait);
-}
-.xkey-status-err,
-.xkey-status-disabled {
-  color: var(--warn);
 }
 
 /* ============================================================
@@ -648,7 +634,8 @@ input[type='range'].range:disabled {
 .stage-title .accent {
   color: var(--accent);
 }
-.checklist {
+.checklist,
+.tuning-group {
   display: flex;
   flex-direction: column;
   gap: 10px;
@@ -657,10 +644,6 @@ input[type='range'].range:disabled {
   display: flex;
   gap: 13px;
   padding: 14px;
-  border-radius: var(--r-md);
-  border: 1px solid var(--border);
-  background: var(--surface);
-  box-shadow: var(--shadow-1);
   transition: 0.25s;
 }
 .step.active {
@@ -689,29 +672,33 @@ input[type='range'].range:disabled {
   width: 100%;
 }
 /* A step whose title is itself the action (e.g. "Open the Elgato Stream Deck app"). */
-.step-title a {
+.step-title a,
+.step-sub a,
+.manual-add-docs,
+.manual-add-steps .app-link {
   color: var(--accent);
   text-decoration: none;
 }
-.step-title a:hover {
-  text-decoration: underline;
-  text-underline-offset: 2px;
-}
-.step-sub {
-  margin-top: 4px;
-  font-size: 13px;
-  color: var(--fg-muted);
-  line-height: 1.5;
-  text-wrap: pretty;
-}
-.step-sub a {
-  color: var(--accent);
-  font-weight: 600;
-  text-decoration: none;
-}
+.step-title a:hover,
 .step-sub a:hover {
   text-decoration: underline;
   text-underline-offset: 2px;
+}
+.step-sub a,
+.manual-add-docs,
+.manual-add-steps .app-link {
+  font-weight: 600;
+}
+.step-sub,
+.manual-add-steps,
+.popover p {
+  font-size: 13px;
+  color: var(--fg-muted);
+  text-wrap: pretty;
+}
+.step-sub {
+  margin-top: 4px;
+  line-height: 1.5;
 }
 
 /* step icons */
@@ -770,7 +757,6 @@ input[type='range'].range:disabled {
   color: var(--fg);
 }
 .warnrow .w-ico {
-  color: var(--warn);
   flex: none;
 }
 .warnrow code {
@@ -819,22 +805,22 @@ input[type='range'].range:disabled {
   margin-bottom: 5px;
 }
 .manual-add-steps {
-  font-size: 13px;
   line-height: 1.6;
-  color: var(--fg-muted);
-  text-wrap: pretty;
 }
 .manual-add-steps .nstrong {
   color: var(--fg);
   font-weight: 600;
 }
-.manual-add-list {
-  margin: 7px 0 0;
-  padding-left: 0;
+.manual-add-list,
+.help-steps,
+.identity-list {
   list-style: none;
-  counter-reset: ma;
   display: flex;
   flex-direction: column;
+}
+.manual-add-list {
+  margin: 7px 0 0;
+  counter-reset: ma;
   gap: 7px;
 }
 .manual-add-list li {
@@ -863,9 +849,6 @@ input[type='range'].range:disabled {
 }
 .manual-add-docs,
 .manual-add-steps .app-link {
-  color: var(--accent);
-  font-weight: 600;
-  text-decoration: none;
   border-bottom: 1px solid color-mix(in oklab, var(--accent), transparent 60%);
   transition: border-color 0.14s;
 }
@@ -923,28 +906,22 @@ input[type='range'].range:disabled {
   font-weight: 600;
   flex: 1;
 }
-.addr-port {
+.addr-port,
+.addr-copy {
   color: var(--fg-dim);
 }
 .addr-copy {
-  color: var(--fg-dim);
   flex: none;
 }
-.addr-chip:hover .addr-copy,
-.addr-port-chip:hover .addr-copy {
+:is(.addr-chip, .addr-port-chip):hover .addr-copy {
   color: var(--accent);
 }
-.addr-chip.copied,
-.addr-port-chip.copied {
+:is(.addr-chip, .addr-port-chip).copied {
   border-color: var(--ok);
   color: var(--ok);
 }
 .addr-chip.copied {
   background: var(--ok-soft);
-}
-.addr-chip.copied .addr-text,
-.addr-chip.copied .addr-copy {
-  color: var(--ok);
 }
 .addr-port-chip {
   gap: 8px;
@@ -1073,11 +1050,7 @@ input[type='range'].range:disabled {
   margin-top: 2em;
 }
 .help-steps {
-  list-style: none;
   margin: 0 0 4px;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
   gap: 11px;
 }
 .help-steps li {
@@ -1199,11 +1172,6 @@ input[type='range'].range:disabled {
 .popover {
   width: 100%;
   max-width: 400px;
-  background: var(--surface);
-  color: var(--fg);
-  border: 1px solid var(--border);
-  border-radius: var(--r-lg);
-  box-shadow: var(--shadow-3);
   padding: 22px;
   position: relative;
   animation: rise 0.22s cubic-bezier(0.2, 0.9, 0.3, 1.1) both;
@@ -1218,10 +1186,7 @@ input[type='range'].range:disabled {
 }
 .popover p {
   margin: 0 0 12px;
-  font-size: 13px;
   line-height: 1.6;
-  color: var(--fg-muted);
-  text-wrap: pretty;
 }
 .popover p strong {
   color: var(--fg);
@@ -1264,17 +1229,19 @@ input[type='range'].range:disabled {
   font-size: 13px;
   margin: 8px 0 0;
 }
-.settings-error {
-  color: var(--warn);
-}
-.settings-status {
+.xkey-status-ok,
+.settings-status,
+.addr-chip.copied :is(.addr-text, .addr-copy) {
   color: var(--ok);
 }
+.xkey-status-err,
+.xkey-status-disabled,
+.settings-error,
+.warnrow .w-ico {
+  color: var(--warn);
+}
 .identity-list {
-  list-style: none;
   margin: 0 0 20px;
-  display: flex;
-  flex-direction: column;
   gap: 8px;
   padding: 13px 15px;
 }
@@ -1300,7 +1267,6 @@ input[type='range'].range:disabled {
   user-select: none;
   cursor: pointer;
   border: 0;
-  padding: 0;
   background: transparent;
   transition: filter 0.15s ease;
 }
@@ -1354,15 +1320,11 @@ input[type='range'].range:disabled {
   color: var(--fg-muted);
 }
 .tuning-group {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
   padding: 10px;
   border: 1px solid var(--border);
   border-radius: 8px;
 }
 .tuning-group-label {
-  margin: 0;
   color: var(--accent);
   font-size: 11px;
   letter-spacing: 0.08em;
@@ -1404,11 +1366,6 @@ input[type='range'].range:disabled {
   border-color: var(--accent);
   color: var(--accent);
 }
-/* the radio itself is visually hidden, so it cannot carry the focus ring */
-.pad-fill-option:has(input:focus-visible) {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
-}
 .pad-fill-option input {
   position: absolute;
   opacity: 0;
@@ -1421,12 +1378,12 @@ input[type='range'].range:disabled {
   color: var(--fg-muted);
   margin: 0 0 8px;
 }
-.multi-deck-row {
+.toggle-row {
   display: flex;
   align-items: center;
   gap: 6px;
 }
-.multi-deck-row .settings-checkbox {
+.toggle-row .settings-checkbox {
   margin: 0;
 }
 .multi-deck-help {
@@ -1475,6 +1432,15 @@ input[type='range'].range:disabled {
   max-height: 260px;
   overflow-y: auto;
   white-space: pre;
+}
+
+.floating-surface,
+.app {
+  background: var(--surface);
+  color: var(--fg);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-3);
 }
 
 /* ============================================================
