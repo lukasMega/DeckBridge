@@ -97,10 +97,9 @@ Mirabox 293V3 also matches the HSV293SV3 / "293S V3" refresh — untested.
 
 1. Download the release for your OS, unzip, and run `deckbridge`.
 2. Plug in your deck.
-3. Open the Elgato Stream Deck app on any machine on the same network — it discovers
-   DeckBridge automatically.
-
-A web page at <http://localhost:3000> shows your deck's keys and a live log.
+3. Open the Elgato Stream Deck app on any machine in LAN (or in the same machine as DeckBridge).
+   Pair it in the app first; next time, it will discover DeckBridge automatically.
+   A web page at <http://localhost:3000> shows your deck's keys and a live log.
 
 Full install and troubleshooting steps:
 [Getting Started](https://lukasmega.github.io/DeckBridge/getting-started).
