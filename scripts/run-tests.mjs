@@ -17,9 +17,13 @@ if (!tjs) {
   process.exit(1);
 }
 
+// These run only on CI (CI env var set by GitHub Actions) — too slow for local iteration.
+const CI_ONLY_TESTS = new Set(['hash-bench.test.ts', 'image-cache.test.ts']);
+
 const opts = { cwd: tsDir, encoding: 'utf8' };
 const files = readdirSync(join(tsDir, 'test'))
   .filter((f) => f.endsWith('.test.ts'))
+  .filter((f) => process.env.CI || !CI_ONLY_TESTS.has(f))
   .sort();
 
 let rc = 0;
