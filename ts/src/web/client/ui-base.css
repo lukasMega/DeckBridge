@@ -54,9 +54,9 @@ body {
   color: var(--fg);
   background: radial-gradient(120% 90% at 50% -10%, var(--bg) 0%, var(--bg-2) 100%) fixed;
   min-height: 100dvh;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  /*display: flex;*/
+  /*align-items: center;*/
+  /*justify-content: center;*/
   padding: 28px 20px;
 }
 
@@ -122,7 +122,6 @@ html[data-mode='advanced'] #advanced-view {
   width: 1px;
   height: 1px;
   margin: -1px;
-  padding: 0;
   overflow: hidden;
   clip-path: inset(50%);
   white-space: nowrap;

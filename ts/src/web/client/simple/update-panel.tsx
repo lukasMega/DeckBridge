@@ -3,7 +3,7 @@
 // the 500-line check-loc gate, same reason as MultiDeckPanel.
 import { useState } from 'preact/hooks';
 import { Collapsible } from '../components/Collapsible.js';
-import { CheckField } from '../components/Fields.js';
+import { ToggleRow } from '../components/Fields.js';
 import { postJson } from '../ui-api.js';
 import { Feedback, useAsyncAction } from '../ui-async.js';
 import type { UpdateInfo } from '../ui-types.js';
@@ -33,14 +33,12 @@ export function UpdatePanel({ info }: Readonly<{ info: UpdateInfo | null }>): pr
 
   return (
     <Collapsible title="Updates" bodyId="update-body">
-      <div class="multi-deck-row">
-        <CheckField
-          id="toggle-update-check"
-          label="Check for updates"
-          checked={enabled}
-          onChange={(next) => void toggle(next)}
-        />
-      </div>
+      <ToggleRow
+        id="toggle-update-check"
+        label="Check for updates"
+        checked={enabled}
+        onChange={(next) => void toggle(next)}
+      />
       {current?.updateAvailable && (
         <p class="multi-deck-note">
           <a href={current.releaseUrl} target="_blank" rel="noopener">

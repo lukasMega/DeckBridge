@@ -5,7 +5,7 @@
 // Kept out of overlays.tsx to stay under the 500-line check-loc gate.
 import { useState } from 'preact/hooks';
 import { Collapsible } from '../components/Collapsible.js';
-import { CheckField } from '../components/Fields.js';
+import { ToggleRow } from '../components/Fields.js';
 import { ICON } from '../ui-icons.js';
 import { Icon } from './Icon.js';
 
@@ -36,15 +36,14 @@ export function MultiDeckPanel({
 
   return (
     <Collapsible title="Multiple decks" bodyId="multi-deck-body">
-      <div class="multi-deck-row">
-        <CheckField
-          id="toggle-multi-deck"
-          label="Use two decks"
-          checked={on}
-          onChange={(next) => void toggle(next)}
-        />
+      <ToggleRow
+        id="toggle-multi-deck"
+        label="Use two decks"
+        checked={on}
+        onChange={(next) => void toggle(next)}
+      >
         <Icon class="multi-deck-help" html={ICON.help} title={MULTI_DECK_HELP} />
-      </div>
+      </ToggleRow>
       <p class="multi-deck-note">Disconnects second deck. Settings stay saved.</p>
       <Feedback error={action.error} status={action.status} />
     </Collapsible>

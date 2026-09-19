@@ -98,3 +98,24 @@ export function CheckField({
     </label>
   );
 }
+
+export function ToggleRow({
+  id,
+  label,
+  checked,
+  onChange,
+  children,
+}: Readonly<{
+  id?: string;
+  label: string;
+  checked: boolean;
+  onChange: (checked: boolean) => void;
+  children?: preact.ComponentChildren;
+}>): preact.JSX.Element {
+  return (
+    <div class="toggle-row">
+      <CheckField id={id} label={label} checked={checked} onChange={onChange} />
+      {children}
+    </div>
+  );
+}

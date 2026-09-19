@@ -51,7 +51,7 @@ export function Step({
   children?: ComponentChildren;
 }>): preact.JSX.Element {
   return (
-    <div class={`step ${kind}`}>
+    <div class={`step surface-card ${kind}`}>
       <div class="step-ico">
         {kind === 'done' && <Icon class="ico-done circle" html={ICON.check} />}
         {kind === 'active' && <span class="ico-spin" />}
