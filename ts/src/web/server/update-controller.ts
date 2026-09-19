@@ -12,6 +12,7 @@ import type { ControllerHost } from './types.js';
 export class UpdateController {
   private readonly checker: UpdateChecker;
   private readonly telemetry: TelemetryController;
+  private onChange?: (info: UpdateInfo) => void;
 
   constructor(
     private readonly host: ControllerHost,
@@ -32,6 +33,15 @@ export class UpdateController {
     return this.checker.toInfo();
   }
 
+  setOnChange(onChange: (info: UpdateInfo) => void): void {
+    this.onChange = onChange;
+  }
+
+  private notify(info: UpdateInfo): void {
+    this.host.broadcast('update', info);
+    this.onChange?.(info);
+  }
+
   /** Daily usage ping, on its own timer (app.ts): the dwell gate rejects a
    *  session's first minutes, which on the shared 24 h interval cost a whole
    *  day. Never throws — telemetry must not break anything. */
@@ -42,19 +52,19 @@ export class UpdateController {
   /** Runs the (possibly cached) check and broadcasts the result. */
   async check(force: boolean): Promise<UpdateInfo> {
     const info = await this.checker.check(force);
-    this.host.broadcast('update', info);
+    this.notify(info);
     return info;
   }
 
   dismiss(version: string): UpdateInfo {
     this.checker.dismiss(version);
     const info = this.checker.toInfo();
-    this.host.broadcast('update', info);
+    this.notify(info);
     return info;
   }
 
   setEnabled(enabled: boolean): void {
     this.host.settings.setUpdateCheck(enabled);
-    this.host.broadcast('update', this.checker.toInfo());
+    this.notify(this.checker.toInfo());
   }
 }

@@ -4,6 +4,7 @@
 // present, so it's cfg_attr'd instead. No-op on macOS/Linux.
 #![cfg_attr(windows, windows_subsystem = "windows")]
 
+use image::{Rgba, RgbaImage};
 use serde::{Deserialize, Serialize};
 use std::io::{BufRead, BufReader, Write};
 use std::net::TcpListener;
@@ -32,6 +33,14 @@ struct TrayState {
     status: String,
     #[serde(default)]
     reconnect_attempts: u32,
+    #[serde(default)]
+    update_available: bool,
+    #[serde(default = "default_update_text")]
+    update_text: String,
+}
+
+fn default_update_text() -> String {
+    "Checking for updates…".to_owned()
 }
 
 #[derive(Debug, Serialize)]
@@ -79,7 +88,7 @@ fn open_browser(url: &str) {
     let _ = Command::new("xdg-open").arg(url).spawn();
 }
 
-fn icon_from_bytes(data: &[u8]) -> Option<Icon> {
+fn rgba_from_bytes(data: &[u8]) -> Option<(Vec<u8>, u32, u32)> {
     let decoder = png::Decoder::new(std::io::Cursor::new(data));
     let mut reader = decoder.read_info().ok()?;
     let mut buf = vec![0u8; reader.output_buffer_size()?];
@@ -99,46 +108,99 @@ fn icon_from_bytes(data: &[u8]) -> Option<Icon> {
         _ => return None,
     };
 
-    Icon::from_rgba(rgba, info.width, info.height).ok()
+    Some((rgba, info.width, info.height))
 }
 
 /// Load icon: try next to executable first, fall back to embedded bytes.
-fn load_icon(name: &str, embedded: &[u8]) -> Option<Icon> {
+fn load_icon_rgba(name: &str, embedded: &[u8]) -> Option<(Vec<u8>, u32, u32)> {
     if let Ok(exe) = std::env::current_exe() {
         if let Some(dir) = exe.parent() {
             if let Ok(data) = std::fs::read(dir.join(name)) {
-                if let Some(icon) = icon_from_bytes(&data) {
-                    return Some(icon);
+                if let Some(rgba) = rgba_from_bytes(&data) {
+                    return Some(rgba);
                 }
             }
         }
     }
-    icon_from_bytes(embedded)
+    rgba_from_bytes(embedded)
+}
+
+fn icon_from_rgba(rgba: Vec<u8>, width: u32, height: u32) -> Icon {
+    Icon::from_rgba(rgba, width, height).expect("failed to create tray icon")
+}
+
+fn icon_with_update_dot(rgba: &[u8], width: u32, height: u32) -> Icon {
+    let mut image =
+        RgbaImage::from_raw(width, height, rgba.to_vec()).expect("invalid tray icon RGBA buffer");
+    let dot_radius = (width.min(height) as i32 * 3 / 20).max(2);
+    let ring_radius = dot_radius + 1;
+    let center_x = width as i32 - ring_radius - 1;
+    let center_y = height as i32 - ring_radius - 1;
+
+    for y in (center_y - ring_radius)..=(center_y + ring_radius) {
+        for x in (center_x - ring_radius)..=(center_x + ring_radius) {
+            let dx = x - center_x;
+            let dy = y - center_y;
+            let distance_squared = dx * dx + dy * dy;
+            if distance_squared <= ring_radius * ring_radius {
+                let color = if distance_squared <= dot_radius * dot_radius {
+                    Rgba([220, 38, 38, 255])
+                } else {
+                    Rgba([255, 255, 255, 190])
+                };
+                image.put_pixel(x as u32, y as u32, color);
+            }
+        }
+    }
+
+    icon_from_rgba(image.into_raw(), width, height)
 }
 
 struct Icons {
     full: Icon,
+    full_update: Icon,
     usb_only: Icon,
+    usb_only_update: Icon,
     disconnected: Icon,
+    disconnected_update: Icon,
 }
 
 impl Icons {
     fn load() -> Self {
+        let (full_rgba, full_width, full_height) =
+            load_icon_rgba("icon-full.png", ICON_FULL_BYTES).expect("failed to load icon-full.png");
+        let (usb_only_rgba, usb_only_width, usb_only_height) =
+            load_icon_rgba("icon-usb-only.png", ICON_USB_ONLY_BYTES)
+                .expect("failed to load icon-usb-only.png");
+        let (disconnected_rgba, disconnected_width, disconnected_height) =
+            load_icon_rgba("icon-disconnected.png", ICON_DISCONNECTED_BYTES)
+                .expect("failed to load icon-disconnected.png");
         Icons {
-            full: load_icon("icon-full.png", ICON_FULL_BYTES)
-                .expect("failed to load icon-full.png"),
-            usb_only: load_icon("icon-usb-only.png", ICON_USB_ONLY_BYTES)
-                .expect("failed to load icon-usb-only.png"),
-            disconnected: load_icon("icon-disconnected.png", ICON_DISCONNECTED_BYTES)
-                .expect("failed to load icon-disconnected.png"),
+            full: icon_from_rgba(full_rgba.clone(), full_width, full_height),
+            full_update: icon_with_update_dot(&full_rgba, full_width, full_height),
+            usb_only: icon_from_rgba(usb_only_rgba.clone(), usb_only_width, usb_only_height),
+            usb_only_update: icon_with_update_dot(&usb_only_rgba, usb_only_width, usb_only_height),
+            disconnected: icon_from_rgba(
+                disconnected_rgba.clone(),
+                disconnected_width,
+                disconnected_height,
+            ),
+            disconnected_update: icon_with_update_dot(
+                &disconnected_rgba,
+                disconnected_width,
+                disconnected_height,
+            ),
         }
     }
 
-    fn for_name(&self, name: &str) -> &Icon {
-        match name {
-            "full" => &self.full,
-            "usb_only" => &self.usb_only,
-            _ => &self.disconnected,
+    fn for_name(&self, name: &str, update_available: bool) -> &Icon {
+        match (name, update_available) {
+            ("full", false) => &self.full,
+            ("full", true) => &self.full_update,
+            ("usb_only", false) => &self.usb_only,
+            ("usb_only", true) => &self.usb_only_update,
+            (_, false) => &self.disconnected,
+            (_, true) => &self.disconnected_update,
         }
     }
 }
@@ -148,6 +210,7 @@ impl Icons {
 struct TrayHandles {
     tray: tray_icon::TrayIcon,
     status_item: MenuItem,
+    update_item: MenuItem,
     open_ui_id: tray_icon::menu::MenuId,
     check_req_id: tray_icon::menu::MenuId,
     quit_id: tray_icon::menu::MenuId,
@@ -158,6 +221,7 @@ fn build_tray(icons: &Icons) -> TrayHandles {
 
     let header_item = MenuItem::new("DeckBridge", false, None);
     let status_item = MenuItem::new("Status: \u{2014}", false, None);
+    let update_item = MenuItem::new("Checking for updates…", false, None);
     let open_ui_item = MenuItem::new("Open Web UI", true, None);
     let check_req_item = MenuItem::new("Check Requirements", true, None);
     let quit_item = MenuItem::new("Quit", true, None);
@@ -170,6 +234,7 @@ fn build_tray(icons: &Icons) -> TrayHandles {
         .append_items(&[
             &header_item,
             &status_item,
+            &update_item,
             &PredefinedMenuItem::separator(),
             &open_ui_item,
             &check_req_item,
@@ -188,6 +253,7 @@ fn build_tray(icons: &Icons) -> TrayHandles {
     TrayHandles {
         tray,
         status_item,
+        update_item,
         open_ui_id,
         check_req_id,
         quit_id,
@@ -284,7 +350,7 @@ fn main() {
 
             Event::UserEvent(UserEvent::State(state)) => {
                 if let Some(handles) = &tray_handles {
-                    let icon = icons.for_name(&state.icon);
+                    let icon = icons.for_name(&state.icon, state.update_available);
                     let _ = handles.tray.set_icon(Some(icon.clone()));
                     let label = if state.reconnect_attempts > 0 {
                         format!(
@@ -295,6 +361,7 @@ fn main() {
                         format!("Status: {}", state.status)
                     };
                     handles.status_item.set_text(&label);
+                    handles.update_item.set_text(&state.update_text);
                 }
             }
 

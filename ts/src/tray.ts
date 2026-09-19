@@ -5,6 +5,8 @@ export interface TrayState {
   icon: 'full' | 'usb_only' | 'disconnected';
   status: string;
   reconnectAttempts: number;
+  updateAvailable: boolean;
+  updateText: string;
 }
 
 export interface TrayHandle {
@@ -14,6 +16,10 @@ export interface TrayHandle {
 
 const enc = new TextEncoder();
 const dec = new TextDecoder();
+
+export function serializeTrayState(state: TrayState): string {
+  return JSON.stringify(state) + '\n';
+}
 
 class TrayProcess implements TrayHandle {
   private writer: WritableStreamDefaultWriter<Uint8Array> | null = null;
@@ -80,7 +86,7 @@ class TrayProcess implements TrayHandle {
 
   private async _send(state: TrayState): Promise<void> {
     try {
-      await this.writer!.write(enc.encode(JSON.stringify(state) + '\n'));
+      await this.writer!.write(enc.encode(serializeTrayState(state)));
     } catch (e) {
       warn('tray', `send error: ${e instanceof Error ? e.message : String(e)}`);
     }
