@@ -369,7 +369,7 @@ fn main() {
                     if !state.version.is_empty() {
                         handles
                             .header_item
-                            .set_text(&format!("DeckBridge v{}", state.version));
+                            .set_text(format!("DeckBridge v{}", state.version));
                     }
                 }
             }
