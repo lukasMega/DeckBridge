@@ -5,13 +5,13 @@
 import { createUpdateChecker } from '../../update-check.js';
 import type { UpdateChecker, UpdateInfo } from '../../update-check.js';
 import { fetchLatestRelease } from '../../update-check.js';
-import { TelemetryController } from './telemetry-controller.js';
+import { DailyPingController } from './daily-ping-controller.js';
 import type { DockStatus } from '../../types.js';
 import type { ControllerHost } from './types.js';
 
 export class UpdateController {
   private readonly checker: UpdateChecker;
-  private readonly telemetry: TelemetryController;
+  private readonly dailyPing: DailyPingController;
   private onChange?: (info: UpdateInfo) => void;
 
   constructor(
@@ -19,7 +19,7 @@ export class UpdateController {
     currentVersion: string,
     docks: () => DockStatus[],
   ) {
-    this.telemetry = new TelemetryController(host, currentVersion, docks);
+    this.dailyPing = new DailyPingController(host, currentVersion, docks);
     this.checker = createUpdateChecker({
       currentVersion,
       isEnabled: () => this.host.settings.updateCheck ?? true,
@@ -44,9 +44,9 @@ export class UpdateController {
 
   /** Daily usage ping, on its own timer (app.ts): the dwell gate rejects a
    *  session's first minutes, which on the shared 24 h interval cost a whole
-   *  day. Never throws — telemetry must not break anything. */
+   *  day. Never throws — dailyPing must not break anything. */
   async ping(): Promise<void> {
-    await this.telemetry.ping();
+    await this.dailyPing.ping();
   }
 
   /** Runs the (possibly cached) check and broadcasts the result. */

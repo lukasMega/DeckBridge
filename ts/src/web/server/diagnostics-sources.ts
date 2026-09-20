@@ -14,7 +14,7 @@ import { listAllHidDevicesTimed } from '../../ffi/hidapi.js';
 import { tailLogFile } from '../../log-file.js';
 import { defaultCacheRoot } from '../../native-libs.js';
 import { settingsPath } from '../../settings-store.js';
-import { MIN_DWELL_MS, suppressReason } from '../../telemetry-env.js';
+import { MIN_DWELL_MS, suppressReason } from '../../daily-ping-env.js';
 import { isElgatoAppRunning, openPathInOS, platformName } from '../../os-utils.ts';
 import { versionText } from '../../cli.js';
 
@@ -75,11 +75,11 @@ export function deckbridgeEnv(): Record<string, string> {
     // Synthetic: "why no ping" is otherwise invisible in a bug report. The
     // dwell gate is skipped on purpose — `diagnose`'s own uptime says nothing
     // about the app's, so this answers what the *environment* allows.
-    '(telemetry)': telemetryEnvState(),
+    '(daily-ping)': dailyPingEnvState(),
   };
 }
 
-function telemetryEnvState(): string {
+function dailyPingEnvState(): string {
   const reason = suppressReason({ env: tjs.env, uptimeMs: MIN_DWELL_MS });
   return reason ? `suppressed (${reason})` : `eligible after ${MIN_DWELL_MS / 60000} min uptime`;
 }

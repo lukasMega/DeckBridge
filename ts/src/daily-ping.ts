@@ -3,8 +3,8 @@
 // pure half + a curl beacon, silent on failure. See docs/privacy.md.
 import { log } from './logger.js';
 import { readText } from './os-utils.js';
-import { suppressReason } from './telemetry-env.js';
-import type { SuppressReason } from './telemetry-env.js';
+import { suppressReason } from './daily-ping-env.js';
+import type { SuppressReason } from './daily-ping-env.js';
 import { parseSemver } from './update-check.js';
 
 const ENDPOINT = 'aHR0cHM6Ly90c3QubHVrYXNtZWdhLmRlbm8ubmV0L2F8ZGVja2JyaWRnZS1hcHA=';
@@ -33,11 +33,11 @@ const OS_VERSION = /^[a-z][a-z0-9_]{0,15}(?:-[a-z0-9.]{1,12})?$/;
  *  https://learn.microsoft.com/windows/release-health/ */
 const WIN11_MIN_BUILD = 22000;
 
-export type TelemetryOs = 'macos' | 'windows' | 'linux' | 'unknown';
+export type DailyPingOs = 'macos' | 'windows' | 'linux' | 'unknown';
 
 /** Short keys because the payload rides in a query string. */
-export interface TelemetryPayload {
-  os: TelemetryOs;
+export interface DailyPingPayload {
+  os: DailyPingOs;
   ov: string;
   v: string;
   dv: string;
@@ -50,7 +50,7 @@ export interface TelemetryPayload {
 /** `navigator.userAgentData.platform` (os-utils.ts) is 'macOS'/'Windows'/'Linux',
  *  but accept the runtime-style names too rather than silently filing a whole
  *  platform under `unknown` if that ever changes. */
-export function normalizeOs(platform: string): TelemetryOs {
+export function normalizeOs(platform: string): DailyPingOs {
   const p = platform.toLowerCase();
   if (p.includes('mac') || p.includes('darwin')) return 'macos';
   if (p.includes('win')) return 'windows';
@@ -81,7 +81,7 @@ export function tzOffset(now: Date): string {
 /** Major release only (`macos-26`): a full `26.6.2` mints a KV key per patch per
  *  install, and fingerprints harder for no extra insight. `unknown` on any
  *  surprise — a wrong guess is worse than no value. */
-export function parseOsVersion(os: TelemetryOs, raw: string): string {
+export function parseOsVersion(os: DailyPingOs, raw: string): string {
   const text = raw.trim();
   if (!text) return 'unknown';
   if (os === 'macos') return parseMacVersion(text);
@@ -139,7 +139,7 @@ export interface PayloadInput {
 /** Deduped + sorted so two docks of one model count once and the same hardware
  *  always produces the same string; `none` when nothing is connected, which is a
  *  real answer (the app runs fine with no device plugged in). */
-export function buildPayload(input: PayloadInput): TelemetryPayload {
+export function buildPayload(input: PayloadInput): DailyPingPayload {
   const ids = [...new Set(input.modelIds.filter((id) => MODEL_ID.test(id)))]
     .toSorted((a, b) => a.localeCompare(b))
     .slice(0, MAX_DEVICE_IDS);
@@ -155,7 +155,7 @@ export function buildPayload(input: PayloadInput): TelemetryPayload {
 
 /** Mirrors the collector's decode (`JSON.parse(decodeURIComponent(atob(v)))`).
  *  `encodeURIComponent` first keeps the input inside base64's byte range. */
-export function encodePayload(payload: TelemetryPayload): string {
+export function encodePayload(payload: DailyPingPayload): string {
   return Buffer.from(encodeURIComponent(JSON.stringify(payload)), 'utf8').toString('base64');
 }
 
@@ -185,7 +185,7 @@ export function beaconUrl(encoded: string): string {
 
 /** Raw platform version text. Never throws — a missing `sw_vers`, a locked-down
  *  `cmd` or an unreadable os-release all degrade to the dim's `unknown`. */
-export async function readOsVersion(os: TelemetryOs): Promise<string> {
+export async function readOsVersion(os: DailyPingOs): Promise<string> {
   try {
     if (os === 'linux') {
       const bytes = await tjs.readFile('/etc/os-release');
@@ -217,7 +217,7 @@ export async function readOsVersion(os: TelemetryOs): Promise<string> {
 
 /** OS locale, including GUI launches without LANG. Same bounded probe as the
  *  OS version; failures leave the locale unknown without losing the ping. */
-export async function readLocale(os: TelemetryOs): Promise<string> {
+export async function readLocale(os: DailyPingOs): Promise<string> {
   try {
     const env = typeof tjs !== 'undefined' ? tjs.env : {};
     const locale = env.LC_ALL || env.LC_MESSAGES || env.LANG || '';
@@ -287,11 +287,11 @@ export async function sendBeacon(
   }
 }
 
-export interface TelemetryDeps {
+export interface DailyPingDeps {
   currentVersion: string;
   /** Read fresh each ping so a settings change takes effect without a restart. */
   isEnabled: () => boolean;
-  /** UTC day of the last ping — the only telemetry state kept on disk. */
+  /** UTC day of the last ping — the only dailyPing state kept on disk. */
   getLastPingDay: () => string | undefined;
   setLastPingDay: (day: string) => void;
   /** Model ids of the currently open devices. */
@@ -301,14 +301,14 @@ export interface TelemetryDeps {
   now?: () => Date;
   platform?: () => string;
   /** Injected so tests never spawn; defaults to `readOsVersion`. */
-  readOsVersion?: (os: TelemetryOs) => Promise<string>;
-  readLocale?: (os: TelemetryOs) => Promise<string>;
+  readOsVersion?: (os: DailyPingOs) => Promise<string>;
+  readLocale?: (os: DailyPingOs) => Promise<string>;
   /** Last locale the WebUI's browser reported (`navigator.language`, see
    *  web-ui-server.ts). Used only when the OS-level probe comes back
    *  `unknown` — a headless/CLI run with no browser ever attached leaves this
    *  undefined, which is a real answer, not a failure. */
   browserLocale?: () => string | undefined;
-  /** Environment veto (telemetry-env.ts). Read fresh each ping so the dwell
+  /** Environment veto (daily-ping-env.ts). Read fresh each ping so the dwell
    *  clock advances between ticks. Defaults to the real environment (fail
    *  closed), which also means a test that wants a ping must inject one. */
   suppress?: () => SuppressReason;
@@ -325,12 +325,12 @@ function envSuppressReason(): SuppressReason {
   });
 }
 
-export interface Telemetry {
+export interface DailyPing {
   /** Never throws. A no-op when disabled, on a dev build, or already sent today. */
   ping(): Promise<void>;
 }
 
-export function createTelemetry(deps: TelemetryDeps): Telemetry {
+export function createDailyPing(deps: DailyPingDeps): DailyPing {
   const now = deps.now ?? ((): Date => new Date());
   const platform = deps.platform ?? ((): string => '');
   const readVersion = deps.readOsVersion ?? readOsVersion;
@@ -343,7 +343,7 @@ export function createTelemetry(deps: TelemetryDeps): Telemetry {
     // still pings.
     const blocked = suppress();
     if (blocked) {
-      log('debug', 'telemetry', `suppressed (${blocked})`);
+      log('debug', 'dailyPing', `suppressed (${blocked})`);
       return;
     }
     const at = now();
@@ -385,7 +385,7 @@ export function createTelemetry(deps: TelemetryDeps): Telemetry {
       now: at,
       locale,
     });
-    log('debug', 'telemetry', `payload ${JSON.stringify(payload)}`);
+    log('debug', 'dailyPing', `payload ${JSON.stringify(payload)}`);
     await deps.send(encodePayload(payload), deps.currentVersion);
   }
 

@@ -148,8 +148,8 @@ function setMultiDeckRoute({ enabled }: { enabled: unknown }, { ui }: RouteConte
 }
 
 /** Browser's `navigator.language`, sent once on WebUI load. Fallback for
- *  telemetry.ts's locale dim when the OS-level probe fails. Length-capped —
- *  same reasoning as telemetry.ts's other closed-vocabulary fields: an
+ *  daily-ping.ts's locale dim when the OS-level probe fails. Length-capped —
+ *  same reasoning as daily-ping.ts's other closed-vocabulary fields: an
  *  unbounded string is an unbounded fingerprint, not just an unbounded key. */
 function setBrowserLocaleRoute({ locale }: { locale: unknown }, { ui }: RouteContext): Response {
   if (typeof locale !== 'string' || !locale || locale.length > 35)

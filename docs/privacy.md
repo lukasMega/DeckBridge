@@ -77,10 +77,10 @@ of the last ping, which never leaves the machine. Turn it off with `"a7s": false
 ### When DeckBridge does not ping at all
 
 Independently of the setting above, the ping is skipped outright when any of these
-holds (`ts/src/telemetry-env.ts` is the whole rule, in one file):
+holds (`ts/src/daily-ping-env.ts` is the whole rule, in one file):
 
 - **You turned it off at the command line or in the environment** —
-  `--no-telemetry`, `DECKBRIDGE_NO_TELEMETRY=1`, or the cross-tool convention
+  `--no-daily-ping`, `DECKBRIDGE_NO_DAILY_PING=1`, or the cross-tool convention
   `DO_NOT_TRACK=1`.
 - **Mock mode** — `DECKBRIDGE_MOCK` set. No real device means no real user.
 - **An automated environment** — `CI`, `GITHUB_ACTIONS`, `GITLAB_CI`, `JENKINS_URL`
@@ -93,7 +93,7 @@ holds (`ts/src/telemetry-env.ts` is the whole rule, in one file):
 So the first ping of a session comes no earlier than 5 minutes after start, on its
 own timer rather than the update check's. A skipped ping leaves `a7sDay` untouched, so
 a CI job or a sandbox run cannot consume the day's ping for a real machine.
-`deckbridge diagnose` reports the current verdict on the `(telemetry)` line of the
+`deckbridge diagnose` reports the current verdict on the `(daily-ping)` line of the
 environment section.
 
 Everything else it records stays on your machine, under the cache directory described

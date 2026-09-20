@@ -22,7 +22,7 @@ import { runDevicesCommand } from './cli-devices.js';
 import { runDiagnoseCommand } from './cli-diagnose.js';
 import { loadSettings } from './settings-store.js';
 import { STARTUP_DELAY_MS, CHECK_INTERVAL_MS } from './update-check.js';
-import { MIN_DWELL_MS, PING_SCHEDULE_SLACK_MS, PING_RETRY_INTERVAL_MS } from './telemetry-env.js';
+import { MIN_DWELL_MS, PING_SCHEDULE_SLACK_MS, PING_RETRY_INTERVAL_MS } from './daily-ping-env.js';
 
 const openBrowser = openPathInOS;
 
@@ -95,7 +95,7 @@ const childServer = new ElgatoChildServer(
 let shuttingDown = false;
 let tray: TrayHandle | null = null;
 let updateCheckTimer: ReturnType<typeof setInterval> | null = null;
-let telemetryTimer: ReturnType<typeof setInterval> | null = null;
+let dailyPingTimer: ReturnType<typeof setInterval> | null = null;
 
 setWebUILog((level, component, message) => webui.log(level, component, message));
 
@@ -337,7 +337,7 @@ async function shutdown(): Promise<void> {
   }
   log('info', 'deckBr', 'shutting down...');
   if (updateCheckTimer) clearInterval(updateCheckTimer);
-  if (telemetryTimer) clearInterval(telemetryTimer);
+  if (dailyPingTimer) clearInterval(dailyPingTimer);
   driverManager.stopScan();
   await driverManager.stopAllExtraSessions().catch(() => undefined);
   const prev = driverManager.getCurrentDriver();
@@ -414,13 +414,13 @@ if (tjs.env.DECKBRIDGE_MOCK !== '1') {
   updateCheckTimer = setInterval(runUpdateCheck, CHECK_INTERVAL_MS);
 
   // Own delay, not the update check's 30 s: MIN_DWELL_MS keeps CI/sandbox runs
-  // from beaconing (telemetry-env.ts) and lets a boot-time device enumerate
+  // from beaconing (daily-ping-env.ts) and lets a boot-time device enumerate
   // before the ping calls it "no device". Slack absorbs setTimeout jitter.
   const runPing = (): void => {
-    void webui.updates.ping().catch((e: unknown) => log('debug', 'telemetry', String(e)));
+    void webui.updates.ping().catch((e: unknown) => log('debug', 'dailyPing', String(e)));
   };
   setTimeout(runPing, MIN_DWELL_MS + PING_SCHEDULE_SLACK_MS);
-  telemetryTimer = setInterval(runPing, PING_RETRY_INTERVAL_MS);
+  dailyPingTimer = setInterval(runPing, PING_RETRY_INTERVAL_MS);
 }
 
 // --no-webui: settings still load (see WebUIServer.start), the HTTP/WS listener doesn't.
