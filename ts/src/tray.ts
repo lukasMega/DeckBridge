@@ -7,6 +7,7 @@ export interface TrayState {
   reconnectAttempts: number;
   updateAvailable: boolean;
   updateText: string;
+  version: string;
 }
 
 export interface TrayHandle {

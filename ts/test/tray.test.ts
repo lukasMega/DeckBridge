@@ -69,6 +69,7 @@ test('updateAvailable round-trips through TCP JSON', () => {
     reconnectAttempts: 0,
     updateAvailable: true,
     updateText: 'Update available: v1.2.3',
+    version: '1.2.3',
   });
   const state = JSON.parse(line) as { updateAvailable: boolean; updateText: string };
   assert.equal(state.updateAvailable, true);
