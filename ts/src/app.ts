@@ -145,6 +145,7 @@ function buildTrayState(): TrayState {
     reconnectAttempts: driverManager.getReconnectAttemptCount(),
     updateAvailable: update.updateAvailable && update.latest !== update.dismissedVersion,
     updateText,
+    version: __VERSION__,
   };
 }
 

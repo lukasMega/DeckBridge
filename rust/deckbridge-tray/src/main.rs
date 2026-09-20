@@ -37,6 +37,8 @@ struct TrayState {
     update_available: bool,
     #[serde(default = "default_update_text")]
     update_text: String,
+    #[serde(default)]
+    version: String,
 }
 
 fn default_update_text() -> String {
@@ -209,6 +211,7 @@ impl Icons {
 
 struct TrayHandles {
     tray: tray_icon::TrayIcon,
+    header_item: MenuItem,
     status_item: MenuItem,
     update_item: MenuItem,
     open_ui_id: tray_icon::menu::MenuId,
@@ -252,6 +255,7 @@ fn build_tray(icons: &Icons) -> TrayHandles {
 
     TrayHandles {
         tray,
+        header_item,
         status_item,
         update_item,
         open_ui_id,
@@ -362,6 +366,11 @@ fn main() {
                     };
                     handles.status_item.set_text(&label);
                     handles.update_item.set_text(&state.update_text);
+                    if !state.version.is_empty() {
+                        handles
+                            .header_item
+                            .set_text(format!("DeckBridge v{}", state.version));
+                    }
                 }
             }
 
