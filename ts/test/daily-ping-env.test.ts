@@ -1,6 +1,6 @@
 import assert from 'tjs:assert';
-import { MIN_DWELL_MS, suppressReason } from '../src/telemetry-env.js';
-import type { EnvSnapshot, SuppressReason } from '../src/telemetry-env.js';
+import { MIN_DWELL_MS, suppressReason } from '../src/daily-ping-env.js';
+import type { EnvSnapshot, SuppressReason } from '../src/daily-ping-env.js';
 import { test, summary } from './helpers/harness.js';
 
 /** Long enough that only the env gates can be the reason. */
@@ -15,7 +15,7 @@ test('a plain long-running desktop session may ping', () => {
 });
 
 test('kill switches suppress', () => {
-  assert.equal(reason({ DECKBRIDGE_NO_TELEMETRY: '1' }), 'kill-switch');
+  assert.equal(reason({ DECKBRIDGE_NO_DAILY_PING: '1' }), 'kill-switch');
   assert.equal(reason({ DO_NOT_TRACK: '1' }), 'kill-switch');
 });
 
@@ -63,7 +63,7 @@ test('CI=false / CI= is not CI', () => {
 
 test('the kill switch wins over mock, and mock over CI', () => {
   assert.equal(
-    reason({ DECKBRIDGE_NO_TELEMETRY: '1', DECKBRIDGE_MOCK: '1', CI: '1' }),
+    reason({ DECKBRIDGE_NO_DAILY_PING: '1', DECKBRIDGE_MOCK: '1', CI: '1' }),
     'kill-switch',
   );
   assert.equal(reason({ DECKBRIDGE_MOCK: '1', CI: '1' }), 'mock');

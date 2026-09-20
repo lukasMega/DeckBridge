@@ -30,8 +30,8 @@ export function SimpleApp(): preact.JSX.Element {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const updateBadge = updateBadgeVersion(updateInfo);
 
-  // Telemetry's fallback when the OS-level locale probe fails (see
-  // telemetry.ts) — best-effort, fire-and-forget like every other beacon.
+  // DailyPing's fallback when the OS-level locale probe fails (see
+  // daily-ping.ts) — best-effort, fire-and-forget like every other beacon.
   useEffect(function postBrowserLocale() {
     if (navigator.language) fire('/api/browser-locale', { locale: navigator.language });
   }, []);

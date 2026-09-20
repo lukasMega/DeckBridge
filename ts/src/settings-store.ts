@@ -60,9 +60,9 @@ export interface Settings {
    *  doesn't burn the unauthenticated GitHub rate limit. */
   updateCheck?: boolean;
   updateState?: UpdateState;
-  /** Daily usage ping (telemetry.ts). Absent = on (opt-out); `false` disables
+  /** Daily usage ping (daily-ping.ts). Absent = on (opt-out); `false` disables
    *  it, independently of `updateCheck`. `a7sDay` is the UTC day of the last ping
-   *  — the only telemetry state kept, and it never leaves the machine. */
+   *  — the only dailyPing state kept, and it never leaves the machine. */
   a7s?: boolean;
   a7sDay?: string;
 }

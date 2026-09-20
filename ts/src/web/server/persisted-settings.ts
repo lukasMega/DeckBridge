@@ -107,10 +107,10 @@ export class PersistedSettings {
   /** GitHub-release update check opt-out (see update-check.ts). undefined = enabled. */
   updateCheck: boolean | undefined = undefined;
   updateState: UpdateState | undefined = undefined;
-  /** Daily usage ping opt-out (see telemetry.ts). undefined = enabled. */
+  /** Daily usage ping opt-out (see daily-ping.ts). undefined = enabled. */
   a7s: boolean | undefined = undefined;
   a7sDay: string | undefined = undefined;
-  /** Browser's navigator.language (telemetry's OS-locale fallback). Ephemeral —
+  /** Browser's navigator.language (dailyPing's OS-locale fallback). Ephemeral —
    *  deliberately absent from current()/persist(), since the browser resends it
    *  on every load. */
   browserLocale: string | undefined = undefined;
@@ -232,8 +232,8 @@ export class PersistedSettings {
     this.persist();
   }
 
-  /** Record the UTC day of the latest usage ping (telemetry.ts). */
-  setTelemetryDay(day: string): void {
+  /** Record the UTC day of the latest usage ping (daily-ping.ts). */
+  setDailyPingDay(day: string): void {
     this.a7sDay = day;
     this.persist();
   }

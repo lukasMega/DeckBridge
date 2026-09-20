@@ -18,7 +18,7 @@ export function quitElgatoApp(): void {
 export function restartElgatoApp(): void {
   deeplink('streamdeck://app/quit');
   showToast('Restarting Elgato app…');
-  window.setTimeout(() => deeplink('streamdeck://open/mainwindow'), 1500);
+  window.setTimeout(() => deeplink('streamdeck://open/mainwindow'), 2500);
 }
 
 export function switchToAdvanced(): void {

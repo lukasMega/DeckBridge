@@ -2,7 +2,7 @@ import assert from 'tjs:assert';
 import {
   beaconUrl,
   buildPayload,
-  createTelemetry,
+  createDailyPing,
   encodePayload,
   normalizeOs,
   normalizeLocale,
@@ -10,8 +10,8 @@ import {
   shouldPing,
   tzOffset,
   utcDay,
-} from '../src/telemetry.js';
-import type { SuppressReason } from '../src/telemetry-env.js';
+} from '../src/daily-ping.js';
+import type { SuppressReason } from '../src/daily-ping-env.js';
 import { testAsync as test, summary } from './helpers/harness.js';
 
 /** Mirrors the collector's decode: JSON.parse(decodeURIComponent(atob(v))). */
@@ -220,9 +220,9 @@ await test('a dev build never pings — it would pollute the app_version dim', (
   assert.equal(shouldPing({ ...gate, version: 'unknown' }), false);
 });
 
-// createTelemetry — no network in any of these
+// createDailyPing — no network in any of these
 
-console.log('\ncreateTelemetry');
+console.log('\ncreateDailyPing');
 
 interface Sent {
   encoded: string;
@@ -257,7 +257,7 @@ function harness(
   const sent: Sent[] = [];
   const days: string[] = [];
   let lastPingDay = opts.lastPingDay;
-  const t = createTelemetry({
+  const t = createDailyPing({
     currentVersion: opts.version ?? '0.14.3',
     isEnabled: () => opts.enabled ?? true,
     getLastPingDay: () => lastPingDay,
@@ -297,7 +297,7 @@ await test('sends the OS, version and device model, and records the day', async 
 
 await test('a thrown OS-version probe degrades the dim, it does not lose the ping', async () => {
   const sent: Sent[] = [];
-  const t = createTelemetry({
+  const t = createDailyPing({
     currentVersion: '0.14.3',
     isEnabled: () => true,
     getLastPingDay: () => undefined,
@@ -363,7 +363,7 @@ await test('a new day pings again', async () => {
 
 await test('the day is marked before the send, so a dead collector is not retried per tick', async () => {
   let lastPingDay: string | undefined;
-  const t = createTelemetry({
+  const t = createDailyPing({
     currentVersion: '0.14.3',
     isEnabled: () => true,
     getLastPingDay: () => lastPingDay,
