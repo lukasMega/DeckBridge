@@ -32,7 +32,12 @@ export const AJAZZ_AKP05E_MODEL: DeviceModel = {
   },
   splash: { transformOverride: { rotate: 180 } },
   wire: { packetSize: 1024, inSize: 512, reportId: 0 },
-  keyMap: { coraToWireImage: [11, 12, 13, 14, 15, 6, 7, 8, 9, 10] },
+  // Input codes are 1-based and row-ordered (1-5 top, 6-10 bottom), unlike the image
+  // wire ids above. Encoder press/twist codes (0x33+) fall past the array and are dropped.
+  keyMap: {
+    coraToWireImage: [11, 12, 13, 14, 15, 6, 7, 8, 9, 10],
+    wireInputToCora: [-1, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
+  },
   // Desktop acceptance of custom 2x5 geometry needs hardware pairing validation.
   cora: { productId: ELGATO_MK2_PID, usePhysicalIdentity: false },
   driverKind: 'custom',

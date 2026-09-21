@@ -2,10 +2,16 @@ const PACKET_SIZE = 1024;
 
 export const AKP05_COMMANDS = Object.freeze({
   VER: Object.freeze([0x56, 0x45, 0x52]),
+  DIS: Object.freeze([0x44, 0x49, 0x53]),
   LIG: Object.freeze([0x4c, 0x49, 0x47]),
+  CLE: Object.freeze([0x43, 0x4c, 0x45]),
   BAT: Object.freeze([0x42, 0x41, 0x54]),
-  ULEND: Object.freeze([0x55, 0x4c, 0x45, 0x4e, 0x44]),
+  STP: Object.freeze([0x53, 0x54, 0x50]),
+  CONNECT: Object.freeze([0x43, 0x4f, 0x4e, 0x4e, 0x45, 0x43, 0x54]),
 });
+
+/** CLE key id that clears every key. */
+export const AKP05_CLEAR_ALL = 0xff;
 
 const CRT_PREFIX = Object.freeze([0x43, 0x52, 0x54, 0x00, 0x00]);
 
@@ -32,8 +38,24 @@ export function buildBat(jpegLength: number, surfaceId: number): Buffer {
   return buildPacket(AKP05_COMMANDS.BAT, [0, 0, jpegLength >> 8, jpegLength & 0xff, surfaceId]);
 }
 
-export function buildUlend(): Buffer {
-  return buildPacket(AKP05_COMMANDS.ULEND);
+/** Commits pending BAT/CLE writes to the panel. */
+export function buildStp(): Buffer {
+  return buildPacket(AKP05_COMMANDS.STP);
+}
+
+// Wakes the panel. Without it the firmware stays silent over USB: no image
+// updates, no key reports. See docs/references.md (mirajazz `initialize()`).
+export function buildDis(): Buffer {
+  return buildPacket(AKP05_COMMANDS.DIS);
+}
+
+export function buildCle(keyId: number): Buffer {
+  return buildPacket(AKP05_COMMANDS.CLE, [0, 0, 0, keyId]);
+}
+
+/** Heartbeat. The firmware drops the host after ~15 s without it. */
+export function buildConnect(): Buffer {
+  return buildPacket(AKP05_COMMANDS.CONNECT);
 }
 
 export function imageChunks(jpeg: Uint8Array): Buffer[] {
@@ -72,9 +94,14 @@ function isVersionCharacter(char: number): boolean {
 
 export function describePacket(packet: Uint8Array): string {
   if (packet[0] !== 0x43 || packet[1] !== 0x52 || packet[2] !== 0x54) return 'image-data chunk';
-  const command = Buffer.from(packet.subarray(5, 10)).toString('ascii').replaceAll('\0', '');
+  // Command word runs from byte 5 to the first NUL — up to 7 letters (CONNECT).
+  let end = 5;
+  while (end < 12 && packet[end]) end++;
+  const command = Buffer.from(packet.subarray(5, end)).toString('ascii');
   if (command === 'BAT')
     return `CRT BAT jpegLen=${(packet[10]! << 8) | packet[11]!} surface=${packet[12]}`;
   if (command === 'LIG') return `CRT LIG brightness=${packet[10]}`;
+  if (command === 'CLE') return `CRT CLE keyId=${packet[11]}`;
+  if (command === 'CONNECT') return 'CRT CONNECT (heartbeat)';
   return `CRT ${command}`;
 }

@@ -2,21 +2,27 @@ import { findHidPath, isNullPtr, IS_MACOS } from '../../ffi/hidapi.js';
 import { HidDeviceBase } from '../hid-connection.js';
 import { debug, error, info } from '../../logger.js';
 import type { DeviceModel } from '../driver.js';
+import type { KeyEvent, KeyState } from '../../types.js';
+import { DEFAULT_BRIGHTNESS } from '../../types.js';
+import { parseAckReport } from '../mirabox-protocol.js';
 import {
+  AKP05_CLEAR_ALL,
   buildBat,
+  buildCle,
   buildConnect,
+  buildDis,
   buildLig,
-  buildUlend,
+  buildStp,
   buildVer,
   describePacket,
   imageChunks,
   parseVersionReport,
 } from './akp05-protocol.js';
 
-// mirajazz's Device::keep_alive() + opendeck-akp03's 15s keep-alive task: the akp03/akp05
-// firmware family blanks the panel (and resets brightness to 100%) without a periodic
-// CRT CONNECT, mistaking silence for the host going away.
-const KEEP_ALIVE_INTERVAL_MS = 15_000;
+// mirajazz's Device::keep_alive() + opendeck-akp05's keepalive_task (10 s): the
+// akp05 firmware drops the host after ~15 s of silence — panel blanks and key
+// reports stop until a key press partially wakes it. See docs/references.md.
+const KEEP_ALIVE_INTERVAL_MS = 10_000;
 
 const BLACK_JPEG = Buffer.from(
   '/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAP//////////////////////////////////////////////////////////////////////////////////////2wBDAf//////////////////////////////////////////////////////////////////////////////////////wAARCAABAAEDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAb/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/9oADAMBAAIQAxAAAAH/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/9oACAEBAAEFAqf/xAAUEQEAAAAAAAAAAAAAAAAAAAAA/9oACAEDAQE/Aaf/xAAUEQEAAAAAAAAAAAAAAAAAAAAA/9oACAECAQE/Aaf/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/9oACAEBAAY/Aqf/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/9oACAEBAAE/IV//2gAMAwEAAgADAAAAEP/EABQRAQAAAAAAAAAAAAAAAAAAABD/2gAIAQMBAT8QH//EABQRAQAAAAAAAAAAAAAAAAAAABD/2gAIAQIBAT8QH//EABQQAQAAAAAAAAAAAAAAAAAAABD/2gAIAQEAAT8QH//Z',
@@ -28,6 +34,7 @@ export class Akp05Driver extends HidDeviceBase {
   firmware: string | undefined;
   private writeScratch = Buffer.alloc(1025);
   private keepAliveTimer: ReturnType<typeof setInterval> | null = null;
+  private brightness = DEFAULT_BRIGHTNESS;
 
   constructor(readonly model: DeviceModel) {
     super();
@@ -56,16 +63,47 @@ export class Akp05Driver extends HidDeviceBase {
     }
 
     this.device = device;
-    this._startReadLoop(hid, this.model.wire.inSize, 5, (data, n) => {
-      const report = Buffer.from(data.subarray(0, n));
-      const firmware = parseVersionReport(report);
-      if (firmware) this.firmware = firmware;
-      else debug('hid', `AKP05E rx: ${report.toString('hex')}`);
-    });
+    this._startReadLoop(hid, this.model.wire.inSize, 5, (data, n) =>
+      this.parseInput(Buffer.from(data.subarray(0, n))),
+    );
     this.write(buildVer());
-    this.keepAliveTimer = setInterval(() => this.write(buildConnect()), KEEP_ALIVE_INTERVAL_MS);
-    info('hid', 'AKP05E opened; sent CRT VER, keep-alive started');
+    this.writeInitSequence();
+    this.keepAliveTimer = setInterval(() => this.writeKeepAlive(), KEEP_ALIVE_INTERVAL_MS);
+    info('hid', 'AKP05E opened; sent CRT VER + init sequence, keep-alive started');
     await Promise.resolve();
+  }
+
+  // DIS + LIG + CLE-all + STP. opendeck-akp05 sends this on every connect, and it
+  // is what unlocks key reporting: without it the firmware never sends ACK reports.
+  private writeInitSequence(): void {
+    this.write(buildDis());
+    this.write(buildLig(this.brightness));
+    this.write(buildCle(AKP05_CLEAR_ALL));
+    this.write(buildStp());
+  }
+
+  // The wake pair (DIS + LIG) is not optional on this firmware: CONNECT alone let
+  // the panel stop taking image updates after the first tick (zeccola/ajazz-akp05
+  // 0.10.1, reverted in 0.10.2). LIG carries the live brightness so the tick can't
+  // reset it.
+  private writeKeepAlive(): void {
+    this.write(buildDis());
+    this.write(buildLig(this.brightness));
+    this.write(buildConnect());
+  }
+
+  // Input report: 'ACK' 00 00 'OK' 00 00, then [keyIndex, state] at bytes 9-10.
+  // keyIndex stays the raw wire code — translator.ts maps it via keyMap.wireInputToCora.
+  private parseInput(data: Buffer): void {
+    const parsed = parseAckReport(data, 0);
+    if (!parsed) {
+      const firmware = parseVersionReport(data);
+      if (firmware) this.firmware = firmware;
+      else debug('hid', `AKP05E rx: ${data.toString('hex')}`);
+      return;
+    }
+    const state: KeyState = parsed.stateByte === 0x01 ? 'down' : 'up';
+    this.emit('key', { keyIndex: parsed.keyIndex, state } satisfies KeyEvent);
   }
 
   close(): Promise<void> {
@@ -79,7 +117,7 @@ export class Akp05Driver extends HidDeviceBase {
     try {
       this.write(buildBat(jpeg.length, keyIndex));
       for (const chunk of imageChunks(jpeg)) this.write(chunk);
-      this.write(buildUlend());
+      this.write(buildStp());
     } catch (cause) {
       this.emit('error', cause instanceof Error ? cause : new Error(String(cause)));
     }
@@ -90,6 +128,7 @@ export class Akp05Driver extends HidDeviceBase {
   }
 
   setBrightness(level: number): void {
+    this.brightness = level;
     this.write(buildLig(level));
   }
 
