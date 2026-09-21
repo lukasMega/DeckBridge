@@ -4,6 +4,7 @@ import { debug, error, info } from '../../logger.js';
 import type { DeviceModel } from '../driver.js';
 import {
   buildBat,
+  buildConnect,
   buildLig,
   buildUlend,
   buildVer,
@@ -11,6 +12,11 @@ import {
   imageChunks,
   parseVersionReport,
 } from './akp05-protocol.js';
+
+// mirajazz's Device::keep_alive() + opendeck-akp03's 15s keep-alive task: the akp03/akp05
+// firmware family blanks the panel (and resets brightness to 100%) without a periodic
+// CRT CONNECT, mistaking silence for the host going away.
+const KEEP_ALIVE_INTERVAL_MS = 15_000;
 
 const BLACK_JPEG = Buffer.from(
   '/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAP//////////////////////////////////////////////////////////////////////////////////////2wBDAf//////////////////////////////////////////////////////////////////////////////////////wAARCAABAAEDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAb/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/9oADAMBAAIQAxAAAAH/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/9oACAEBAAEFAqf/xAAUEQEAAAAAAAAAAAAAAAAAAAAA/9oACAEDAQE/Aaf/xAAUEQEAAAAAAAAAAAAAAAAAAAAA/9oACAECAQE/Aaf/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/9oACAEBAAY/Aqf/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/9oACAEBAAE/IV//2gAMAwEAAgADAAAAEP/EABQRAQAAAAAAAAAAAAAAAAAAABD/2gAIAQMBAT8QH//EABQRAQAAAAAAAAAAAAAAAAAAABD/2gAIAQIBAT8QH//EABQQAQAAAAAAAAAAAAAAAAAAABD/2gAIAQEAAT8QH//Z',
@@ -21,6 +27,7 @@ export class Akp05Driver extends HidDeviceBase {
   hidPath: string | undefined;
   firmware: string | undefined;
   private writeScratch = Buffer.alloc(1025);
+  private keepAliveTimer: ReturnType<typeof setInterval> | null = null;
 
   constructor(readonly model: DeviceModel) {
     super();
@@ -53,9 +60,11 @@ export class Akp05Driver extends HidDeviceBase {
       const report = Buffer.from(data.subarray(0, n));
       const firmware = parseVersionReport(report);
       if (firmware) this.firmware = firmware;
+      else debug('hid', `AKP05E rx: ${report.toString('hex')}`);
     });
     this.write(buildVer());
-    info('hid', 'AKP05E opened; sent CRT VER only');
+    this.keepAliveTimer = setInterval(() => this.write(buildConnect()), KEEP_ALIVE_INTERVAL_MS);
+    info('hid', 'AKP05E opened; sent CRT VER, keep-alive started');
     await Promise.resolve();
   }
 
@@ -64,14 +73,11 @@ export class Akp05Driver extends HidDeviceBase {
     return Promise.resolve();
   }
 
+  // keyIndex is already the device wire id — callers (image-render.ts,
+  // splash-sender.ts) resolve model.keyMap.coraToWireImage before calling in.
   sendImage(keyIndex: number, jpeg: Uint8Array): void {
-    const surfaceId = this.model.keyMap.coraToWireImage?.[keyIndex];
-    if (surfaceId === undefined) {
-      this.emit('error', new RangeError(`AKP05E key index out of range: ${keyIndex}`));
-      return;
-    }
     try {
-      this.write(buildBat(jpeg.length, surfaceId));
+      this.write(buildBat(jpeg.length, keyIndex));
       for (const chunk of imageChunks(jpeg)) this.write(chunk);
       this.write(buildUlend());
     } catch (cause) {
@@ -119,6 +125,10 @@ export class Akp05Driver extends HidDeviceBase {
   }
 
   protected _cleanup(): void {
+    if (this.keepAliveTimer) {
+      clearInterval(this.keepAliveTimer);
+      this.keepAliveTimer = null;
+    }
     this._stopReadTimer();
     this._closeDevice();
     const exitResult = this._teardownLib();

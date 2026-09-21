@@ -20,7 +20,7 @@ export const AJAZZ_AKP05E_MODEL: DeviceModel = {
     format: 'jpeg',
     width: 112,
     height: 112,
-    rotate: 180,
+    rotate: 0,
     flipH: false,
     flipV: false,
     colorMode: 'rgb',
@@ -30,6 +30,7 @@ export const AJAZZ_AKP05E_MODEL: DeviceModel = {
     sharpen: 0.6,
     transform: 'sidecar',
   },
+  splash: { transformOverride: { rotate: 180 } },
   wire: { packetSize: 1024, inSize: 512, reportId: 0 },
   keyMap: { coraToWireImage: [11, 12, 13, 14, 15, 6, 7, 8, 9, 10] },
   // Desktop acceptance of custom 2x5 geometry needs hardware pairing validation.
