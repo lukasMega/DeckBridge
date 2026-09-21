@@ -64,6 +64,35 @@
       ],
       "sources": ["keydeck", ".claude/plans/K1Pro/jpeg-artifact-findings.md"]
     },
+    "ajazz-akp05e": {
+      "tested": { "status": false },
+      "summary": "AJAZZ AKP05E (VID 0x0300, PID 0x3004): ten 112×112 LCD keys in a 2×5 grid. Dedicated protocol driver uses CRT VER on open, CRT BAT uploads, CRT ULEND commits, and CRT LIG brightness.",
+      "alsoSoldAs": [],
+      "quirks": [
+        "Only PID 0x3004 is registered. Do not add retail, Pro, Mirabox, or hub siblings without their own evidence packet.",
+        "Open and close send no reset, clear, heartbeat, or disconnect command. Sending CRT DIS can wedge this hardware; unplug and replug if panel wedges.",
+        "Key input remains disabled until press and release captures exist. Encoder and touch controls remain unsupported."
+      ],
+      "sources": [
+        "AiAcos/ajazz-control-center docs/protocols/streamdeck/akp05.md",
+        "AiAcos/ajazz-control-center docs/protocols/streamdeck/akp05_init_sequence.md",
+        "AiAcos/ajazz-control-center docs/protocols/streamdeck/akp05_vendor.md"
+      ]
+    },
+    "ajazz-akp05": {
+      "tested": { "status": false },
+      "summary": "Retail AJAZZ AKP05 (VID 0x0300, PID 0x3006). It uses the AKP05 dedicated driver, with ten 112×112 LCD keys, CRT BAT uploads, CRT ULEND commits, and CRT LIG brightness.",
+      "alsoSoldAs": [],
+      "quirks": [
+        "VID, PID, vendor HID collection, protocol version 3, 112×112 JPEG format, and 180° rotation come from ambiso/opendeck-akp05. DeckBridge hardware has not tested this SKU.",
+        "Key input remains disabled until press and release captures exist. Encoder and touch controls remain unsupported.",
+        "Open and close send no reset, clear, heartbeat, or disconnect command. Unplug and replug if panel wedges."
+      ],
+      "sources": [
+        "ambiso/opendeck-akp05 src/mappings.rs",
+        "ambiso/opendeck-akp05 CHANGELOG.md v0.9.3"
+      ]
+    },
     "ajazz-akp153e-rev2": {
       "tested": { "status": true, "platform": "Windows", "date": "2026-09-15" },
       "summary": "The Mirabox 293V3 protocol behind VID 0x0300, with hardware-confirmed 95×95 key images and AKP153E-specific input/image mapping.",

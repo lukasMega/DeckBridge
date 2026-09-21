@@ -44,6 +44,7 @@ export interface ElgatoServerOptions {
 }
 
 export class ElgatoServer extends CoraServerBase {
+  private static readonly keepaliveAckLogIntervalMs = 60_000;
   private mdnsAdvertiser: MdnsAdvertiser | null = null;
   private readonly skipMdns: boolean;
   readonly childPort: number;
@@ -51,6 +52,8 @@ export class ElgatoServer extends CoraServerBase {
   private childGeometry: ChildGeometry;
   private lastAdvertisedPid = -1;
   private lastAdvertisedSerial = '';
+  private keepaliveAckLogWindowStartedAt = 0;
+  private keepaliveAckLogCount = 0;
 
   readonly deviceConfig: DeviceConfig = {
     dockFirmwareVersion: DEFAULT_DOCK_FIRMWARE_VERSION,
@@ -146,8 +149,27 @@ export class ElgatoServer extends CoraServerBase {
   }
 
   protected onClientConnected(_socket: net.Socket): void {
+    this.keepaliveAckLogWindowStartedAt = 0;
+    this.keepaliveAckLogCount = 0;
     this.emitLog('info', 'primary (Network Dock) connected');
     this.sendKeepalive();
+  }
+
+  private recordKeepaliveAck(): void {
+    const now = Date.now();
+    if (this.keepaliveAckLogWindowStartedAt === 0) this.keepaliveAckLogWindowStartedAt = now;
+    this.keepaliveAckLogCount++;
+    if (now - this.keepaliveAckLogWindowStartedAt < ElgatoServer.keepaliveAckLogIntervalMs) return;
+
+    const expectedPerMinute = Math.round(
+      ElgatoServer.keepaliveAckLogIntervalMs / this.keepaliveIntervalMs,
+    );
+    this.emitLog(
+      'info',
+      `primary keepalive ACKs: ${this.keepaliveAckLogCount}/min (expected ${expectedPerMinute}/min)`,
+    );
+    this.keepaliveAckLogWindowStartedAt = now;
+    this.keepaliveAckLogCount = 0;
   }
 
   pushChildCapabilities(): void {
@@ -194,7 +216,7 @@ export class ElgatoServer extends CoraServerBase {
 
     switch (byte1) {
       case FEATURE_KEEPALIVE_ACK:
-        this.emitLog('info', `primary keepalive ACK seq=${payload.length > 2 ? payload[2] : '?'}`);
+        this.recordKeepaliveAck();
         return;
 
       case FEATURE_GET_DEVICE_INFO:

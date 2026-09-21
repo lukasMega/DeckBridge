@@ -14,6 +14,8 @@ import {
   AJAZZ_AKP153E_REV2_MODEL,
   AJAZZ_AKP153R_REV2_MODEL,
 } from '../src/devices/ajazz/akp153-rev2.js';
+import { AJAZZ_AKP05E_MODEL } from '../src/devices/ajazz/akp05e.js';
+import { AJAZZ_AKP05_MODEL } from '../src/devices/ajazz/akp05.js';
 import { FIFINE_D6_MODEL, FIFINE_D6_REV2_MODEL } from '../src/devices/fifine/fifine-d6.js';
 import { AKP153_V1_CLONE_MODELS } from '../src/devices/rebadge/akp153-v1-clones.js';
 import { deviceInputToMk2Index } from '../src/translator.js';
@@ -94,6 +96,33 @@ test('findModel returns MIRABOX_293_MODEL for the HSV293SV3 PID 0x1014', () => {
 test('findModel returns the Ajazz AKP153 rev.2 models for VID 0x0300', () => {
   assert.equal(findModel(0x0300, 0x3010)?.id, 'ajazz-akp153e-rev2');
   assert.equal(findModel(0x0300, 0x3011)?.id, 'ajazz-akp153r-rev2');
+});
+
+test('findModel returns each supported AKP05 PID', () => {
+  assert.equal(findModel(0x0300, 0x3004)?.id, 'ajazz-akp05e');
+  assert.equal(findModel(0x0300, 0x3006)?.id, 'ajazz-akp05');
+});
+
+test('AKP05E has its proven 2x5 output mapping', () => {
+  assert.equal(AJAZZ_AKP05E_MODEL.protocol, 'ajazz-akp05');
+  assert.equal(AJAZZ_AKP05E_MODEL.driverKind, 'custom');
+  assert.deepEqual(modelToChildGeometry(AJAZZ_AKP05E_MODEL), {
+    rows: 2,
+    columns: 5,
+    keyCount: 10,
+    keyWidth: 112,
+    keyHeight: 112,
+    productName: 'AJAZZ AKP05E',
+  });
+  assert.equal(AJAZZ_AKP05E_MODEL.image.rotate, 180);
+  assert.deepEqual(AJAZZ_AKP05E_MODEL.keyMap.coraToWireImage, [11, 12, 13, 14, 15, 6, 7, 8, 9, 10]);
+});
+
+test('AKP05 inherits AKP05E output protocol', () => {
+  assert.equal(AJAZZ_AKP05_MODEL.protocol, AJAZZ_AKP05E_MODEL.protocol);
+  assert.equal(AJAZZ_AKP05_MODEL.driverKind, AJAZZ_AKP05E_MODEL.driverKind);
+  assert.deepEqual(AJAZZ_AKP05_MODEL.image, AJAZZ_AKP05E_MODEL.image);
+  assert.deepEqual(AJAZZ_AKP05_MODEL.keyMap, AJAZZ_AKP05E_MODEL.keyMap);
 });
 
 // Rev.1 PIDs now resolve to the v1 rebadge clones (akp153-v1-clones.ts), not the rev.2
@@ -309,8 +338,8 @@ test('findModel returns null for a known VID but unknown PID', () => {
 
 console.log('\ndevice-models: DEVICE_MODELS ordering');
 
-test('DEVICE_MODELS contains exactly 16 models', () => {
-  assert.equal(DEVICE_MODELS.length, 16);
+test('DEVICE_MODELS contains exactly 18 models', () => {
+  assert.equal(DEVICE_MODELS.length, 18);
 });
 
 test('DEFAULT_MODEL is MK2_MODEL', () => {

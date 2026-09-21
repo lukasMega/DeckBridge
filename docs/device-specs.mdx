@@ -279,6 +279,76 @@ splash: {
 
 **Derived from:** keydeck · .claude/plans/K1Pro/jpeg-artifact-findings.md
 
+### AJAZZ AKP05E \{#ajazz-akp05e}
+
+`ajazz-akp05e` · `ajazz-akp05` · — untested · [compare entry](./devices.mdx#ajazz-akp05e)
+
+```text
+mk2 index → wire image id  (5×2, row-major)
+
+   0   1   2   3   4      11  12  13  14  15
+   5   6   7   8   9       6   7   8   9  10
+```
+
+```js
+keyMap: {
+  "coraToWireImage": [
+    11,
+    12,
+    13,
+    14,
+    15,
+    6,
+    7,
+    8,
+    9,
+    10
+  ]
+}
+cora: {
+  "productId": 0x00a5,
+  "usePhysicalIdentity": false
+}
+splash: null
+```
+
+**Derived from:** AiAcos/ajazz-control-center docs/protocols/streamdeck/akp05.md · AiAcos/ajazz-control-center docs/protocols/streamdeck/akp05_init_sequence.md · AiAcos/ajazz-control-center docs/protocols/streamdeck/akp05_vendor.md
+
+### AJAZZ AKP05 \{#ajazz-akp05}
+
+`ajazz-akp05` · `ajazz-akp05` · — untested · [compare entry](./devices.mdx#ajazz-akp05)
+
+```text
+mk2 index → wire image id  (5×2, row-major)
+
+   0   1   2   3   4      11  12  13  14  15
+   5   6   7   8   9       6   7   8   9  10
+```
+
+```js
+keyMap: {
+  "coraToWireImage": [
+    11,
+    12,
+    13,
+    14,
+    15,
+    6,
+    7,
+    8,
+    9,
+    10
+  ]
+}
+cora: {
+  "productId": 0x00a5,
+  "usePhysicalIdentity": false
+}
+splash: null
+```
+
+**Derived from:** ambiso/opendeck-akp05 src/mappings.rs · ambiso/opendeck-akp05 CHANGELOG.md v0.9.3
+
 ### Ajazz AKP153E (rev. 2) \{#ajazz-akp153e-rev2}
 
 `ajazz-akp153e-rev2` · `mirabox-cora` · ✓ tested (Windows, 2026-09-15) · [compare entry](./devices.mdx#ajazz-akp153e-rev2)

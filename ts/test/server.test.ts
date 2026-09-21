@@ -94,6 +94,32 @@ try {
     assert.equal(keepalives[2]!.payload[5], (seq1 + 2) & 0xff);
   });
 
+  await runTest('keepalive ACKs are summarized once per minute', () => {
+    const logs: { level: string; message: string }[] = [];
+    const onServerLog = (entry: { level: string; message: string }): void => {
+      logs.push(entry);
+    };
+    const internals = server as unknown as {
+      keepaliveAckLogWindowStartedAt: number;
+      keepaliveAckLogCount: number;
+      handleCoraPacket: (flags: number, hidOp: number, messageId: number, payload: Buffer) => void;
+    };
+    server.on('serverLog', onServerLog);
+    try {
+      internals.handleCoraPacket(0, 0, 0, Buffer.from([0x03, 0x1a, 0]));
+      assert.equal(logs.length, 0);
+
+      internals.keepaliveAckLogWindowStartedAt = Date.now() - 60_000;
+      internals.handleCoraPacket(0, 0, 0, Buffer.from([0x03, 0x1a, 0]));
+      assert.equal(logs.length, 1);
+      assert.equal(logs[0]!.message, 'primary keepalive ACKs: 2/min (expected 600/min)');
+    } finally {
+      internals.keepaliveAckLogWindowStartedAt = 0;
+      internals.keepaliveAckLogCount = 0;
+      server.off('serverLog', onServerLog);
+    }
+  });
+
   console.log('\nelgato server: feature reports');
 
   await runTest('device info (0x80) response has correct VID and Network Dock PID', async () => {

@@ -15,6 +15,7 @@ export type DeviceVendor =
 export type DeviceProtocol =
   | 'mirabox-cora' // v3, 1024-byte packets, press+release
   | 'mirabox-cora-v1' // v1, 512-byte packets, keydown-only
+  | 'ajazz-akp05' // 1024-byte CRT BAT uploads, ULEND commit
   | 'elgato-gen1' // BMP, 16-byte header, key+1, feature 0x05/0x0B (Mini, original)
   | 'elgato-gen2'; // JPEG, 8-byte header, feature 0x03 (MK.2, XL)
 

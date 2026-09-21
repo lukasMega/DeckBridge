@@ -6,6 +6,8 @@ import { MIRABOX_293_MODEL } from './mirabox/mirabox-293.js';
 import { MIRABOX_293S_MODEL } from './mirabox/mirabox-293s.js';
 import { MIRABOX_K1PRO_MODEL } from './mirabox/mirabox-k1pro.js';
 import { AJAZZ_AKP153E_REV2_MODEL, AJAZZ_AKP153R_REV2_MODEL } from './ajazz/akp153-rev2.js';
+import { AJAZZ_AKP05E_MODEL } from './ajazz/akp05e.js';
+import { AJAZZ_AKP05_MODEL } from './ajazz/akp05.js';
 import { FIFINE_D6_MODEL, FIFINE_D6_REV2_MODEL } from './fifine/fifine-d6.js';
 import { AKP153_V1_CLONE_MODELS } from './rebadge/akp153-v1-clones.js';
 
@@ -18,6 +20,8 @@ export const DEVICE_MODELS: DeviceModel[] = [
   MIRABOX_293_MODEL,
   MIRABOX_293S_MODEL,
   MIRABOX_K1PRO_MODEL,
+  AJAZZ_AKP05E_MODEL,
+  AJAZZ_AKP05_MODEL,
   AJAZZ_AKP153E_REV2_MODEL,
   AJAZZ_AKP153R_REV2_MODEL,
   FIFINE_D6_MODEL,

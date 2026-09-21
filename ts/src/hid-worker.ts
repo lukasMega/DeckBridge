@@ -10,6 +10,7 @@ import { applyModelOverrides, overrideSummary, pinsImageFit } from './devices/mo
 import { imageCache } from './image-cache.js';
 import { ElgatoHidDriver } from './devices/hid-driver-base.js';
 import { MiraboxDriver } from './mirabox.js';
+import { Akp05Driver } from './devices/ajazz/akp05-driver.js';
 import { renderImage } from './image-render.js';
 import { transformImageForDevice } from './translator.js';
 import { setWorkerPost, setLogLevel, info } from './logger.js';
@@ -23,7 +24,7 @@ setWorkerPost(scope.postMessage.bind(scope));
 
 const post = scope.postMessage.bind(scope);
 
-type AnyRealDriver = ElgatoHidDriver | MiraboxDriver;
+type AnyRealDriver = ElgatoHidDriver | MiraboxDriver | Akp05Driver;
 let driver: AnyRealDriver | null = null;
 let currentModel: DeviceModel | null = null;
 // Registry entry behind currentModel, kept so a live tuning swap ('setOverrides')
@@ -48,7 +49,8 @@ function createDriver(model: DeviceModel): AnyRealDriver {
     case 'mirabox':
       return new MiraboxDriver(model);
     case 'custom':
-      throw new Error(`No driver implementation for driverKind 'custom' (model: ${model.id})`);
+      if (model.protocol === 'ajazz-akp05') return new Akp05Driver(model);
+      throw new Error(`No driver implementation for custom model: ${model.id}`);
   }
 }
 
@@ -88,7 +90,9 @@ async function handleOpen(
   try {
     await d.open(hidPath);
     const serial = d instanceof ElgatoHidDriver ? d.deviceSerial : undefined;
-    const firmware = d instanceof ElgatoHidDriver ? d.deviceFirmware : undefined;
+    let firmware: string | undefined;
+    if (d instanceof ElgatoHidDriver) firmware = d.deviceFirmware;
+    else if (d instanceof Akp05Driver) firmware = d.firmware;
     post({
       type: 'opened',
       ok: true,

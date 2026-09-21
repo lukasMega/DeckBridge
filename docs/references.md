@@ -32,17 +32,18 @@ HID framing and Elgato CORA protocol come from the projects below, credited here
 
 | Project | What it gave us |
 |---|---|
-| [shugotekitten/opendeck-ampgd6](https://github.com/shugotekitten/opendeck-ampgd6) | AmpliGame D6 driver — the `IMAGE_MAP` key remap (identical to the 293V3), JPEG geometry, and the split between the write and reader protocol versions. Its PRs #4, #5, #6 and #7 are four independent reports that PID `0x0060` needs 1024-byte packets; #6 and #7 also put that revision's panel at 112×112 and its protocol at v3 (press+release). PR #7 explains *why* a wrong packet size is invisible — the board reports `MaxOutputReportSize = 1024` and silently discards short writes while `write()` still returns success, which is what `wire.packetSizeCandidates` now probes for. |
-| [Phoenix557/FifineOpenSource](https://github.com/Phoenix557/FifineOpenSource) | Independent confirmation of the same D6 constants (VID/PID, HID usage, image map, protocol versions) from a separate Tauri/Rust implementation. |
-| [Lyagva/companion-surface-mirabox-stream-dock](https://github.com/Lyagva/companion-surface-mirabox-stream-dock) | Fork of Companion's Mirabox surface that added the D6. Its PR #49 (upstream) is the hardware-verified `0x0007` entry we cloned the model from. PR #1 is a *different* fix for the `0x0060` black screen: it keeps 512-byte control packets and instead enlarges the image chunks, serializes the writes and paces them 2 ms apart — the pacing `wire.chunkDelayMs` exposes. |
-| [jasonkoon/sd-connect](https://github.com/jasonkoon/sd-connect) | Live-probed `0x0060` notes. Confirmed the key remap empirically (painted every key with its own index and read back the grid) and that button input is *not* remapped — the device reports raw 1-based indexes in raster order, the read/write asymmetry our `inputOffset: 1` encodes. Its 95 px icon size is the low end of the unresolved panel-resolution split (see O1). |
-| [TripleU613/Ampligame_D6_Pro_Linux](https://github.com/TripleU613/Ampligame_D6_Pro_Linux) | libusb reverse-engineering notes on `0x0060` from Fifine's `SDLibrary1.dll`: the CRT opcode set, the per-image `STP` commit, and the 180° image rotation. Treat with care — it is the only source that reads `0x0060` as a pre-release "HID DEMO" firmware rather than a later revision. |
+| [shugotekitten/opendeck-ampgd6](https://github.com/shugotekitten/opendeck-ampgd6) | D6 driver — key remap, JPEG geometry, protocol versions, and 1024-byte packets for PID `0x0060`. |
+| [Phoenix557/FifineOpenSource](https://github.com/Phoenix557/FifineOpenSource) | Independent confirmation of the same D6 constants. |
+| [Lyagva/companion-surface-mirabox-stream-dock](https://github.com/Lyagva/companion-surface-mirabox-stream-dock) | Companion fork that added the D6; PR #49 is the hardware-verified `0x0007` model we cloned. |
+| [jasonkoon/sd-connect](https://github.com/jasonkoon/sd-connect) | Live-probed `0x0060` notes — key remap on write, raw 1-based indexes on input. |
+| [TripleU613/Ampligame_D6_Pro_Linux](https://github.com/TripleU613/Ampligame_D6_Pro_Linux) | libusb notes on CRT opcodes, `STP` commit, and 180° rotation (treat as a different firmware reading). |
 
 ## Runtime & build
 
 | Project                                                              | What it gave us                                                               |
 |----------------------------------------------------------------------|-------------------------------------------------------------------------------|
 | [saghul/txiki.js](https://github.com/saghul/txiki.js)                | The JS runtime DeckBridge compiles to — QuickJS-ng + libuv + libffi, no Node. |
+| [lukasMega/txiki.js-with-slim-builds](https://github.com/lukasMega/txiki.js-with-slim-builds) | Slim `tjs` builds DeckBridge vendors (`slim-ffi` assets, pinned as `$TXIKI_VERSION`). |
 | [@julusian/node-image-rs](https://github.com/Julusian/node-image-rs) | Reference for the Rust JPEG resize/rotate path (`deckbridge-native`).         |
 
 ---

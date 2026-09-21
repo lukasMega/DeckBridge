@@ -588,6 +588,122 @@
       }
     },
     {
+      "id": "ajazz-akp05e",
+      "name": "AJAZZ AKP05E",
+      "family": "ajazz-akp05",
+      "tested": false,
+      "testedLabel": "— untested",
+      "cells": {
+        "identity": {
+          "name": "AJAZZ AKP05E",
+          "id": "ajazz-akp05e",
+          "vendor": "ajazz",
+          "protocol": "ajazz-akp05",
+          "driverKind": "custom",
+          "vid": "0x0300",
+          "pids": "0x3004",
+          "usagePage": "0xffa0",
+          "usage": "1",
+          "keyCount": "10",
+          "columns": "5",
+          "rows": "2",
+          "keyWidth": "112",
+          "keyHeight": "112"
+        },
+        "image": {
+          "name": "AJAZZ AKP05E",
+          "format": "jpeg",
+          "width": "112",
+          "height": "112",
+          "rotate": "180°",
+          "flipH": "no",
+          "flipV": "no",
+          "colorMode": "rgb",
+          "crop": "—",
+          "resizeMode": "—",
+          "padFill": "—",
+          "resizeFilter": "lanczos3",
+          "sharpen": "0.6",
+          "blur": "—",
+          "maxBytes": "65535",
+          "quality": "0.9",
+          "bmpPpm": "—",
+          "transform": "sidecar"
+        },
+        "wire": {
+          "name": "AJAZZ AKP05E",
+          "packetSize": "1024",
+          "inSize": "512",
+          "heartbeatMs": "—",
+          "synthesizeKeyUp": "—",
+          "sendStpAfterImage": "—",
+          "reportId": "0x00",
+          "chunkPadByte": "—",
+          "chunkDelayMs": "—",
+          "sharedSerial": "—",
+          "packetSizeCandidates": "—"
+        }
+      }
+    },
+    {
+      "id": "ajazz-akp05",
+      "name": "AJAZZ AKP05",
+      "family": "ajazz-akp05",
+      "tested": false,
+      "testedLabel": "— untested",
+      "cells": {
+        "identity": {
+          "name": "AJAZZ AKP05",
+          "id": "ajazz-akp05",
+          "vendor": "ajazz",
+          "protocol": "ajazz-akp05",
+          "driverKind": "custom",
+          "vid": "0x0300",
+          "pids": "0x3006",
+          "usagePage": "0xffa0",
+          "usage": "1",
+          "keyCount": "10",
+          "columns": "5",
+          "rows": "2",
+          "keyWidth": "112",
+          "keyHeight": "112"
+        },
+        "image": {
+          "name": "AJAZZ AKP05",
+          "format": "jpeg",
+          "width": "112",
+          "height": "112",
+          "rotate": "180°",
+          "flipH": "no",
+          "flipV": "no",
+          "colorMode": "rgb",
+          "crop": "—",
+          "resizeMode": "—",
+          "padFill": "—",
+          "resizeFilter": "lanczos3",
+          "sharpen": "0.6",
+          "blur": "—",
+          "maxBytes": "65535",
+          "quality": "0.9",
+          "bmpPpm": "—",
+          "transform": "sidecar"
+        },
+        "wire": {
+          "name": "AJAZZ AKP05",
+          "packetSize": "1024",
+          "inSize": "512",
+          "heartbeatMs": "—",
+          "synthesizeKeyUp": "—",
+          "sendStpAfterImage": "—",
+          "reportId": "0x00",
+          "chunkPadByte": "—",
+          "chunkDelayMs": "—",
+          "sharedSerial": "—",
+          "packetSizeCandidates": "—"
+        }
+      }
+    },
+    {
       "id": "ajazz-akp153e-rev2",
       "name": "Ajazz AKP153E (rev. 2)",
       "family": "mirabox-v3",
@@ -1261,6 +1377,16 @@
       "id": "fifine-d6-rev2",
       "name": "Fifine AmpliGame D6 (rev. 2)",
       "tested": true
+    },
+    {
+      "id": "ajazz-akp05e",
+      "name": "AJAZZ AKP05E",
+      "tested": false
+    },
+    {
+      "id": "ajazz-akp05",
+      "name": "AJAZZ AKP05",
+      "tested": false
     },
     {
       "id": "ajazz-akp153r-rev2",

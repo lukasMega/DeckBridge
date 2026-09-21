@@ -28,7 +28,7 @@ runtime.
 
 `mise run tjs-setup` (a dependency of `build`) puts that runtime at `$TJS` under
 `../vendor`, and no-ops when it already exists. It downloads the prebuilt
-**`slim-ffi`** asset of `$TXIKI_VERSION` (pinned in [`../mise.toml`](../mise.toml)) from
+**`slim-ffi`** asset of `$TXIKI_VERSION` (pinned in [`mise.toml`](https://github.com/lukasMega/DeckBridge/blob/main/mise.toml)) from
 [lukasMega/txiki.js-with-slim-builds](https://github.com/lukasMega/txiki.js-with-slim-builds/releases)
 — no toolchain needed. That profile keeps `tjs:ffi`, WebCrypto, `run`/`compile` and the
 REPL, and drops TLS, WebAssembly, SQLite, mimalloc and the `eval`/`serve`/`test`/`bundle`/
