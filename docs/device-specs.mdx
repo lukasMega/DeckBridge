@@ -281,7 +281,7 @@ splash: {
 
 ### AJAZZ AKP05E \{#ajazz-akp05e}
 
-`ajazz-akp05e` · `ajazz-akp05` · — untested · [compare entry](./devices.mdx#ajazz-akp05e)
+`ajazz-akp05e` · `ajazz-akp05` · ✓ tested (macOS, 2026-09-21) · [compare entry](./devices.mdx#ajazz-akp05e)
 
 ```text
 mk2 index → wire image id  (5×2, row-major)
@@ -303,16 +303,33 @@ keyMap: {
     8,
     9,
     10
+  ],
+  "wireInputToCora": [
+    -1,
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9
   ]
 }
 cora: {
   "productId": 0x00a5,
   "usePhysicalIdentity": false
 }
-splash: null
+splash: {
+  "transformOverride": {
+    "rotate": 180
+  }
+}
 ```
 
-**Derived from:** AiAcos/ajazz-control-center docs/protocols/streamdeck/akp05.md · AiAcos/ajazz-control-center docs/protocols/streamdeck/akp05_init_sequence.md · AiAcos/ajazz-control-center docs/protocols/streamdeck/akp05_vendor.md
+**Derived from:** own hardware capture (macOS, PID 0x3004, `mise run akp05-capture`) · ambiso/opendeck-akp05 src/device.rs + src/inputs.rs · zeccola/ajazz-akp05 akp05_device.py · 4ndv/mirajazz src/device.rs + src/state.rs
 
 ### AJAZZ AKP05 \{#ajazz-akp05}
 
@@ -338,13 +355,30 @@ keyMap: {
     8,
     9,
     10
+  ],
+  "wireInputToCora": [
+    -1,
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9
   ]
 }
 cora: {
   "productId": 0x00a5,
   "usePhysicalIdentity": false
 }
-splash: null
+splash: {
+  "transformOverride": {
+    "rotate": 180
+  }
+}
 ```
 
 **Derived from:** ambiso/opendeck-akp05 src/mappings.rs · ambiso/opendeck-akp05 CHANGELOG.md v0.9.3

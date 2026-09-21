@@ -591,8 +591,8 @@
       "id": "ajazz-akp05e",
       "name": "AJAZZ AKP05E",
       "family": "ajazz-akp05",
-      "tested": false,
-      "testedLabel": "— untested",
+      "tested": true,
+      "testedLabel": "✓ tested (macOS, 2026-09-21)",
       "cells": {
         "identity": {
           "name": "AJAZZ AKP05E",
@@ -615,7 +615,7 @@
           "format": "jpeg",
           "width": "112",
           "height": "112",
-          "rotate": "180°",
+          "rotate": "0°",
           "flipH": "no",
           "flipV": "no",
           "colorMode": "rgb",
@@ -673,7 +673,7 @@
           "format": "jpeg",
           "width": "112",
           "height": "112",
-          "rotate": "180°",
+          "rotate": "0°",
           "flipH": "no",
           "flipV": "no",
           "colorMode": "rgb",
@@ -1369,6 +1369,11 @@
       "tested": true
     },
     {
+      "id": "ajazz-akp05e",
+      "name": "AJAZZ AKP05E",
+      "tested": true
+    },
+    {
       "id": "ajazz-akp153e-rev2",
       "name": "Ajazz AKP153E (rev. 2)",
       "tested": true
@@ -1377,11 +1382,6 @@
       "id": "fifine-d6-rev2",
       "name": "Fifine AmpliGame D6 (rev. 2)",
       "tested": true
-    },
-    {
-      "id": "ajazz-akp05e",
-      "name": "AJAZZ AKP05E",
-      "tested": false
     },
     {
       "id": "ajazz-akp05",

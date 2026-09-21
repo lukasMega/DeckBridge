@@ -65,28 +65,31 @@
       "sources": ["keydeck", ".claude/plans/K1Pro/jpeg-artifact-findings.md"]
     },
     "ajazz-akp05e": {
-      "tested": { "status": false },
-      "summary": "AJAZZ AKP05E (VID 0x0300, PID 0x3004): ten 112×112 LCD keys in a 2×5 grid. Dedicated protocol driver uses CRT VER on open, CRT BAT uploads, CRT ULEND commits, and CRT LIG brightness.",
+      "tested": { "status": true, "platform": "macOS", "date": "2026-09-21" },
+      "summary": "AJAZZ AKP05E (VID 0x0300, PID 0x3004): ten 112×112 LCD keys in a 2×5 grid, plus four rotary encoders and a touch strip that are not wired up. Dedicated protocol driver: CRT VER on open, the CRT DIS / LIG / CLE / STP init sequence, CRT BAT uploads committed with CRT STP, and a CRT CONNECT keepalive.",
       "alsoSoldAs": [],
       "quirks": [
         "Only PID 0x3004 is registered. Do not add retail, Pro, Mirabox, or hub siblings without their own evidence packet.",
-        "Open and close send no reset, clear, heartbeat, or disconnect command. Sending CRT DIS can wedge this hardware; unplug and replug if panel wedges.",
-        "Key input remains disabled until press and release captures exist. Encoder and touch controls remain unsupported."
+        "The firmware reports nothing until it receives the init sequence (CRT DIS, CRT LIG, CRT CLE 0xff, CRT STP). Without it images still paint, but no key report ever arrives.",
+        "The host is dropped after roughly 15 s of silence: the panel blanks and key reporting stops until a key press partially wakes it. The keepalive runs every 10 s and repeats CRT DIS + CRT LIG before CRT CONNECT — CONNECT alone leaves the panel refusing further image updates (zeccola/ajazz-akp05 0.10.1, reverted in 0.10.2). The LIG carries the live brightness so a tick cannot reset it.",
+        "Input codes are not the image wire ids: keys report 0x01–0x0a in row order, while their images address wire ids 11–15 (top row) and 6–10 (bottom row).",
+        "Encoder and touch-strip codes are captured but deliberately unmapped, so they fall past the key map and are dropped: encoder press 0x37 / 0x35 / 0x33 / 0x36 left to right (state 1, no release report), twist 0xa0-0xa1 / 0x50-0x51 / 0x90-0x91 / 0x70-0x71 (CCW-CW, state always 0), touch-strip taps 0x40–0x43 left to right, swipes 0x38 and 0x39. A 7-byte header-only report with no code byte also appears and carries nothing."
       ],
       "sources": [
-        "AiAcos/ajazz-control-center docs/protocols/streamdeck/akp05.md",
-        "AiAcos/ajazz-control-center docs/protocols/streamdeck/akp05_init_sequence.md",
-        "AiAcos/ajazz-control-center docs/protocols/streamdeck/akp05_vendor.md"
+        "own hardware capture (macOS, PID 0x3004, `mise run akp05-capture`)",
+        "ambiso/opendeck-akp05 src/device.rs + src/inputs.rs",
+        "zeccola/ajazz-akp05 akp05_device.py",
+        "4ndv/mirajazz src/device.rs + src/state.rs"
       ]
     },
     "ajazz-akp05": {
       "tested": { "status": false },
-      "summary": "Retail AJAZZ AKP05 (VID 0x0300, PID 0x3006). It uses the AKP05 dedicated driver, with ten 112×112 LCD keys, CRT BAT uploads, CRT ULEND commits, and CRT LIG brightness.",
+      "summary": "Retail AJAZZ AKP05 (VID 0x0300, PID 0x3006). It uses the AKP05 dedicated driver, with ten 112×112 LCD keys, CRT BAT uploads, CRT STP commits, and CRT LIG brightness.",
       "alsoSoldAs": [],
       "quirks": [
         "VID, PID, vendor HID collection, protocol version 3, 112×112 JPEG format, and 180° rotation come from ambiso/opendeck-akp05. DeckBridge hardware has not tested this SKU.",
-        "Key input remains disabled until press and release captures exist. Encoder and touch controls remain unsupported.",
-        "Open and close send no reset, clear, heartbeat, or disconnect command. Unplug and replug if panel wedges."
+        "Shares the AKP05E init sequence, CRT CONNECT keepalive, and key map; encoders and the touch strip are unmapped. See the AKP05E notes for the captured input codes.",
+        "Close sends no disconnect command — the firmware can wedge after speculative commands. Unplug and replug if the panel wedges."
       ],
       "sources": [
         "ambiso/opendeck-akp05 src/mappings.rs",

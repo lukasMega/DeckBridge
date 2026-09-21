@@ -75,7 +75,7 @@ Dedicated 1024-byte CRT BAT protocol: ten JPEG keys, CRT ULEND image commits, an
 
 | Device | Vendor | USB VID:PID | Keys (grid) | Panel px | Image | Extra keys | Tested |
 |---|---|---|---|---|---|---|---|
-| [AJAZZ AKP05E](#ajazz-akp05e) | ajazz | `0x0300:0x3004` | 10 (5×2) | 112×112 | JPEG | — | — untested |
+| [AJAZZ AKP05E](#ajazz-akp05e) | ajazz | `0x0300:0x3004` | 10 (5×2) | 112×112 | JPEG | — | ✓ tested (macOS, 2026-09-21) |
 | [AJAZZ AKP05](#ajazz-akp05) | ajazz | `0x0300:0x3006` | 10 (5×2) | 112×112 | JPEG | — | — untested |
 
 </div>
@@ -177,7 +177,7 @@ The reference v1 board: physically 3×6 = 18 keys, of which the left 5 columns a
 
 ### AJAZZ AKP05E \{#ajazz-akp05e}
 
-AJAZZ AKP05E (VID 0x0300, PID 0x3004): ten 112×112 LCD keys in a 2×5 grid. Dedicated protocol driver uses CRT VER on open, CRT BAT uploads, CRT ULEND commits, and CRT LIG brightness.
+AJAZZ AKP05E (VID 0x0300, PID 0x3004): ten 112×112 LCD keys in a 2×5 grid, plus four rotary encoders and a touch strip that are not wired up. Dedicated protocol driver: CRT VER on open, the CRT DIS / LIG / CLE / STP init sequence, CRT BAT uploads committed with CRT STP, and a CRT CONNECT keepalive.
 
 |  |  |
 |---|---|
@@ -185,17 +185,19 @@ AJAZZ AKP05E (VID 0x0300, PID 0x3004): ten 112×112 LCD keys in a 2×5 grid. Ded
 | **Keys** | 10 (5×2) |
 | **Panel** | 112×112 JPEG |
 | **Protocol** | `ajazz-akp05` (custom driver) |
-| **Tested** | — untested |
+| **Tested** | ✓ tested (macOS, 2026-09-21) |
 
 - Only PID 0x3004 is registered. Do not add retail, Pro, Mirabox, or hub siblings without their own evidence packet.
-- Open and close send no reset, clear, heartbeat, or disconnect command. Sending CRT DIS can wedge this hardware; unplug and replug if panel wedges.
-- Key input remains disabled until press and release captures exist. Encoder and touch controls remain unsupported.
+- The firmware reports nothing until it receives the init sequence (CRT DIS, CRT LIG, CRT CLE 0xff, CRT STP). Without it images still paint, but no key report ever arrives.
+- The host is dropped after roughly 15 s of silence: the panel blanks and key reporting stops until a key press partially wakes it. The keepalive runs every 10 s and repeats CRT DIS + CRT LIG before CRT CONNECT — CONNECT alone leaves the panel refusing further image updates (zeccola/ajazz-akp05 0.10.1, reverted in 0.10.2). The LIG carries the live brightness so a tick cannot reset it.
+- Input codes are not the image wire ids: keys report 0x01–0x0a in row order, while their images address wire ids 11–15 (top row) and 6–10 (bottom row).
+- Encoder and touch-strip codes are captured but deliberately unmapped, so they fall past the key map and are dropped: encoder press 0x37 / 0x35 / 0x33 / 0x36 left to right (state 1, no release report), twist 0xa0-0xa1 / 0x50-0x51 / 0x90-0x91 / 0x70-0x71 (CCW-CW, state always 0), touch-strip taps 0x40–0x43 left to right, swipes 0x38 and 0x39. A 7-byte header-only report with no code byte also appears and carries nothing.
 
 [Full spec →](./device-specs.mdx#ajazz-akp05e)
 
 ### AJAZZ AKP05 \{#ajazz-akp05}
 
-Retail AJAZZ AKP05 (VID 0x0300, PID 0x3006). It uses the AKP05 dedicated driver, with ten 112×112 LCD keys, CRT BAT uploads, CRT ULEND commits, and CRT LIG brightness.
+Retail AJAZZ AKP05 (VID 0x0300, PID 0x3006). It uses the AKP05 dedicated driver, with ten 112×112 LCD keys, CRT BAT uploads, CRT STP commits, and CRT LIG brightness.
 
 |  |  |
 |---|---|
@@ -206,8 +208,8 @@ Retail AJAZZ AKP05 (VID 0x0300, PID 0x3006). It uses the AKP05 dedicated driver,
 | **Tested** | — untested |
 
 - VID, PID, vendor HID collection, protocol version 3, 112×112 JPEG format, and 180° rotation come from ambiso/opendeck-akp05. DeckBridge hardware has not tested this SKU.
-- Key input remains disabled until press and release captures exist. Encoder and touch controls remain unsupported.
-- Open and close send no reset, clear, heartbeat, or disconnect command. Unplug and replug if panel wedges.
+- Shares the AKP05E init sequence, CRT CONNECT keepalive, and key map; encoders and the touch strip are unmapped. See the AKP05E notes for the captured input codes.
+- Close sends no disconnect command — the firmware can wedge after speculative commands. Unplug and replug if the panel wedges.
 
 [Full spec →](./device-specs.mdx#ajazz-akp05)
 
