@@ -114,8 +114,12 @@ test('AKP05E has its proven 2x5 output mapping', () => {
     keyHeight: 112,
     productName: 'AJAZZ AKP05E',
   });
-  assert.equal(AJAZZ_AKP05E_MODEL.image.rotate, 180);
+  // CORA already delivers key art upright for this panel; only the splash needs 180.
+  assert.equal(AJAZZ_AKP05E_MODEL.image.rotate, 0);
+  assert.equal(AJAZZ_AKP05E_MODEL.splash?.transformOverride?.rotate, 180);
   assert.deepEqual(AJAZZ_AKP05E_MODEL.keyMap.coraToWireImage, [11, 12, 13, 14, 15, 6, 7, 8, 9, 10]);
+  // Input codes are 1-based row-order, not the image wire ids.
+  assert.deepEqual(AJAZZ_AKP05E_MODEL.keyMap.wireInputToCora, [-1, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9]);
 });
 
 test('AKP05 inherits AKP05E output protocol', () => {

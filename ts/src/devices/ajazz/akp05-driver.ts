@@ -94,7 +94,7 @@ export class Akp05Driver extends HidDeviceBase {
 
   // Input report: 'ACK' 00 00 'OK' 00 00, then [keyIndex, state] at bytes 9-10.
   // keyIndex stays the raw wire code — translator.ts maps it via keyMap.wireInputToCora.
-  private parseInput(data: Buffer): void {
+  protected parseInput(data: Buffer): void {
     const parsed = parseAckReport(data, 0);
     if (!parsed) {
       const firmware = parseVersionReport(data);

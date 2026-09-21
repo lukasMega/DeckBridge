@@ -39,10 +39,7 @@ test('AKP05 BAT carries BE16 length and surface id', () => {
 test('AKP05 wake/commit commands sit at offset 5', () => {
   assert.deepEqual([...buildDis().subarray(5, 8)], [0x44, 0x49, 0x53]);
   assert.deepEqual([...buildStp().subarray(5, 8)], [0x53, 0x54, 0x50]);
-  assert.deepEqual(
-    [...buildConnect().subarray(5, 12)],
-    [0x43, 0x4f, 0x4e, 0x4e, 0x45, 0x43, 0x54],
-  );
+  assert.deepEqual([...buildConnect().subarray(5, 12)], [0x43, 0x4f, 0x4e, 0x4e, 0x45, 0x43, 0x54]);
 });
 
 test('AKP05 CLE stores the key id at offset 11', () => {
