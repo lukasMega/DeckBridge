@@ -6,6 +6,7 @@ export const AKP05_COMMANDS = Object.freeze({
   LIG: Object.freeze([0x4c, 0x49, 0x47]),
   CLE: Object.freeze([0x43, 0x4c, 0x45]),
   BAT: Object.freeze([0x42, 0x41, 0x54]),
+  ULEND: Object.freeze([0x55, 0x4c, 0x45, 0x4e, 0x44]),
   STP: Object.freeze([0x53, 0x54, 0x50]),
   CONNECT: Object.freeze([0x43, 0x4f, 0x4e, 0x4e, 0x45, 0x43, 0x54]),
 });
@@ -41,6 +42,11 @@ export function buildBat(jpegLength: number, surfaceId: number): Buffer {
 /** Commits pending BAT/CLE writes to the panel. */
 export function buildStp(): Buffer {
   return buildPacket(AKP05_COMMANDS.STP);
+}
+
+/** Ends one BAT image upload. */
+export function buildUlend(): Buffer {
+  return buildPacket(AKP05_COMMANDS.ULEND);
 }
 
 // Wakes the panel. Without it the firmware stays silent over USB: no image

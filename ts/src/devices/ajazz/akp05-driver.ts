@@ -13,6 +13,7 @@ import {
   buildDis,
   buildLig,
   buildStp,
+  buildUlend,
   buildVer,
   describePacket,
   imageChunks,
@@ -117,7 +118,7 @@ export class Akp05Driver extends HidDeviceBase {
     try {
       this.write(buildBat(jpeg.length, keyIndex));
       for (const chunk of imageChunks(jpeg)) this.write(chunk);
-      this.write(buildStp());
+      this.write(buildUlend());
     } catch (cause) {
       this.emit('error', cause instanceof Error ? cause : new Error(String(cause)));
     }

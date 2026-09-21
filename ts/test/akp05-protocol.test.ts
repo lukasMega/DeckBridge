@@ -6,6 +6,7 @@ import {
   buildDis,
   buildLig,
   buildStp,
+  buildUlend,
   buildVer,
   describePacket,
   imageChunks,
@@ -19,6 +20,7 @@ test('AKP05 CRT builders use fixed 1024-byte packets', () => {
     buildLig(50),
     buildBat(0x1f40, 11),
     buildStp(),
+    buildUlend(),
     buildDis(),
     buildCle(0xff),
     buildConnect(),
@@ -39,6 +41,7 @@ test('AKP05 BAT carries BE16 length and surface id', () => {
 test('AKP05 wake/commit commands sit at offset 5', () => {
   assert.deepEqual([...buildDis().subarray(5, 8)], [0x44, 0x49, 0x53]);
   assert.deepEqual([...buildStp().subarray(5, 8)], [0x53, 0x54, 0x50]);
+  assert.deepEqual([...buildUlend().subarray(5, 10)], [0x55, 0x4c, 0x45, 0x4e, 0x44]);
   assert.deepEqual([...buildConnect().subarray(5, 12)], [0x43, 0x4f, 0x4e, 0x4e, 0x45, 0x43, 0x54]);
 });
 
