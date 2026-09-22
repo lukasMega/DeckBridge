@@ -26,21 +26,37 @@ import {
 const KEEP_ALIVE_INTERVAL_MS = 10_000;
 
 // Input classification. Key codes are 1-based and row-ordered (1-10). Encoder codes
-// come through the same ACK report (byte 9 = code, byte 10 = stateByte) and are
-// UNVERIFIED — capture them with `mise run akp05-capture` (ts/src/akp05-capture.ts)
-// and correct the tables below. Touch-strip reports use a different framing that is
+// come through the same ACK report (byte 9 = code, byte 10 = stateByte) — the tables
+// below are the hardware-verified values from `mise run akp05-capture`, recorded in
+// devices/device-notes.json. Touch-strip reports use a different framing that is
 // not decoded yet, so those events are not emitted.
 const KEY_CODE_MIN = 0x01;
 const KEY_CODE_MAX = 0x0a;
-/** Encoder press codes, left-to-right (UNVERIFIED). stateByte 0x01 = down. */
-const ENCODER_PRESS_CODES: readonly number[] = [0x33, 0x34, 0x35, 0x36];
-/** Encoder rotate codes, left-to-right (UNVERIFIED). stateByte 0x01 = cw, 0x02 = ccw. */
-const ENCODER_ROTATE_CODES: readonly number[] = [0x43, 0x44, 0x45, 0x46];
+/** Encoder press codes, left-to-right. stateByte 0x01 = down; no release report. */
+const ENCODER_PRESS_CODES: readonly number[] = [0x37, 0x35, 0x33, 0x36];
+/** Encoder rotate codes, left-to-right: [ccw, cw] per encoder. stateByte is always 0. */
+const ENCODER_ROTATE_CODES: readonly (readonly [number, number])[] = [
+  [0xa0, 0xa1],
+  [0x50, 0x51],
+  [0x90, 0x91],
+  [0x70, 0x71],
+];
 
 const BLACK_JPEG = Buffer.from(
-  '/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAP//////////////////////////////////////////////////////////////////////////////////////2wBDAf//////////////////////////////////////////////////////////////////////////////////////wAARCAABAAEDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAb/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/9oADAMBAAIQAxAAAAH/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/9oACAEBAAEFAqf/xAAUEQEAAAAAAAAAAAAAAAAAAAAA/9oACAEDAQE/Aaf/xAAUEQEAAAAAAAAAAAAAAAAAAAAA/9oACAECAQE/Aaf/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/9oACAEBAAY/Aqf/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/9oACAEBAAE/IV//2gAMAwEAAgADAAAAEP/EABQRAQAAAAAAAAAAAAAAAAAAABD/2gAIAQMBAT8QH//EABQRAQAAAAAAAAAAAAAAAAAAABD/2gAIAQIBAT8QH//EABQQAQAAAAAAAAAAAAAAAAAAABD/2gAIAQEAAT8QH//Z',
+  '/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAP//////////////////////////////////////////////////////////////////////////////////////2wBDAf//////////////////////////////////////////////////////////////////////////////////////wAARCAABAAEDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAb/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/9oADAMBAAIQAxAAAAH/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/9oACAEBAAEFAqf/xAAUEQEAAAAAAAAAAAAAAAAAAAAA/9oACAEDAQE/Aaf/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/9oACAECAQE/Aaf/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/9oACAEBAAY/Aqf/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/9oACAEBAAE/IV//2gAMAwEAAgADAAAAEP/EABQRAQAAAAAAAAAAAAAAAAAAABD/2gAIAQMBAT8QH//EABQRAQAAAAAAAAAAAAAAAAAAABD/2gAIAQIBAT8QH//EABQQAQAAAAAAAAAAAAAAAAAAABD/2gAIAQEAAT8QH//Z',
   'base64',
 );
+
+/** The encoder index + signed delta for a rotate code, or null when `code` is not
+ *  a rotate code. delta +1 = clockwise, -1 = counter-clockwise. */
+function encoderRotateDelta(code: number): { index: number; delta: number } | null {
+  for (let i = 0; i < ENCODER_ROTATE_CODES.length; i++) {
+    const pair = ENCODER_ROTATE_CODES[i]!;
+    if (code === pair[0]) return { index: i, delta: -1 };
+    if (code === pair[1]) return { index: i, delta: 1 };
+  }
+  return null;
+}
 
 export class Akp05Driver extends HidDeviceBase {
   hidPath: string | undefined;
@@ -130,10 +146,12 @@ export class Akp05Driver extends HidDeviceBase {
       this.emit('dial', { index: pressIndex, kind: 'press', state } satisfies DialEvent);
       return;
     }
-    const rotateIndex = ENCODER_ROTATE_CODES.indexOf(code);
-    if (rotateIndex >= 0) {
-      const delta = stateByte === 0x02 ? -1 : 1; // direction UNVERIFIED
-      this.emit('dial', { index: rotateIndex, kind: 'rotate', delta } satisfies DialEvent);
+    const rotate = encoderRotateDelta(code);
+    if (rotate) {
+      this.emit(
+        'dial',
+        { index: rotate.index, kind: 'rotate', delta: rotate.delta } satisfies DialEvent,
+      );
       return;
     }
     // Touch-strip and any other control: framing unverified — log for capture.
