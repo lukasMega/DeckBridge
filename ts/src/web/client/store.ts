@@ -8,7 +8,9 @@ import type {
   CommLog,
   DeviceModel,
   DeviceIdentity,
+  EncoderSettings,
   ExtraKeyCfg,
+  TouchStripMode,
   UpdateInfo,
 } from './ui-types.js';
 
@@ -31,8 +33,9 @@ export interface StoreState {
   deviceIdentity?: DeviceIdentity;
   /** SELECTED dock's extra-key assignments, keyed by device wire id. */
   extraKeys: Record<string, ExtraKeyCfg>;
-  /** SELECTED dock's touch-strip disable flag (true = Elgato app drives it). */
-  touchStripDisabled: boolean;
+  /** SELECTED dock's touch-strip mode + knob override (AKP05E). */
+  touchStripMode: TouchStripMode;
+  encoders: EncoderSettings;
   updateInfo?: UpdateInfo;
 }
 
@@ -50,7 +53,8 @@ let state: StoreState = {
   deviceModels: [],
   deviceIdentity: undefined,
   extraKeys: {},
-  touchStripDisabled: false,
+  touchStripMode: 'elgato',
+  encoders: {},
   updateInfo: undefined,
 };
 
@@ -98,8 +102,12 @@ export function setBrightnessOverride(brightnessOverride: boolean): void {
   setField('brightnessOverride', brightnessOverride);
 }
 
-export function setTouchStripDisabled(touchStripDisabled: boolean): void {
-  setField('touchStripDisabled', touchStripDisabled);
+export function setTouchStripMode(touchStripMode: TouchStripMode): void {
+  setField('touchStripMode', touchStripMode);
+}
+
+export function setEncoders(encoders: EncoderSettings): void {
+  setField('encoders', encoders);
 }
 
 export function setResizeEnabled(resizeEnabled: boolean): void {

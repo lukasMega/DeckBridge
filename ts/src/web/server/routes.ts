@@ -12,8 +12,16 @@ import {
   COMMAND_INTERVAL_MAX_MS,
   COMMAND_TIMEOUT_MIN_MS,
   COMMAND_TIMEOUT_MAX_MS,
+  TOUCH_STRIP_MODES,
 } from '../../types.js';
-import type { ExtraKeyConfig, ExtraKeyWidget, ImageModeOverride } from '../../types.js';
+import type {
+  EncoderSettings,
+  ExtraKeyConfig,
+  ExtraKeyWidget,
+  ImageModeOverride,
+  TouchStripMode,
+} from '../../types.js';
+import { encoderSettingsError } from './encoders-controller.js';
 
 // The complete HTTP surface, declarative. WebSocket upgrade (/api/ws) is handled
 // before dispatch in WebUIServer; everything else lives here.
@@ -48,7 +56,8 @@ export const routes: Route[] = [
   postJson('/api/select-dock', selectDock),
   postJson('/api/extra-key', setExtraKey),
   postJson('/api/extra-key/run', runExtraKeyNow),
-  postJson('/api/touch-strip', setTouchStripDisabled),
+  postJson('/api/touch-strip-mode', setTouchStripMode),
+  postJson('/api/encoders', setEncoders),
   post('/api/settings', setSettings),
   post('/api/settings/open-in-os', async ({ ui }) => {
     await ui.openSettingsFile();
@@ -255,14 +264,25 @@ function runExtraKeyNow({ wireId }: RunExtraKeyBody, { ui }: RouteContext): Resp
   return err ? json({ error: err.error }, err.status) : json({ ok: true });
 }
 
-/** Disable DeckBridge's touch-strip widgets so the Elgato app drives the strip. */
-function setTouchStripDisabled(
-  { disabled }: { disabled: unknown },
-  { ui }: RouteContext,
-): Response {
-  if (typeof disabled !== 'boolean') return badRequest('disabled must be a boolean');
-  const err = ui.trySetTouchStripDisabled(disabled);
-  return err ? json({ error: err.error }, err.status) : json({ ok: true, disabled });
+/** Who paints the touch strip: the Elgato app only, or DeckBridge widgets over it. */
+function setTouchStripMode({ mode }: { mode: unknown }, { ui }: RouteContext): Response {
+  if (!(TOUCH_STRIP_MODES as readonly unknown[]).includes(mode)) {
+    return badRequest(`mode must be one of: ${TOUCH_STRIP_MODES.join(', ')}`);
+  }
+  const err = ui.trySetTouchStripMode(mode as TouchStripMode);
+  return err ? json({ error: err.error }, err.status) : json({ ok: true, mode });
+}
+
+/** Knob override: connect to the Elgato app, or run per-knob shell commands. */
+function setEncoders(body: unknown, { ui }: RouteContext): Response {
+  const invalid = encoderSettingsError(body);
+  if (invalid) return badRequest(invalid);
+  const { connectToApp, commands } = body as EncoderSettings;
+  const err = ui.trySetEncoders({
+    ...(connectToApp !== undefined ? { connectToApp } : {}),
+    ...(commands !== undefined ? { commands } : {}),
+  });
+  return err ? json({ error: err.error }, err.status) : json({ ok: true });
 }
 
 function selectDock({ index }: { index: unknown }, { ui }: RouteContext): Response {

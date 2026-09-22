@@ -15,7 +15,8 @@ import {
   ELGATO_PLUS_PID,
   DEFAULT_CHILD_FIRMWARE_VERSION,
 } from '../src/types.js';
-import type { KeyState } from '../src/types.js';
+import type { DialEvent, KeyState } from '../src/types.js';
+import type { EncoderOverride } from '../src/encoders.js';
 import type { ChildGeometry } from '../src/capabilities.js';
 import type { DeviceConfig } from '../src/elgato-types.js';
 import type { DeviceModel } from '../src/devices/driver.js';
@@ -77,6 +78,10 @@ class FakeChildServer extends EventEmitter {
   sendKeyEvent(keyIndex: number, state: KeyState): void {
     this.sendKeyEventCalls.push({ keyIndex, state });
   }
+  sendDialCalls: DialEvent[] = [];
+  sendDial(event: DialEvent): void {
+    this.sendDialCalls.push(event);
+  }
 }
 
 class FakeDriver extends EventEmitter {
@@ -115,7 +120,7 @@ function testIdentity(model: DeviceModel, deviceKey = 'test-device-key') {
   return generateDeviceIdentity(deviceKey, `${MDNS_SERVICE_NAME} (${model.name})`);
 }
 
-function makeSession(model: DeviceModel = DEFAULT_MODEL) {
+function makeSession(model: DeviceModel = DEFAULT_MODEL, encoderOverride?: EncoderOverride) {
   const server = new FakeServer();
   const childServer = new FakeChildServer();
   const driver = new FakeDriver(model);
@@ -139,6 +144,7 @@ function makeSession(model: DeviceModel = DEFAULT_MODEL) {
       imageCalls.push({ keyIndex, format });
     },
     ignoreElgatoBrightness: () => ignoreElgato,
+    encoderOverride: () => encoderOverride,
   });
   return {
     server,
@@ -294,6 +300,30 @@ await test('an identity-mapped model reports no wire id', () => {
   });
   driver.emit('key', { keyIndex: 3, state: 'down' });
   assert.deepEqual(seen, [undefined]);
+});
+
+await test('dial events reach childServer.sendDial only when the knob override leaves them', async () => {
+  const connected = makeSession(AJAZZ_AKP05E_MODEL);
+  await connected.session.start();
+  connected.driver.emit('dial', { index: 1, kind: 'rotate', delta: 1 });
+  assert.deepEqual(connected.childServer.sendDialCalls, [{ index: 1, kind: 'rotate', delta: 1 }]);
+
+  // Disconnected with no command set: consumed, nothing spawned, nothing forwarded.
+  const override: EncoderOverride = {
+    mode: 'deckbridge-ignore',
+    encoders: { connectToApp: false },
+  };
+  const disconnected = makeSession(AJAZZ_AKP05E_MODEL, override);
+  await disconnected.session.start();
+  disconnected.driver.emit('dial', { index: 1, kind: 'rotate', delta: 1 });
+  disconnected.driver.emit('dial', { index: 1, kind: 'press', state: 'down' });
+  disconnected.driver.emit('dial', { index: 1, kind: 'press', state: 'up' });
+  assert.equal(disconnected.childServer.sendDialCalls.length, 0, 'consumed, not forwarded');
+});
+
+await test('status() reports the physical encoder count (AKP05E via its Plus emulation)', () => {
+  assert.equal(makeSession(AJAZZ_AKP05E_MODEL).session.status().encoderCount, 4);
+  assert.equal(makeSession(DEFAULT_MODEL).session.status().encoderCount, undefined, 'omitted');
 });
 
 await test('image event reaches driver.renderCoraImage', async () => {

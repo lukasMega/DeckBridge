@@ -5,6 +5,8 @@ import type { ClientApp, ExtraKeyWidget } from '../contract.js';
 
 export type {
   ClientApp,
+  EncoderCommands,
+  EncoderSettings,
   ExtraKeyWidget,
   PluginStatus,
   PluginsInfo,
@@ -13,6 +15,7 @@ export type {
   RealDeviceIdentity,
   KeyEventEntry as KeyEvent,
   DeviceModelInfo as DeviceModel,
+  TouchStripMode,
   UpdateInfo,
 } from '../contract.js';
 
@@ -31,6 +34,7 @@ export interface DockUi {
   brightness?: number; // absent on legacy-synthesized entries (deriveDocks)
   extraKeys?: number[]; // wire ids of keys outside the emulated grid (293S 6th column)
   widgetDisplays?: Array<{ wireId: number; label: string }>;
+  encoderCount?: number; // rotary encoders (knobs); absent/0 = none
 }
 
 export interface ExtraKeyCfg {

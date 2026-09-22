@@ -115,6 +115,12 @@ export class WorkerHidDriver extends EventEmitter implements DeviceDriver {
     this.post({ type: 'touchImage', bytes: new Uint8Array(bytes), region });
   }
 
+  /** Touch-strip zones DeckBridge widgets own — the worker withholds Elgato strip
+   *  segments for them. Copied so the caller may reuse its array. */
+  setTouchStripMask(wireIds: readonly number[]): void {
+    this.post({ type: 'setTouchStripMask', wireIds: [...wireIds] });
+  }
+
   setBrightness(level: number): void {
     this.post({ type: 'setBrightness', level });
   }

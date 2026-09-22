@@ -1,6 +1,7 @@
 // Best-effort "open this path with the OS's default handler" — shared by app.ts's
 // browser-launch and the WebUI's "open settings.json" action — plus the
-// Elgato-desktop-app process probe (used by app.ts's conflict poll and diagnostics).
+// Elgato-desktop-app process probe (used by app.ts's conflict poll and diagnostics), and
+// the shell runner behind the command widget and encoder commands.
 
 const [MAC_OS, WIN] = ['macOS', 'Windows'];
 
@@ -11,6 +12,21 @@ export async function readText(stream: ReadableStream<Uint8Array>): Promise<stri
   let text = '';
   for await (const chunk of stream) text += decoder.decode(chunk, { stream: true });
   return text + decoder.decode();
+}
+
+/** Read a spawned process' stdout to a string, killing it after `timeoutMs` so
+ *  a hung command can't wedge the entry on inflight forever. */
+export async function runCommand(cmd: string, timeoutMs: number): Promise<string> {
+  const args = platformName() === 'Windows' ? ['cmd', '/c', cmd] : ['sh', '-c', cmd];
+  const p = tjs.spawn(args, { stdout: 'pipe', stderr: 'ignore' });
+  const killer = setTimeout(() => p.kill(), timeoutMs);
+  try {
+    const out = await readText(p.stdout);
+    await p.wait();
+    return out;
+  } finally {
+    clearTimeout(killer);
+  }
 }
 
 /** Best-effort `navigator.userAgentData.platform` read. A txiki build lacking

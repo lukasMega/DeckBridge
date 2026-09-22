@@ -8,7 +8,12 @@
 import { log } from './logger.js';
 import { defaultCacheRoot } from './native-libs.js';
 import { SERIAL_KEY_PREFIX } from './device-identity.js';
-import type { ExtraKeyConfig, ImageModeOverride } from './types.js';
+import type {
+  EncoderSettings,
+  ExtraKeyConfig,
+  ImageModeOverride,
+  TouchStripMode,
+} from './types.js';
 import type { DeviceModelId, DeviceModelOverride } from './devices/driver.js';
 import type { UpdateState } from './update-check.js';
 
@@ -30,9 +35,10 @@ export interface DeviceIdentitySettings {
   /** DeckBridge-native actions for keys outside the emulated grid (293S 6th
    *  column), keyed by device wire id — see extra-keys.ts. */
   extraKeys?: Record<string, ExtraKeyConfig>;
-  /** Stop DeckBridge from driving the touch-strip widget displays (AKP05E) so
-   *  the Elgato app controls them instead. Default false = DeckBridge drives. */
-  touchStripDisabled?: boolean;
+  /** Touch-strip display mode (AKP05E). Default 'elgato' = the app only. */
+  touchStripMode?: TouchStripMode;
+  /** Encoder override — only honored while touchStripMode is a deckbridge-* mode. */
+  encoders?: EncoderSettings;
 }
 
 /** Persisted log level. Precedence (documented in cli.ts's usage text and

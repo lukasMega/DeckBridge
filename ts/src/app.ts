@@ -5,6 +5,7 @@ import { WebUIServer } from './web/server';
 import type { MockDeviceConfig } from './web/server';
 import { MockDriver } from './devices/mock.js';
 import type { ClientApp, CommEntry, ImageModeOverride, LogObject } from './types.js';
+import type { TouchStripMode } from './types.js';
 import { ELGATO_CHILD_PORT, ELGATO_TCP_PORT, WEBUI_PORT } from './types.js';
 import { advertisedGeometry, DEFAULT_MODEL, DEVICE_MODELS } from './devices/registry.js';
 import type { OverrideChangeKind } from './devices/model-overrides.js';
@@ -302,8 +303,8 @@ webui.on('extraKeyRunNow', (dock: number, wireId: number) => {
   driverManager.forceRunExtraKey(dock, wireId);
 });
 
-webui.on('touchStripChanged', (dock: number, disabled: boolean) => {
-  driverManager.setTouchStripDisabledForDock(dock, disabled);
+webui.on('touchStripModeChanged', (dock: number, mode: TouchStripMode) => {
+  driverManager.setTouchStripModeForDock(dock, mode);
 });
 
 webui.on('setDeviceMdnsName', (deviceKey: string, name: string) => {

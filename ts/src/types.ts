@@ -1,9 +1,22 @@
 // WebUI wire types live in the `web-contract` leaf (web/contract.ts) so the
 // browser tier shares one declaration instead of mirroring ours. Re-exported
 // here so every existing `types.js` import keeps working.
-import type { ExtraKeyWidget, KeyState, RealDeviceIdentity } from './web/contract.js';
+import type {
+  ExtraKeyWidget,
+  KeyState,
+  RealDeviceIdentity,
+  TouchStripMode,
+} from './web/contract.js';
 
-export type { ClientApp, ExtraKeyWidget, KeyState, RealDeviceIdentity } from './web/contract.js';
+export type {
+  ClientApp,
+  EncoderCommands,
+  EncoderSettings,
+  ExtraKeyWidget,
+  KeyState,
+  RealDeviceIdentity,
+  TouchStripMode,
+} from './web/contract.js';
 
 export const ELGATO_VID = 0x0fd9;
 export const ELGATO_MK2_PID = 0x00a5;
@@ -288,6 +301,17 @@ export const EXTRA_KEY_WIDGETS = [
   'plugin',
 ] as const satisfies readonly ExtraKeyWidget[];
 
+export const TOUCH_STRIP_MODES = [
+  'elgato',
+  'deckbridge-ignore',
+  'deckbridge-repaint',
+] as const satisfies readonly TouchStripMode[];
+
+export const DEFAULT_TOUCH_STRIP_MODE: TouchStripMode = 'elgato';
+
+/** Cap on one encoder shell command (EncoderCommands press/rotateCw/rotateCcw). */
+export const ENCODER_COMMAND_MAX = 512;
+
 /** Cap on the widget param (text content / weather "lat,lon" / shell command /
  *  plugin file name) and on the plugin per-key argument (pluginArg). */
 export const EXTRA_KEY_PARAM_MAX = 128;
@@ -380,6 +404,8 @@ export interface DockStatus {
   extraKeys?: readonly number[];
   /** Device-native widget displays outside CORA's key grid, such as AKP05E's touch strip. */
   widgetDisplays?: readonly { wireId: number; label: string }[];
+  /** Physical rotary encoders (AKP05/AKP05E: 4) — the WebUI's knob-override rows. */
+  encoderCount?: number;
 }
 
 // Clear-and-null helpers. The guard-clear-forget-to-null sequence was written out

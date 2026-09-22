@@ -22,9 +22,48 @@ AKP05E — with a widget dropdown and, for some, a parameter field or gear (⚙)
 Pick a widget and fill its parameter; it takes effect immediately, saved per key and
 restored on reconnect.
 
-The **Touch strip** panel (AKP05E) also has an **"Elgato app controls it"** switch.
-Turn it on to stop DeckBridge driving the strip's zones, so the Elgato Stream Deck +
-app (when the device is re-paired as a Plus) owns them instead.
+## Touch strip modes
+
+On AKP05E the strip has two possible painters — DeckBridge widgets and the Elgato Stream
+Deck + app (when the device is paired as a Plus). The **Touch strip** panel picks who owns
+it, saved per device:
+
+| Mode                               | Strip                                                                                              |
+| ---------------------------------- | -------------------------------------------------------------------------------------------------- |
+| **Elgato app only** (default)      | The app paints all four zones. DeckBridge draws nothing there and the widget rows are hidden.      |
+| **DeckBridge overrides (ignore)**  | DeckBridge widgets. Everything the app sends to the strip is dropped; an unassigned zone is blank. |
+| **DeckBridge overrides (repaint)** | DeckBridge widgets on assigned zones; the app keeps painting the unassigned ones.                  |
+
+Each zone keeps its own widget in both override modes. The "no widget" choice reads
+**Blank** under _ignore_ and **App controls** under _repaint_ — the zone is cleared, or
+left to the app. Leaving an override hands every zone back to the app. Side keys (293S)
+are not affected: they are DeckBridge widgets in every mode.
+
+> **No migration.** The earlier **"Elgato app controls it"** switch (`touchStripDisabled`
+> in settings.json) is gone and its value is dropped on load. Every strip starts in
+> **Elgato app only**; widgets you had assigned are kept, so picking an override mode
+> brings them back.
+
+## Knobs
+
+In an override mode the panel also shows a **Knobs** section for the AKP05/AKP05E rotary
+encoders. **Connect knobs to Elgato app** (on by default) forwards presses and turns to
+the app as usual. Turn it off and every knob stops reaching the app; each gets a row with
+three shell commands:
+
+- **press** — runs once per press.
+- **turn right** / **turn left** — runs per clockwise / counter-clockwise detent. A fast
+  spin coalesces: while a command is still running, further detents queue at most one
+  follow-up run.
+
+A field commits on blur or Enter; an empty field does nothing (the knob event is still
+kept from the app). Commands run like the [command widget](#command-output) — `sh -c` /
+`cmd /c`, killed after **5 s**, capped at **512 characters** — and their output is
+discarded. In **Elgato app only** mode the knobs always go to the app, whatever is saved.
+
+> **⚠ Security.** Same posture as the command widget below: the web UI has **no
+> authentication**, so anyone who can reach it can set a command that runs on this host.
+> Keep it on a **trusted personal LAN**.
 
 ## Built-in widgets
 

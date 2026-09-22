@@ -7,7 +7,9 @@ import type {
   CommLog,
   DeviceModel,
   DeviceIdentity,
+  EncoderSettings,
   ExtraKeyCfg,
+  TouchStripMode,
   UpdateInfo,
 } from './ui-types.js';
 import { applyImage } from './key-preview.js';
@@ -29,7 +31,8 @@ interface InitialState extends Status {
   deviceModels?: DeviceModel[];
   deviceIdentity?: DeviceIdentity;
   extraKeys?: Record<string, ExtraKeyCfg>;
-  touchStripDisabled?: boolean;
+  touchStripMode?: TouchStripMode;
+  encoders?: EncoderSettings;
   updateInfo?: UpdateInfo;
 }
 
@@ -58,7 +61,8 @@ void fetch('/api/state')
       deviceModels: st.deviceModels ?? [],
       deviceIdentity: st.deviceIdentity,
       extraKeys: st.extraKeys ?? {},
-      touchStripDisabled: st.touchStripDisabled ?? false,
+      touchStripMode: st.touchStripMode ?? 'elgato',
+      encoders: st.encoders ?? {},
       updateInfo: st.updateInfo,
       serverLogs: st.logs ?? [],
       commLogs: st.commLogs ?? [],

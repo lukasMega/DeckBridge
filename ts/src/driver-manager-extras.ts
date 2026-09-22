@@ -7,7 +7,7 @@ import { closeDriver, type WorkerHidDriver } from './hid-worker-host.js';
 import type { DeviceModel, DeviceModelOverride } from './devices/driver.js';
 import type { DriverMode } from './driver-manager-discovery.js';
 import { HID_POLL_INTERVAL_MS, MAX_DEVICE_SESSIONS, MDNS_SERVICE_NAME } from './types.js';
-import type { DockStatus, ExtraKeyConfig } from './types.js';
+import type { DockStatus, EncoderSettings, ExtraKeyConfig, TouchStripMode } from './types.js';
 import { DEVICE_MODELS, findModelById } from './devices/registry.js';
 import {
   DeviceSession,
@@ -66,6 +66,9 @@ export interface ExtraDockCoordinatorDeps {
   /** Per-device extra-key config (293S 6th column), resolved by deviceKey +
    *  wire id — delegates to WebUIServer's persisted settings. */
   extraKeyConfigFor: (deviceKey: string, wireId: number) => ExtraKeyConfig | undefined;
+  /** Per-device touch-strip mode + encoder override, resolved live by deviceKey. */
+  touchStripModeFor: (deviceKey: string) => TouchStripMode;
+  encoderSettingsFor: (deviceKey: string) => EncoderSettings | undefined;
 }
 
 // Index 0 is the primary dock, so extras draw from 1..maxDocks-1 — an empty pool
@@ -289,7 +292,11 @@ export class ExtraDockCoordinator {
       initialBrightness: deviceIdentity.brightness,
       initialImageMode: deviceIdentity.imageModeOverride ?? null,
       extraKeyConfigFor: (wireId) => this.deps.extraKeyConfigFor(deviceKey, wireId),
-      touchStripDisabled: deviceIdentity.touchStripDisabled,
+      touchStripMode: this.deps.touchStripModeFor(deviceKey),
+      encoderOverride: () => ({
+        mode: this.deps.touchStripModeFor(deviceKey),
+        encoders: this.deps.encoderSettingsFor(deviceKey),
+      }),
     });
     this.extraSessions.set(hidPath, session);
 
@@ -357,9 +364,9 @@ export class ExtraDockCoordinator {
     this.sessionAt(index)?.forceRunExtraKey(wireId);
   }
 
-  /** Toggle DeckBridge's touch-strip widget control on the extra dock at `index`. */
-  setTouchStripDisabled(index: number, disabled: boolean): void {
-    this.sessionAt(index)?.setTouchStripDisabled(disabled);
+  /** Switch who paints the touch strip on the extra dock at `index`. */
+  setTouchStripMode(index: number, mode: TouchStripMode): void {
+    this.sessionAt(index)?.setTouchStripMode(mode);
   }
 
   /** Tear down the extra docks running `modelId` ('' = all) so the next scan

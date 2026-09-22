@@ -12,6 +12,27 @@ export type KeyState = 'down' | 'up';
  *  `EXTRA_KEY_WIDGETS` list and proves it against this union with `satisfies`. */
 export type ExtraKeyWidget = 'none' | 'clock' | 'date' | 'text' | 'weather' | 'command' | 'plugin';
 
+/** Who paints the touch strip (AKP05E). `elgato` = the app only; `deckbridge-ignore`
+ *  = DeckBridge widgets, Elgato strip images dropped; `deckbridge-repaint` = DeckBridge
+ *  widgets on assigned zones, Elgato content on the rest. `types.ts` holds the runtime
+ *  `TOUCH_STRIP_MODES` list. */
+export type TouchStripMode = 'elgato' | 'deckbridge-ignore' | 'deckbridge-repaint';
+
+/** Shell commands one rotary encoder runs when disconnected from the Elgato app. */
+export interface EncoderCommands {
+  press?: string;
+  rotateCw?: string;
+  rotateCcw?: string;
+}
+
+/** Encoder override — only honored while the strip is in a `deckbridge-*` mode.
+ *  `commands` is keyed by encoder index ('0'..'3'). */
+export interface EncoderSettings {
+  /** Default true = forward knob events to the Elgato app. */
+  connectToApp?: boolean;
+  commands?: Record<string, EncoderCommands>;
+}
+
 /** Live status of one plugin-widget key (see plugin-host.ts). */
 export type PluginStatus = 'pending' | 'ok' | 'err' | 'disabled';
 

@@ -13,7 +13,13 @@ import type {
   StatusSnapshot,
   UpdateInfo,
 } from './types.js';
-import type { CommEntry, ExtraKeyConfig, RealDeviceIdentity } from '../../types.js';
+import type {
+  CommEntry,
+  EncoderSettings,
+  ExtraKeyConfig,
+  RealDeviceIdentity,
+  TouchStripMode,
+} from '../../types.js';
 
 export interface StateResponseInputs {
   snapshot: StatusSnapshot;
@@ -29,7 +35,8 @@ export interface StateResponseInputs {
   deviceIdentity: DeviceIdentity;
   realDeviceIdentity?: RealDeviceIdentity;
   extraKeys: Record<string, ExtraKeyConfig>;
-  touchStripDisabled: boolean;
+  touchStripMode: TouchStripMode;
+  encoders: EncoderSettings;
   logLevel: string;
   logFilePath: string;
   multiDeck: boolean;

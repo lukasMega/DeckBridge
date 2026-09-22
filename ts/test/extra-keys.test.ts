@@ -6,7 +6,12 @@ import {
   parseLatLon,
   renderWidgetLines,
 } from '../src/extra-keys.js';
-import { isExtraKeyConfig } from '../src/types.js';
+import {
+  TOUCH_STRIP_MODES,
+  isExtraKeyConfig,
+  type ExtraKeyConfig,
+  type TouchStripMode,
+} from '../src/types.js';
 import { MIRABOX_293S_MODEL } from '../src/devices/mirabox/mirabox-293s.js';
 import { AJAZZ_AKP05E_MODEL } from '../src/devices/ajazz/akp05e.js';
 import type { DeviceImageSpec, DeviceModel } from '../src/devices/driver.js';
@@ -186,6 +191,7 @@ class FakeDriver extends EventEmitter {
   model: DeviceModel = MIRABOX_293S_MODEL;
   splashed: Array<{ keyIndex: number; bytes: Uint8Array; spec: DeviceImageSpec }> = [];
   cleared: number[] = [];
+  masks: number[][] = [];
   open(): Promise<void> {
     return Promise.resolve();
   }
@@ -199,6 +205,9 @@ class FakeDriver extends EventEmitter {
   }
   sendSplashImage(keyIndex: number, bytes: Uint8Array, spec: DeviceImageSpec): void {
     this.splashed.push({ keyIndex, bytes, spec });
+  }
+  setTouchStripMask(wireIds: readonly number[]): void {
+    this.masks.push([...wireIds]);
   }
 }
 
@@ -268,8 +277,10 @@ await test('model without extraKeys → no device I/O, no timer', () => {
 await test('AKP05E touch-strip widgets use all four zones and their image spec', () => {
   const d = new FakeDriver();
   d.model = AJAZZ_AKP05E_MODEL;
-  const w = new ExtraKeyWidgets(d, (wireId) =>
-    wireId === 1 ? { widget: 'text', param: 'Hi' } : undefined,
+  const w = new ExtraKeyWidgets(
+    d,
+    (wireId) => (wireId === 1 ? { widget: 'text', param: 'Hi' } : undefined),
+    'deckbridge-ignore',
   );
   w.start();
   w.stop();
@@ -281,50 +292,158 @@ await test('AKP05E touch-strip widgets use all four zones and their image spec',
   assert.equal(d.splashed[0]!.spec.rotate, 180);
 });
 
-await test('setTouchStripDisabled(true) clears the strip and stops driving it', () => {
+console.log('\nExtraKeyWidgets touch-strip mode');
+
+// Zone 1 has a widget, zone 2 is explicitly 'none', zones 3/4 unconfigured.
+const zone1Only = (wireId: number): ExtraKeyConfig | undefined => {
+  if (wireId === 1) return { widget: 'text', param: 'Hi' };
+  return wireId === 2 ? { widget: 'none' } : undefined;
+};
+
+function stripDock(mode?: TouchStripMode): { d: FakeDriver; w: ExtraKeyWidgets } {
   const d = new FakeDriver();
   d.model = AJAZZ_AKP05E_MODEL;
-  const w = new ExtraKeyWidgets(d, () => ({ widget: 'clock' }));
+  return { d, w: new ExtraKeyWidgets(d, zone1Only, mode) };
+}
+
+await test("default 'elgato' paints no strip widgets and pushes an empty mask", () => {
+  const { d, w } = stripDock();
   w.start();
-  assert.equal(d.splashed.length, 4, 'all four zones painted');
-  d.cleared.length = 0;
-  w.setTouchStripDisabled(true);
   tick(w);
   w.stop();
-  assert.deepEqual(d.cleared, [1, 2, 3, 4], 'strip cleared on disable');
-  assert.equal(d.splashed.length, 4, 'no touch-strip repaint while disabled');
-});
-
-await test('setTouchStripDisabled(false) repaints the strip widgets', () => {
-  const d = new FakeDriver();
-  d.model = AJAZZ_AKP05E_MODEL;
-  const w = new ExtraKeyWidgets(d, () => ({ widget: 'clock' }));
-  w.start();
-  w.setTouchStripDisabled(true);
-  assert.equal(d.splashed.length, 4, 'only the start() paint so far');
-  w.setTouchStripDisabled(false);
-  w.stop();
-  assert.equal(d.splashed.length, 8, 're-enable repaints all four zones');
-});
-
-await test('re-enabling a strip that started disabled starts painting it', () => {
-  const d = new FakeDriver();
-  d.model = AJAZZ_AKP05E_MODEL;
-  // AKP05E has no side keys, so start() with the strip disabled has nothing to tick.
-  const w = new ExtraKeyWidgets(d, () => ({ widget: 'clock' }), true);
-  w.start();
-  assert.equal(d.splashed.length, 0, 'nothing painted while disabled');
-  w.setTouchStripDisabled(false);
-  w.stop();
-  assert.equal(d.splashed.length, 4, 'all four zones painted after re-enable');
-});
-
-await test('re-enabling before start() paints nothing (dock not up yet)', () => {
-  const d = new FakeDriver();
-  d.model = AJAZZ_AKP05E_MODEL;
-  const w = new ExtraKeyWidgets(d, () => ({ widget: 'clock' }), true);
-  w.setTouchStripDisabled(false);
   assert.equal(d.splashed.length, 0);
+  assert.deepEqual(d.cleared, []);
+  assert.deepEqual(d.masks, [[]]);
+});
+
+await test("'deckbridge-ignore' clears empty zones and masks the whole strip", () => {
+  const { d, w } = stripDock('deckbridge-ignore');
+  w.start();
+  tick(w);
+  w.stop();
+  assert.deepEqual(
+    d.splashed.map((s) => s.keyIndex),
+    [1],
+  );
+  assert.deepEqual(d.cleared, [2, 3, 4]);
+  assert.deepEqual(d.masks, [[1, 2, 3, 4]], 'unchanged mask is not re-pushed per tick');
+});
+
+await test("'deckbridge-repaint' skips empty zones and masks only owned ones", () => {
+  const { d, w } = stripDock('deckbridge-repaint');
+  w.start();
+  tick(w);
+  w.stop();
+  assert.deepEqual(
+    d.splashed.map((s) => s.keyIndex),
+    [1],
+  );
+  assert.deepEqual(d.cleared, [], 'Elgato content shows through unowned zones');
+  assert.deepEqual(d.masks, [[1]]);
+});
+
+for (const mode of TOUCH_STRIP_MODES) {
+  await test(`side keys with no widget clear under '${mode}'`, () => {
+    const d = new FakeDriver();
+    const w = new ExtraKeyWidgets(d, () => undefined, mode);
+    w.start();
+    w.stop();
+    assert.deepEqual(d.cleared, [16, 17, 18]);
+    assert.deepEqual(d.masks, [], 'no strip → no mask traffic');
+  });
+}
+
+await test('start() re-pushes the mask even when unchanged (worker reset it on open)', () => {
+  const { d, w } = stripDock('deckbridge-repaint');
+  w.start();
+  w.stop();
+  w.start();
+  w.stop();
+  assert.deepEqual(d.masks, [[1], [1]]);
+});
+
+await test('assigning a widget then repaint() grows the mask and paints the zone', () => {
+  const d = new FakeDriver();
+  d.model = AJAZZ_AKP05E_MODEL;
+  let zone3: ExtraKeyConfig | undefined;
+  const w = new ExtraKeyWidgets(
+    d,
+    (wireId) => (wireId === 3 ? zone3 : zone1Only(wireId)),
+    'deckbridge-repaint',
+  );
+  w.start();
+  zone3 = { widget: 'text', param: 'Yo' };
+  w.repaint();
+  zone3 = undefined;
+  w.repaint();
+  w.stop();
+  assert.deepEqual(d.masks, [[1], [1, 3], [1]]);
+  assert.deepEqual(
+    d.splashed.map((s) => s.keyIndex),
+    [1, 1, 3, 1],
+  );
+  assert.deepEqual(d.cleared, [], 'a released zone is restored by the worker, not cleared');
+});
+
+await test('re-assigning the same content to a released zone repaints it', () => {
+  const d = new FakeDriver();
+  d.model = AJAZZ_AKP05E_MODEL;
+  let zone1: ExtraKeyConfig | undefined = { widget: 'text', param: 'Hi' };
+  const w = new ExtraKeyWidgets(
+    d,
+    (wireId) => (wireId === 1 ? zone1 : undefined),
+    'deckbridge-repaint',
+  );
+  w.start();
+  zone1 = undefined;
+  tick(w);
+  zone1 = { widget: 'text', param: 'Hi' };
+  tick(w);
+  w.stop();
+  assert.equal(d.splashed.length, 2);
+  assert.deepEqual(d.masks, [[1], [], [1]]);
+});
+
+await test('leaving an override mode unmasks without clearing the strip', () => {
+  const { d, w } = stripDock('deckbridge-ignore');
+  w.start();
+  d.cleared.length = 0;
+  w.setTouchStripMode('elgato');
+  tick(w);
+  w.stop();
+  assert.deepEqual(d.cleared, []);
+  assert.deepEqual(d.masks, [[1, 2, 3, 4], []]);
+  assert.equal(d.splashed.length, 1, 'no strip repaint in elgato mode');
+});
+
+await test('switching ignore → repaint releases the empty zones', () => {
+  const { d, w } = stripDock('deckbridge-ignore');
+  w.start();
+  w.setTouchStripMode('deckbridge-repaint');
+  w.stop();
+  assert.deepEqual(d.masks, [[1, 2, 3, 4], [1]]);
+  assert.equal(d.splashed.length, 2, 'owned zone repainted after the switch');
+  assert.deepEqual(d.cleared, [2, 3, 4], 'only the ignore-mode clears');
+});
+
+await test('enabling an override on a dock that started idle starts painting it', () => {
+  // AKP05E has no side keys, so start() in 'elgato' has nothing to tick.
+  const { d, w } = stripDock();
+  w.start();
+  assert.equal(d.splashed.length, 0);
+  w.setTouchStripMode('deckbridge-ignore');
+  const ticking = (w as unknown as { timer: unknown }).timer !== undefined;
+  w.stop();
+  assert.ok(ticking, 'timer started');
+  assert.equal(d.splashed.length, 1);
+  assert.deepEqual(d.masks, [[], [1, 2, 3, 4]]);
+});
+
+await test('setTouchStripMode before start() paints and pushes nothing', () => {
+  const { d, w } = stripDock();
+  w.setTouchStripMode('deckbridge-ignore');
+  assert.equal(d.splashed.length, 0);
+  assert.deepEqual(d.masks, []);
 });
 
 // isExtraKeyConfig (migration guard)

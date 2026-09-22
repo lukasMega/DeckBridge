@@ -33,16 +33,19 @@ import type {
 import type {
   KeyState,
   CommEntry,
+  EncoderSettings,
   ExtraKeyConfig,
   ImageModeOverride,
   DockStatus,
   ClientApp,
+  TouchStripMode,
 } from '../../types.js';
 import { WEBUI_PORT, webuiBindAddr } from '../../types.js';
 import { StatusPublisher } from './status-publisher.js';
 import { buildStateResponse } from './state-response.js';
 import { LoggingController } from './logging-controller.js';
 import { DevicePrefsController } from './device-prefs-controller.js';
+import { EncodersController } from './encoders-controller.js';
 import { liveDiagnosticsInputs } from './diagnostics-sources.js';
 import type { DiagnosticsOptions } from './diagnostics.js';
 import { UpdateController } from './update-controller.js';
@@ -60,6 +63,7 @@ export class WebUIServer extends EventEmitter implements WebUIController {
   private readonly modelOverrides: ModelOverridesController;
   private readonly logging: LoggingController;
   private readonly devicePrefs: DevicePrefsController;
+  private readonly encoders: EncodersController;
   readonly updates: UpdateController;
   private readonly imageChannel = new ImageChannel(this.bus, () => this.selectedDock);
   get imageState(): Map<number, Buffer> {
@@ -89,9 +93,11 @@ export class WebUIServer extends EventEmitter implements WebUIController {
   get imageModeOverride(): ImageModeOverride {
     return this.devicePrefs.imageModeOverride;
   }
-  /** SELECTED dock's touch-strip disable flag (true = Elgato app drives it). */
-  get touchStripDisabled(): boolean {
-    return this.devicePrefs.touchStripDisabled;
+  touchStripModeFor(deviceKey: string): TouchStripMode {
+    return this.devicePrefs.touchStripModeFor(deviceKey);
+  }
+  encoderSettingsFor(deviceKey: string): EncoderSettings | undefined {
+    return this.encoders.settingsFor(deviceKey);
   }
   private readonly status: StatusPublisher;
   private readonly stats: Stats = { uptimeMs: 0, elgatoRxPkts: 0, elgatoTxPkts: 0, imagesSent: 0 };
@@ -139,6 +145,7 @@ export class WebUIServer extends EventEmitter implements WebUIController {
       this.dockRegistry.selectedBrightness(),
     );
     this.extraKeys = new ExtraKeysController(host, this.bus);
+    this.encoders = new EncodersController(host);
     this.settingsIdentity = new SettingsIdentityController(
       host,
       (level) => this.trySetLogLevel(level),
@@ -291,8 +298,12 @@ export class WebUIServer extends EventEmitter implements WebUIController {
     this.devicePrefs.setImageMode(mode);
   }
 
-  trySetTouchStripDisabled(disabled: boolean): ReqError | null {
-    return this.devicePrefs.trySetTouchStripDisabled(disabled);
+  trySetTouchStripMode(mode: TouchStripMode): ReqError | null {
+    return this.devicePrefs.trySetTouchStripMode(mode);
+  }
+
+  trySetEncoders(settings: EncoderSettings): ReqError | null {
+    return this.encoders.trySet(settings);
   }
 
   notifyBrightness(level: number): void {
@@ -336,13 +347,7 @@ export class WebUIServer extends EventEmitter implements WebUIController {
     Object.assign(this.stats, delta);
   }
 
-  notifyDeviceModel(model: {
-    id: string;
-    name: string;
-    keyCount: number;
-    columns: number;
-    rows: number;
-  }): void {
+  notifyDeviceModel(model: Parameters<StatusPublisher['setDeviceModel']>[0]): void {
     this.status.setDeviceModel(model);
   }
 
@@ -351,7 +356,8 @@ export class WebUIServer extends EventEmitter implements WebUIController {
   }
 
   private broadcastSelectedDeviceState(): void {
-    this.devicePrefs.broadcastSelected(this.selectedExtraKeyConfigs());
+    this.devicePrefs.broadcastSelected(this.extraKeys.selectedConfigs());
+    this.encoders.broadcastSelected();
   }
 
   private handleRequest(
@@ -384,8 +390,9 @@ export class WebUIServer extends EventEmitter implements WebUIController {
       deviceModels: this.deviceModels,
       deviceIdentity: this.settingsIdentity.identity(),
       realDeviceIdentity: this.dockRegistry.selectedStatus()?.realDeviceIdentity,
-      extraKeys: this.selectedExtraKeyConfigs(),
-      touchStripDisabled: this.touchStripDisabled,
+      extraKeys: this.extraKeys.selectedConfigs(),
+      touchStripMode: this.devicePrefs.touchStripMode,
+      encoders: this.encoders.selected(),
       logLevel: this.logLevel(),
       logFilePath: this.logFilePath(),
       multiDeck: this.settings.multiDeck,
@@ -405,10 +412,6 @@ export class WebUIServer extends EventEmitter implements WebUIController {
 
   extraKeyConfigFor(deviceKey: string, wireId: number): ExtraKeyConfig | undefined {
     return this.extraKeys.configFor(deviceKey, wireId);
-  }
-
-  private selectedExtraKeyConfigs(): Record<string, ExtraKeyConfig> {
-    return this.extraKeys.selectedConfigs();
   }
 
   trySetExtraKey(wireId: number, cfg: ExtraKeyConfig): ReqError | null {

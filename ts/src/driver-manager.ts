@@ -5,6 +5,7 @@ import { WorkerHidDriver, closeDriver } from './hid-worker-host.js';
 import { MockDriver } from './devices/mock.js';
 import { MAX_MULTI_DECK_SESSIONS } from './types.js';
 import type { KeyEvent, CommEntry, DockStatus, DialEvent, TouchInputEvent } from './types.js';
+import type { TouchStripMode } from './types.js';
 import type { DeviceDriver, DeviceModel, DeviceModelOverride } from './devices/driver.js';
 import { applyModelOverrides, overrideSummary } from './devices/model-overrides.js';
 import type { OverrideChangeKind } from './devices/model-overrides.js';
@@ -109,6 +110,8 @@ export class DriverManager {
       dockFramesSnapshot: (dockIndex) => deps.webui.dockFramesSnapshot(dockIndex),
       isBrightnessOverride: (deviceKey) => deps.webui.isBrightnessOverride(deviceKey),
       extraKeyConfigFor: (deviceKey, wireId) => deps.webui.extraKeyConfigFor(deviceKey, wireId),
+      touchStripModeFor: (deviceKey) => deps.webui.touchStripModeFor(deviceKey),
+      encoderSettingsFor: (deviceKey) => deps.webui.encoderSettingsFor(deviceKey),
     });
   }
 
@@ -238,7 +241,9 @@ export class DriverManager {
         this.deps.childServer.sendKeyEvent(index, state);
         this.deps.webui.notifyKeyEvent(index, state, wireId);
       },
-      onDial: (event: DialEvent) => this.deps.childServer.sendDial(event),
+      onDial: (event: DialEvent) => {
+        if (!this.primary.handleDial(event)) this.deps.childServer.sendDial(event);
+      },
       onTouch: (event: TouchInputEvent) => this.deps.childServer.sendTouch(event),
       onReinit: () => this.primary.repaintWidgets(),
     });
@@ -398,10 +403,10 @@ export class DriverManager {
     else this.extraCoordinator.forceRunExtraKey(index, wireId);
   }
 
-  /** WebUI touch-strip disable toggle — the strip hands off to the Elgato app. */
-  setTouchStripDisabledForDock(index: number, disabled: boolean): void {
-    if (index === 0) this.primary.setTouchStripDisabled(disabled);
-    else this.extraCoordinator.setTouchStripDisabled(index, disabled);
+  /** WebUI touch-strip mode selector — who paints the strip on the dock at `index`. */
+  setTouchStripModeForDock(index: number, mode: TouchStripMode): void {
+    if (index === 0) this.primary.setTouchStripMode(mode);
+    else this.extraCoordinator.setTouchStripMode(index, mode);
   }
 
   async connectMock(model?: DeviceModel): Promise<void> {

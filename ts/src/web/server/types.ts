@@ -1,10 +1,12 @@
 import type {
   CommEntry,
+  EncoderSettings,
   ExtraKeyConfig,
   ImageModeOverride,
   DockStatus,
   RealDeviceIdentity,
   ClientApp,
+  TouchStripMode,
 } from '../../types.js';
 import type {
   DeviceIdentity,
@@ -121,8 +123,9 @@ export interface StateResponse extends StatusSnapshot {
   realDeviceIdentity?: RealDeviceIdentity;
   // The SELECTED dock's extra-key assignments, keyed by device wire id.
   extraKeys: Record<string, ExtraKeyConfig>;
-  /** The SELECTED dock's touch-strip disable flag (true = Elgato app drives it). */
-  touchStripDisabled: boolean;
+  /** The SELECTED dock's touch-strip mode + knob override (AKP05E). */
+  touchStripMode: TouchStripMode;
+  encoders: EncoderSettings;
   /** Log level currently in effect (not merely the persisted one) + where the
    *  log file lives — both surfaced under Settings so a reporter can turn on
    *  debug logging and find the file. */
@@ -159,8 +162,8 @@ export interface WebUIController {
   trySetExtraKey(wireId: number, cfg: ExtraKeyConfig): ReqError | null;
   tryRunExtraKeyNow(wireId: number): ReqError | null;
   pluginsInfo(): Promise<PluginsInfo>;
-  readonly touchStripDisabled: boolean;
-  trySetTouchStripDisabled(disabled: boolean): ReqError | null;
+  trySetTouchStripMode(mode: TouchStripMode): ReqError | null;
+  trySetEncoders(settings: EncoderSettings): ReqError | null;
   getSettingsJson(): string;
   applySettingsJson(raw: string): void;
   openSettingsFile(): Promise<void>;

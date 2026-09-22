@@ -8,9 +8,10 @@ import {
   DEFAULT_MAC_ADDRESS,
   MDNS_SERVICE_NAME,
 } from './types.js';
-import type { DockStatus } from './types.js';
+import type { DialEvent, DockStatus, TouchStripMode } from './types.js';
 import { DEFAULT_MODEL } from './devices/registry.js';
 import { ExtraKeyWidgets } from './extra-keys.js';
+import { EncoderActions } from './encoders.js';
 import { buildDockStatus, repaintFrames } from './device-session.js';
 import type { DeviceInfo } from './device-session.js';
 import type { DeviceDriver, DeviceModel, DeviceModelOverride } from './devices/driver.js';
@@ -46,6 +47,14 @@ export class PrimaryDock {
   /** Display widgets on the extra keys (293S 6th column, display-only).
    *  Created per connect; config resolves per tick from persisted settings. */
   private widgets: ExtraKeyWidgets | null = null;
+
+  /** Knob override; resolves this dock's current identity per event. */
+  private readonly encoders = new EncoderActions(() => {
+    const key = this.identity?.deviceKey;
+    if (key === undefined) return undefined;
+    const { webui } = this.deps;
+    return { mode: webui.touchStripModeFor(key), encoders: webui.encoderSettingsFor(key) };
+  });
 
   /** The Elgato app's last CORA frames, captured on USB disconnect: the app
    *  keeps its TCP pairing across a replug and never re-pushes, so these are
@@ -143,7 +152,7 @@ export class PrimaryDock {
     this.widgets = new ExtraKeyWidgets(
       driver,
       (wireId) => this.deps.webui.extraKeyConfigFor(identity.deviceKey, wireId),
-      identity.touchStripDisabled,
+      this.deps.webui.touchStripModeFor(identity.deviceKey),
     );
     this.widgets.start();
   }
@@ -161,9 +170,14 @@ export class PrimaryDock {
     this.widgets?.forceRun(wireId);
   }
 
-  /** Toggle DeckBridge's touch-strip widget control (WebUI switch). */
-  setTouchStripDisabled(disabled: boolean): void {
-    this.widgets?.setTouchStripDisabled(disabled);
+  /** Switch who paints the touch strip (WebUI mode selector). */
+  setTouchStripMode(mode: TouchStripMode): void {
+    this.widgets?.setTouchStripMode(mode);
+  }
+
+  /** True when the knob override consumed `event` — it must not reach the app. */
+  handleDial(event: DialEvent): boolean {
+    return this.encoders.handleDial(event);
   }
 
   /** Dock status for the WebUI. Same builder as DeviceSession.status(), with the

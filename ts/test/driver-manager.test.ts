@@ -8,7 +8,7 @@ import { MIRABOX_293S_MODEL } from '../src/devices/mirabox/mirabox-293s.js';
 import { MIRABOX_K1PRO_MODEL } from '../src/devices/mirabox/mirabox-k1pro.js';
 import type { SessionIdentity, SessionServers } from '../src/device-session.js';
 import type { DeviceModel, DeviceModelOverride } from '../src/devices/driver.js';
-import type { CommEntry, KeyState } from '../src/types.js';
+import type { CommEntry, EncoderSettings, KeyState, TouchStripMode } from '../src/types.js';
 import { ELGATO_TCP_PORT, MAX_DEVICE_SESSIONS, MAX_MULTI_DECK_SESSIONS } from '../src/types.js';
 import type { ChildGeometry } from '../src/capabilities.js';
 import type { DeviceConfig } from '../src/elgato-types.js';
@@ -103,6 +103,13 @@ function makeFakeWebUI() {
     // dock has a persisted override in these tests → default.
     isBrightnessOverride(_deviceKey: string): boolean {
       return false;
+    },
+    // Touch-strip mode + encoder override: none persisted → strip and knobs belong to the app.
+    touchStripModeFor(_deviceKey: string): TouchStripMode {
+      return 'elgato';
+    },
+    encoderSettingsFor(_deviceKey: string): EncoderSettings | undefined {
+      return undefined;
     },
     getOrCreateDeviceIdentityCalls: [] as { deviceKey: string; defaultMdnsName: string }[],
     // Mirrors WebUIServer.getOrCreateDeviceIdentity: lookup-or-generate + memoize,

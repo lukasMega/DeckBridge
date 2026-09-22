@@ -9,10 +9,10 @@ import type {
   ExtraKeyWidget,
   PluginStatus,
   PluginsInfo,
+  TouchStripMode,
 } from '../ui-types.js';
 import { ConfigButton, paramPlaceholder, postExtraKey, PARAM_MAX } from './extra-keys-popovers.js';
-import { CheckField } from '../components/Fields.js';
-import { fire } from '../ui-api.js';
+import { EncodersSection, TouchStripModePicker } from './touch-strip-panel.js';
 
 const WIDGET_OPTIONS: ReadonlyArray<{ value: ExtraKeyWidget; label: string }> = [
   { value: 'none', label: 'Empty' },
@@ -23,6 +23,12 @@ const WIDGET_OPTIONS: ReadonlyArray<{ value: ExtraKeyWidget; label: string }> = 
   { value: 'command', label: 'Command output' },
   { value: 'plugin', label: 'Plugin (JS)' },
 ];
+
+// Under an override mode 'none' decides what an unassigned strip zone shows.
+const NONE_LABEL: Partial<Record<TouchStripMode, string>> = {
+  'deckbridge-ignore': 'Blank',
+  'deckbridge-repaint': 'App controls',
+};
 
 const POSITION_LABELS = ['Top', 'Middle', 'Bottom'];
 const PLUGIN_CUSTOM = '__custom__';
@@ -39,6 +45,7 @@ function widgetPanel(dock: DockUi | undefined): {
   title: string;
   subtitle: string;
   touchStrip: boolean;
+  encoderCount: number;
 } | null {
   const displays = dock?.widgetDisplays;
   if (displays) {
@@ -48,6 +55,7 @@ function widgetPanel(dock: DockUi | undefined): {
       title: 'Touch strip',
       subtitle: 'Four display zones — show a value on each zone',
       touchStrip: true,
+      encoderCount: dock.encoderCount ?? 0,
     };
   }
   const wireIds = dock?.extraKeys;
@@ -58,6 +66,7 @@ function widgetPanel(dock: DockUi | undefined): {
     title: 'Side keys',
     subtitle: 'Display-only right column — show a value on each key',
     touchStrip: false,
+    encoderCount: 0,
   };
 }
 
@@ -180,6 +189,7 @@ function ExtraKeyRow({
   pluginFiles,
   pluginsDir,
   pluginStatus,
+  noneLabel,
 }: Readonly<{
   wireId: number;
   label: string;
@@ -187,6 +197,7 @@ function ExtraKeyRow({
   pluginFiles: string[];
   pluginsDir: string;
   pluginStatus?: PluginStatus;
+  noneLabel?: string;
 }>): preact.JSX.Element {
   const widget = cfg?.widget ?? 'none';
   const param = cfg?.param ?? '';
@@ -215,7 +226,7 @@ function ExtraKeyRow({
       >
         {WIDGET_OPTIONS.map((o) => (
           <option key={o.value} value={o.value}>
-            {o.label}
+            {o.value === 'none' ? (noneLabel ?? o.label) : o.label}
           </option>
         ))}
       </select>
@@ -249,7 +260,7 @@ function ExtraKeyRow({
 export function ExtraKeysPanel(): preact.JSX.Element | null {
   const status = useStore((s) => s.status);
   const configs = useStore((s) => s.extraKeys);
-  const touchStripDisabled = useStore((s) => s.touchStripDisabled);
+  const stripMode = useStore((s) => s.touchStripMode);
 
   // Fetch plugin file list + live per-key status; re-poll while any key runs a plugin.
   const [plugins, setPlugins] = useState<PluginsInfo>({ dir: '', files: [], status: {} });
@@ -280,33 +291,32 @@ export function ExtraKeysPanel(): preact.JSX.Element | null {
   if (!panel) return null;
 
   const sorted = panel.wireIds.toSorted((a, b) => a - b);
+  // Strip zones (and the knobs) are only DeckBridge's in an override mode; side keys always are.
+  const showRows = !panel.touchStrip || stripMode !== 'elgato';
   return (
     <div class="xkeys">
       <div class="xkeys-head">
         <span class="xkeys-label">{panel.title}</span>
         <span class="xkeys-sub">{panel.subtitle}</span>
-        {panel.touchStrip && (
-          <CheckField
-            label="Elgato app controls it"
-            checked={touchStripDisabled}
-            onChange={(v) => fire('/api/touch-strip', { disabled: v })}
-          />
-        )}
       </div>
-      {sorted.map((wireId, i) => (
-        <ExtraKeyRow
-          key={wireId}
-          wireId={wireId}
-          label={
-            panel.labels.get(wireId) ??
-            (sorted.length === 3 ? POSITION_LABELS[i]! : `Key ${wireId}`)
-          }
-          cfg={configs[String(wireId)]}
-          pluginFiles={plugins.files}
-          pluginsDir={plugins.dir}
-          pluginStatus={plugins.status[String(wireId)]}
-        />
-      ))}
+      {panel.touchStrip && <TouchStripModePicker mode={stripMode} />}
+      {showRows &&
+        sorted.map((wireId, i) => (
+          <ExtraKeyRow
+            key={wireId}
+            wireId={wireId}
+            label={
+              panel.labels.get(wireId) ??
+              (sorted.length === 3 ? POSITION_LABELS[i]! : `Key ${wireId}`)
+            }
+            cfg={configs[String(wireId)]}
+            pluginFiles={plugins.files}
+            pluginsDir={plugins.dir}
+            pluginStatus={plugins.status[String(wireId)]}
+            noneLabel={panel.touchStrip ? NONE_LABEL[stripMode] : undefined}
+          />
+        ))}
+      {showRows && panel.encoderCount > 0 && <EncodersSection count={panel.encoderCount} />}
     </div>
   );
 }

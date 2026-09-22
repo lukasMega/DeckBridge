@@ -5,14 +5,14 @@
 // mode, or before the first connect) — that fallback is never persisted, since
 // it belongs to no physical device.
 import type { DeviceIdentitySettings } from '../../settings-store.js';
-import type { ImageModeOverride } from '../../types.js';
-import { DEFAULT_BRIGHTNESS_OVERRIDE } from '../../types.js';
+import type { ImageModeOverride, TouchStripMode } from '../../types.js';
+import { DEFAULT_BRIGHTNESS_OVERRIDE, DEFAULT_TOUCH_STRIP_MODE } from '../../types.js';
 import type { ControllerHost, ReqError } from './types.js';
 
 export class DevicePrefsController {
   private runtimeBrightnessOverride = DEFAULT_BRIGHTNESS_OVERRIDE;
   private runtimeImageModeOverride: ImageModeOverride = null;
-  private runtimeTouchStripDisabled = false;
+  private runtimeTouchStripMode: TouchStripMode = DEFAULT_TOUCH_STRIP_MODE;
 
   constructor(
     private readonly host: ControllerHost,
@@ -39,31 +39,31 @@ export class DevicePrefsController {
     return e ? (e.imageModeOverride ?? null) : this.runtimeImageModeOverride;
   }
 
-  /** Per-device touch-strip disable — also read by the widget scheduler
+  /** Per-device touch-strip mode — also read by the widget scheduler
    *  (ExtraKeyWidgets) via DriverManager/DeviceSession. */
-  isTouchStripDisabled(deviceKey: string): boolean {
+  touchStripModeFor(deviceKey: string): TouchStripMode {
     const e = this.host.settings.entryFor(deviceKey);
-    return e ? (e.touchStripDisabled ?? false) : this.runtimeTouchStripDisabled;
+    return e ? (e.touchStripMode ?? DEFAULT_TOUCH_STRIP_MODE) : this.runtimeTouchStripMode;
   }
 
-  /** touchStripDisabled of the SELECTED dock (WebUI switch). */
-  get touchStripDisabled(): boolean {
-    return this.isTouchStripDisabled(this.host.selectedDeviceKey());
+  /** touchStripMode of the SELECTED dock (WebUI mode selector). */
+  get touchStripMode(): TouchStripMode {
+    return this.touchStripModeFor(this.host.selectedDeviceKey());
   }
 
-  /** Store, broadcast, and let app.ts hand the strip to the Elgato app via
-   *  'touchStripChanged'. 409 when the selected dock has no strip — the flag would
-   *  persist on a device it means nothing for. */
-  trySetTouchStripDisabled(disabled: boolean): ReqError | null {
+  /** Store, broadcast, and let app.ts hand the strip over via 'touchStripModeChanged'.
+   *  409 when the selected dock has no strip — the mode would persist on a device it
+   *  means nothing for. */
+  trySetTouchStripMode(mode: TouchStripMode): ReqError | null {
     if (!this.host.selectedDockStatus()?.widgetDisplays?.length) {
       return { error: 'selected dock has no touch strip', status: 409 };
     }
     this.mutateSelectedEntryOrRuntime(
-      (e) => (e.touchStripDisabled = disabled),
-      () => (this.runtimeTouchStripDisabled = disabled),
+      (e) => (e.touchStripMode = mode),
+      () => (this.runtimeTouchStripMode = mode),
     );
-    this.host.broadcast('touchStrip', { disabled });
-    this.host.emit('touchStripChanged', this.host.selectedDock(), disabled);
+    this.host.broadcast('touchStripMode', { mode });
+    this.host.emit('touchStripModeChanged', this.host.selectedDock(), mode);
     return null;
   }
 
@@ -100,7 +100,7 @@ export class DevicePrefsController {
     this.host.broadcast('brightnessOverride', { enabled: this.brightnessOverride });
     this.host.broadcast('imageMode', { mode: this.imageModeOverride });
     this.host.broadcast('extraKeys', { configs: extraKeyConfigs });
-    this.host.broadcast('touchStrip', { disabled: this.touchStripDisabled });
+    this.host.broadcast('touchStripMode', { mode: this.touchStripMode });
   }
 
   /** Store a value on the SELECTED dock's persisted entry, or (no deviceKey) in

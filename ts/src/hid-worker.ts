@@ -46,6 +46,19 @@ let imageOverride: ImageModeOverride = null;
 // device, otherwise it would overwrite resizeMode/padFill on every render.
 let imageFitPinned = false;
 
+// Touch-strip wire ids DeckBridge widgets own ('setTouchStripMask'): Elgato strip
+// segments for them are rendered and cached, but never sent.
+let touchStripMask = new Set<number>();
+// Last Elgato-rendered native bytes per strip wire id — what a zone gets back when
+// it leaves the mask, instead of a stale widget.
+const touchSegments = new Map<number, Uint8Array>();
+
+/** A new device (or none) starts with the Elgato app owning the whole strip. */
+function resetTouchStrip(): void {
+  touchStripMask = new Set();
+  touchSegments.clear();
+}
+
 /** Driver factory keyed on `model.driverKind` — the single touch-point for
  *  registering a new driver implementation (Path C / 'custom' has none yet). */
 function createDriver(model: DeviceModel): AnyRealDriver {
@@ -79,6 +92,7 @@ async function handleOpen(
   // one. The cache key carries a spec revision too (image-render.ts); clearing
   // here additionally frees the stale entries instead of letting them age out.
   imageCache.clear();
+  resetTouchStrip();
   if (overrides) {
     info('worker', `${model.id} opened with overrides: ${overrideSummary(overrides)}`);
   }
@@ -156,9 +170,31 @@ function handleSplashImage(
 }
 
 /** Split a Stream Deck + window image (full or a partial region) onto the
- *  device's touch segments. */
+ *  device's touch segments. The mask gates only the send: masked segments are
+ *  still cached so releasing a zone can restore them. */
 function handleTouchStrip(bytes: Uint8Array, region?: TouchWindowRegion): void {
-  if (driver && currentModel) renderTouchStrip(driver, currentModel, bytes, region);
+  const d = driver;
+  if (!d || !currentModel) return;
+  const target = {
+    sendImage(wireId: number, native: Uint8Array): void {
+      touchSegments.set(wireId, native);
+      if (!touchStripMask.has(wireId)) d.sendImage(wireId, native);
+    },
+  };
+  renderTouchStrip(target, currentModel, bytes, region);
+}
+
+/** Swap in a new ownership mask; every released zone gets its last Elgato image
+ *  back (or is cleared when the app never drew one). */
+function handleTouchStripMask(wireIds: readonly number[]): void {
+  const released = [...touchStripMask].filter((wireId) => !wireIds.includes(wireId));
+  touchStripMask = new Set(wireIds);
+  if (!driver) return;
+  for (const wireId of released) {
+    const cached = touchSegments.get(wireId);
+    if (cached) driver.sendImage(wireId, cached);
+    else driver.clearKey(wireId);
+  }
 }
 
 /** Non-device state changes: no HID I/O, they only steer the next render. */
@@ -187,6 +223,10 @@ async function handle(msg: MainToWorker, deferNotification: boolean): Promise<vo
     case 'touchImage':
       handleTouchStrip(msg.bytes, msg.region);
       break;
+    // Device path, not handleSetting: releasing a zone writes to the device.
+    case 'setTouchStripMask':
+      handleTouchStripMask(msg.wireIds);
+      break;
     case 'setBrightness':
       driver?.setBrightness(msg.level);
       break;
@@ -198,6 +238,7 @@ async function handle(msg: MainToWorker, deferNotification: boolean): Promise<vo
       driver = null;
       currentModel = null;
       openRegistryModel = null;
+      resetTouchStrip();
       await d?.close().catch(() => undefined);
       post({ type: 'closed' });
       break;

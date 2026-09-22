@@ -55,8 +55,11 @@ const handlers: Record<string, (d: unknown) => void> = {
   extraKeys: (d) => {
     store.patch({ extraKeys: (d as { configs: StoreState['extraKeys'] }).configs });
   },
-  touchStrip: (d) => {
-    store.setTouchStripDisabled((d as { disabled: boolean }).disabled);
+  touchStripMode: (d) => {
+    store.setTouchStripMode((d as { mode: StoreState['touchStripMode'] }).mode);
+  },
+  encoders: (d) => {
+    store.setEncoders((d as { encoders: StoreState['encoders'] }).encoders);
   },
   keyEvent: (d) => {
     const e = d as KeyEvent;

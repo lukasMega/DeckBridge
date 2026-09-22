@@ -50,6 +50,10 @@ export type MainToWorker =
   // Assembled Stream Deck + window image (800×100 JPEG, or a partial-window
   // region) — the worker splits it into the device's touch-segment displays.
   | { type: 'touchImage'; bytes: Uint8Array; region?: TouchWindowRegion }
+  // Touch-strip wire ids DeckBridge widgets own: 'touchImage' segments for them
+  // are withheld, and a zone leaving the mask gets its last Elgato image back
+  // (or is cleared). The worker resets it to empty on open/close.
+  | { type: 'setTouchStripMask'; wireIds: number[] }
   // Runtime log-level change (WebUI "Debug logging"). Without this the USB
   // worker — where the interesting device traffic is — stays at its spawn-time
   // level while the main thread switches to debug.

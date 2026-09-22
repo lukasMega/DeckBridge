@@ -283,6 +283,9 @@ export interface DeviceDriver extends EventEmitter {
    *  to the device's touch-segment displays. `WorkerHidDriver` only. No-op on
    *  models without widget displays. */
   renderTouchImage?(bytes: Uint8Array, region?: TouchWindowRegion): void;
+  /** Touch-strip wire ids DeckBridge owns: Elgato strip images skip them, and a
+   *  zone leaving the mask gets the last Elgato image back. `WorkerHidDriver` only. */
+  setTouchStripMask?(wireIds: readonly number[]): void;
   /** Live device-tuning swap — image-transform fields only, no reopen. The
    *  caller resolves `effectiveModel` (registry + overrides) and must have
    *  classified the change as 'live' first (classifyOverrideChange). Absent

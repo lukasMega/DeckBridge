@@ -325,7 +325,13 @@ test('fullState exposes selected dock real device identity', () => {
 });
 
 /** What broadcastSelected() pushes for the selected dock, in order. */
-const SELECTED_DEVICE_EVENTS = ['brightnessOverride', 'imageMode', 'extraKeys', 'touchStrip'];
+const SELECTED_DEVICE_EVENTS = [
+  'brightnessOverride',
+  'imageMode',
+  'extraKeys',
+  'touchStripMode',
+  'encoders',
+];
 
 test('notifyDocks broadcasts status + selected-device state to a connected WS client', () => {
   const ui = new WebUIServer(undefined, [], 'real', TEST_SETTINGS_ROOT);
@@ -359,22 +365,87 @@ test('duplicate notifyDocks call (same shape) does not broadcast again', () => {
   assert.equal(sent.length, 2 * perCall, 'a genuinely different list broadcasts again');
 });
 
-test('touch-strip toggle: 409 without a strip, else broadcast + touchStripChanged', () => {
+const STRIP = [{ wireId: 1, label: 'Left' }];
+
+test('touch-strip mode: 409 without a strip, else persist + broadcast + touchStripModeChanged', () => {
   const ui = new WebUIServer(undefined, [], 'real', TEST_SETTINGS_ROOT);
   ui.notifyDocks([fakeDockStatus(0)]);
-  assert.equal(ui.trySetTouchStripDisabled(true)?.status, 409, 'MK.2 dock has no strip');
+  assert.equal(ui.trySetTouchStripMode('deckbridge-ignore')?.status, 409, 'MK.2 has no strip');
+  assert.equal(ui.touchStripModeFor('fake-device-0'), 'elgato', 'default is Elgato app only');
 
-  const strip = [{ wireId: 1, label: 'Left' }];
-  ui.notifyDocks([{ ...fakeDockStatus(0), widgetDisplays: strip }]);
+  ui.getOrCreateDeviceIdentity('fake-device-0', 'Dock');
+  ui.notifyDocks([{ ...fakeDockStatus(0), widgetDisplays: STRIP }]);
   const { sent } = connectMockClient(ui);
   sent.length = 0;
   const changed: unknown[][] = [];
-  ui.on('touchStripChanged', (...args: unknown[]) => changed.push(args));
+  ui.on('touchStripModeChanged', (...args: unknown[]) => changed.push(args));
 
-  assert.equal(ui.trySetTouchStripDisabled(true), null);
-  assert.deepEqual(changed, [[0, true]]);
-  assert.deepEqual(JSON.parse(sent[0]!), { event: 'touchStrip', data: { disabled: true } });
-  assert.equal(ui.touchStripDisabled, true);
+  assert.equal(ui.trySetTouchStripMode('deckbridge-repaint'), null);
+  assert.deepEqual(changed, [[0, 'deckbridge-repaint']]);
+  assert.deepEqual(JSON.parse(sent[0]!), {
+    event: 'touchStripMode',
+    data: { mode: 'deckbridge-repaint' },
+  });
+  assert.equal(ui.touchStripModeFor('fake-device-0'), 'deckbridge-repaint');
+  assert.equal(ui.fullState().touchStripMode, 'deckbridge-repaint');
+  const saved = JSON.parse(ui.getSettingsJson()) as { devices: { touchStripMode?: string }[] };
+  assert.equal(saved.devices[0]!.touchStripMode, 'deckbridge-repaint', 'persisted per device');
+});
+
+test('encoders: 409 without a strip or knobs, 400 past the last knob', () => {
+  const ui = new WebUIServer(undefined, [], 'real', TEST_SETTINGS_ROOT);
+  ui.notifyDocks([{ ...fakeDockStatus(0), encoderCount: 4 }]);
+  assert.equal(ui.trySetEncoders({ connectToApp: false })?.status, 409, 'no strip');
+  ui.notifyDocks([{ ...fakeDockStatus(0), widgetDisplays: STRIP }]);
+  assert.equal(ui.trySetEncoders({ connectToApp: false })?.status, 409, 'no knobs');
+  ui.notifyDocks([{ ...fakeDockStatus(0), widgetDisplays: STRIP, encoderCount: 2 }]);
+  assert.equal(ui.trySetEncoders({ commands: { '2': { press: 'x' } } })?.status, 400);
+});
+
+test('encoders: merges per knob, trims blanks, persists and broadcasts', () => {
+  const ui = new WebUIServer(undefined, [], 'real', TEST_SETTINGS_ROOT);
+  ui.getOrCreateDeviceIdentity('fake-device-0', 'Dock');
+  ui.notifyDocks([{ ...fakeDockStatus(0), widgetDisplays: STRIP, encoderCount: 4 }]);
+  const { sent } = connectMockClient(ui);
+  sent.length = 0;
+
+  assert.equal(ui.trySetEncoders({ connectToApp: false }), null);
+  assert.equal(
+    ui.trySetEncoders({
+      commands: { '0': { press: ' mute ', rotateCw: 'up' }, '1': { press: 'a' } },
+    }),
+    null,
+  );
+  assert.equal(ui.trySetEncoders({ commands: { '1': { press: '' } } }), null, 'emptied knob');
+
+  const expected = { connectToApp: false, commands: { '0': { press: 'mute', rotateCw: 'up' } } };
+  assert.deepEqual(ui.encoderSettingsFor('fake-device-0'), expected);
+  assert.deepEqual(ui.fullState().encoders, expected);
+  assert.deepEqual(JSON.parse(sent.at(-1)!), { event: 'encoders', data: { encoders: expected } });
+  const saved = JSON.parse(ui.getSettingsJson()) as { devices: { encoders?: unknown }[] };
+  assert.deepEqual(saved.devices[0]!.encoders, expected, 'persisted per device');
+});
+
+test('applySettingsJson: bad touchStripMode / encoders fail the device-entry guard', () => {
+  const ui = new WebUIServer(undefined, [], 'real', TEST_SETTINGS_ROOT);
+  ui.notifyDocks([fakeDockStatus(0)]);
+  const entry = (extra: Parameters<typeof deviceEntry>[1]): string =>
+    JSON.stringify({ devices: [deviceEntry('fake-device-0', extra)] });
+  const stored = (): unknown[] =>
+    (JSON.parse(ui.getSettingsJson()) as { devices?: unknown[] }).devices ?? [];
+
+  ui.applySettingsJson(entry({ touchStripMode: 'sometimes' }));
+  assert.equal(stored().length, 0, 'unknown mode rejected');
+  ui.applySettingsJson(entry({ encoders: { commands: { '7': { press: 'x' } } } }));
+  assert.equal(stored().length, 0, 'knob index out of range rejected');
+  ui.applySettingsJson(entry({ encoders: { commands: { '0': { press: 'x'.repeat(513) } } } }));
+  assert.equal(stored().length, 0, 'over-long command rejected');
+
+  ui.applySettingsJson(
+    entry({ touchStripMode: 'deckbridge-ignore', encoders: { connectToApp: false } }),
+  );
+  assert.equal(ui.touchStripModeFor('fake-device-0'), 'deckbridge-ignore');
+  assert.deepEqual(ui.encoderSettingsFor('fake-device-0'), { connectToApp: false });
 });
 
 test("new WS client's initial snapshot carries stored docks", () => {
@@ -543,6 +614,32 @@ try {
     });
     assert.equal(r.status, 400);
   });
+
+  const post = (path: string, body: unknown): Promise<Response> =>
+    fetch(`${base}${path}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+
+  await runWebTest(
+    'POST /api/touch-strip-mode: unknown mode → 400, valid mode on MK.2 → 409',
+    async () => {
+      assert.equal((await post('/api/touch-strip-mode', { mode: 'sometimes' })).status, 400);
+      assert.equal((await post('/api/touch-strip-mode', { mode: 'elgato' })).status, 409);
+    },
+  );
+
+  await runWebTest('POST /api/encoders: bad shape → 400, valid body on MK.2 → 409', async () => {
+    assert.equal((await post('/api/encoders', { connectToApp: 'no' })).status, 400);
+    assert.equal((await post('/api/encoders', { commands: { '9': {} } })).status, 400);
+    assert.equal((await post('/api/encoders', { commands: { '0': { press: 1 } } })).status, 400);
+    assert.equal((await post('/api/encoders', { connectToApp: false })).status, 409);
+  });
+
+  await runWebTest('POST /api/touch-strip (removed) → 404', async () => {
+    assert.equal((await post('/api/touch-strip', { disabled: true })).status, 404);
+  });
 } finally {
   await imageModeUi.stop().catch(() => undefined);
 }
@@ -559,6 +656,8 @@ function deviceEntry(
     brightness: number;
     brightnessOverride: boolean;
     imageModeOverride: unknown;
+    touchStripMode: unknown;
+    encoders: unknown;
   }> = {},
 ): Record<string, unknown> {
   return {
@@ -855,6 +954,35 @@ await runWebTest('start() drops path-keyed entries, keeps usb:<serial> keys', as
     await ui.stop().catch(() => undefined);
   }
 });
+
+await runWebTest(
+  'load() strips bad strip/encoder fields + legacy touchStripDisabled, keeps the entry',
+  async () => {
+    await saveSettings(
+      {
+        devices: [
+          {
+            ...mkPruneEntry('usb:0300D0782F51', 42),
+            touchStripMode: 'sometimes',
+            encoders: { connectToApp: 'no' },
+            touchStripDisabled: true,
+          } as unknown as NonNullable<Settings['devices']>[number],
+        ],
+      },
+      PRUNE_ROOT,
+    );
+    const ui = new WebUIServer(undefined, [], 'real', PRUNE_ROOT);
+    await ui.start(false);
+    const body = JSON.parse(ui.getSettingsJson()) as { devices?: Record<string, unknown>[] };
+    assert.equal(body.devices?.length, 1, 'identity entry survives (no Elgato re-pair)');
+    const entry = body.devices![0]!;
+    assert.equal(entry.brightness, 42);
+    for (const k of ['touchStripMode', 'encoders', 'touchStripDisabled']) {
+      assert.ok(!(k in entry), `${k} stripped`);
+    }
+    assert.equal(ui.touchStripModeFor('usb:0300D0782F51'), 'elgato');
+  },
+);
 
 // Device tuning (modelOverrides) + log level — see devices/model-overrides.ts
 

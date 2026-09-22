@@ -6,11 +6,13 @@ import type { BitmapFont } from './assets/font-atlas.js';
 import {
   COMMAND_INTERVAL_DEFAULT_MS,
   COMMAND_TIMEOUT_DEFAULT_MS,
+  DEFAULT_TOUCH_STRIP_MODE,
   type ExtraKeyConfig,
+  type TouchStripMode,
 } from './types.js';
 import type { DeviceDriver } from './devices/driver.js';
 import { splashSpec } from './splash-sender.js';
-import { platformName, readText } from './os-utils.js';
+import { runCommand } from './os-utils.js';
 import { log } from './logger.js';
 import { pluginValueFor, type PluginStatus } from './plugin-host.js';
 
@@ -254,21 +256,6 @@ function weatherTempFor(param: string | undefined, onUpdate: () => void): number
 
 const commandCache = new Map<string, CacheEntry<string>>();
 
-/** Read a spawned process' stdout to a string, killing it after `timeoutMs` so
- *  a hung command can't wedge the entry on inflight forever. */
-async function runCommand(cmd: string, timeoutMs: number): Promise<string> {
-  const args = platformName() === 'Windows' ? ['cmd', '/c', cmd] : ['sh', '-c', cmd];
-  const p = tjs.spawn(args, { stdout: 'pipe', stderr: 'ignore' });
-  const killer = setTimeout(() => p.kill(), timeoutMs);
-  try {
-    const out = await readText(p.stdout);
-    await p.wait();
-    return out;
-  } finally {
-    clearTimeout(killer);
-  }
-}
-
 /** Cached stdout of the command widget's command; re-runs at most every `intervalMs`. */
 function commandOutputFor(
   param: string | undefined,
@@ -291,6 +278,15 @@ function forceRunCommand(param: string | undefined, timeoutMs: number, onUpdate:
 
 // Per-dock scheduler
 
+/** A zone is DeckBridge's only when a real widget is assigned ('none' = unowned). */
+function owns(cfg: ExtraKeyConfig | undefined): boolean {
+  return cfg !== undefined && cfg.widget !== 'none';
+}
+
+function sameIds(a: readonly number[], b: readonly number[]): boolean {
+  return a.length === b.length && a.every((id, i) => id === b[i]);
+}
+
 /** Ticks once a second, re-renders every configured widget, and repaints a key only
  *  when its content changed (clock → one repaint per minute; idle cost is a few string
  *  compares). One instance per connected dock. */
@@ -299,23 +295,27 @@ export class ExtraKeyWidgets {
   private readonly configFor: (wireId: number) => ExtraKeyConfig | undefined;
   private timer: ReturnType<typeof setInterval> | undefined;
   private lastPainted = new Map<number, string>();
-  private touchStripDisabled: boolean;
-  /** Between start() and stop() — a dock that started with nothing to paint (strip
-   *  disabled, no side keys) must still begin ticking when the strip is re-enabled. */
+  private mode: TouchStripMode;
+  /** Last touch-strip ownership mask pushed to the driver (see pushMask). */
+  private lastMask: readonly number[] = [];
+  /** Between start() and stop() — a dock that started with nothing to paint ('elgato'
+   *  strip, no side keys) must still begin ticking when an override mode is chosen. */
   private active = false;
 
   constructor(
     driver: DeviceDriver,
     configFor: (wireId: number) => ExtraKeyConfig | undefined,
-    touchStripDisabled = false,
+    mode: TouchStripMode = DEFAULT_TOUCH_STRIP_MODE,
   ) {
     this.driver = driver;
     this.configFor = configFor;
-    this.touchStripDisabled = touchStripDisabled;
+    this.mode = mode;
   }
 
   start(): void {
     this.active = true;
+    // Unconditional: the worker drops its mask on every (re)open.
+    this.pushMask(true);
     this.ensureTicking();
   }
 
@@ -334,21 +334,16 @@ export class ExtraKeyWidgets {
   /** Force a full repaint on the next tick (config change / device reinit). */
   repaint(): void {
     this.lastPainted.clear();
+    this.pushMask();
     if (this.timer !== undefined) this.tick();
   }
 
-  /** Disable/enable DeckBridge's touch-strip (widgetDisplays) control so the
-   *  Elgato app can drive those segments instead. Side keys (extraKeys) are
-   *  unaffected. Disabling clears the strip; enabling repaints the widgets. */
-  setTouchStripDisabled(disabled: boolean): void {
-    if (this.touchStripDisabled === disabled) return;
-    this.touchStripDisabled = disabled;
-    if (disabled) {
-      for (const wireId of this.widgetDisplayIds()) {
-        this.lastPainted.delete(wireId);
-        this.driver.clearKey(wireId);
-      }
-    }
+  /** Switch who drives the touch strip (widgetDisplays); side keys are unaffected.
+   *  No clearKey on leaving an override: the worker restores the last Elgato image
+   *  for every zone that leaves the mask. */
+  setTouchStripMode(mode: TouchStripMode): void {
+    if (this.mode === mode) return;
+    this.mode = mode;
     this.repaint();
     this.ensureTicking();
   }
@@ -383,11 +378,18 @@ export class ExtraKeyWidgets {
   }
 
   private tick(): void {
+    // Before painting, so an Elgato strip frame can't land on a newly owned zone.
+    this.pushMask();
     const widgetIds = this.widgetIds();
     if (widgetIds.length === 0) return;
     const now = new Date();
     for (const wireId of widgetIds) {
       const cfg = this.configFor(wireId);
+      if (this.mode === 'deckbridge-repaint' && !owns(cfg) && this.widgetDisplay(wireId)) {
+        // The Elgato app shows through here; forget the paint so a re-assign repaints.
+        this.lastPainted.delete(wireId);
+        continue;
+      }
       const lines = cfg ? renderWidgetLines(cfg, this.contextFor(cfg, now)) : null;
       const sig = lines === null ? '' : JSON.stringify(lines);
       if (this.lastPainted.get(wireId) === sig) continue;
@@ -403,8 +405,26 @@ export class ExtraKeyWidgets {
 
   private widgetIds(): readonly number[] {
     const sideKeys = this.driver.model.keyMap.extraKeys ?? [];
-    if (this.touchStripDisabled) return sideKeys;
+    if (this.mode === 'elgato') return sideKeys;
     return [...sideKeys, ...this.widgetDisplayIds()];
+  }
+
+  /** Strip zones whose Elgato images the worker must withhold: all of them under
+   *  'deckbridge-ignore', only widget-owned ones under 'deckbridge-repaint'. */
+  private stripMask(): readonly number[] {
+    if (this.mode === 'elgato') return [];
+    const ids = this.widgetDisplayIds();
+    if (this.mode === 'deckbridge-ignore') return ids;
+    return ids.filter((wireId) => owns(this.configFor(wireId)));
+  }
+
+  /** Push the ownership mask when it changed (`force`: the worker lost it on open). */
+  private pushMask(force = false): void {
+    if (!this.active || this.widgetDisplayIds().length === 0) return;
+    const mask = this.stripMask();
+    if (!force && sameIds(mask, this.lastMask)) return;
+    this.lastMask = mask;
+    this.driver.setTouchStripMask?.(mask);
   }
 
   private widgetDisplayIds(): readonly number[] {
