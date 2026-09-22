@@ -33,7 +33,8 @@ import {
   type SendFrameFn,
   type LogFn,
 } from './elgato-child-payload.js';
-import { assembleImageChunk } from './image-assembler.js';
+import { assembleImageChunk, assemblePartialWindowChunk } from './image-assembler.js';
+import type { PartialWindowAssembly } from './image-assembler.js';
 import { createGetReportHandlers, type GetReportHandler } from './elgato-child-report-handlers.js';
 
 type ReconnectState = 'idle' | 'in-progress' | 'scheduled';
@@ -42,6 +43,7 @@ export class ElgatoChildServer extends CoraServerBase {
   private imagePages: Map<number, ImageAssembly> = new Map();
   private gen1ImagePages: Map<number, ImageAssembly> = new Map();
   private touchPages: Map<number, ImageAssembly> = new Map();
+  private partialWindowPages: Map<string, PartialWindowAssembly> = new Map();
   private warnedOobKeys = new Set<number>();
   private childGeometry: ChildGeometry;
   private keyStates: Uint8Array;
@@ -341,21 +343,41 @@ export class ElgatoChildServer extends CoraServerBase {
   }
 
   /** Stream Deck + touch/LCD output commands (0x08 LCD, 0x0B window strip,
-   *  0x0C partial window). Only the window strip (0x0B) is assembled and acted
-   *  on today; LCD and partial-window chunk layouts are UNVERIFIED, so those are
-   *  ACKed (already done by the caller) and dropped with a debug trace. The
-   *  window strip is assumed to use the gen2 8-byte chunk header. */
+   *  0x0C partial window). The window strip (0x0B) and partial window (0x0C) are
+   *  assembled and forwarded to the device's touch segments; the full LCD (0x08,
+   *  800×480) has no equivalent surface, so it is ACKed and dropped with a trace. */
   private handleTouchOutput(cmd: number, pkt: Buffer, _messageId: number): void {
-    if (cmd === IMG_CMD_LCD || cmd === IMG_CMD_WINDOW_PARTIAL) {
+    if (cmd === IMG_CMD_LCD) {
       this.emitLog(
         'debug',
-        `child rx: ${cmd === IMG_CMD_LCD ? 'LCD' : 'partial-window'} output dropped (layout unverified)`,
+        `child rx: LCD output dropped (no 800×480 surface): ${(pkt.subarray(0, 16) as Buffer).toString('hex')}`,
       );
       return;
     }
+    if (cmd === IMG_CMD_WINDOW_PARTIAL) {
+      const region = assemblePartialWindowChunk(this.partialWindowPages, pkt);
+      if (region) {
+        this.emitLog(
+          'debug',
+          `child rx: partial window assembled ${region.w}×${region.h} @ ${region.x},${region.y} (${region.data.length} B)`,
+        );
+        this.emit('touchImage', {
+          data: region.data,
+          region: { x: region.x, y: region.y, w: region.w, h: region.h },
+        });
+      }
+      return;
+    }
     // 0x0B window strip — assemble as a gen2 image chunk (assumed layout).
+    this.emitLog(
+      'debug',
+      `child rx: window-strip chunk: ${(pkt.subarray(0, 8) as Buffer).toString('hex')}`,
+    );
     const assembled = assembleImageChunk(this.touchPages, pkt);
-    if (assembled) this.emit('touchImage', { data: assembled.data });
+    if (assembled) {
+      this.emitLog('debug', `child rx: window strip assembled ${assembled.data.length} B`);
+      this.emit('touchImage', { data: assembled.data });
+    }
   }
 
   private tryConnectOutbound(): void {
@@ -420,6 +442,7 @@ export class ElgatoChildServer extends CoraServerBase {
     this.imagePages = new Map();
     this.gen1ImagePages = new Map();
     this.touchPages = new Map();
+    this.partialWindowPages = new Map();
     this.encoderPressMask = 0;
     this.warnedOobKeys.clear();
     this.sendKeepalive();

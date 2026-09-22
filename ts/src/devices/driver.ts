@@ -1,5 +1,5 @@
 import type { EventEmitter } from 'node:events';
-import type { ImageModeOverride } from '../types.js';
+import type { ImageModeOverride, TouchWindowRegion } from '../types.js';
 
 export type DeviceVendor =
   | 'mirabox'
@@ -273,10 +273,10 @@ export interface DeviceDriver extends EventEmitter {
    *  model.image — splash sources are upright). `WorkerHidDriver` only, keeping the
    *  FFI transform and hid_write burst off the main thread. */
   sendSplashImage?(keyIndex: number, bytes: Uint8Array, spec: DeviceImageSpec): void;
-  /** Render a Stream Deck + window-strip image (800×100 JPEG) to the device's
-   *  touch-segment displays. `WorkerHidDriver` only. No-op on models without
-   *  widget displays. */
-  renderTouchImage?(bytes: Uint8Array): void;
+  /** Render a Stream Deck + window image (800×100, or a partial-window region)
+   *  to the device's touch-segment displays. `WorkerHidDriver` only. No-op on
+   *  models without widget displays. */
+  renderTouchImage?(bytes: Uint8Array, region?: TouchWindowRegion): void;
   /** Live device-tuning swap — image-transform fields only, no reopen. The
    *  caller resolves `effectiveModel` (registry + overrides) and must have
    *  classified the change as 'live' first (classifyOverrideChange). Absent

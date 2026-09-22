@@ -9,8 +9,15 @@ import {
   GEN1_IMAGE_LAST_OFFSET,
   MAX_IMAGE_ASSEMBLY_BYTES,
   MAX_IMAGE_ASSEMBLY_CHUNKS,
+  PARTIAL_WINDOW_HEADER_SIZE,
+  PARTIAL_WINDOW_X_OFFSET,
+  PARTIAL_WINDOW_Y_OFFSET,
+  PARTIAL_WINDOW_W_OFFSET,
+  PARTIAL_WINDOW_H_OFFSET,
+  PARTIAL_WINDOW_LAST_OFFSET,
+  PARTIAL_WINDOW_SIZE_OFFSET,
 } from './types.js';
-import type { ImageEvent } from './types.js';
+import type { ImageEvent, TouchWindowRegion } from './types.js';
 import { warn } from './logger.js';
 
 export interface ImageAssembly {
@@ -171,4 +178,67 @@ export function assembleGen1ImageChunk(
   }
 
   return { keyIndex, data, format: 'bmp' };
+}
+
+/** In-flight Stream Deck + partial-window region (keyed by its rectangle). */
+export interface PartialWindowAssembly extends ImageAssembly {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
+/** A completed partial-window region: its window rectangle + the assembled JPEG. */
+export interface PartialWindowEvent extends TouchWindowRegion {
+  data: Buffer;
+}
+
+/** Assemble a Stream Deck + partial-window (0x0C) chunk into one region JPEG. The
+ *  16-byte header repeats the region rectangle on every chunk; chunks are keyed by
+ *  that rectangle so interleaved regions cannot mix. Returns the region on the last
+ *  chunk, null otherwise. */
+export function assemblePartialWindowChunk(
+  pages: Map<string, PartialWindowAssembly>,
+  pkt: Buffer,
+): PartialWindowEvent | null {
+  if (pkt.length < PARTIAL_WINDOW_HEADER_SIZE) return null;
+  const x = pkt.readUInt16LE(PARTIAL_WINDOW_X_OFFSET);
+  const y = pkt.readUInt16LE(PARTIAL_WINDOW_Y_OFFSET);
+  const w = pkt.readUInt16LE(PARTIAL_WINDOW_W_OFFSET);
+  const h = pkt.readUInt16LE(PARTIAL_WINDOW_H_OFFSET);
+  const isLast = pkt[PARTIAL_WINDOW_LAST_OFFSET] === IMAGE_CHUNK_LAST_FLAG;
+  const bodyLength = pkt.readUInt16LE(PARTIAL_WINDOW_SIZE_OFFSET);
+  if (bodyLength > pkt.length - PARTIAL_WINDOW_HEADER_SIZE) {
+    warn('assembler', `partial window: declared body ${bodyLength} exceeds packet — dropped`);
+    return null;
+  }
+  const chunk = Buffer.from(
+    pkt.subarray(PARTIAL_WINDOW_HEADER_SIZE, PARTIAL_WINDOW_HEADER_SIZE + bodyLength),
+  );
+
+  const key = `${x}:${y}:${w}:${h}`;
+  const acc = pages.get(key) ?? { chunks: [], bytes: 0, x, y, w, h };
+  if (acc.bytes + chunk.length > MAX_IMAGE_ASSEMBLY_BYTES) {
+    pages.delete(key);
+    warn(
+      'assembler',
+      `partial window ${key}: exceeded ${MAX_IMAGE_ASSEMBLY_BYTES} bytes — dropped`,
+    );
+    return null;
+  }
+  if (chunk.length > 0 && acc.chunks.length >= MAX_IMAGE_ASSEMBLY_CHUNKS) {
+    pages.delete(key);
+    warn(
+      'assembler',
+      `partial window ${key}: exceeded ${MAX_IMAGE_ASSEMBLY_CHUNKS} chunks — dropped`,
+    );
+    return null;
+  }
+  if (chunk.length > 0) acc.chunks.push(chunk);
+  acc.bytes += chunk.length;
+  pages.set(key, acc);
+
+  if (!isLast) return null;
+  pages.delete(key);
+  return { x, y, w, h, data: Buffer.concat(acc.chunks, acc.bytes) };
 }

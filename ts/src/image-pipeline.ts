@@ -1,6 +1,6 @@
 import { info } from './logger.js';
 import type { DeviceDriver } from './devices/driver.js';
-import type { ImageEvent } from './types.js';
+import type { ImageEvent, TouchWindowRegion } from './types.js';
 import type { WebUIServer } from './web/server';
 import type { ElgatoChildServer } from './elgato.js';
 
@@ -56,9 +56,12 @@ export function setupImageHandler(
     getDriver()?.renderCoraImage?.(keyIndex, data, format);
   });
 
-  // Stream Deck + window-strip image → device touch-segment displays. Unhandled
-  // (dropped) until the child server has assembled the full 800×100 strip.
-  childServer.on('touchImage', ({ data }: { data: Uint8Array }) => {
-    getDriver()?.renderTouchImage?.(data);
-  });
+  // Stream Deck + window image → device touch-segment displays. `region` is set
+  // for partial-window uploads, undefined for a full window strip.
+  childServer.on(
+    'touchImage',
+    ({ data, region }: { data: Uint8Array; region?: TouchWindowRegion }) => {
+      getDriver()?.renderTouchImage?.(data, region);
+    },
+  );
 }

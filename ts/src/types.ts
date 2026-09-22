@@ -118,6 +118,16 @@ export const IMAGE_CHUNK_FLAG_OFFSET = 3;
 export const IMAGE_CHUNK_LEN_OFFSET = 4;
 export const IMAGE_CHUNK_LAST_FLAG = 1;
 
+// Stream Deck + partial-window (0x0C) chunk header — one JPEG region of the 800×100
+// touch window, split across chunks that each repeat the region rectangle.
+export const PARTIAL_WINDOW_HEADER_SIZE = 16;
+export const PARTIAL_WINDOW_X_OFFSET = 2;
+export const PARTIAL_WINDOW_Y_OFFSET = 4;
+export const PARTIAL_WINDOW_W_OFFSET = 6;
+export const PARTIAL_WINDOW_H_OFFSET = 8;
+export const PARTIAL_WINDOW_LAST_OFFSET = 10;
+export const PARTIAL_WINDOW_SIZE_OFFSET = 13;
+
 // Server listen address — override with DECKBRIDGE_BIND (e.g. "127.0.0.1") to restrict
 // the CORA servers (5343/5344) to a single interface. WebUI honors the same override
 // (see webuiBindAddr() below) — unset, it stays WEBUI_LISTEN_ADDRESS (localhost-only).
@@ -226,6 +236,15 @@ export interface TouchInputEvent {
   y: number;
   endX?: number;
   endY?: number;
+}
+
+/** A rectangular region of the Stream Deck + window (800×100) the app uploaded via
+ *  the partial-window command. Absent = a full-window (0x0B) image. */
+export interface TouchWindowRegion {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
 }
 
 export interface ImageEvent {

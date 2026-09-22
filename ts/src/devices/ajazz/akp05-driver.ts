@@ -148,10 +148,11 @@ export class Akp05Driver extends HidDeviceBase {
     }
     const rotate = encoderRotateDelta(code);
     if (rotate) {
-      this.emit(
-        'dial',
-        { index: rotate.index, kind: 'rotate', delta: rotate.delta } satisfies DialEvent,
-      );
+      this.emit('dial', {
+        index: rotate.index,
+        kind: 'rotate',
+        delta: rotate.delta,
+      } satisfies DialEvent);
       return;
     }
     // Touch-strip and any other control: framing unverified — log for capture.

@@ -11,7 +11,13 @@ import type {
   DeviceModel,
   DeviceModelOverride,
 } from './devices/driver.js';
-import type { ImageModeOverride, KeyEvent, DialEvent, TouchInputEvent } from './types.js';
+import type {
+  ImageModeOverride,
+  KeyEvent,
+  DialEvent,
+  TouchInputEvent,
+  TouchWindowRegion,
+} from './types.js';
 
 const OPEN_TIMEOUT_MS = 10_000;
 const CLOSE_GRACE_MS = 1_000;
@@ -103,10 +109,10 @@ export class WorkerHidDriver extends EventEmitter implements DeviceDriver {
     this.post({ type: 'splashImage', keyIndex, bytes: new Uint8Array(bytes), spec });
   }
 
-  /** Stream Deck + window-strip image → worker: split into the device's touch
-   *  segments and write each (off the main thread). */
-  renderTouchImage(bytes: Uint8Array): void {
-    this.post({ type: 'touchImage', bytes: new Uint8Array(bytes) });
+  /** Stream Deck + window image (or a partial-window region) → worker: split into
+   *  the device's touch segments and write each (off the main thread). */
+  renderTouchImage(bytes: Uint8Array, region?: TouchWindowRegion): void {
+    this.post({ type: 'touchImage', bytes: new Uint8Array(bytes), region });
   }
 
   setBrightness(level: number): void {

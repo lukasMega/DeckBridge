@@ -5,6 +5,7 @@ import type {
   ImageModeOverride,
   DialEvent,
   TouchInputEvent,
+  TouchWindowRegion,
 } from './types.js';
 import type { DeviceModelId, DeviceImageSpec, DeviceModelOverride } from './devices/driver.js';
 import type { LogLevel } from './logger.js';
@@ -46,9 +47,9 @@ export type MainToWorker =
   // worker ignores those sections regardless, since the open driver instance
   // keeps reading the model it opened with.
   | { type: 'setOverrides'; overrides?: DeviceModelOverride }
-  // Assembled Stream Deck + window-strip image (800×100 JPEG) — the worker
-  // splits it into the device's touch-segment displays and writes each.
-  | { type: 'touchImage'; bytes: Uint8Array }
+  // Assembled Stream Deck + window image (800×100 JPEG, or a partial-window
+  // region) — the worker splits it into the device's touch-segment displays.
+  | { type: 'touchImage'; bytes: Uint8Array; region?: TouchWindowRegion }
   // Runtime log-level change (WebUI "Debug logging"). Without this the USB
   // worker — where the interesting device traffic is — stays at its spawn-time
   // level while the main thread switches to debug.

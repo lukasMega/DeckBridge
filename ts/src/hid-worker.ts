@@ -2,7 +2,13 @@
  *  Instantiates the right driver (Mirabox or Elgato) based on modelId,
  *  then bridges its EventEmitter events ↔ postMessage. */
 import type { MainToWorker, WorkerToMain } from './hid-worker-protocol.js';
-import type { ImageModeOverride, KeyEvent, DialEvent, TouchInputEvent } from './types.js';
+import type {
+  ImageModeOverride,
+  KeyEvent,
+  DialEvent,
+  TouchInputEvent,
+  TouchWindowRegion,
+} from './types.js';
 import { DEVICE_MODELS } from './devices/registry.js';
 import type { DeviceModel, DeviceModelOverride } from './devices/driver.js';
 import { supportsImageBatching } from './devices/driver.js';
@@ -149,9 +155,10 @@ function handleSplashImage(
   driver.sendImage(keyIndex, nativeBytes);
 }
 
-/** Split a Stream Deck + window-strip image onto the device's touch segments. */
-function handleTouchStrip(bytes: Uint8Array): void {
-  if (driver && currentModel) renderTouchStrip(driver, currentModel, bytes);
+/** Split a Stream Deck + window image (full or a partial region) onto the
+ *  device's touch segments. */
+function handleTouchStrip(bytes: Uint8Array, region?: TouchWindowRegion): void {
+  if (driver && currentModel) renderTouchStrip(driver, currentModel, bytes, region);
 }
 
 /** Non-device state changes: no HID I/O, they only steer the next render. */
@@ -178,7 +185,7 @@ async function handle(msg: MainToWorker, deferNotification: boolean): Promise<vo
       handleSplashImage(msg.keyIndex, msg.bytes, msg.spec);
       break;
     case 'touchImage':
-      handleTouchStrip(msg.bytes);
+      handleTouchStrip(msg.bytes, msg.region);
       break;
     case 'setBrightness':
       driver?.setBrightness(msg.level);

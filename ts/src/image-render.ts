@@ -12,7 +12,7 @@ import {
 } from './translator.js';
 import { imageCache, hashJpeg, makeCacheKey, specRevision } from './image-cache.js';
 import type { DeviceModel } from './devices/driver.js';
-import type { ImageModeOverride } from './types.js';
+import type { ImageModeOverride, TouchWindowRegion } from './types.js';
 import { PLUS_TOUCH_WIDTH, PLUS_TOUCH_HEIGHT } from './types.js';
 
 /** The slice of a driver this module needs: the native-bytes write. The model
@@ -214,27 +214,42 @@ export function renderImage(
   return Promise.resolve();
 }
 
-/** Render a Stream Deck + window-strip image (800×100) to the device's touch-segment
- *  widget displays, splitting left-to-right (segment i → widgetDisplays[i]). The
- *  window-strip chunk layout is UNVERIFIED; this consumes the already-assembled
- *  full-strip JPEG and is a no-op on models without widgetDisplays. */
+/** Render a Stream Deck + window image to the device's touch-segment displays.
+ *  A full-window image (or no region) is split left-to-right into one slice per
+ *  segment; a partial-window region is rendered only into the segments it overlaps
+ *  (best-effort — a region not aligned to segment boundaries is stretched to fill
+ *  the segment, since each segment is a full 128×128 display). */
 export function renderTouchStrip(
   driver: RenderTarget,
   model: DeviceModel,
   bytes: Uint8Array,
+  region?: TouchWindowRegion,
 ): void {
   const displays = model.widgetDisplays;
   if (!displays || displays.length === 0) return;
   const sliceWidth = Math.floor(PLUS_TOUCH_WIDTH / displays.length);
+  // Full window: source is the whole 800×100 strip — slice it per segment.
+  const fullWindow = !region || (region.x === 0 && region.w >= PLUS_TOUCH_WIDTH);
   for (let i = 0; i < displays.length; i++) {
     const display = displays[i]!;
-    try {
-      const native = transformImageRegion(bytes, display.image, {
-        x: i * sliceWidth,
+    let crop: { x: number; y: number; width: number; height: number };
+    if (fullWindow) {
+      crop = { x: i * sliceWidth, y: 0, width: sliceWidth, height: PLUS_TOUCH_HEIGHT };
+    } else {
+      const segStart = i * sliceWidth;
+      const segEnd = segStart + sliceWidth;
+      const overlapStart = Math.max(region.x, segStart);
+      const overlapEnd = Math.min(region.x + region.w, segEnd);
+      if (overlapStart >= overlapEnd) continue;
+      crop = {
+        x: overlapStart - region.x,
         y: 0,
-        width: sliceWidth,
-        height: PLUS_TOUCH_HEIGHT,
-      });
+        width: overlapEnd - overlapStart,
+        height: region.h,
+      };
+    }
+    try {
+      const native = transformImageRegion(bytes, display.image, crop);
       driver.sendImage(display.wireId, native);
     } catch (err) {
       warn('touch', `touch segment ${i} render failed: ${(err as Error).message}`);

@@ -23,6 +23,7 @@ import type {
   ImageModeOverride,
   DialEvent,
   TouchInputEvent,
+  TouchWindowRegion,
 } from './types.js';
 import type { DeviceIdentitySettings } from './settings-store.js';
 import { advertisedGeometry, advertisedModel } from './devices/registry.js';
@@ -415,9 +416,12 @@ export class DeviceSession {
       this.driver.renderCoraImage(keyIndex, data, format);
       this.onImage?.(keyIndex, data, format);
     });
-    this.childServer.on('touchImage', ({ data }: { data: Uint8Array }) => {
-      this.driver.renderTouchImage(data);
-    });
+    this.childServer.on(
+      'touchImage',
+      ({ data, region }: { data: Uint8Array; region?: TouchWindowRegion }) => {
+        this.driver.renderTouchImage(data, region);
+      },
+    );
     this.childServer.on('brightness', (level: number) => {
       if (this.ignoreElgatoBrightness?.()) {
         log('debug', this.model.id, `brightness ${level} from Elgato ignored (override on)`);
