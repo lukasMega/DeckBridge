@@ -94,9 +94,10 @@ const FAMILIES = [
   },
   {
     key: 'ajazz-akp05',
-    title: 'AJAZZ AKP05',
+    // Not "AJAZZ AKP05": its auto-slug would clash with the model anchor #ajazz-akp05.
+    title: 'AJAZZ AKP05 family',
     blurb:
-      'Dedicated 1024-byte CRT BAT protocol: ten JPEG keys, CRT ULEND image commits, and no reset command during open.',
+      'Dedicated 1024-byte CRT protocol: ten JPEG keys (CRT BAT uploads committed with CRT ULEND), four rotary encoders, a four-zone touch strip, and a 10 s keepalive.',
   },
 ];
 

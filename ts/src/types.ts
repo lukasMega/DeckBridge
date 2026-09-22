@@ -219,14 +219,10 @@ export interface KeyEvent {
 }
 
 /** A rotary encoder event from a Stream Deck +-style device. `index` is the
- *  encoder (0..encoderCount-1); a press carries `state`, a turn carries `delta`
- *  (+1 clockwise / -1 counter-clockwise — device mapping still UNVERIFIED). */
-export interface DialEvent {
-  index: number;
-  kind: 'press' | 'rotate';
-  state?: KeyState;
-  delta?: number;
-}
+ *  encoder (0..encoderCount-1); a turn's `delta` is +1 clockwise / -1 counter-clockwise. */
+export type DialEvent =
+  | { index: number; kind: 'press'; state: KeyState }
+  | { index: number; kind: 'rotate'; delta: number };
 
 /** A touch-strip event from a Stream Deck +-style device, in strip coordinates
  *  (0..touchWidth-1, 0..touchHeight-1). `endX`/`endY` are present for swipes. */

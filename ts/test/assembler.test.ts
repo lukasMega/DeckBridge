@@ -5,8 +5,8 @@ import {
   assembleGen1ImageChunk,
   assemblePartialWindowChunk,
   resetMalformedWarnThrottle,
+  MAX_PARTIAL_WINDOW_ASSEMBLIES,
 } from '../src/image-assembler.js';
-import type { PartialWindowAssembly } from '../src/image-assembler.js';
 import {
   MAX_IMAGE_ASSEMBLY_BYTES,
   MAX_IMAGE_ASSEMBLY_CHUNKS,
@@ -482,7 +482,7 @@ function makePartialWindowChunk(
 }
 
 test('partial window: single-chunk region assembles with its rectangle', () => {
-  const pages = new Map<string, PartialWindowAssembly>();
+  const pages = new Map<string, ImageAssembly>();
   const payload = Buffer.from([0xff, 0xd8, 0xff, 0xd9]); // JPEG-ish
   const result = assemblePartialWindowChunk(
     pages,
@@ -499,7 +499,7 @@ test('partial window: single-chunk region assembles with its rectangle', () => {
 });
 
 test('partial window: multi-chunk region reassembles in order', () => {
-  const pages = new Map<string, PartialWindowAssembly>();
+  const pages = new Map<string, ImageAssembly>();
   assemblePartialWindowChunk(
     pages,
     makePartialWindowChunk(0, 0, 800, 100, false, Buffer.from('abc')),
@@ -516,7 +516,7 @@ test('partial window: multi-chunk region reassembles in order', () => {
 });
 
 test('partial window: two interleaved regions do not mix', () => {
-  const pages = new Map<string, PartialWindowAssembly>();
+  const pages = new Map<string, ImageAssembly>();
   assemblePartialWindowChunk(
     pages,
     makePartialWindowChunk(0, 0, 100, 100, false, Buffer.from('LL')),
@@ -540,6 +540,47 @@ test('partial window: two interleaved regions do not mix', () => {
   assert.notEqual(left, null);
   assert.equal(left!.data.toString('utf8'), 'LL!');
   assert.equal(pages.size, 0);
+});
+
+test('partial window: regions outside the 800×100 window or empty are dropped', () => {
+  resetMalformedWarnThrottle();
+  const pages = new Map<string, ImageAssembly>();
+  const body = Buffer.from('x');
+  for (const [x, y, w, h] of [
+    [0, 0, 0, 100], // zero width
+    [0, 0, 100, 0], // zero height
+    [700, 0, 200, 100], // past the right edge
+    [0, 50, 100, 60], // past the bottom edge
+    [65535, 65535, 65535, 65535],
+  ] as const) {
+    assert.equal(
+      assemblePartialWindowChunk(pages, makePartialWindowChunk(x, y, w, h, true, body)),
+      null,
+    );
+  }
+  assert.equal(pages.size, 0);
+});
+
+test('partial window: declared body longer than the packet is dropped', () => {
+  const pages = new Map<string, ImageAssembly>();
+  const pkt = makePartialWindowChunk(0, 0, 100, 100, true, Buffer.from('ab'));
+  pkt.writeUInt16LE(pkt.length, PARTIAL_WINDOW_SIZE_OFFSET);
+  assert.equal(assemblePartialWindowChunk(pages, pkt), null);
+  assert.equal(pages.size, 0);
+});
+
+test('partial window: in-flight regions are capped, oldest evicted', () => {
+  const pages = new Map<string, ImageAssembly>();
+  // Never-finished regions with distinct rectangles — the flood a hostile peer sends.
+  for (let i = 0; i < MAX_PARTIAL_WINDOW_ASSEMBLIES + 5; i++) {
+    assemblePartialWindowChunk(
+      pages,
+      makePartialWindowChunk(i, 0, 10, 10, false, Buffer.from('z')),
+    );
+  }
+  assert.equal(pages.size, MAX_PARTIAL_WINDOW_ASSEMBLIES);
+  assert.equal(pages.has('0:0:10:10'), false); // oldest gone
+  assert.equal(pages.has(`${MAX_PARTIAL_WINDOW_ASSEMBLIES + 4}:0:10:10`), true);
 });
 
 summary();

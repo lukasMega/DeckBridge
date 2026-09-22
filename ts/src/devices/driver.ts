@@ -118,12 +118,18 @@ export interface DeviceCoraSpec {
    *  Omit for the shared DEFAULT_CHILD_FIRMWARE_VERSION ('1.01.000'); the Stream Deck +
    *  profile sets a 2.00.x version because the desktop rejects 1.01.x for PID 0x0084. */
   childFirmwareVersion?: string;
-  /** When a model advertises AS this profile, also adopt this profile's `image` and
-   *  `keyMap` (a full emulation, not just geometry). The Stream Deck + profile sets
-   *  this because its 120×120 / 4×2 geometry needs a different physical rotation and
-   *  key mapping than the AKP05E's native 5×2. Geometry-only profiles (mk2, mini) leave
-   *  it unset so the 293S/K1 Pro keep their own image transform + key map. */
-  fullEmulation?: boolean;
+  /** CORA profiles (registry.ts `CORA_PROFILES` ids) this device may re-pair as via a
+   *  `cora.advertiseAs` override, each with the physical image transform + key map the
+   *  emulated grid needs on this panel. Only these (or the model's own `advertiseAs`)
+   *  validate, so a profile can never land on hardware it has no mapping for. */
+  emulations?: Readonly<Record<DeviceModelId, DeviceEmulation>>;
+}
+
+/** How a device drives its own panel while re-paired as a CORA profile (e.g. the
+ *  AKP05E's 5×2 panel showing a Stream Deck + 4×2 grid). */
+export interface DeviceEmulation {
+  image: DeviceImageSpec;
+  keyMap: DeviceKeyMap;
 }
 
 /** Splash-screen overrides. model.image is calibrated for desktop-pre-rotated CORA
@@ -224,10 +230,10 @@ export const WIRE_OVERRIDE_KEYS = [
 ] as const;
 
 /** The CORA-emulation fields a user may change to re-pair a device as a different
- *  Elgato deck (e.g. AKP05E → Stream Deck +). `advertiseAs` selects the geometry
- *  source, `productId` the advertised PID; both must agree, so the WebUI sets them
- *  together. `usePhysicalIdentity` is deliberately absent — it is a physical-device
- *  fact, not a pairing preference. */
+ *  Elgato deck (e.g. AKP05E → Stream Deck +). `advertiseAs` must name one of the
+ *  model's `cora.emulations` (or its own advertiseAs); `productId` must match that
+ *  profile's PID. `usePhysicalIdentity` is deliberately absent — it is a
+ *  physical-device fact, not a pairing preference. */
 export const CORA_OVERRIDE_KEYS = ['advertiseAs', 'productId'] as const;
 
 /** User-tunable subset of a DeviceModel, persisted per model id under settings.json's

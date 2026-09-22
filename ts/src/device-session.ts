@@ -110,7 +110,7 @@ export function buildDockStatus(s: DockStatusInput): DockStatus {
     elgatoConnected: s.elgatoConnected,
     brightness: s.brightness,
     dockFirmwareVersion: DEFAULT_DOCK_FIRMWARE_VERSION,
-    childFirmwareVersion: (usePhysical && deviceInfo?.firmware) || DEFAULT_CHILD_FIRMWARE_VERSION,
+    childFirmwareVersion: childFirmwareFor(model, deviceInfo),
     serialNumber: identity?.dockSerial ?? DEFAULT_DOCK_SERIAL_NUMBER,
     childSerialNumber:
       (usePhysical && deviceInfo?.serial) || identity?.childSerial || DEFAULT_CHILD_SERIAL_NUMBER,
@@ -198,6 +198,14 @@ export function wireCommonDriverEvents(
   );
 }
 
+/** Child firmware reported over CORA: the physical device's own when the model
+ *  forwards it, else the advertised profile's line (the desktop rejects 1.01.x for a
+ *  Stream Deck +), else the shared default. */
+function childFirmwareFor(model: DeviceModel, deviceInfo: DeviceInfo | undefined): string {
+  if (model.cora.usePhysicalIdentity && deviceInfo?.firmware) return deviceInfo.firmware;
+  return advertisedModel(model).cora.childFirmwareVersion ?? DEFAULT_CHILD_FIRMWARE_VERSION;
+}
+
 /** Server-facing half of DriverManager.applyDeviceModel (no WebUI): advertises the
  *  model's PID/geometry/identity to the desktop over both CORA ports. Shared by the
  *  primary and every extra session. */
@@ -209,17 +217,14 @@ export function applyModelToServers(
 ): void {
   const pid = model.cora.productId;
   const geo = advertisedGeometry(model);
-  const configPatch: Partial<DeviceConfig> = { productId: pid };
-  // Firmware comes from the advertised profile (a re-paired device reports the
-  // emulated deck's firmware line, e.g. Stream Deck + → 2.00.x). Only when the
-  // model forwards its physical identity does the real device firmware win.
-  const advertised = advertisedModel(model);
-  if (advertised.cora.childFirmwareVersion) {
-    configPatch.childFirmwareVersion = advertised.cora.childFirmwareVersion;
-  }
-  if (model.cora.usePhysicalIdentity) {
-    if (deviceInfo?.serial) configPatch.childSerialNumber = deviceInfo.serial;
-    if (deviceInfo?.firmware) configPatch.childFirmwareVersion = deviceInfo.firmware;
+  // Always patched: the servers outlive a model, so a Plus firmware must not stick
+  // after the device is unplugged or re-paired as an MK.2.
+  const configPatch: Partial<DeviceConfig> = {
+    productId: pid,
+    childFirmwareVersion: childFirmwareFor(model, deviceInfo),
+  };
+  if (model.cora.usePhysicalIdentity && deviceInfo?.serial) {
+    configPatch.childSerialNumber = deviceInfo.serial;
   }
   server.setDeviceConfig(configPatch);
   server.setChildGeometry(geo);
@@ -396,12 +401,7 @@ export class DeviceSession {
   private wireListeners(): void {
     wireCommonDriverEvents(this.driver, this.model, {
       onKey: (index, state) => this.childServer.sendKeyEvent(index, state),
-      onDial: (event) => {
-        if (event.kind === 'press')
-          this.childServer.sendDialPress(event.index, event.state === 'down');
-        else if (event.delta !== undefined)
-          this.childServer.sendDialRotate(event.index, event.delta);
-      },
+      onDial: (event) => this.childServer.sendDial(event),
       onTouch: (event) => this.childServer.sendTouch(event),
       onReinit: () => this.repaintExtraKeys(),
     });

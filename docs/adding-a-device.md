@@ -192,6 +192,7 @@ export const ACME_X5_MODEL: DeviceModel = {
 |---|---|
 | `productId` | The PID the Elgato desktop sees in CORA capabilities. Elgato devices typically advertise their real PID (`usbProductIds[0]`); non-Elgato devices spoof `ELGATO_MK2_PID` so the desktop recognizes a known model. |
 | `advertiseAs` | Registry model id whose geometry is sent in CORA capabilities. Omit to derive geometry from this model. Non-Elgato devices typically use `'mk2'`; Mini-like devices use `'mini'`. Dimensions are never copied. |
+| `emulations` | Optional. CORA profiles (`CORA_PROFILES` ids, e.g. `'stream-deck-plus'`) this device can re-pair as from Device tuning, each with the `image` + `keyMap` it needs to paint that grid on its own panel. A user override may only select a profile listed here. |
 | `usePhysicalIdentity` | `true` forwards the device's real serial number / firmware version (Elgato devices only — the desktop expects them to match). `false` (Mirabox/third-party) keeps the configured mock identity. |
 
 ### `keyMap` field reference — translating between CORA and device key indices

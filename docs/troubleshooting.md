@@ -19,8 +19,9 @@ your issue.
 - **Missing libhidapi** — see the [requirements check](./features.md#requirements).
 - **Restrict LAN access** — set `DECKBRIDGE_BIND=127.0.0.1`.
 - **Images rotated, mirrored, or on the wrong key** — see [Device tuning](#device-tuning).
-- **AJAZZ AKP05E panel wedged** — unplug it, wait briefly, then reconnect. Do not send
-  reset or clear commands during recovery; AKP05E support uses only `CRT VER` on open.
+- **AJAZZ AKP05E panel wedged** — unplug it, wait briefly, then reconnect. DeckBridge
+  sends the full init sequence on open (`CRT VER`, then `DIS`, `LIG`, `CLE 0xff`, `STP`)
+  and nothing on close; do not send other reset commands during recovery.
 
 ## Where the logs live
 

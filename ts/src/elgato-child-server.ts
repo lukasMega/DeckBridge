@@ -13,11 +13,10 @@ import {
   IMG_CMD_LCD,
   IMG_CMD_WINDOW_PARTIAL,
   INPUT_SUBTYPE_BUTTONS,
-  INPUT_SUBTYPE_TOUCH,
-  INPUT_SUBTYPE_ENCODER,
   clearTimer,
 } from './types.js';
-import type { KeyState, TouchInputEvent } from './types.js';
+import type { DialEvent, KeyState, TouchInputEvent } from './types.js';
+import { isLevelEnabled } from './logger.js';
 import { CORA_FLAG_VERBATIM, encodeCoraFrame } from './cora-frame.js';
 import { CoraServerBase } from './cora-server-base.js';
 import { describeChildPayload } from './cora-describe.js';
@@ -34,8 +33,12 @@ import {
   type LogFn,
 } from './elgato-child-payload.js';
 import { assembleImageChunk, assemblePartialWindowChunk } from './image-assembler.js';
-import type { PartialWindowAssembly } from './image-assembler.js';
 import { createGetReportHandlers, type GetReportHandler } from './elgato-child-report-handlers.js';
+import {
+  buildEncoderPressReport,
+  buildEncoderRotateReport,
+  buildTouchReport,
+} from './elgato-plus-reports.js';
 
 type ReconnectState = 'idle' | 'in-progress' | 'scheduled';
 
@@ -43,7 +46,7 @@ export class ElgatoChildServer extends CoraServerBase {
   private imagePages: Map<number, ImageAssembly> = new Map();
   private gen1ImagePages: Map<number, ImageAssembly> = new Map();
   private touchPages: Map<number, ImageAssembly> = new Map();
-  private partialWindowPages: Map<string, PartialWindowAssembly> = new Map();
+  private partialWindowPages: Map<string, ImageAssembly> = new Map();
   private warnedOobKeys = new Set<number>();
   private childGeometry: ChildGeometry;
   private keyStates: Uint8Array;
@@ -159,54 +162,29 @@ export class ElgatoChildServer extends CoraServerBase {
     this.sendFrame(pkt, 0, 0, 0, `CORA button-state keys=${kc}`);
   }
 
-  /** Stream Deck + encoder press. BTN report: `01 03 <1+count> 00 00 <per-encoder>`. */
-  sendDialPress(index: number, down: boolean): void {
+  /** Forward a device dial event as the matching Stream Deck + encoder report.
+   *  Dropped when the advertised geometry has no such encoder (e.g. an MK.2 pairing). */
+  sendDial(event: DialEvent): void {
     const count = this.childGeometry.encoderCount ?? 0;
+    const { index } = event;
     if (index < 0 || index >= count) return;
-    if (down) this.encoderPressMask |= 1 << index;
-    else this.encoderPressMask &= ~(1 << index);
-    const pkt = Buffer.alloc(ELGATO_PKT_SIZE_TX);
-    pkt[0] = REPORT_BUTTON_STATE_INPUT;
-    pkt[1] = INPUT_SUBTYPE_ENCODER;
-    pkt[2] = 1 + count; // contents type byte + one byte per encoder
-    pkt[4] = 0x00; // BTN
-    for (let i = 0; i < count; i++) {
-      pkt[5 + i] = (this.encoderPressMask >> i) & 1;
+    if (event.kind === 'rotate') {
+      const pkt = buildEncoderRotateReport(count, index, event.delta);
+      this.sendFrame(pkt, 0, 0, 0, `CORA encoder-rotate index=${index} delta=${event.delta}`);
+      return;
     }
+    if (event.state === 'down') this.encoderPressMask |= 1 << index;
+    else this.encoderPressMask &= ~(1 << index);
+    const pkt = buildEncoderPressReport(count, this.encoderPressMask);
     this.sendFrame(pkt, 0, 0, 0, `CORA encoder-press mask=${this.encoderPressMask}`);
   }
 
-  /** Stream Deck + encoder rotation. `01 03 <len> 00 01 <d0..d3>` (INT8 per encoder). */
-  sendDialRotate(index: number, delta: number): void {
-    const count = this.childGeometry.encoderCount ?? 0;
-    if (index < 0 || index >= count) return;
-    const pkt = Buffer.alloc(ELGATO_PKT_SIZE_TX);
-    pkt[0] = REPORT_BUTTON_STATE_INPUT;
-    pkt[1] = INPUT_SUBTYPE_ENCODER;
-    pkt[2] = 1 + count;
-    pkt[4] = 0x01; // rotate
-    pkt[5 + index] = Math.max(-128, Math.min(127, delta));
-    this.sendFrame(pkt, 0, 0, 0, `CORA encoder-rotate index=${index} delta=${delta}`);
-  }
-
-  /** Stream Deck + touch strip. `01 02 <len> 00 <type> <fingers> x y [ex ey]`. */
+  /** Forward a touch-strip gesture. Only a Plus-advertised geometry has a strip; an
+   *  MK.2 session must not see touch reports. */
   sendTouch(event: TouchInputEvent): void {
-    const pkt = Buffer.alloc(ELGATO_PKT_SIZE_TX);
-    let typeByte = 0x03;
-    if (event.type === 'tap') typeByte = 0x01;
-    else if (event.type === 'hold') typeByte = 0x02;
-    const hasEnd = event.type === 'swipe';
-    pkt[0] = REPORT_BUTTON_STATE_INPUT;
-    pkt[1] = INPUT_SUBTYPE_TOUCH;
-    pkt[2] = hasEnd ? 0x0e : 0x0a; // FLICK 0x0E, TAP/PRESS 0x0A
-    pkt[4] = typeByte;
-    pkt[5] = 0; // fingers (reserved for FLICK; N/A for TAP/PRESS)
-    pkt.writeUInt16LE(event.x, 6);
-    pkt.writeUInt16LE(event.y, 8);
-    if (hasEnd) {
-      pkt.writeUInt16LE(event.endX ?? event.x, 10);
-      pkt.writeUInt16LE(event.endY ?? event.y, 12);
-    }
+    const { touchWidth = 0, touchHeight = 0 } = this.childGeometry;
+    if (touchWidth === 0 || touchHeight === 0) return;
+    const pkt = buildTouchReport(event, touchWidth, touchHeight);
     this.sendFrame(pkt, 0, 0, 0, `CORA touch ${event.type} x=${event.x} y=${event.y}`);
   }
 
@@ -346,21 +324,26 @@ export class ElgatoChildServer extends CoraServerBase {
    *  0x0C partial window). The window strip (0x0B) and partial window (0x0C) are
    *  assembled and forwarded to the device's touch segments; the full LCD (0x08,
    *  800×480) has no equivalent surface, so it is ACKed and dropped with a trace. */
-  private handleTouchOutput(cmd: number, pkt: Buffer, _messageId: number): void {
+  private handleTouchOutput(cmd: number, pkt: Buffer): void {
+    // Hex dumps only at debug: these chunks ride the ACK-paced path.
+    const tracing = isLevelEnabled('debug');
     if (cmd === IMG_CMD_LCD) {
-      this.emitLog(
-        'debug',
-        `child rx: LCD output dropped (no 800×480 surface): ${(pkt.subarray(0, 16) as Buffer).toString('hex')}`,
-      );
+      if (tracing) {
+        this.emitLog(
+          'debug',
+          `child rx: LCD output dropped (no 800×480 surface): ${(pkt.subarray(0, 16) as Buffer).toString('hex')}`,
+        );
+      }
       return;
     }
     if (cmd === IMG_CMD_WINDOW_PARTIAL) {
       const region = assemblePartialWindowChunk(this.partialWindowPages, pkt);
       if (region) {
-        this.emitLog(
-          'debug',
-          `child rx: partial window assembled ${region.w}×${region.h} @ ${region.x},${region.y} (${region.data.length} B)`,
-        );
+        if (tracing)
+          this.emitLog(
+            'debug',
+            `child rx: partial window assembled ${region.w}×${region.h} @ ${region.x},${region.y} (${region.data.length} B)`,
+          );
         this.emit('touchImage', {
           data: region.data,
           region: { x: region.x, y: region.y, w: region.w, h: region.h },
@@ -369,13 +352,16 @@ export class ElgatoChildServer extends CoraServerBase {
       return;
     }
     // 0x0B window strip — assemble as a gen2 image chunk (assumed layout).
-    this.emitLog(
-      'debug',
-      `child rx: window-strip chunk: ${(pkt.subarray(0, 8) as Buffer).toString('hex')}`,
-    );
+    if (tracing) {
+      this.emitLog(
+        'debug',
+        `child rx: window-strip chunk: ${(pkt.subarray(0, 8) as Buffer).toString('hex')}`,
+      );
+    }
     const assembled = assembleImageChunk(this.touchPages, pkt);
     if (assembled) {
-      this.emitLog('debug', `child rx: window strip assembled ${assembled.data.length} B`);
+      if (tracing)
+        this.emitLog('debug', `child rx: window strip assembled ${assembled.data.length} B`);
       this.emit('touchImage', { data: assembled.data });
     }
   }

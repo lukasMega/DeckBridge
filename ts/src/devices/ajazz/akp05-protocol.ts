@@ -64,14 +64,21 @@ export function buildConnect(): Buffer {
   return buildPacket(AKP05_COMMANDS.CONNECT);
 }
 
-export function imageChunks(jpeg: Uint8Array): Buffer[] {
-  const chunks: Buffer[] = [];
+/** Copy each 1024-byte slice of `jpeg` into `out` at `at` (zero-filling the short
+ *  final slice's stale tail) and call `send` per slice — one reused buffer instead of
+ *  an allocation per chunk on the upload path. */
+export function forEachImageChunk(
+  jpeg: Uint8Array,
+  out: Uint8Array,
+  at: number,
+  send: () => void,
+): void {
   for (let offset = 0; offset < jpeg.length; offset += PACKET_SIZE) {
-    const chunk = Buffer.alloc(PACKET_SIZE);
-    chunk.set(jpeg.subarray(offset, offset + PACKET_SIZE));
-    chunks.push(chunk);
+    const slice = jpeg.subarray(offset, offset + PACKET_SIZE);
+    out.set(slice, at);
+    if (slice.length < PACKET_SIZE) out.fill(0, at + slice.length, at + PACKET_SIZE);
+    send();
   }
-  return chunks;
 }
 
 export function parseVersionReport(report: Uint8Array): string | undefined {

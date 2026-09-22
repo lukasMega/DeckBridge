@@ -1,6 +1,7 @@
 import assert from 'tjs:assert';
 import { Akp05Driver } from '../src/devices/ajazz/akp05-driver.js';
 import { AJAZZ_AKP05E_MODEL } from '../src/devices/ajazz/akp05e.js';
+import { describePacket } from '../src/devices/ajazz/akp05-protocol.js';
 import type { DialEvent, KeyEvent, TouchInputEvent } from '../src/types.js';
 import { test, summaryExit } from './helpers/harness.js';
 
@@ -45,16 +46,33 @@ test('key codes 0x01–0x0a emit key events with the raw code as keyIndex', () =
   ]);
 });
 
-test('encoder press codes map left-to-right, down only (no release report)', () => {
+test('encoder press codes map left-to-right, each a down + synthesized up', () => {
   const d = new TestDriver();
-  // hardware-verified press codes: 0x37 / 0x35 / 0x33 / 0x36.
+  // hardware-verified press codes: 0x37 / 0x35 / 0x33 / 0x36 (no release report).
   for (const code of [0x37, 0x35, 0x33, 0x36]) {
     d.feed(code, 0x01);
   }
   assert.deepEqual(
     d.dials,
-    [0, 1, 2, 3].map((index) => ({ index, kind: 'press', state: 'down' })),
+    [0, 1, 2, 3].flatMap((index) => [
+      { index, kind: 'press', state: 'down' },
+      { index, kind: 'press', state: 'up' },
+    ]),
   );
+});
+
+test('encoder press with stateByte 0 is ignored (no double-fired pair)', () => {
+  const d = new TestDriver();
+  d.feed(0x37, 0x00);
+  assert.deepEqual(d.dials, []);
+});
+
+test('codes just outside the key range emit nothing', () => {
+  const d = new TestDriver();
+  d.feed(0x00, 0x01);
+  d.feed(0x0b, 0x01);
+  d.feed(0x40, 0x00); // touch tap: not decoded yet
+  assert.deepEqual([d.keys, d.dials, d.touches], [[], [], []]);
 });
 
 test('encoder rotate codes map [ccw, cw] per encoder with ±1 delta', () => {
@@ -97,6 +115,42 @@ test('touch-strip swipe codes emit touch events with synthetic coordinates', () 
     { type: 'swipe', x: 750, y: 50, endX: 50, endY: 50 },
     { type: 'swipe', x: 50, y: 50, endX: 750, endY: 50 },
   ]);
+});
+
+/** Captures every HID report instead of calling hid_write. */
+class WriteCaptureDriver extends Akp05Driver {
+  readonly reports: Uint8Array[] = [];
+
+  constructor() {
+    super(AJAZZ_AKP05E_MODEL);
+    this.device = {};
+    this.hidLib = {} as never;
+  }
+
+  protected override _writeRaw(buf: Uint8Array): number {
+    this.reports.push(Uint8Array.from(buf));
+    return buf.length;
+  }
+}
+
+test('sendImage frames BAT → 1024-byte data chunks → ULEND, one report id byte each', () => {
+  const d = new WriteCaptureDriver();
+  const jpeg = new Uint8Array(1500).fill(0x77);
+  d.sendImage(11, jpeg);
+  const commands = d.reports.map((r) => describePacket(r.subarray(1)));
+  assert.deepEqual(commands, [
+    'CRT BAT jpegLen=1500 surface=11',
+    'image-data chunk',
+    'image-data chunk',
+    'CRT ULEND',
+  ]);
+  for (const report of d.reports) {
+    assert.equal(report.length, 1025);
+    assert.equal(report[0], 0, 'report id 0');
+  }
+  const last = d.reports[2]!;
+  assert.equal(last[1 + 475], 0x77, 'final chunk carries the last data byte');
+  assert.equal(last[1 + 476], 0, 'and zero padding after it');
 });
 
 summaryExit();

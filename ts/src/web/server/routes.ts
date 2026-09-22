@@ -261,8 +261,8 @@ function setTouchStripDisabled(
   { ui }: RouteContext,
 ): Response {
   if (typeof disabled !== 'boolean') return badRequest('disabled must be a boolean');
-  ui.notifyTouchStripDisabled(disabled);
-  return json({ ok: true, disabled });
+  const err = ui.trySetTouchStripDisabled(disabled);
+  return err ? json({ error: err.error }, err.status) : json({ ok: true, disabled });
 }
 
 function selectDock({ index }: { index: unknown }, { ui }: RouteContext): Response {

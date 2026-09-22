@@ -134,7 +134,7 @@ export function handleChildOutputReportPacket(
   sendAckNak: (messageId: number, hidOp?: number) => void,
   handleImageChunk: (pkt: Buffer, messageId: number) => void,
   handleGen1ImageChunk: (pkt: Buffer, messageId: number) => void,
-  handleTouchOutput?: (cmd: number, pkt: Buffer, messageId: number) => void,
+  handleTouchOutput: (cmd: number, pkt: Buffer) => void,
 ): void {
   if (byte0 !== PAYLOAD_TYPE_OUTPUT_REPORT) return;
   const tracing = isLevelEnabled('debug');
@@ -155,7 +155,7 @@ export function handleChildOutputReportPacket(
     // before the next chunk), then hand the chunk to the child server, which decides
     // which of these (only the window strip is assembled today) it can act on.
     if (flags & CORA_FLAG_REQACK) sendAckNak(messageId, hidOp);
-    handleTouchOutput?.(byte1, payload, messageId);
+    handleTouchOutput(byte1, payload);
   }
 }
 

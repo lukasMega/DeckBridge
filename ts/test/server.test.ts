@@ -308,6 +308,16 @@ try {
     const frame2 = await f.recv();
     assert.equal(frame2.payload[4 + 5], 0x00);
 
+    // MK.2 geometry has no strip: touch/dial must not reach the app, so the next
+    // frame is the key event, not a touch or encoder report.
+    childServer.sendTouch({ type: 'tap', x: 10, y: 10 });
+    childServer.sendDial({ index: 0, kind: 'press', state: 'down' });
+    childServer.sendKeyEvent(5, 'down');
+    let frame3 = await f.recv();
+    while (frame3.payload[1] === 0x0a) frame3 = await f.recv(); // skip keepalives
+    assert.equal(frame3.payload[1], 0x00); // buttons subtype
+    childServer.sendKeyEvent(5, 'up');
+
     await closeAndWait(childServer, f);
   });
 
@@ -322,13 +332,14 @@ try {
         server.deviceConfig,
         false,
       );
-      plusChild.keepaliveIntervalMs = 100;
+      // Only the connect-time keepalive: a periodic one could land between the reads below.
+      plusChild.keepaliveIntervalMs = 60_000;
       await plusChild.start();
       try {
         const f = await connect(PLUS_TEST_CHILD_PORT);
         await f.recv(); // drain keepalive
 
-        plusChild.sendDialPress(2, true);
+        plusChild.sendDial({ index: 2, kind: 'press', state: 'down' });
         const press = await f.recv();
         assert.equal(press.payload[0], 0x01);
         assert.equal(press.payload[1], 0x03); // encoder subtype
@@ -338,7 +349,12 @@ try {
         assert.equal(press.payload[5 + 0], 0x00); // others released
         assert.equal(press.payload[5 + 3], 0x00);
 
-        plusChild.sendDialRotate(1, -3);
+        plusChild.sendDial({ index: 2, kind: 'press', state: 'up' });
+        const release = await f.recv();
+        assert.equal(release.payload[4], 0x00); // BTN
+        assert.equal(release.payload[5 + 2], 0x00); // released — mask bit cleared
+
+        plusChild.sendDial({ index: 1, kind: 'rotate', delta: -3 });
         const rotate = await f.recv();
         assert.equal(rotate.payload[0], 0x01);
         assert.equal(rotate.payload[1], 0x03);
@@ -356,6 +372,12 @@ try {
         assert.equal(touch.payload.readUInt16LE(8), 20); // y
         assert.equal(touch.payload.readUInt16LE(10), 300); // endX
         assert.equal(touch.payload.readUInt16LE(12), 40); // endY
+
+        plusChild.sendTouch({ type: 'tap', x: 5000, y: -7 });
+        const clamped = await f.recv();
+        assert.equal(clamped.payload[4], 0x01); // tap
+        assert.equal(clamped.payload.readUInt16LE(6), 799); // x clamped to strip
+        assert.equal(clamped.payload.readUInt16LE(8), 0); // y clamped to strip
 
         await closeAndWait(plusChild, f);
       } finally {

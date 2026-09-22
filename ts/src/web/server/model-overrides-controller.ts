@@ -3,10 +3,11 @@
 // PersistedSettings, with the pure merge/validate living in devices/model-overrides.ts.
 import type { ControllerHost, ReqError } from './types.js';
 import type { DeviceModel, DeviceModelOverride } from '../../devices/driver.js';
-import { findModelById, CORA_PROFILES } from '../../devices/registry.js';
+import { findModelById } from '../../devices/registry.js';
 import {
   applyModelOverrides,
   classifyOverrideChange,
+  emulationProfiles,
   tunableDefaults,
   validateModelOverride,
 } from '../../devices/model-overrides.js';
@@ -32,7 +33,7 @@ export interface DeviceOverridesView {
   /** `effective`, projected down to exactly the fields an override may set — so a
    *  round-trip (seed the form → Apply unchanged) is always valid. */
   tunable: DeviceModelOverride;
-  /** Emulation profiles a device may re-pair as (id → advertised productId). */
+  /** CORA profiles this model may re-pair as (its `cora.emulations`), with their PID. */
   profiles: Array<{ id: string; name: string; productId: number }>;
 }
 
@@ -81,7 +82,7 @@ export class ModelOverridesController {
         cora: effective.cora,
       },
       tunable: tunableDefaults(effective),
-      profiles: CORA_PROFILES.map((p) => ({
+      profiles: emulationProfiles(model).map((p) => ({
         id: p.id,
         name: p.name,
         productId: p.cora.productId,

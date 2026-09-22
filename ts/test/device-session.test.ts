@@ -12,6 +12,8 @@ import {
   ELGATO_CHILD_PORT,
   CORA_PORT_STRIDE,
   MDNS_SERVICE_NAME,
+  ELGATO_PLUS_PID,
+  DEFAULT_CHILD_FIRMWARE_VERSION,
 } from '../src/types.js';
 import type { KeyState } from '../src/types.js';
 import type { ChildGeometry } from '../src/capabilities.js';
@@ -214,7 +216,7 @@ await test('Plus emulation forwards a 2.00.x child firmware to the desktop', asy
     cora: {
       ...AJAZZ_AKP05E_MODEL.cora,
       advertiseAs: 'stream-deck-plus',
-      productId: 0x0084,
+      productId: ELGATO_PLUS_PID,
     },
   };
   const { server, session } = makeSession(rePaired);
@@ -223,6 +225,15 @@ await test('Plus emulation forwards a 2.00.x child firmware to the desktop', asy
     server.setDeviceConfigCalls[0]?.childFirmwareVersion,
     '2.00.026',
     're-paired Plus advertises the Plus firmware line, not the AKP05E default',
+  );
+});
+
+await test('a native model resets the child firmware to the default (no stale Plus line)', async () => {
+  const { server, session } = makeSession(AJAZZ_AKP05E_MODEL);
+  await session.start();
+  assert.equal(
+    server.setDeviceConfigCalls[0]?.childFirmwareVersion,
+    DEFAULT_CHILD_FIRMWARE_VERSION,
   );
 });
 

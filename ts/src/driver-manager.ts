@@ -238,12 +238,7 @@ export class DriverManager {
         this.deps.childServer.sendKeyEvent(index, state);
         this.deps.webui.notifyKeyEvent(index, state, wireId);
       },
-      onDial: (event: DialEvent) => {
-        if (event.kind === 'press')
-          this.deps.childServer.sendDialPress(event.index, event.state === 'down');
-        else if (event.delta !== undefined)
-          this.deps.childServer.sendDialRotate(event.index, event.delta);
-      },
+      onDial: (event: DialEvent) => this.deps.childServer.sendDial(event),
       onTouch: (event: TouchInputEvent) => this.deps.childServer.sendTouch(event),
       onReinit: () => this.primary.repaintWidgets(),
     });

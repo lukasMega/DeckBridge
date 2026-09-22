@@ -324,21 +324,23 @@ test('fullState exposes selected dock real device identity', () => {
   assert.deepEqual(ui.fullState().realDeviceIdentity, realDeviceIdentity);
 });
 
-test('notifyDocks broadcasts status + extra-key configs to a connected WS client', () => {
+/** What broadcastSelected() pushes for the selected dock, in order. */
+const SELECTED_DEVICE_EVENTS = ['brightnessOverride', 'imageMode', 'extraKeys', 'touchStrip'];
+
+test('notifyDocks broadcasts status + selected-device state to a connected WS client', () => {
   const ui = new WebUIServer(undefined, [], 'real', TEST_SETTINGS_ROOT);
   const { sent } = connectMockClient(ui);
   sent.length = 0; // discard the initial-connect snapshot
 
   ui.notifyDocks([fakeDockStatus(0)]);
 
-  // status + extraKeys: the selected dock's live deviceKey may have changed, so
-  // notifyDocks re-pushes its extra-key configs alongside the status snapshot.
-  assert.equal(sent.length, 2, 'status + extraKeys broadcast');
+  // The selected dock's live deviceKey may have changed, so notifyDocks re-pushes
+  // its per-device values (extra keys, touch strip, …) alongside the status snapshot.
+  const events = sent.map((m) => (JSON.parse(m) as { event: string }).event);
+  assert.deepEqual(events, ['status', ...SELECTED_DEVICE_EVENTS]);
   const parsed = JSON.parse(sent[0]!) as { event: string; data: { docks: DockStatus[] } };
-  assert.equal(parsed.event, 'status');
   assert.equal(parsed.data.docks.length, 1);
   assert.equal(parsed.data.docks[0]!.index, 0);
-  assert.equal((JSON.parse(sent[1]!) as { event: string }).event, 'extraKeys');
 });
 
 test('duplicate notifyDocks call (same shape) does not broadcast again', () => {
@@ -347,13 +349,32 @@ test('duplicate notifyDocks call (same shape) does not broadcast again', () => {
   sent.length = 0;
 
   ui.notifyDocks([fakeDockStatus(0)]);
-  assert.equal(sent.length, 2, 'first call broadcasts status + extraKeys');
+  const perCall = 1 + SELECTED_DEVICE_EVENTS.length;
+  assert.equal(sent.length, perCall, 'first call broadcasts status + selected-device state');
 
   ui.notifyDocks([fakeDockStatus(0)]); // new array, same JSON shape
-  assert.equal(sent.length, 2, 'duplicate call is deduped — no further broadcast');
+  assert.equal(sent.length, perCall, 'duplicate call is deduped — no further broadcast');
 
   ui.notifyDocks([fakeDockStatus(0), fakeDockStatus(1)]);
-  assert.equal(sent.length, 4, 'a genuinely different list broadcasts status + extraKeys again');
+  assert.equal(sent.length, 2 * perCall, 'a genuinely different list broadcasts again');
+});
+
+test('touch-strip toggle: 409 without a strip, else broadcast + touchStripChanged', () => {
+  const ui = new WebUIServer(undefined, [], 'real', TEST_SETTINGS_ROOT);
+  ui.notifyDocks([fakeDockStatus(0)]);
+  assert.equal(ui.trySetTouchStripDisabled(true)?.status, 409, 'MK.2 dock has no strip');
+
+  const strip = [{ wireId: 1, label: 'Left' }];
+  ui.notifyDocks([{ ...fakeDockStatus(0), widgetDisplays: strip }]);
+  const { sent } = connectMockClient(ui);
+  sent.length = 0;
+  const changed: unknown[][] = [];
+  ui.on('touchStripChanged', (...args: unknown[]) => changed.push(args));
+
+  assert.equal(ui.trySetTouchStripDisabled(true), null);
+  assert.deepEqual(changed, [[0, true]]);
+  assert.deepEqual(JSON.parse(sent[0]!), { event: 'touchStrip', data: { disabled: true } });
+  assert.equal(ui.touchStripDisabled, true);
 });
 
 test("new WS client's initial snapshot carries stored docks", () => {

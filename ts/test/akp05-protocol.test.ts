@@ -9,7 +9,7 @@ import {
   buildUlend,
   buildVer,
   describePacket,
-  imageChunks,
+  forEachImageChunk,
   parseVersionReport,
 } from '../src/devices/ajazz/akp05-protocol.js';
 import { test, summaryExit } from './helpers/harness.js';
@@ -59,12 +59,32 @@ test('AKP05 LIG stores brightness at offset 10', () => {
   assert.equal(buildLig(73)[10], 73);
 });
 
-test('AKP05 final image chunk clears stale tail', () => {
-  const chunks = imageChunks(Uint8Array.from({ length: 1025 }, (_, index) => index & 0xff));
-  assert.equal(chunks.length, 2);
-  assert.equal(chunks[1]![0], 0);
-  assert.equal(chunks[1]![1], 0);
-  assert.equal(chunks[1]![1023], 0);
+test('AKP05 image chunks reuse one buffer and clear the final stale tail', () => {
+  const jpeg = new Uint8Array(1025).fill(0xaa);
+  jpeg[1024] = 0x5b; // the one byte of the second chunk — distinct from padding
+  const out = new Uint8Array(1025).fill(0xee); // stale bytes from a previous packet
+  const sent: number[][] = [];
+  forEachImageChunk(jpeg, out, 1, () => sent.push([...out]));
+  assert.equal(sent.length, 2);
+  assert.equal(sent[0]![0], 0xee, 'byte before `at` (report id slot) untouched');
+  assert.ok(
+    sent[0]!.slice(1).every((b) => b === 0xaa),
+    'first chunk is a full data slice',
+  );
+  assert.equal(sent[1]![1], 0x5b, 'second chunk carries the remaining data byte');
+  assert.ok(
+    sent[1]!.slice(2).every((b) => b === 0),
+    'stale tail zero-filled',
+  );
+});
+
+test('AKP05 describePacket names BAT fields and raw image data', () => {
+  assert.equal(describePacket(buildBat(0x1f40, 11)), 'CRT BAT jpegLen=8000 surface=11');
+  assert.equal(describePacket(new Uint8Array(1024).fill(0xff)), 'image-data chunk');
+});
+
+test('AKP05 version parser rejects reports without a version', () => {
+  assert.equal(parseVersionReport(Buffer.from('ACK\0\0OK')), undefined);
 });
 
 test('AKP05 version parser finds vendor firmware string', () => {

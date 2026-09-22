@@ -266,9 +266,10 @@ UI is always localhost-only.
   [Network ports](#network-ports)). The web UI shows a live preview for **one selected
   deck at a time** (click its card); the others stay static.
 - **Keys and dials only** — DeckBridge drives keys plus the AJAZZ AKP05E's four rotary
-  encoders (as dial events) and its touch strip (as widget displays, or a Stream Deck +
-  window image when re-paired as a Plus). Touch-strip *input* (tap/swipe) is not yet
-  mapped, and other Stream Deck +/Plus/Neo-style LCD strips remain out of scope.
+  encoders and its touch strip (as widget displays, or a Stream Deck + window image).
+  Dials and strip swipes reach the Elgato app only when the AKP05E is re-paired as a
+  Stream Deck + (Device tuning → Emulation profile); strip *taps* are not yet mapped, and
+  other Stream Deck +/Plus/Neo-style LCD strips remain out of scope.
 - **Fixed ports** — CORA is hard-wired to **5343 / 5344** (extra decks add a fixed +2
   offset per device); conflicts with a real Elgato Network Dock or a second DeckBridge
   instance on the same machine.

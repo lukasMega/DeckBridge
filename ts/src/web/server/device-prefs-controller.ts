@@ -7,7 +7,7 @@
 import type { DeviceIdentitySettings } from '../../settings-store.js';
 import type { ImageModeOverride } from '../../types.js';
 import { DEFAULT_BRIGHTNESS_OVERRIDE } from '../../types.js';
-import type { ControllerHost } from './types.js';
+import type { ControllerHost, ReqError } from './types.js';
 
 export class DevicePrefsController {
   private runtimeBrightnessOverride = DEFAULT_BRIGHTNESS_OVERRIDE;
@@ -52,14 +52,19 @@ export class DevicePrefsController {
   }
 
   /** Store, broadcast, and let app.ts hand the strip to the Elgato app via
-   *  'touchStripChanged'. */
-  setTouchStripDisabled(disabled: boolean): void {
+   *  'touchStripChanged'. 409 when the selected dock has no strip — the flag would
+   *  persist on a device it means nothing for. */
+  trySetTouchStripDisabled(disabled: boolean): ReqError | null {
+    if (!this.host.selectedDockStatus()?.widgetDisplays?.length) {
+      return { error: 'selected dock has no touch strip', status: 409 };
+    }
     this.mutateSelectedEntryOrRuntime(
       (e) => (e.touchStripDisabled = disabled),
       () => (this.runtimeTouchStripDisabled = disabled),
     );
     this.host.broadcast('touchStrip', { disabled });
     this.host.emit('touchStripChanged', this.host.selectedDock(), disabled);
+    return null;
   }
 
   setBrightnessOverride(enabled: boolean): void {

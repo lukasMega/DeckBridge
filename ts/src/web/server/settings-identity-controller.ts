@@ -103,5 +103,6 @@ export class SettingsIdentityController {
     this.host.emit('extraKeyChanged', idx);
     const e = this.host.settings.entryFor(this.host.selectedDeviceKey());
     if (typeof e?.brightness === 'number') this.host.emit('setBrightness', e.brightness, idx);
+    if (e) this.host.emit('touchStripChanged', idx, e.touchStripDisabled ?? false);
   }
 }

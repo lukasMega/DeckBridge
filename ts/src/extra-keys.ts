@@ -300,6 +300,9 @@ export class ExtraKeyWidgets {
   private timer: ReturnType<typeof setInterval> | undefined;
   private lastPainted = new Map<number, string>();
   private touchStripDisabled: boolean;
+  /** Between start() and stop() — a dock that started with nothing to paint (strip
+   *  disabled, no side keys) must still begin ticking when the strip is re-enabled. */
+  private active = false;
 
   constructor(
     driver: DeviceDriver,
@@ -312,14 +315,20 @@ export class ExtraKeyWidgets {
   }
 
   start(): void {
-    if (this.widgetIds().length === 0 || this.timer !== undefined) return;
-    this.tick();
-    this.timer = setInterval(() => this.tick(), 1000);
+    this.active = true;
+    this.ensureTicking();
   }
 
   stop(): void {
+    this.active = false;
     if (this.timer !== undefined) clearInterval(this.timer);
     this.timer = undefined;
+  }
+
+  private ensureTicking(): void {
+    if (!this.active || this.widgetIds().length === 0 || this.timer !== undefined) return;
+    this.tick();
+    this.timer = setInterval(() => this.tick(), 1000);
   }
 
   /** Force a full repaint on the next tick (config change / device reinit). */
@@ -341,6 +350,7 @@ export class ExtraKeyWidgets {
       }
     }
     this.repaint();
+    this.ensureTicking();
   }
 
   /** Build the render context for one widget, kicking off the background

@@ -16,7 +16,7 @@ import {
   buildUlend,
   buildVer,
   describePacket,
-  imageChunks,
+  forEachImageChunk,
   parseVersionReport,
 } from './akp05-protocol.js';
 
@@ -28,11 +28,11 @@ const KEEP_ALIVE_INTERVAL_MS = 10_000;
 // Input classification. Key codes are 1-based and row-ordered (1-10). Encoder codes
 // come through the same ACK report (byte 9 = code, byte 10 = stateByte) — the tables
 // below are the hardware-verified values from `mise run akp05-capture`, recorded in
-// devices/device-notes.json. Touch-strip reports use a different framing that is
-// not decoded yet, so those events are not emitted.
+// devices/device-notes.json. Touch-strip swipes are decoded; taps are not yet.
 const KEY_CODE_MIN = 0x01;
 const KEY_CODE_MAX = 0x0a;
-/** Encoder press codes, left-to-right. stateByte 0x01 = down; no release report. */
+/** Encoder press codes, left-to-right. stateByte 0x01 = down; the firmware sends no
+ *  release report, so the driver synthesizes the up (a latched press never re-fires). */
 const ENCODER_PRESS_CODES: readonly number[] = [0x37, 0x35, 0x33, 0x36];
 /** Encoder rotate codes, left-to-right: [ccw, cw] per encoder. stateByte is always 0. */
 const ENCODER_ROTATE_CODES: readonly (readonly [number, number])[] = [
@@ -148,8 +148,10 @@ export class Akp05Driver extends HidDeviceBase {
     }
     const pressIndex = ENCODER_PRESS_CODES.indexOf(code);
     if (pressIndex >= 0) {
-      const state: KeyState = stateByte === 0x01 ? 'down' : 'up';
-      this.emit('dial', { index: pressIndex, kind: 'press', state } satisfies DialEvent);
+      // A release report from other firmware would double-fire the synthesized pair.
+      if (stateByte !== 0x01) return;
+      this.emit('dial', { index: pressIndex, kind: 'press', state: 'down' } satisfies DialEvent);
+      this.emit('dial', { index: pressIndex, kind: 'press', state: 'up' } satisfies DialEvent);
       return;
     }
     const rotate = encoderRotateDelta(code);
@@ -195,7 +197,7 @@ export class Akp05Driver extends HidDeviceBase {
   sendImage(keyIndex: number, jpeg: Uint8Array): void {
     try {
       this.write(buildBat(jpeg.length, keyIndex));
-      for (const chunk of imageChunks(jpeg)) this.write(chunk);
+      forEachImageChunk(jpeg, this.writeScratch, 1, () => this.writeScratchOut());
       this.write(buildUlend());
     } catch (cause) {
       this.emit('error', cause instanceof Error ? cause : new Error(String(cause)));
@@ -227,15 +229,22 @@ export class Akp05Driver extends HidDeviceBase {
   private write(packet: Buffer): void {
     if (packet.length !== 1024)
       throw new Error(`AKP05 packet must be 1024 bytes, got ${packet.length}`);
+    this.writeScratch.set(packet, 1);
+    this.writeScratchOut();
+  }
+
+  /** Send the report staged in writeScratch (report id 0 + one 1024-byte packet). */
+  private writeScratchOut(): void {
     if (!this.device || !this.hidLib) return;
     this.writeScratch[0] = 0;
-    this.writeScratch.set(packet, 1);
     const result = this._writeRaw(
       this.writeScratch,
       'hid',
       (n, detail) => `hid_write returned ${n}: ${detail}`,
     );
-    if (result < 0) error('hid', `AKP05E write failed: ${describePacket(packet)}`);
+    if (result < 0) {
+      error('hid', `AKP05E write failed: ${describePacket(this.writeScratch.subarray(1))}`);
+    }
   }
 
   protected onBeforeClose(): void {

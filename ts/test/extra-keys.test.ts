@@ -307,6 +307,26 @@ await test('setTouchStripDisabled(false) repaints the strip widgets', () => {
   assert.equal(d.splashed.length, 8, 're-enable repaints all four zones');
 });
 
+await test('re-enabling a strip that started disabled starts painting it', () => {
+  const d = new FakeDriver();
+  d.model = AJAZZ_AKP05E_MODEL;
+  // AKP05E has no side keys, so start() with the strip disabled has nothing to tick.
+  const w = new ExtraKeyWidgets(d, () => ({ widget: 'clock' }), true);
+  w.start();
+  assert.equal(d.splashed.length, 0, 'nothing painted while disabled');
+  w.setTouchStripDisabled(false);
+  w.stop();
+  assert.equal(d.splashed.length, 4, 'all four zones painted after re-enable');
+});
+
+await test('re-enabling before start() paints nothing (dock not up yet)', () => {
+  const d = new FakeDriver();
+  d.model = AJAZZ_AKP05E_MODEL;
+  const w = new ExtraKeyWidgets(d, () => ({ widget: 'clock' }), true);
+  w.setTouchStripDisabled(false);
+  assert.equal(d.splashed.length, 0);
+});
+
 // isExtraKeyConfig (migration guard)
 
 console.log('\nisExtraKeyConfig');

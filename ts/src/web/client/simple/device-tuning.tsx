@@ -130,13 +130,21 @@ export function DeviceTuningPanel(): preact.JSX.Element {
   const apply = (): Promise<void> =>
     action.run(async () => {
       if (!activeView) return;
-      const profile = activeView.profiles?.find((p) => p.id === coraProfile);
       const overrides: Record<string, unknown> = { ...activeView.overrides, image };
       if (typeof activeView.tunable.wire?.batchImageTransfers === 'boolean') {
         overrides.wire = { ...activeView.overrides.wire, batchImageTransfers };
       }
-      if (profile) overrides.cora = { advertiseAs: profile.id, productId: profile.productId };
-      else delete overrides.cora;
+      if (activeView.profiles?.length) {
+        const profile = activeView.profiles.find((p) => p.id === coraProfile);
+        if (profile) overrides.cora = { advertiseAs: profile.id, productId: profile.productId };
+        else delete overrides.cora;
+        // Image + key map are per grid: the draft was seeded from the old target and
+        // would override the new target's transform (e.g. undo the Plus 180°).
+        if (coraProfile !== (activeView.tunable.cora?.advertiseAs ?? '')) {
+          delete overrides.image;
+          delete overrides.keyMap;
+        }
+      }
       const parsed = await postJson<{ reconnecting?: boolean }>(
         '/api/device-overrides',
         { modelId: activeView.modelId, overrides },
@@ -303,6 +311,7 @@ export function DeviceTuningPanel(): preact.JSX.Element {
         <label class="tuning-field">
           <span>Emulation profile</span>
           <select
+            id="tuning-emulation-profile"
             class="input"
             value={coraProfile}
             onChange={(e) => setCoraProfile((e.target as HTMLSelectElement).value)}

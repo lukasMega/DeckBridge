@@ -69,11 +69,11 @@
       "summary": "AJAZZ AKP05E (VID 0x0300, PID 0x3004): ten 112×112 LCD keys in a 2×5 grid, plus four rotary encoders (press + rotate, emitted as CORA dial events) and a touch strip whose four zones render DeckBridge widget displays (or a Stream Deck + window image when re-paired as a Plus). Dedicated protocol driver: CRT VER on open, the CRT DIS / LIG / CLE / STP init sequence, CRT BAT uploads committed with CRT ULEND, and a CRT CONNECT keepalive.",
       "alsoSoldAs": [],
       "quirks": [
-        "Only PID 0x3004 is registered. Do not add retail, Pro, Mirabox, or hub siblings without their own evidence packet.",
+        "Only PID 0x3004 is hardware-tested; the retail AKP05 (0x3006) is registered from opendeck-akp05 evidence. Do not add Pro, Mirabox, or hub siblings without their own evidence packet.",
         "The firmware reports nothing until it receives the init sequence (CRT DIS, CRT LIG, CRT CLE 0xff, CRT STP). Without it images still paint, but no key report ever arrives.",
         "The host is dropped after roughly 15 s of silence: the panel blanks and key reporting stops until a key press partially wakes it. The keepalive runs every 10 s and repeats CRT DIS + CRT LIG before CRT CONNECT — CONNECT alone leaves the panel refusing further image updates (zeccola/ajazz-akp05 0.10.1, reverted in 0.10.2). The LIG carries the live brightness so a tick cannot reset it.",
         "Input codes are not the image wire ids: keys report 0x01–0x0a in row order, while their images address wire ids 11–15 (top row) and 6–10 (bottom row).",
-        "Encoder press and twist codes are wired (DialEvent → CORA): press 0x37 / 0x35 / 0x33 / 0x36 left to right (state 1, no release report), twist 0xa0-0xa1 / 0x50-0x51 / 0x90-0x91 / 0x70-0x71 (CCW-CW, state always 0). Touch-strip taps 0x40–0x43 left to right and swipes 0x38 / 0x39 are captured but still unmapped, so they fall past the key map and are dropped. A 7-byte header-only report with no code byte also appears and carries nothing."
+        "Encoder press and twist codes are decoded as dial events: press 0x37 / 0x35 / 0x33 / 0x36 left to right (state 1, no release report, so the driver synthesizes the release), twist 0xa0-0xa1 / 0x50-0x51 / 0x90-0x91 / 0x70-0x71 (CCW-CW, state always 0). Touch-strip swipes 0x38 / 0x39 are decoded as left/right swipes; taps 0x40–0x43 are captured but not mapped yet. Dials and swipes reach the Elgato app only when the device is re-paired as a Stream Deck + — the native MK.2-PID pairing advertises no encoders or strip. A 7-byte header-only report with no code byte also appears and carries nothing."
       ],
       "sources": [
         "own hardware capture (macOS, PID 0x3004, `mise run akp05-capture`)",
@@ -87,8 +87,8 @@
       "summary": "Retail AJAZZ AKP05 (VID 0x0300, PID 0x3006). It uses the AKP05 dedicated driver, with ten 112×112 LCD keys, CRT BAT uploads, CRT ULEND commits, and CRT LIG brightness.",
       "alsoSoldAs": [],
       "quirks": [
-        "VID, PID, vendor HID collection, protocol version 3, 112×112 JPEG format, and 180° rotation come from ambiso/opendeck-akp05. DeckBridge hardware has not tested this SKU.",
-        "Shares the AKP05E init sequence, CRT CONNECT keepalive, key map, and wired encoder path (touch input still unmapped). See the AKP05E notes for the captured input codes.",
+        "VID, PID, vendor HID collection, protocol version 3 and 112×112 JPEG format come from ambiso/opendeck-akp05; the key transform is the AKP05E's (upright keys, 180° splash). DeckBridge hardware has not tested this SKU.",
+        "Shares the AKP05E init sequence, CRT CONNECT keepalive, key map, Stream Deck + emulation, and encoder/swipe decoding (strip taps still unmapped). See the AKP05E notes for the captured input codes.",
         "Close sends no disconnect command — the firmware can wedge after speculative commands. Unplug and replug if the panel wedges."
       ],
       "sources": [

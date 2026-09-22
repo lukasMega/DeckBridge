@@ -338,6 +338,51 @@ async function checkBatchImageTransferTuning(): Promise<void> {
   }
 }
 
+// Picking an emulation profile must not post the old grid's image draft: an explicit
+// image override wins over the profile's transform (it undid the Plus 180° rotation).
+async function checkEmulationProfileSwitch(): Promise<void> {
+  const view: DeviceOverridesView = {
+    ...OVERRIDES_VIEW,
+    modelId: 'ajazz-akp05e',
+    modelName: 'AJAZZ AKP05E',
+    overrides: { image: { quality: 0.7 } },
+    tunable: { image: { rotate: 0, width: 112, height: 112 }, cora: { productId: 0x80 } },
+    profiles: [{ id: 'stream-deck-plus', name: 'Stream Deck +', productId: 0x84 }],
+  };
+  const stub = stubFetch((_url, init) => ({
+    payload: init?.method === 'POST' ? { reconnecting: true } : view,
+  }));
+  try {
+    await act(() => patch({ status: { ...baseStatus, modelId: 'ajazz-akp05e' } }));
+    await act(() => render(<DeviceTuningPanel />, root));
+    await settle();
+    const select = root.querySelector<HTMLSelectElement>('#tuning-emulation-profile');
+    check(select !== null && select.value === '', 'Emulation profile seeds as native');
+    await act(() => {
+      select!.value = 'stream-deck-plus';
+      select!.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+    await click('#tuning-apply');
+    await settle();
+    const posted = stub.calls.find((call) => call.method === 'POST')?.body as {
+      overrides: Record<string, unknown>;
+    };
+    check(
+      JSON.stringify(posted.overrides.cora) ===
+        JSON.stringify({ advertiseAs: 'stream-deck-plus', productId: 0x84 }),
+      'Profile switch posts the cora target',
+    );
+    check(
+      !('image' in posted.overrides) && !('keyMap' in posted.overrides),
+      'Profile switch drops the previous grid image/keyMap overrides',
+    );
+  } finally {
+    stub.restore();
+    await act(() => render(null, root));
+    await act(() => patch({ status: baseStatus }));
+  }
+}
+
 async function runSettingsPanels(): Promise<void> {
   // Device tuning: renders the effective spec, not a blank form.
   {
@@ -368,6 +413,7 @@ async function runSettingsPanels(): Promise<void> {
   }
 
   await checkBatchImageTransferTuning();
+  await checkEmulationProfileSwitch();
 
   // A validation failure surfaces the server's error list.
   {

@@ -670,6 +670,20 @@ test('every model advertises a geometry that resolves', () => {
   }
 });
 
+test('every emulation names a CORA profile and maps its whole grid', () => {
+  for (const model of DEVICE_MODELS) {
+    for (const [id, emulation] of Object.entries(model.cora.emulations ?? {})) {
+      const profile = CORA_PROFILES.find((p) => p.id === id);
+      assert.ok(profile, `${model.id}: emulation '${id}' must be a CORA profile`);
+      assert.equal(
+        emulation.keyMap.coraToWireImage?.length,
+        profile!.keyCount,
+        `${model.id}: '${id}' coraToWireImage must cover every emulated key`,
+      );
+    }
+  }
+});
+
 test('every model declares positive wire sizes', () => {
   for (const model of DEVICE_MODELS) {
     assert.ok(model.wire.packetSize > 0, `${model.id}: wire.packetSize must be positive`);

@@ -160,7 +160,7 @@ export interface WebUIController {
   tryRunExtraKeyNow(wireId: number): ReqError | null;
   pluginsInfo(): Promise<PluginsInfo>;
   readonly touchStripDisabled: boolean;
-  notifyTouchStripDisabled(disabled: boolean): void;
+  trySetTouchStripDisabled(disabled: boolean): ReqError | null;
   getSettingsJson(): string;
   applySettingsJson(raw: string): void;
   openSettingsFile(): Promise<void>;

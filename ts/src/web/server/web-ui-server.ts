@@ -291,8 +291,8 @@ export class WebUIServer extends EventEmitter implements WebUIController {
     this.devicePrefs.setImageMode(mode);
   }
 
-  notifyTouchStripDisabled(disabled: boolean): void {
-    this.devicePrefs.setTouchStripDisabled(disabled);
+  trySetTouchStripDisabled(disabled: boolean): ReqError | null {
+    return this.devicePrefs.trySetTouchStripDisabled(disabled);
   }
 
   notifyBrightness(level: number): void {
@@ -319,9 +319,9 @@ export class WebUIServer extends EventEmitter implements WebUIController {
     this.imageChannel.pruneDeadDocks(live);
     this.settings.syncDockBrightness(docks);
     this.status.publish();
-    // Re-push extra keys after a replug so the client's map isn't stale; selectDock(0) below already covers it.
+    // Re-push per-device values after a replug (the selected deviceKey may have changed); selectDock(0) covers it too.
     if (this.selectedDock !== 0 && !live.has(this.selectedDock)) this.selectDock(0);
-    else this.bus.broadcast('extraKeys', { configs: this.selectedExtraKeyConfigs() });
+    else this.broadcastSelectedDeviceState();
   }
 
   notifyElgatoAppConflict(conflict: boolean): void {

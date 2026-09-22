@@ -16,6 +16,8 @@ import {
   PARTIAL_WINDOW_H_OFFSET,
   PARTIAL_WINDOW_LAST_OFFSET,
   PARTIAL_WINDOW_SIZE_OFFSET,
+  PLUS_TOUCH_WIDTH,
+  PLUS_TOUCH_HEIGHT,
 } from './types.js';
 import type { ImageEvent, TouchWindowRegion } from './types.js';
 import { warn } from './logger.js';
@@ -43,9 +45,9 @@ export function resetMalformedWarnThrottle(): void {
 /** Drop the in-flight assembly for `keyIndex` and report why, at most once per window.
  *  Callers return null themselves — a `null`-returning helper trips
  *  sonarjs/no-invariant-returns. */
-function dropMalformed(
-  pages: Map<number, ImageAssembly>,
-  keyIndex: number,
+function dropMalformed<K extends number | string>(
+  pages: Map<K, ImageAssembly>,
+  keyIndex: K,
   label: string,
   reason: string,
 ): void {
@@ -70,9 +72,9 @@ function dropMalformed(
  *  On overflow: drops the key, warns naming the cap that tripped and its value
  *  (`label` distinguishes gen1/gen2 wording), and returns null. Otherwise pushes
  *  the chunk and returns the updated assembly. */
-function accumulateChunk(
-  pages: Map<number, ImageAssembly>,
-  keyIndex: number,
+function accumulateChunk<K extends number | string>(
+  pages: Map<K, ImageAssembly>,
+  keyIndex: K,
   chunk: Buffer,
   label: string,
 ): ImageAssembly | null {
@@ -180,13 +182,10 @@ export function assembleGen1ImageChunk(
   return { keyIndex, data, format: 'bmp' };
 }
 
-/** In-flight Stream Deck + partial-window region (keyed by its rectangle). */
-export interface PartialWindowAssembly extends ImageAssembly {
-  x: number;
-  y: number;
-  w: number;
-  h: number;
-}
+const PARTIAL_WINDOW_LABEL = 'partial window assembly';
+/** In-flight partial-window regions kept at once. The key comes off the wire, so
+ *  without a cap a peer that never sends a last chunk grows the map without bound. */
+export const MAX_PARTIAL_WINDOW_ASSEMBLIES = 8;
 
 /** A completed partial-window region: its window rectangle + the assembled JPEG. */
 export interface PartialWindowEvent extends TouchWindowRegion {
@@ -198,7 +197,7 @@ export interface PartialWindowEvent extends TouchWindowRegion {
  *  that rectangle so interleaved regions cannot mix. Returns the region on the last
  *  chunk, null otherwise. */
 export function assemblePartialWindowChunk(
-  pages: Map<string, PartialWindowAssembly>,
+  pages: Map<string, ImageAssembly>,
   pkt: Buffer,
 ): PartialWindowEvent | null {
   if (pkt.length < PARTIAL_WINDOW_HEADER_SIZE) return null;
@@ -206,39 +205,26 @@ export function assemblePartialWindowChunk(
   const y = pkt.readUInt16LE(PARTIAL_WINDOW_Y_OFFSET);
   const w = pkt.readUInt16LE(PARTIAL_WINDOW_W_OFFSET);
   const h = pkt.readUInt16LE(PARTIAL_WINDOW_H_OFFSET);
+  const key = `${x}:${y}:${w}:${h}`;
+  if (w === 0 || h === 0 || x + w > PLUS_TOUCH_WIDTH || y + h > PLUS_TOUCH_HEIGHT) {
+    dropMalformed(pages, key, PARTIAL_WINDOW_LABEL, 'region outside the 800×100 window');
+    return null;
+  }
   const isLast = pkt[PARTIAL_WINDOW_LAST_OFFSET] === IMAGE_CHUNK_LAST_FLAG;
   const bodyLength = pkt.readUInt16LE(PARTIAL_WINDOW_SIZE_OFFSET);
   if (bodyLength > pkt.length - PARTIAL_WINDOW_HEADER_SIZE) {
-    warn('assembler', `partial window: declared body ${bodyLength} exceeds packet — dropped`);
+    dropMalformed(pages, key, PARTIAL_WINDOW_LABEL, 'declared body length exceeds the packet');
     return null;
+  }
+  if (!pages.has(key) && pages.size >= MAX_PARTIAL_WINDOW_ASSEMBLIES) {
+    // Map iteration is insertion order: the first key is the oldest in-flight region.
+    pages.delete(pages.keys().next().value!);
   }
   const chunk = Buffer.from(
     pkt.subarray(PARTIAL_WINDOW_HEADER_SIZE, PARTIAL_WINDOW_HEADER_SIZE + bodyLength),
   );
-
-  const key = `${x}:${y}:${w}:${h}`;
-  const acc = pages.get(key) ?? { chunks: [], bytes: 0, x, y, w, h };
-  if (acc.bytes + chunk.length > MAX_IMAGE_ASSEMBLY_BYTES) {
-    pages.delete(key);
-    warn(
-      'assembler',
-      `partial window ${key}: exceeded ${MAX_IMAGE_ASSEMBLY_BYTES} bytes — dropped`,
-    );
-    return null;
-  }
-  if (chunk.length > 0 && acc.chunks.length >= MAX_IMAGE_ASSEMBLY_CHUNKS) {
-    pages.delete(key);
-    warn(
-      'assembler',
-      `partial window ${key}: exceeded ${MAX_IMAGE_ASSEMBLY_CHUNKS} chunks — dropped`,
-    );
-    return null;
-  }
-  if (chunk.length > 0) acc.chunks.push(chunk);
-  acc.bytes += chunk.length;
-  pages.set(key, acc);
-
-  if (!isLast) return null;
+  const acc = accumulateChunk(pages, key, chunk, PARTIAL_WINDOW_LABEL);
+  if (!acc || !isLast) return null;
   pages.delete(key);
   return { x, y, w, h, data: Buffer.concat(acc.chunks, acc.bytes) };
 }
