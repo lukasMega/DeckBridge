@@ -26,9 +26,7 @@ import { MIN_DWELL_MS, PING_SCHEDULE_SLACK_MS, PING_RETRY_INTERVAL_MS } from './
 
 const openBrowser = openPathInOS;
 
-// CLI parsing is the very first thing that happens: version/help/devices exit
-// immediately, and the flags must land in tjs.env before anything below reads it
-// (setupNativeLibs, WebUIServer's port, getInitialDriverMode, etc).
+// CLI parsing first: version/help/devices exit immediately; flags must land in tjs.env before anything below reads it.
 const cli = parseCli(userArgs());
 if (cli.command === 'version') {
   console.log(versionText());
@@ -43,9 +41,7 @@ if (cli.command === 'devices') {
   tjs.exit(0);
 }
 applyFlagsToEnv(cli.flags);
-// `diagnose` runs AFTER applyFlagsToEnv (it reports the effective flags/env and honours
-// --cache-dir) but before any server or device open — that's what makes it usable on the
-// freeze report, where the WebUI never comes up. Enumeration only, never hid_open.
+// diagnose runs after applyFlagsToEnv (reports effective flags/env, honours --cache-dir) but before any server/device open; enumeration only, never hid_open.
 if (cli.command === 'diagnose') {
   await runDiagnoseCommand(cli.flags);
   tjs.exit(0);
@@ -99,9 +95,7 @@ let dailyPingTimer: ReturnType<typeof setInterval> | null = null;
 
 setWebUILog((level, component, message) => webui.log(level, component, message));
 
-// Last-resort handler: txiki hard-aborts the process on an unhandled promise
-// rejection unless preventDefault() is called. Calling it lets shutdown() run the
-// disconnect handshake / socket teardown / tray kill instead of a raw abort.
+// txiki hard-aborts on unhandled rejection unless preventDefault(); this lets shutdown() run the teardown instead.
 globalThis.addEventListener('unhandledrejection', (ev: PromiseRejectionEvent) => {
   ev.preventDefault();
   const reason =

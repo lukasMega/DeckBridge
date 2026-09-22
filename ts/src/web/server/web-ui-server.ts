@@ -83,7 +83,6 @@ export class WebUIServer extends EventEmitter implements WebUIController {
   isBrightnessOverride(deviceKey: string): boolean {
     return this.devicePrefs.isBrightnessOverride(deviceKey);
   }
-  /** Same, by dock index (app.ts's Elgato→primary brightness gate). */
   isBrightnessOverrideForDock(index: number): boolean {
     return this.devicePrefs.isBrightnessOverride(this.dockRegistry.deviceKeyFor(index));
   }
@@ -168,8 +167,7 @@ export class WebUIServer extends EventEmitter implements WebUIController {
     this.updates = new UpdateController(host, __VERSION__, () => this.dockRegistry.list());
   }
 
-  // Device tuning (model overrides) — see devices/model-overrides.ts
-  /** Read by DriverManager at probe time; undefined = registry defaults. */
+  /** Device tuning (model overrides) — undefined = registry defaults. See devices/model-overrides.ts. */
   modelOverrideFor(modelId: string): DeviceModelOverride | undefined {
     return this.modelOverrides.overrideFor(modelId);
   }
@@ -191,8 +189,7 @@ export class WebUIServer extends EventEmitter implements WebUIController {
     return this.modelOverrides.tryReset(modelId);
   }
 
-  // `listen = false` (--no-webui): settings still load (identity/brightness/extra-keys must work
-  // headless too), but the HTTP/WS listener + broadcast timers never start — notify*/log/snapshot become no-ops.
+  // listen=false (--no-webui): settings still load, but the HTTP/WS listener + broadcast timers never start.
   async start(listen = true): Promise<void> {
     await this.settings.load(); // direct load — no broadcasts/hardware events fire before anything listens
     // app.ts already applied the persisted level before startup (it re-reads settings.json to
@@ -221,7 +218,6 @@ export class WebUIServer extends EventEmitter implements WebUIController {
     this.server = null;
   }
 
-  /** True if at least one WebUI WS client is connected. */
   hasClients(): boolean {
     return this.bus.size > 0;
   }
@@ -251,7 +247,6 @@ export class WebUIServer extends EventEmitter implements WebUIController {
     return this.imageChannel.dockFramesSnapshot(dock);
   }
 
-  /** Switch the live preview to another dock: swap in its cached frames and replay them. */
   selectDock(index: number): void {
     if (index === this.selectedDock) return;
     this.dockRegistry.selectedDock = index;
@@ -312,7 +307,6 @@ export class WebUIServer extends EventEmitter implements WebUIController {
     this.status.setElgatoStatus(connected, remoteAddr);
   }
 
-  /** Which CORA client (Elgato app vs Bitfocus Companion) was detected. Reset to 'unknown' on disconnect. */
   notifyClientApp(app: ClientApp): void {
     this.status.setFlag('clientApp', app);
   }
@@ -325,8 +319,7 @@ export class WebUIServer extends EventEmitter implements WebUIController {
     this.imageChannel.pruneDeadDocks(live);
     this.settings.syncDockBrightness(docks);
     this.status.publish();
-    // Extra-key configs resolve from the (possibly changed) selected deviceKey; re-push so a replug
-    // doesn't leave the client's map stale. Skipped when selectDock(0) below already covers it.
+    // Re-push extra keys after a replug so the client's map isn't stale; selectDock(0) below already covers it.
     if (this.selectedDock !== 0 && !live.has(this.selectedDock)) this.selectDock(0);
     else this.bus.broadcast('extraKeys', { configs: this.selectedExtraKeyConfigs() });
   }
@@ -410,8 +403,6 @@ export class WebUIServer extends EventEmitter implements WebUIController {
     return this.settings.multiDeck;
   }
 
-  // Extra keys (293S 6th column — see extra-keys.ts / extra-keys-controller.ts)
-
   extraKeyConfigFor(deviceKey: string, wireId: number): ExtraKeyConfig | undefined {
     return this.extraKeys.configFor(deviceKey, wireId);
   }
@@ -464,8 +455,6 @@ export class WebUIServer extends EventEmitter implements WebUIController {
     return this.dockRegistry.brightnessFor(index);
   }
 
-  // Settings JSON surface (see settings-identity-controller.ts)
-
   getSettingsJson(): string {
     return this.settingsIdentity.json();
   }
@@ -477,8 +466,6 @@ export class WebUIServer extends EventEmitter implements WebUIController {
   applySettingsJson(raw: string): void {
     this.settingsIdentity.applyJson(raw);
   }
-
-  // Logging + diagnostics (see logging-controller.ts / docs/troubleshooting.md)
 
   trySetLogLevel(level: unknown): ReqError | null {
     return this.logging.trySetLevel(level);

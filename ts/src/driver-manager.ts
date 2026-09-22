@@ -43,25 +43,20 @@ export class DriverManager {
   /** Probe interval, adapted to how slow HID enumeration is (driver-manager-pacing.ts). */
   private readonly pacer = new ProbePacer();
 
-  /** Process-lifetime worker for supported-device discovery. Native Windows HID
-   * calls may stall, but never block CORA ACKs or WebUI timers. */
+  /** Process-lifetime discovery worker: Windows HID calls may stall but never block CORA/WebUI. */
   private readonly hidScanner = new HidScanWorkerHost();
 
   /** Primary dock (index 0) state: identity, brightness, widgets, saved-frame replay. */
   private readonly primary: PrimaryDock;
 
-  /** Workers whose open() failed, kept alive for reuse (keyed by model.id) —
-   * spawning+terminating a hidapi-loaded worker per retry SIGBUSes on macOS.
-   * Drained on switchMode; process exit covers shutdown. */
+  /** Idle workers (open() failed), reused per model.id — spawn/terminate per retry SIGBUSes on macOS; drained on switchMode. */
   private idleDrivers = new Map<string, WorkerHidDriver>();
 
   /** Multi-device coordinator (extras only). Deps are closures over this instance's
    * mutable state — always-current values without an import cycle. */
   private readonly extraCoordinator: ExtraDockCoordinator;
 
-  // Test seams (tests have no hardware/FFI) — overridden via __set* below. Presence
-  // decided by enumeration, never trial hid_open: opening absent device or terminating
-  // a throwaway hidapi-loaded worker segfaults on macOS (IOKit/dlclose churn).
+  // Test seams (no hardware/FFI), overridden via __set* below. Presence by enumeration, never trial hid_open — segfaults on macOS (IOKit/dlclose churn).
   private makeRealDriver: (model: DeviceModel, ov?: DeviceModelOverride) => WorkerHidDriver = (
     model,
     ov,
@@ -163,18 +158,13 @@ export class DriverManager {
     this.makeRealDriver = (model, ov) => new WorkerHidDriver(model, ov);
   }
 
-  /** The user's device tuning for `modelId`, or undefined in safe mode
-   * (`--no-overrides`) / when nothing is persisted. A bad keyMap can make a
-   * device look dead and the WebUI Reset button is no help if the user can't
-   * get that far. Also shared with the WebUI's own view. */
+  /** User tuning for `modelId`, undefined in safe mode (`--no-overrides`)/when unset. Shared with the WebUI view. */
   private overrideFor(modelId: string): DeviceModelOverride | undefined {
     if (overridesDisabled()) return undefined;
     return this.deps.webui.modelOverrideFor(modelId);
   }
 
-  /** Model merged with user tuning. Everything downstream (CORA advertise
-   * geometry, input mapping, splash, extras) sees the effective model;
-   * the registry is never mutated. */
+  /** Model + user tuning; downstream sees the effective model, registry never mutated. */
   private effectiveModel(model: DeviceModel): DeviceModel {
     return applyModelOverrides(model, this.overrideFor(model.id));
   }
