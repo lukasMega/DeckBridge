@@ -123,9 +123,18 @@ export interface DeviceSplashSpec {
   transformOverride?: { rotate?: 0 | 90 | 180 | 270; flipH?: boolean; flipV?: boolean };
 }
 
+/** A device-native display outside CORA's key grid, rendered by DeckBridge widgets. */
+export interface DeviceWidgetDisplay {
+  wireId: number;
+  label: string;
+  image: DeviceImageSpec;
+}
+
 export type DriverKind = 'elgato-hid' | 'mirabox' | 'custom';
 
-/** Child geometry advertised to the Elgato desktop over CORA capabilities. */
+/** Child geometry advertised to the Elgato desktop over CORA capabilities. The
+ *  optional fields describe a Stream Deck + (encoders + touch strip); non-Plus
+ *  models omit them (undefined → 0 → "no encoders / no touch" in the packet). */
 export interface ChildGeometry {
   rows: number;
   columns: number;
@@ -133,6 +142,14 @@ export interface ChildGeometry {
   keyWidth: number;
   keyHeight: number;
   productName: string;
+  /** Number of rotaries (Plus = 4). Omitted/0 on key-only models. */
+  encoderCount?: number;
+  /** Touch-strip size in pixels (Plus = 800×100). Omitted/0 on key-only models. */
+  touchWidth?: number;
+  touchHeight?: number;
+  /** Capabilities layout-type byte. Defaults to CHILD_CAPS_LAYOUT_TYPE (0x02);
+   *  Plus uses CHILD_CAPS_PLUS_LAYOUT_TYPE (UNVERIFIED). */
+  layoutType?: number;
 }
 
 export interface DeviceModel {
@@ -149,11 +166,19 @@ export interface DeviceModel {
   rows: number;
   keyWidth: number;
   keyHeight: number;
+  /** Stream Deck + only: rotary encoder count (4) and touch-strip size (800×100).
+   *  Omitted/undefined on key-only models → advertised as 0 (no encoders/touch). */
+  encoderCount?: number;
+  touchWidth?: number;
+  touchHeight?: number;
+  /** Capabilities layout-type byte override. Defaults to CHILD_CAPS_LAYOUT_TYPE. */
+  layoutType?: number;
   image: DeviceImageSpec;
   wire: DeviceWireSpec;
   keyMap: DeviceKeyMap;
   cora: DeviceCoraSpec;
   splash?: DeviceSplashSpec;
+  widgetDisplays?: readonly DeviceWidgetDisplay[];
   driverKind: DriverKind;
 }
 
@@ -193,16 +218,27 @@ export const WIRE_OVERRIDE_KEYS = [
   'batchImageTransfers',
 ] as const;
 
+/** The CORA-emulation fields a user may change to re-pair a device as a different
+ *  Elgato deck (e.g. AKP05E → Stream Deck +). `advertiseAs` selects the geometry
+ *  source, `productId` the advertised PID; both must agree, so the WebUI sets them
+ *  together. `usePhysicalIdentity` is deliberately absent — it is a physical-device
+ *  fact, not a pairing preference. */
+export const CORA_OVERRIDE_KEYS = ['advertiseAs', 'productId'] as const;
+
 /** User-tunable subset of a DeviceModel, persisted per model id under settings.json's
  *  `modelOverrides` (devices/model-overrides.ts). Deep-partial per section, arrays
- *  replace wholesale. Omissions are deliberate: VID/PID/protocol/driverKind/cora.productId
- *  would impersonate a different device, keyCount/rows/columns force a CORA re-pair,
- *  image.format is a protocol fact, and packetSize/inSize are Mirabox-only. */
+ *  replace wholesale. Omissions are deliberate: VID/PID/protocol/driverKind would
+ *  impersonate a different device, keyCount/rows/columns force a CORA re-pair,
+ *  image.format is a protocol fact, and packetSize/inSize are Mirabox-only.
+ *  The `cora` section is the sanctioned exception: `advertiseAs`/`productId` are
+ *  exactly the "re-pair as a different Elgato deck" knob (opt-in, changes geometry +
+ *  PID → CORA re-pair). */
 export interface DeviceModelOverride {
   image?: Partial<Pick<DeviceImageSpec, (typeof IMAGE_OVERRIDE_KEYS)[number]>>;
   keyMap?: Partial<DeviceKeyMap>;
   wire?: Partial<Pick<DeviceWireSpec, (typeof WIRE_OVERRIDE_KEYS)[number]>>;
   splash?: DeviceSplashSpec;
+  cora?: Partial<Pick<DeviceCoraSpec, (typeof CORA_OVERRIDE_KEYS)[number]>>;
 }
 
 /** Common interface satisfied by every driver (real USB and mock). */
@@ -232,6 +268,10 @@ export interface DeviceDriver extends EventEmitter {
    *  model.image — splash sources are upright). `WorkerHidDriver` only, keeping the
    *  FFI transform and hid_write burst off the main thread. */
   sendSplashImage?(keyIndex: number, bytes: Uint8Array, spec: DeviceImageSpec): void;
+  /** Render a Stream Deck + window-strip image (800×100 JPEG) to the device's
+   *  touch-segment displays. `WorkerHidDriver` only. No-op on models without
+   *  widget displays. */
+  renderTouchImage?(bytes: Uint8Array): void;
   /** Live device-tuning swap — image-transform fields only, no reopen. The
    *  caller resolves `effectiveModel` (registry + overrides) and must have
    *  classified the change as 'live' first (classifyOverrideChange). Absent

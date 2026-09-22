@@ -1,5 +1,20 @@
 import { ELGATO_MK2_PID, IMAGE_JPEG_QUALITY } from '../../types.js';
-import type { DeviceModel } from '../driver.js';
+import type { DeviceImageSpec, DeviceModel } from '../driver.js';
+
+const TOUCH_STRIP_IMAGE: DeviceImageSpec = {
+  format: 'jpeg',
+  width: 128,
+  height: 128,
+  rotate: 180,
+  flipH: false,
+  flipV: false,
+  colorMode: 'rgb',
+  maxBytes: 0xffff,
+  quality: IMAGE_JPEG_QUALITY,
+  resizeFilter: 'lanczos3',
+  sharpen: 0.6,
+  transform: 'sidecar',
+};
 
 /** AJAZZ AKP05E. Only PID 0x3004 has output-protocol evidence. */
 export const AJAZZ_AKP05E_MODEL: DeviceModel = {
@@ -32,6 +47,12 @@ export const AJAZZ_AKP05E_MODEL: DeviceModel = {
   },
   splash: { transformOverride: { rotate: 180 } },
   wire: { packetSize: 1024, inSize: 512, reportId: 0 },
+  widgetDisplays: [
+    { wireId: 1, label: 'Left', image: TOUCH_STRIP_IMAGE },
+    { wireId: 2, label: 'Left center', image: TOUCH_STRIP_IMAGE },
+    { wireId: 3, label: 'Right center', image: TOUCH_STRIP_IMAGE },
+    { wireId: 4, label: 'Right', image: TOUCH_STRIP_IMAGE },
+  ],
   // Input codes are 1-based and row-ordered (1-5 top, 6-10 bottom), unlike the image
   // wire ids above. Encoder press/twist codes (0x33+) fall past the array and are dropped.
   keyMap: {

@@ -94,6 +94,9 @@ export function buildDockStatus(s: DockStatusInput): DockStatus {
   return {
     index: s.index,
     ...(model.keyMap.extraKeys ? { extraKeys: model.keyMap.extraKeys } : {}),
+    ...(model.widgetDisplays
+      ? { widgetDisplays: model.widgetDisplays.map(({ wireId, label }) => ({ wireId, label })) }
+      : {}),
     modelId: model.id,
     modelName: model.name,
     keyCount: model.keyCount,

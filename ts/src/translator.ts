@@ -94,9 +94,34 @@ export function applyOverride(spec: DeviceImageSpec, mode: ImageModeOverride): D
   }
 }
 
+/** A sub-rectangle of the source image (Stream Deck + touch-strip segment). */
+export interface CropRegion {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
 /** Transform a CORA JPEG for an Elgato device according to its DeviceImageSpec.
  *  Returns JPEG bytes for gen2 (MK.2) or BMP bytes for gen1 (Mini). */
 export function transformImageForDevice(jpeg: Uint8Array, spec: DeviceImageSpec): Buffer {
+  return transformWithRegion(jpeg, spec, undefined);
+}
+
+/** Transform one region-cropped slice of a source image (touch-strip segment). */
+export function transformImageRegion(
+  jpeg: Uint8Array,
+  spec: DeviceImageSpec,
+  region: CropRegion,
+): Buffer {
+  return transformWithRegion(jpeg, spec, region);
+}
+
+function transformWithRegion(
+  jpeg: Uint8Array,
+  spec: DeviceImageSpec,
+  region: CropRegion | undefined,
+): Buffer {
   const { symbols } = load();
   for (;;) {
     const n = symbols.image_proc_transform(
@@ -117,6 +142,10 @@ export function transformImageForDevice(jpeg: Uint8Array, spec: DeviceImageSpec)
       Math.round((spec.sharpen ?? 0) * 10),
       fillModeFor(spec),
       spec.crop ?? 0,
+      region?.x ?? 0,
+      region?.y ?? 0,
+      region?.width ?? 0,
+      region?.height ?? 0,
       OUT,
       OUT.length,
       ERR,

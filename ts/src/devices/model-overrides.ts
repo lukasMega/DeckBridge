@@ -2,9 +2,11 @@
 // Pure — no I/O/FFI — runs on main thread and USB worker. Applied ON TOP of a resolved
 // model, never in place of one; excluded fields mean it can't smuggle in a different driver.
 import {
+  CORA_OVERRIDE_KEYS,
   IMAGE_OVERRIDE_KEYS,
   WIRE_OVERRIDE_KEYS,
   supportsImageBatching,
+  type DeviceCoraSpec,
   type DeviceImageSpec,
   type DeviceKeyMap,
   type DeviceModel,
@@ -32,7 +34,7 @@ const KEYMAP_KEYS = [
   'imageOffset',
   'extraKeys',
 ] as const;
-const SECTION_KEYS = ['image', 'keyMap', 'wire', 'splash'] as const;
+const SECTION_KEYS = ['image', 'keyMap', 'wire', 'splash', 'cora'] as const;
 
 type WireOverrideKey = (typeof WIRE_OVERRIDE_KEYS)[number];
 
@@ -77,6 +79,7 @@ function rejectUnknownKeys(
  *  per-field checks and the allowed-key list of their section. */
 type FieldSpec =
   | { kind: 'enum'; values: readonly (string | number)[] }
+  | { kind: 'string'; max?: number }
   | { kind: 'boolean' }
   | { kind: 'number'; min?: number; max?: number; integer?: boolean }
   | { kind: 'ints'; min: number; length?: (model: DeviceModel) => number }
@@ -128,6 +131,13 @@ const TRANSFORM_OVERRIDE_FIELDS: SectionFields = {
   rotate: { kind: 'enum', values: ROTATIONS },
   flipH: { kind: 'boolean' },
   flipV: { kind: 'boolean' },
+};
+
+type CoraOverrideKey = (typeof CORA_OVERRIDE_KEYS)[number];
+
+const CORA_FIELDS: Record<CoraOverrideKey, FieldSpec> = {
+  advertiseAs: { kind: 'string', max: 64 },
+  productId: { kind: 'number', min: 0, max: 0xffff, integer: true },
 };
 
 const SPLASH_FIELDS: SectionFields = {
@@ -190,6 +200,11 @@ function checkField(
     case 'boolean':
       if (typeof value !== 'boolean') errors.push(`${path}: must be a boolean`);
       return;
+    case 'string':
+      if (typeof value !== 'string') errors.push(`${path}: must be a string`);
+      else if (spec.max !== undefined && value.length > spec.max)
+        errors.push(`${path}: must be ≤ ${spec.max} characters`);
+      return;
     case 'enum':
       if (!spec.values.includes(value as string)) {
         errors.push(`${path}: must be one of ${spec.values.join(', ')}`);
@@ -244,6 +259,7 @@ export function validateModelOverride(raw: unknown, model: DeviceModel): Validat
   if (raw.keyMap !== undefined) validateSection(raw.keyMap, KEYMAP_FIELDS, 'keyMap', model, errors);
   if (raw.wire !== undefined) validateWire(raw.wire, model, errors);
   if (raw.splash !== undefined) validateSection(raw.splash, SPLASH_FIELDS, 'splash', model, errors);
+  if (raw.cora !== undefined) validateSection(raw.cora, CORA_FIELDS, 'cora', model, errors);
   if (errors.length > 0) return { ok: false, errors };
   return { ok: true, value: raw };
 }
@@ -263,11 +279,13 @@ export function applyModelOverrides(model: DeviceModel, ov?: DeviceModelOverride
   const keyMap: DeviceKeyMap = { ...model.keyMap, ...defined(ov.keyMap) };
   const wire: DeviceWireSpec = { ...model.wire, ...defined(ov.wire) };
   const splash: DeviceSplashSpec | undefined = ov.splash ?? model.splash;
+  const cora: DeviceCoraSpec = { ...model.cora, ...defined(ov.cora) };
   return {
     ...model,
     image,
     keyMap,
     wire,
+    cora,
     ...(splash ? { splash } : {}),
   };
 }
@@ -300,7 +318,7 @@ export function overrideSummary(ov?: DeviceModelOverride): string {
  *  wire or splash changed, all of which are read at open(). */
 export type OverrideChangeKind = 'none' | 'live' | 'reopen';
 
-const OPEN_TIME_SECTIONS = ['keyMap', 'wire', 'splash'] as const;
+const OPEN_TIME_SECTIONS = ['keyMap', 'wire', 'splash', 'cora'] as const;
 
 /** Canonical form of one override section: key order and absent-vs-undefined
  *  normalized, so `{}`, `undefined` and `{ rotate: undefined }` all compare equal. */
@@ -363,12 +381,13 @@ function tunableWireKeys(model: DeviceModel): readonly WireOverrideKey[] {
 /** Tunable fields at their current (post-override) values — seeds the Device tuning
  *  form so every control starts at what the device actually uses. */
 export function tunableDefaults(model: DeviceModel): DeviceModelOverride {
-  const { image, keyMap, wire, splash } = model;
+  const { image, keyMap, wire, splash, cora } = model;
   return {
     image: project(image, IMAGE_OVERRIDE_KEYS),
     keyMap: project(keyMap, KEYMAP_KEYS),
     wire: project(wire, tunableWireKeys(model)),
     ...(splash ? { splash } : {}),
+    cora: project(cora, CORA_OVERRIDE_KEYS),
   };
 }
 

@@ -1,4 +1,4 @@
-# Side-key widgets
+# Display widgets
 
 Some decks have keys **outside** the grid the Elgato app drives — most notably the
 Mirabox **293S**, whose sixth column is three keys down the right edge. These keys have
@@ -9,27 +9,30 @@ Rendering is **server-side**: the value is drawn on the host and uploaded to the
 widgets keep updating with **no browser open**. A key only re-uploads when its content
 changes (e.g. a clock repaints once a minute).
 
+AJAZZ AKP05E adds four **Touch strip** zones beneath its encoders. They use the same
+widgets, including command output and JavaScript plugins.
+
 ## Assign a widget
 
-Open the web UI (`http://localhost:3000`), select the dock, and use the **Side keys**
-panel. It appears only for a connected dock with side keys (not a plain 15-key deck, not
-mock mode). Each key has a row — **Top / Middle / Bottom** on the 293S — with a widget
-dropdown and, for some, a parameter field or gear (⚙) button.
+Open the web UI (`http://localhost:3000`), select the dock, and use the **Side keys** or
+**Touch strip** panel. It appears only for a connected supported dock (not mock mode). Each
+display has a row — **Top / Middle / Bottom** on the 293S, or four left-to-right zones on
+AKP05E — with a widget dropdown and, for some, a parameter field or gear (⚙) button.
 
 Pick a widget and fill its parameter; it takes effect immediately, saved per key and
 restored on reconnect.
 
 ## Built-in widgets
 
-| Widget | Parameter | What it shows |
-|---|---|---|
-| **Empty** | — | Nothing (clears the key). |
-| **Clock (24h)** | — | Current time as `HH:MM`. Repaints once a minute. |
-| **Date** | — | Weekday, day, and month. |
-| **Custom text** | text (`\n` = new line) | Whatever you type, as up to 4 centered lines. |
-| **Weather (°C)** | `lat,lon` (e.g. `50.08,14.43`) | Current temperature in °C. |
-| **Command output** | a shell command | The command's stdout. |
-| **Plugin (JS)** | a plugin file | The value returned by a JavaScript plugin you write — see [Plugin widgets](./plugin-widgets.md). |
+| Widget             | Parameter                      | What it shows                                                                                    |
+| ------------------ | ------------------------------ | ------------------------------------------------------------------------------------------------ |
+| **Empty**          | —                              | Nothing (clears the key).                                                                        |
+| **Clock (24h)**    | —                              | Current time as `HH:MM`. Repaints once a minute.                                                 |
+| **Date**           | —                              | Weekday, day, and month.                                                                         |
+| **Custom text**    | text (`\n` = new line)         | Whatever you type, as up to 4 centered lines.                                                    |
+| **Weather (°C)**   | `lat,lon` (e.g. `50.08,14.43`) | Current temperature in °C.                                                                       |
+| **Command output** | a shell command                | The command's stdout.                                                                            |
+| **Plugin (JS)**    | a plugin file                  | The value returned by a JavaScript plugin you write — see [Plugin widgets](./plugin-widgets.md). |
 
 ### Weather
 
@@ -60,13 +63,13 @@ string.
 
 ## Rendering details
 
-- Values are drawn with a packed **Spleen** bitmap font (BSD-2) into an 85×85 BMP, then
-  transformed to the device's native format like any other key image.
+- Values are drawn with a packed **Spleen** bitmap font (BSD-2), then transformed to each
+  display's native format like any other key image.
 - Up to **4 centered lines**, split on `\n`. Short single lines use a larger font.
 - The parameter is capped at **128 characters**.
 
 ## Going further
 
 For anything the built-ins don't cover — a home-automation entity, custom API, or
-computed value — write a small JavaScript **plugin** and assign it to a side key. See
+computed value — write a small JavaScript **plugin** and assign it to a display. See
 [Plugin widgets](./plugin-widgets.md).

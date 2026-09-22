@@ -8,7 +8,8 @@ import {
 } from '../src/extra-keys.js';
 import { isExtraKeyConfig } from '../src/types.js';
 import { MIRABOX_293S_MODEL } from '../src/devices/mirabox/mirabox-293s.js';
-import type { DeviceImageSpec } from '../src/devices/driver.js';
+import { AJAZZ_AKP05E_MODEL } from '../src/devices/ajazz/akp05e.js';
+import type { DeviceImageSpec, DeviceModel } from '../src/devices/driver.js';
 import { testAsync as test, summary } from './helpers/harness.js';
 
 // renderWidgetLines
@@ -182,7 +183,7 @@ await test('blank text renders pure background', () => {
 // ExtraKeyWidgets
 
 class FakeDriver extends EventEmitter {
-  model = MIRABOX_293S_MODEL;
+  model: DeviceModel = MIRABOX_293S_MODEL;
   splashed: Array<{ keyIndex: number; bytes: Uint8Array; spec: DeviceImageSpec }> = [];
   cleared: number[] = [];
   open(): Promise<void> {
@@ -262,6 +263,22 @@ await test('model without extraKeys → no device I/O, no timer', () => {
   w.stop();
   assert.equal(d.cleared.length, 0);
   assert.equal(d.splashed.length, 0);
+});
+
+await test('AKP05E touch-strip widgets use all four zones and their image spec', () => {
+  const d = new FakeDriver();
+  d.model = AJAZZ_AKP05E_MODEL;
+  const w = new ExtraKeyWidgets(d, (wireId) =>
+    wireId === 1 ? { widget: 'text', param: 'Hi' } : undefined,
+  );
+  w.start();
+  w.stop();
+  assert.deepEqual(d.cleared, [2, 3, 4]);
+  assert.equal(d.splashed.length, 1);
+  assert.equal(d.splashed[0]!.keyIndex, 1);
+  assert.equal(d.splashed[0]!.spec.width, 128);
+  assert.equal(d.splashed[0]!.spec.height, 128);
+  assert.equal(d.splashed[0]!.spec.rotate, 180);
 });
 
 // isExtraKeyConfig (migration guard)

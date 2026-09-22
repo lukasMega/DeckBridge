@@ -3,7 +3,13 @@
 // so this panel only picks the widget + its parameter.
 import { useEffect, useState } from 'preact/hooks';
 import { useStore } from '../store.js';
-import type { ExtraKeyCfg, ExtraKeyWidget, PluginStatus, PluginsInfo } from '../ui-types.js';
+import type {
+  DockUi,
+  ExtraKeyCfg,
+  ExtraKeyWidget,
+  PluginStatus,
+  PluginsInfo,
+} from '../ui-types.js';
 import { ConfigButton, paramPlaceholder, postExtraKey, PARAM_MAX } from './extra-keys-popovers.js';
 
 const WIDGET_OPTIONS: ReadonlyArray<{ value: ExtraKeyWidget; label: string }> = [
@@ -24,6 +30,31 @@ const PARAM_NOUN: Partial<Record<ExtraKeyWidget, string>> = {
   weather: 'location',
   command: 'command',
 };
+
+function widgetPanel(dock: DockUi | undefined): {
+  wireIds: number[];
+  labels: ReadonlyMap<number, string>;
+  title: string;
+  subtitle: string;
+} | null {
+  const displays = dock?.widgetDisplays;
+  if (displays) {
+    return {
+      wireIds: displays.map((display) => display.wireId),
+      labels: new Map(displays.map((display) => [display.wireId, display.label])),
+      title: 'Touch strip',
+      subtitle: 'Four display zones — show a value on each zone',
+    };
+  }
+  const wireIds = dock?.extraKeys;
+  if (!wireIds || wireIds.length === 0) return null;
+  return {
+    wireIds,
+    labels: new Map(),
+    title: 'Side keys',
+    subtitle: 'Display-only right column — show a value on each key',
+  };
+}
 
 // change (not input) — commits on blur/Enter. Only text widget maps "\n" to real line break.
 function ParamInput({
@@ -239,21 +270,24 @@ export function ExtraKeysPanel(): preact.JSX.Element | null {
   if (status.driverMode === 'mock') return null;
   const selected = status.selectedDock ?? 0;
   const dock = status.docks?.find((d) => d.index === selected) ?? status.docks?.[0];
-  const wireIds = dock?.extraKeys;
-  if (!wireIds || wireIds.length === 0) return null;
+  const panel = widgetPanel(dock);
+  if (!panel) return null;
 
-  const sorted = wireIds.toSorted((a, b) => a - b);
+  const sorted = panel.wireIds.toSorted((a, b) => a - b);
   return (
     <div class="xkeys">
       <div class="xkeys-head">
-        <span class="xkeys-label">Side keys</span>
-        <span class="xkeys-sub">The display-only right column — show a value on each key</span>
+        <span class="xkeys-label">{panel.title}</span>
+        <span class="xkeys-sub">{panel.subtitle}</span>
       </div>
       {sorted.map((wireId, i) => (
         <ExtraKeyRow
           key={wireId}
           wireId={wireId}
-          label={sorted.length === 3 ? POSITION_LABELS[i]! : `Key ${wireId}`}
+          label={
+            panel.labels.get(wireId) ??
+            (sorted.length === 3 ? POSITION_LABELS[i]! : `Key ${wireId}`)
+          }
           cfg={configs[String(wireId)]}
           pluginFiles={plugins.files}
           pluginsDir={plugins.dir}

@@ -23,6 +23,10 @@ interface ImageProcSymbols {
     sharpenSigmaTenths: number, // sigma × 10; 0 = no sharpen
     fillMode: number, // 0 = resize; 1 = pad-black; 2 = pad-average; 3 = pad-edge-clamp
     cropPx: number, // pixels cropped from every source side before resize; 0 = none
+    cropX: number, // region-crop left offset (used when cropW/cropH > 0)
+    cropY: number, // region-crop top offset
+    cropW: number, // region-crop width (0 = no region crop)
+    cropH: number, // region-crop height (0 = no region crop)
     outBuf: Uint8Array,
     outCap: number,
     errBuf: Uint8Array,
@@ -45,6 +49,10 @@ export function load(): { symbols: ImageProcSymbols; close(): void } {
         UINT32, UINT32,
         SIZE_T, UINT32, INT,
         UINT32, INT, INT, INT, INT,
+        UINT32,
+        UINT32,
+        UINT32,
+        UINT32,
         UINT32,
         UINT32,
         UINT32,

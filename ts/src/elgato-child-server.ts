@@ -8,12 +8,17 @@ import {
   PAYLOAD_TYPE_FEATURE,
   REPORT_BUTTON_STATE_INPUT,
   REPORT_SECONDARY_DETECT,
-  KEY_EVENT_RESERVED_BYTE,
   KEY_EVENT_STATE_OFFSET,
   RECONNECT_DELAY_MS,
+  IMG_CMD_WINDOW,
+  IMG_CMD_LCD,
+  IMG_CMD_WINDOW_PARTIAL,
+  INPUT_SUBTYPE_BUTTONS,
+  INPUT_SUBTYPE_TOUCH,
+  INPUT_SUBTYPE_ENCODER,
   clearTimer,
 } from './types.js';
-import type { KeyState } from './types.js';
+import type { KeyState, TouchInputEvent } from './types.js';
 import { CORA_FLAG_VERBATIM, encodeCoraFrame } from './cora-frame.js';
 import { CoraServerBase } from './cora-server-base.js';
 import { describeChildPayload } from './cora-describe.js';
@@ -29,6 +34,7 @@ import {
   type SendFrameFn,
   type LogFn,
 } from './elgato-child-payload.js';
+import { assembleImageChunk } from './image-assembler.js';
 import { createGetReportHandlers, type GetReportHandler } from './elgato-child-report-handlers.js';
 
 type ReconnectState = 'idle' | 'in-progress' | 'scheduled';
@@ -36,9 +42,13 @@ type ReconnectState = 'idle' | 'in-progress' | 'scheduled';
 export class ElgatoChildServer extends CoraServerBase {
   private imagePages: Map<number, ImageAssembly> = new Map();
   private gen1ImagePages: Map<number, ImageAssembly> = new Map();
+  private touchPages: Map<number, ImageAssembly> = new Map();
   private warnedOobKeys = new Set<number>();
   private childGeometry: ChildGeometry;
   private keyStates: Uint8Array;
+  /** Bitmap of currently-pressed encoders (bit i = encoder i), emitted as the
+   *  Plus encoder press report. */
+  private encoderPressMask = 0;
   private readonly deviceConfig: DeviceConfig;
   private remoteAddress: string | null = null;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
@@ -57,6 +67,7 @@ export class ElgatoChildServer extends CoraServerBase {
   private readonly sendAckNakFn = this.sendAckNak.bind(this);
   private readonly handleImageChunkFn = this.handleImageChunk.bind(this);
   private readonly handleGen1ImageChunkFn = this.handleGen1ImageChunk.bind(this);
+  private readonly handleTouchOutputFn = this.handleTouchOutput.bind(this);
   private readonly buildSelfDeviceInfoFn = (): Buffer => this.buildSelfDeviceInfo();
   private readonly getReportHandlers: Map<number, GetReportHandler>;
 
@@ -139,12 +150,59 @@ export class ElgatoChildServer extends CoraServerBase {
     const pkt = Buffer.alloc(ELGATO_PKT_SIZE_TX);
     const kc = this.childGeometry.keyCount;
     pkt[0] = REPORT_BUTTON_STATE_INPUT;
-    pkt[1] = KEY_EVENT_RESERVED_BYTE;
+    pkt[1] = INPUT_SUBTYPE_BUTTONS;
     pkt[2] = kc;
     for (let i = 0; i < kc; i++) {
       pkt[KEY_EVENT_STATE_OFFSET + i] = this.keyStates[i] ?? 0;
     }
     this.sendFrame(pkt, 0, 0, 0, `CORA button-state keys=${kc}`);
+  }
+
+  /** Stream Deck + encoder press. Bitmap report: `01 03 <len> 00 00 <mask>`. */
+  sendDialPress(index: number, down: boolean): void {
+    const count = this.childGeometry.encoderCount ?? 0;
+    if (index < 0 || index >= count) return;
+    if (down) this.encoderPressMask |= 1 << index;
+    else this.encoderPressMask &= ~(1 << index);
+    const pkt = Buffer.alloc(ELGATO_PKT_SIZE_TX);
+    pkt[0] = REPORT_BUTTON_STATE_INPUT;
+    pkt[1] = INPUT_SUBTYPE_ENCODER;
+    pkt[2] = 2; // subtype byte + mask byte
+    pkt[4] = 0x00; // press bitmap
+    pkt[5] = this.encoderPressMask;
+    this.sendFrame(pkt, 0, 0, 0, `CORA encoder-press mask=${this.encoderPressMask}`);
+  }
+
+  /** Stream Deck + encoder rotation. `01 03 <len> 00 01 <d0..d3>` (INT8 per encoder). */
+  sendDialRotate(index: number, delta: number): void {
+    const count = this.childGeometry.encoderCount ?? 0;
+    if (index < 0 || index >= count) return;
+    const pkt = Buffer.alloc(ELGATO_PKT_SIZE_TX);
+    pkt[0] = REPORT_BUTTON_STATE_INPUT;
+    pkt[1] = INPUT_SUBTYPE_ENCODER;
+    pkt[2] = 1 + count;
+    pkt[4] = 0x01; // rotate
+    pkt[5 + index] = Math.max(-128, Math.min(127, delta));
+    this.sendFrame(pkt, 0, 0, 0, `CORA encoder-rotate index=${index} delta=${delta}`);
+  }
+
+  /** Stream Deck + touch strip. `01 02 <len> 00 <type> <contacts> x y [ex ey]`. */
+  sendTouch(event: TouchInputEvent): void {
+    const pkt = Buffer.alloc(ELGATO_PKT_SIZE_TX);
+    const typeByte = event.type === 'tap' ? 0x01 : event.type === 'hold' ? 0x02 : 0x03;
+    const hasEnd = event.type === 'swipe';
+    pkt[0] = REPORT_BUTTON_STATE_INPUT;
+    pkt[1] = INPUT_SUBTYPE_TOUCH;
+    pkt[2] = hasEnd ? 10 : 6; // type + contacts + x/y (+ endX/endY)
+    pkt[4] = typeByte;
+    pkt[5] = 1; // contacts
+    pkt.writeUInt16LE(event.x, 6);
+    pkt.writeUInt16LE(event.y, 8);
+    if (hasEnd) {
+      pkt.writeUInt16LE(event.endX ?? event.x, 10);
+      pkt.writeUInt16LE(event.endY ?? event.y, 12);
+    }
+    this.sendFrame(pkt, 0, 0, 0, `CORA touch ${event.type} x=${event.x} y=${event.y}`);
   }
 
   private buildSelfDeviceInfo(): Buffer {
@@ -227,6 +285,7 @@ export class ElgatoChildServer extends CoraServerBase {
       this.sendAckNakFn,
       this.handleImageChunkFn,
       this.handleGen1ImageChunkFn,
+      this.handleTouchOutputFn,
     );
   }
 
@@ -276,6 +335,24 @@ export class ElgatoChildServer extends CoraServerBase {
       this.emitLogFn,
       (event) => this.emit('image', event),
     );
+  }
+
+  /** Stream Deck + touch/LCD output commands (0x08 LCD, 0x0B window strip,
+   *  0x0C partial window). Only the window strip (0x0B) is assembled and acted
+   *  on today; LCD and partial-window chunk layouts are UNVERIFIED, so those are
+   *  ACKed (already done by the caller) and dropped with a debug trace. The
+   *  window strip is assumed to use the gen2 8-byte chunk header. */
+  private handleTouchOutput(cmd: number, pkt: Buffer, _messageId: number): void {
+    if (cmd === IMG_CMD_LCD || cmd === IMG_CMD_WINDOW_PARTIAL) {
+      this.emitLog(
+        'debug',
+        `child rx: ${cmd === IMG_CMD_LCD ? 'LCD' : 'partial-window'} output dropped (layout unverified)`,
+      );
+      return;
+    }
+    // 0x0B window strip — assemble as a gen2 image chunk (assumed layout).
+    const assembled = assembleImageChunk(this.touchPages, pkt);
+    if (assembled) this.emit('touchImage', { data: assembled.data });
   }
 
   private tryConnectOutbound(): void {
@@ -339,6 +416,8 @@ export class ElgatoChildServer extends CoraServerBase {
     this.keyStates = new Uint8Array(this.childGeometry.keyCount);
     this.imagePages = new Map();
     this.gen1ImagePages = new Map();
+    this.touchPages = new Map();
+    this.encoderPressMask = 0;
     this.warnedOobKeys.clear();
     this.sendKeepalive();
   }

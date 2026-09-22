@@ -30,6 +30,7 @@ export interface DockUi {
   elgatoConnected: boolean;
   brightness?: number; // absent on legacy-synthesized entries (deriveDocks)
   extraKeys?: number[]; // wire ids of keys outside the emulated grid (293S 6th column)
+  widgetDisplays?: Array<{ wireId: number; label: string }>;
 }
 
 export interface ExtraKeyCfg {

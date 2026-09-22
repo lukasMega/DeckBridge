@@ -21,6 +21,10 @@ export function modelToChildGeometry(model: DeviceModel): ChildGeometry {
     keyWidth: model.keyWidth,
     keyHeight: model.keyHeight,
     productName: model.name,
+    encoderCount: model.encoderCount ?? 0,
+    touchWidth: model.touchWidth ?? 0,
+    touchHeight: model.touchHeight ?? 0,
+    layoutType: model.layoutType ?? CHILD_CAPS_LAYOUT_TYPE,
   };
 }
 
@@ -33,12 +37,16 @@ export function buildCapabilitiesPacket(
   pkt[0] = PKT_EVENT;
   pkt[1] = EVENT_SUBTYPE_CAPABILITIES;
   pkt.writeUInt16LE(CHILD_CAPS_VERSION, 2);
-  pkt[4] = CHILD_CAPS_LAYOUT_TYPE;
+  pkt[4] = geometry.layoutType ?? CHILD_CAPS_LAYOUT_TYPE;
   pkt[5] = geometry.rows;
   pkt[6] = geometry.columns;
   pkt[7] = geometry.keyCount;
   pkt.writeUInt16LE(geometry.keyWidth, 8);
   pkt.writeUInt16LE(geometry.keyHeight, 10);
+  // Touch-strip dims (Stream Deck +: 800×100). Offsets UNVERIFIED — keyed here so a
+  // verified capture is a one-line fix (see plan CORA section).
+  pkt.writeUInt16LE(geometry.touchWidth ?? 0, 12);
+  pkt.writeUInt16LE(geometry.touchHeight ?? 0, 14);
   pkt.writeUInt16LE(ELGATO_VID, 26);
   pkt.writeUInt16LE(config.productId, 28);
   Buffer.from(MANUFACTURER_STRING + '\0', 'ascii').copy(pkt, 30);

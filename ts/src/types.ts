@@ -7,6 +7,11 @@ export type { ClientApp, ExtraKeyWidget, KeyState, RealDeviceIdentity } from './
 
 export const ELGATO_VID = 0x0fd9;
 export const ELGATO_MK2_PID = 0x00a5;
+export const ELGATO_PLUS_PID = 0x0084;
+/** Stream Deck + touch-strip dimensions (pixels). The window-strip image is split
+ *  into one slice per device touch segment before rendering. */
+export const PLUS_TOUCH_WIDTH = 800;
+export const PLUS_TOUCH_HEIGHT = 100;
 export const ELGATO_TCP_PORT = 5343;
 export const ELGATO_PKT_SIZE_RX = 1024;
 export const ELGATO_PKT_SIZE_TX = 512;
@@ -50,6 +55,10 @@ export const MDNS_TXT_VID = '4057';
 // Capabilities packet structure
 export const CHILD_CAPS_VERSION = 0x0200;
 export const CHILD_CAPS_LAYOUT_TYPE = 0x02;
+// Stream Deck + layout byte. UNVERIFIED — no Plus-on-Dock capture exists; kept as a
+// named constant (not inlined) so a verified value is a one-line change. See
+// .claude/plans/2026-09-21_ajazz-akp05-stream-deck-plus-support.md.
+export const CHILD_CAPS_PLUS_LAYOUT_TYPE = 0x03;
 export const CHILD_CAPS_SERIAL_MAX_LEN = 30;
 export const MANUFACTURER_STRING = 'Elgato';
 
@@ -172,6 +181,17 @@ export const PAYLOAD_TYPE_FEATURE = 0x03;
 // Image chunk sub-command (byte 1 when byte0 = 0x02)
 export const IMG_CMD_WRITE = 0x07;
 
+// Stream Deck + output-report image commands (byte 1 when byte0 = 0x02). Routing
+// only — see elgato-child-payload.ts; the 0x0B/0x0C chunk layouts are UNVERIFIED.
+export const IMG_CMD_LCD = 0x08; // full 800×480 LCD
+export const IMG_CMD_WINDOW = 0x0b; // window strip 800×100
+export const IMG_CMD_WINDOW_PARTIAL = 0x0c; // partial window (X/Y/W/H header)
+
+// Input report sub-types (byte 1 of the 0x01 input report the child server emits).
+export const INPUT_SUBTYPE_BUTTONS = 0x00;
+export const INPUT_SUBTYPE_TOUCH = 0x02;
+export const INPUT_SUBTYPE_ENCODER = 0x03;
+
 // Gen1 (Stream Deck Mini) image chunk constants
 export const GEN1_IMG_CMD = 0x01; // byte[1] in gen1 output report
 export const GEN1_IMAGE_HEADER_SIZE = 16;
@@ -191,6 +211,26 @@ export const REPORT_DEVICE_INFO = 0x0b;
 export interface KeyEvent {
   keyIndex: number;
   state: KeyState;
+}
+
+/** A rotary encoder event from a Stream Deck +-style device. `index` is the
+ *  encoder (0..encoderCount-1); a press carries `state`, a turn carries `delta`
+ *  (+1 clockwise / -1 counter-clockwise — device mapping still UNVERIFIED). */
+export interface DialEvent {
+  index: number;
+  kind: 'press' | 'rotate';
+  state?: KeyState;
+  delta?: number;
+}
+
+/** A touch-strip event from a Stream Deck +-style device, in strip coordinates
+ *  (0..touchWidth-1, 0..touchHeight-1). `endX`/`endY` are present for swipes. */
+export interface TouchInputEvent {
+  type: 'tap' | 'hold' | 'swipe';
+  x: number;
+  y: number;
+  endX?: number;
+  endY?: number;
 }
 
 export interface ImageEvent {
@@ -328,6 +368,8 @@ export interface DockStatus {
   // column). Present only when the model has any — the WebUI renders the
   // extra-keys panel off this.
   extraKeys?: readonly number[];
+  /** Device-native widget displays outside CORA's key grid, such as AKP05E's touch strip. */
+  widgetDisplays?: readonly { wireId: number; label: string }[];
 }
 
 // Clear-and-null helpers. The guard-clear-forget-to-null sequence was written out

@@ -10,6 +10,7 @@ import { AJAZZ_AKP05E_MODEL } from './ajazz/akp05e.js';
 import { AJAZZ_AKP05_MODEL } from './ajazz/akp05.js';
 import { FIFINE_D6_MODEL, FIFINE_D6_REV2_MODEL } from './fifine/fifine-d6.js';
 import { AKP153_V1_CLONE_MODELS } from './rebadge/akp153-v1-clones.js';
+import { STREAM_DECK_PLUS_MODEL } from './elgato/plus.js';
 
 // Probe order: Elgato first (priority over Mirabox), then 293V3 before 293S. Everything
 // after that has a unique VID/PID pair, so its position is cosmetic — the one near-clash,
@@ -32,11 +33,19 @@ export const DEVICE_MODELS: DeviceModel[] = [
 /** Fallback model used when nothing is connected / before a real device is probed. */
 export const DEFAULT_MODEL: DeviceModel = MK2_MODEL;
 
+/** CORA emulation profiles: registry entries resolved as `cora.advertiseAs` targets
+ *  only, never probed over USB. A device re-pairs as one of these by setting
+ *  `cora.advertiseAs` (and matching `cora.productId`) via a model override. */
+export const CORA_PROFILES: readonly DeviceModel[] = [STREAM_DECK_PLUS_MODEL];
+
+/** Every resolvable model id: probeable devices + emulation profiles. */
+const ALL_MODELS: readonly DeviceModel[] = [...DEVICE_MODELS, ...CORA_PROFILES];
+
 /** The registry entry with this model id, or null. Model ids are the key of
  *  settings.json's `modelOverrides`, so this is the lookup that turns a persisted
  *  override back into the model it applies to. */
 export function findModelById(id: string): DeviceModel | null {
-  return DEVICE_MODELS.find((m) => m.id === id) ?? null;
+  return ALL_MODELS.find((m) => m.id === id) ?? null;
 }
 
 /** Identifies which model matches a VID+PID pair, or null if unknown. */

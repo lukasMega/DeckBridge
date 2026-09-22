@@ -25,7 +25,12 @@ export class ExtraKeysController {
   }
 
   private onSelectedDock(wireId: number): boolean {
-    return this.host.selectedDockStatus()?.extraKeys?.includes(wireId) ?? false;
+    const status = this.host.selectedDockStatus();
+    return (
+      status?.extraKeys?.includes(wireId) ||
+      status?.widgetDisplays?.some((display) => display.wireId === wireId) ||
+      false
+    );
   }
 
   private noKeyError(wireId: number): ReqError {

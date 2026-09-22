@@ -4,10 +4,16 @@
  *  CORA ACK loop or the WebUI (P1). The main thread forwards raw CORA bytes via
  *  the 'image' worker message; this module owns the transform + the LRU cache. */
 import { debug, info, warn } from './logger.js';
-import { applyOverride, mk2IndexToDeviceImgId, transformImageForDevice } from './translator.js';
+import {
+  applyOverride,
+  mk2IndexToDeviceImgId,
+  transformImageForDevice,
+  transformImageRegion,
+} from './translator.js';
 import { imageCache, hashJpeg, makeCacheKey, specRevision } from './image-cache.js';
 import type { DeviceModel } from './devices/driver.js';
 import type { ImageModeOverride } from './types.js';
+import { PLUS_TOUCH_WIDTH, PLUS_TOUCH_HEIGHT } from './types.js';
 
 /** The slice of a driver this module needs: the native-bytes write. The model
  *  is passed separately because the low-level drivers keep `model` private. */
@@ -206,4 +212,32 @@ export function renderImage(
 
   driver.sendImage(deviceKeyIndex, entry.nativeBytes);
   return Promise.resolve();
+}
+
+/** Render a Stream Deck + window-strip image (800×100) to the device's touch-segment
+ *  widget displays, splitting left-to-right (segment i → widgetDisplays[i]). The
+ *  window-strip chunk layout is UNVERIFIED; this consumes the already-assembled
+ *  full-strip JPEG and is a no-op on models without widgetDisplays. */
+export function renderTouchStrip(
+  driver: RenderTarget,
+  model: DeviceModel,
+  bytes: Uint8Array,
+): void {
+  const displays = model.widgetDisplays;
+  if (!displays || displays.length === 0) return;
+  const sliceWidth = Math.floor(PLUS_TOUCH_WIDTH / displays.length);
+  for (let i = 0; i < displays.length; i++) {
+    const display = displays[i]!;
+    try {
+      const native = transformImageRegion(bytes, display.image, {
+        x: i * sliceWidth,
+        y: 0,
+        width: sliceWidth,
+        height: PLUS_TOUCH_HEIGHT,
+      });
+      driver.sendImage(display.wireId, native);
+    } catch (err) {
+      warn('touch', `touch segment ${i} render failed: ${(err as Error).message}`);
+    }
+  }
 }

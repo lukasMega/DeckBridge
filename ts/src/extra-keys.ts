@@ -306,7 +306,7 @@ export class ExtraKeyWidgets {
   }
 
   start(): void {
-    if (!this.driver.model.keyMap.extraKeys || this.timer !== undefined) return;
+    if (this.widgetIds().length === 0 || this.timer !== undefined) return;
     this.tick();
     this.timer = setInterval(() => this.tick(), 1000);
   }
@@ -352,10 +352,10 @@ export class ExtraKeyWidgets {
   }
 
   private tick(): void {
-    const extraKeys = this.driver.model.keyMap.extraKeys;
-    if (!extraKeys) return;
+    const widgetIds = this.widgetIds();
+    if (widgetIds.length === 0) return;
     const now = new Date();
-    for (const wireId of extraKeys) {
+    for (const wireId of widgetIds) {
       const cfg = this.configFor(wireId);
       const lines = cfg ? renderWidgetLines(cfg, this.contextFor(cfg, now)) : null;
       const sig = lines === null ? '' : JSON.stringify(lines);
@@ -364,9 +364,19 @@ export class ExtraKeyWidgets {
       if (lines === null) {
         this.driver.clearKey(wireId);
       } else if (this.driver.sendSplashImage) {
-        const spec = splashSpec(this.driver.model);
+        const spec = this.widgetDisplay(wireId)?.image ?? splashSpec(this.driver.model);
         this.driver.sendSplashImage(wireId, composeWidgetBmp(lines, spec.width), spec);
       }
     }
+  }
+
+  private widgetIds(): readonly number[] {
+    const sideKeys = this.driver.model.keyMap.extraKeys ?? [];
+    const displays = this.driver.model.widgetDisplays?.map((display) => display.wireId) ?? [];
+    return [...sideKeys, ...displays];
+  }
+
+  private widgetDisplay(wireId: number) {
+    return this.driver.model.widgetDisplays?.find((display) => display.wireId === wireId);
   }
 }
