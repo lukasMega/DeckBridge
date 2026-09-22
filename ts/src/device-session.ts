@@ -21,6 +21,8 @@ import type {
   ImageEvent,
   DockStatus,
   ImageModeOverride,
+  DialEvent,
+  TouchInputEvent,
 } from './types.js';
 import type { DeviceIdentitySettings } from './settings-store.js';
 import { advertisedGeometry } from './devices/registry.js';
@@ -161,6 +163,11 @@ export function wireCommonDriverEvents(
      *  undefined for identity-mapped models. Key-map learn mode needs it —
      *  a wrong map is exactly what it is there to fix. */
     onKey: (mk2Index: number, state: KeyEvent['state'], wireId?: number) => void;
+    /** Encoder press/rotate (Stream Deck + emulation). Dropped by the child
+     *  server when the advertised geometry declares no encoders. */
+    onDial?: (event: DialEvent) => void;
+    /** Touch-strip gesture (Stream Deck + emulation). */
+    onTouch?: (event: TouchInputEvent) => void;
     /** Sleep/wake re-init sent CLE ALL — repaint the extra-key widgets it wiped. */
     onReinit: () => void;
   },
@@ -179,6 +186,8 @@ export function wireCommonDriverEvents(
     log('info', 'key', `${model.id} wire=0x${wire} → mk2=${index} ${e.state}`);
     opts.onKey(index, e.state, e.keyIndex);
   });
+  driver.on('dial', (e: DialEvent) => opts.onDial?.(e));
+  driver.on('touch', (e: TouchInputEvent) => opts.onTouch?.(e));
   driver.on('error', (err: Error) => log('error', model.id, err.message));
   driver.on('reinit', opts.onReinit);
   driver.on(
@@ -368,6 +377,11 @@ export class DeviceSession {
   private wireListeners(): void {
     wireCommonDriverEvents(this.driver, this.model, {
       onKey: (index, state) => this.childServer.sendKeyEvent(index, state),
+      onDial: (event) => {
+        if (event.kind === 'press') this.childServer.sendDialPress(event.index, event.state === 'down');
+        else if (event.delta !== undefined) this.childServer.sendDialRotate(event.index, event.delta);
+      },
+      onTouch: (event) => this.childServer.sendTouch(event),
       onReinit: () => this.repaintExtraKeys(),
     });
     this.driver.on('disconnect', () => {
@@ -380,6 +394,9 @@ export class DeviceSession {
     this.childServer.on('image', ({ keyIndex, data, format }: ImageEvent) => {
       this.driver.renderCoraImage(keyIndex, data, format);
       this.onImage?.(keyIndex, data, format);
+    });
+    this.childServer.on('touchImage', ({ data }: { data: Uint8Array }) => {
+      this.driver.renderTouchImage(data);
     });
     this.childServer.on('brightness', (level: number) => {
       if (this.ignoreElgatoBrightness?.()) {

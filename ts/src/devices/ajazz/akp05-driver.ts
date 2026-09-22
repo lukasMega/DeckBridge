@@ -2,7 +2,7 @@ import { findHidPath, isNullPtr, IS_MACOS } from '../../ffi/hidapi.js';
 import { HidDeviceBase } from '../hid-connection.js';
 import { debug, error, info } from '../../logger.js';
 import type { DeviceModel } from '../driver.js';
-import type { KeyEvent, KeyState } from '../../types.js';
+import type { KeyEvent, KeyState, DialEvent } from '../../types.js';
 import { DEFAULT_BRIGHTNESS } from '../../types.js';
 import { parseAckReport } from '../mirabox-protocol.js';
 import {
@@ -24,6 +24,18 @@ import {
 // akp05 firmware drops the host after ~15 s of silence — panel blanks and key
 // reports stop until a key press partially wakes it. See docs/references.md.
 const KEEP_ALIVE_INTERVAL_MS = 10_000;
+
+// Input classification. Key codes are 1-based and row-ordered (1-10). Encoder codes
+// come through the same ACK report (byte 9 = code, byte 10 = stateByte) and are
+// UNVERIFIED — capture them with `mise run akp05-capture` (ts/src/akp05-capture.ts)
+// and correct the tables below. Touch-strip reports use a different framing that is
+// not decoded yet, so those events are not emitted.
+const KEY_CODE_MIN = 0x01;
+const KEY_CODE_MAX = 0x0a;
+/** Encoder press codes, left-to-right (UNVERIFIED). stateByte 0x01 = down. */
+const ENCODER_PRESS_CODES: readonly number[] = [0x33, 0x34, 0x35, 0x36];
+/** Encoder rotate codes, left-to-right (UNVERIFIED). stateByte 0x01 = cw, 0x02 = ccw. */
+const ENCODER_ROTATE_CODES: readonly number[] = [0x43, 0x44, 0x45, 0x46];
 
 const BLACK_JPEG = Buffer.from(
   '/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAP//////////////////////////////////////////////////////////////////////////////////////2wBDAf//////////////////////////////////////////////////////////////////////////////////////wAARCAABAAEDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAb/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/9oADAMBAAIQAxAAAAH/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/9oACAEBAAEFAqf/xAAUEQEAAAAAAAAAAAAAAAAAAAAA/9oACAEDAQE/Aaf/xAAUEQEAAAAAAAAAAAAAAAAAAAAA/9oACAECAQE/Aaf/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/9oACAEBAAY/Aqf/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/9oACAEBAAE/IV//2gAMAwEAAgADAAAAEP/EABQRAQAAAAAAAAAAAAAAAAAAABD/2gAIAQMBAT8QH//EABQRAQAAAAAAAAAAAAAAAAAAABD/2gAIAQIBAT8QH//EABQQAQAAAAAAAAAAAAAAAAAAABD/2gAIAQEAAT8QH//Z',
@@ -103,8 +115,29 @@ export class Akp05Driver extends HidDeviceBase {
       else debug('hid', `AKP05E rx: ${data.toString('hex')}`);
       return;
     }
-    const state: KeyState = parsed.stateByte === 0x01 ? 'down' : 'up';
-    this.emit('key', { keyIndex: parsed.keyIndex, state } satisfies KeyEvent);
+    this.classifyInput(parsed.keyIndex, parsed.stateByte);
+  }
+
+  private classifyInput(code: number, stateByte: number): void {
+    if (code >= KEY_CODE_MIN && code <= KEY_CODE_MAX) {
+      const state: KeyState = stateByte === 0x01 ? 'down' : 'up';
+      this.emit('key', { keyIndex: code, state } satisfies KeyEvent);
+      return;
+    }
+    const pressIndex = ENCODER_PRESS_CODES.indexOf(code);
+    if (pressIndex >= 0) {
+      const state: KeyState = stateByte === 0x01 ? 'down' : 'up';
+      this.emit('dial', { index: pressIndex, kind: 'press', state } satisfies DialEvent);
+      return;
+    }
+    const rotateIndex = ENCODER_ROTATE_CODES.indexOf(code);
+    if (rotateIndex >= 0) {
+      const delta = stateByte === 0x02 ? -1 : 1; // direction UNVERIFIED
+      this.emit('dial', { index: rotateIndex, kind: 'rotate', delta } satisfies DialEvent);
+      return;
+    }
+    // Touch-strip and any other control: framing unverified — log for capture.
+    debug('hid', `AKP05E unclassified input code=0x${code.toString(16)} state=${stateByte}`);
   }
 
   close(): Promise<void> {

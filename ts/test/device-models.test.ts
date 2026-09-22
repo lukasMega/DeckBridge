@@ -4,9 +4,12 @@ import {
   DEVICE_MODELS,
   DEFAULT_MODEL,
   findModel,
+  findModelById,
+  CORA_PROFILES,
 } from '../src/devices/registry.js';
 import { MK2_MODEL } from '../src/devices/elgato/mk2.js';
 import { MINI_MODEL } from '../src/devices/elgato/mini.js';
+import { STREAM_DECK_PLUS_MODEL } from '../src/devices/elgato/plus.js';
 import { MIRABOX_293_MODEL } from '../src/devices/mirabox/mirabox-293.js';
 import { MIRABOX_293S_MODEL } from '../src/devices/mirabox/mirabox-293s.js';
 import { MIRABOX_K1PRO_MODEL } from '../src/devices/mirabox/mirabox-k1pro.js';
@@ -22,12 +25,14 @@ import { deviceInputToMk2Index } from '../src/translator.js';
 import { modelToChildGeometry, buildCapabilitiesPacket } from '../src/capabilities.js';
 import {
   ELGATO_VID,
+  ELGATO_PLUS_PID,
   CHILD_CAPS_SERIAL_MAX_LEN,
   ELGATO_PKT_SIZE_RX,
   PKT_EVENT,
   EVENT_SUBTYPE_CAPABILITIES,
   CHILD_CAPS_VERSION,
   CHILD_CAPS_LAYOUT_TYPE,
+  CHILD_CAPS_PLUS_LAYOUT_TYPE,
   MANUFACTURER_STRING,
 } from '../src/types.js';
 import type { DeviceConfig } from '../src/elgato-types.js';
@@ -113,6 +118,10 @@ test('AKP05E has its proven 2x5 output mapping', () => {
     keyWidth: 112,
     keyHeight: 112,
     productName: 'AJAZZ AKP05E',
+    encoderCount: 0,
+    touchWidth: 0,
+    touchHeight: 0,
+    layoutType: CHILD_CAPS_LAYOUT_TYPE,
   });
   // CORA already delivers key art upright for this panel; only the splash needs 180.
   assert.equal(AJAZZ_AKP05E_MODEL.image.rotate, 0);
@@ -127,6 +136,38 @@ test('AKP05 inherits AKP05E output protocol', () => {
   assert.equal(AJAZZ_AKP05_MODEL.driverKind, AJAZZ_AKP05E_MODEL.driverKind);
   assert.deepEqual(AJAZZ_AKP05_MODEL.image, AJAZZ_AKP05E_MODEL.image);
   assert.deepEqual(AJAZZ_AKP05_MODEL.keyMap, AJAZZ_AKP05E_MODEL.keyMap);
+});
+
+// Stream Deck + emulation profile
+
+test('stream-deck-plus profile advertises Plus identity and touch geometry', () => {
+  assert.equal(STREAM_DECK_PLUS_MODEL.cora.productId, ELGATO_PLUS_PID);
+  assert.equal(STREAM_DECK_PLUS_MODEL.keyCount, 8);
+  assert.equal(STREAM_DECK_PLUS_MODEL.columns, 4);
+  assert.equal(STREAM_DECK_PLUS_MODEL.rows, 2);
+  assert.equal(STREAM_DECK_PLUS_MODEL.keyWidth, 120);
+  assert.equal(STREAM_DECK_PLUS_MODEL.keyHeight, 120);
+  assert.equal(STREAM_DECK_PLUS_MODEL.encoderCount, 4);
+  assert.equal(STREAM_DECK_PLUS_MODEL.touchWidth, 800);
+  assert.equal(STREAM_DECK_PLUS_MODEL.touchHeight, 100);
+  assert.equal(STREAM_DECK_PLUS_MODEL.layoutType, CHILD_CAPS_PLUS_LAYOUT_TYPE);
+});
+
+test('stream-deck-plus resolves as a cora profile but is not USB-probed', () => {
+  assert.equal(findModelById('stream-deck-plus')?.id, 'stream-deck-plus');
+  assert.ok(!DEVICE_MODELS.some((m) => m.id === 'stream-deck-plus'));
+  assert.equal(CORA_PROFILES[0]?.id, 'stream-deck-plus');
+  // The Plus USB PID must not be claimed by any probeable model.
+  assert.equal(findModel(0x0fd9, ELGATO_PLUS_PID), null);
+});
+
+test('AKP05E can be re-paired as Stream Deck + via cora.advertiseAs', () => {
+  const geo = advertisedGeometry({ ...AJAZZ_AKP05E_MODEL, cora: { ...AJAZZ_AKP05E_MODEL.cora, advertiseAs: 'stream-deck-plus' } });
+  assert.equal(geo.keyCount, 8);
+  assert.equal(geo.encoderCount, 4);
+  assert.equal(geo.touchWidth, 800);
+  assert.equal(geo.touchHeight, 100);
+  assert.equal(geo.layoutType, CHILD_CAPS_PLUS_LAYOUT_TYPE);
 });
 
 // Rev.1 PIDs now resolve to the v1 rebadge clones (akp153-v1-clones.ts), not the rev.2

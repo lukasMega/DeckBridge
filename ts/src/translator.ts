@@ -123,6 +123,7 @@ function transformWithRegion(
   region: CropRegion | undefined,
 ): Buffer {
   const { symbols } = load();
+  const r = region ?? { x: 0, y: 0, width: 0, height: 0 };
   for (;;) {
     const n = symbols.image_proc_transform(
       jpeg,
@@ -142,10 +143,10 @@ function transformWithRegion(
       Math.round((spec.sharpen ?? 0) * 10),
       fillModeFor(spec),
       spec.crop ?? 0,
-      region?.x ?? 0,
-      region?.y ?? 0,
-      region?.width ?? 0,
-      region?.height ?? 0,
+      r.x,
+      r.y,
+      r.width,
+      r.height,
       OUT,
       OUT.length,
       ERR,

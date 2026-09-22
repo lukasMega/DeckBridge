@@ -2,7 +2,7 @@
  *  Instantiates the right driver (Mirabox or Elgato) based on modelId,
  *  then bridges its EventEmitter events ↔ postMessage. */
 import type { MainToWorker, WorkerToMain } from './hid-worker-protocol.js';
-import type { ImageModeOverride, KeyEvent } from './types.js';
+import type { ImageModeOverride, KeyEvent, DialEvent, TouchInputEvent } from './types.js';
 import { DEVICE_MODELS } from './devices/registry.js';
 import type { DeviceModel, DeviceModelOverride } from './devices/driver.js';
 import { supportsImageBatching } from './devices/driver.js';
@@ -11,7 +11,7 @@ import { imageCache } from './image-cache.js';
 import { ElgatoHidDriver } from './devices/hid-driver-base.js';
 import { MiraboxDriver } from './mirabox.js';
 import { Akp05Driver } from './devices/ajazz/akp05-driver.js';
-import { renderImage } from './image-render.js';
+import { renderImage, renderTouchStrip } from './image-render.js';
 import { transformImageForDevice } from './translator.js';
 import { setWorkerPost, setLogLevel, info } from './logger.js';
 
@@ -83,6 +83,8 @@ async function handleOpen(
   openRegistryModel = registryModel;
 
   d.on('key', (e: KeyEvent) => post({ type: 'key', keyIndex: e.keyIndex, state: e.state }));
+  d.on('dial', (e: DialEvent) => post({ type: 'dial', event: e }));
+  d.on('touch', (e: TouchInputEvent) => post({ type: 'touch', event: e }));
   d.on('error', (err: Error) => post({ type: 'error', message: err.message }));
   d.on('disconnect', () => post({ type: 'disconnect' }));
   d.on('reinit', () => post({ type: 'reinit' }));
@@ -147,6 +149,11 @@ function handleSplashImage(
   driver.sendImage(keyIndex, nativeBytes);
 }
 
+/** Split a Stream Deck + window-strip image onto the device's touch segments. */
+function handleTouchStrip(bytes: Uint8Array): void {
+  if (driver && currentModel) renderTouchStrip(driver, currentModel, bytes);
+}
+
 /** Non-device state changes: no HID I/O, they only steer the next render. */
 function handleSetting(
   msg: Extract<MainToWorker, { type: 'setImageOverride' | 'setOverrides' | 'setLogLevel' }>,
@@ -169,6 +176,9 @@ async function handle(msg: MainToWorker, deferNotification: boolean): Promise<vo
       break;
     case 'splashImage':
       handleSplashImage(msg.keyIndex, msg.bytes, msg.spec);
+      break;
+    case 'touchImage':
+      handleTouchStrip(msg.bytes);
       break;
     case 'setBrightness':
       driver?.setBrightness(msg.level);

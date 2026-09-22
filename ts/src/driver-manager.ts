@@ -4,7 +4,7 @@ import { cachedDiscoverySerial, installDiscoverySnapshot } from './ffi/hid-disco
 import { WorkerHidDriver, closeDriver } from './hid-worker-host.js';
 import { MockDriver } from './devices/mock.js';
 import { MAX_MULTI_DECK_SESSIONS } from './types.js';
-import type { KeyEvent, CommEntry, DockStatus } from './types.js';
+import type { KeyEvent, CommEntry, DockStatus, DialEvent, TouchInputEvent } from './types.js';
 import type { DeviceDriver, DeviceModel, DeviceModelOverride } from './devices/driver.js';
 import { applyModelOverrides, overrideSummary } from './devices/model-overrides.js';
 import type { OverrideChangeKind } from './devices/model-overrides.js';
@@ -251,6 +251,11 @@ export class DriverManager {
         this.deps.childServer.sendKeyEvent(index, state);
         this.deps.webui.notifyKeyEvent(index, state, wireId);
       },
+      onDial: (event: DialEvent) => {
+        if (event.kind === 'press') this.deps.childServer.sendDialPress(event.index, event.state === 'down');
+        else if (event.delta !== undefined) this.deps.childServer.sendDialRotate(event.index, event.delta);
+      },
+      onTouch: (event: TouchInputEvent) => this.deps.childServer.sendTouch(event),
       onReinit: () => this.primary.repaintWidgets(),
     });
     driver.on('disconnect', () => {

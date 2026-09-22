@@ -3,7 +3,7 @@
 // PersistedSettings, with the pure merge/validate living in devices/model-overrides.ts.
 import type { ControllerHost, ReqError } from './types.js';
 import type { DeviceModel, DeviceModelOverride } from '../../devices/driver.js';
-import { findModelById } from '../../devices/registry.js';
+import { findModelById, CORA_PROFILES } from '../../devices/registry.js';
 import {
   applyModelOverrides,
   classifyOverrideChange,
@@ -26,12 +26,14 @@ export interface DeviceOverridesView {
    *  what the device is actually running. */
   safeMode: boolean;
   /** The FULL effective spec — for display/diagnostics. Do NOT seed the form from this: it
-   * carries the non-tunable protocol facts (`format`, `colorMode`, `bmpPpm`) too, and
-   * POSTing them straight back is rejected by validateModelOverride. Seed from `tunable` instead. */
-  effective: Pick<DeviceModel, 'image' | 'keyMap' | 'wire' | 'splash'>;
+   *  carries the non-tunable protocol facts (`format`, `colorMode`, `bmpPpm`) too, and
+   *  POSTing them straight back is rejected by validateModelOverride. Seed from `tunable` instead. */
+  effective: Pick<DeviceModel, 'image' | 'keyMap' | 'wire' | 'splash' | 'cora'>;
   /** `effective`, projected down to exactly the fields an override may set — so a
    *  round-trip (seed the form → Apply unchanged) is always valid. */
   tunable: DeviceModelOverride;
+  /** Emulation profiles a device may re-pair as (id → advertised productId). */
+  profiles: Array<{ id: string; name: string; productId: number }>;
 }
 
 export class ModelOverridesController {
@@ -76,8 +78,14 @@ export class ModelOverridesController {
         keyMap: effective.keyMap,
         wire: effective.wire,
         ...(effective.splash ? { splash: effective.splash } : {}),
+        cora: effective.cora,
       },
       tunable: tunableDefaults(effective),
+      profiles: CORA_PROFILES.map((p) => ({
+        id: p.id,
+        name: p.name,
+        productId: p.cora.productId,
+      })),
     };
   }
 

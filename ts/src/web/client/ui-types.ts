@@ -104,11 +104,24 @@ export interface DeviceKeyMapOverride {
   extraKeys?: number[];
 }
 
+export interface DeviceCoraOverride {
+  advertiseAs?: string;
+  productId?: number;
+}
+
 export interface DeviceModelOverride {
   image?: DeviceImageOverride;
   keyMap?: DeviceKeyMapOverride;
   wire?: Record<string, number | boolean>;
   splash?: unknown;
+  cora?: DeviceCoraOverride;
+}
+
+/** A CORA emulation profile the device may re-pair as (from CORA_PROFILES). */
+export interface EmulationProfile {
+  id: string;
+  name: string;
+  productId: number;
 }
 
 /** GET /api/device-overrides payload. */
@@ -126,6 +139,8 @@ export interface DeviceOverridesView {
   effective: { image: DeviceEffectiveImage; keyMap: DeviceKeyMapOverride };
   /** `effective` projected to the settable fields — what the form seeds from. */
   tunable: DeviceModelOverride;
+  /** Emulation profiles a device may re-pair as. */
+  profiles?: EmulationProfile[];
 }
 export interface ServerLog {
   ts: number;

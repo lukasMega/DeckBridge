@@ -55,4 +55,10 @@ export function setupImageHandler(
     // is virtual), so `?.` makes this a no-op in mock mode.
     getDriver()?.renderCoraImage?.(keyIndex, data, format);
   });
+
+  // Stream Deck + window-strip image → device touch-segment displays. Unhandled
+  // (dropped) until the child server has assembled the full 800×100 strip.
+  childServer.on('touchImage', ({ data }: { data: Uint8Array }) => {
+    getDriver()?.renderTouchImage?.(data);
+  });
 }

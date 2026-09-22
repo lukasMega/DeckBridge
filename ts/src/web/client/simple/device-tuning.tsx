@@ -78,6 +78,7 @@ export function DeviceTuningPanel(): preact.JSX.Element {
   const [view, setView] = useState<DeviceOverridesView | null>(null);
   const [image, setImage] = useState<DeviceImageOverride>({});
   const [batchImageTransfers, setBatchImageTransfers] = useState(false);
+  const [coraProfile, setCoraProfile] = useState('');
   const action = useAsyncAction();
   const resetFeedback = action.reset;
   const copy = useCopyText();
@@ -99,6 +100,7 @@ export function DeviceTuningPanel(): preact.JSX.Element {
       // Reloading intentionally discards drafts so edits never follow another dock.
       setImage({ ...data.tunable.image });
       setBatchImageTransfers(data.tunable.wire?.batchImageTransfers === true);
+      setCoraProfile(data.tunable.cora?.advertiseAs ?? '');
     },
     [selectedModelId],
   );
@@ -128,18 +130,16 @@ export function DeviceTuningPanel(): preact.JSX.Element {
   const apply = (): Promise<void> =>
     action.run(async () => {
       if (!activeView) return;
+      const profile = activeView.profiles?.find((p) => p.id === coraProfile);
+      const overrides: Record<string, unknown> = { ...activeView.overrides, image };
+      if (typeof activeView.tunable.wire?.batchImageTransfers === 'boolean') {
+        overrides.wire = { ...activeView.overrides.wire, batchImageTransfers };
+      }
+      if (profile) overrides.cora = { advertiseAs: profile.id, productId: profile.productId };
+      else delete overrides.cora;
       const parsed = await postJson<{ reconnecting?: boolean }>(
         '/api/device-overrides',
-        {
-          modelId: activeView.modelId,
-          overrides: {
-            ...activeView.overrides,
-            image,
-            ...(typeof activeView.tunable.wire?.batchImageTransfers === 'boolean'
-              ? { wire: { ...activeView.overrides.wire, batchImageTransfers } }
-              : {}),
-          },
-        },
+        { modelId: activeView.modelId, overrides },
         'Save failed',
       );
       action.setStatus(
@@ -297,6 +297,24 @@ export function DeviceTuningPanel(): preact.JSX.Element {
           checked={batchImageTransfers}
           onChange={setBatchImageTransfers}
         />
+      )}
+
+      {activeView.profiles && activeView.profiles.length > 0 && (
+        <label class="tuning-field">
+          <span>Emulation profile</span>
+          <select
+            class="input"
+            value={coraProfile}
+            onChange={(e) => setCoraProfile((e.target as HTMLSelectElement).value)}
+          >
+            <option value="">Native (default)</option>
+            {activeView.profiles.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name}
+              </option>
+            ))}
+          </select>
+        </label>
       )}
 
       <Collapsible title="Advanced">

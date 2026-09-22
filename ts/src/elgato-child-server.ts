@@ -10,7 +10,6 @@ import {
   REPORT_SECONDARY_DETECT,
   KEY_EVENT_STATE_OFFSET,
   RECONNECT_DELAY_MS,
-  IMG_CMD_WINDOW,
   IMG_CMD_LCD,
   IMG_CMD_WINDOW_PARTIAL,
   INPUT_SUBTYPE_BUTTONS,
@@ -189,7 +188,9 @@ export class ElgatoChildServer extends CoraServerBase {
   /** Stream Deck + touch strip. `01 02 <len> 00 <type> <contacts> x y [ex ey]`. */
   sendTouch(event: TouchInputEvent): void {
     const pkt = Buffer.alloc(ELGATO_PKT_SIZE_TX);
-    const typeByte = event.type === 'tap' ? 0x01 : event.type === 'hold' ? 0x02 : 0x03;
+    let typeByte = 0x03;
+    if (event.type === 'tap') typeByte = 0x01;
+    else if (event.type === 'hold') typeByte = 0x02;
     const hasEnd = event.type === 'swipe';
     pkt[0] = REPORT_BUTTON_STATE_INPUT;
     pkt[1] = INPUT_SUBTYPE_TOUCH;
