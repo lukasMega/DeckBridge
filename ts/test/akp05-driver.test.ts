@@ -1,7 +1,7 @@
 import assert from 'tjs:assert';
 import { Akp05Driver } from '../src/devices/ajazz/akp05-driver.js';
 import { AJAZZ_AKP05E_MODEL } from '../src/devices/ajazz/akp05e.js';
-import type { DialEvent, KeyEvent } from '../src/types.js';
+import type { DialEvent, KeyEvent, TouchInputEvent } from '../src/types.js';
 import { test, summaryExit } from './helpers/harness.js';
 
 // Input classification only — no FFI, no open(). classifyInput is reached through
@@ -21,11 +21,13 @@ function ackReport(code: number, stateByte: number): Buffer {
 class TestDriver extends Akp05Driver {
   readonly keys: KeyEvent[] = [];
   readonly dials: DialEvent[] = [];
+  readonly touches: TouchInputEvent[] = [];
 
   constructor() {
     super(AJAZZ_AKP05E_MODEL);
     this.on('key', (e: KeyEvent) => this.keys.push(e));
     this.on('dial', (e: DialEvent) => this.dials.push(e));
+    this.on('touch', (e: TouchInputEvent) => this.touches.push(e));
   }
 
   feed(code: number, stateByte: number): void {
@@ -85,6 +87,16 @@ test('encoder rotate pairs are all mapped to their encoder index', () => {
       { index: i, kind: 'rotate', delta: 1 },
     ]),
   );
+});
+
+test('touch-strip swipe codes emit touch events with synthetic coordinates', () => {
+  const d = new TestDriver();
+  d.feed(0x38, 0); // swipe left
+  d.feed(0x39, 0); // swipe right
+  assert.deepEqual(d.touches, [
+    { type: 'swipe', x: 750, y: 50, endX: 50, endY: 50 },
+    { type: 'swipe', x: 50, y: 50, endX: 750, endY: 50 },
+  ]);
 });
 
 summaryExit();

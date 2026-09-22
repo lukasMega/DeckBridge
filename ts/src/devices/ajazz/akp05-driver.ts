@@ -2,7 +2,7 @@ import { findHidPath, isNullPtr, IS_MACOS } from '../../ffi/hidapi.js';
 import { HidDeviceBase } from '../hid-connection.js';
 import { debug, error, info } from '../../logger.js';
 import type { DeviceModel } from '../driver.js';
-import type { KeyEvent, KeyState, DialEvent } from '../../types.js';
+import type { DialEvent, KeyEvent, KeyState, TouchInputEvent } from '../../types.js';
 import { DEFAULT_BRIGHTNESS } from '../../types.js';
 import { parseAckReport } from '../mirabox-protocol.js';
 import {
@@ -41,6 +41,12 @@ const ENCODER_ROTATE_CODES: readonly (readonly [number, number])[] = [
   [0x90, 0x91],
   [0x70, 0x71],
 ];
+
+/** Touch-strip swipe codes. The AKP05E 4-segment strip reports left/right swipes
+ *  as single-direction events (no coordinates). Synthesised to span the full
+ *  Stream Deck + 800×100 strip. Reference: opendeck-akp05 src/inputs.rs. */
+const TOUCH_SWIPE_LEFT = 0x38;
+const TOUCH_SWIPE_RIGHT = 0x39;
 
 const BLACK_JPEG = Buffer.from(
   '/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAP//////////////////////////////////////////////////////////////////////////////////////2wBDAf//////////////////////////////////////////////////////////////////////////////////////wAARCAABAAEDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAb/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/9oADAMBAAIQAxAAAAH/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/9oACAEBAAEFAqf/xAAUEQEAAAAAAAAAAAAAAAAAAAAA/9oACAEDAQE/Aaf/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/9oACAECAQE/Aaf/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/9oACAEBAAY/Aqf/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/9oACAEBAAE/IV//2gAMAwEAAgADAAAAEP/EABQRAQAAAAAAAAAAAAAAAAAAABD/2gAIAQMBAT8QH//EABQRAQAAAAAAAAAAAAAAAAAAABD/2gAIAQIBAT8QH//EABQQAQAAAAAAAAAAAAAAAAAAABD/2gAIAQEAAT8QH//Z',
@@ -155,7 +161,27 @@ export class Akp05Driver extends HidDeviceBase {
       } satisfies DialEvent);
       return;
     }
-    // Touch-strip and any other control: framing unverified — log for capture.
+    if (code === TOUCH_SWIPE_LEFT) {
+      this.emit('touch', {
+        type: 'swipe',
+        x: 750,
+        y: 50,
+        endX: 50,
+        endY: 50,
+      } satisfies TouchInputEvent);
+      return;
+    }
+    if (code === TOUCH_SWIPE_RIGHT) {
+      this.emit('touch', {
+        type: 'swipe',
+        x: 50,
+        y: 50,
+        endX: 750,
+        endY: 50,
+      } satisfies TouchInputEvent);
+      return;
+    }
+    // Touch-strip tap and any other control: framing unverified — log for capture.
     debug('hid', `AKP05E unclassified input code=0x${code.toString(16)} state=${stateByte}`);
   }
 
