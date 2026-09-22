@@ -29,6 +29,7 @@ interface InitialState extends Status {
   deviceModels?: DeviceModel[];
   deviceIdentity?: DeviceIdentity;
   extraKeys?: Record<string, ExtraKeyCfg>;
+  touchStripDisabled?: boolean;
   updateInfo?: UpdateInfo;
 }
 
@@ -57,6 +58,7 @@ void fetch('/api/state')
       deviceModels: st.deviceModels ?? [],
       deviceIdentity: st.deviceIdentity,
       extraKeys: st.extraKeys ?? {},
+      touchStripDisabled: st.touchStripDisabled ?? false,
       updateInfo: st.updateInfo,
       serverLogs: st.logs ?? [],
       commLogs: st.commLogs ?? [],

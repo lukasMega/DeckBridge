@@ -44,24 +44,24 @@ export class DriverManager {
   private readonly pacer = new ProbePacer();
 
   /** Process-lifetime worker for supported-device discovery. Native Windows HID
-   * calls may stall, but never block CORA acknowledgements or WebUI timers. */
+   * calls may stall, but never block CORA ACKs or WebUI timers. */
   private readonly hidScanner = new HidScanWorkerHost();
 
   /** Primary dock (index 0) state: identity, brightness, widgets, saved-frame replay. */
   private readonly primary: PrimaryDock;
 
-  /** Workers whose open() failed, kept alive for reuse on the next reconnect attempt
-   *  (keyed by model.id) — spawning+terminating a hidapi-loaded worker per retry SIGBUSes
-   *  on macOS. Drained on switchMode; process exit covers shutdown. */
+  /** Workers whose open() failed, kept alive for reuse (keyed by model.id) —
+   * spawning+terminating a hidapi-loaded worker per retry SIGBUSes on macOS.
+   * Drained on switchMode; process exit covers shutdown. */
   private idleDrivers = new Map<string, WorkerHidDriver>();
 
   /** Multi-device coordinator (extras only). Deps are closures over this instance's
-   *  mutable state — always-current values without an import cycle. */
+   * mutable state — always-current values without an import cycle. */
   private readonly extraCoordinator: ExtraDockCoordinator;
 
-  // Test seams (tests have no hardware/FFI) — overridden via __set* below. Presence is
-  // decided up front by enumeration, never trial hid_open: opening an absent device or
-  // terminating a throwaway hidapi-loaded worker segfaults on macOS (IOKit/dlclose churn).
+  // Test seams (tests have no hardware/FFI) — overridden via __set* below. Presence
+  // decided by enumeration, never trial hid_open: opening absent device or terminating
+  // a throwaway hidapi-loaded worker segfaults on macOS (IOKit/dlclose churn).
   private makeRealDriver: (model: DeviceModel, ov?: DeviceModelOverride) => WorkerHidDriver = (
     model,
     ov,
@@ -140,9 +140,8 @@ export class DriverManager {
     return this.driverMode;
   }
 
-  /** Push a runtime log-level change to every live USB worker (primary, extras,
-   *  and parked idle workers). Workers spawned later inherit it from
-   *  DECKBRIDGE_LOG_LEVEL, which app.ts keeps in sync. */
+  /** Push a runtime log-level change to every live USB worker. Workers spawned
+   * later inherit it from DECKBRIDGE_LOG_LEVEL, which app.ts keeps in sync. */
   setLogLevel(level: string): void {
     this.realDriver?.setLogLevel(level);
     for (const d of this.idleDrivers.values()) d.setLogLevel(level);
@@ -165,18 +164,17 @@ export class DriverManager {
   }
 
   /** The user's device tuning for `modelId`, or undefined in safe mode
-   *  (`--no-overrides`) / when nothing is persisted. */
+   * (`--no-overrides`) / when nothing is persisted. A bad keyMap can make a
+   * device look dead and the WebUI Reset button is no help if the user can't
+   * get that far. Also shared with the WebUI's own view. */
   private overrideFor(modelId: string): DeviceModelOverride | undefined {
-    // Safe mode (`run --no-overrides`): a bad keyMap can make a device look dead, and the
-    // WebUI Reset button is no help if the user can't get that far. Shared with the
-    // WebUI's own view, so the panel never claims tuning the device isn't actually running.
     if (overridesDisabled()) return undefined;
     return this.deps.webui.modelOverrideFor(modelId);
   }
 
-  /** Registry model + the user's tuning. Everything downstream (CORA advertise
-   *  geometry, input mapping, splash, extras) sees the effective model; the
-   *  registry itself is never mutated. */
+  /** Model merged with user tuning. Everything downstream (CORA advertise
+   * geometry, input mapping, splash, extras) sees the effective model;
+   * the registry is never mutated. */
   private effectiveModel(model: DeviceModel): DeviceModel {
     return applyModelOverrides(model, this.overrideFor(model.id));
   }
@@ -197,8 +195,7 @@ export class DriverManager {
     registryOrEffective: DeviceModel,
     deviceInfo?: { serial?: string; firmware?: string },
   ): void {
-    // Idempotent: callers pass either a bare registry model (WebUI model picker,
-    // DEFAULT_MODEL on disconnect) or an already-effective one (probe result).
+    // Proxy model through user tuning so callers don't need to.
     const model = this.effectiveModel(registryOrEffective);
     this.deps.webui.resetImages();
     this.primary.model = model;
@@ -252,15 +249,17 @@ export class DriverManager {
         this.deps.webui.notifyKeyEvent(index, state, wireId);
       },
       onDial: (event: DialEvent) => {
-        if (event.kind === 'press') this.deps.childServer.sendDialPress(event.index, event.state === 'down');
-        else if (event.delta !== undefined) this.deps.childServer.sendDialRotate(event.index, event.delta);
+        if (event.kind === 'press')
+          this.deps.childServer.sendDialPress(event.index, event.state === 'down');
+        else if (event.delta !== undefined)
+          this.deps.childServer.sendDialRotate(event.index, event.delta);
       },
       onTouch: (event: TouchInputEvent) => this.deps.childServer.sendTouch(event),
       onReinit: () => this.primary.repaintWidgets(),
     });
     driver.on('disconnect', () => {
       log('info', model.id, 'disconnected');
-      // Re-init the native HID stack before the next probe: without it a replug of the
+      // Re-init native HID stack before next probe: without it a replug of the
       // same unit can stay invisible to enumeration for the rest of the process.
       this.hidScanner.requestReset();
       this.primary.onDisconnect(model.id);
@@ -274,9 +273,8 @@ export class DriverManager {
     });
   }
 
-  /** Presence sweep = one supported-device enumeration inside the dedicated worker.
-   * Every per-model query reads its installed snapshot. Duration remains the pacer's
-   * input, but even a stalled scan cannot starve CORA or WebUI work (issue #67.2). */
+  /** Enumerate supported devices in dedicated worker. Duration feeds the
+   * pacer; even a stalled scan cannot starve CORA/WebUI work (issue #67.2). */
   private async presentModels(): Promise<DeviceModel[]> {
     const took = await this.refreshHidSnapshot();
     const present = DEVICE_MODELS.filter((model) => this.isModelPresent(model));
@@ -286,8 +284,8 @@ export class DriverManager {
   }
 
   private async probeAndOpen(): Promise<WorkerHidDriver | null> {
-    // Only spawn a worker for a connected device — hid_open on a missing device
-    // or terminating a hidapi-loaded worker segfaults on macOS.
+    /** Probe presence then open. Skip absent devices — hid_open on missing device
+     * or terminating a hidapi-loaded worker segfaults on macOS. */
     for (const model of await this.presentModels()) {
       // Reuse the worker from a prior failed open (present-but-unopenable device,
       // e.g. Input Monitoring denied) — it connects the moment open() succeeds.
@@ -309,7 +307,7 @@ export class DriverManager {
         return driver;
       } catch (e) {
         log('debug', 'hid', `${model.id} open failed: ${(e as Error).message}`);
-        // Keep the worker alive, listeners intact, for the next retry.
+        // Keep worker alive, listeners intact, for next retry.
         this.idleDrivers.set(model.id, driver);
       }
     }
@@ -320,9 +318,8 @@ export class DriverManager {
     this.reconnecting = false;
     if (this.deps.getShuttingDown() || this.driverMode !== 'real') return;
 
-    // null = nothing to activate: probe already in flight, no device found, or
-    // the session was torn down across the probe await (each case having done
-    // its own notify/schedule work inside acquireRealDriver).
+    // null: already probing, no device found, or session torn down across await.
+    // Each case did its own notify/schedule work inside acquireRealDriver.
     const driver = this.realDriver ?? (await this.acquireRealDriver());
     if (!driver) return;
 
@@ -338,8 +335,8 @@ export class DriverManager {
     this.deps.onDocksChanged?.();
   }
 
-  /** Probe + open + identity resolution. Returns the installed driver, or null
-   *  when the caller must not proceed to activation. */
+  /** Probe + open + identity resolution. Returns installed driver, or null when
+   * the caller must not proceed to activation. */
   private async acquireRealDriver(): Promise<WorkerHidDriver | null> {
     if (this.probeInFlight) return null;
     this.probeInFlight = true;
@@ -416,6 +413,12 @@ export class DriverManager {
     else this.extraCoordinator.forceRunExtraKey(index, wireId);
   }
 
+  /** WebUI touch-strip disable toggle — the strip hands off to the Elgato app. */
+  setTouchStripDisabledForDock(index: number, disabled: boolean): void {
+    if (index === 0) this.primary.setTouchStripDisabled(disabled);
+    else this.extraCoordinator.setTouchStripDisabled(index, disabled);
+  }
+
   async connectMock(model?: DeviceModel): Promise<void> {
     // Effective, so device tuning is previewable in mock mode without hardware.
     const m = this.effectiveModel(model ?? DEFAULT_MODEL);
@@ -464,9 +467,8 @@ export class DriverManager {
 
   // Multi-device (extra docks): thin delegation to ExtraDockCoordinator
 
-  /** Multi-deck opt-in: off (the default) = one dock and no USB scanning once it
-   *  is up; switching it off tears down a live second dock. `cap` is a test seam
-   *  — production always takes the constant. */
+  /** Multi-deck opt-in: off (the default) = one dock, no USB scanning once up;
+   * switching it off tears down a live second dock. `cap` is a test seam. */
   setMultiDeck(enabled: boolean, cap: number = MAX_MULTI_DECK_SESSIONS): Promise<void> {
     return this.extraCoordinator.setMaxDocks(enabled ? cap : 1);
   }

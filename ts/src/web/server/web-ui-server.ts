@@ -90,6 +90,10 @@ export class WebUIServer extends EventEmitter implements WebUIController {
   get imageModeOverride(): ImageModeOverride {
     return this.devicePrefs.imageModeOverride;
   }
+  /** SELECTED dock's touch-strip disable flag (true = Elgato app drives it). */
+  get touchStripDisabled(): boolean {
+    return this.devicePrefs.touchStripDisabled;
+  }
   private readonly status: StatusPublisher;
   private readonly stats: Stats = { uptimeMs: 0, elgatoRxPkts: 0, elgatoTxPkts: 0, imagesSent: 0 };
   private readonly startTime = Date.now();
@@ -292,6 +296,10 @@ export class WebUIServer extends EventEmitter implements WebUIController {
     this.devicePrefs.setImageMode(mode);
   }
 
+  notifyTouchStripDisabled(disabled: boolean): void {
+    this.devicePrefs.setTouchStripDisabled(disabled);
+  }
+
   notifyBrightness(level: number): void {
     this.devicePrefs.broadcastBrightness(level);
   }
@@ -384,6 +392,7 @@ export class WebUIServer extends EventEmitter implements WebUIController {
       deviceIdentity: this.settingsIdentity.identity(),
       realDeviceIdentity: this.dockRegistry.selectedStatus()?.realDeviceIdentity,
       extraKeys: this.selectedExtraKeyConfigs(),
+      touchStripDisabled: this.touchStripDisabled,
       logLevel: this.logLevel(),
       logFilePath: this.logFilePath(),
       multiDeck: this.settings.multiDeck,

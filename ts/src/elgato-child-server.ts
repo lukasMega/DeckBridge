@@ -157,7 +157,7 @@ export class ElgatoChildServer extends CoraServerBase {
     this.sendFrame(pkt, 0, 0, 0, `CORA button-state keys=${kc}`);
   }
 
-  /** Stream Deck + encoder press. Bitmap report: `01 03 <len> 00 00 <mask>`. */
+  /** Stream Deck + encoder press. BTN report: `01 03 <1+count> 00 00 <per-encoder>`. */
   sendDialPress(index: number, down: boolean): void {
     const count = this.childGeometry.encoderCount ?? 0;
     if (index < 0 || index >= count) return;
@@ -166,9 +166,11 @@ export class ElgatoChildServer extends CoraServerBase {
     const pkt = Buffer.alloc(ELGATO_PKT_SIZE_TX);
     pkt[0] = REPORT_BUTTON_STATE_INPUT;
     pkt[1] = INPUT_SUBTYPE_ENCODER;
-    pkt[2] = 2; // subtype byte + mask byte
-    pkt[4] = 0x00; // press bitmap
-    pkt[5] = this.encoderPressMask;
+    pkt[2] = 1 + count; // contents type byte + one byte per encoder
+    pkt[4] = 0x00; // BTN
+    for (let i = 0; i < count; i++) {
+      pkt[5 + i] = (this.encoderPressMask >> i) & 1;
+    }
     this.sendFrame(pkt, 0, 0, 0, `CORA encoder-press mask=${this.encoderPressMask}`);
   }
 
@@ -185,7 +187,7 @@ export class ElgatoChildServer extends CoraServerBase {
     this.sendFrame(pkt, 0, 0, 0, `CORA encoder-rotate index=${index} delta=${delta}`);
   }
 
-  /** Stream Deck + touch strip. `01 02 <len> 00 <type> <contacts> x y [ex ey]`. */
+  /** Stream Deck + touch strip. `01 02 <len> 00 <type> <fingers> x y [ex ey]`. */
   sendTouch(event: TouchInputEvent): void {
     const pkt = Buffer.alloc(ELGATO_PKT_SIZE_TX);
     let typeByte = 0x03;
@@ -194,9 +196,9 @@ export class ElgatoChildServer extends CoraServerBase {
     const hasEnd = event.type === 'swipe';
     pkt[0] = REPORT_BUTTON_STATE_INPUT;
     pkt[1] = INPUT_SUBTYPE_TOUCH;
-    pkt[2] = hasEnd ? 10 : 6; // type + contacts + x/y (+ endX/endY)
+    pkt[2] = hasEnd ? 0x0e : 0x0a; // FLICK 0x0E, TAP/PRESS 0x0A
     pkt[4] = typeByte;
-    pkt[5] = 1; // contacts
+    pkt[5] = 0; // fingers (reserved for FLICK; N/A for TAP/PRESS)
     pkt.writeUInt16LE(event.x, 6);
     pkt.writeUInt16LE(event.y, 8);
     if (hasEnd) {

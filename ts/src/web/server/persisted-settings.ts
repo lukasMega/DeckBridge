@@ -38,7 +38,8 @@ function hasValidDeviceSettings(r: Record<string, unknown>): boolean {
     (r.brightnessOverride === undefined || typeof r.brightnessOverride === 'boolean') &&
     (r.imageModeOverride === undefined ||
       IMAGE_MODE_SETTINGS.includes(r.imageModeOverride as null)) &&
-    (r.extraKeys === undefined || isExtraKeysRecord(r.extraKeys))
+    (r.extraKeys === undefined || isExtraKeysRecord(r.extraKeys)) &&
+    (r.touchStripDisabled === undefined || typeof r.touchStripDisabled === 'boolean')
   );
 }
 

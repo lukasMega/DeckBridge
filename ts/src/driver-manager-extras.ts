@@ -289,6 +289,7 @@ export class ExtraDockCoordinator {
       initialBrightness: deviceIdentity.brightness,
       initialImageMode: deviceIdentity.imageModeOverride ?? null,
       extraKeyConfigFor: (wireId) => this.deps.extraKeyConfigFor(deviceKey, wireId),
+      touchStripDisabled: deviceIdentity.touchStripDisabled,
     });
     this.extraSessions.set(hidPath, session);
 
@@ -354,6 +355,11 @@ export class ExtraDockCoordinator {
   /** WebUI "Run now" for a command-widget extra key on the extra dock with this index. */
   forceRunExtraKey(index: number, wireId: number): void {
     this.sessionAt(index)?.forceRunExtraKey(wireId);
+  }
+
+  /** Toggle DeckBridge's touch-strip widget control on the extra dock at `index`. */
+  setTouchStripDisabled(index: number, disabled: boolean): void {
+    this.sessionAt(index)?.setTouchStripDisabled(disabled);
   }
 
   /** Tear down the extra docks running `modelId` ('' = all) so the next scan

@@ -32,7 +32,6 @@ import {
   EVENT_SUBTYPE_CAPABILITIES,
   CHILD_CAPS_VERSION,
   CHILD_CAPS_LAYOUT_TYPE,
-  CHILD_CAPS_PLUS_LAYOUT_TYPE,
   MANUFACTURER_STRING,
 } from '../src/types.js';
 import type { DeviceConfig } from '../src/elgato-types.js';
@@ -121,7 +120,6 @@ test('AKP05E has its proven 2x5 output mapping', () => {
     encoderCount: 0,
     touchWidth: 0,
     touchHeight: 0,
-    layoutType: CHILD_CAPS_LAYOUT_TYPE,
   });
   // CORA already delivers key art upright for this panel; only the splash needs 180.
   assert.equal(AJAZZ_AKP05E_MODEL.image.rotate, 0);
@@ -150,7 +148,9 @@ test('stream-deck-plus profile advertises Plus identity and touch geometry', () 
   assert.equal(STREAM_DECK_PLUS_MODEL.encoderCount, 4);
   assert.equal(STREAM_DECK_PLUS_MODEL.touchWidth, 800);
   assert.equal(STREAM_DECK_PLUS_MODEL.touchHeight, 100);
-  assert.equal(STREAM_DECK_PLUS_MODEL.layoutType, CHILD_CAPS_PLUS_LAYOUT_TYPE);
+  // The desktop rejects a 1.01.x child firmware for PID 0x0084; the Plus profile
+  // reports a 2.00.x line.
+  assert.equal(STREAM_DECK_PLUS_MODEL.cora.childFirmwareVersion, '2.00.026');
 });
 
 test('stream-deck-plus resolves as a cora profile but is not USB-probed', () => {
@@ -162,12 +162,14 @@ test('stream-deck-plus resolves as a cora profile but is not USB-probed', () => 
 });
 
 test('AKP05E can be re-paired as Stream Deck + via cora.advertiseAs', () => {
-  const geo = advertisedGeometry({ ...AJAZZ_AKP05E_MODEL, cora: { ...AJAZZ_AKP05E_MODEL.cora, advertiseAs: 'stream-deck-plus' } });
+  const geo = advertisedGeometry({
+    ...AJAZZ_AKP05E_MODEL,
+    cora: { ...AJAZZ_AKP05E_MODEL.cora, advertiseAs: 'stream-deck-plus' },
+  });
   assert.equal(geo.keyCount, 8);
   assert.equal(geo.encoderCount, 4);
   assert.equal(geo.touchWidth, 800);
   assert.equal(geo.touchHeight, 100);
-  assert.equal(geo.layoutType, CHILD_CAPS_PLUS_LAYOUT_TYPE);
 });
 
 // Rev.1 PIDs now resolve to the v1 rebadge clones (akp153-v1-clones.ts), not the rev.2
@@ -793,6 +795,22 @@ test('buildCapabilitiesPacket uses mirabox-293s geometry correctly', () => {
   assert.equal(pkt[7], MIRABOX_293S_MODEL.keyCount);
   assert.equal(pkt.readUInt16LE(8), MIRABOX_293S_MODEL.keyWidth);
   assert.equal(pkt.readUInt16LE(10), MIRABOX_293S_MODEL.keyHeight);
+});
+
+test('buildCapabilitiesPacket writes Plus touch dims (layout byte unchanged)', () => {
+  const geo = modelToChildGeometry(STREAM_DECK_PLUS_MODEL);
+  const pkt = buildCapabilitiesPacket(FAKE_CONFIG, 5344, geo);
+  assert.equal(pkt[4], CHILD_CAPS_LAYOUT_TYPE);
+  assert.equal(pkt.readUInt16LE(12), 800);
+  assert.equal(pkt.readUInt16LE(14), 100);
+});
+
+test('buildCapabilitiesPacket writes zero touch dims for key-only models', () => {
+  const geo = modelToChildGeometry(MK2_MODEL);
+  const pkt = buildCapabilitiesPacket(FAKE_CONFIG, 5344, geo);
+  assert.equal(pkt[4], CHILD_CAPS_LAYOUT_TYPE);
+  assert.equal(pkt.readUInt16LE(12), 0);
+  assert.equal(pkt.readUInt16LE(14), 0);
 });
 
 // Summary

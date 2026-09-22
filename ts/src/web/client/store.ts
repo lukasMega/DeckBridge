@@ -31,6 +31,8 @@ export interface StoreState {
   deviceIdentity?: DeviceIdentity;
   /** SELECTED dock's extra-key assignments, keyed by device wire id. */
   extraKeys: Record<string, ExtraKeyCfg>;
+  /** SELECTED dock's touch-strip disable flag (true = Elgato app drives it). */
+  touchStripDisabled: boolean;
   updateInfo?: UpdateInfo;
 }
 
@@ -48,6 +50,7 @@ let state: StoreState = {
   deviceModels: [],
   deviceIdentity: undefined,
   extraKeys: {},
+  touchStripDisabled: false,
   updateInfo: undefined,
 };
 
@@ -93,6 +96,10 @@ export function setBrightness(brightness: number): void {
 
 export function setBrightnessOverride(brightnessOverride: boolean): void {
   setField('brightnessOverride', brightnessOverride);
+}
+
+export function setTouchStripDisabled(touchStripDisabled: boolean): void {
+  setField('touchStripDisabled', touchStripDisabled);
 }
 
 export function setResizeEnabled(resizeEnabled: boolean): void {

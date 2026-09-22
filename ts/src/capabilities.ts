@@ -24,7 +24,6 @@ export function modelToChildGeometry(model: DeviceModel): ChildGeometry {
     encoderCount: model.encoderCount ?? 0,
     touchWidth: model.touchWidth ?? 0,
     touchHeight: model.touchHeight ?? 0,
-    layoutType: model.layoutType ?? CHILD_CAPS_LAYOUT_TYPE,
   };
 }
 
@@ -37,7 +36,10 @@ export function buildCapabilitiesPacket(
   pkt[0] = PKT_EVENT;
   pkt[1] = EVENT_SUBTYPE_CAPABILITIES;
   pkt.writeUInt16LE(CHILD_CAPS_VERSION, 2);
-  pkt[4] = geometry.layoutType ?? CHILD_CAPS_LAYOUT_TYPE;
+  // grid-type byte. Haukcode reads grid-type/cols/rows from bytes 5..7; byte 4 is
+  // observed 0x02 for the MK.2/Mini layouts. The Plus grid (4×2) shares that value
+  // — the model distinction rides on the PID + firmware, not this byte.
+  pkt[4] = CHILD_CAPS_LAYOUT_TYPE;
   pkt[5] = geometry.rows;
   pkt[6] = geometry.columns;
   pkt[7] = geometry.keyCount;

@@ -55,6 +55,9 @@ const handlers: Record<string, (d: unknown) => void> = {
   extraKeys: (d) => {
     store.patch({ extraKeys: (d as { configs: StoreState['extraKeys'] }).configs });
   },
+  touchStrip: (d) => {
+    store.setTouchStripDisabled((d as { disabled: boolean }).disabled);
+  },
   keyEvent: (d) => {
     const e = d as KeyEvent;
     flashKey(e.mk2Index);

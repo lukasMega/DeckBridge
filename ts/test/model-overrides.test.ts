@@ -13,6 +13,8 @@ import type { DeviceModel } from '../src/devices/driver.js';
 import { DEVICE_MODELS } from '../src/devices/registry.js';
 import { MIRABOX_293_MODEL } from '../src/devices/mirabox/mirabox-293.js';
 import { MK2_MODEL } from '../src/devices/elgato/mk2.js';
+import { AJAZZ_AKP05E_MODEL } from '../src/devices/ajazz/akp05e.js';
+import { STREAM_DECK_PLUS_MODEL } from '../src/devices/elgato/plus.js';
 import { test, summary as reportSummary } from './helpers/harness.js';
 
 const MODEL: DeviceModel = MIRABOX_293_MODEL;
@@ -477,6 +479,56 @@ test('true only when tuning sets resizeMode or padFill', () => {
   assert.ok(!pinsImageFit({ image: { rotate: 90 } }));
   assert.ok(!pinsImageFit({}));
   assert.ok(!pinsImageFit());
+});
+
+// cora override section
+
+console.log('\ncora override');
+
+test('cora override validates, applies, and reopens', () => {
+  assert.ok(validateModelOverride({ cora: { advertiseAs: 'mk2', productId: 0x84 } }, MODEL).ok);
+  assert.ok(!validateModelOverride({ cora: { productId: -1 } }, MODEL).ok);
+  assert.ok(!validateModelOverride({ cora: { bogus: 1 } }, MODEL).ok);
+
+  const eff = applyModelOverrides(MODEL, {
+    cora: { advertiseAs: 'mk2', productId: 0x84 },
+  });
+  assert.equal(eff.cora.advertiseAs, 'mk2');
+  assert.equal(eff.cora.productId, 0x84);
+  // Non-cora sections and the untouched model are preserved (mk2 is geometry-only).
+  assert.equal(eff.cora.usePhysicalIdentity, MODEL.cora.usePhysicalIdentity);
+  assert.equal(eff.image, MODEL.image);
+
+  // A cora change reopens (it re-pairs the device).
+  assert.equal(classifyOverrideChange(undefined, { cora: { advertiseAs: 'mk2' } }), 'reopen');
+  // tunableDefaults projects the cora fields at their current values.
+  assert.equal(tunableDefaults(eff).cora?.advertiseAs, 'mk2');
+  assert.equal(tunableDefaults(eff).cora?.productId, 0x84);
+});
+
+test('full-emulation profile adopts its image + keyMap onto the emulating device', () => {
+  const eff = applyModelOverrides(AJAZZ_AKP05E_MODEL, {
+    cora: { advertiseAs: 'stream-deck-plus', productId: 0x0084 },
+  });
+  // Image transform comes from the Plus profile (112×112, 180° rotation).
+  assert.equal(eff.image.rotate, 180);
+  assert.equal(eff.image.width, 112);
+  // Key map drops the rightmost column: 8 keys, wire 5/10 input codes ignored.
+  assert.deepEqual(eff.keyMap.coraToWireImage, [11, 12, 13, 14, 6, 7, 8, 9]);
+  assert.deepEqual(eff.keyMap.wireInputToCora, [-1, 0, 1, 2, 3, -1, 4, 5, 6, 7, -1]);
+
+  // An explicit user image/keyMap override still wins on top of the profile.
+  const tuned = applyModelOverrides(AJAZZ_AKP05E_MODEL, {
+    cora: { advertiseAs: 'stream-deck-plus' },
+    image: { rotate: 90 },
+  });
+  assert.equal(tuned.image.rotate, 90, 'user image override wins over the profile default');
+  assert.equal(tuned.image.width, 112, 'unset profile fields still adopted');
+
+  // A geometry-only profile (mk2) does NOT adopt the advertised model's image.
+  const geo = applyModelOverrides(AJAZZ_AKP05E_MODEL, { cora: { advertiseAs: 'mk2' } });
+  assert.equal(geo.image.rotate, AJAZZ_AKP05E_MODEL.image.rotate, 'mk2 is geometry-only');
+  assert.equal(STREAM_DECK_PLUS_MODEL.cora.fullEmulation, true, 'Plus profile is a full emulation');
 });
 
 reportSummary();

@@ -1,5 +1,11 @@
 /** Generic USB HID worker message protocol. */
-import type { KeyState, CommEntry, ImageModeOverride, DialEvent, TouchInputEvent } from './types.js';
+import type {
+  KeyState,
+  CommEntry,
+  ImageModeOverride,
+  DialEvent,
+  TouchInputEvent,
+} from './types.js';
 import type { DeviceModelId, DeviceImageSpec, DeviceModelOverride } from './devices/driver.js';
 import type { LogLevel } from './logger.js';
 

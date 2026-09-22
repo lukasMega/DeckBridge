@@ -30,6 +30,9 @@ export interface DeviceIdentitySettings {
   /** DeckBridge-native actions for keys outside the emulated grid (293S 6th
    *  column), keyed by device wire id — see extra-keys.ts. */
   extraKeys?: Record<string, ExtraKeyConfig>;
+  /** Stop DeckBridge from driving the touch-strip widget displays (AKP05E) so
+   *  the Elgato app controls them instead. Default false = DeckBridge drives. */
+  touchStripDisabled?: boolean;
 }
 
 /** Persisted log level. Precedence (documented in cli.ts's usage text and

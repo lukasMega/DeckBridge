@@ -121,6 +121,8 @@ export interface StateResponse extends StatusSnapshot {
   realDeviceIdentity?: RealDeviceIdentity;
   // The SELECTED dock's extra-key assignments, keyed by device wire id.
   extraKeys: Record<string, ExtraKeyConfig>;
+  /** The SELECTED dock's touch-strip disable flag (true = Elgato app drives it). */
+  touchStripDisabled: boolean;
   /** Log level currently in effect (not merely the persisted one) + where the
    *  log file lives — both surfaced under Settings so a reporter can turn on
    *  debug logging and find the file. */
@@ -157,6 +159,8 @@ export interface WebUIController {
   trySetExtraKey(wireId: number, cfg: ExtraKeyConfig): ReqError | null;
   tryRunExtraKeyNow(wireId: number): ReqError | null;
   pluginsInfo(): Promise<PluginsInfo>;
+  readonly touchStripDisabled: boolean;
+  notifyTouchStripDisabled(disabled: boolean): void;
   getSettingsJson(): string;
   applySettingsJson(raw: string): void;
   openSettingsFile(): Promise<void>;

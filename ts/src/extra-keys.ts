@@ -299,10 +299,16 @@ export class ExtraKeyWidgets {
   private readonly configFor: (wireId: number) => ExtraKeyConfig | undefined;
   private timer: ReturnType<typeof setInterval> | undefined;
   private lastPainted = new Map<number, string>();
+  private touchStripDisabled: boolean;
 
-  constructor(driver: DeviceDriver, configFor: (wireId: number) => ExtraKeyConfig | undefined) {
+  constructor(
+    driver: DeviceDriver,
+    configFor: (wireId: number) => ExtraKeyConfig | undefined,
+    touchStripDisabled = false,
+  ) {
     this.driver = driver;
     this.configFor = configFor;
+    this.touchStripDisabled = touchStripDisabled;
   }
 
   start(): void {
@@ -320,6 +326,21 @@ export class ExtraKeyWidgets {
   repaint(): void {
     this.lastPainted.clear();
     if (this.timer !== undefined) this.tick();
+  }
+
+  /** Disable/enable DeckBridge's touch-strip (widgetDisplays) control so the
+   *  Elgato app can drive those segments instead. Side keys (extraKeys) are
+   *  unaffected. Disabling clears the strip; enabling repaints the widgets. */
+  setTouchStripDisabled(disabled: boolean): void {
+    if (this.touchStripDisabled === disabled) return;
+    this.touchStripDisabled = disabled;
+    if (disabled) {
+      for (const wireId of this.widgetDisplayIds()) {
+        this.lastPainted.delete(wireId);
+        this.driver.clearKey(wireId);
+      }
+    }
+    this.repaint();
   }
 
   /** Build the render context for one widget, kicking off the background
@@ -372,8 +393,12 @@ export class ExtraKeyWidgets {
 
   private widgetIds(): readonly number[] {
     const sideKeys = this.driver.model.keyMap.extraKeys ?? [];
-    const displays = this.driver.model.widgetDisplays?.map((display) => display.wireId) ?? [];
-    return [...sideKeys, ...displays];
+    if (this.touchStripDisabled) return sideKeys;
+    return [...sideKeys, ...this.widgetDisplayIds()];
+  }
+
+  private widgetDisplayIds(): readonly number[] {
+    return this.driver.model.widgetDisplays?.map((display) => display.wireId) ?? [];
   }
 
   private widgetDisplay(wireId: number) {

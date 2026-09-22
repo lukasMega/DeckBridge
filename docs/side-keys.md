@@ -22,6 +22,10 @@ AKP05E — with a widget dropdown and, for some, a parameter field or gear (⚙)
 Pick a widget and fill its parameter; it takes effect immediately, saved per key and
 restored on reconnect.
 
+The **Touch strip** panel (AKP05E) also has an **"Elgato app controls it"** switch.
+Turn it on to stop DeckBridge driving the strip's zones, so the Elgato Stream Deck +
+app (when the device is re-paired as a Plus) owns them instead.
+
 ## Built-in widgets
 
 | Widget             | Parameter                      | What it shows                                                                                    |

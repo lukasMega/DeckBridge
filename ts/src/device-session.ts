@@ -25,7 +25,7 @@ import type {
   TouchInputEvent,
 } from './types.js';
 import type { DeviceIdentitySettings } from './settings-store.js';
-import { advertisedGeometry } from './devices/registry.js';
+import { advertisedGeometry, advertisedModel } from './devices/registry.js';
 import { deviceInputToMk2Index } from './translator.js';
 import { sendSplashImages } from './splash-sender.js';
 import { ExtraKeyWidgets } from './extra-keys.js';
@@ -209,6 +209,13 @@ export function applyModelToServers(
   const pid = model.cora.productId;
   const geo = advertisedGeometry(model);
   const configPatch: Partial<DeviceConfig> = { productId: pid };
+  // Firmware comes from the advertised profile (a re-paired device reports the
+  // emulated deck's firmware line, e.g. Stream Deck + → 2.00.x). Only when the
+  // model forwards its physical identity does the real device firmware win.
+  const advertised = advertisedModel(model);
+  if (advertised.cora.childFirmwareVersion) {
+    configPatch.childFirmwareVersion = advertised.cora.childFirmwareVersion;
+  }
   if (model.cora.usePhysicalIdentity) {
     if (deviceInfo?.serial) configPatch.childSerialNumber = deviceInfo.serial;
     if (deviceInfo?.firmware) configPatch.childFirmwareVersion = deviceInfo.firmware;
@@ -248,6 +255,8 @@ export interface DeviceSessionOptions {
   /** This dock's persisted extra-key config (by device wire id), resolved per
    *  press by the coordinator (deviceKey captured there) — see extra-keys.ts. */
   extraKeyConfigFor?: (wireId: number) => ExtraKeyConfig | undefined;
+  /** This dock's persisted touch-strip-disabled flag. Default false. */
+  touchStripDisabled?: boolean;
 }
 
 export class DeviceSession {
@@ -285,7 +294,11 @@ export class DeviceSession {
     this.brightness = opts.initialBrightness ?? DEFAULT_BRIGHTNESS;
     this.initialImageMode = opts.initialImageMode ?? null;
     this.extraKeyConfigFor = opts.extraKeyConfigFor;
-    this.extraKeys = new ExtraKeyWidgets(this.driver, (wireId) => this.extraKeyConfigFor?.(wireId));
+    this.extraKeys = new ExtraKeyWidgets(
+      this.driver,
+      (wireId) => this.extraKeyConfigFor?.(wireId),
+      opts.touchStripDisabled,
+    );
   }
 
   /** The underlying driver — used by DriverManager.getDriverForDock so app.ts
@@ -373,13 +386,20 @@ export class DeviceSession {
     this.extraKeys.forceRun(wireId);
   }
 
+  /** Toggle DeckBridge's touch-strip widget control (WebUI switch). */
+  setTouchStripDisabled(disabled: boolean): void {
+    this.extraKeys.setTouchStripDisabled(disabled);
+  }
+
   /** Mirror DriverManager.attachRealDriverListeners minus every WebUI hook. */
   private wireListeners(): void {
     wireCommonDriverEvents(this.driver, this.model, {
       onKey: (index, state) => this.childServer.sendKeyEvent(index, state),
       onDial: (event) => {
-        if (event.kind === 'press') this.childServer.sendDialPress(event.index, event.state === 'down');
-        else if (event.delta !== undefined) this.childServer.sendDialRotate(event.index, event.delta);
+        if (event.kind === 'press')
+          this.childServer.sendDialPress(event.index, event.state === 'down');
+        else if (event.delta !== undefined)
+          this.childServer.sendDialRotate(event.index, event.delta);
       },
       onTouch: (event) => this.childServer.sendTouch(event),
       onReinit: () => this.repaintExtraKeys(),

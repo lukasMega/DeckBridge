@@ -11,6 +11,8 @@ import type {
   PluginsInfo,
 } from '../ui-types.js';
 import { ConfigButton, paramPlaceholder, postExtraKey, PARAM_MAX } from './extra-keys-popovers.js';
+import { CheckField } from '../components/Fields.js';
+import { fire } from '../ui-api.js';
 
 const WIDGET_OPTIONS: ReadonlyArray<{ value: ExtraKeyWidget; label: string }> = [
   { value: 'none', label: 'Empty' },
@@ -36,6 +38,7 @@ function widgetPanel(dock: DockUi | undefined): {
   labels: ReadonlyMap<number, string>;
   title: string;
   subtitle: string;
+  touchStrip: boolean;
 } | null {
   const displays = dock?.widgetDisplays;
   if (displays) {
@@ -44,6 +47,7 @@ function widgetPanel(dock: DockUi | undefined): {
       labels: new Map(displays.map((display) => [display.wireId, display.label])),
       title: 'Touch strip',
       subtitle: 'Four display zones — show a value on each zone',
+      touchStrip: true,
     };
   }
   const wireIds = dock?.extraKeys;
@@ -53,6 +57,7 @@ function widgetPanel(dock: DockUi | undefined): {
     labels: new Map(),
     title: 'Side keys',
     subtitle: 'Display-only right column — show a value on each key',
+    touchStrip: false,
   };
 }
 
@@ -244,6 +249,7 @@ function ExtraKeyRow({
 export function ExtraKeysPanel(): preact.JSX.Element | null {
   const status = useStore((s) => s.status);
   const configs = useStore((s) => s.extraKeys);
+  const touchStripDisabled = useStore((s) => s.touchStripDisabled);
 
   // Fetch plugin file list + live per-key status; re-poll while any key runs a plugin.
   const [plugins, setPlugins] = useState<PluginsInfo>({ dir: '', files: [], status: {} });
@@ -279,6 +285,13 @@ export function ExtraKeysPanel(): preact.JSX.Element | null {
       <div class="xkeys-head">
         <span class="xkeys-label">{panel.title}</span>
         <span class="xkeys-sub">{panel.subtitle}</span>
+        {panel.touchStrip && (
+          <CheckField
+            label="Elgato app controls it"
+            checked={touchStripDisabled}
+            onChange={(v) => fire('/api/touch-strip', { disabled: v })}
+          />
+        )}
       </div>
       {sorted.map((wireId, i) => (
         <ExtraKeyRow

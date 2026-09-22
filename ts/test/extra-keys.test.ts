@@ -281,6 +281,32 @@ await test('AKP05E touch-strip widgets use all four zones and their image spec',
   assert.equal(d.splashed[0]!.spec.rotate, 180);
 });
 
+await test('setTouchStripDisabled(true) clears the strip and stops driving it', () => {
+  const d = new FakeDriver();
+  d.model = AJAZZ_AKP05E_MODEL;
+  const w = new ExtraKeyWidgets(d, () => ({ widget: 'clock' }));
+  w.start();
+  assert.equal(d.splashed.length, 4, 'all four zones painted');
+  d.cleared.length = 0;
+  w.setTouchStripDisabled(true);
+  tick(w);
+  w.stop();
+  assert.deepEqual(d.cleared, [1, 2, 3, 4], 'strip cleared on disable');
+  assert.equal(d.splashed.length, 4, 'no touch-strip repaint while disabled');
+});
+
+await test('setTouchStripDisabled(false) repaints the strip widgets', () => {
+  const d = new FakeDriver();
+  d.model = AJAZZ_AKP05E_MODEL;
+  const w = new ExtraKeyWidgets(d, () => ({ widget: 'clock' }));
+  w.start();
+  w.setTouchStripDisabled(true);
+  assert.equal(d.splashed.length, 4, 'only the start() paint so far');
+  w.setTouchStripDisabled(false);
+  w.stop();
+  assert.equal(d.splashed.length, 8, 're-enable repaints all four zones');
+});
+
 // isExtraKeyConfig (migration guard)
 
 console.log('\nisExtraKeyConfig');

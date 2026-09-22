@@ -140,8 +140,10 @@ export class PrimaryDock {
     this.stopWidgets();
     const identity = this.identity;
     if (!identity) return;
-    this.widgets = new ExtraKeyWidgets(driver, (wireId) =>
-      this.deps.webui.extraKeyConfigFor(identity.deviceKey, wireId),
+    this.widgets = new ExtraKeyWidgets(
+      driver,
+      (wireId) => this.deps.webui.extraKeyConfigFor(identity.deviceKey, wireId),
+      identity.touchStripDisabled,
     );
     this.widgets.start();
   }
@@ -157,6 +159,11 @@ export class PrimaryDock {
 
   forceRunWidget(wireId: number): void {
     this.widgets?.forceRun(wireId);
+  }
+
+  /** Toggle DeckBridge's touch-strip widget control (WebUI switch). */
+  setTouchStripDisabled(disabled: boolean): void {
+    this.widgets?.setTouchStripDisabled(disabled);
   }
 
   /** Dock status for the WebUI. Same builder as DeviceSession.status(), with the

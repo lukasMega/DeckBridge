@@ -5,6 +5,7 @@ import type { DockStatus } from '../src/types.js';
 import { modelToChildGeometry } from '../src/capabilities.js';
 import { MK2_MODEL } from '../src/devices/elgato/mk2.js';
 import { MINI_MODEL } from '../src/devices/elgato/mini.js';
+import { STREAM_DECK_PLUS_MODEL } from '../src/devices/elgato/plus.js';
 import {
   CORA_MAGIC,
   encodeCoraFrame,
@@ -18,8 +19,10 @@ import { testAsync as runTest, summaryExit } from './helpers/harness.js';
 
 const TEST_PORT = 15343;
 const TEST_CHILD_PORT = 15344;
+const PLUS_TEST_CHILD_PORT = 15346;
 const MK2_CHILD_GEOMETRY = modelToChildGeometry(MK2_MODEL);
 const MINI_CHILD_GEOMETRY = modelToChildGeometry(MINI_MODEL);
+const PLUS_CHILD_GEOMETRY = modelToChildGeometry(STREAM_DECK_PLUS_MODEL);
 
 // Setup / teardown
 
@@ -307,6 +310,59 @@ try {
 
     await closeAndWait(childServer, f);
   });
+
+  await runTest(
+    'sendDialPress / sendDialRotate / sendTouch produce Plus input reports',
+    async () => {
+      // A Plus-geometry child server is required (encoderCount 4) — the MK.2 one
+      // above declares none, so sendDial* would no-op.
+      const plusChild = new ElgatoChildServer(
+        PLUS_CHILD_GEOMETRY,
+        PLUS_TEST_CHILD_PORT,
+        server.deviceConfig,
+        false,
+      );
+      plusChild.keepaliveIntervalMs = 100;
+      await plusChild.start();
+      try {
+        const f = await connect(PLUS_TEST_CHILD_PORT);
+        await f.recv(); // drain keepalive
+
+        plusChild.sendDialPress(2, true);
+        const press = await f.recv();
+        assert.equal(press.payload[0], 0x01);
+        assert.equal(press.payload[1], 0x03); // encoder subtype
+        assert.equal(press.payload[2], 1 + 4); // contents type + one byte per encoder
+        assert.equal(press.payload[4], 0x00); // BTN
+        assert.equal(press.payload[5 + 2], 0x01); // encoder 2 pressed
+        assert.equal(press.payload[5 + 0], 0x00); // others released
+        assert.equal(press.payload[5 + 3], 0x00);
+
+        plusChild.sendDialRotate(1, -3);
+        const rotate = await f.recv();
+        assert.equal(rotate.payload[0], 0x01);
+        assert.equal(rotate.payload[1], 0x03);
+        assert.equal(rotate.payload[4], 0x01); // rotate
+        const deltaByte = rotate.payload[5 + 1]!;
+        assert.equal(deltaByte >= 0x80 ? deltaByte - 0x100 : deltaByte, -3); // INT8 per encoder
+
+        plusChild.sendTouch({ type: 'swipe', x: 100, y: 20, endX: 300, endY: 40 });
+        const touch = await f.recv();
+        assert.equal(touch.payload[0], 0x01);
+        assert.equal(touch.payload[1], 0x02); // touch subtype
+        assert.equal(touch.payload[2], 0x0e); // FLICK payload length
+        assert.equal(touch.payload[4], 0x03); // swipe
+        assert.equal(touch.payload.readUInt16LE(6), 100); // x
+        assert.equal(touch.payload.readUInt16LE(8), 20); // y
+        assert.equal(touch.payload.readUInt16LE(10), 300); // endX
+        assert.equal(touch.payload.readUInt16LE(12), 40); // endY
+
+        await closeAndWait(plusChild, f);
+      } finally {
+        await plusChild.stop();
+      }
+    },
+  );
 
   /* oxlint-disable no-console no-control-regex */
   await runTest('GET_REPORT 0x05 returns child firmware version', async () => {

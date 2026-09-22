@@ -15,6 +15,7 @@ import {
   type DeviceWireSpec,
 } from './driver.js';
 import { fnv1aHex } from '../types.js';
+import { findModelById } from './registry.js';
 
 export type ValidationResult =
   | { ok: true; value: DeviceModelOverride }
@@ -272,14 +273,26 @@ function defined<T extends object>(patch: T | undefined): Partial<T> {
 }
 
 /** Apply `ov` on top of `model`, returning a NEW model (inputs untouched).
- *  Per-section shallow merge; arrays replace wholesale. `undefined` never wins. */
+ *  Per-section shallow merge; arrays replace wholesale. `undefined` never wins.
+ *  A `cora.advertiseAs` pointing at a full-emulation profile also adopts that
+ *  profile's `image` + `keyMap` (the AKP05E re-pairing as a Stream Deck + needs
+ *  the Plus physical transform + 4×2 key map), with any explicit user `image`/
+ *  `keyMap` override still winning on top. */
 export function applyModelOverrides(model: DeviceModel, ov?: DeviceModelOverride): DeviceModel {
   if (!ov || Object.keys(ov).length === 0) return model;
-  const image: DeviceImageSpec = { ...model.image, ...defined(ov.image) };
-  const keyMap: DeviceKeyMap = { ...model.keyMap, ...defined(ov.keyMap) };
+  const cora: DeviceCoraSpec = { ...model.cora, ...defined(ov.cora) };
+  const emulated = cora.advertiseAs ? findModelById(cora.advertiseAs) : null;
+  const adopt = emulated?.cora.fullEmulation === true;
+  const image: DeviceImageSpec = {
+    ...(adopt ? emulated.image : model.image),
+    ...defined(ov.image),
+  };
+  const keyMap: DeviceKeyMap = {
+    ...(adopt ? emulated.keyMap : model.keyMap),
+    ...defined(ov.keyMap),
+  };
   const wire: DeviceWireSpec = { ...model.wire, ...defined(ov.wire) };
   const splash: DeviceSplashSpec | undefined = ov.splash ?? model.splash;
-  const cora: DeviceCoraSpec = { ...model.cora, ...defined(ov.cora) };
   return {
     ...model,
     image,

@@ -12,6 +12,7 @@ import type { ControllerHost } from './types.js';
 export class DevicePrefsController {
   private runtimeBrightnessOverride = DEFAULT_BRIGHTNESS_OVERRIDE;
   private runtimeImageModeOverride: ImageModeOverride = null;
+  private runtimeTouchStripDisabled = false;
 
   constructor(
     private readonly host: ControllerHost,
@@ -36,6 +37,29 @@ export class DevicePrefsController {
   get imageModeOverride(): ImageModeOverride {
     const e = this.host.settings.entryFor(this.host.selectedDeviceKey());
     return e ? (e.imageModeOverride ?? null) : this.runtimeImageModeOverride;
+  }
+
+  /** Per-device touch-strip disable — also read by the widget scheduler
+   *  (ExtraKeyWidgets) via DriverManager/DeviceSession. */
+  isTouchStripDisabled(deviceKey: string): boolean {
+    const e = this.host.settings.entryFor(deviceKey);
+    return e ? (e.touchStripDisabled ?? false) : this.runtimeTouchStripDisabled;
+  }
+
+  /** touchStripDisabled of the SELECTED dock (WebUI switch). */
+  get touchStripDisabled(): boolean {
+    return this.isTouchStripDisabled(this.host.selectedDeviceKey());
+  }
+
+  /** Store, broadcast, and let app.ts hand the strip to the Elgato app via
+   *  'touchStripChanged'. */
+  setTouchStripDisabled(disabled: boolean): void {
+    this.mutateSelectedEntryOrRuntime(
+      (e) => (e.touchStripDisabled = disabled),
+      () => (this.runtimeTouchStripDisabled = disabled),
+    );
+    this.host.broadcast('touchStrip', { disabled });
+    this.host.emit('touchStripChanged', this.host.selectedDock(), disabled);
   }
 
   setBrightnessOverride(enabled: boolean): void {
@@ -71,6 +95,7 @@ export class DevicePrefsController {
     this.host.broadcast('brightnessOverride', { enabled: this.brightnessOverride });
     this.host.broadcast('imageMode', { mode: this.imageModeOverride });
     this.host.broadcast('extraKeys', { configs: extraKeyConfigs });
+    this.host.broadcast('touchStrip', { disabled: this.touchStripDisabled });
   }
 
   /** Store a value on the SELECTED dock's persisted entry, or (no deviceKey) in

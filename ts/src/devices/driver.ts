@@ -114,6 +114,16 @@ export interface DeviceCoraSpec {
   /** Registry model whose geometry this device emulates; omit for own geometry. */
   advertiseAs?: DeviceModelId;
   usePhysicalIdentity: boolean; // forward the device's real serial/firmware (Elgato true, Mirabox false)
+  /** Firmware version string the CHILD reports over CORA (GET_REPORT 0x05 / 0x87).
+   *  Omit for the shared DEFAULT_CHILD_FIRMWARE_VERSION ('1.01.000'); the Stream Deck +
+   *  profile sets a 2.00.x version because the desktop rejects 1.01.x for PID 0x0084. */
+  childFirmwareVersion?: string;
+  /** When a model advertises AS this profile, also adopt this profile's `image` and
+   *  `keyMap` (a full emulation, not just geometry). The Stream Deck + profile sets
+   *  this because its 120×120 / 4×2 geometry needs a different physical rotation and
+   *  key mapping than the AKP05E's native 5×2. Geometry-only profiles (mk2, mini) leave
+   *  it unset so the 293S/K1 Pro keep their own image transform + key map. */
+  fullEmulation?: boolean;
 }
 
 /** Splash-screen overrides. model.image is calibrated for desktop-pre-rotated CORA
@@ -147,9 +157,6 @@ export interface ChildGeometry {
   /** Touch-strip size in pixels (Plus = 800×100). Omitted/0 on key-only models. */
   touchWidth?: number;
   touchHeight?: number;
-  /** Capabilities layout-type byte. Defaults to CHILD_CAPS_LAYOUT_TYPE (0x02);
-   *  Plus uses CHILD_CAPS_PLUS_LAYOUT_TYPE (UNVERIFIED). */
-  layoutType?: number;
 }
 
 export interface DeviceModel {
@@ -171,8 +178,6 @@ export interface DeviceModel {
   encoderCount?: number;
   touchWidth?: number;
   touchHeight?: number;
-  /** Capabilities layout-type byte override. Defaults to CHILD_CAPS_LAYOUT_TYPE. */
-  layoutType?: number;
   image: DeviceImageSpec;
   wire: DeviceWireSpec;
   keyMap: DeviceKeyMap;

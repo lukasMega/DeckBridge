@@ -29,6 +29,7 @@ export interface StateResponseInputs {
   deviceIdentity: DeviceIdentity;
   realDeviceIdentity?: RealDeviceIdentity;
   extraKeys: Record<string, ExtraKeyConfig>;
+  touchStripDisabled: boolean;
   logLevel: string;
   logFilePath: string;
   multiDeck: boolean;

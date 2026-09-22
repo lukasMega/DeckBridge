@@ -551,6 +551,9 @@ input[type='range'].range:disabled {
   font-size: 12px;
   color: var(--fg-dim);
 }
+.xkeys-head .settings-checkbox {
+  margin: 0 0 0 auto;
+}
 .xkey-row {
   gap: 10px;
   margin-top: 8px;

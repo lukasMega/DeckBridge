@@ -55,10 +55,6 @@ export const MDNS_TXT_VID = '4057';
 // Capabilities packet structure
 export const CHILD_CAPS_VERSION = 0x0200;
 export const CHILD_CAPS_LAYOUT_TYPE = 0x02;
-// Stream Deck + layout byte. UNVERIFIED — no Plus-on-Dock capture exists; kept as a
-// named constant (not inlined) so a verified value is a one-line change. See
-// .claude/plans/2026-09-21_ajazz-akp05-stream-deck-plus-support.md.
-export const CHILD_CAPS_PLUS_LAYOUT_TYPE = 0x03;
 export const CHILD_CAPS_SERIAL_MAX_LEN = 30;
 export const MANUFACTURER_STRING = 'Elgato';
 
@@ -79,7 +75,6 @@ export const DEFAULT_MAC_ADDRESS_STRING = '02:00:00:00:00:01';
 export const DEFAULT_MAC_ADDRESS = [0x02, 0x00, 0x00, 0x00, 0x00, 0x01] as const;
 
 // Key event packet layout
-export const KEY_EVENT_RESERVED_BYTE = 0x00;
 export const KEY_EVENT_STATE_OFFSET = 4;
 
 // Mirabox protocol padding

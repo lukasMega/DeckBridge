@@ -308,6 +308,10 @@ webui.on('extraKeyRunNow', (dock: number, wireId: number) => {
   driverManager.forceRunExtraKey(dock, wireId);
 });
 
+webui.on('touchStripChanged', (dock: number, disabled: boolean) => {
+  driverManager.setTouchStripDisabledForDock(dock, disabled);
+});
+
 webui.on('setDeviceMdnsName', (deviceKey: string, name: string) => {
   const ok = webui.updateDeviceMdnsName(deviceKey, name);
   if (!ok) {

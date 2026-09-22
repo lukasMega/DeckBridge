@@ -48,6 +48,7 @@ export const routes: Route[] = [
   postJson('/api/select-dock', selectDock),
   postJson('/api/extra-key', setExtraKey),
   postJson('/api/extra-key/run', runExtraKeyNow),
+  postJson('/api/touch-strip', setTouchStripDisabled),
   post('/api/settings', setSettings),
   post('/api/settings/open-in-os', async ({ ui }) => {
     await ui.openSettingsFile();
@@ -252,6 +253,16 @@ function runExtraKeyNow({ wireId }: RunExtraKeyBody, { ui }: RouteContext): Resp
   if (!isNonNegInt(wireId)) return badRequest(nonNegIntMessage('wireId'));
   const err = ui.tryRunExtraKeyNow(wireId);
   return err ? json({ error: err.error }, err.status) : json({ ok: true });
+}
+
+/** Disable DeckBridge's touch-strip widgets so the Elgato app drives the strip. */
+function setTouchStripDisabled(
+  { disabled }: { disabled: unknown },
+  { ui }: RouteContext,
+): Response {
+  if (typeof disabled !== 'boolean') return badRequest('disabled must be a boolean');
+  ui.notifyTouchStripDisabled(disabled);
+  return json({ ok: true, disabled });
 }
 
 function selectDock({ index }: { index: unknown }, { ui }: RouteContext): Response {

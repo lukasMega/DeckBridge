@@ -62,7 +62,7 @@ export function findModel(vid: number, pid: number): DeviceModel | null {
  *  `cora.advertiseAs`. Resolved through registry ids, never copied dimensions, so an
  *  emulating model can't drift from the one it impersonates. device-models.test.ts
  *  asserts every `advertiseAs` resolves, so the throw is a can't-happen guard. */
-function advertisedModel(model: DeviceModel): DeviceModel {
+export function advertisedModel(model: DeviceModel): DeviceModel {
   if (!model.cora.advertiseAs) return model;
   const advertised = findModelById(model.cora.advertiseAs);
   if (!advertised) {

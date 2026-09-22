@@ -1,15 +1,13 @@
 import type { DeviceModel } from '../driver.js';
-import {
-  ELGATO_PLUS_PID,
-  CHILD_CAPS_PLUS_LAYOUT_TYPE,
-} from '../../types.js';
+import { ELGATO_PLUS_PID, IMAGE_JPEG_QUALITY } from '../../types.js';
 
 // Stream Deck + emulation profile. NOT in the USB probe list (DEVICE_MODELS) — it is
 // resolved as a `cora.advertiseAs` target so another device (AJAZZ AKP05/AKP05E) can
-// re-pair as a Plus. Its geometry + productId drive the advertised capabilities; the
-// image/wire/keyMap/driverKind fields are profile metadata only (a real Plus is not
-// opened through this entry). Encoder/touch dims come from the plan's CORA data —
-// the layout-type byte and touch-dim capabilities offsets remain UNVERIFIED.
+// re-pair as a Plus. `cora.fullEmulation` makes a device that advertises AS this
+// profile also adopt its `image` + `keyMap` (see devices/model-overrides.ts): the
+// AKP05E panel is 112×112 and, unlike the MK.2 app, the Plus desktop sends key art
+// upright (no 180° pre-rotation), so the physical transform is 180°. The keyMap maps
+// the Plus 4×2 grid onto the AKP05E's left four columns, dropping the rightmost one.
 export const STREAM_DECK_PLUS_MODEL: DeviceModel = {
   id: 'stream-deck-plus',
   vendor: 'elgato',
@@ -25,21 +23,37 @@ export const STREAM_DECK_PLUS_MODEL: DeviceModel = {
   encoderCount: 4,
   touchWidth: 800,
   touchHeight: 100,
-  layoutType: CHILD_CAPS_PLUS_LAYOUT_TYPE,
+  // Physical transform for the emulating device (AKP05E): 112×112 keys, 180° rotation.
   image: {
     format: 'jpeg',
-    width: 120,
-    height: 120,
-    rotate: 0,
+    width: 112,
+    height: 112,
+    rotate: 180,
     flipH: false,
     flipV: false,
     colorMode: 'rgb',
-    maxBytes: 0,
-    quality: 0.95,
-    transform: 'passthrough',
+    maxBytes: 0xffff,
+    quality: IMAGE_JPEG_QUALITY,
+    resizeFilter: 'lanczos3',
+    sharpen: 0.6,
+    transform: 'sidecar',
   },
   wire: { packetSize: 1024, inSize: 512 },
-  keyMap: {},
-  cora: { productId: ELGATO_PLUS_PID, usePhysicalIdentity: true },
+  // Plus 4×2 onto the AKP05E's 5×2: left four columns only; the rightmost column
+  // (wire image ids 15/10, input codes 5/10) is dropped.
+  keyMap: {
+    coraToWireImage: [11, 12, 13, 14, 6, 7, 8, 9],
+    wireInputToCora: [-1, 0, 1, 2, 3, -1, 4, 5, 6, 7, -1],
+  },
+  // usePhysicalIdentity stays false — the AKP05E's own firmware (V3.AKP05E.02.007)
+  // must NOT be forwarded to the desktop. childFirmwareVersion is what the desktop
+  // validates against: a Plus reports a 2.00.x line, and 1.01.x is rejected with
+  // "Device firmware is not supported. Please update."
+  cora: {
+    productId: ELGATO_PLUS_PID,
+    usePhysicalIdentity: false,
+    childFirmwareVersion: '2.00.026',
+    fullEmulation: true,
+  },
   driverKind: 'elgato-hid',
 };

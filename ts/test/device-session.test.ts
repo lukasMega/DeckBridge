@@ -5,6 +5,7 @@ import type { SessionServers } from '../src/device-session.js';
 import { generateDeviceIdentity } from '../src/device-identity.js';
 import { DEFAULT_MODEL } from '../src/devices/registry.js';
 import { MIRABOX_293S_MODEL } from '../src/devices/mirabox/mirabox-293s.js';
+import { AJAZZ_AKP05E_MODEL } from '../src/devices/ajazz/akp05e.js';
 import { deviceInputToMk2Index } from '../src/translator.js';
 import {
   ELGATO_TCP_PORT,
@@ -205,6 +206,24 @@ await test('start() applies model to both servers and sends splash', async () =>
   assert.equal(server.restartMdnsCalls.length, 1, 'restartMdns called');
   assert.equal(server.pushChildCapabilitiesCalls, 1, 'pushChildCapabilities called');
   assert.ok(driver.splashCalls.length > 0, 'splash images sent to driver');
+});
+
+await test('Plus emulation forwards a 2.00.x child firmware to the desktop', async () => {
+  const rePaired: DeviceModel = {
+    ...AJAZZ_AKP05E_MODEL,
+    cora: {
+      ...AJAZZ_AKP05E_MODEL.cora,
+      advertiseAs: 'stream-deck-plus',
+      productId: 0x0084,
+    },
+  };
+  const { server, session } = makeSession(rePaired);
+  await session.start();
+  assert.equal(
+    server.setDeviceConfigCalls[0]?.childFirmwareVersion,
+    '2.00.026',
+    're-paired Plus advertises the Plus firmware line, not the AKP05E default',
+  );
 });
 
 await test('key event translates via keymap and reaches childServer.sendKeyEvent', async () => {
