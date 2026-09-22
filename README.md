@@ -55,6 +55,7 @@ DeckBridge uses to drive a deck: **[Device specs](https://lukasmega.github.io/De
 | Mirabox K1 Pro | 6 buttons (3×2) | 64×64 | mirabox-cora |
 | Fifine AmpliGame D6 (rev. 2) | 15 buttons (5×3) | 112×112 | mirabox-cora |
 | Ajazz AKP153E (rev. 2) | 15 buttons (5×3) | 95×95 | mirabox-cora |
+| Ajazz AKP05E | 10 buttons (5×2) | 112×112 | ajazz-akp05 |
 
 <details>
 <summary>untested devices</summary>
@@ -63,6 +64,7 @@ DeckBridge uses to drive a deck: **[Device specs](https://lukasmega.github.io/De
 |---|---|---|---|
 | Fifine AmpliGame D6 | 15 buttons (5×3) | 112×112 | mirabox-cora |
 | Ajazz AKP153R (rev. 2) | 15 buttons (5×3) | 112×112 | mirabox-cora |
+| Ajazz AKP05 | 10 buttons (5×2) | 112×112 | ajazz-akp05 |
 | Ajazz AKP153 | 15 buttons (5×3) | 85×85 | mirabox-cora-v1 |
 | Ajazz AKP153E (rev. 1) | 15 buttons (5×3) | 85×85 | mirabox-cora-v1 |
 | Ajazz AKP153R (rev. 1) | 15 buttons (5×3) | 85×85 | mirabox-cora-v1 |
@@ -76,8 +78,8 @@ DeckBridge uses to drive a deck: **[Device specs](https://lukasmega.github.io/De
 Mirabox 293V3 also matches the HSV293SV3 / "293S V3" refresh — untested.
 
 > [!NOTE] <details><summary>details about supported devices</summary>
-> Hardware-tested on macOS: Stream Deck MK.2, Stream Deck Mini, 293V3, 293S, K1 Pro, and
-> Fifine AmpliGame D6 (rev. 2).
+> Hardware-tested on macOS: Stream Deck MK.2, Stream Deck Mini, 293V3, 293S, K1 Pro,
+> Fifine AmpliGame D6 (rev. 2), and Ajazz AKP05E.
 > <br/><br>
 > The Ajazz AKP153 rev. 2 models, the Fifine AmpliGame D6 rev. 1, the 7 v1
 > rebadges of the 293S board (Ajazz AKP153/E/R rev. 1, Mars Gaming MSD-ONE, Mad Dog GK150K,
