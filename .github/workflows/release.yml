@@ -403,7 +403,7 @@ jobs:
 
     steps:
       # Needed for .github/scripts/vt-upload.sh.
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         with:
           sparse-checkout: .github/scripts
           ref: ${{ github.sha }}
