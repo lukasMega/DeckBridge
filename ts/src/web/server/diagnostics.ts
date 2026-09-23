@@ -203,17 +203,20 @@ function keyEventsBlock(events: KeyEventEntry[] | undefined): string {
     .join('\n');
 }
 
-/** Replace extra-key `param`/`pluginArg` in a settings.json string. Operates on
+/** Replace extra-key `param`/`pluginArg`/`pressCommand` in a settings.json string. Operates on
  *  the parsed object so it can't corrupt unrelated text that happens to match. */
 function redactSettings(settingsJson: string): string {
   try {
     const parsed = JSON.parse(settingsJson) as {
-      devices?: Array<{ extraKeys?: Record<string, { param?: string; pluginArg?: string }> }>;
+      devices?: Array<{
+        extraKeys?: Record<string, { param?: string; pluginArg?: string; pressCommand?: string }>;
+      }>;
     };
     for (const device of parsed.devices ?? []) {
       for (const cfg of Object.values(device.extraKeys ?? {})) {
         if (cfg.param !== undefined) cfg.param = REDACTED;
         if (cfg.pluginArg !== undefined) cfg.pluginArg = REDACTED;
+        if (cfg.pressCommand !== undefined) cfg.pressCommand = REDACTED;
       }
     }
     return JSON.stringify(parsed, null, 2);

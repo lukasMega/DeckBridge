@@ -33,8 +33,10 @@ export interface DockUi {
   elgatoConnected: boolean;
   brightness?: number; // absent on legacy-synthesized entries (deriveDocks)
   extraKeys?: number[]; // wire ids of keys outside the emulated grid (293S 6th column)
+  pressableExtraKeys?: number[]; // the extraKeys with a switch (AKP05E right column as a Plus)
   widgetDisplays?: Array<{ wireId: number; label: string }>;
   encoderCount?: number; // rotary encoders (knobs); absent/0 = none
+  coraProfile?: string; // re-paired CORA profile (cora.advertiseAs); absent = native
 }
 
 export interface ExtraKeyCfg {
@@ -43,6 +45,7 @@ export interface ExtraKeyCfg {
   intervalMs?: number; // command/plugin widget: re-run/poll interval
   timeoutMs?: number; // command widget only: kill-timeout
   pluginArg?: string; // plugin widget only: per-key argument (ctx.param)
+  pressCommand?: string; // pressable extra keys only: shell command run on press
 }
 
 export interface Status {

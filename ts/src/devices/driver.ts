@@ -106,6 +106,9 @@ export interface DeviceKeyMap {
    *  events but map to no mk2 index, so DeckBridge-native actions bind to them
    *  (extra-keys.ts). 293S right column = [16, 17, 18]. */
   extraKeys?: readonly number[];
+  /** Input code of each `extraKeys` entry, same order, for extra keys that have a
+   *  switch (their press runs a DeckBridge command). Absent = display-only keys. */
+  extraKeyInputs?: readonly number[];
 }
 
 /** How this device advertises itself to the Elgato desktop over CORA. */

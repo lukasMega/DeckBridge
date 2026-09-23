@@ -2,6 +2,7 @@ import assert from 'tjs:assert';
 import { Akp05Driver } from '../src/devices/ajazz/akp05-driver.js';
 import { AJAZZ_AKP05E_MODEL } from '../src/devices/ajazz/akp05e.js';
 import { describePacket } from '../src/devices/ajazz/akp05-protocol.js';
+import { transformImageForDevice } from '../src/translator.js';
 import type { DialEvent, KeyEvent, TouchInputEvent } from '../src/types.js';
 import { test, summaryExit } from './helpers/harness.js';
 
@@ -151,6 +152,43 @@ test('sendImage frames BAT → 1024-byte data chunks → ULEND, one report id by
   const last = d.reports[2]!;
   assert.equal(last[1 + 475], 0x77, 'final chunk carries the last data byte');
   assert.equal(last[1 + 476], 0, 'and zero padding after it');
+});
+
+/** Reassemble the JPEG a single sendImage() wrote: BAT length, then the data chunks. */
+function uploadedJpeg(reports: readonly Uint8Array[]): Uint8Array {
+  const bat = reports[0]!.subarray(1);
+  const length = (bat[10]! << 8) | bat[11]!;
+  const data = reports.slice(1, -1).map((r) => r.subarray(1));
+  return Buffer.concat(data).subarray(0, length);
+}
+
+/** SOF0 frame size of a baseline JPEG. */
+function jpegSize(jpeg: Uint8Array): { width: number; height: number } {
+  for (let i = 0; i < jpeg.length - 8; i++) {
+    if (jpeg[i] === 0xff && jpeg[i + 1] === 0xc0) {
+      return {
+        height: (jpeg[i + 5]! << 8) | jpeg[i + 6]!,
+        width: (jpeg[i + 7]! << 8) | jpeg[i + 8]!,
+      };
+    }
+  }
+  throw new Error('no SOF0 marker');
+}
+
+test('clearKey sends a decodable black JPEG sized to the slot (key 112, strip zone 128)', () => {
+  for (const [wire, size] of [
+    [11, 112],
+    [6, 112],
+    [1, 128],
+  ] as const) {
+    const d = new WriteCaptureDriver();
+    d.clearKey(wire);
+    const jpeg = uploadedJpeg(d.reports);
+    assert.deepEqual(jpegSize(jpeg), { width: size, height: size }, `wire ${wire}`);
+    // Throws on a malformed stream (the old 1×1 constant had no Cb DC table).
+    const decoded = transformImageForDevice(jpeg, { ...AJAZZ_AKP05E_MODEL.image, sharpen: 0 });
+    assert.ok(decoded.length > 0, `wire ${wire} decodes`);
+  }
 });
 
 summaryExit();

@@ -14,6 +14,7 @@ export function KeyGridPreview({
   columns,
   dimmed,
   modelId,
+  coraProfile,
   label = 'Live preview',
   live = true,
   badge,
@@ -26,6 +27,8 @@ export function KeyGridPreview({
   columns: number;
   dimmed: boolean;
   modelId?: string;
+  /** Re-paired CORA profile; selects the preview orientation for that desktop profile. */
+  coraProfile?: string;
   /** Header label (left side of the card head). */
   label?: string;
   /** false = inert cells, no KeyPreview instance (unselected dock cards). */
@@ -52,7 +55,7 @@ export function KeyGridPreview({
     // Create the KeyPreview instance once; broadcast() auto-prunes on disconnect
     const kp = new KeyPreview(el, { showIndex, flash, onKeyClick });
     previewRef.current = kp;
-    kp.setModel(modelId);
+    kp.setModel(modelId, coraProfile);
     kp.rebuild(keyCount, columns);
     if (clickable !== undefined) kp.setClickable(clickable);
   }, []);
@@ -63,10 +66,10 @@ export function KeyGridPreview({
   useEffect(() => {
     const kp = previewRef.current;
     if (!kp) return;
-    kp.setModel(modelId);
+    kp.setModel(modelId, coraProfile);
     kp.rebuild(keyCount, columns);
     if (clickable !== undefined) kp.setClickable(clickable);
-  }, [keyCount, columns, modelId, clickable]);
+  }, [keyCount, columns, modelId, coraProfile, clickable]);
 
   const cls = 'preview panel-inset' + (isCompact ? ' compact' : '') + (dimmed ? ' dimmed' : '');
 

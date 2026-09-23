@@ -2,6 +2,7 @@ import assert from 'tjs:assert';
 import {
   mk2IndexToDeviceImgId,
   deviceInputToMk2Index,
+  deviceInputToExtraKey,
   transformImageForDevice,
   fillModeFor,
   applyOverride,
@@ -75,6 +76,17 @@ await test('mk2IndexToDeviceImgId(15, mirabox-293) === -1 (just past 15-entry ar
 
 await test('mk2IndexToDeviceImgId(99, mirabox-293) === -1 (far OOB)', () => {
   assert.equal(mk2IndexToDeviceImgId(99, MIRABOX_293_MODEL), -1);
+});
+
+await test('deviceInputToExtraKey: pairs extraKeyInputs with extraKeys by position', () => {
+  const model = {
+    ...MIRABOX_293_MODEL,
+    keyMap: { ...MIRABOX_293_MODEL.keyMap, extraKeys: [15, 10], extraKeyInputs: [5, 10] },
+  };
+  assert.equal(deviceInputToExtraKey(5, model), 15);
+  assert.equal(deviceInputToExtraKey(10, model), 10);
+  assert.equal(deviceInputToExtraKey(1, model), -1, 'a grid key');
+  assert.equal(deviceInputToExtraKey(5, MIRABOX_293_MODEL), -1, 'no extraKeyInputs');
 });
 
 await test('deviceInputToMk2Index(0x01, mirabox-293) === 0', () => {

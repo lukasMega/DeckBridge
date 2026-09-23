@@ -10,14 +10,18 @@ widgets keep updating with **no browser open**. A key only re-uploads when its c
 changes (e.g. a clock repaints once a minute).
 
 AJAZZ AKP05E adds four **Touch strip** zones beneath its encoders. They use the same
-widgets, including command output and JavaScript plugins.
+widgets, including command output and JavaScript plugins. When the AKP05E is paired as a
+**Stream Deck +**, the Plus grid covers only its left four columns: the two keys of the
+right column become side keys too — and these have switches, so each can also
+[run a command on press](#press-commands).
 
 ## Assign a widget
 
 Open the web UI (`http://localhost:3000`), select the dock, and use the **Side keys** or
 **Touch strip** panel. It appears only for a connected supported dock (not mock mode). Each
-display has a row — **Top / Middle / Bottom** on the 293S, or four left-to-right zones on
-AKP05E — with a widget dropdown and, for some, a parameter field or gear (⚙) button.
+display has a row — **Top / Middle / Bottom** on the 293S, **Top / Bottom** for the AKP05E
+right column, or four left-to-right zones on the AKP05E strip — with a widget dropdown and,
+for some, a parameter field or gear (⚙) button.
 
 Pick a widget and fill its parameter; it takes effect immediately, saved per key and
 restored on reconnect.
@@ -25,8 +29,9 @@ restored on reconnect.
 ## Touch strip modes
 
 On AKP05E the strip has two possible painters — DeckBridge widgets and the Elgato Stream
-Deck + app (when the device is paired as a Plus). The **Touch strip** panel picks who owns
-it, saved per device:
+Deck + app (when the device is paired as a Plus). The mode select in the **Touch strip**
+panel head picks who owns it, saved per device; the line under it describes the selected
+mode:
 
 | Mode                               | Strip                                                                                              |
 | ---------------------------------- | -------------------------------------------------------------------------------------------------- |
@@ -36,8 +41,8 @@ it, saved per device:
 
 Each zone keeps its own widget in both override modes. The "no widget" choice reads
 **Blank** under _ignore_ and **App controls** under _repaint_ — the zone is cleared, or
-left to the app. Leaving an override hands every zone back to the app. Side keys (293S)
-are not affected: they are DeckBridge widgets in every mode.
+left to the app. Leaving an override hands every zone back to the app. Side keys (293S,
+AKP05E right column) are not affected: they are DeckBridge widgets in every mode.
 
 > **No migration.** The earlier **"Elgato app controls it"** switch (`touchStripDisabled`
 > in settings.json) is gone and its value is dropped on load. Every strip starts in
@@ -49,10 +54,10 @@ are not affected: they are DeckBridge widgets in every mode.
 In an override mode the panel also shows a **Knobs** section for the AKP05/AKP05E rotary
 encoders. **Connect knobs to Elgato app** (on by default) forwards presses and turns to
 the app as usual. Turn it off and every knob stops reaching the app; each gets a row with
-three shell commands:
+three shell commands, in the **Press**, **Turn right** and **Turn left** columns:
 
-- **press** — runs once per press.
-- **turn right** / **turn left** — runs per clockwise / counter-clockwise detent. A fast
+- **Press** — runs once per press.
+- **Turn right** / **Turn left** — runs per clockwise / counter-clockwise detent. A fast
   spin coalesces: while a command is still running, further detents queue at most one
   follow-up run.
 
@@ -60,6 +65,22 @@ A field commits on blur or Enter; an empty field does nothing (the knob event is
 kept from the app). Commands run like the [command widget](#command-output) — `sh -c` /
 `cmd /c`, killed after **5 s**, capped at **512 characters** — and their output is
 discarded. In **Elgato app only** mode the knobs always go to the app, whatever is saved.
+
+> **⚠ Security.** Same posture as the command widget below: the web UI has **no
+> authentication**, so anyone who can reach it can set a command that runs on this host.
+> Keep it on a **trusted personal LAN**.
+
+## Press commands
+
+On the AKP05/AKP05E paired as a **Stream Deck +**, each right-column side key has an
+**On press** line under its widget row: a shell command run once per press. It is independent of
+the widget — the key can show a clock and open an app on press, and changing either one
+keeps the other. The command runs like a [knob command](#knobs): `sh -c` / `cmd /c`,
+killed after **5 s**, capped at **512 characters**, output discarded; presses during a
+run queue at most one follow-up run. An empty field does nothing. Unlike the knobs, these
+keys never reach the Elgato app, so there is no mode to switch.
+
+The 293S side keys have no switches and show no press field.
 
 > **⚠ Security.** Same posture as the command widget below: the web UI has **no
 > authentication**, so anyone who can reach it can set a command that runs on this host.

@@ -9,6 +9,8 @@ import { DiagnosticsPanel } from '../src/web/client/simple/diagnostics-panel.js'
 import { MultiDeckPanel } from '../src/web/client/simple/multi-deck-panel.js';
 import { KeymapLearn } from '../src/web/client/simple/keymap-learn.js';
 import { DockList } from '../src/web/client/simple/dock-cards.js';
+import { ExtraKeysPanel } from '../src/web/client/simple/extra-keys-panel.js';
+import { ChipRadioGroup } from '../src/web/client/components/ChipRadioGroup.js';
 import { updateBadgeVersion } from '../src/web/client/ui-helpers.js';
 import type { DeviceOverridesView, DockUi, UpdateInfo } from '../src/web/client/ui-types.js';
 
@@ -210,6 +212,8 @@ async function run(): Promise<void> {
   await runSettingsPanels();
   await runKeymapAndDiagnosticsPanels();
   await runMultiDockCards();
+  await runSideKeysPanel();
+  await runChipRadioGroup();
   runUpdateBadge();
 }
 
@@ -876,6 +880,125 @@ async function runMultiDockCards(): Promise<void> {
     stub.restore();
     await act(() => render(null, root));
   }
+}
+
+// Side keys + touch strip (simple/extra-keys-panel.tsx): every row sits on the
+// shared grid, and the strip's rows/knobs follow the selected mode.
+const AKP05E_DOCK: DockUi = {
+  index: 0,
+  modelId: 'ajazz-akp05e',
+  modelName: 'AJAZZ AKP05E',
+  keyCount: 8,
+  columns: 4,
+  rows: 2,
+  primaryPort: 5343,
+  primaryConnected: true,
+  elgatoConnected: true,
+  extraKeys: [10, 11, 12],
+  pressableExtraKeys: [10, 11, 12],
+  widgetDisplays: [20, 21, 22, 23].map((wireId, i) => ({ wireId, label: `Zone ${i + 1}` })),
+  encoderCount: 4,
+};
+
+async function runSideKeysPanel(): Promise<void> {
+  const stub = stubFetch(() => ({ payload: { dir: '', files: [], status: {} } }));
+  const section = (title: string): Element =>
+    root.querySelector(`[role="group"][aria-label="${title}"]`)!;
+  const rows = (title: string, extra = ''): Element[] => [
+    ...section(title).querySelectorAll(`.xkey-row:not(.xkey-grid-head)${extra}`),
+  ];
+  try {
+    await act(() =>
+      patch({
+        status: { ...baseStatus, docks: [AKP05E_DOCK], selectedDock: 0 },
+        extraKeys: { '11': { widget: 'command', param: 'date' } },
+        touchStripMode: 'elgato',
+        encoders: { connectToApp: true },
+      }),
+    );
+    await act(() => render(<ExtraKeysPanel />, root));
+    await settle();
+
+    const sideRows = rows('Side keys');
+    check(
+      sideRows.length === 3 &&
+        sideRows.every(
+          (row) =>
+            row.querySelectorAll('.xkey-value').length === 1 &&
+            row.querySelector('.xkey-press-label') !== null,
+        ),
+      'Every side-key row has one value cell and an on-press line',
+    );
+    check(
+      sideRows.filter((row) => row.querySelector('.xkey-value.xkey-wide') !== null).length === 2,
+      'Value cell spans the settings track when the widget has no settings button',
+    );
+    check(
+      section('Side keys').querySelector('.xkey-grid-head')?.textContent === 'KeyShowsValue',
+      'Side keys grid has column captions',
+    );
+    check(
+      rows('Touch strip').length === 0 &&
+        section('Touch strip').textContent.includes('DeckBridge widgets are off'),
+      'Elgato strip mode hides zone rows and says why',
+    );
+
+    const modeSelect = root.querySelector<HTMLSelectElement>(
+      'select[aria-label="Touch strip mode"]',
+    )!;
+    modeSelect.value = 'deckbridge-repaint';
+    await act(() => {
+      modeSelect.dispatchEvent(new Event('change'));
+    });
+    await settle();
+    const modePost = stub.calls.find((c) => c.url === '/api/touch-strip-mode');
+    check(
+      (modePost?.body as { mode?: string } | undefined)?.mode === 'deckbridge-repaint',
+      'Touch strip mode select posts the picked mode',
+    );
+
+    await act(() => patch({ touchStripMode: 'deckbridge-repaint' }));
+    check(
+      rows('Touch strip', ':not(.xkey-knob-row)').length === 4 &&
+        rows('Touch strip', '.xkey-knob-row').length === 0,
+      'Override mode shows zone rows; connected knobs show no command grid',
+    );
+    await act(() => patch({ encoders: { connectToApp: false } }));
+    check(
+      rows('Touch strip', '.xkey-knob-row').length === 4 &&
+        rows('Touch strip', '.xkey-knob-row').every(
+          (row) => row.querySelectorAll('input').length === 3,
+        ),
+      'Disconnected knobs show one press/right/left row per knob',
+    );
+  } finally {
+    stub.restore();
+    await act(() => render(null, root));
+    await act(() => patch({ status: baseStatus, extraKeys: {}, touchStripMode: 'elgato' }));
+  }
+}
+
+async function runChipRadioGroup(): Promise<void> {
+  let picked: number | undefined;
+  await act(() =>
+    render(
+      <ChipRadioGroup
+        name="chip-test"
+        label="Chip test"
+        value={0}
+        options={[0, 90].map((value) => ({ value, label: String(value) }))}
+        onChange={(value) => (picked = value)}
+      />,
+      root,
+    ),
+  );
+  check(
+    root.querySelector<HTMLInputElement>('input[name="chip-test"]:checked')?.value === '0',
+    'ChipRadioGroup checks the current value',
+  );
+  await act(() => root.querySelector<HTMLInputElement>('input[value="90"]')!.click());
+  check(picked === 90, 'ChipRadioGroup reports the typed option value');
+  await act(() => render(null, root));
 }
 
 void run()

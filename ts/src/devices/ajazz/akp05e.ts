@@ -21,13 +21,16 @@ const TOUCH_STRIP_IMAGE: DeviceImageSpec = { ...KEY_IMAGE, width: 128, height: 1
 // Re-paired as a Stream Deck +: unlike the MK.2 app, the Plus desktop sends key art
 // upright (no 180° pre-rotation), so the physical transform is 180°. The Plus 4×2 grid
 // maps onto the left four columns; the rightmost (wire image ids 15/10, input codes
-// 5/10) is dropped. usePhysicalIdentity stays false — the AKP05E's own firmware
-// (V3.AKP05E.02.007) must not reach the desktop.
+// 5/10) becomes DeckBridge-owned extra keys (widget + press command, extra-keys.ts).
+// usePhysicalIdentity stays false — the AKP05E's own firmware (V3.AKP05E.02.007)
+// must not reach the desktop.
 const STREAM_DECK_PLUS_EMULATION: DeviceEmulation = {
   image: { ...KEY_IMAGE, rotate: 180 },
   keyMap: {
     coraToWireImage: [11, 12, 13, 14, 6, 7, 8, 9],
     wireInputToCora: [-1, 0, 1, 2, 3, -1, 4, 5, 6, 7, -1],
+    extraKeys: [15, 10],
+    extraKeyInputs: [5, 10],
   },
 };
 

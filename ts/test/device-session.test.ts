@@ -6,6 +6,7 @@ import { generateDeviceIdentity } from '../src/device-identity.js';
 import { DEFAULT_MODEL } from '../src/devices/registry.js';
 import { MIRABOX_293S_MODEL } from '../src/devices/mirabox/mirabox-293s.js';
 import { AJAZZ_AKP05E_MODEL } from '../src/devices/ajazz/akp05e.js';
+import { applyModelOverrides } from '../src/devices/model-overrides.js';
 import { deviceInputToMk2Index } from '../src/translator.js';
 import {
   ELGATO_TCP_PORT,
@@ -324,6 +325,49 @@ await test('dial events reach childServer.sendDial only when the knob override l
 await test('status() reports the physical encoder count (AKP05E via its Plus emulation)', () => {
   assert.equal(makeSession(AJAZZ_AKP05E_MODEL).session.status().encoderCount, 4);
   assert.equal(makeSession(DEFAULT_MODEL).session.status().encoderCount, undefined, 'omitted');
+});
+
+await test('status() reports the re-paired CORA profile only when advertising as one', () => {
+  const plus = applyModelOverrides(AJAZZ_AKP05E_MODEL, {
+    cora: { advertiseAs: 'stream-deck-plus' },
+  });
+  assert.equal(makeSession(plus).session.status().coraProfile, 'stream-deck-plus');
+  assert.equal(makeSession(AJAZZ_AKP05E_MODEL).session.status().coraProfile, undefined, 'native');
+});
+
+await test('status() lists the AKP05E right column as pressable extra keys only as a Plus', () => {
+  const plus = applyModelOverrides(AJAZZ_AKP05E_MODEL, {
+    cora: { advertiseAs: 'stream-deck-plus' },
+  });
+  const status = makeSession(plus).session.status();
+  assert.deepEqual(status.extraKeys, [15, 10]);
+  assert.deepEqual(status.pressableExtraKeys, [15, 10]);
+  const native = makeSession(AJAZZ_AKP05E_MODEL).session.status();
+  assert.equal(native.extraKeys, undefined, 'native 5×2 grid has no extra keys');
+  assert.equal(native.pressableExtraKeys, undefined);
+});
+
+await test('a pressable extra key reaches onExtraKey by its image wire id, not onKey', () => {
+  const plus = applyModelOverrides(AJAZZ_AKP05E_MODEL, {
+    cora: { advertiseAs: 'stream-deck-plus' },
+  });
+  const driver = new EventEmitter() as unknown as WorkerHidDriver;
+  const keys: number[] = [];
+  const extras: Array<[number, string]> = [];
+  wireCommonDriverEvents(driver, plus, {
+    onKey: (mk2Index) => keys.push(mk2Index),
+    onExtraKey: (wireId, state) => extras.push([wireId, state]),
+    onReinit: () => undefined,
+  });
+  driver.emit('key', { keyIndex: 5, state: 'down' }); // top-right
+  driver.emit('key', { keyIndex: 10, state: 'up' }); // bottom-right
+  driver.emit('key', { keyIndex: 1, state: 'down' }); // Plus key 0
+  driver.emit('key', { keyIndex: 0, state: 'down' }); // unmapped
+  assert.deepEqual(extras, [
+    [15, 'down'],
+    [10, 'up'],
+  ]);
+  assert.deepEqual(keys, [0]);
 });
 
 await test('image event reaches driver.renderCoraImage', async () => {

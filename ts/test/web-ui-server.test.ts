@@ -448,6 +448,36 @@ test('applySettingsJson: bad touchStripMode / encoders fail the device-entry gua
   assert.deepEqual(ui.encoderSettingsFor('fake-device-0'), { connectToApp: false });
 });
 
+test('extra-key press command: pressable keys only, widget and command replace independently', () => {
+  const ui = new WebUIServer(undefined, [], 'real', TEST_SETTINGS_ROOT);
+  ui.getOrCreateDeviceIdentity('fake-device-0', 'Dock');
+  ui.notifyDocks([{ ...fakeDockStatus(0), extraKeys: [15, 10], pressableExtraKeys: [15] }]);
+  const changed: unknown[][] = [];
+  ui.on('extraKeyChanged', (...args: unknown[]) => changed.push(args));
+  const cfg = () => ui.extraKeyConfigFor('fake-device-0', 15);
+
+  assert.equal(ui.trySetExtraKey(10, { pressCommand: 'x' })?.status, 400, 'no switch');
+  assert.equal(ui.trySetExtraKey(3, { pressCommand: 'x' })?.status, 400, 'no such extra key');
+  assert.equal(ui.trySetExtraKey(15, { pressCommand: ' say hi ' }), null);
+  assert.deepEqual(cfg(), { widget: 'none', pressCommand: 'say hi' }, 'trimmed, no widget yet');
+  assert.equal(changed.length, 0, 'a press command needs no repaint');
+
+  assert.equal(ui.trySetExtraKey(15, { widget: 'clock' }), null);
+  assert.deepEqual(cfg(), { widget: 'clock', pressCommand: 'say hi' }, 'widget keeps command');
+  assert.deepEqual(changed, [[0]]);
+  assert.equal(ui.trySetExtraKey(15, { pressCommand: '' }), null);
+  assert.deepEqual(cfg(), { widget: 'clock' }, 'command cleared, widget kept');
+  assert.equal(ui.trySetExtraKey(15, { widget: 'none' }), null);
+  assert.equal(cfg(), undefined, 'nothing left → entry dropped');
+
+  const entry = (extraKeys: unknown): string =>
+    JSON.stringify({ devices: [{ ...deviceEntry('fake-device-0', {}), extraKeys }] });
+  ui.applySettingsJson(entry({ '15': { widget: 'none', pressCommand: 'x'.repeat(513) } }));
+  assert.equal(cfg(), undefined, 'over-long press command rejected');
+  ui.applySettingsJson(entry({ '15': { widget: 'none', pressCommand: 'open -a Music' } }));
+  assert.deepEqual(cfg(), { widget: 'none', pressCommand: 'open -a Music' });
+});
+
 test("new WS client's initial snapshot carries stored docks", () => {
   const ui = new WebUIServer(undefined, [], 'real', TEST_SETTINGS_ROOT);
   ui.notifyDocks([fakeDockStatus(0), fakeDockStatus(1)]);
@@ -636,6 +666,17 @@ try {
     assert.equal((await post('/api/encoders', { commands: { '0': { press: 1 } } })).status, 400);
     assert.equal((await post('/api/encoders', { connectToApp: false })).status, 409);
   });
+
+  await runWebTest(
+    'POST /api/extra-key/press: bad body → 400, MK.2 has no extra key → 400',
+    async () => {
+      assert.equal((await post('/api/extra-key/press', { wireId: -1, command: 'x' })).status, 400);
+      assert.equal((await post('/api/extra-key/press', { wireId: 15, command: 1 })).status, 400);
+      const long = 'x'.repeat(513);
+      assert.equal((await post('/api/extra-key/press', { wireId: 15, command: long })).status, 400);
+      assert.equal((await post('/api/extra-key/press', { wireId: 15, command: 'x' })).status, 400);
+    },
+  );
 
   await runWebTest('POST /api/touch-strip (removed) → 404', async () => {
     assert.equal((await post('/api/touch-strip', { disabled: true })).status, 404);

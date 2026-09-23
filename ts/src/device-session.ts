@@ -28,10 +28,11 @@ import type {
 } from './types.js';
 import type { DeviceIdentitySettings } from './settings-store.js';
 import { advertisedGeometry, advertisedModel } from './devices/registry.js';
-import { deviceInputToMk2Index } from './translator.js';
+import { deviceInputToExtraKey, deviceInputToMk2Index } from './translator.js';
 import { sendSplashImages } from './splash-sender.js';
 import { ExtraKeyWidgets } from './extra-keys.js';
 import { EncoderActions, type EncoderOverride } from './encoders.js';
+import { ExtraKeyActions } from './command-actions.js';
 import { emulationProfiles } from './devices/model-overrides.js';
 import type { DeviceDriver, DeviceModel, DeviceModelOverride } from './devices/driver.js';
 import type { ElgatoServer, ElgatoChildServer } from './elgato.js';
@@ -98,13 +99,16 @@ export function buildDockStatus(s: DockStatusInput): DockStatus {
   // else is the dock's own fixed identity (dockSerial/mdns) or the shared defaults.
   const usePhysical = model.cora.usePhysicalIdentity;
   const encoderCount = physicalEncoderCount(model);
+  const pressable = pressableExtraKeys(model);
   return {
     index: s.index,
     ...(model.keyMap.extraKeys ? { extraKeys: model.keyMap.extraKeys } : {}),
+    ...(pressable.length > 0 ? { pressableExtraKeys: pressable } : {}),
     ...(model.widgetDisplays
       ? { widgetDisplays: model.widgetDisplays.map(({ wireId, label }) => ({ wireId, label })) }
       : {}),
     ...(encoderCount ? { encoderCount } : {}),
+    ...(model.cora.advertiseAs ? { coraProfile: model.cora.advertiseAs } : {}),
     modelId: model.id,
     modelName: model.name,
     keyCount: model.keyCount,
@@ -143,6 +147,12 @@ function physicalEncoderCount(model: DeviceModel): number {
   return Math.max(model.encoderCount ?? 0, ...emulated);
 }
 
+/** The extra keys that have a switch — those with an entry in keyMap.extraKeyInputs. */
+function pressableExtraKeys(model: DeviceModel): readonly number[] {
+  const inputs = model.keyMap.extraKeyInputs ?? [];
+  return (model.keyMap.extraKeys ?? []).filter((_, i) => inputs[i] !== undefined);
+}
+
 export type DockFrames = Map<number, { data: Buffer; format: 'jpeg' | 'bmp' }>;
 
 /** Re-send a dock's cached CORA frames through its driver — the transform runs
@@ -177,6 +187,9 @@ export function wireCommonDriverEvents(
      *  undefined for identity-mapped models. Key-map learn mode needs it —
      *  a wrong map is exactly what it is there to fix. */
     onKey: (mk2Index: number, state: KeyEvent['state'], wireId?: number) => void;
+    /** Press on an extra key with a switch (keyMap.extraKeyInputs); `wireId` is the
+     *  extra key's image wire id, as keyed in its ExtraKeyConfig. */
+    onExtraKey?: (wireId: number, state: KeyEvent['state']) => void;
     /** Encoder press/rotate (Stream Deck + emulation). Dropped by the child
      *  server when the advertised geometry declares no encoders. */
     onDial?: (event: DialEvent) => void;
@@ -193,10 +206,16 @@ export function wireCommonDriverEvents(
       return;
     }
     const index = deviceInputToMk2Index(e.keyIndex, model);
-    // Outside the emulated grid (293S 6th column) — display-only keys
-    // with no switches; nothing to dispatch.
-    if (index < 0) return;
     const wire = e.keyIndex.toString(16).padStart(2, '0');
+    if (index < 0) {
+      // Outside the emulated grid: an AKP05E right-column key (re-paired as a Stream
+      // Deck +) runs its DeckBridge command; the 293S 6th column has no switches.
+      const extraKey = deviceInputToExtraKey(e.keyIndex, model);
+      if (extraKey < 0) return;
+      log('info', 'key', `${model.id} wire=0x${wire} → extra key ${extraKey} ${e.state}`);
+      opts.onExtraKey?.(extraKey, e.state);
+      return;
+    }
     log('info', 'key', `${model.id} wire=0x${wire} → mk2=${index} ${e.state}`);
     opts.onKey(index, e.state, e.keyIndex);
   });
@@ -299,6 +318,7 @@ export class DeviceSession {
   private readonly extraKeyConfigFor?: (wireId: number) => ExtraKeyConfig | undefined;
   private readonly extraKeys: ExtraKeyWidgets;
   private readonly encoders: EncoderActions;
+  private readonly extraKeyActions: ExtraKeyActions;
   private brightness = DEFAULT_BRIGHTNESS;
   private stopped = false;
 
@@ -323,6 +343,7 @@ export class DeviceSession {
       opts.touchStripMode,
     );
     this.encoders = new EncoderActions(() => opts.encoderOverride?.());
+    this.extraKeyActions = new ExtraKeyActions((wireId) => this.extraKeyConfigFor?.(wireId));
   }
 
   /** The underlying driver — used by DriverManager.getDriverForDock so app.ts
@@ -419,6 +440,7 @@ export class DeviceSession {
   private wireListeners(): void {
     wireCommonDriverEvents(this.driver, this.model, {
       onKey: (index, state) => this.childServer.sendKeyEvent(index, state),
+      onExtraKey: (wireId, state) => this.extraKeyActions.handleKey(wireId, state),
       onDial: (event) => {
         if (!this.encoders.handleDial(event)) this.childServer.sendDial(event);
       },

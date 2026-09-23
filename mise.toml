@@ -305,6 +305,15 @@ run = """
   DECKBRIDGE_NATIVE_LIB=$DECKBRIDGE_NATIVE_LIB $TJS run dist/akp05-capture.js
 """
 
+[tasks.akp05-image-probe]
+description = "Ajazz AKP05/AKP05E top-row line artifacts: staged image writes, press any LCD key to advance (requires the device; stop DeckBridge first)"
+depends = ["tjs-setup", "deckbridge-native"]
+dir = "ts"
+run = """
+  node build.mjs --probe akp05-image-probe
+  DECKBRIDGE_NATIVE_LIB=$DECKBRIDGE_NATIVE_LIB $TJS run dist/akp05-image-probe.js
+"""
+
 [tasks.e2e]
 description = "Black-box smoke test of a packaged release zip (usage: mise run e2e -- dist/foo.zip)"
 run = "./scripts/e2e-smoke.sh ${1:-}"

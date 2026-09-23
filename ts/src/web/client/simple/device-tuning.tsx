@@ -2,6 +2,8 @@
 // Supports runtime calibration before copying values into a registry PR.
 // Key-map wizard lives in keymap-learn.tsx.
 import { useCallback, useEffect, useRef, useState } from 'preact/hooks';
+import { ChipRadioGroup } from '../components/ChipRadioGroup.js';
+import type { ChipOption } from '../components/ChipRadioGroup.js';
 import { Collapsible } from '../components/Collapsible.js';
 import { CheckField, NumberField, SelectField } from '../components/Fields.js';
 import { useStore } from '../store.js';
@@ -14,15 +16,34 @@ import type { DeviceImageOverride, DeviceOverridesView } from '../ui-types.js';
 
 const ROTATIONS = [0, 90, 180, 270] as const;
 const RESIZE_FILTERS = ['triangle', 'nearest', 'lanczos3'] as const;
-const RESIZE_MODE_OPTIONS = [
+const ROTATION_CHIPS: ReadonlyArray<ChipOption<(typeof ROTATIONS)[number]>> = ROTATIONS.map(
+  (rotate) => ({ value: rotate, label: <span>{rotate}°</span>, title: `Rotate ${rotate} degrees` }),
+);
+
+function iconChips<T extends string>(
+  options: ReadonlyArray<{ value: T; icon: string; description: string }>,
+): ReadonlyArray<ChipOption<T>> {
+  return options.map(({ value, icon, description }) => ({
+    value,
+    title: description,
+    label: (
+      <>
+        <span aria-hidden="true">{icon}</span>
+        <span class="icon-radio-label">{value}</span>
+      </>
+    ),
+  }));
+}
+
+const RESIZE_MODE_CHIPS = iconChips([
   { value: 'resize', icon: '↔', description: 'Resize image to fit' },
   { value: 'pad', icon: '□', description: 'Pad image to fit' },
-] as const;
-const PAD_FILL_OPTIONS = [
+] as const);
+const PAD_FILL_CHIPS = iconChips([
   { value: 'black', icon: '●', description: 'Black padding' },
   { value: 'average', icon: '◐', description: 'Average-color padding' },
   { value: 'edge', icon: '▣', description: 'Edge-color padding' },
-] as const;
+] as const);
 
 /** Numeric fields rendered as a plain number input, with their bounds. Bounds
  *  mirror devices/model-overrides.ts — the server re-validates regardless. */
@@ -202,56 +223,34 @@ export function DeviceTuningPanel(): preact.JSX.Element {
           <p class="tuning-group-label">Layout</p>
           <div class="tuning-field">
             <span>Rotation</span>
-            <div class="pad-fill-options rotation-options" role="radiogroup" aria-label="Rotation">
-              {ROTATIONS.map((rotate) => (
-                <label key={rotate} class="pad-fill-option" title={`Rotate ${rotate} degrees`}>
-                  <input
-                    type="radio"
-                    name="rotation"
-                    value={rotate}
-                    checked={(image.rotate ?? 0) === rotate}
-                    onChange={() => patch({ rotate })}
-                  />
-                  <span>{rotate}°</span>
-                </label>
-              ))}
-            </div>
+            <ChipRadioGroup
+              name="rotation"
+              label="Rotation"
+              class="rotation-options"
+              value={image.rotate ?? 0}
+              options={ROTATION_CHIPS}
+              onChange={(rotate) => patch({ rotate })}
+            />
           </div>
           <div class="tuning-field">
             <span>Image fit</span>
-            <div class="pad-fill-options" role="radiogroup" aria-label="Image fit">
-              {RESIZE_MODE_OPTIONS.map(({ value, icon, description }) => (
-                <label key={value} class="pad-fill-option" title={description}>
-                  <input
-                    type="radio"
-                    name="image-fit"
-                    value={value}
-                    checked={(image.resizeMode ?? 'resize') === value}
-                    onChange={() => patch({ resizeMode: value })}
-                  />
-                  <span aria-hidden="true">{icon}</span>
-                  <span class="icon-radio-label">{value}</span>
-                </label>
-              ))}
-            </div>
+            <ChipRadioGroup
+              name="image-fit"
+              label="Image fit"
+              value={image.resizeMode ?? 'resize'}
+              options={RESIZE_MODE_CHIPS}
+              onChange={(resizeMode) => patch({ resizeMode })}
+            />
           </div>
           <div class="tuning-field">
             <span>Pad fill</span>
-            <div class="pad-fill-options" role="radiogroup" aria-label="Pad fill">
-              {PAD_FILL_OPTIONS.map(({ value, icon, description }) => (
-                <label key={value} class="pad-fill-option" title={description}>
-                  <input
-                    type="radio"
-                    name="pad-fill"
-                    value={value}
-                    checked={(image.padFill ?? 'edge') === value}
-                    onChange={() => patch({ padFill: value })}
-                  />
-                  <span aria-hidden="true">{icon}</span>
-                  <span class="icon-radio-label">{value}</span>
-                </label>
-              ))}
-            </div>
+            <ChipRadioGroup
+              name="pad-fill"
+              label="Pad fill"
+              value={image.padFill ?? 'edge'}
+              options={PAD_FILL_CHIPS}
+              onChange={(padFill) => patch({ padFill })}
+            />
           </div>
         </div>
         <div class="tuning-group">

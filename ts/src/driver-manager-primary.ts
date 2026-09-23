@@ -8,10 +8,11 @@ import {
   DEFAULT_MAC_ADDRESS,
   MDNS_SERVICE_NAME,
 } from './types.js';
-import type { DialEvent, DockStatus, TouchStripMode } from './types.js';
+import type { DialEvent, DockStatus, KeyState, TouchStripMode } from './types.js';
 import { DEFAULT_MODEL } from './devices/registry.js';
 import { ExtraKeyWidgets } from './extra-keys.js';
 import { EncoderActions } from './encoders.js';
+import { ExtraKeyActions } from './command-actions.js';
 import { buildDockStatus, repaintFrames } from './device-session.js';
 import type { DeviceInfo } from './device-session.js';
 import type { DeviceDriver, DeviceModel, DeviceModelOverride } from './devices/driver.js';
@@ -54,6 +55,12 @@ export class PrimaryDock {
     if (key === undefined) return undefined;
     const { webui } = this.deps;
     return { mode: webui.touchStripModeFor(key), encoders: webui.encoderSettingsFor(key) };
+  });
+
+  /** Extra-key press commands; resolves this dock's current identity per press. */
+  private readonly extraKeyActions = new ExtraKeyActions((wireId) => {
+    const key = this.identity?.deviceKey;
+    return key === undefined ? undefined : this.deps.webui.extraKeyConfigFor(key, wireId);
   });
 
   /** The Elgato app's last CORA frames, captured on USB disconnect: the app
@@ -178,6 +185,11 @@ export class PrimaryDock {
   /** True when the knob override consumed `event` — it must not reach the app. */
   handleDial(event: DialEvent): boolean {
     return this.encoders.handleDial(event);
+  }
+
+  /** Press on an extra key with a switch — runs its configured command. */
+  handleExtraKey(wireId: number, state: KeyState): void {
+    this.extraKeyActions.handleKey(wireId, state);
   }
 
   /** Dock status for the WebUI. Same builder as DeviceSession.status(), with the

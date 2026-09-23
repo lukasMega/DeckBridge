@@ -241,6 +241,7 @@ export class DriverManager {
         this.deps.childServer.sendKeyEvent(index, state);
         this.deps.webui.notifyKeyEvent(index, state, wireId);
       },
+      onExtraKey: (wireId, state) => this.primary.handleExtraKey(wireId, state),
       onDial: (event: DialEvent) => {
         if (!this.primary.handleDial(event)) this.deps.childServer.sendDial(event);
       },

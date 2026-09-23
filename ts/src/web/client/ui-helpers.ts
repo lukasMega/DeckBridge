@@ -62,6 +62,13 @@ export function deriveDocks(s: Status): DockUi[] {
   ];
 }
 
+/** The selected dock's re-paired CORA profile — the single-dock views read the
+ *  top-level status, which has no per-dock fields. */
+export function selectedCoraProfile(s: Status): string | undefined {
+  const selected = s.selectedDock ?? 0;
+  return s.docks?.find((d) => d.index === selected)?.coraProfile;
+}
+
 export type ThemePref = 'light' | 'dark' | 'auto';
 
 /** Mirrors the inline pre-paint script in ui.html — must stay in sync. */

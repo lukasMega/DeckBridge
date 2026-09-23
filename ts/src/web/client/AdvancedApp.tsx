@@ -13,6 +13,7 @@ import { LogConsolePanel } from './advanced-log-panel.js';
 import { KeyGridPreview } from './components/KeyGridPreview.js';
 import { Brightness } from './simple/controls.js';
 import { fire } from './ui-api.js';
+import { selectedCoraProfile } from './ui-helpers.js';
 
 function postKey(index: number): void {
   fire(`/api/key/${index}`);
@@ -29,6 +30,7 @@ function AdvGridSection(): preact.JSX.Element {
         columns={status.columns ?? 5}
         dimmed={false}
         modelId={status.modelId}
+        coraProfile={selectedCoraProfile(status)}
         label="Key grid"
         showIndex
         flash

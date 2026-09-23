@@ -12,6 +12,7 @@ import {
   COMMAND_INTERVAL_MAX_MS,
   COMMAND_TIMEOUT_MIN_MS,
   COMMAND_TIMEOUT_MAX_MS,
+  ENCODER_COMMAND_MAX,
   TOUCH_STRIP_MODES,
 } from '../../types.js';
 import type {
@@ -56,6 +57,7 @@ export const routes: Route[] = [
   postJson('/api/select-dock', selectDock),
   postJson('/api/extra-key', setExtraKey),
   postJson('/api/extra-key/run', runExtraKeyNow),
+  postJson('/api/extra-key/press', setExtraKeyPress),
   postJson('/api/touch-strip-mode', setTouchStripMode),
   postJson('/api/encoders', setEncoders),
   post('/api/settings', setSettings),
@@ -237,7 +239,7 @@ function validateExtraKeyBody({
 }
 
 /** Assign a display widget to one of the selected dock's extra keys (293S 6th
- *  column — display-only). The server renders and refreshes the key itself. */
+ *  column, AKP05E right column). The server renders and refreshes the key itself. */
 function setExtraKey(body: ExtraKeyBody, { ui }: RouteContext): Response {
   const invalid = validateExtraKeyBody(body);
   if (invalid) return badRequest(invalid);
@@ -261,6 +263,20 @@ interface RunExtraKeyBody {
 function runExtraKeyNow({ wireId }: RunExtraKeyBody, { ui }: RouteContext): Response {
   if (!isNonNegInt(wireId)) return badRequest(nonNegIntMessage('wireId'));
   const err = ui.tryRunExtraKeyNow(wireId);
+  return err ? json({ error: err.error }, err.status) : json({ ok: true });
+}
+
+/** Shell command a pressable extra key runs on press ('' clears it). Separate from the
+ *  widget POST so neither overwrites the other. */
+function setExtraKeyPress(
+  { wireId, command }: { wireId: unknown; command: unknown },
+  { ui }: RouteContext,
+): Response {
+  if (!isNonNegInt(wireId)) return badRequest(nonNegIntMessage('wireId'));
+  if (typeof command !== 'string' || command.length > ENCODER_COMMAND_MAX) {
+    return badRequest(`command must be a string ≤ ${ENCODER_COMMAND_MAX} chars`);
+  }
+  const err = ui.trySetExtraKey(wireId, { pressCommand: command });
   return err ? json({ error: err.error }, err.status) : json({ ok: true });
 }
 

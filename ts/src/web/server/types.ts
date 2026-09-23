@@ -30,6 +30,9 @@ export interface OverrideChange {
   kind: OverrideChangeKind;
 }
 
+/** One POST to an extra key: a full widget config, or only its press command. */
+export type ExtraKeyUpdate = ExtraKeyConfig | { pressCommand: string };
+
 export interface ReqError {
   error: string;
   status: number;
@@ -159,7 +162,7 @@ export interface WebUIController {
   applyMockConfig(parsed: Partial<MockDeviceConfig>): MockDeviceConfig;
   trySimulateKey(n: number): ReqError | null;
   trySelectDock(index: unknown): ReqError | null;
-  trySetExtraKey(wireId: number, cfg: ExtraKeyConfig): ReqError | null;
+  trySetExtraKey(wireId: number, update: ExtraKeyUpdate): ReqError | null;
   tryRunExtraKeyNow(wireId: number): ReqError | null;
   pluginsInfo(): Promise<PluginsInfo>;
   trySetTouchStripMode(mode: TouchStripMode): ReqError | null;

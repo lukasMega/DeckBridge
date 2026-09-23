@@ -1,22 +1,16 @@
 // Rotary-encoder override (AKP05/AKP05E knobs): while the touch strip is in a
 // DeckBridge mode and the knobs are disconnected from the Elgato app, each knob
 // runs its configured shell commands instead of reaching the app.
-// SECURITY: arbitrary shell command from the WebUI config — same posture as the
-// extra-key command widget (extra-keys.ts): loopback-only WebUI by default, but
-// `--bind` on the LAN lets anyone reaching :3000 run a command on this host.
-// Opt-in per knob, trusted personal LAN only.
-import { COMMAND_TIMEOUT_DEFAULT_MS } from './types.js';
+// SECURITY: see command-actions.ts — opt-in per knob, trusted personal LAN only.
 import type { DialEvent, EncoderCommands, EncoderSettings, TouchStripMode } from './types.js';
 import { runCommand } from './os-utils.js';
-import { log } from './logger.js';
+import { CommandSlots, type CommandRunner } from './command-actions.js';
 
 /** One dock's strip mode + encoder settings, resolved per event. */
 export interface EncoderOverride {
   mode: TouchStripMode;
   encoders?: EncoderSettings;
 }
-
-export type CommandRunner = (cmd: string, timeoutMs: number) => Promise<string>;
 
 type EncoderAction = keyof EncoderCommands;
 
@@ -29,13 +23,11 @@ function actionFor(event: DialEvent): EncoderAction | null {
 /** Intercepts one dock's dial events and runs the knob commands. */
 export class EncoderActions {
   private readonly settingsFor: () => EncoderOverride | undefined;
-  private readonly run: CommandRunner;
-  /** Keyed `${index}:${action}`; `pending` = more detents arrived while running. */
-  private readonly inflight = new Map<string, { pending: boolean }>();
+  private readonly slots: CommandSlots;
 
   constructor(settingsFor: () => EncoderOverride | undefined, run: CommandRunner = runCommand) {
     this.settingsFor = settingsFor;
-    this.run = run;
+    this.slots = new CommandSlots('encoder', run);
   }
 
   /** True when the event is consumed — the caller must not forward it to the app.
@@ -59,28 +51,7 @@ export class EncoderActions {
     return settings.encoders?.commands?.[String(index)]?.[action]?.trim() || undefined;
   }
 
-  /** At most one process per (knob, action): a fast spin coalesces into one
-   *  follow-up run instead of flooding the shell with one process per detent. */
   private trigger(index: number, action: EncoderAction): void {
-    const key = `${index}:${action}`;
-    const running = this.inflight.get(key);
-    if (running) {
-      running.pending = true;
-      return;
-    }
-    const cmd = this.commandFor(index, action);
-    if (!cmd) return;
-    const entry = { pending: false };
-    this.inflight.set(key, entry);
-    log('debug', 'encoder', `knob ${index} ${action}: ${cmd}`);
-    // runCommand kills the process after the timeout, so a hung command can't pin the slot.
-    void this.run(cmd, COMMAND_TIMEOUT_DEFAULT_MS)
-      .catch((e: unknown) => {
-        log('warn', 'encoder', `knob ${index} ${action} failed: ${(e as Error).message}`);
-      })
-      .finally(() => {
-        this.inflight.delete(key);
-        if (entry.pending) this.trigger(index, action);
-      });
+    this.slots.trigger(`knob ${index} ${action}`, () => this.commandFor(index, action));
   }
 }

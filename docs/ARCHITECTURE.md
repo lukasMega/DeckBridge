@@ -475,9 +475,16 @@ shows its stdout — full trust, same tradeoff as a build script), `plugin` (bel
 transform, not the main thread, does the FFI JPEG encode. A per-dock `ExtraKeyWidgets` scheduler
 (one instance per connected dock: the primary's own, and one per `DeviceSession`) ticks every second
 and repaints a key only when its content changed.
+
+Extra keys *with* a switch exist too: the AJAZZ AKP05E re-paired as a Stream Deck + drops its right
+column from the 4×2 Plus grid, and its emulation key map lists those keys in `extraKeys` (image wire
+ids 15/10) with their input codes in the parallel `extraKeyInputs` (5/10). `wireCommonDriverEvents`
+routes such a press to `onExtraKey` by image wire id instead of CORA, and a per-dock `ExtraKeyActions`
+([command-actions.ts](../ts/src/command-actions.ts), shared with the knob override in `encoders.ts`)
+runs the key's `pressCommand`, at most one process per key.
 [web/server/extra-keys-controller.ts](../ts/src/web/server/extra-keys-controller.ts) is the
-WebUI-facing glue: assign/clear a widget (persists + broadcasts), "run now" for command widgets, and
-the plugin dropdown/status for the popup.
+WebUI-facing glue: assign/clear a widget or set a press command (independent fields of one config;
+persists + broadcasts), "run now" for command widgets, and the plugin dropdown/status for the popup.
 
 ### Plugins — a third, lazily-spawned worker thread
 

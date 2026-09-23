@@ -21,7 +21,7 @@ const SETTINGS_WITH_COMMANDS = JSON.stringify(
         extraKeys: {
           '16': { widget: 'command', param: '/Users/me/secret-script.sh --token hunter2' },
           '17': { widget: 'plugin', param: 'weather.js', pluginArg: '/home/me/apikey.txt' },
-          '18': { widget: 'clock' },
+          '18': { widget: 'clock', pressCommand: 'open -a Hunter3' },
         },
       },
     ],
@@ -232,13 +232,14 @@ test('commands are included verbatim by default', () => {
   assert.ok(report.includes('/home/me/apikey.txt'), 'plugin arg is present');
 });
 
-test('--redact-commands replaces param and pluginArg only', () => {
+test('--redact-commands replaces param, pluginArg and pressCommand only', () => {
   const report = buildDiagnostics(fullSources(), { redactCommands: true });
   assert.ok(!report.includes('hunter2'), 'command is gone');
   assert.ok(!report.includes('/home/me/apikey.txt'), 'plugin arg is gone');
+  assert.ok(!report.includes('Hunter3'), 'press command is gone');
   assert.ok(report.includes('<redacted>'), 'replaced, not dropped');
   assert.ok(report.includes('usb:ABC123:mirabox-293s'), 'the rest of settings.json survives');
-  assert.ok(report.includes('"widget": "clock"'), 'a command-less widget is untouched');
+  assert.ok(report.includes('"widget": "clock"'), 'the widget itself is untouched');
 });
 
 test('unparsable settings redact to (unavailable) rather than leaking', () => {

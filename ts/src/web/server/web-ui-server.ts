@@ -20,6 +20,7 @@ import type {
   ControllerHost,
   DeviceModelInfo,
   DriverMode,
+  ExtraKeyUpdate,
   LogLevel,
   MockDeviceConfig,
   OverrideChange,
@@ -414,8 +415,8 @@ export class WebUIServer extends EventEmitter implements WebUIController {
     return this.extraKeys.configFor(deviceKey, wireId);
   }
 
-  trySetExtraKey(wireId: number, cfg: ExtraKeyConfig): ReqError | null {
-    return this.extraKeys.trySet(wireId, cfg, this.selectedDock);
+  trySetExtraKey(wireId: number, update: ExtraKeyUpdate): ReqError | null {
+    return this.extraKeys.trySet(wireId, update, this.selectedDock);
   }
 
   tryRunExtraKeyNow(wireId: number): ReqError | null {

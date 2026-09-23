@@ -1,5 +1,5 @@
 import assert from 'tjs:assert';
-import { deriveDocks } from '../src/web/client/ui-helpers.js';
+import { deriveDocks, selectedCoraProfile } from '../src/web/client/ui-helpers.js';
 import type { Status } from '../src/web/client/ui-types.js';
 import { test, summaryExit } from './helpers/harness.js';
 
@@ -93,6 +93,29 @@ test('empty docks array → falls through to legacy synthesis', () => {
   const docks = deriveDocks(s);
   assert.equal(docks.length, 1);
   assert.equal(docks[0]!.index, 0);
+});
+
+// selectedCoraProfile
+
+console.log('\nselectedCoraProfile');
+
+test('reads the selected dock, absent when native or no docks', () => {
+  const dock = {
+    index: 0,
+    modelId: 'ajazz-akp05e',
+    modelName: 'AJAZZ AKP05E',
+    keyCount: 10,
+    columns: 5,
+    rows: 2,
+    primaryPort: 5343,
+    primaryConnected: true,
+    elgatoConnected: true,
+  };
+  const plus = { ...dock, index: 1, coraProfile: 'stream-deck-plus' };
+  const docks = [dock, plus];
+  assert.equal(selectedCoraProfile({ ...baseStatus, docks, selectedDock: 1 }), 'stream-deck-plus');
+  assert.equal(selectedCoraProfile({ ...baseStatus, docks }), undefined, 'dock 0 is native');
+  assert.equal(selectedCoraProfile(baseStatus), undefined, 'no docks');
 });
 
 // Summary

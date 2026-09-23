@@ -309,7 +309,22 @@ export const TOUCH_STRIP_MODES = [
 
 export const DEFAULT_TOUCH_STRIP_MODE: TouchStripMode = 'elgato';
 
-/** Cap on one encoder shell command (EncoderCommands press/rotateCw/rotateCcw). */
+/** 'deckbridge-repaint' re-uploads DeckBridge-owned strip zones this often, even
+ *  unchanged, so a zone the Elgato app or firmware painted over comes back. */
+export const TOUCH_STRIP_REPAINT_DEFAULT_MS = 5000;
+export const TOUCH_STRIP_REPAINT_MIN_MS = 1000;
+export const TOUCH_STRIP_REPAINT_MAX_MS = 3_600_000;
+
+export function isTouchStripRepaintMs(v: unknown): v is number {
+  return (
+    Number.isInteger(v) &&
+    (v as number) >= TOUCH_STRIP_REPAINT_MIN_MS &&
+    (v as number) <= TOUCH_STRIP_REPAINT_MAX_MS
+  );
+}
+
+/** Cap on one encoder shell command (EncoderCommands press/rotateCw/rotateCcw) and
+ *  on an extra key's press command (ExtraKeyConfig.pressCommand). */
 export const ENCODER_COMMAND_MAX = 512;
 
 /** Cap on the widget param (text content / weather "lat,lon" / shell command /
@@ -344,6 +359,9 @@ export interface ExtraKeyConfig {
   timeoutMs?: number;
   /** plugin widget only: the per-key argument passed to the plugin (ctx.param). */
   pluginArg?: string;
+  /** Shell command run on press — only extra keys with a switch
+   *  (keyMap.extraKeyInputs). Independent of the widget, so kept across widget changes. */
+  pressCommand?: string;
 }
 
 const inRange = (n: number, min: number, max: number): boolean => n >= min && n <= max;
@@ -365,7 +383,9 @@ export function isExtraKeyConfig(v: unknown): v is ExtraKeyConfig {
       (typeof r.timeoutMs === 'number' &&
         inRange(r.timeoutMs, COMMAND_TIMEOUT_MIN_MS, COMMAND_TIMEOUT_MAX_MS))) &&
     (r.pluginArg === undefined ||
-      (typeof r.pluginArg === 'string' && r.pluginArg.length <= EXTRA_KEY_PARAM_MAX))
+      (typeof r.pluginArg === 'string' && r.pluginArg.length <= EXTRA_KEY_PARAM_MAX)) &&
+    (r.pressCommand === undefined ||
+      (typeof r.pressCommand === 'string' && r.pressCommand.length <= ENCODER_COMMAND_MAX))
   );
 }
 
@@ -402,10 +422,16 @@ export interface DockStatus {
   // column). Present only when the model has any — the WebUI renders the
   // extra-keys panel off this.
   extraKeys?: readonly number[];
+  /** The `extraKeys` that have a switch (AKP05E right column as a Stream Deck +) —
+   *  the WebUI offers a press command only on these. */
+  pressableExtraKeys?: readonly number[];
   /** Device-native widget displays outside CORA's key grid, such as AKP05E's touch strip. */
   widgetDisplays?: readonly { wireId: number; label: string }[];
   /** Physical rotary encoders (AKP05/AKP05E: 4) — the WebUI's knob-override rows. */
   encoderCount?: number;
+  /** CORA profile this dock re-pairs as (`cora.advertiseAs`, e.g. AKP05E → 'stream-deck-plus').
+   *  The desktop's image orientation follows the profile, so the WebUI preview needs it. */
+  coraProfile?: string;
 }
 
 // Clear-and-null helpers. The guard-clear-forget-to-null sequence was written out

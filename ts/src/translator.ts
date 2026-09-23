@@ -21,6 +21,14 @@ export function deviceInputToMk2Index(code: number, model: DeviceModel): number 
   return code;
 }
 
+/** Device input code → wire id of the extra key it belongs to (keyMap.extraKeyInputs),
+ *  or -1 when the code is no pressable extra key. */
+export function deviceInputToExtraKey(code: number, model: DeviceModel): number {
+  const { extraKeys, extraKeyInputs } = model.keyMap;
+  const i = extraKeyInputs?.indexOf(code) ?? -1;
+  return i < 0 ? -1 : (extraKeys?.[i] ?? -1);
+}
+
 // Reusable scratch buffers — safe because FFI calls are synchronous on the single
 // JS thread and the result is copied into a fresh Buffer before returning. No await
 // can interleave between the native call and the copy-out. OUT may grow (doubling)

@@ -183,7 +183,6 @@
 .manual-add-head,
 .brightness,
 .fader,
-.xkey-row,
 .xkey-popover-field,
 .status-line,
 .warnrow,
@@ -362,9 +361,9 @@
   padding: 13px;
   cursor: pointer;
 }
-/* .pad-fill-option: the radio itself is visually hidden, so it cannot carry the focus ring */
+/* .chip-radio: the radio itself is visually hidden, so it cannot carry the focus ring */
 .dock-card:focus-visible,
-.pad-fill-option:has(input:focus-visible) {
+.chip-radio:has(input:focus-visible) {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
@@ -458,19 +457,16 @@
   gap: 13px;
 }
 .b-label,
-.xkeys-label,
 .xkey-pos,
 .b-mode-select {
   font-weight: 600;
   flex: none;
 }
 .b-label,
-.xkeys-label,
 .xkey-pos {
   color: var(--fg-muted);
 }
-.b-label,
-.xkeys-label {
+.b-label {
   font-size: 13px;
 }
 .brightness .b-ico {
@@ -540,33 +536,63 @@ input[type='range'].range:disabled {
   flex: none;
 }
 
-/* ---- extra keys panel (293S side column) ---- */
-.xkeys-head {
-  display: flex;
-  align-items: baseline;
-  gap: 10px;
-  margin-bottom: 12px;
+/* ---- side keys + touch strip (ConfigSection, simple/config-section.tsx) ---- */
+.xkeys-head .settings-checkbox {
+  margin: 0;
 }
 .xkeys-sub {
+  margin: -3px 2px 12px;
   font-size: 12px;
+  line-height: 1.45;
   color: var(--fg-dim);
 }
-.xkeys-head .settings-checkbox {
-  margin: 0 0 0 auto;
-}
-.strip-mode-options {
-  flex-wrap: wrap;
-}
 .xkeys-knobs {
-  margin-top: 16px;
+  margin-top: 20px;
 }
+/* one grid per row, same tracks everywhere, so cells line up across rows */
 .xkey-row {
-  gap: 10px;
+  display: grid;
+  grid-template-columns: 52px 150px minmax(0, 1fr) 30px;
+  gap: 6px 8px;
+  align-items: center;
   margin-top: 8px;
+}
+.xkey-knob-row {
+  grid-template-columns: 52px repeat(3, minmax(0, 1fr));
+}
+/* captions start where the control text does (.input padding + border) */
+.xkey-grid-head {
+  margin-top: 0;
+  .preview-label + .preview-label {
+    padding-left: 9px;
+  }
+}
+/* the "on press" line reads as part of its key, not a new row */
+.xkey-row:has(.xkey-press-label) + .xkey-row {
+  margin-top: 14px;
+}
+.xkey-wide {
+  grid-column: span 2;
+}
+.xkey-value {
+  display: flex;
+  gap: 8px;
+  min-width: 0;
 }
 .xkey-pos {
   font-size: 12px;
-  width: 52px;
+}
+.xkey-press-label {
+  grid-column: 2;
+  font-size: 12px;
+  color: var(--fg-dim);
+  text-align: right;
+}
+.xkey-press-label + .input {
+  grid-column: 3 / -1;
+}
+.xkey-mode {
+  flex: none;
 }
 /* rides .input; UI font + surface bg for the widget dropdowns.
    Double class: .input is declared later in this file and would win otherwise */
@@ -1349,14 +1375,14 @@ input[type='range'].range:disabled {
 .tuning-field .input {
   width: 100%;
 }
-.pad-fill-options {
+.chip-radio-group {
   display: flex;
   gap: 8px;
 }
 .rotation-options {
   flex-wrap: wrap;
 }
-.pad-fill-option {
+.chip-radio {
   display: flex;
   position: relative;
   align-items: center;
@@ -1373,11 +1399,11 @@ input[type='range'].range:disabled {
   font-family: var(--mono);
   font-size: 10px;
 }
-.pad-fill-option:has(input:checked) {
+.chip-radio:has(input:checked) {
   border-color: var(--accent);
   color: var(--accent);
 }
-.pad-fill-option input {
+.chip-radio input {
   position: absolute;
   opacity: 0;
 }
