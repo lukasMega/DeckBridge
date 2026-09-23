@@ -37,7 +37,7 @@ export interface DeviceIdentitySettings {
   extraKeys?: Record<string, ExtraKeyConfig>;
   /** Touch-strip display mode (AKP05E). Default 'elgato' = the app only. */
   touchStripMode?: TouchStripMode;
-  /** 'deckbridge-repaint' forced re-upload interval; default TOUCH_STRIP_REPAINT_DEFAULT_MS. */
+  /** 'deckbridge-repaint' hold-off after an Elgato frame; default TOUCH_STRIP_REPAINT_DEFAULT_MS. */
   touchStripRepaintMs?: number;
   /** Encoder override — only honored while touchStripMode is a deckbridge-* mode. */
   encoders?: EncoderSettings;

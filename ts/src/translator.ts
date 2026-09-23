@@ -102,36 +102,10 @@ export function applyOverride(spec: DeviceImageSpec, mode: ImageModeOverride): D
   }
 }
 
-/** A sub-rectangle of the source image (Stream Deck + touch-strip segment). */
-export interface CropRegion {
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-}
-
 /** Transform a CORA JPEG for an Elgato device according to its DeviceImageSpec.
  *  Returns JPEG bytes for gen2 (MK.2) or BMP bytes for gen1 (Mini). */
 export function transformImageForDevice(jpeg: Uint8Array, spec: DeviceImageSpec): Buffer {
-  return transformWithRegion(jpeg, spec, undefined);
-}
-
-/** Transform one region-cropped slice of a source image (touch-strip segment). */
-export function transformImageRegion(
-  jpeg: Uint8Array,
-  spec: DeviceImageSpec,
-  region: CropRegion,
-): Buffer {
-  return transformWithRegion(jpeg, spec, region);
-}
-
-function transformWithRegion(
-  jpeg: Uint8Array,
-  spec: DeviceImageSpec,
-  region: CropRegion | undefined,
-): Buffer {
   const { symbols } = load();
-  const r = region ?? { x: 0, y: 0, width: 0, height: 0 };
   for (;;) {
     const n = symbols.image_proc_transform(
       jpeg,
@@ -151,10 +125,11 @@ function transformWithRegion(
       Math.round((spec.sharpen ?? 0) * 10),
       fillModeFor(spec),
       spec.crop ?? 0,
-      r.x,
-      r.y,
-      r.width,
-      r.height,
+      // Region crop unused: touch-strip zones are sliced from the canvas (canvasSliceToBmp).
+      0,
+      0,
+      0,
+      0,
       OUT,
       OUT.length,
       ERR,
@@ -167,6 +142,63 @@ function transformWithRegion(
     if (n < 0) throwImageProcError(n);
     return Buffer.from(OUT.subarray(0, n));
   }
+}
+
+/** Decode `image` (JPEG/BMP) into the top-down RGB24 `canvas` (cw×ch) at (x, y),
+ *  clipped to the canvas. */
+export function blitImage(
+  canvas: Uint8Array,
+  cw: number,
+  ch: number,
+  image: Uint8Array,
+  x: number,
+  y: number,
+): void {
+  const n = load().symbols.image_proc_blit(
+    canvas,
+    cw,
+    ch,
+    image,
+    image.length,
+    x,
+    y,
+    ERR,
+    ERR.length,
+  );
+  if (n < 0) throwImageProcError(n);
+}
+
+/** 24-bit BMP of the canvas columns [x, x + w) — the image transform's input format
+ *  for one touch-strip zone. Rows are bottom-up BGR, padded to 4 bytes. */
+export function canvasSliceToBmp(
+  canvas: Uint8Array,
+  cw: number,
+  ch: number,
+  x: number,
+  w: number,
+): Uint8Array {
+  const rowBytes = (w * 3 + 3) & ~3;
+  const bmp = new Uint8Array(54 + rowBytes * ch);
+  const view = new DataView(bmp.buffer);
+  bmp[0] = 0x42;
+  bmp[1] = 0x4d;
+  view.setUint32(2, bmp.length, true);
+  view.setUint32(10, 54, true);
+  view.setUint32(14, 40, true);
+  view.setInt32(18, w, true);
+  view.setInt32(22, ch, true);
+  view.setUint16(26, 1, true);
+  view.setUint16(28, 24, true);
+  for (let row = 0; row < ch; row++) {
+    const src = (row * cw + x) * 3;
+    const dst = 54 + (ch - 1 - row) * rowBytes;
+    for (let col = 0; col < w; col++) {
+      bmp[dst + col * 3] = canvas[src + col * 3 + 2]!;
+      bmp[dst + col * 3 + 1] = canvas[src + col * 3 + 1]!;
+      bmp[dst + col * 3 + 2] = canvas[src + col * 3]!;
+    }
+  }
+  return bmp;
 }
 
 /** Close the image-proc dylib handle. Kept for backwards-compatibility with

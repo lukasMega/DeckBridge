@@ -72,7 +72,7 @@ export class DevicePrefsController {
     return null;
   }
 
-  /** Per-device forced-repaint interval — read live by ExtraKeyWidgets each tick,
+  /** Per-device repaint hold-off — read live by ExtraKeyWidgets each tick,
    *  so a change needs no event to reach the dock. */
   touchStripRepaintMsFor(deviceKey: string): number {
     const e = this.host.settings.entryFor(deviceKey);

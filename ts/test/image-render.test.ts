@@ -1,5 +1,6 @@
 import assert from 'tjs:assert';
-import { renderImage } from '../src/image-render.js';
+import { renderImage, TouchStripCanvas } from '../src/image-render.js';
+import { AJAZZ_AKP05E_MODEL } from '../src/devices/ajazz/akp05e.js';
 import { MIRABOX_293_MODEL } from '../src/devices/mirabox/mirabox-293.js';
 import { testAsync as test, summaryExit } from './helpers/harness.js';
 import { SOLID_RED_16X16_JPEG, makePassthroughModel } from './helpers/fixtures.js';
@@ -109,6 +110,35 @@ await test('passthrough model forwards original bytes unchanged', async () => {
     Array.from(someBytes),
     'passthrough must forward the input bytes unchanged',
   );
+});
+
+console.log('\nimage-render: TouchStripCanvas');
+
+await test('a partial window re-sends only the zones it touches, each whole', () => {
+  const canvas = new TouchStripCanvas();
+  const driver = makeFakeDriver();
+  const patch = (x: number): void =>
+    canvas.apply(driver, AJAZZ_AKP05E_MODEL, SOLID_RED_16X16_JPEG, { x, y: 40, w: 16, h: 16 });
+  patch(416);
+  patch(192); // straddles zones 1 and 2
+  const [z1, z2] = AJAZZ_AKP05E_MODEL.widgetDisplays!;
+  assert.deepEqual(
+    driver.calls.map((c) => c.keyIndex),
+    [AJAZZ_AKP05E_MODEL.widgetDisplays![2]!.wireId, z1!.wireId, z2!.wireId],
+  );
+  assert.ok(driver.calls.every((c) => c.bytes.length > 0));
+});
+
+await test('a full window (no region) re-sends every zone', () => {
+  const driver = makeFakeDriver();
+  new TouchStripCanvas().apply(driver, AJAZZ_AKP05E_MODEL, SOLID_RED_16X16_JPEG);
+  assert.equal(driver.calls.length, AJAZZ_AKP05E_MODEL.widgetDisplays!.length);
+});
+
+await test('an undecodable window sends nothing', () => {
+  const driver = makeFakeDriver();
+  new TouchStripCanvas().apply(driver, AJAZZ_AKP05E_MODEL, new Uint8Array([1, 2, 3]));
+  assert.equal(driver.calls.length, 0);
 });
 
 // Summary

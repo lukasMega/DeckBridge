@@ -7,9 +7,11 @@ import {
   COMMAND_INTERVAL_DEFAULT_MS,
   COMMAND_TIMEOUT_DEFAULT_MS,
   DEFAULT_TOUCH_STRIP_MODE,
+  PLUS_TOUCH_WIDTH,
   TOUCH_STRIP_REPAINT_DEFAULT_MS,
   type ExtraKeyConfig,
   type TouchStripMode,
+  type TouchWindowRegion,
 } from './types.js';
 import type { DeviceDriver } from './devices/driver.js';
 import { splashSpec } from './splash-sender.js';
@@ -303,13 +305,18 @@ export class ExtraKeyWidgets {
    *  strip, no side keys) must still begin ticking when an override mode is chosen. */
   private active = false;
   private readonly repaintIntervalMs: () => number;
-  private lastForcedRepaintAt = 0;
+  /** 'deckbridge-repaint': when the Elgato app last drew on each strip zone. */
+  private lastElgatoFrameAt = new Map<number, number>();
+  /** 'deckbridge-repaint': strip zones currently showing a widget — the ones that
+   *  need the app's image put back when the widget leaves (nothing is masked). */
+  private widgetOnZone = new Set<number>();
 
   constructor(
     driver: DeviceDriver,
     configFor: (wireId: number) => ExtraKeyConfig | undefined,
     mode: TouchStripMode = DEFAULT_TOUCH_STRIP_MODE,
-    /** Read each tick, so a WebUI change applies without a restart. */
+    /** 'deckbridge-repaint' hold-off after an Elgato frame; read live, so a WebUI
+     *  change applies without a restart. */
     repaintIntervalMs: () => number = () => TOUCH_STRIP_REPAINT_DEFAULT_MS,
   ) {
     this.driver = driver;
@@ -349,6 +356,9 @@ export class ExtraKeyWidgets {
    *  for every zone that leaves the mask. */
   setTouchStripMode(mode: TouchStripMode): void {
     if (this.mode === mode) return;
+    // Leaving to 'elgato' changes no mask, so the worker restores nothing by itself.
+    if (mode === 'elgato') this.restoreZones([...this.widgetOnZone]);
+    this.widgetOnZone.clear();
     this.mode = mode;
     this.repaint();
     this.ensureTicking();
@@ -389,34 +399,69 @@ export class ExtraKeyWidgets {
     const widgetIds = this.widgetIds();
     if (widgetIds.length === 0) return;
     const now = new Date();
-    this.forgetOwnedZonesWhenDue(now.getTime());
     for (const wireId of widgetIds) {
       const cfg = this.configFor(wireId);
-      if (this.mode === 'deckbridge-repaint' && !owns(cfg) && this.widgetDisplay(wireId)) {
-        // The Elgato app shows through here; forget the paint so a re-assign repaints.
-        this.lastPainted.delete(wireId);
-        continue;
-      }
+      if (this.leftToApp(wireId, cfg, now.getTime())) continue;
       const lines = cfg ? renderWidgetLines(cfg, this.contextFor(cfg, now)) : null;
       const sig = lines === null ? '' : JSON.stringify(lines);
       if (this.lastPainted.get(wireId) === sig) continue;
       this.lastPainted.set(wireId, sig);
-      if (lines === null) {
-        this.driver.clearKey(wireId);
-      } else if (this.driver.sendSplashImage) {
-        const spec = this.widgetDisplay(wireId)?.image ?? splashSpec(this.driver.model);
-        this.driver.sendSplashImage(wireId, composeWidgetBmp(lines, spec.width), spec);
-      }
+      this.paint(wireId, lines);
     }
   }
 
-  /** 'deckbridge-repaint': drop the paint cache of owned zones once per interval so
-   *  this tick re-uploads them, undoing anything drawn over them outside the mask. */
-  private forgetOwnedZonesWhenDue(nowMs: number): void {
-    if (this.mode !== 'deckbridge-repaint') return;
-    if (nowMs - this.lastForcedRepaintAt < this.repaintIntervalMs()) return;
-    this.lastForcedRepaintAt = nowMs;
-    for (const wireId of this.stripMask()) this.lastPainted.delete(wireId);
+  /** 'deckbridge-repaint' zones the widget must not paint this tick: unassigned ones
+   *  (the app shows through) and ones inside an Elgato-frame hold-off. */
+  private leftToApp(wireId: number, cfg: ExtraKeyConfig | undefined, nowMs: number): boolean {
+    if (this.mode !== 'deckbridge-repaint' || !this.widgetDisplay(wireId)) return false;
+    if (owns(cfg)) return this.inElgatoHoldOff(wireId, nowMs);
+    // Forget the paint so a re-assign repaints.
+    this.lastPainted.delete(wireId);
+    if (this.widgetOnZone.has(wireId)) this.restoreZones([wireId]);
+    return true;
+  }
+
+  private paint(wireId: number, lines: ReturnType<typeof renderWidgetLines>): void {
+    if (lines === null) {
+      this.driver.clearKey(wireId);
+      return;
+    }
+    if (!this.driver.sendSplashImage) return;
+    const display = this.widgetDisplay(wireId);
+    const spec = display?.image ?? splashSpec(this.driver.model);
+    this.driver.sendSplashImage(wireId, composeWidgetBmp(lines, spec.width), spec);
+    if (this.mode === 'deckbridge-repaint' && display) this.widgetOnZone.add(wireId);
+  }
+
+  /** An Elgato strip frame reached the device (nothing is masked under
+   *  'deckbridge-repaint'): the zones it covers show the app's image until the
+   *  repaint interval passes with no further frame, then the widget comes back. */
+  noteTouchFrame(region?: TouchWindowRegion): void {
+    const ids = this.widgetDisplayIds();
+    if (this.mode !== 'deckbridge-repaint' || ids.length === 0) return;
+    const sliceWidth = Math.floor(PLUS_TOUCH_WIDTH / ids.length);
+    const x = region?.x ?? 0;
+    const w = region?.w ?? PLUS_TOUCH_WIDTH;
+    const nowMs = Date.now();
+    ids.forEach((wireId, i) => {
+      if (x >= (i + 1) * sliceWidth || x + w <= i * sliceWidth) return;
+      this.lastElgatoFrameAt.set(wireId, nowMs);
+      this.lastPainted.delete(wireId);
+      this.widgetOnZone.delete(wireId);
+    });
+  }
+
+  private restoreZones(wireIds: number[]): void {
+    for (const wireId of wireIds) this.widgetOnZone.delete(wireId);
+    if (this.active && wireIds.length > 0) this.driver.restoreTouchSegments?.(wireIds);
+  }
+
+  private inElgatoHoldOff(wireId: number, nowMs: number): boolean {
+    const at = this.lastElgatoFrameAt.get(wireId);
+    if (at === undefined) return false;
+    if (nowMs - at < this.repaintIntervalMs()) return true;
+    this.lastElgatoFrameAt.delete(wireId);
+    return false;
   }
 
   private widgetIds(): readonly number[] {
@@ -426,12 +471,10 @@ export class ExtraKeyWidgets {
   }
 
   /** Strip zones whose Elgato images the worker must withhold: all of them under
-   *  'deckbridge-ignore', only widget-owned ones under 'deckbridge-repaint'. */
+   *  'deckbridge-ignore', none otherwise — under 'deckbridge-repaint' the app's frames
+   *  always show, and the widget returns after a hold-off (noteTouchFrame). */
   private stripMask(): readonly number[] {
-    if (this.mode === 'elgato') return [];
-    const ids = this.widgetDisplayIds();
-    if (this.mode === 'deckbridge-ignore') return ids;
-    return ids.filter((wireId) => owns(this.configFor(wireId)));
+    return this.mode === 'deckbridge-ignore' ? this.widgetDisplayIds() : [];
   }
 
   /** Push the ownership mask when it changed (`force`: the worker lost it on open). */

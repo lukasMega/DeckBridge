@@ -8,7 +8,13 @@ import {
   DEFAULT_MAC_ADDRESS,
   MDNS_SERVICE_NAME,
 } from './types.js';
-import type { DialEvent, DockStatus, KeyState, TouchStripMode } from './types.js';
+import type {
+  DialEvent,
+  DockStatus,
+  KeyState,
+  TouchStripMode,
+  TouchWindowRegion,
+} from './types.js';
 import { DEFAULT_MODEL } from './devices/registry.js';
 import { ExtraKeyWidgets } from './extra-keys.js';
 import { EncoderActions } from './encoders.js';
@@ -16,7 +22,8 @@ import { ExtraKeyActions } from './command-actions.js';
 import { buildDockStatus, repaintFrames } from './device-session.js';
 import type { DeviceInfo } from './device-session.js';
 import type { DeviceDriver, DeviceModel, DeviceModelOverride } from './devices/driver.js';
-import type { ElgatoServer } from './elgato.js';
+import type { ElgatoServer, ElgatoChildServer } from './elgato.js';
+
 import type { WebUIServer } from './web/server';
 import type { DeviceIdentitySettings } from './settings-store.js';
 
@@ -30,6 +37,8 @@ export function macToBytes(mac: string, fallback: number[]): number[] {
 export interface PrimaryDockDeps {
   webui: WebUIServer;
   server: ElgatoServer;
+  /** Its strip frames start the widgets' repaint-mode hold-off (noteTouchFrame). */
+  childServer?: Pick<ElgatoChildServer, 'on'>;
 }
 
 export class PrimaryDock {
@@ -72,6 +81,9 @@ export class PrimaryDock {
 
   constructor(deps: PrimaryDockDeps) {
     this.deps = deps;
+    deps.childServer?.on('touchImage', ({ region }: { region?: TouchWindowRegion }) =>
+      this.widgets?.noteTouchFrame(region),
+    );
   }
 
   /** Resolve (or generate + persist) the identity for `deviceKey` and push it

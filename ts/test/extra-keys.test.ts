@@ -192,6 +192,7 @@ class FakeDriver extends EventEmitter {
   splashed: Array<{ keyIndex: number; bytes: Uint8Array; spec: DeviceImageSpec }> = [];
   cleared: number[] = [];
   masks: number[][] = [];
+  restored: number[][] = [];
   open(): Promise<void> {
     return Promise.resolve();
   }
@@ -208,6 +209,9 @@ class FakeDriver extends EventEmitter {
   }
   setTouchStripMask(wireIds: readonly number[]): void {
     this.masks.push([...wireIds]);
+  }
+  restoreTouchSegments(wireIds: readonly number[]): void {
+    this.restored.push([...wireIds]);
   }
 }
 
@@ -329,7 +333,7 @@ await test("'deckbridge-ignore' clears empty zones and masks the whole strip", (
   assert.deepEqual(d.masks, [[1, 2, 3, 4]], 'unchanged mask is not re-pushed per tick');
 });
 
-await test("'deckbridge-repaint' skips empty zones and masks only owned ones", () => {
+await test("'deckbridge-repaint' paints owned zones, leaves the rest to the app, masks nothing", () => {
   const { d, w } = stripDock('deckbridge-repaint');
   w.start();
   tick(w);
@@ -339,7 +343,7 @@ await test("'deckbridge-repaint' skips empty zones and masks only owned ones", (
     [1],
   );
   assert.deepEqual(d.cleared, [], 'Elgato content shows through unowned zones');
-  assert.deepEqual(d.masks, [[1]]);
+  assert.deepEqual(d.masks, [[]], 'app frames reach every zone');
 });
 
 for (const mode of TOUCH_STRIP_MODES) {
@@ -353,77 +357,83 @@ for (const mode of TOUCH_STRIP_MODES) {
   });
 }
 
-for (const [intervalMs, uploads] of [
-  [0, 3],
-  [3_600_000, 1],
-] as const) {
-  await test(`'deckbridge-repaint' re-uploads owned zones per interval (${intervalMs} ms → ${uploads})`, () => {
-    const d = new FakeDriver();
-    d.model = AJAZZ_AKP05E_MODEL;
-    const w = new ExtraKeyWidgets(d, zone1Only, 'deckbridge-repaint', () => intervalMs);
-    w.start();
-    tick(w);
-    tick(w);
-    w.stop();
-    assert.deepEqual(
-      d.splashed.map((s) => s.keyIndex),
-      Array.from({ length: uploads }, () => 1),
-      'unowned zones are never forced',
-    );
-  });
-}
+await test('start() re-pushes the mask even when unchanged (worker reset it on open)', () => {
+  const { d, w } = stripDock('deckbridge-ignore');
+  w.start();
+  w.stop();
+  w.start();
+  w.stop();
+  assert.deepEqual(d.masks, [
+    [1, 2, 3, 4],
+    [1, 2, 3, 4],
+  ]);
+});
 
-await test("'deckbridge-ignore' never forces a repaint of unchanged zones", () => {
+console.log('\nExtraKeyWidgets repaint hold-off');
+
+/** Repaint-mode dock whose zone 1 widget is `zone1()`; hold-off `holdMs`. */
+function repaintDock(
+  zone1: () => ExtraKeyConfig | undefined,
+  holdMs: number,
+): { d: FakeDriver; w: ExtraKeyWidgets } {
   const d = new FakeDriver();
   d.model = AJAZZ_AKP05E_MODEL;
-  const w = new ExtraKeyWidgets(d, zone1Only, 'deckbridge-ignore', () => 0);
+  const configFor = (wireId: number) => (wireId === 1 ? zone1() : undefined);
+  return { d, w: new ExtraKeyWidgets(d, configFor, 'deckbridge-repaint', () => holdMs) };
+}
+const HI: ExtraKeyConfig = { widget: 'text', param: 'Hi' };
+
+await test('an Elgato frame holds the widget off its zone until the interval passes', () => {
+  const { d, w } = repaintDock(() => HI, 3_600_000);
   w.start();
+  w.noteTouchFrame({ x: 0, y: 0, w: 48, h: 48 });
   tick(w);
   w.stop();
-  assert.equal(d.splashed.length, 1);
+  assert.equal(d.splashed.length, 1, 'only the first paint; the app frame then wins');
 });
 
-await test('start() re-pushes the mask even when unchanged (worker reset it on open)', () => {
-  const { d, w } = stripDock('deckbridge-repaint');
+await test('after the hold-off the widget is painted again, even unchanged', () => {
+  const { d, w } = repaintDock(() => HI, 0);
   w.start();
+  w.noteTouchFrame({ x: 0, y: 0, w: 48, h: 48 });
+  tick(w);
   w.stop();
-  w.start();
-  w.stop();
-  assert.deepEqual(d.masks, [[1], [1]]);
+  assert.equal(d.splashed.length, 2);
 });
 
-await test('assigning a widget then repaint() grows the mask and paints the zone', () => {
-  const d = new FakeDriver();
-  d.model = AJAZZ_AKP05E_MODEL;
-  let zone3: ExtraKeyConfig | undefined;
-  const w = new ExtraKeyWidgets(
-    d,
-    (wireId) => (wireId === 3 ? zone3 : zone1Only(wireId)),
-    'deckbridge-repaint',
-  );
+await test('a frame on another zone does not hold zone 1 off', () => {
+  const { d, w } = repaintDock(() => HI, 3_600_000);
   w.start();
-  zone3 = { widget: 'text', param: 'Yo' };
-  w.repaint();
-  zone3 = undefined;
+  w.noteTouchFrame({ x: 416, y: 40, w: 48, h: 48 });
   w.repaint();
   w.stop();
-  assert.deepEqual(d.masks, [[1], [1, 3], [1]]);
-  assert.deepEqual(
-    d.splashed.map((s) => s.keyIndex),
-    [1, 1, 3, 1],
-  );
-  assert.deepEqual(d.cleared, [], 'a released zone is restored by the worker, not cleared');
+  assert.equal(d.splashed.length, 2, 'zone 1 repainted by repaint()');
+});
+
+await test('frames are ignored outside repaint mode', () => {
+  const { d, w } = stripDock('deckbridge-ignore');
+  w.start();
+  w.noteTouchFrame();
+  w.repaint();
+  w.stop();
+  assert.equal(d.splashed.length, 2);
+});
+
+await test('un-assigning a painted zone puts the app image back', () => {
+  let zone1: ExtraKeyConfig | undefined = HI;
+  const { d, w } = repaintDock(() => zone1, 0);
+  w.start();
+  zone1 = undefined;
+  tick(w);
+  tick(w);
+  w.stop();
+  assert.deepEqual(d.restored, [[1]], 'restored once');
+  assert.deepEqual(d.cleared, []);
 });
 
 await test('re-assigning the same content to a released zone repaints it', () => {
-  const d = new FakeDriver();
-  d.model = AJAZZ_AKP05E_MODEL;
-  let zone1: ExtraKeyConfig | undefined = { widget: 'text', param: 'Hi' };
-  const w = new ExtraKeyWidgets(
-    d,
-    (wireId) => (wireId === 1 ? zone1 : undefined),
-    'deckbridge-repaint',
-  );
+  let zone1: ExtraKeyConfig | undefined = HI;
+  const { d, w } = repaintDock(() => zone1, 0);
   w.start();
   zone1 = undefined;
   tick(w);
@@ -431,7 +441,23 @@ await test('re-assigning the same content to a released zone repaints it', () =>
   tick(w);
   w.stop();
   assert.equal(d.splashed.length, 2);
-  assert.deepEqual(d.masks, [[1], [], [1]]);
+});
+
+await test('leaving repaint for elgato restores zones showing a widget', () => {
+  const { d, w } = repaintDock(() => HI, 0);
+  w.start();
+  w.setTouchStripMode('elgato');
+  w.stop();
+  assert.deepEqual(d.restored, [[1]]);
+});
+
+await test('a zone the app drew over needs no restore when leaving repaint', () => {
+  const { d, w } = repaintDock(() => HI, 3_600_000);
+  w.start();
+  w.noteTouchFrame();
+  w.setTouchStripMode('elgato');
+  w.stop();
+  assert.deepEqual(d.restored, []);
 });
 
 await test('leaving an override mode unmasks without clearing the strip', () => {
@@ -446,12 +472,12 @@ await test('leaving an override mode unmasks without clearing the strip', () => 
   assert.equal(d.splashed.length, 1, 'no strip repaint in elgato mode');
 });
 
-await test('switching ignore → repaint releases the empty zones', () => {
+await test('switching ignore → repaint unmasks the strip and repaints the owned zone', () => {
   const { d, w } = stripDock('deckbridge-ignore');
   w.start();
   w.setTouchStripMode('deckbridge-repaint');
   w.stop();
-  assert.deepEqual(d.masks, [[1, 2, 3, 4], [1]]);
+  assert.deepEqual(d.masks, [[1, 2, 3, 4], []]);
   assert.equal(d.splashed.length, 2, 'owned zone repainted after the switch');
   assert.deepEqual(d.cleared, [2, 3, 4], 'only the ignore-mode clears');
 });

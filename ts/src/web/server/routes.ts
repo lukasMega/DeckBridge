@@ -293,7 +293,7 @@ function setTouchStripMode({ mode }: { mode: unknown }, { ui }: RouteContext): R
   return err ? json({ error: err.error }, err.status) : json({ ok: true, mode });
 }
 
-/** How often 'deckbridge-repaint' re-uploads the zones DeckBridge owns. */
+/** How long after the Elgato app's last strip frame 'deckbridge-repaint' brings a widget back. */
 function setTouchStripRepaint({ ms }: { ms: unknown }, { ui }: RouteContext): Response {
   if (!isTouchStripRepaintMs(ms)) {
     return badRequest(

@@ -51,6 +51,9 @@ function makeFakeChildServer() {
     setChildGeometryCalls: [] as ChildGeometry[],
     sendKeyEventCalls: [] as { keyIndex: number; state: KeyState }[],
     hasClient: false,
+    on() {
+      return this;
+    },
     setChildGeometry(geo: ChildGeometry) {
       this.setChildGeometryCalls.push(geo);
     },

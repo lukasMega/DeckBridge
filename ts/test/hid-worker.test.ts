@@ -75,6 +75,29 @@ await test('unmask resends the cached Elgato segment, or clears an unpainted zon
   assert.ok(io[0]!.op === 'send' && io[0]!.bytes.length > 0, 'cached native bytes resent');
 });
 
+await test('restoreTouchSegments resends the cached segment, or clears an unpainted zone', async () => {
+  await openAkp05e();
+  paintSegment(0);
+  await wait(5);
+  io.length = 0;
+  send({ type: 'restoreTouchSegments', wireIds: [1, 2] });
+  await wait(5);
+  assert.deepEqual(ops(), ['send:1', 'clear:2']);
+});
+
+await test('a partial window re-sends its whole zone, drawn on the last frame', async () => {
+  await openAkp05e();
+  paintSegment(0);
+  paintSegment(100);
+  await wait(5);
+  assert.deepEqual(ops(), ['send:1', 'send:1']);
+  const [first, second] = io as Array<{ bytes: Uint8Array }>;
+  const same =
+    first!.bytes.length === second!.bytes.length &&
+    first!.bytes.every((b, i) => b === second!.bytes[i]);
+  assert.ok(!same, 'second frame keeps the first patch');
+});
+
 await test('zones staying in the mask are left alone', async () => {
   await openAkp05e();
   send({ type: 'setTouchStripMask', wireIds: [1, 2] });

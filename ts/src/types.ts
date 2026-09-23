@@ -309,8 +309,8 @@ export const TOUCH_STRIP_MODES = [
 
 export const DEFAULT_TOUCH_STRIP_MODE: TouchStripMode = 'elgato';
 
-/** 'deckbridge-repaint' re-uploads DeckBridge-owned strip zones this often, even
- *  unchanged, so a zone the Elgato app or firmware painted over comes back. */
+/** 'deckbridge-repaint' hold-off: a widget returns to its strip zone this long after
+ *  the Elgato app last drew there (the app's image shows in between). */
 export const TOUCH_STRIP_REPAINT_DEFAULT_MS = 5000;
 export const TOUCH_STRIP_REPAINT_MIN_MS = 1000;
 export const TOUCH_STRIP_REPAINT_MAX_MS = 3_600_000;

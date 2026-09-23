@@ -17,7 +17,7 @@ import { imageCache } from './image-cache.js';
 import { ElgatoHidDriver } from './devices/hid-driver-base.js';
 import { MiraboxDriver } from './mirabox.js';
 import { Akp05Driver } from './devices/ajazz/akp05-driver.js';
-import { renderImage, renderTouchStrip } from './image-render.js';
+import { renderImage, TouchStripCanvas } from './image-render.js';
 import { transformImageForDevice } from './translator.js';
 import { setWorkerPost, setLogLevel, info } from './logger.js';
 
@@ -52,11 +52,14 @@ let touchStripMask = new Set<number>();
 // Last Elgato-rendered native bytes per strip wire id — what a zone gets back when
 // it leaves the mask, instead of a stale widget.
 const touchSegments = new Map<number, Uint8Array>();
+// The app's whole strip, so a partial window update lands in place (image-render.ts).
+const touchCanvas = new TouchStripCanvas();
 
 /** A new device (or none) starts with the Elgato app owning the whole strip. */
 function resetTouchStrip(): void {
   touchStripMask = new Set();
   touchSegments.clear();
+  touchCanvas.clear();
 }
 
 /** Driver factory keyed on `model.driverKind` — the single touch-point for
@@ -169,8 +172,8 @@ function handleSplashImage(
   driver.sendImage(keyIndex, nativeBytes);
 }
 
-/** Split a Stream Deck + window image (full or a partial region) onto the
- *  device's touch segments. The mask gates only the send: masked segments are
+/** Draw a Stream Deck + window image (full or a partial region) into the strip
+ *  canvas and send the touched segments. The mask gates only the send: masked segments are
  *  still cached so releasing a zone can restore them. */
 function handleTouchStrip(bytes: Uint8Array, region?: TouchWindowRegion): void {
   const d = driver;
@@ -181,7 +184,7 @@ function handleTouchStrip(bytes: Uint8Array, region?: TouchWindowRegion): void {
       if (!touchStripMask.has(wireId)) d.sendImage(wireId, native);
     },
   };
-  renderTouchStrip(target, currentModel, bytes, region);
+  touchCanvas.apply(target, currentModel, bytes, region);
 }
 
 /** Swap in a new ownership mask; every released zone gets its last Elgato image
@@ -189,8 +192,31 @@ function handleTouchStrip(bytes: Uint8Array, region?: TouchWindowRegion): void {
 function handleTouchStripMask(wireIds: readonly number[]): void {
   const released = [...touchStripMask].filter((wireId) => !wireIds.includes(wireId));
   touchStripMask = new Set(wireIds);
+  restoreTouchSegments(released);
+}
+
+type TouchStripMsg = Extract<
+  MainToWorker,
+  { type: 'touchImage' | 'setTouchStripMask' | 'restoreTouchSegments' }
+>;
+
+function isTouchStripMsg(msg: MainToWorker): msg is TouchStripMsg {
+  return (
+    msg.type === 'touchImage' ||
+    msg.type === 'setTouchStripMask' ||
+    msg.type === 'restoreTouchSegments'
+  );
+}
+
+function handleTouchStripMsg(msg: TouchStripMsg): void {
+  if (msg.type === 'touchImage') handleTouchStrip(msg.bytes, msg.region);
+  else if (msg.type === 'setTouchStripMask') handleTouchStripMask(msg.wireIds);
+  else restoreTouchSegments(msg.wireIds);
+}
+
+function restoreTouchSegments(wireIds: readonly number[]): void {
   if (!driver) return;
-  for (const wireId of released) {
+  for (const wireId of wireIds) {
     const cached = touchSegments.get(wireId);
     if (cached) driver.sendImage(wireId, cached);
     else driver.clearKey(wireId);
@@ -207,6 +233,11 @@ function handleSetting(
 }
 
 async function handle(msg: MainToWorker, deferNotification: boolean): Promise<void> {
+  // Device path, not handleSetting: releasing/restoring a zone writes to the device.
+  if (isTouchStripMsg(msg)) {
+    handleTouchStripMsg(msg);
+    return;
+  }
   switch (msg.type) {
     case 'open':
       await handleOpen(msg.modelId, msg.hidPath, msg.overrides);
@@ -219,13 +250,6 @@ async function handle(msg: MainToWorker, deferNotification: boolean): Promise<vo
       break;
     case 'splashImage':
       handleSplashImage(msg.keyIndex, msg.bytes, msg.spec);
-      break;
-    case 'touchImage':
-      handleTouchStrip(msg.bytes, msg.region);
-      break;
-    // Device path, not handleSetting: releasing a zone writes to the device.
-    case 'setTouchStripMask':
-      handleTouchStripMask(msg.wireIds);
       break;
     case 'setBrightness':
       driver?.setBrightness(msg.level);

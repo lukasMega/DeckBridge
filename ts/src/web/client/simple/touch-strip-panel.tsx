@@ -22,7 +22,8 @@ const MODE_OPTIONS: ReadonlyArray<{ value: TouchStripMode; label: string; descri
   {
     value: 'deckbridge-repaint',
     label: 'DeckBridge overrides (repaint)',
-    description: 'DeckBridge widgets on assigned zones; the Elgato app keeps the rest.',
+    description:
+      'Elgato app images always show; a widget comes back once the app stops drawing on its zone.',
   },
 ];
 
@@ -87,13 +88,13 @@ function KnobRow({
 const REPAINT_MIN_S = 1;
 const REPAINT_MAX_S = 3600;
 
-/** 'deckbridge-repaint' only: how often owned zones are re-uploaded unchanged. */
+/** 'deckbridge-repaint' only: how long the app's image stays before the widget returns. */
 export function RepaintIntervalField(): preact.JSX.Element {
   const ms = useStore((s) => s.touchStripRepaintMs);
   return (
     <SecondsField
       class="xkeys-option"
-      label="Repaint every (s)"
+      label="Repaint after (s)"
       min={REPAINT_MIN_S}
       max={REPAINT_MAX_S}
       value={ms / 1000}

@@ -37,12 +37,13 @@ mode:
 | ---------------------------------- | -------------------------------------------------------------------------------------------------- |
 | **Elgato app only** (default)      | The app paints all four zones. DeckBridge draws nothing there and the widget rows are hidden.      |
 | **DeckBridge overrides (ignore)**  | DeckBridge widgets. Everything the app sends to the strip is dropped; an unassigned zone is blank. |
-| **DeckBridge overrides (repaint)** | DeckBridge widgets on assigned zones; the app keeps painting the unassigned ones.                  |
+| **DeckBridge overrides (repaint)** | App images always show. A widget comes back once the app stops drawing on its zone.                |
 
-Under _repaint_, a **Repaint every (s)** field (default **5 s**, range 1–3600 s) sets how
-often DeckBridge re-uploads the zones it owns, even when their content is unchanged. This
-restores a zone that something outside DeckBridge drew over. Changes apply on the next
-widget tick, with no reconnect.
+Under _repaint_, every image the app sends reaches the strip, including dial feedback
+on a zone that has a widget. The **Repaint after (s)** field (default **5 s**, range
+1–3600 s) sets how long after the app's last image on a zone DeckBridge paints the widget
+there again. Turn a knob and you see the app's feedback; stop and the widget returns.
+A change applies on the next widget tick, with no reconnect.
 
 Each zone keeps its own widget in both override modes. The "no widget" choice reads
 **Blank** under _ignore_ and **App controls** under _repaint_ — the zone is cleared, or

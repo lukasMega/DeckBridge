@@ -81,7 +81,7 @@ export class DriverManager {
 
   constructor(deps: DriverManagerDeps) {
     this.deps = deps;
-    this.primary = new PrimaryDock({ webui: deps.webui, server: deps.server });
+    this.primary = new PrimaryDock(deps);
     this.extraCoordinator = new ExtraDockCoordinator({
       getShuttingDown: deps.getShuttingDown,
       getDriverMode: () => this.driverMode,

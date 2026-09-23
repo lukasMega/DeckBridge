@@ -121,6 +121,10 @@ export class WorkerHidDriver extends EventEmitter implements DeviceDriver {
     this.post({ type: 'setTouchStripMask', wireIds: [...wireIds] });
   }
 
+  restoreTouchSegments(wireIds: readonly number[]): void {
+    this.post({ type: 'restoreTouchSegments', wireIds: [...wireIds] });
+  }
+
   setBrightness(level: number): void {
     this.post({ type: 'setBrightness', level });
   }

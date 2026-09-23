@@ -54,6 +54,8 @@ export type MainToWorker =
   // are withheld, and a zone leaving the mask gets its last Elgato image back
   // (or is cleared). The worker resets it to empty on open/close.
   | { type: 'setTouchStripMask'; wireIds: number[] }
+  // Resend the cached Elgato segment (or clear) on zones a widget just left.
+  | { type: 'restoreTouchSegments'; wireIds: number[] }
   // Runtime log-level change (WebUI "Debug logging"). Without this the USB
   // worker — where the interesting device traffic is — stays at its spawn-time
   // level while the main thread switches to debug.

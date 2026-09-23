@@ -35,7 +35,7 @@ export interface StoreState {
   extraKeys: Record<string, ExtraKeyCfg>;
   /** SELECTED dock's touch-strip mode + knob override (AKP05E). */
   touchStripMode: TouchStripMode;
-  /** 'deckbridge-repaint' forced re-upload interval. */
+  /** 'deckbridge-repaint' hold-off after an Elgato frame. */
   touchStripRepaintMs: number;
   encoders: EncoderSettings;
   updateInfo?: UpdateInfo;

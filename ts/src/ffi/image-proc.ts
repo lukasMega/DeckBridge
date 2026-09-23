@@ -32,6 +32,17 @@ interface ImageProcSymbols {
     errBuf: Uint8Array,
     errCap: number,
   ): number;
+  image_proc_blit(
+    canvas: Uint8Array, // top-down RGB24, cw × ch × 3 bytes, written in place
+    cw: number,
+    ch: number,
+    input: Uint8Array,
+    inputLen: number,
+    x: number,
+    y: number,
+    errBuf: Uint8Array,
+    errCap: number,
+  ): number;
 }
 
 let lib: { symbols: ImageProcSymbols; close(): void } | null = null;
@@ -61,6 +72,10 @@ export function load(): { symbols: ImageProcSymbols; close(): void } {
         BUFFER, SIZE_T,
         BUFFER, SIZE_T,
       ],
+      returns: INT,
+    },
+    image_proc_blit: {
+      args: [BUFFER, UINT32, UINT32, BUFFER, SIZE_T, UINT32, UINT32, BUFFER, SIZE_T],
       returns: INT,
     },
   }) as unknown as { symbols: ImageProcSymbols; close(): void };

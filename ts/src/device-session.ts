@@ -465,6 +465,7 @@ export class DeviceSession {
       'touchImage',
       ({ data, region }: { data: Uint8Array; region?: TouchWindowRegion }) => {
         this.driver.renderTouchImage(data, region);
+        this.extraKeys.noteTouchFrame(region);
       },
     );
     this.childServer.on('brightness', (level: number) => {

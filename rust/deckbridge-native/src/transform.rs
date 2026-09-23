@@ -5,6 +5,24 @@ use crate::util::{ffi_guard, write_err};
 use image::imageops::FilterType;
 use std::io::Cursor;
 
+/// Decode with decompression-bomb limits (S3) — bytes arrive from the LAN
+/// unauthenticated. Shared by `transform` and the touch-strip blit.
+pub(crate) fn decode_limited(input: &[u8]) -> Result<image::DynamicImage, String> {
+    let mut reader = image::ImageReader::new(Cursor::new(input))
+        .with_guessed_format()
+        .map_err(|e| format!("Image format error: {}", e))?;
+    let mut limits = image::Limits::default();
+    // Raised to 800 wide for the Stream Deck + window strip (800×100); height and
+    // alloc stay bounded so the 800×480 full LCD is still rejected by max_alloc.
+    limits.max_image_width = Some(800);
+    limits.max_image_height = Some(500);
+    limits.max_alloc = Some(900 * 1024);
+    reader.limits(limits);
+    reader
+        .decode()
+        .map_err(|e| format!("Image load error: {}", e))
+}
+
 /// Private transform helper: decode, rotate/flip, resize, encode (JPEG or BMP).
 /// EXIF auto-rotate is intentionally not performed (dropped for binary size — see plan).
 // The flat parameter list mirrors the FFI ABI of image_proc_transform.
@@ -31,22 +49,7 @@ pub(crate) fn transform(
     crop_w: u32,
     crop_h: u32,
 ) -> Result<Vec<u8>, String> {
-    // Decompression-bomb defense: cap dimensions and intermediate allocations
-    // before decoding (S3) — bytes arrive from the LAN unauthenticated.
-    let mut reader = image::ImageReader::new(Cursor::new(input))
-        .with_guessed_format()
-        .map_err(|e| format!("Image format error: {}", e))?;
-    let mut limits = image::Limits::default();
-    // Raised to 800 wide for the Stream Deck + window strip (800×100); height and
-    // alloc stay bounded so the 800×480 full LCD is still rejected by max_alloc.
-    limits.max_image_width = Some(800);
-    limits.max_image_height = Some(500);
-    limits.max_alloc = Some(900 * 1024);
-    reader.limits(limits);
-    let mut img = match reader.decode() {
-        Ok(i) => i,
-        Err(e) => return Err(format!("Image load error: {}", e)),
-    };
+    let mut img = decode_limited(input)?;
 
     // Region crop (Stream Deck + touch strip: split 800×100 into N segments) takes
     // precedence over the symmetric crop. Region bounds are clamped to the source.

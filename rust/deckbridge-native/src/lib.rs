@@ -4,6 +4,7 @@ mod hid;
 #[cfg(target_os = "windows")]
 mod mdns_windows;
 
+mod blit;
 mod bmp;
 mod jpeg;
 mod pad;

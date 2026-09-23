@@ -6,9 +6,10 @@
 import { debug, info, warn } from './logger.js';
 import {
   applyOverride,
+  blitImage,
+  canvasSliceToBmp,
   mk2IndexToDeviceImgId,
   transformImageForDevice,
-  transformImageRegion,
 } from './translator.js';
 import { imageCache, hashJpeg, makeCacheKey, specRevision } from './image-cache.js';
 import type { DeviceModel } from './devices/driver.js';
@@ -214,45 +215,49 @@ export function renderImage(
   return Promise.resolve();
 }
 
-/** Render a Stream Deck + window image to the device's touch-segment displays.
- *  A full-window image (or no region) is split left-to-right into one slice per
- *  segment; a partial-window region is rendered only into the segments it overlaps
- *  (best-effort — a region not aligned to segment boundaries is stretched to fill
- *  the segment, since each segment is a full 128×128 display). */
-export function renderTouchStrip(
-  driver: RenderTarget,
-  model: DeviceModel,
-  bytes: Uint8Array,
-  region?: TouchWindowRegion,
-): void {
-  const displays = model.widgetDisplays;
-  if (!displays || displays.length === 0) return;
-  const sliceWidth = Math.floor(PLUS_TOUCH_WIDTH / displays.length);
-  // Full window: source is the whole 800×100 strip — slice it per segment.
-  const fullWindow = !region || (region.x === 0 && region.w >= PLUS_TOUCH_WIDTH);
-  for (let i = 0; i < displays.length; i++) {
-    const display = displays[i]!;
-    let crop: { x: number; y: number; width: number; height: number };
-    if (fullWindow) {
-      crop = { x: i * sliceWidth, y: 0, width: sliceWidth, height: PLUS_TOUCH_HEIGHT };
-    } else {
-      const segStart = i * sliceWidth;
-      const segEnd = segStart + sliceWidth;
-      const overlapStart = Math.max(region.x, segStart);
-      const overlapEnd = Math.min(region.x + region.w, segEnd);
-      if (overlapStart >= overlapEnd) continue;
-      crop = {
-        x: overlapStart - region.x,
-        y: 0,
-        width: overlapEnd - overlapStart,
-        height: region.h,
-      };
-    }
+/** One dock's Stream Deck + window (800×100, RGB). The app sends full frames and
+ *  small patches (dial feedback); each is drawn into this canvas, then every zone it
+ *  touches is re-sent whole — a patch sent alone would be stretched over its zone. */
+export class TouchStripCanvas {
+  private readonly rgb = new Uint8Array(PLUS_TOUCH_WIDTH * PLUS_TOUCH_HEIGHT * 3);
+
+  clear(): void {
+    this.rgb.fill(0);
+  }
+
+  apply(
+    driver: RenderTarget,
+    model: DeviceModel,
+    bytes: Uint8Array,
+    region?: TouchWindowRegion,
+  ): void {
+    const displays = model.widgetDisplays;
+    if (!displays || displays.length === 0) return;
+    const x = region?.x ?? 0;
+    const w = region?.w ?? PLUS_TOUCH_WIDTH;
     try {
-      const native = transformImageRegion(bytes, display.image, crop);
-      driver.sendImage(display.wireId, native);
+      blitImage(this.rgb, PLUS_TOUCH_WIDTH, PLUS_TOUCH_HEIGHT, bytes, x, region?.y ?? 0);
     } catch (err) {
-      warn('touch', `touch segment ${i} render failed: ${(err as Error).message}`);
+      warn('touch', `touch window blit failed: ${(err as Error).message}`);
+      return;
+    }
+    const sliceWidth = Math.floor(PLUS_TOUCH_WIDTH / displays.length);
+    for (let i = 0; i < displays.length; i++) {
+      const segStart = i * sliceWidth;
+      if (x >= segStart + sliceWidth || x + w <= segStart) continue;
+      const display = displays[i]!;
+      try {
+        const slice = canvasSliceToBmp(
+          this.rgb,
+          PLUS_TOUCH_WIDTH,
+          PLUS_TOUCH_HEIGHT,
+          segStart,
+          sliceWidth,
+        );
+        driver.sendImage(display.wireId, transformImageForDevice(slice, display.image));
+      } catch (err) {
+        warn('touch', `touch segment ${i} render failed: ${(err as Error).message}`);
+      }
     }
   }
 }
