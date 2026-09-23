@@ -3,7 +3,7 @@
 // docs/side-keys.md.
 import { useStore } from '../store.js';
 import type { EncoderCommands, TouchStripMode } from '../ui-types.js';
-import { CheckField } from '../components/Fields.js';
+import { CheckField, SecondsField } from '../components/Fields.js';
 import { fire } from '../ui-api.js';
 import { CommandInput } from './command-input.js';
 import { GridHeader } from './config-section.js';
@@ -80,6 +80,25 @@ function KnobRow({
         />
       ))}
     </div>
+  );
+}
+
+// Bounds mirror TOUCH_STRIP_REPAINT_MIN_MS / _MAX_MS (types.ts), in seconds.
+const REPAINT_MIN_S = 1;
+const REPAINT_MAX_S = 3600;
+
+/** 'deckbridge-repaint' only: how often owned zones are re-uploaded unchanged. */
+export function RepaintIntervalField(): preact.JSX.Element {
+  const ms = useStore((s) => s.touchStripRepaintMs);
+  return (
+    <SecondsField
+      class="xkeys-option"
+      label="Repaint every (s)"
+      min={REPAINT_MIN_S}
+      max={REPAINT_MAX_S}
+      value={ms / 1000}
+      onCommit={(next) => fire('/api/touch-strip-repaint', { ms: next })}
+    />
   );
 }
 

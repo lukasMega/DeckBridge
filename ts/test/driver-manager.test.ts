@@ -108,6 +108,7 @@ function makeFakeWebUI() {
     touchStripModeFor(_deviceKey: string): TouchStripMode {
       return 'elgato';
     },
+    devicePrefs: { touchStripRepaintMsFor: (_deviceKey: string): number => 5000 },
     encoderSettingsFor(_deviceKey: string): EncoderSettings | undefined {
       return undefined;
     },

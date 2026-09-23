@@ -68,6 +68,7 @@ export interface ExtraDockCoordinatorDeps {
   extraKeyConfigFor: (deviceKey: string, wireId: number) => ExtraKeyConfig | undefined;
   /** Per-device touch-strip mode + encoder override, resolved live by deviceKey. */
   touchStripModeFor: (deviceKey: string) => TouchStripMode;
+  touchStripRepaintMsFor: (deviceKey: string) => number;
   encoderSettingsFor: (deviceKey: string) => EncoderSettings | undefined;
 }
 
@@ -293,6 +294,7 @@ export class ExtraDockCoordinator {
       initialImageMode: deviceIdentity.imageModeOverride ?? null,
       extraKeyConfigFor: (wireId) => this.deps.extraKeyConfigFor(deviceKey, wireId),
       touchStripMode: this.deps.touchStripModeFor(deviceKey),
+      touchStripRepaintMs: () => this.deps.touchStripRepaintMsFor(deviceKey),
       encoderOverride: () => ({
         mode: this.deps.touchStripModeFor(deviceKey),
         encoders: this.deps.encoderSettingsFor(deviceKey),

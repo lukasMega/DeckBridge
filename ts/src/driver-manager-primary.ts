@@ -160,6 +160,7 @@ export class PrimaryDock {
       driver,
       (wireId) => this.deps.webui.extraKeyConfigFor(identity.deviceKey, wireId),
       this.deps.webui.touchStripModeFor(identity.deviceKey),
+      () => this.deps.webui.devicePrefs.touchStripRepaintMsFor(identity.deviceKey),
     );
     this.widgets.start();
   }

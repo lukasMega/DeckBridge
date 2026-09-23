@@ -1,11 +1,49 @@
 // Labelled form controls shared by the settings-page panels (device tuning,
-// diagnostics). Markup is fixed by ui-simple.css: `.tuning-field` for the
-// number/select rows, `.settings-checkbox` for checkboxes.
+// diagnostics, widget popovers, touch strip). Markup is fixed by ui-simple.css:
+// `.tuning-field` for the number/select rows, `.settings-checkbox` for checkboxes.
 
 function numberOrUndefined(raw: string): number | undefined {
   if (raw.trim() === '') return undefined;
   const n = Number(raw);
   return Number.isFinite(n) ? n : undefined;
+}
+
+/** Seconds input that posts milliseconds. Out-of-range values are ignored rather
+ *  than clamped — the number spinner would otherwise fight the user mid-typing. */
+export function SecondsField({
+  class: cls = 'xkey-popover-field',
+  label,
+  min,
+  max,
+  value,
+  onCommit,
+}: Readonly<{
+  class?: string;
+  label: string;
+  min: number;
+  max: number;
+  value: number;
+  onCommit: (ms: number) => void;
+}>): preact.JSX.Element {
+  const handleChange = (e: Event): void => {
+    const s = Number((e.target as HTMLInputElement).value);
+    if (!Number.isFinite(s) || s < min || s > max) return;
+    onCommit(Math.round(s * 1000));
+  };
+
+  return (
+    <label class={cls}>
+      <span>{label}</span>
+      <input
+        class="input"
+        type="number"
+        min={min}
+        max={max}
+        value={value}
+        onChange={handleChange}
+      />
+    </label>
+  );
 }
 
 export function NumberField({

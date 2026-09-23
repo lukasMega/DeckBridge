@@ -330,6 +330,7 @@ const SELECTED_DEVICE_EVENTS = [
   'imageMode',
   'extraKeys',
   'touchStripMode',
+  'touchStripRepaint',
   'encoders',
 ];
 
@@ -392,6 +393,27 @@ test('touch-strip mode: 409 without a strip, else persist + broadcast + touchStr
   assert.equal(saved.devices[0]!.touchStripMode, 'deckbridge-repaint', 'persisted per device');
 });
 
+test('touch-strip repaint interval: 409 without a strip, default 5 s, else persist + broadcast', () => {
+  const ui = new WebUIServer(undefined, [], 'real', TEST_SETTINGS_ROOT);
+  ui.notifyDocks([fakeDockStatus(0)]);
+  assert.equal(ui.devicePrefs.trySetTouchStripRepaintMs(2000)?.status, 409, 'MK.2 has no strip');
+  assert.equal(ui.devicePrefs.touchStripRepaintMsFor('fake-device-0'), 5000, 'default is 5 s');
+
+  ui.getOrCreateDeviceIdentity('fake-device-0', 'Dock');
+  ui.notifyDocks([{ ...fakeDockStatus(0), widgetDisplays: STRIP }]);
+  const { sent } = connectMockClient(ui);
+  sent.length = 0;
+
+  assert.equal(ui.devicePrefs.trySetTouchStripRepaintMs(2000), null);
+  assert.deepEqual(JSON.parse(sent[0]!), { event: 'touchStripRepaint', data: { ms: 2000 } });
+  assert.equal(ui.devicePrefs.touchStripRepaintMsFor('fake-device-0'), 2000);
+  assert.equal(ui.fullState().touchStripRepaintMs, 2000);
+  const saved = JSON.parse(ui.getSettingsJson()) as {
+    devices: { touchStripRepaintMs?: number }[];
+  };
+  assert.equal(saved.devices[0]!.touchStripRepaintMs, 2000, 'persisted per device');
+});
+
 test('encoders: 409 without a strip or knobs, 400 past the last knob', () => {
   const ui = new WebUIServer(undefined, [], 'real', TEST_SETTINGS_ROOT);
   ui.notifyDocks([{ ...fakeDockStatus(0), encoderCount: 4 }]);
@@ -436,6 +458,8 @@ test('applySettingsJson: bad touchStripMode / encoders fail the device-entry gua
 
   ui.applySettingsJson(entry({ touchStripMode: 'sometimes' }));
   assert.equal(stored().length, 0, 'unknown mode rejected');
+  ui.applySettingsJson(entry({ touchStripRepaintMs: 10 }));
+  assert.equal(stored().length, 0, 'repaint interval below 1 s rejected');
   ui.applySettingsJson(entry({ encoders: { commands: { '7': { press: 'x' } } } }));
   assert.equal(stored().length, 0, 'knob index out of range rejected');
   ui.applySettingsJson(entry({ encoders: { commands: { '0': { press: 'x'.repeat(513) } } } }));
@@ -660,6 +684,16 @@ try {
     },
   );
 
+  await runWebTest(
+    'POST /api/touch-strip-repaint: out-of-range or non-integer ms → 400, valid ms on MK.2 → 409',
+    async () => {
+      for (const ms of [999, 3_600_001, 1500.5, '5000']) {
+        assert.equal((await post('/api/touch-strip-repaint', { ms })).status, 400, String(ms));
+      }
+      assert.equal((await post('/api/touch-strip-repaint', { ms: 5000 })).status, 409);
+    },
+  );
+
   await runWebTest('POST /api/encoders: bad shape → 400, valid body on MK.2 → 409', async () => {
     assert.equal((await post('/api/encoders', { connectToApp: 'no' })).status, 400);
     assert.equal((await post('/api/encoders', { commands: { '9': {} } })).status, 400);
@@ -698,6 +732,7 @@ function deviceEntry(
     brightnessOverride: boolean;
     imageModeOverride: unknown;
     touchStripMode: unknown;
+    touchStripRepaintMs: unknown;
     encoders: unknown;
   }> = {},
 ): Record<string, unknown> {

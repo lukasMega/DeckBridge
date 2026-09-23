@@ -549,6 +549,20 @@ input[type='range'].range:disabled {
 .xkeys-knobs {
   margin-top: 20px;
 }
+.xkeys-option {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 2px 12px;
+  font-size: 13px;
+  color: var(--fg-muted);
+}
+.xkeys-option input {
+  width: 70px;
+  font-family: var(--font);
+  font-size: 13px;
+  background: var(--surface);
+}
 /* one grid per row, same tracks everywhere, so cells line up across rows */
 .xkey-row {
   display: grid;

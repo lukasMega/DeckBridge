@@ -295,6 +295,8 @@ export interface DeviceSessionOptions {
   extraKeyConfigFor?: (wireId: number) => ExtraKeyConfig | undefined;
   /** This dock's persisted touch-strip mode. Default DEFAULT_TOUCH_STRIP_MODE. */
   touchStripMode?: TouchStripMode;
+  /** This dock's 'deckbridge-repaint' interval, read live each widget tick. */
+  touchStripRepaintMs?: () => number;
   /** This dock's strip mode + encoder settings, resolved per dial event (deviceKey
    *  captured by the coordinator). Absent = knobs always reach the Elgato app. */
   encoderOverride?: () => EncoderOverride | undefined;
@@ -341,6 +343,7 @@ export class DeviceSession {
       this.driver,
       (wireId) => this.extraKeyConfigFor?.(wireId),
       opts.touchStripMode,
+      opts.touchStripRepaintMs,
     );
     this.encoders = new EncoderActions(() => opts.encoderOverride?.());
     this.extraKeyActions = new ExtraKeyActions((wireId) => this.extraKeyConfigFor?.(wireId));

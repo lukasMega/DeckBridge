@@ -63,7 +63,7 @@ export class WebUIServer extends EventEmitter implements WebUIController {
   private readonly settingsIdentity: SettingsIdentityController;
   private readonly modelOverrides: ModelOverridesController;
   private readonly logging: LoggingController;
-  private readonly devicePrefs: DevicePrefsController;
+  readonly devicePrefs: DevicePrefsController;
   private readonly encoders: EncodersController;
   readonly updates: UpdateController;
   private readonly imageChannel = new ImageChannel(this.bus, () => this.selectedDock);
@@ -392,7 +392,7 @@ export class WebUIServer extends EventEmitter implements WebUIController {
       deviceIdentity: this.settingsIdentity.identity(),
       realDeviceIdentity: this.dockRegistry.selectedStatus()?.realDeviceIdentity,
       extraKeys: this.extraKeys.selectedConfigs(),
-      touchStripMode: this.devicePrefs.touchStripMode,
+      ...this.devicePrefs.touchStripState(),
       encoders: this.encoders.selected(),
       logLevel: this.logLevel(),
       logFilePath: this.logFilePath(),

@@ -39,6 +39,11 @@ mode:
 | **DeckBridge overrides (ignore)**  | DeckBridge widgets. Everything the app sends to the strip is dropped; an unassigned zone is blank. |
 | **DeckBridge overrides (repaint)** | DeckBridge widgets on assigned zones; the app keeps painting the unassigned ones.                  |
 
+Under _repaint_, a **Repaint every (s)** field (default **5 s**, range 1–3600 s) sets how
+often DeckBridge re-uploads the zones it owns, even when their content is unchanged. This
+restores a zone that something outside DeckBridge drew over. Changes apply on the next
+widget tick, with no reconnect.
+
 Each zone keeps its own widget in both override modes. The "no widget" choice reads
 **Blank** under _ignore_ and **App controls** under _repaint_ — the zone is cleared, or
 left to the app. Leaving an override hands every zone back to the app. Side keys (293S,

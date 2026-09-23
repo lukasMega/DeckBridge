@@ -32,6 +32,7 @@ interface InitialState extends Status {
   deviceIdentity?: DeviceIdentity;
   extraKeys?: Record<string, ExtraKeyCfg>;
   touchStripMode?: TouchStripMode;
+  touchStripRepaintMs?: number;
   encoders?: EncoderSettings;
   updateInfo?: UpdateInfo;
 }
@@ -44,6 +45,18 @@ interface InitialState extends Status {
 if (__SIMPLE_ONLY__) {
   document.documentElement.removeAttribute('data-mode');
   localStorage.removeItem('deckbridge.mode');
+}
+
+/** The SELECTED dock's side-key / touch-strip / knob settings. */
+function sideKeysState(
+  st: InitialState,
+): Pick<store.StoreState, 'extraKeys' | 'touchStripMode' | 'touchStripRepaintMs' | 'encoders'> {
+  return {
+    extraKeys: st.extraKeys ?? {},
+    touchStripMode: st.touchStripMode ?? 'elgato',
+    touchStripRepaintMs: st.touchStripRepaintMs ?? store.TOUCH_STRIP_REPAINT_DEFAULT_MS,
+    encoders: st.encoders ?? {},
+  };
 }
 
 void fetch('/api/state')
@@ -60,9 +73,7 @@ void fetch('/api/state')
       imageMode: st.imageModeOverride ?? null,
       deviceModels: st.deviceModels ?? [],
       deviceIdentity: st.deviceIdentity,
-      extraKeys: st.extraKeys ?? {},
-      touchStripMode: st.touchStripMode ?? 'elgato',
-      encoders: st.encoders ?? {},
+      ...sideKeysState(st),
       updateInfo: st.updateInfo,
       serverLogs: st.logs ?? [],
       commLogs: st.commLogs ?? [],

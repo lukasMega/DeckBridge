@@ -35,9 +35,13 @@ export interface StoreState {
   extraKeys: Record<string, ExtraKeyCfg>;
   /** SELECTED dock's touch-strip mode + knob override (AKP05E). */
   touchStripMode: TouchStripMode;
+  /** 'deckbridge-repaint' forced re-upload interval. */
+  touchStripRepaintMs: number;
   encoders: EncoderSettings;
   updateInfo?: UpdateInfo;
 }
+
+export const TOUCH_STRIP_REPAINT_DEFAULT_MS = 5000; // mirrors types.ts
 
 let state: StoreState = {
   status: { driverMode: 'real', driverConnected: false, elgatoConnected: false },
@@ -54,6 +58,7 @@ let state: StoreState = {
   deviceIdentity: undefined,
   extraKeys: {},
   touchStripMode: 'elgato',
+  touchStripRepaintMs: TOUCH_STRIP_REPAINT_DEFAULT_MS,
   encoders: {},
   updateInfo: undefined,
 };
@@ -104,6 +109,10 @@ export function setBrightnessOverride(brightnessOverride: boolean): void {
 
 export function setTouchStripMode(touchStripMode: TouchStripMode): void {
   setField('touchStripMode', touchStripMode);
+}
+
+export function setTouchStripRepaintMs(touchStripRepaintMs: number): void {
+  setField('touchStripRepaintMs', touchStripRepaintMs);
 }
 
 export function setEncoders(encoders: EncoderSettings): void {

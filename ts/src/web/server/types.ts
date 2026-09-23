@@ -22,6 +22,7 @@ import type { OverrideChangeKind } from '../../devices/model-overrides.js';
 import type { DiagnosticsOptions } from './diagnostics.js';
 import type { PersistedSettings } from './persisted-settings.js';
 import type { UpdateController } from './update-controller.js';
+import type { DevicePrefsController } from './device-prefs-controller.js';
 
 /** A rejected request: the message the WebUI shows, plus its HTTP status. */
 /** Result of a persisted device-tuning change: how the live session applies it
@@ -128,6 +129,7 @@ export interface StateResponse extends StatusSnapshot {
   extraKeys: Record<string, ExtraKeyConfig>;
   /** The SELECTED dock's touch-strip mode + knob override (AKP05E). */
   touchStripMode: TouchStripMode;
+  touchStripRepaintMs: number;
   encoders: EncoderSettings;
   /** Log level currently in effect (not merely the persisted one) + where the
    *  log file lives — both surfaced under Settings so a reporter can turn on
@@ -179,4 +181,5 @@ export interface WebUIController {
   buildDiagnosticsReport(opt?: DiagnosticsOptions): Promise<string>;
   saveDiagnosticsReport(opt?: DiagnosticsOptions): Promise<string | null>;
   readonly updates: UpdateController;
+  readonly devicePrefs: DevicePrefsController;
 }

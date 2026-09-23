@@ -14,6 +14,9 @@ import {
   COMMAND_TIMEOUT_MAX_MS,
   ENCODER_COMMAND_MAX,
   TOUCH_STRIP_MODES,
+  TOUCH_STRIP_REPAINT_MIN_MS,
+  TOUCH_STRIP_REPAINT_MAX_MS,
+  isTouchStripRepaintMs,
 } from '../../types.js';
 import type {
   EncoderSettings,
@@ -59,6 +62,7 @@ export const routes: Route[] = [
   postJson('/api/extra-key/run', runExtraKeyNow),
   postJson('/api/extra-key/press', setExtraKeyPress),
   postJson('/api/touch-strip-mode', setTouchStripMode),
+  postJson('/api/touch-strip-repaint', setTouchStripRepaint),
   postJson('/api/encoders', setEncoders),
   post('/api/settings', setSettings),
   post('/api/settings/open-in-os', async ({ ui }) => {
@@ -287,6 +291,17 @@ function setTouchStripMode({ mode }: { mode: unknown }, { ui }: RouteContext): R
   }
   const err = ui.trySetTouchStripMode(mode as TouchStripMode);
   return err ? json({ error: err.error }, err.status) : json({ ok: true, mode });
+}
+
+/** How often 'deckbridge-repaint' re-uploads the zones DeckBridge owns. */
+function setTouchStripRepaint({ ms }: { ms: unknown }, { ui }: RouteContext): Response {
+  if (!isTouchStripRepaintMs(ms)) {
+    return badRequest(
+      `ms must be an integer ${TOUCH_STRIP_REPAINT_MIN_MS}–${TOUCH_STRIP_REPAINT_MAX_MS}`,
+    );
+  }
+  const err = ui.devicePrefs.trySetTouchStripRepaintMs(ms);
+  return err ? json({ error: err.error }, err.status) : json({ ok: true, ms });
 }
 
 /** Knob override: connect to the Elgato app, or run per-knob shell commands. */

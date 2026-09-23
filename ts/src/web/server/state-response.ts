@@ -36,6 +36,7 @@ export interface StateResponseInputs {
   realDeviceIdentity?: RealDeviceIdentity;
   extraKeys: Record<string, ExtraKeyConfig>;
   touchStripMode: TouchStripMode;
+  touchStripRepaintMs: number;
   encoders: EncoderSettings;
   logLevel: string;
   logFilePath: string;

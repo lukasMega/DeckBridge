@@ -58,6 +58,9 @@ const handlers: Record<string, (d: unknown) => void> = {
   touchStripMode: (d) => {
     store.setTouchStripMode((d as { mode: StoreState['touchStripMode'] }).mode);
   },
+  touchStripRepaint: (d) => {
+    store.setTouchStripRepaintMs((d as { ms: number }).ms);
+  },
   encoders: (d) => {
     store.setEncoders((d as { encoders: StoreState['encoders'] }).encoders);
   },

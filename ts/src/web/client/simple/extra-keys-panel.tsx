@@ -15,6 +15,7 @@ import type {
 import { ConfigButton, paramPlaceholder, postExtraKey, PARAM_MAX } from './extra-keys-popovers.js';
 import {
   EncodersSection,
+  RepaintIntervalField,
   TouchStripModeSelect,
   touchStripModeDescription,
 } from './touch-strip-panel.js';
@@ -353,6 +354,7 @@ export function ExtraKeysPanel(): preact.JSX.Element | null {
             subtitle={section.subtitle ?? touchStripModeDescription(stripMode)}
             aside={section.touchStrip ? <TouchStripModeSelect mode={stripMode} /> : undefined}
           >
+            {section.touchStrip && stripMode === 'deckbridge-repaint' && <RepaintIntervalField />}
             {showRows && (
               <GridHeader
                 columns={[

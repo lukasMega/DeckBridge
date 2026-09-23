@@ -4,6 +4,7 @@ import { ICON } from '../ui-icons.js';
 import { fire } from '../ui-api.js';
 import { useDismiss } from '../ui-hooks.js';
 import { Icon } from './Icon.js';
+import { SecondsField } from '../components/Fields.js';
 
 // Interval/timeout bounds mirror types.ts, in seconds for UI.
 const INTERVAL_MIN_S = 1;
@@ -48,42 +49,6 @@ export function paramPlaceholder(widget: ExtraKeyWidget): string {
   if (widget === 'weather') return 'lat,lon e.g. 50.08,14.43';
   if (widget === 'command') return 'shell command e.g. date +%H:%M';
   return 'text (\\n = new line)';
-}
-
-/** Seconds input that posts milliseconds. Out-of-range values are ignored rather
- *  than clamped — the number spinner would otherwise fight the user mid-typing. */
-function SecondsField({
-  label,
-  min,
-  max,
-  value,
-  onCommit,
-}: Readonly<{
-  label: string;
-  min: number;
-  max: number;
-  value: number;
-  onCommit: (ms: number) => void;
-}>): preact.JSX.Element {
-  const handleChange = (e: Event): void => {
-    const s = Number((e.target as HTMLInputElement).value);
-    if (!Number.isFinite(s) || s < min || s > max) return;
-    onCommit(Math.round(s * 1000));
-  };
-
-  return (
-    <label class="xkey-popover-field">
-      <span>{label}</span>
-      <input
-        class="input"
-        type="number"
-        min={min}
-        max={max}
-        value={value}
-        onChange={handleChange}
-      />
-    </label>
-  );
 }
 
 /** Popup to edit command re-run interval, kill-timeout, and force an immediate run. */

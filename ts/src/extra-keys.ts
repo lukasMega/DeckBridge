@@ -7,6 +7,7 @@ import {
   COMMAND_INTERVAL_DEFAULT_MS,
   COMMAND_TIMEOUT_DEFAULT_MS,
   DEFAULT_TOUCH_STRIP_MODE,
+  TOUCH_STRIP_REPAINT_DEFAULT_MS,
   type ExtraKeyConfig,
   type TouchStripMode,
 } from './types.js';
@@ -301,15 +302,20 @@ export class ExtraKeyWidgets {
   /** Between start() and stop() — a dock that started with nothing to paint ('elgato'
    *  strip, no side keys) must still begin ticking when an override mode is chosen. */
   private active = false;
+  private readonly repaintIntervalMs: () => number;
+  private lastForcedRepaintAt = 0;
 
   constructor(
     driver: DeviceDriver,
     configFor: (wireId: number) => ExtraKeyConfig | undefined,
     mode: TouchStripMode = DEFAULT_TOUCH_STRIP_MODE,
+    /** Read each tick, so a WebUI change applies without a restart. */
+    repaintIntervalMs: () => number = () => TOUCH_STRIP_REPAINT_DEFAULT_MS,
   ) {
     this.driver = driver;
     this.configFor = configFor;
     this.mode = mode;
+    this.repaintIntervalMs = repaintIntervalMs;
   }
 
   start(): void {
@@ -383,6 +389,7 @@ export class ExtraKeyWidgets {
     const widgetIds = this.widgetIds();
     if (widgetIds.length === 0) return;
     const now = new Date();
+    this.forgetOwnedZonesWhenDue(now.getTime());
     for (const wireId of widgetIds) {
       const cfg = this.configFor(wireId);
       if (this.mode === 'deckbridge-repaint' && !owns(cfg) && this.widgetDisplay(wireId)) {
@@ -401,6 +408,15 @@ export class ExtraKeyWidgets {
         this.driver.sendSplashImage(wireId, composeWidgetBmp(lines, spec.width), spec);
       }
     }
+  }
+
+  /** 'deckbridge-repaint': drop the paint cache of owned zones once per interval so
+   *  this tick re-uploads them, undoing anything drawn over them outside the mask. */
+  private forgetOwnedZonesWhenDue(nowMs: number): void {
+    if (this.mode !== 'deckbridge-repaint') return;
+    if (nowMs - this.lastForcedRepaintAt < this.repaintIntervalMs()) return;
+    this.lastForcedRepaintAt = nowMs;
+    for (const wireId of this.stripMask()) this.lastPainted.delete(wireId);
   }
 
   private widgetIds(): readonly number[] {

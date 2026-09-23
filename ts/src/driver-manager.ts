@@ -111,6 +111,8 @@ export class DriverManager {
       isBrightnessOverride: (deviceKey) => deps.webui.isBrightnessOverride(deviceKey),
       extraKeyConfigFor: (deviceKey, wireId) => deps.webui.extraKeyConfigFor(deviceKey, wireId),
       touchStripModeFor: (deviceKey) => deps.webui.touchStripModeFor(deviceKey),
+      touchStripRepaintMsFor: (deviceKey) =>
+        deps.webui.devicePrefs.touchStripRepaintMsFor(deviceKey),
       encoderSettingsFor: (deviceKey) => deps.webui.encoderSettingsFor(deviceKey),
     });
   }

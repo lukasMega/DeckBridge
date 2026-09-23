@@ -10,7 +10,7 @@ import { isModelOverridesRecord, validateModelOverride } from '../../devices/mod
 import { findModelById } from '../../devices/registry.js';
 import type { DeviceModelOverride } from '../../devices/driver.js';
 import { log } from '../../logger.js';
-import { isExtraKeyConfig, TOUCH_STRIP_MODES } from '../../types.js';
+import { isExtraKeyConfig, isTouchStripRepaintMs, TOUCH_STRIP_MODES } from '../../types.js';
 import type { DockStatus, ExtraKeyConfig } from '../../types.js';
 import type { UpdateState } from '../../update-check.js';
 import { encoderSettingsError } from './encoders-controller.js';
@@ -37,6 +37,9 @@ function stripInvalidDeviceSettings(d: unknown): void {
   if (r.touchStripMode !== undefined && !isTouchStripMode(r.touchStripMode)) {
     delete r.touchStripMode;
   }
+  if (r.touchStripRepaintMs !== undefined && !isTouchStripRepaintMs(r.touchStripRepaintMs)) {
+    delete r.touchStripRepaintMs;
+  }
   if (r.encoders !== undefined && encoderSettingsError(r.encoders)) delete r.encoders;
   delete r.touchStripDisabled;
 }
@@ -50,6 +53,7 @@ function hasValidDeviceSettings(r: Record<string, unknown>): boolean {
       IMAGE_MODE_SETTINGS.includes(r.imageModeOverride as null)) &&
     (r.extraKeys === undefined || isExtraKeysRecord(r.extraKeys)) &&
     (r.touchStripMode === undefined || isTouchStripMode(r.touchStripMode)) &&
+    (r.touchStripRepaintMs === undefined || isTouchStripRepaintMs(r.touchStripRepaintMs)) &&
     (r.encoders === undefined || encoderSettingsError(r.encoders) === null)
   );
 }

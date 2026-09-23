@@ -939,8 +939,9 @@ async function runSideKeysPanel(): Promise<void> {
     );
     check(
       rows('Touch strip').length === 0 &&
-        section('Touch strip').textContent.includes('DeckBridge widgets are off'),
-      'Elgato strip mode hides zone rows and says why',
+        section('Touch strip').textContent.includes('DeckBridge widgets are off') &&
+        section('Touch strip').querySelector('.xkeys-option') === null,
+      'Elgato strip mode hides zone rows, the repaint interval, and says why',
     );
 
     const modeSelect = root.querySelector<HTMLSelectElement>(
@@ -958,6 +959,19 @@ async function runSideKeysPanel(): Promise<void> {
     );
 
     await act(() => patch({ touchStripMode: 'deckbridge-repaint' }));
+    const repaintInput =
+      section('Touch strip').querySelector<HTMLInputElement>('.xkeys-option input');
+    check(repaintInput?.value === '5', 'Repaint mode shows the repaint interval, default 5 s');
+    repaintInput!.value = '2';
+    await act(() => {
+      repaintInput!.dispatchEvent(new Event('change'));
+    });
+    await settle();
+    const repaintPost = stub.calls.find((c) => c.url === '/api/touch-strip-repaint');
+    check(
+      (repaintPost?.body as { ms?: number } | undefined)?.ms === 2000,
+      'Repaint interval posts milliseconds',
+    );
     check(
       rows('Touch strip', ':not(.xkey-knob-row)').length === 4 &&
         rows('Touch strip', '.xkey-knob-row').length === 0,

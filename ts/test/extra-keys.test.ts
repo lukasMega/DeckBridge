@@ -353,6 +353,36 @@ for (const mode of TOUCH_STRIP_MODES) {
   });
 }
 
+for (const [intervalMs, uploads] of [
+  [0, 3],
+  [3_600_000, 1],
+] as const) {
+  await test(`'deckbridge-repaint' re-uploads owned zones per interval (${intervalMs} ms → ${uploads})`, () => {
+    const d = new FakeDriver();
+    d.model = AJAZZ_AKP05E_MODEL;
+    const w = new ExtraKeyWidgets(d, zone1Only, 'deckbridge-repaint', () => intervalMs);
+    w.start();
+    tick(w);
+    tick(w);
+    w.stop();
+    assert.deepEqual(
+      d.splashed.map((s) => s.keyIndex),
+      Array.from({ length: uploads }, () => 1),
+      'unowned zones are never forced',
+    );
+  });
+}
+
+await test("'deckbridge-ignore' never forces a repaint of unchanged zones", () => {
+  const d = new FakeDriver();
+  d.model = AJAZZ_AKP05E_MODEL;
+  const w = new ExtraKeyWidgets(d, zone1Only, 'deckbridge-ignore', () => 0);
+  w.start();
+  tick(w);
+  w.stop();
+  assert.equal(d.splashed.length, 1);
+});
+
 await test('start() re-pushes the mask even when unchanged (worker reset it on open)', () => {
   const { d, w } = stripDock('deckbridge-repaint');
   w.start();
