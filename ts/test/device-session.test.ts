@@ -7,7 +7,7 @@ import { DEFAULT_MODEL } from '../src/devices/registry.js';
 import { MIRABOX_293S_MODEL } from '../src/devices/mirabox/mirabox-293s.js';
 import { AJAZZ_AKP05E_MODEL } from '../src/devices/ajazz/akp05e.js';
 import { applyModelOverrides } from '../src/devices/model-overrides.js';
-import { deviceInputToMk2Index } from '../src/translator.js';
+import { deviceInputToMk2Index } from '../src/key-map.js';
 import {
   ELGATO_TCP_PORT,
   ELGATO_CHILD_PORT,

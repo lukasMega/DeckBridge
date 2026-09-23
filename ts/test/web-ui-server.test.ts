@@ -750,6 +750,39 @@ try {
   await imageModeUi.stop().catch(() => undefined);
 }
 
+// WebUIServer: GET /api/image/:key content type by stored format
+
+console.log('\nwebui: GET /api/image/:key content type');
+
+const IMAGE_ROUTE_TEST_PORT = 13005;
+const imageRouteUi = new WebUIServer(IMAGE_ROUTE_TEST_PORT, [], 'real', TEST_SETTINGS_ROOT);
+await imageRouteUi.start();
+
+try {
+  const base = `http://127.0.0.1:${imageRouteUi.port}`;
+
+  await runWebTest('jpeg frame → image/jpeg', async () => {
+    imageRouteUi.imageChannel.notifyImageUpdate(0, Buffer.from([1, 2, 3]), 'jpeg');
+    const r = await fetch(`${base}/api/image/0`);
+    assert.equal(r.status, 200);
+    assert.equal(r.headers.get('content-type'), 'image/jpeg');
+  });
+
+  await runWebTest('bmp frame → image/bmp', async () => {
+    imageRouteUi.imageChannel.notifyImageUpdate(1, Buffer.from([4, 5, 6]), 'bmp');
+    const r = await fetch(`${base}/api/image/1`);
+    assert.equal(r.status, 200);
+    assert.equal(r.headers.get('content-type'), 'image/bmp');
+  });
+
+  await runWebTest('missing key → 404', async () => {
+    const r = await fetch(`${base}/api/image/99`);
+    assert.equal(r.status, 404);
+  });
+} finally {
+  await imageRouteUi.stop().catch(() => undefined);
+}
+
 // WebUIServer settings persistence
 
 console.log('\nWebUIServer.getSettingsJson / applySettingsJson');
@@ -1312,6 +1345,14 @@ test('fullState exposes the log level and log path for the Settings page', () =>
   const state = ui.fullState();
   assert.equal(typeof state.logLevel, 'string');
   assert.ok(state.logFilePath.endsWith('deckbridge.log'), state.logFilePath);
+});
+
+test('fullState omits logs/commLogs in simple-only builds (the test build default)', () => {
+  const ui = new WebUIServer(undefined, [], 'real', TEST_SETTINGS_ROOT);
+  const state = ui.fullState();
+  assert.equal(state.logs, undefined, 'no log panel to receive it in a simple-only build');
+  assert.equal(state.commLogs, undefined, 'no comm panel to receive it in a simple-only build');
+  assert.ok(Array.isArray(state.keyEvents), 'keyEvents is unaffected');
 });
 
 await runWebTest(

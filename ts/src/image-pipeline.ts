@@ -43,17 +43,17 @@ export function setupImageHandler(
   childServer.on('image', ({ keyIndex, data, format }: ImageEvent) => {
     perfOnArrival();
 
-    // WebUI gets the original CORA image immediately — it never waits on the
-    // device. Dock 0 = primary; the WebUI broadcasts only the selected dock.
+    // USB latency first: hand the raw CORA image to the device driver before the
+    // WebUI mirror. The worker-backed real driver transforms (resize/rotate/encode),
+    // caches, and writes it off the main thread (renderCoraImage → 'image' worker
+    // message), so the FFI transform never stalls this CORA ACK loop. MockDriver
+    // omits renderCoraImage (its device is virtual), so `?.` makes this a no-op in
+    // mock mode.
+    getDriver()?.renderCoraImage?.(keyIndex, data, format);
+
+    // WebUI mirror. Dock 0 = primary; the WebUI broadcasts only the selected dock.
     webui.notifyDockImage(0, keyIndex, Buffer.from(data), format);
     perfOnWebUI();
-
-    // Hand the raw CORA image to the device driver. The worker-backed real driver
-    // transforms (resize/rotate/encode), caches, and writes it off the main thread
-    // (renderCoraImage → 'image' worker message), so the FFI transform
-    // never stalls this CORA ACK loop. MockDriver omits renderCoraImage (its device
-    // is virtual), so `?.` makes this a no-op in mock mode.
-    getDriver()?.renderCoraImage?.(keyIndex, data, format);
   });
 
   // Stream Deck + window image → device touch-segment displays. `region` is set

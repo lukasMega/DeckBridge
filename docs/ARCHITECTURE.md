@@ -149,7 +149,10 @@ Two lighter worker types sit outside the CORA/image hot path:
 
 To keep image bursts from flooding the WebUI, per-chunk CORA tx/ACK and keepalive logs are `debug`
 level, and `WebUIServer.notifyComm()` batches comm entries into one `commBatch` message every ~100 ms
-(`COMM_BROADCAST_FLUSH_MS`) instead of one WS message per chunk.
+(`COMM_BROADCAST_FLUSH_MS`) instead of one WS message per chunk. In `__SIMPLE_ONLY__` builds (the
+default — no log/comm panel exists to render them) the `commBatch`/`logBatch` broadcasts and the
+`/api/state` `logs`/`commLogs` fields are skipped entirely; the ring buffers themselves keep
+filling, since diagnostics reads them directly.
 
 ### Network exposure
 
@@ -453,7 +456,7 @@ A `<select id="model-select">` dropdown switches the advertised model in **mock 
 
 | Class | File | Owns |
 |---|---|---|
-| `ActivityBuffers` | `web/server/activity-buffers.ts` | ring buffers for logs/CORA-comm/key-events; batches comm entries on the `COMM_BROADCAST_FLUSH_MS` timer (see [Concurrency model](#concurrency-model)) |
+| `ActivityBuffers` | `web/server/activity-buffers.ts` | ring buffers for logs/CORA-comm/key-events; batches comm entries on the `COMM_BROADCAST_FLUSH_MS` timer (see [Concurrency model](#concurrency-model)); broadcast skipped in `__SIMPLE_ONLY__` builds, ring buffers still fill |
 | `DockRegistry` | `web/server/dock-registry.ts` | the live per-dock `DockStatus[]` list + which dock is selected |
 | `ImageChannel` | `web/server/image-channel.ts` | per-dock CORA image cache + the single live WS image channel (mirrors only the selected dock; instant dock-switch without an Elgato re-push) |
 | `PersistedSettings` | `web/server/persisted-settings.ts` | `settings.json` — see [Settings persistence](#settings-persistence) |

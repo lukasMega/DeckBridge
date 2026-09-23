@@ -91,6 +91,8 @@ export class ExtraDockCoordinator {
   // Keyed by hidPath (physical unit), NOT model.id — lets N same-model units
   // each hold their own session.
   private extraSessions = new Map<string, DeviceSession>();
+  // Per-hidPath post-pairing brightness resend timers.
+  private brightnessResendTimers = new Map<string, ReturnType<typeof setTimeout>>();
   /** Total docks allowed, primary included. 1 (the default) = single deck: no
    *  extras pool, and the scan timer never runs. Raised by setMaxDocks(). */
   private maxDocks = 1;
@@ -314,6 +316,9 @@ export class ExtraDockCoordinator {
       }),
     });
     this.extraSessions.set(hidPath, session);
+    servers.childServer.on('clientConnected', () =>
+      this.scheduleBrightnessResend(hidPath, session, deviceIdentity),
+    );
 
     try {
       await session.start();
@@ -335,12 +340,37 @@ export class ExtraDockCoordinator {
     }
   }
 
+  /** Re-push the saved brightness ~1s after pairing, as app.ts does for the
+   *  primary: the app's default-brightness handshake would stomp it.
+   *  `deviceIdentity` is the live settings entry, so this reads the current value. */
+  private scheduleBrightnessResend(
+    hidPath: string,
+    session: DeviceSession,
+    deviceIdentity: DeviceIdentitySettings,
+  ): void {
+    this.clearBrightnessResendTimer(hidPath);
+    const timer = setTimeout(() => {
+      this.brightnessResendTimers.delete(hidPath);
+      if (this.extraSessions.get(hidPath) === session)
+        session.setBrightness(deviceIdentity.brightness ?? session.status().brightness);
+    }, 1000);
+    this.brightnessResendTimers.set(hidPath, timer);
+  }
+
+  /** Cleared on teardown so it can't fire against a closed driver. */
+  private clearBrightnessResendTimer(hidPath: string): void {
+    const timer = this.brightnessResendTimers.get(hidPath);
+    if (timer) clearTimeout(timer);
+    this.brightnessResendTimers.delete(hidPath);
+  }
+
   /** Disconnect-driven teardown: the physical unit went away. Free the index so a
    *  new unit can reuse it. Keyed by hidPath (the physical interface). */
   private async teardownExtraSession(hidPath: string, index: number): Promise<void> {
     const session = this.extraSessions.get(hidPath);
     if (!session) return;
     this.extraSessions.delete(hidPath);
+    this.clearBrightnessResendTimer(hidPath);
     this.releaseIndex(index);
     await session.stop();
     log('info', 'coord', `extra dock down: ${hidPath} idx=${index}`);
@@ -351,6 +381,7 @@ export class ExtraDockCoordinator {
    *  by app.ts on shutdown. */
   async stopAllExtraSessions(): Promise<void> {
     const sessions = [...this.extraSessions.values()];
+    for (const hidPath of this.extraSessions.keys()) this.clearBrightnessResendTimer(hidPath);
     this.extraSessions.clear();
     this.freeIndices = freshIndexPool(this.maxDocks);
     for (const s of sessions) {

@@ -10,7 +10,6 @@ export interface CoraStartupDeps {
   server: CoraStartable;
   childServer: CoraStartable;
   log: (level: LogLevel, component: string, message: string) => void;
-  webuiLog: (level: LogLevel, component: string, message: string) => void;
   getShuttingDown: () => boolean;
   /** CORA primary TCP port (5343), included in the conflict message. */
   elgatoTcpPort: number;
@@ -31,8 +30,7 @@ export function coraPortConflict(primary: number, child: number, detail: string)
  * each iteration so a signal during the wait bails instead of retrying forever.
  */
 export async function startCoraWithRetry(deps: CoraStartupDeps, delayMs = 5000): Promise<void> {
-  const { server, childServer, log, webuiLog, getShuttingDown, elgatoTcpPort, elgatoChildPort } =
-    deps;
+  const { server, childServer, log, getShuttingDown, elgatoTcpPort, elgatoChildPort } = deps;
   for (let attempt = 1; ; attempt++) {
     if (getShuttingDown()) return;
     try {
@@ -41,8 +39,8 @@ export async function startCoraWithRetry(deps: CoraStartupDeps, delayMs = 5000):
       return;
     } catch (err) {
       const msg = coraPortConflict(elgatoTcpPort, elgatoChildPort, `attempt ${attempt}`);
+      // log() already mirrors to the WebUI (setWebUILog).
       log('error', 'elgato', `${msg}: ${(err as Error).message}`);
-      webuiLog('error', 'elgato', msg);
       await server.stop().catch(() => undefined);
       await childServer.stop().catch(() => undefined);
       await new Promise((r) => setTimeout(r, delayMs));

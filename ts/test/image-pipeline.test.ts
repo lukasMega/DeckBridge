@@ -228,6 +228,49 @@ await test('null driver does not throw and notifyImageUpdate still fires', () =>
   assert.equal(webui.notifyImageUpdateCalls[0]!.keyIndex, 1, 'keyIndex should be 1');
 });
 
+// 5. USB worker is posted before the WebUI mirror (B2 fix — latency first).
+await test('renderCoraImage fires before notifyDockImage', () => {
+  const childServer = new EventEmitter();
+  const model = makePassthroughModel();
+  const order: string[] = [];
+
+  const driver = Object.assign(new EventEmitter(), {
+    model,
+    renderCoraImage: (_keyIndex: number, _bytes: Uint8Array, _format: 'jpeg' | 'bmp') => {
+      order.push('worker');
+    },
+    sendImage: (_keyIndex: number, _bytes: Uint8Array) => {},
+    open: () => Promise.resolve(),
+    close: () => Promise.resolve(),
+    clearKey: (_keyIndex: number) => {},
+    setBrightness: (_level: number) => {},
+  });
+
+  const webui = {
+    notifyDockImage: (_dock: number, _keyIndex: number, _data: Buffer, _format?: string) => {
+      order.push('webui');
+    },
+  };
+
+  setupImageHandler(
+    childServer as unknown as ElgatoChildServer,
+    webui as unknown as WebUIServer,
+    () => driver,
+  );
+
+  childServer.emit('image', {
+    keyIndex: 3,
+    data: SOLID_RED_16X16_JPEG,
+    format: 'jpeg',
+  });
+
+  assert.deepEqual(
+    order,
+    ['worker', 'webui'],
+    'USB worker post must happen before the WebUI mirror',
+  );
+});
+
 // Summary
 
 summaryExit();

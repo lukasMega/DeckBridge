@@ -224,8 +224,8 @@ childServer.on('brightness', (level: number) => {
 });
 
 webui.on('regenPreviews', (_resizeOn: boolean) => {
-  for (const [keyIndex, jpeg] of webui.imageState.entries()) {
-    webui.notifyImageUpdate(keyIndex, jpeg);
+  for (const [keyIndex, data] of webui.imageState.entries()) {
+    webui.notifyImageUpdate(keyIndex, data, webui.imageChannel.imageFormat.get(keyIndex) ?? 'jpeg');
   }
 });
 
@@ -473,7 +473,6 @@ await step('deckBr', `cora bind :${ELGATO_TCP_PORT}/:${ELGATO_CHILD_PORT}`, () =
     server,
     childServer,
     log,
-    webuiLog: (level, component, message) => webui.log(level, component, message),
     getShuttingDown: () => shuttingDown,
     elgatoTcpPort: ELGATO_TCP_PORT,
     elgatoChildPort: ELGATO_CHILD_PORT,

@@ -44,7 +44,7 @@ export interface StoreState {
 export const TOUCH_STRIP_REPAINT_DEFAULT_MS = 5000; // mirrors types.ts
 
 let state: StoreState = {
-  status: { driverMode: 'real', driverConnected: false, elgatoConnected: false },
+  status: { driverMode: 'real', driverConnected: false, elgatoConnected: false, docks: [] },
   stats: { uptimeMs: 0, elgatoRxPkts: 0, elgatoTxPkts: 0, imagesSent: 0 },
   mockConfig: undefined,
   brightness: 82,

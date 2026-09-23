@@ -201,18 +201,21 @@ export class ElgatoChildServer extends CoraServerBase {
     if (payload.length < 1) return;
 
     try {
-      this.emitComm(
-        'rx',
-        describeChildPayload(
+      // Runs per image chunk on the ACK-paced hot path.
+      if (this.commTracing) {
+        this.emitComm(
+          'rx',
+          describeChildPayload(
+            payload,
+            flags,
+            hidOp,
+            messageId,
+            this.deviceConfig.productId,
+            this.port,
+          ),
           payload,
-          flags,
-          hidOp,
-          messageId,
-          this.deviceConfig.productId,
-          this.port,
-        ),
-        payload,
-      );
+        );
+      }
       this.routeChildPacket(flags, hidOp, messageId, payload);
     } catch (err) {
       this.emitLog('error', `child handleCoraPacket error: ${(err as Error).message}`);
@@ -440,11 +443,20 @@ export class ElgatoChildServer extends CoraServerBase {
     hidOp: number,
     messageId: number,
     description?: string,
+    // Per-chunk image ACKs and keepalives fire constantly during image bursts;
+    // callers mark them noisy so they log at debug instead of becoming an
+    // info-level WS broadcast per chunk.
+    noisy = false,
   ): void {
     const frame = encodeCoraFrame(payload, flags, hidOp, messageId);
     // Write FIRST, then trace — matching the base class. Elgato ACK-paces image
     // chunks, so anything ahead of the write throttles image delivery.
     this.client?.write(frame);
+
+    const wantsLog = isLevelEnabled(noisy ? 'debug' : 'info');
+    const wantsComm = this.commTracing;
+    if (!wantsLog && !wantsComm) return;
+
     const desc =
       description ??
       describeChildPayload(
@@ -455,15 +467,13 @@ export class ElgatoChildServer extends CoraServerBase {
         this.deviceConfig.productId,
         this.port,
       );
-    const msSinceConnect = this.sessionStartTs ? `+${Date.now() - this.sessionStartTs}ms` : '';
-    // Per-chunk image ACKs and keepalives fire constantly during image bursts;
-    // demote them to debug so they don't each become an info-level WS broadcast.
-    const isNoisy =
-      description?.startsWith('CORA AckNak') || description?.startsWith('CORA keepalive');
-    this.emitLog(
-      isNoisy ? 'debug' : 'info',
-      `child tx: ${desc} (${frame.length}B)${msSinceConnect}`,
-    );
-    this.emitComm('tx', desc, frame);
+    if (wantsLog) {
+      const msSinceConnect = this.sessionStartTs ? `+${Date.now() - this.sessionStartTs}ms` : '';
+      this.emitLog(
+        noisy ? 'debug' : 'info',
+        `child tx: ${desc} (${frame.length}B)${msSinceConnect}`,
+      );
+    }
+    if (wantsComm) this.emitComm('tx', desc, frame);
   }
 }

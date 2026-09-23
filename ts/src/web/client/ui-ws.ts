@@ -12,6 +12,7 @@ import { applyImage, clearImage, flashKey, resetPreviews } from './key-preview.j
 import { applyTouchImage, resetTouchStrip, type TouchFrameMsg } from './touch-strip-preview.js';
 import * as store from './store.js';
 import type { StoreState } from './store.js';
+import { hydrate, type InitialState } from './hydrate.js';
 
 interface ImageEvt {
   mk2Index: number;
@@ -104,12 +105,11 @@ export function connectWS(): void {
 
   ws.addEventListener('open', () => {
     if (_wsConnected) {
+      // Full re-hydrate: an app restart while disconnected changes more than images.
       void fetch('/api/state')
-        .then((r) => r.json() as Promise<{ images: Record<string, number> }>)
+        .then((r) => r.json() as Promise<InitialState>)
         .then((st) => {
-          for (const [k, v] of Object.entries(st.images)) {
-            applyImage(Number(k), { v });
-          }
+          hydrate(st);
           return undefined;
         });
     }

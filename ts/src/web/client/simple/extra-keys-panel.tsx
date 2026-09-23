@@ -338,7 +338,7 @@ export function ExtraKeysPanel(): preact.JSX.Element | null {
 
   if (status.driverMode === 'mock') return null;
   const selected = status.selectedDock ?? 0;
-  const dock = status.docks?.find((d) => d.index === selected) ?? status.docks?.[0];
+  const dock = status.docks.find((d) => d.index === selected) ?? status.docks[0];
   const sections = widgetSections(dock);
   if (sections.length === 0) return null;
 

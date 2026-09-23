@@ -619,14 +619,12 @@ await runTest('retries on bind failure, logs conflict, and eventually succeeds',
   const server2 = new FakeCoraServer(2); // fails twice, then succeeds
   const childServer2 = new FakeCoraServer(0);
   const logs: { level: string; component: string; message: string }[] = [];
-  const webuiLogs: { level: string; component: string; message: string }[] = [];
 
   await startCoraWithRetry(
     {
       server: server2,
       childServer: childServer2,
       log: (level, component, message) => logs.push({ level, component, message }),
-      webuiLog: (level, component, message) => webuiLogs.push({ level, component, message }),
       getShuttingDown: () => false,
       elgatoTcpPort: 5343,
       elgatoChildPort: 5344,
@@ -646,8 +644,6 @@ await runTest('retries on bind failure, logs conflict, and eventually succeeds',
   assert.ok(errorLogs[0]!.message.includes('5343/5344'));
   assert.ok(errorLogs[0]!.message.includes('attempt 1'));
   assert.ok(errorLogs[1]!.message.includes('attempt 2'));
-  assert.equal(webuiLogs.length, 2, 'one webui conflict log per failed attempt');
-  assert.ok(webuiLogs[0]!.message.includes('is another DeckBridge / Elgato dock running?'));
 });
 
 await runTest('bails immediately if shutdown is already in progress', async () => {
@@ -660,7 +656,6 @@ await runTest('bails immediately if shutdown is already in progress', async () =
       server: server2,
       childServer: childServer2,
       log: (level, component, message) => logs.push({ level, component, message }),
-      webuiLog: () => {},
       getShuttingDown: () => true,
       elgatoTcpPort: 5343,
       elgatoChildPort: 5344,
@@ -684,7 +679,6 @@ await runTest('shuttingDown flag set during wait stops further retries', async (
       server: server2,
       childServer: childServer2,
       log: () => {},
-      webuiLog: () => {},
       getShuttingDown: () => shuttingDown,
       elgatoTcpPort: 5343,
       elgatoChildPort: 5344,

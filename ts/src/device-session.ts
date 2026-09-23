@@ -28,7 +28,7 @@ import type {
 } from './types.js';
 import type { DeviceIdentitySettings } from './settings-store.js';
 import { advertisedGeometry, advertisedModel, advertisedTouchStrip } from './devices/registry.js';
-import { deviceInputToExtraKey, deviceInputToMk2Index } from './translator.js';
+import { deviceInputToExtraKey, deviceInputToMk2Index } from './key-map.js';
 import { sendSplashImages } from './splash-sender.js';
 import { ExtraKeyWidgets } from './extra-keys.js';
 import { EncoderActions, type EncoderOverride } from './encoders.js';

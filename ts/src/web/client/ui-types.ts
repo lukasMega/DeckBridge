@@ -36,7 +36,7 @@ export interface DockUi {
   primaryPort: number;
   primaryConnected: boolean; // primary (Network Dock) CORA client = app discovered us
   elgatoConnected: boolean;
-  brightness?: number; // absent on legacy-synthesized entries (deriveDocks)
+  brightness: number;
   extraKeys?: number[]; // wire ids of keys outside the emulated grid (293S 6th column)
   pressableExtraKeys?: number[]; // the extraKeys with a switch (AKP05E right column as a Plus)
   widgetDisplays?: Array<{ wireId: number; label: string }>;
@@ -68,7 +68,7 @@ export interface Status {
   elgatoAppConflict?: boolean;
   elgatoDevicePresent?: boolean;
   localIp?: string;
-  docks?: DockUi[];
+  docks: DockUi[];
   selectedDock?: number;
 }
 

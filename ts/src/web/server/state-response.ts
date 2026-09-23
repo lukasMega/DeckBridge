@@ -52,8 +52,9 @@ export function buildStateResponse(input: StateResponseInputs): StateResponse {
   return {
     ...snapshot,
     images,
-    logs: activity.logs,
-    commLogs: activity.comms,
+    // Simple builds have no log/comm panel to render these — omit from the wire
+    // payload (client defaults them to [], see hydrate.ts).
+    ...(__SIMPLE_ONLY__ ? {} : { logs: activity.logs, commLogs: activity.comms }),
     keyEvents: activity.keyEvents,
     ...rest,
   };

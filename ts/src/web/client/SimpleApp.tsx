@@ -8,7 +8,7 @@
 import { useEffect, useState } from 'preact/hooks';
 import { fire } from './ui-api.js';
 import { useStore } from './store.js';
-import { deriveState, deriveDocks, isMultiDockView, updateBadgeVersion } from './ui-helpers.js';
+import { deriveState, isMultiDockView, updateBadgeVersion } from './ui-helpers.js';
 import { switchToAdvanced } from './simple/handlers.js';
 import { AboutPopover, SettingsPage, HelpScreen } from './simple/overlays.js';
 import { BackButton } from './simple/controls.js';
@@ -37,7 +37,7 @@ export function SimpleApp(): preact.JSX.Element {
   }, []);
 
   const deviceState = deriveState(status);
-  const docks = deriveDocks(status);
+  const docks = status.docks;
 
   const openAbout = (): void => setAboutOpen(true);
   const closeAbout = (): void => setAboutOpen(false);

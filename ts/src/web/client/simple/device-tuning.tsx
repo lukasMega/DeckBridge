@@ -67,7 +67,7 @@ const NUMBER_FIELDS: ReadonlyArray<{
 function selectedModel(state: StoreState): string | undefined {
   const selectedDock = state.status.selectedDock ?? 0;
   return (
-    state.status.docks?.find((dock) => dock.index === selectedDock)?.modelId ?? state.status.modelId
+    state.status.docks.find((dock) => dock.index === selectedDock)?.modelId ?? state.status.modelId
   );
 }
 

@@ -30,9 +30,9 @@ function makeFakeDriver(): {
 console.log('\nimage-render: renderImage (Rust sidecar)');
 
 // 1. sidecar model produces a valid JPEG ≤ maxBytes.
-await test('sidecar model produces a valid JPEG ≤ maxBytes', async () => {
+await test('sidecar model produces a valid JPEG ≤ maxBytes', () => {
   const fake = makeFakeDriver();
-  await renderImage(fake, MIRABOX_293_MODEL, 0, SOLID_RED_16X16_JPEG, 'jpeg');
+  renderImage(fake, MIRABOX_293_MODEL, 0, SOLID_RED_16X16_JPEG, 'jpeg');
 
   assert.equal(fake.calls.length, 1, 'sendImage should be called once');
   const bytes = fake.calls[0]!.bytes;
@@ -47,16 +47,16 @@ await test('sidecar model produces a valid JPEG ≤ maxBytes', async () => {
 // 2. cache hit returns identical bytes (transform runs once).
 // Uses a distinct source image (one mutated byte deep in the entropy-coded
 // scan) so it cannot collide with case 1/3's cache entry.
-await test('second identical image is a cache hit (same bytes)', async () => {
+await test('second identical image is a cache hit (same bytes)', () => {
   const distinct = Buffer.from(SOLID_RED_16X16_JPEG);
   distinct[distinct.length - 5] = (distinct[distinct.length - 5]! ^ 0x55) & 0xff;
   const fake = makeFakeDriver();
 
-  await renderImage(fake, MIRABOX_293_MODEL, 1, distinct, 'jpeg');
+  renderImage(fake, MIRABOX_293_MODEL, 1, distinct, 'jpeg');
   assert.equal(fake.calls.length, 1, 'first render should call sendImage once');
   const firstBytes = fake.calls[0]!.bytes;
 
-  await renderImage(fake, MIRABOX_293_MODEL, 1, distinct, 'jpeg');
+  renderImage(fake, MIRABOX_293_MODEL, 1, distinct, 'jpeg');
   assert.equal(fake.calls.length, 2, 'second render should call sendImage again');
   const secondBytes = fake.calls[1]!.bytes;
 
@@ -68,9 +68,9 @@ await test('second identical image is a cache hit (same bytes)', async () => {
 });
 
 // 3. key remap: sendImage keyIndex equals coraToWireImage[0] (NOT 0).
-await test('key remap: sendImage receives mapped device key index', async () => {
+await test('key remap: sendImage receives mapped device key index', () => {
   const fake = makeFakeDriver();
-  await renderImage(fake, MIRABOX_293_MODEL, 0, SOLID_RED_16X16_JPEG, 'jpeg');
+  renderImage(fake, MIRABOX_293_MODEL, 0, SOLID_RED_16X16_JPEG, 'jpeg');
 
   assert.equal(fake.calls.length, 1, 'sendImage should be called once');
   assert.equal(
@@ -81,9 +81,9 @@ await test('key remap: sendImage receives mapped device key index', async () => 
 });
 
 // 4. out-of-range key (coraToWireImage[99] === undefined → -1) is skipped.
-await test('out-of-range key is skipped (no sendImage)', async () => {
+await test('out-of-range key is skipped (no sendImage)', () => {
   const fake = makeFakeDriver();
-  await renderImage(fake, MIRABOX_293_MODEL, 99, SOLID_RED_16X16_JPEG, 'jpeg');
+  renderImage(fake, MIRABOX_293_MODEL, 99, SOLID_RED_16X16_JPEG, 'jpeg');
 
   assert.equal(
     fake.calls.length,
@@ -93,14 +93,14 @@ await test('out-of-range key is skipped (no sendImage)', async () => {
 });
 
 // 5. passthrough model forwards original bytes unchanged (no transform).
-await test('passthrough model forwards original bytes unchanged', async () => {
+await test('passthrough model forwards original bytes unchanged', () => {
   const model = makePassthroughModel();
   const fake = makeFakeDriver();
   // Distinct bytes that begin like a JPEG but are not a real image — proves no
   // transform ran (a transform would reject/alter these).
   const someBytes = Buffer.from([0xff, 0xd8, 0x11, 0x22, 0x33, 0x44, 0x55, 0xff, 0xd9]);
 
-  await renderImage(fake, model, 1, someBytes, 'jpeg');
+  renderImage(fake, model, 1, someBytes, 'jpeg');
 
   assert.equal(fake.calls.length, 1, 'sendImage should be called once');
   const call = fake.calls[0]!;

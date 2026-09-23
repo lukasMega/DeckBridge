@@ -1,7 +1,14 @@
 import { render } from 'preact';
 import { act } from 'preact/test-utils';
 import { useLayoutEffect } from 'preact/hooks';
-import { addKeyEvent, patch, setBrightness, useStore } from '../src/web/client/store.js';
+import {
+  addKeyEvent,
+  getSnapshot,
+  patch,
+  setBrightness,
+  useStore,
+} from '../src/web/client/store.js';
+import { hydrate } from '../src/web/client/hydrate.js';
 import { CopyChip } from '../src/web/client/simple/controls.js';
 import { LogConsolePanel } from '../src/web/client/advanced-log-panel.js';
 import { DeviceTuningPanel } from '../src/web/client/simple/device-tuning.js';
@@ -218,6 +225,46 @@ async function run(): Promise<void> {
   await runChipRadioGroup();
   await runTouchStripPreview();
   runUpdateBadge();
+  runHydrateRegression();
+}
+
+// B4: WS reconnect used to re-apply only images, leaving extraKeys/encoders/
+// touchStripMode/brightnessOverride/updateInfo stale after an app restart.
+// hydrate() is now the single entry point for both first load and reconnect.
+function runHydrateRegression(): void {
+  patch({
+    extraKeys: {},
+    touchStripMode: 'elgato',
+    brightnessOverride: true,
+    updateInfo: undefined,
+  });
+  hydrate({
+    driverMode: 'real',
+    driverConnected: true,
+    elgatoConnected: true,
+    docks: [],
+    stats: { uptimeMs: 1, elgatoRxPkts: 0, elgatoTxPkts: 0, imagesSent: 0 },
+    images: {},
+    extraKeys: { '11': { widget: 'command', param: 'date' } },
+    touchStripMode: 'deckbridge-repaint',
+    brightnessOverride: false,
+    updateInfo: { enabled: true, current: '0.14.1', updateAvailable: true, latest: '0.15.0' },
+  });
+  const snap = getSnapshot();
+  check(
+    JSON.stringify(snap.extraKeys) ===
+      JSON.stringify({ '11': { widget: 'command', param: 'date' } }),
+    'hydrate() re-applies extraKeys',
+  );
+  check(snap.touchStripMode === 'deckbridge-repaint', 'hydrate() re-applies touchStripMode');
+  check(!snap.brightnessOverride, 'hydrate() re-applies brightnessOverride');
+  check(snap.updateInfo?.latest === '0.15.0', 'hydrate() re-applies updateInfo');
+  patch({
+    extraKeys: {},
+    touchStripMode: 'elgato',
+    brightnessOverride: true,
+    updateInfo: undefined,
+  });
 }
 
 /** Base64 JPEG body of a solid w×h block. */
@@ -350,7 +397,12 @@ async function settle(): Promise<void> {
 }
 
 /** Minimum status the learn-mode grid prompts need. */
-const baseStatus = { driverMode: 'real' as const, driverConnected: true, elgatoConnected: true };
+const baseStatus = {
+  driverMode: 'real' as const,
+  driverConnected: true,
+  elgatoConnected: true,
+  docks: [] as DockUi[],
+};
 
 async function checkBatchImageTransferTuning(): Promise<void> {
   for (const [modelId, enabled] of [
@@ -542,6 +594,7 @@ async function runSettingsPanels(): Promise<void> {
         primaryPort: 5325,
         primaryConnected: true,
         elgatoConnected: true,
+        brightness: 100,
       },
       {
         index: 1,
@@ -553,6 +606,7 @@ async function runSettingsPanels(): Promise<void> {
         primaryPort: 5345,
         primaryConnected: true,
         elgatoConnected: true,
+        brightness: 100,
       },
     ];
     const stub = stubFetch((url) => ({
@@ -617,6 +671,7 @@ async function runSettingsPanels(): Promise<void> {
         primaryPort: 5325,
         primaryConnected: true,
         elgatoConnected: true,
+        brightness: 100,
       },
       {
         index: 1,
@@ -628,6 +683,7 @@ async function runSettingsPanels(): Promise<void> {
         primaryPort: 5345,
         primaryConnected: true,
         elgatoConnected: true,
+        brightness: 100,
       },
     ];
     const stub = stubFetch((url, init) => {
@@ -827,6 +883,7 @@ const DOCKS: DockUi[] = [
     primaryPort: 5343,
     primaryConnected: true,
     elgatoConnected: true,
+    brightness: 100,
   },
   {
     index: 1,
@@ -838,6 +895,7 @@ const DOCKS: DockUi[] = [
     primaryPort: 5345,
     primaryConnected: true,
     elgatoConnected: true,
+    brightness: 100,
   },
 ];
 
@@ -950,6 +1008,7 @@ const AKP05E_DOCK: DockUi = {
   primaryPort: 5343,
   primaryConnected: true,
   elgatoConnected: true,
+  brightness: 100,
   extraKeys: [10, 11, 12],
   pressableExtraKeys: [10, 11, 12],
   widgetDisplays: [20, 21, 22, 23].map((wireId, i) => ({ wireId, label: `Zone ${i + 1}` })),

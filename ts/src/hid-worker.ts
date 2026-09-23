@@ -143,15 +143,15 @@ function applyLiveOverrides(overrides?: DeviceModelOverride): void {
 
 /** Render one CORA image frame: transform (via image-render.ts) + notify main
  *  thread. Guards on driver+currentModel; no-ops if the driver is gone. */
-async function handleImage(
+function handleImage(
   keyIndex: number,
   bytes: Uint8Array,
   format: 'jpeg' | 'bmp',
   deferNotification: boolean,
-): Promise<void> {
+): void {
   if (!driver || !currentModel) return;
   const mode = imageFitPinned ? null : imageOverride;
-  await renderImage(driver, currentModel, keyIndex, bytes, format, mode);
+  renderImage(driver, currentModel, keyIndex, bytes, format, mode);
   if (!deferNotification) post({ type: 'imageSent', keyIndex });
 }
 
@@ -243,7 +243,7 @@ async function handle(msg: MainToWorker, deferNotification: boolean): Promise<vo
       await handleOpen(msg.modelId, msg.hidPath, msg.overrides);
       break;
     case 'image':
-      await handleImage(msg.keyIndex, msg.bytes, msg.format, deferNotification);
+      handleImage(msg.keyIndex, msg.bytes, msg.format, deferNotification);
       break;
     case 'sendImage':
       driver?.sendImage(msg.keyIndex, msg.bytes);

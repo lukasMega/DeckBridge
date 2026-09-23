@@ -37,42 +37,17 @@ export function isMultiDockView(docks: DockUi[]): boolean {
   return docks.length > 1 || (docks.length === 1 && docks[0]!.index !== 0);
 }
 
-// Returns the multi-dock list when the server provides one; otherwise synthesizes
-// a single-entry list from legacy top-level fields so the client keeps working
-// against an older server bundle (dev skew between client/server builds).
-export function deriveDocks(s: Status): DockUi[] {
-  if (s.docks && s.docks.length > 0) return s.docks;
-  if (!s.driverConnected) return [];
-  const keyCount = s.keyCount ?? 15;
-  const columns = s.columns ?? 5;
-  return [
-    {
-      index: 0,
-      modelId: s.modelId ?? '',
-      modelName: s.modelName ?? 'Stream Deck MK.2',
-      keyCount,
-      columns,
-      rows: Math.ceil(keyCount / columns),
-      primaryPort: 5343,
-      // Legacy server has no per-dock primary signal: child-connected implies
-      // primary-connected; otherwise conservatively false.
-      primaryConnected: s.elgatoConnected,
-      elgatoConnected: s.elgatoConnected,
-    },
-  ];
-}
-
 /** The selected dock's re-paired CORA profile — the single-dock views read the
  *  top-level status, which has no per-dock fields. */
 export function selectedCoraProfile(s: Status): string | undefined {
   const selected = s.selectedDock ?? 0;
-  return s.docks?.find((d) => d.index === selected)?.coraProfile;
+  return s.docks.find((d) => d.index === selected)?.coraProfile;
 }
 
 /** The selected dock's advertised touch strip, if its profile has one. */
 export function selectedTouchStripSize(s: Status): TouchStripSize | undefined {
   const selected = s.selectedDock ?? 0;
-  return s.docks?.find((d) => d.index === selected)?.touchStripSize;
+  return s.docks.find((d) => d.index === selected)?.touchStripSize;
 }
 
 export type ThemePref = 'light' | 'dark' | 'auto';

@@ -23,6 +23,7 @@ import type { DiagnosticsOptions } from './diagnostics.js';
 import type { PersistedSettings } from './persisted-settings.js';
 import type { UpdateController } from './update-controller.js';
 import type { DevicePrefsController } from './device-prefs-controller.js';
+import type { ImageChannel } from './image-channel.js';
 
 /** A rejected request: the message the WebUI shows, plus its HTTP status. */
 /** Result of a persisted device-tuning change: how the live session applies it
@@ -115,8 +116,9 @@ export interface StatusSnapshot {
 
 export interface StateResponse extends StatusSnapshot {
   images: Record<string, number>;
-  logs: LogEntry[];
-  commLogs: CommEntry[];
+  // Omitted from the wire payload in simple-only builds — see state-response.ts.
+  logs?: LogEntry[];
+  commLogs?: CommEntry[];
   keyEvents: KeyEventEntry[];
   stats: Stats;
   mockConfig: MockDeviceConfig;
@@ -156,6 +158,7 @@ export interface WebUIController {
   readonly selectedDock: number;
   fullState(): StateResponse;
   getImage(key: number): Buffer | undefined;
+  readonly imageChannel: Pick<ImageChannel, 'imageFormat'>;
   notifyBrightness(level: number): void;
   notifyResizeToggle(enabled: boolean): void;
   notifyBrightnessOverride(enabled: boolean): void;
