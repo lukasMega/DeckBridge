@@ -76,6 +76,7 @@ export function DockCard({
           dimmed={!dock.elgatoConnected}
           modelId={dock.modelId}
           coraProfile={dock.coraProfile}
+          touchStrip={dock.touchStripSize}
         />
       ) : (
         <KeyGridPreview

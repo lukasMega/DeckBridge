@@ -550,7 +550,38 @@ test('selectDock swaps the channel and replays the cached frames', () => {
   assert.ok(!ui.imageState.has(0), "old dock's frames dropped from the channel");
   assert.ok(ui.imageState.has(2), "new dock's frames now in the channel");
   assert.equal(ui.snapshot().selectedDock, 1);
-  assert.equal(ui.imageFormat.get(2), 'bmp', 'replay keeps the frame format');
+  assert.equal(ui.imageChannel.imageFormat.get(2), 'bmp', 'replay keeps the frame format');
+});
+
+test('touch-strip frames: full resets, a window replaces its own region, snapshot in order', () => {
+  const ui = new WebUIServer(undefined, [], 'real', TEST_SETTINGS_ROOT);
+  ui.notifyDocks([fakeDockStatus(0), fakeDockStatus(1)]);
+  const touch = ui.imageChannel;
+  const a = { x: 0, y: 0, w: 200, h: 100 };
+  touch.notifyDockTouchImage(0, new Uint8Array([1]));
+  touch.notifyDockTouchImage(0, new Uint8Array([2]), a);
+  touch.notifyDockTouchImage(0, new Uint8Array([3]), { x: 200, y: 0, w: 200, h: 100 });
+  touch.notifyDockTouchImage(0, new Uint8Array([4]), a);
+  touch.notifyDockTouchImage(1, new Uint8Array([9]));
+
+  const { sent } = connectMockClient(ui);
+  sent.length = 0;
+  touch.sendTouchSnapshot(
+    (ui as unknown as { bus: { clients: Set<ServerWebSocket> } }).bus.clients.values().next()
+      .value!,
+  );
+  const frames = sent.map((m) => JSON.parse(m) as { event: string; data: { data: string } });
+  assert.deepEqual(
+    frames.map((f) => [...Buffer.from(f.data.data, 'base64')][0]),
+    [1, 3, 4],
+    'full frame, then windows in paint order; the repainted window moved last',
+  );
+  assert.ok(frames.every((f) => f.event === 'touchImage'));
+
+  sent.length = 0;
+  touch.notifyDockTouchImage(0, new Uint8Array([5]));
+  touch.notifyDockTouchImage(1, new Uint8Array([6]));
+  assert.equal(sent.length, 1, 'only the selected dock broadcasts');
 });
 
 test('selecting an unknown/removed dock is rejected; unplug falls back to 0', () => {

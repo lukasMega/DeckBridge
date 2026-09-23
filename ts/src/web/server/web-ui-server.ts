@@ -66,12 +66,9 @@ export class WebUIServer extends EventEmitter implements WebUIController {
   readonly devicePrefs: DevicePrefsController;
   private readonly encoders: EncodersController;
   readonly updates: UpdateController;
-  private readonly imageChannel = new ImageChannel(this.bus, () => this.selectedDock);
+  readonly imageChannel = new ImageChannel(this.bus, () => this.selectedDock);
   get imageState(): Map<number, Buffer> {
     return this.imageChannel.imageState;
-  }
-  get imageFormat(): Map<number, ImageFormat> {
-    return this.imageChannel.imageFormat;
   }
   get selectedDock(): number {
     return this.dockRegistry.selectedDock;
@@ -208,7 +205,10 @@ export class WebUIServer extends EventEmitter implements WebUIController {
       port: this._port,
       listenIp: webuiBindAddr(),
       fetch: (req, extra) => this.handleRequest(req, extra),
-      websocket: this.bus.websocketHandlers((ws) => this.bus.sendTo(ws, 'status', this.snapshot())),
+      websocket: this.bus.websocketHandlers((ws) => {
+        this.bus.sendTo(ws, 'status', this.snapshot());
+        this.imageChannel.sendTouchSnapshot(ws);
+      }),
     });
 
     this.bus.start(() => {

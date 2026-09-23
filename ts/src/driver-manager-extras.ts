@@ -7,7 +7,13 @@ import { closeDriver, type WorkerHidDriver } from './hid-worker-host.js';
 import type { DeviceModel, DeviceModelOverride } from './devices/driver.js';
 import type { DriverMode } from './driver-manager-discovery.js';
 import { HID_POLL_INTERVAL_MS, MAX_DEVICE_SESSIONS, MDNS_SERVICE_NAME } from './types.js';
-import type { DockStatus, EncoderSettings, ExtraKeyConfig, TouchStripMode } from './types.js';
+import type {
+  DockStatus,
+  EncoderSettings,
+  ExtraKeyConfig,
+  TouchStripMode,
+  TouchWindowRegion,
+} from './types.js';
 import { DEVICE_MODELS, findModelById } from './devices/registry.js';
 import {
   DeviceSession,
@@ -58,6 +64,8 @@ export interface ExtraDockCoordinatorDeps {
   onSessionsChanged?: () => void;
   /** Per-dock mirror of raw CORA key images (WebUI selected-dock preview). */
   onImage?: (dockIndex: number, keyIndex: number, data: Uint8Array, format: 'jpeg' | 'bmp') => void;
+  /** WebUI strip-preview mirror; DeviceSession owns the device-side render. */
+  onTouchImage?: (dockIndex: number, data: Uint8Array, region?: TouchWindowRegion) => void;
   /** This dock's cached CORA frames, for repainting after a live tuning swap. */
   dockFramesSnapshot?: (dockIndex: number) => DockFrames;
   /** Per-device "ignore brightness from Elgato app" override, resolved by the
@@ -275,6 +283,11 @@ export class ExtraDockCoordinator {
     );
     const identity = sessionIdentity(index, deviceIdentity);
     const servers = factory(identity);
+    servers.childServer.on(
+      'touchImage',
+      ({ data, region }: { data: Uint8Array; region?: TouchWindowRegion }) =>
+        this.deps.onTouchImage?.(index, data, region),
+    );
     const session = new DeviceSession({
       identity,
       servers,

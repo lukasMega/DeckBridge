@@ -74,3 +74,13 @@ export function advertisedModel(model: DeviceModel): DeviceModel {
 export function advertisedGeometry(model: DeviceModel): ChildGeometry {
   return modelToChildGeometry(advertisedModel(model));
 }
+
+/** DockStatus `touchStripSize` spread: the advertised strip, or nothing. */
+export function advertisedTouchStrip(model: DeviceModel): {
+  touchStripSize?: { width: number; height: number };
+} {
+  const { touchWidth, touchHeight } = advertisedGeometry(model);
+  return touchWidth && touchHeight
+    ? { touchStripSize: { width: touchWidth, height: touchHeight } }
+    : {};
+}

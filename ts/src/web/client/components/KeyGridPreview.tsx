@@ -8,6 +8,32 @@
 // need the shell but not a KeyPreview instance.
 import { useEffect, useRef } from 'preact/hooks';
 import { KeyPreview } from '../key-preview.js';
+import { attachTouchCanvas } from '../touch-strip-preview.js';
+import type { TouchStripSize } from '../ui-types.js';
+
+/** Live strip under the keys; the canvas keeps the app's native pixel size and
+ *  CSS scales it, so frame regions map 1:1. */
+function TouchStripPreview({ width, height }: Readonly<TouchStripSize>): preact.JSX.Element {
+  const ref = useRef<HTMLCanvasElement>(null);
+  // Re-attach on a size change: resizing a canvas wipes it.
+  useEffect(
+    function attachStrip() {
+      const el = ref.current;
+      return el ? attachTouchCanvas(el) : undefined;
+    },
+    [width, height],
+  );
+  return (
+    <canvas
+      ref={ref}
+      class="touch-strip-preview"
+      width={width}
+      height={height}
+      style={`aspect-ratio:${width}/${height}`}
+      aria-label="Touch strip preview"
+    />
+  );
+}
 
 export function KeyGridPreview({
   keyCount,
@@ -22,6 +48,7 @@ export function KeyGridPreview({
   flash,
   onKeyClick,
   clickable,
+  touchStrip,
 }: Readonly<{
   keyCount: number;
   columns: number;
@@ -43,6 +70,8 @@ export function KeyGridPreview({
   onKeyClick?: (index: number) => void;
   /** Toggle the clickable cell state; undefined = never touched (simple view). */
   clickable?: boolean;
+  /** Advertised touch-strip size; shows the live strip under the keys. */
+  touchStrip?: TouchStripSize;
 }>): preact.JSX.Element {
   const isCompact = keyCount === 6;
   const gridRef = useRef<HTMLDivElement>(null);
@@ -80,7 +109,10 @@ export function KeyGridPreview({
         <span class="live-dot">{badge ?? (dimmed ? 'Paused' : 'Live')}</span>
       </div>
       {live ? (
-        <div ref={gridRef} />
+        <>
+          <div ref={gridRef} />
+          {touchStrip && <TouchStripPreview width={touchStrip.width} height={touchStrip.height} />}
+        </>
       ) : (
         <div class="key-grid" style={`grid-template-columns:repeat(${columns},1fr)`}>
           {Array.from({ length: keyCount }, (_, i) => (

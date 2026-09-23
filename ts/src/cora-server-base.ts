@@ -46,6 +46,12 @@ export abstract class CoraServerBase extends EventEmitter {
     return this.client !== null;
   }
 
+  /** Close the attached client but keep listening. Unlike stop(), `client` stays
+   *  set until the socket's close handler runs, so 'clientDisconnected' fires. */
+  dropClient(): void {
+    this.client?.destroy();
+  }
+
   protected startServer(): Promise<void> {
     return new Promise((resolve, reject) => {
       let started = false;

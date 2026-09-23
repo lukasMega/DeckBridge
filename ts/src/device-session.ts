@@ -27,7 +27,7 @@ import type {
   TouchStripMode,
 } from './types.js';
 import type { DeviceIdentitySettings } from './settings-store.js';
-import { advertisedGeometry, advertisedModel } from './devices/registry.js';
+import { advertisedGeometry, advertisedModel, advertisedTouchStrip } from './devices/registry.js';
 import { deviceInputToExtraKey, deviceInputToMk2Index } from './translator.js';
 import { sendSplashImages } from './splash-sender.js';
 import { ExtraKeyWidgets } from './extra-keys.js';
@@ -109,6 +109,7 @@ export function buildDockStatus(s: DockStatusInput): DockStatus {
       : {}),
     ...(encoderCount ? { encoderCount } : {}),
     ...(model.cora.advertiseAs ? { coraProfile: model.cora.advertiseAs } : {}),
+    ...advertisedTouchStrip(model),
     modelId: model.id,
     modelName: model.name,
     keyCount: model.keyCount,

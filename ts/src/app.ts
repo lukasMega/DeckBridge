@@ -1,6 +1,6 @@
 import { resolveTrayBin, startTray } from './tray.js';
 import type { TrayHandle, TrayState } from './tray.js';
-import { ElgatoServer, ElgatoChildServer } from './elgato.js';
+import { ElgatoServer, ElgatoChildServer, watchPairing } from './elgato.js';
 import { WebUIServer } from './web/server';
 import type { MockDeviceConfig } from './web/server';
 import { MockDriver } from './devices/mock.js';
@@ -88,6 +88,7 @@ const childServer = new ElgatoChildServer(
   server.deviceConfig,
   false,
 );
+watchPairing(server, childServer, 'dock 0');
 
 let shuttingDown = false;
 let tray: TrayHandle | null = null;
@@ -161,6 +162,7 @@ const sessionServersFactory: SessionServersFactory = (identity) => {
     childSerial: identity.childSerial,
   });
   const cs = new ElgatoChildServer(defaultChildGeometry, identity.childPort, s.deviceConfig, false);
+  watchPairing(s, cs, `dock ${identity.index}`);
   s.on('serverLog', ({ level, component: c, message: m }: LogObject) => log(level, c, m));
   cs.on('serverLog', ({ level, component: c, message: m }: LogObject) => log(level, c, m));
   return { server: s, childServer: cs };
@@ -238,7 +240,7 @@ webui.on('setImageOverride', (mode: ImageModeOverride, dock?: number) => {
   // frames (imageState = the selected dock's live frames) so the change is
   // visible immediately.
   for (const [k, data] of webui.imageState) {
-    d?.renderCoraImage?.(k, data, webui.imageFormat.get(k) ?? 'jpeg');
+    d?.renderCoraImage?.(k, data, webui.imageChannel.imageFormat.get(k) ?? 'jpeg');
   }
 });
 

@@ -19,6 +19,11 @@ export type {
   UpdateInfo,
 } from '../contract.js';
 
+export interface TouchStripSize {
+  width: number;
+  height: number;
+}
+
 // Duplicated from server-side DockStatus (../../types.ts) — web-client cannot
 // import server/shared types (boundaries: web-client imports only web-client).
 export interface DockUi {
@@ -37,6 +42,7 @@ export interface DockUi {
   widgetDisplays?: Array<{ wireId: number; label: string }>;
   encoderCount?: number; // rotary encoders (knobs); absent/0 = none
   coraProfile?: string; // re-paired CORA profile (cora.advertiseAs); absent = native
+  touchStripSize?: TouchStripSize; // advertised strip (Plus: 800×100)
 }
 
 export interface ExtraKeyCfg {

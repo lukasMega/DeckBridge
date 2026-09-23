@@ -107,6 +107,7 @@ export class DriverManager {
       onSessionsChanged: () => this.deps.onDocksChanged?.(),
       onImage: (dockIndex, keyIndex, data, format) =>
         deps.webui.notifyDockImage(dockIndex, keyIndex, Buffer.from(data), format),
+      onTouchImage: (...args) => deps.webui.imageChannel.notifyDockTouchImage(...args),
       dockFramesSnapshot: (dockIndex) => deps.webui.dockFramesSnapshot(dockIndex),
       isBrightnessOverride: (deviceKey) => deps.webui.isBrightnessOverride(deviceKey),
       extraKeyConfigFor: (deviceKey, wireId) => deps.webui.extraKeyConfigFor(deviceKey, wireId),

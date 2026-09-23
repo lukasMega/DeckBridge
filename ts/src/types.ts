@@ -432,6 +432,8 @@ export interface DockStatus {
   /** CORA profile this dock re-pairs as (`cora.advertiseAs`, e.g. AKP05E → 'stream-deck-plus').
    *  The desktop's image orientation follows the profile, so the WebUI preview needs it. */
   coraProfile?: string;
+  /** Advertised touch-strip size (Plus profile: 800×100) — the WebUI strip preview canvas. */
+  touchStripSize?: { width: number; height: number };
 }
 
 // Clear-and-null helpers. The guard-clear-forget-to-null sequence was written out

@@ -12,6 +12,8 @@ import { DockList } from '../src/web/client/simple/dock-cards.js';
 import { ExtraKeysPanel } from '../src/web/client/simple/extra-keys-panel.js';
 import { ChipRadioGroup } from '../src/web/client/components/ChipRadioGroup.js';
 import { updateBadgeVersion } from '../src/web/client/ui-helpers.js';
+import { KeyGridPreview } from '../src/web/client/components/KeyGridPreview.js';
+import { applyTouchImage, resetTouchStrip } from '../src/web/client/touch-strip-preview.js';
 import type { DeviceOverridesView, DockUi, UpdateInfo } from '../src/web/client/ui-types.js';
 
 const root = document.createElement('div');
@@ -214,7 +216,61 @@ async function run(): Promise<void> {
   await runMultiDockCards();
   await runSideKeysPanel();
   await runChipRadioGroup();
+  await runTouchStripPreview();
   runUpdateBadge();
+}
+
+/** Base64 JPEG body of a solid w×h block. */
+function solidJpeg(w: number, h: number, color: string): string {
+  const c = document.createElement('canvas');
+  c.width = w;
+  c.height = h;
+  const ctx = c.getContext('2d')!;
+  ctx.fillStyle = color;
+  ctx.fillRect(0, 0, w, h);
+  return c.toDataURL('image/jpeg', 1).split(',')[1]!;
+}
+
+/** Red channel at (x, y) once the async paint chain has drawn it. */
+async function stripRed(x: number, y: number, want: (r: number) => boolean): Promise<number> {
+  let r = -1;
+  for (let i = 0; i < 50; i++) {
+    const canvas = root.querySelector<HTMLCanvasElement>('canvas.touch-strip-preview');
+    r = canvas?.getContext('2d')?.getImageData(x, y, 1, 1).data[0] ?? -1;
+    if (want(r)) return r;
+    await new Promise((res) => setTimeout(res, 10));
+  }
+  return r;
+}
+
+async function runTouchStripPreview(): Promise<void> {
+  await act(() => render(<KeyGridPreview keyCount={8} columns={4} dimmed={false} />, root));
+  check(!root.querySelector('canvas.touch-strip-preview'), 'No strip canvas without a strip');
+
+  applyTouchImage({ data: solidJpeg(40, 10, '#ff0000') });
+  await act(() =>
+    render(
+      <KeyGridPreview
+        keyCount={8}
+        columns={4}
+        dimmed={false}
+        touchStrip={{ width: 40, height: 10 }}
+      />,
+      root,
+    ),
+  );
+  const canvas = root.querySelector<HTMLCanvasElement>('canvas.touch-strip-preview');
+  check(canvas?.width === 40 && canvas.height === 10, 'Strip canvas uses the advertised size');
+  check((await stripRed(5, 5, (r) => r > 200)) > 200, 'A frame seen before mount is painted');
+
+  applyTouchImage({ data: solidJpeg(20, 10, '#0000ff'), region: { x: 20, y: 0, w: 20, h: 10 } });
+  check((await stripRed(30, 5, (r) => r < 50)) < 50, 'A partial window lands at its region');
+  check((await stripRed(5, 5, (r) => r > 200)) > 200, 'A partial window leaves the rest');
+
+  resetTouchStrip();
+  const alpha = canvas!.getContext('2d')!.getImageData(5, 5, 1, 1).data[3];
+  check(alpha === 0, 'Dock switch clears the strip');
+  await act(() => render(null, root));
 }
 
 // Device tuning + diagnostics panels (simple/device-tuning.tsx,

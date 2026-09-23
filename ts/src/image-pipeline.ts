@@ -62,6 +62,7 @@ export function setupImageHandler(
     'touchImage',
     ({ data, region }: { data: Uint8Array; region?: TouchWindowRegion }) => {
       getDriver()?.renderTouchImage?.(data, region);
+      webui.imageChannel.notifyDockTouchImage(0, data, region);
     },
   );
 }

@@ -1,4 +1,4 @@
-import type { ClientApp, DockUi, Status, UpdateInfo } from './ui-types.js';
+import type { ClientApp, DockUi, Status, TouchStripSize, UpdateInfo } from './ui-types.js';
 import type { DeviceState } from './ui-state.js';
 
 /** " to the Elgato app" / " to the Bitfocus Companion app" / "" — appended
@@ -67,6 +67,12 @@ export function deriveDocks(s: Status): DockUi[] {
 export function selectedCoraProfile(s: Status): string | undefined {
   const selected = s.selectedDock ?? 0;
   return s.docks?.find((d) => d.index === selected)?.coraProfile;
+}
+
+/** The selected dock's advertised touch strip, if its profile has one. */
+export function selectedTouchStripSize(s: Status): TouchStripSize | undefined {
+  const selected = s.selectedDock ?? 0;
+  return s.docks?.find((d) => d.index === selected)?.touchStripSize;
 }
 
 export type ThemePref = 'light' | 'dark' | 'auto';
