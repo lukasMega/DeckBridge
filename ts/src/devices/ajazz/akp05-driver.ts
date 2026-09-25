@@ -47,7 +47,7 @@ const ENCODER_ROTATE_CODES: readonly (readonly [number, number])[] = [
 ];
 
 /** Touch-strip swipe codes. The AKP05E 4-segment strip reports left/right swipes
- *  as single-direction events (no coordinates). Synthesised to span the full
+ *  as single-direction events (no coordinates). Synthesized to span the full
  *  Stream Deck + 800×100 strip. Reference: opendeck-akp05 src/inputs.rs. */
 const TOUCH_SWIPE_LEFT = 0x38;
 const TOUCH_SWIPE_RIGHT = 0x39;

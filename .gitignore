@@ -80,4 +80,4 @@ CLAUDE.md
 .cache/
 /ts/src/akp05-strip-guided-probe.ts
 /ts/src/akp05-strip-probe.html
-/docs/akp05-guided-probe.md
+/ts/src/akp05-strip-probe.ts
