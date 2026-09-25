@@ -116,7 +116,7 @@ export class MdnsAdvertiser {
 
   stop(): void {
     if (this.usingNative) {
-      mdnsAdvertiseStop();
+      mdnsAdvertiseStop(this.port);
       this.usingNative = false;
       return;
     }

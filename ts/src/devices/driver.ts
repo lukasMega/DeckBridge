@@ -1,5 +1,5 @@
 import type { EventEmitter } from 'node:events';
-import type { ImageModeOverride } from '../types.js';
+import type { ImageModeOverride, TouchStripOptions, TouchWindowRegion } from '../types.js';
 
 export type DeviceVendor =
   | 'mirabox'
@@ -15,6 +15,7 @@ export type DeviceVendor =
 export type DeviceProtocol =
   | 'mirabox-cora' // v3, 1024-byte packets, press+release
   | 'mirabox-cora-v1' // v1, 512-byte packets, keydown-only
+  | 'ajazz-akp05' // 1024-byte CRT BAT uploads, ULEND commit
   | 'elgato-gen1' // BMP, 16-byte header, key+1, feature 0x05/0x0B (Mini, original)
   | 'elgato-gen2'; // JPEG, 8-byte header, feature 0x03 (MK.2, XL)
 
@@ -105,6 +106,9 @@ export interface DeviceKeyMap {
    *  events but map to no mk2 index, so DeckBridge-native actions bind to them
    *  (extra-keys.ts). 293S right column = [16, 17, 18]. */
   extraKeys?: readonly number[];
+  /** Input code of each `extraKeys` entry, same order, for extra keys that have a
+   *  switch (their press runs a DeckBridge command). Absent = display-only keys. */
+  extraKeyInputs?: readonly number[];
 }
 
 /** How this device advertises itself to the Elgato desktop over CORA. */
@@ -113,6 +117,22 @@ export interface DeviceCoraSpec {
   /** Registry model whose geometry this device emulates; omit for own geometry. */
   advertiseAs?: DeviceModelId;
   usePhysicalIdentity: boolean; // forward the device's real serial/firmware (Elgato true, Mirabox false)
+  /** Firmware version string the CHILD reports over CORA (GET_REPORT 0x05 / 0x87).
+   *  Omit for the shared DEFAULT_CHILD_FIRMWARE_VERSION ('1.01.000'); the Stream Deck +
+   *  profile sets a 2.00.x version because the desktop rejects 1.01.x for PID 0x0084. */
+  childFirmwareVersion?: string;
+  /** CORA profiles (registry.ts `CORA_PROFILES` ids) this device may re-pair as via a
+   *  `cora.advertiseAs` override, each with the physical image transform + key map the
+   *  emulated grid needs on this panel. Only these (or the model's own `advertiseAs`)
+   *  validate, so a profile can never land on hardware it has no mapping for. */
+  emulations?: Readonly<Record<DeviceModelId, DeviceEmulation>>;
+}
+
+/** How a device drives its own panel while re-paired as a CORA profile (e.g. the
+ *  AKP05E's 5×2 panel showing a Stream Deck + 4×2 grid). */
+export interface DeviceEmulation {
+  image: DeviceImageSpec;
+  keyMap: DeviceKeyMap;
 }
 
 /** Splash-screen overrides. model.image is calibrated for desktop-pre-rotated CORA
@@ -122,9 +142,28 @@ export interface DeviceSplashSpec {
   transformOverride?: { rotate?: 0 | 90 | 180 | 270; flipH?: boolean; flipV?: boolean };
 }
 
+/** A device-native display outside CORA's key grid, rendered by DeckBridge widgets. */
+export interface DeviceWidgetDisplay {
+  wireId: number;
+  label: string;
+  image: DeviceImageSpec;
+  /** Left edge of this display's window on the full strip, in strip pixels. Only
+   *  meaningful with `DeviceModel.touchStripDisplay`. */
+  stripX?: number;
+}
+
+/** One image across the whole touch strip. Its wire id may also be a widget
+ *  display: the firmware draws each upload at its real size from the slot origin. */
+export interface DeviceTouchStripDisplay {
+  wireId: number;
+  image: DeviceImageSpec;
+}
+
 export type DriverKind = 'elgato-hid' | 'mirabox' | 'custom';
 
-/** Child geometry advertised to the Elgato desktop over CORA capabilities. */
+/** Child geometry advertised to the Elgato desktop over CORA capabilities. The
+ *  optional fields describe a Stream Deck + (encoders + touch strip); non-Plus
+ *  models omit them (undefined → 0 → "no encoders / no touch" in the packet). */
 export interface ChildGeometry {
   rows: number;
   columns: number;
@@ -132,6 +171,11 @@ export interface ChildGeometry {
   keyWidth: number;
   keyHeight: number;
   productName: string;
+  /** Number of rotaries (Plus = 4). Omitted/0 on key-only models. */
+  encoderCount?: number;
+  /** Touch-strip size in pixels (Plus = 800×100). Omitted/0 on key-only models. */
+  touchWidth?: number;
+  touchHeight?: number;
 }
 
 export interface DeviceModel {
@@ -148,11 +192,18 @@ export interface DeviceModel {
   rows: number;
   keyWidth: number;
   keyHeight: number;
+  /** Stream Deck + only: rotary encoder count (4) and touch-strip size (800×100).
+   *  Omitted/undefined on key-only models → advertised as 0 (no encoders/touch). */
+  encoderCount?: number;
+  touchWidth?: number;
+  touchHeight?: number;
   image: DeviceImageSpec;
   wire: DeviceWireSpec;
   keyMap: DeviceKeyMap;
   cora: DeviceCoraSpec;
   splash?: DeviceSplashSpec;
+  widgetDisplays?: readonly DeviceWidgetDisplay[];
+  touchStripDisplay?: DeviceTouchStripDisplay;
   driverKind: DriverKind;
 }
 
@@ -192,16 +243,27 @@ export const WIRE_OVERRIDE_KEYS = [
   'batchImageTransfers',
 ] as const;
 
+/** The CORA-emulation fields a user may change to re-pair a device as a different
+ *  Elgato deck (e.g. AKP05E → Stream Deck +). `advertiseAs` must name one of the
+ *  model's `cora.emulations` (or its own advertiseAs); `productId` must match that
+ *  profile's PID. `usePhysicalIdentity` is deliberately absent — it is a
+ *  physical-device fact, not a pairing preference. */
+export const CORA_OVERRIDE_KEYS = ['advertiseAs', 'productId'] as const;
+
 /** User-tunable subset of a DeviceModel, persisted per model id under settings.json's
  *  `modelOverrides` (devices/model-overrides.ts). Deep-partial per section, arrays
- *  replace wholesale. Omissions are deliberate: VID/PID/protocol/driverKind/cora.productId
- *  would impersonate a different device, keyCount/rows/columns force a CORA re-pair,
- *  image.format is a protocol fact, and packetSize/inSize are Mirabox-only. */
+ *  replace wholesale. Omissions are deliberate: VID/PID/protocol/driverKind would
+ *  impersonate a different device, keyCount/rows/columns force a CORA re-pair,
+ *  image.format is a protocol fact, and packetSize/inSize are Mirabox-only.
+ *  The `cora` section is the sanctioned exception: `advertiseAs`/`productId` are
+ *  exactly the "re-pair as a different Elgato deck" knob (opt-in, changes geometry +
+ *  PID → CORA re-pair). */
 export interface DeviceModelOverride {
   image?: Partial<Pick<DeviceImageSpec, (typeof IMAGE_OVERRIDE_KEYS)[number]>>;
   keyMap?: Partial<DeviceKeyMap>;
   wire?: Partial<Pick<DeviceWireSpec, (typeof WIRE_OVERRIDE_KEYS)[number]>>;
   splash?: DeviceSplashSpec;
+  cora?: Partial<Pick<DeviceCoraSpec, (typeof CORA_OVERRIDE_KEYS)[number]>>;
 }
 
 /** Common interface satisfied by every driver (real USB and mock). */
@@ -231,6 +293,21 @@ export interface DeviceDriver extends EventEmitter {
    *  model.image — splash sources are upright). `WorkerHidDriver` only, keeping the
    *  FFI transform and hid_write burst off the main thread. */
   sendSplashImage?(keyIndex: number, bytes: Uint8Array, spec: DeviceImageSpec): void;
+  /** Render a Stream Deck + window image (800×100, or a partial-window region)
+   *  to the device's touch-segment displays. `WorkerHidDriver` only. No-op on
+   *  models without widget displays. */
+  renderTouchImage?(bytes: Uint8Array, region?: TouchWindowRegion): void;
+  /** Touch-strip wire ids DeckBridge owns: Elgato strip images skip them, and a
+   *  zone leaving the mask gets the last Elgato image back. `WorkerHidDriver` only. */
+  setTouchStripMask?(wireIds: readonly number[]): void;
+  /** Put the last Elgato image back on these strip zones (cleared if the app never
+   *  drew one) — a widget leaving an unmasked zone. `WorkerHidDriver` only. */
+  restoreTouchSegments?(wireIds: readonly number[]): void;
+  /** Zone fit + upload policy for a full-strip model (settings.json, per dock). The
+   *  worker resets them to the defaults on open. `WorkerHidDriver` only. */
+  setTouchStripOptions?(options: TouchStripOptions): void;
+  /** The options last set (defaults after open). `WorkerHidDriver` only. */
+  readonly touchStripOptions?: TouchStripOptions;
   /** Live device-tuning swap — image-transform fields only, no reopen. The
    *  caller resolves `effectiveModel` (registry + overrides) and must have
    *  classified the change as 'live' first (classifyOverrideChange). Absent

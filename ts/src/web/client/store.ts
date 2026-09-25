@@ -8,7 +8,9 @@ import type {
   CommLog,
   DeviceModel,
   DeviceIdentity,
+  EncoderSettings,
   ExtraKeyCfg,
+  TouchStripMode,
   UpdateInfo,
 } from './ui-types.js';
 
@@ -31,11 +33,18 @@ export interface StoreState {
   deviceIdentity?: DeviceIdentity;
   /** SELECTED dock's extra-key assignments, keyed by device wire id. */
   extraKeys: Record<string, ExtraKeyCfg>;
+  /** SELECTED dock's touch-strip mode + knob override (AKP05E). */
+  touchStripMode: TouchStripMode;
+  /** 'deckbridge-repaint' hold-off after an Elgato frame. */
+  touchStripRepaintMs: number;
+  encoders: EncoderSettings;
   updateInfo?: UpdateInfo;
 }
 
+export const TOUCH_STRIP_REPAINT_DEFAULT_MS = 5000; // mirrors types.ts
+
 let state: StoreState = {
-  status: { driverMode: 'real', driverConnected: false, elgatoConnected: false },
+  status: { driverMode: 'real', driverConnected: false, elgatoConnected: false, docks: [] },
   stats: { uptimeMs: 0, elgatoRxPkts: 0, elgatoTxPkts: 0, imagesSent: 0 },
   mockConfig: undefined,
   brightness: 82,
@@ -48,6 +57,9 @@ let state: StoreState = {
   deviceModels: [],
   deviceIdentity: undefined,
   extraKeys: {},
+  touchStripMode: 'elgato',
+  touchStripRepaintMs: TOUCH_STRIP_REPAINT_DEFAULT_MS,
+  encoders: {},
   updateInfo: undefined,
 };
 
@@ -93,6 +105,18 @@ export function setBrightness(brightness: number): void {
 
 export function setBrightnessOverride(brightnessOverride: boolean): void {
   setField('brightnessOverride', brightnessOverride);
+}
+
+export function setTouchStripMode(touchStripMode: TouchStripMode): void {
+  setField('touchStripMode', touchStripMode);
+}
+
+export function setTouchStripRepaintMs(touchStripRepaintMs: number): void {
+  setField('touchStripRepaintMs', touchStripRepaintMs);
+}
+
+export function setEncoders(encoders: EncoderSettings): void {
+  setField('encoders', encoders);
 }
 
 export function setResizeEnabled(resizeEnabled: boolean): void {

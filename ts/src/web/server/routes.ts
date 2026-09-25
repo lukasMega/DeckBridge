@@ -2,7 +2,7 @@ import { assets } from './assets.js';
 import { checkRequirements } from './requirements.js';
 import { get, post, postJson } from './router.js';
 import type { Route, RouteContext } from './router.js';
-import { badRequest, css, html, jpeg, js, json, noContent, notFound, text } from './http.js';
+import { badRequest, bmp, css, html, jpeg, js, json, noContent, notFound, text } from './http.js';
 import { isNonNegInt, nonNegIntMessage } from './types.js';
 import type { MockDeviceConfig } from './types.js';
 import {
@@ -12,8 +12,20 @@ import {
   COMMAND_INTERVAL_MAX_MS,
   COMMAND_TIMEOUT_MIN_MS,
   COMMAND_TIMEOUT_MAX_MS,
+  ENCODER_COMMAND_MAX,
+  TOUCH_STRIP_MODES,
+  TOUCH_STRIP_REPAINT_MIN_MS,
+  TOUCH_STRIP_REPAINT_MAX_MS,
+  isTouchStripRepaintMs,
 } from '../../types.js';
-import type { ExtraKeyConfig, ExtraKeyWidget, ImageModeOverride } from '../../types.js';
+import type {
+  EncoderSettings,
+  ExtraKeyConfig,
+  ExtraKeyWidget,
+  ImageModeOverride,
+  TouchStripMode,
+} from '../../types.js';
+import { encoderSettingsError } from './encoders-controller.js';
 
 // The complete HTTP surface, declarative. WebSocket upgrade (/api/ws) is handled
 // before dispatch in WebUIServer; everything else lives here.
@@ -27,8 +39,10 @@ export const routes: Route[] = [
   get('/api/plugins', async ({ ui }) => json(await ui.pluginsInfo())),
   get('/api/settings', ({ ui }) => json(JSON.parse(ui.getSettingsJson()))),
   get('/api/image/:key', ({ ui, params }) => {
-    const buf = ui.getImage(Number(params.key));
-    return buf ? jpeg(buf) : notFound();
+    const key = Number(params.key);
+    const buf = ui.getImage(key);
+    if (!buf) return notFound();
+    return ui.imageChannel.imageFormat.get(key) === 'bmp' ? bmp(buf) : jpeg(buf);
   }),
 
   postJson('/api/driver-mode', setDriverMode),
@@ -48,6 +62,10 @@ export const routes: Route[] = [
   postJson('/api/select-dock', selectDock),
   postJson('/api/extra-key', setExtraKey),
   postJson('/api/extra-key/run', runExtraKeyNow),
+  postJson('/api/extra-key/press', setExtraKeyPress),
+  postJson('/api/touch-strip-mode', setTouchStripMode),
+  postJson('/api/touch-strip-repaint', setTouchStripRepaint),
+  postJson('/api/encoders', setEncoders),
   post('/api/settings', setSettings),
   post('/api/settings/open-in-os', async ({ ui }) => {
     await ui.openSettingsFile();
@@ -227,7 +245,7 @@ function validateExtraKeyBody({
 }
 
 /** Assign a display widget to one of the selected dock's extra keys (293S 6th
- *  column — display-only). The server renders and refreshes the key itself. */
+ *  column, AKP05E right column). The server renders and refreshes the key itself. */
 function setExtraKey(body: ExtraKeyBody, { ui }: RouteContext): Response {
   const invalid = validateExtraKeyBody(body);
   if (invalid) return badRequest(invalid);
@@ -251,6 +269,52 @@ interface RunExtraKeyBody {
 function runExtraKeyNow({ wireId }: RunExtraKeyBody, { ui }: RouteContext): Response {
   if (!isNonNegInt(wireId)) return badRequest(nonNegIntMessage('wireId'));
   const err = ui.tryRunExtraKeyNow(wireId);
+  return err ? json({ error: err.error }, err.status) : json({ ok: true });
+}
+
+/** Shell command a pressable extra key runs on press ('' clears it). Separate from the
+ *  widget POST so neither overwrites the other. */
+function setExtraKeyPress(
+  { wireId, command }: { wireId: unknown; command: unknown },
+  { ui }: RouteContext,
+): Response {
+  if (!isNonNegInt(wireId)) return badRequest(nonNegIntMessage('wireId'));
+  if (typeof command !== 'string' || command.length > ENCODER_COMMAND_MAX) {
+    return badRequest(`command must be a string ≤ ${ENCODER_COMMAND_MAX} chars`);
+  }
+  const err = ui.trySetExtraKey(wireId, { pressCommand: command });
+  return err ? json({ error: err.error }, err.status) : json({ ok: true });
+}
+
+/** Who paints the touch strip: the Elgato app only, or DeckBridge widgets over it. */
+function setTouchStripMode({ mode }: { mode: unknown }, { ui }: RouteContext): Response {
+  if (!(TOUCH_STRIP_MODES as readonly unknown[]).includes(mode)) {
+    return badRequest(`mode must be one of: ${TOUCH_STRIP_MODES.join(', ')}`);
+  }
+  const err = ui.trySetTouchStripMode(mode as TouchStripMode);
+  return err ? json({ error: err.error }, err.status) : json({ ok: true, mode });
+}
+
+/** How long after the Elgato app's last strip frame 'deckbridge-repaint' brings a widget back. */
+function setTouchStripRepaint({ ms }: { ms: unknown }, { ui }: RouteContext): Response {
+  if (!isTouchStripRepaintMs(ms)) {
+    return badRequest(
+      `ms must be an integer ${TOUCH_STRIP_REPAINT_MIN_MS}–${TOUCH_STRIP_REPAINT_MAX_MS}`,
+    );
+  }
+  const err = ui.devicePrefs.trySetTouchStripRepaintMs(ms);
+  return err ? json({ error: err.error }, err.status) : json({ ok: true, ms });
+}
+
+/** Knob override: connect to the Elgato app, or run per-knob shell commands. */
+function setEncoders(body: unknown, { ui }: RouteContext): Response {
+  const invalid = encoderSettingsError(body);
+  if (invalid) return badRequest(invalid);
+  const { connectToApp, commands } = body as EncoderSettings;
+  const err = ui.trySetEncoders({
+    ...(connectToApp !== undefined ? { connectToApp } : {}),
+    ...(commands !== undefined ? { commands } : {}),
+  });
   return err ? json({ error: err.error }, err.status) : json({ ok: true });
 }
 

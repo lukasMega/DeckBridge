@@ -10,9 +10,16 @@ import { isModelOverridesRecord, validateModelOverride } from '../../devices/mod
 import { findModelById } from '../../devices/registry.js';
 import type { DeviceModelOverride } from '../../devices/driver.js';
 import { log } from '../../logger.js';
-import { isExtraKeyConfig } from '../../types.js';
+import {
+  isExtraKeyConfig,
+  isTouchStripRepaintMs,
+  TOUCH_STRIP_MODES,
+  TOUCH_STRIP_UPLOADS,
+  TOUCH_STRIP_ZONE_FITS,
+} from '../../types.js';
 import type { DockStatus, ExtraKeyConfig } from '../../types.js';
 import type { UpdateState } from '../../update-check.js';
+import { encoderSettingsError } from './encoders-controller.js';
 
 const IMAGE_MODE_SETTINGS = [null, 'resize', 'pad-black', 'pad-average', 'pad-edge'];
 
@@ -22,13 +29,35 @@ function isExtraKeysRecord(v: unknown): v is Record<string, ExtraKeyConfig> {
   return Object.values(v).every(isExtraKeyConfig);
 }
 
-/** Migration (2026-07-16, action→widget model): strip a stale/corrupt extraKeys
- *  map so it can't fail isDeviceIdentitySettings and drop the whole identity
- *  entry — that would regenerate MAC/serial and force an Elgato re-pair. */
-function stripInvalidExtraKeys(d: unknown): void {
+const isTouchStripMode = (v: unknown): boolean =>
+  (TOUCH_STRIP_MODES as readonly unknown[]).includes(v);
+const isTouchStripZoneFit = (v: unknown): boolean =>
+  (TOUCH_STRIP_ZONE_FITS as readonly unknown[]).includes(v);
+const isTouchStripUpload = (v: unknown): boolean =>
+  (TOUCH_STRIP_UPLOADS as readonly unknown[]).includes(v);
+
+/** Strip bad optional per-device fields so they can't fail isDeviceIdentitySettings
+ *  and drop the whole identity entry — that would regenerate MAC/serial and force an
+ *  Elgato re-pair. extraKeys: migration 2026-07-16 (action→widget model);
+ *  touchStripDisabled: replaced by touchStripMode 2026-09-22, no migration. */
+function stripInvalidDeviceSettings(d: unknown): void {
   if (typeof d !== 'object' || d === null) return;
   const r = d as Record<string, unknown>;
   if (r.extraKeys !== undefined && !isExtraKeysRecord(r.extraKeys)) delete r.extraKeys;
+  if (r.touchStripMode !== undefined && !isTouchStripMode(r.touchStripMode)) {
+    delete r.touchStripMode;
+  }
+  if (r.touchStripRepaintMs !== undefined && !isTouchStripRepaintMs(r.touchStripRepaintMs)) {
+    delete r.touchStripRepaintMs;
+  }
+  if (r.touchStripZoneFit !== undefined && !isTouchStripZoneFit(r.touchStripZoneFit)) {
+    delete r.touchStripZoneFit;
+  }
+  if (r.touchStripUpload !== undefined && !isTouchStripUpload(r.touchStripUpload)) {
+    delete r.touchStripUpload;
+  }
+  if (r.encoders !== undefined && encoderSettingsError(r.encoders)) delete r.encoders;
+  delete r.touchStripDisabled;
 }
 
 /** The optional per-device settings half of isDeviceIdentitySettings. */
@@ -38,7 +67,12 @@ function hasValidDeviceSettings(r: Record<string, unknown>): boolean {
     (r.brightnessOverride === undefined || typeof r.brightnessOverride === 'boolean') &&
     (r.imageModeOverride === undefined ||
       IMAGE_MODE_SETTINGS.includes(r.imageModeOverride as null)) &&
-    (r.extraKeys === undefined || isExtraKeysRecord(r.extraKeys))
+    (r.extraKeys === undefined || isExtraKeysRecord(r.extraKeys)) &&
+    (r.touchStripMode === undefined || isTouchStripMode(r.touchStripMode)) &&
+    (r.touchStripRepaintMs === undefined || isTouchStripRepaintMs(r.touchStripRepaintMs)) &&
+    (r.touchStripZoneFit === undefined || isTouchStripZoneFit(r.touchStripZoneFit)) &&
+    (r.touchStripUpload === undefined || isTouchStripUpload(r.touchStripUpload)) &&
+    (r.encoders === undefined || encoderSettingsError(r.encoders) === null)
   );
 }
 
@@ -116,6 +150,9 @@ export class PersistedSettings {
   browserLocale: string | undefined = undefined;
   private devices: DeviceIdentitySettings[] = [];
   private modelOverrides: Record<string, DeviceModelOverride> = {};
+  /** Serializes writes: overlapping write+rename pairs could land out of order. */
+  private saveChain: Promise<void> = Promise.resolve();
+  private pendingSave: Settings | undefined;
 
   /** `cacheRoot` is overridable so tests never touch the real user cache dir;
    *  production passes undefined and settings-store.ts picks the default. */
@@ -136,7 +173,7 @@ export class PersistedSettings {
     if (typeof saved.a7sDay === 'string') this.a7sDay = saved.a7sDay;
     this.modelOverrides = sanitizeModelOverrides(saved.modelOverrides);
     if (Array.isArray(saved.devices)) {
-      saved.devices.forEach(stripInvalidExtraKeys);
+      saved.devices.forEach(stripInvalidDeviceSettings);
       this.devices = saved.devices
         .filter(isDeviceIdentitySettings)
         .filter((d) => isStableDeviceKey(d.deviceKey));
@@ -146,7 +183,24 @@ export class PersistedSettings {
   /** Fire-and-forget write-through — called after every mutation of a persisted
    *  field. Errors are logged inside saveSettings(), never thrown. */
   persist(): void {
-    void saveSettings(this.current(), this.cacheRoot);
+    void this.queueSave(this.current());
+  }
+
+  /** Resolves once every queued snapshot is on disk. */
+  async flush(): Promise<void> {
+    await this.saveChain;
+  }
+
+  /** A burst of saves coalesces onto one write of the newest snapshot. */
+  private queueSave(snapshot: Settings): Promise<void> {
+    this.pendingSave = snapshot;
+    this.saveChain = this.saveChain.then(async () => {
+      const next = this.pendingSave;
+      if (next === undefined) return;
+      this.pendingSave = undefined;
+      await saveSettings(next, this.cacheRoot);
+    });
+    return this.saveChain;
   }
 
   json(): string {
@@ -157,7 +211,7 @@ export class PersistedSettings {
    *  first — the file may not exist yet and `open` fails silently on a missing
    *  path. Failures beyond that are swallowed in os-utils.ts. */
   async openFile(): Promise<void> {
-    await saveSettings(this.current(), this.cacheRoot);
+    await this.queueSave(this.current());
     await openPathInOS(settingsPath(this.cacheRoot));
   }
 

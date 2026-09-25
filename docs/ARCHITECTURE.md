@@ -28,7 +28,7 @@ runtime.
 
 `mise run tjs-setup` (a dependency of `build`) puts that runtime at `$TJS` under
 `../vendor`, and no-ops when it already exists. It downloads the prebuilt
-**`slim-ffi`** asset of `$TXIKI_VERSION` (pinned in [`../mise.toml`](../mise.toml)) from
+**`slim-ffi`** asset of `$TXIKI_VERSION` (pinned in [`mise.toml`](https://github.com/lukasMega/DeckBridge/blob/main/mise.toml)) from
 [lukasMega/txiki.js-with-slim-builds](https://github.com/lukasMega/txiki.js-with-slim-builds/releases)
 — no toolchain needed. That profile keeps `tjs:ffi`, WebCrypto, `run`/`compile` and the
 REPL, and drops TLS, WebAssembly, SQLite, mimalloc and the `eval`/`serve`/`test`/`bundle`/
@@ -116,7 +116,8 @@ device. Two further worker types sit outside that loop (HID enumeration and plug
   `WorkerHidDriver.renderCoraImage()`; the worker transforms, caches, and writes — so neither the
   transform nor a large upload stalls the CORA ACK loop (P1). A single generic worker
   (`hid-worker.ts`, proxied by `WorkerHidDriver`) serves every device; its `createDriver()` picks
-  `ElgatoHidDriver` (MK.2, Mini) or `MiraboxDriver` (293/293S/K1 Pro) by `driverKind`.
+  `ElgatoHidDriver` (MK.2, Mini), `MiraboxDriver` (293/293S/K1 Pro), or `Akp05Driver`
+  (AJAZZ AKP05/AKP05E, `driverKind: 'custom'`).
 
 The split makes a full profile load fast on **both** sides: the main thread pushes every image to
 the browser immediately while the device updates in parallel on the worker. USB I/O gets a whole
@@ -148,7 +149,10 @@ Two lighter worker types sit outside the CORA/image hot path:
 
 To keep image bursts from flooding the WebUI, per-chunk CORA tx/ACK and keepalive logs are `debug`
 level, and `WebUIServer.notifyComm()` batches comm entries into one `commBatch` message every ~100 ms
-(`COMM_BROADCAST_FLUSH_MS`) instead of one WS message per chunk.
+(`COMM_BROADCAST_FLUSH_MS`) instead of one WS message per chunk. In `__SIMPLE_ONLY__` builds (the
+default — no log/comm panel exists to render them) the `commBatch`/`logBatch` broadcasts and the
+`/api/state` `logs`/`commLogs` fields are skipped entirely; the ring buffers themselves keep
+filling, since diagnostics reads them directly.
 
 ### Network exposure
 
@@ -331,7 +335,7 @@ Full walkthrough: [docs/adding-a-device.md](adding-a-device.md). In short:
 1. Create a `DeviceModel` ([driver.ts](../ts/src/devices/driver.ts)) under `devices/elgato/` or `devices/mirabox/`; most behavior is in the nested specs (`image`, required `wire`, `keyMap`, `cora`, optional `splash`).
 2. Add to `DEVICE_MODELS` in [registry.ts](../ts/src/devices/registry.ts) — list position is probe priority.
 3. Set `usagePage`+`usage` only for a vendor-specific HID interface (all Mirabox use `0xffa0`/`1`); undefined for standard Elgato VID+PID.
-4. Set `driverKind` — `'elgato-hid'` or `'mirabox'`; `createDriver()` in [hid-worker.ts](../ts/src/hid-worker.ts) is the single registration point.
+4. Set `driverKind` — `'elgato-hid'`, `'mirabox'`, or `'custom'`; `createDriver()` in [hid-worker.ts](../ts/src/hid-worker.ts) is the single registration point.
 5. For a new wire protocol beyond the four variants, add a `DeviceProtocol` literal: Elgato variants implement pack/parse behavior under [protocol/](https://github.com/lukasMega/DeckBridge/tree/main/ts/src/devices/protocol) (in `PROTOCOL_STRATEGY`); packet and input sizes remain model-owned in `wire`. Mirabox variants are driven by `wire` fields in `mirabox.ts`.
 
 ## CORA device capabilities
@@ -452,7 +456,7 @@ A `<select id="model-select">` dropdown switches the advertised model in **mock 
 
 | Class | File | Owns |
 |---|---|---|
-| `ActivityBuffers` | `web/server/activity-buffers.ts` | ring buffers for logs/CORA-comm/key-events; batches comm entries on the `COMM_BROADCAST_FLUSH_MS` timer (see [Concurrency model](#concurrency-model)) |
+| `ActivityBuffers` | `web/server/activity-buffers.ts` | ring buffers for logs/CORA-comm/key-events; batches comm entries on the `COMM_BROADCAST_FLUSH_MS` timer (see [Concurrency model](#concurrency-model)); broadcast skipped in `__SIMPLE_ONLY__` builds, ring buffers still fill |
 | `DockRegistry` | `web/server/dock-registry.ts` | the live per-dock `DockStatus[]` list + which dock is selected |
 | `ImageChannel` | `web/server/image-channel.ts` | per-dock CORA image cache + the single live WS image channel (mirrors only the selected dock; instant dock-switch without an Elgato re-push) |
 | `PersistedSettings` | `web/server/persisted-settings.ts` | `settings.json` — see [Settings persistence](#settings-persistence) |
@@ -474,9 +478,16 @@ shows its stdout — full trust, same tradeoff as a build script), `plugin` (bel
 transform, not the main thread, does the FFI JPEG encode. A per-dock `ExtraKeyWidgets` scheduler
 (one instance per connected dock: the primary's own, and one per `DeviceSession`) ticks every second
 and repaints a key only when its content changed.
+
+Extra keys *with* a switch exist too: the AJAZZ AKP05E re-paired as a Stream Deck + drops its right
+column from the 4×2 Plus grid, and its emulation key map lists those keys in `extraKeys` (image wire
+ids 15/10) with their input codes in the parallel `extraKeyInputs` (5/10). `wireCommonDriverEvents`
+routes such a press to `onExtraKey` by image wire id instead of CORA, and a per-dock `ExtraKeyActions`
+([command-actions.ts](../ts/src/command-actions.ts), shared with the knob override in `encoders.ts`)
+runs the key's `pressCommand`, at most one process per key.
 [web/server/extra-keys-controller.ts](../ts/src/web/server/extra-keys-controller.ts) is the
-WebUI-facing glue: assign/clear a widget (persists + broadcasts), "run now" for command widgets, and
-the plugin dropdown/status for the popup.
+WebUI-facing glue: assign/clear a widget or set a press command (independent fields of one config;
+persists + broadcasts), "run now" for command widgets, and the plugin dropdown/status for the popup.
 
 ### Plugins — a third, lazily-spawned worker thread
 

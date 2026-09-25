@@ -12,7 +12,7 @@ const DECKBRIDGE_NATIVE_LIB = 'DECKBRIDGE_NATIVE_LIB';
 
 interface MdnsSymbols {
   mdns_advertise_start(name: string, serviceType: string, port: number, txtKv: string): number;
-  mdns_advertise_stop(): void;
+  mdns_advertise_stop(port: number): void;
 }
 
 let lib: { symbols: MdnsSymbols; close(): void } | null = null;
@@ -31,7 +31,7 @@ function load(): { symbols: MdnsSymbols; close(): void } | null {
   try {
     lib = FFI.dlopen(path, {
       mdns_advertise_start: { args: [STRING, STRING, UINT16, STRING], returns: INT },
-      mdns_advertise_stop: { args: [], returns: 'void' },
+      mdns_advertise_stop: { args: [UINT16], returns: 'void' },
     }) as unknown as { symbols: MdnsSymbols; close(): void };
     return lib;
   } catch (e) {
@@ -67,9 +67,11 @@ export function mdnsAdvertiseStart(
   );
 }
 
-/** Stops native mDNS advertise (no-op if never started / unavailable). */
-export function mdnsAdvertiseStop(): void {
+/** Stops native mDNS advertise for `port` (no-op if that port was never
+ *  started / the native lib is unavailable; other ports are untouched — one
+ *  process can run several docks, each on its own port). */
+export function mdnsAdvertiseStop(port: number): void {
   const l = lib;
   if (!l) return;
-  guardedCall<void>('mdns_advertise_stop', undefined, () => l.symbols.mdns_advertise_stop());
+  guardedCall<void>('mdns_advertise_stop', undefined, () => l.symbols.mdns_advertise_stop(port));
 }

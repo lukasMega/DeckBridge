@@ -279,6 +279,212 @@ splash: {
 
 **Derived from:** keydeck · .claude/plans/K1Pro/jpeg-artifact-findings.md
 
+### AJAZZ AKP05E \{#ajazz-akp05e}
+
+`ajazz-akp05e` · `ajazz-akp05` · ✓ tested (macOS, 2026-09-21) · [compare entry](./devices.mdx#ajazz-akp05e)
+
+```text
+mk2 index → wire image id  (5×2, row-major)
+
+   0   1   2   3   4      11  12  13  14  15
+   5   6   7   8   9       6   7   8   9  10
+```
+
+```js
+keyMap: {
+  "coraToWireImage": [
+    11,
+    12,
+    13,
+    14,
+    15,
+    6,
+    7,
+    8,
+    9,
+    10
+  ],
+  "wireInputToCora": [
+    -1,
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9
+  ]
+}
+cora: {
+  "productId": 0x00a5,
+  "usePhysicalIdentity": false,
+  "emulations": {
+    "stream-deck-plus": {
+      "image": {
+        "format": "jpeg",
+        "width": 112,
+        "height": 112,
+        "rotate": 180,
+        "flipH": false,
+        "flipV": false,
+        "colorMode": "rgb",
+        "maxBytes": 65535,
+        "quality": 0.9,
+        "resizeFilter": "lanczos3",
+        "sharpen": 0.6,
+        "transform": "sidecar"
+      },
+      "keyMap": {
+        "coraToWireImage": [
+          11,
+          12,
+          13,
+          14,
+          6,
+          7,
+          8,
+          9
+        ],
+        "wireInputToCora": [
+          -1,
+          0,
+          1,
+          2,
+          3,
+          -1,
+          4,
+          5,
+          6,
+          7,
+          -1
+        ],
+        "extraKeys": [
+          15,
+          10
+        ],
+        "extraKeyInputs": [
+          5,
+          10
+        ]
+      }
+    }
+  }
+}
+splash: {
+  "transformOverride": {
+    "rotate": 180
+  }
+}
+```
+
+**Derived from:** own hardware capture (macOS, PID 0x3004, `mise run akp05-capture`) · ambiso/opendeck-akp05 src/device.rs + src/inputs.rs · zeccola/ajazz-akp05 akp05_device.py · 4ndv/mirajazz src/device.rs + src/state.rs
+
+### AJAZZ AKP05 \{#ajazz-akp05}
+
+`ajazz-akp05` · `ajazz-akp05` · — untested · [compare entry](./devices.mdx#ajazz-akp05)
+
+```text
+mk2 index → wire image id  (5×2, row-major)
+
+   0   1   2   3   4      11  12  13  14  15
+   5   6   7   8   9       6   7   8   9  10
+```
+
+```js
+keyMap: {
+  "coraToWireImage": [
+    11,
+    12,
+    13,
+    14,
+    15,
+    6,
+    7,
+    8,
+    9,
+    10
+  ],
+  "wireInputToCora": [
+    -1,
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9
+  ]
+}
+cora: {
+  "productId": 0x00a5,
+  "usePhysicalIdentity": false,
+  "emulations": {
+    "stream-deck-plus": {
+      "image": {
+        "format": "jpeg",
+        "width": 112,
+        "height": 112,
+        "rotate": 180,
+        "flipH": false,
+        "flipV": false,
+        "colorMode": "rgb",
+        "maxBytes": 65535,
+        "quality": 0.9,
+        "resizeFilter": "lanczos3",
+        "sharpen": 0.6,
+        "transform": "sidecar"
+      },
+      "keyMap": {
+        "coraToWireImage": [
+          11,
+          12,
+          13,
+          14,
+          6,
+          7,
+          8,
+          9
+        ],
+        "wireInputToCora": [
+          -1,
+          0,
+          1,
+          2,
+          3,
+          -1,
+          4,
+          5,
+          6,
+          7,
+          -1
+        ],
+        "extraKeys": [
+          15,
+          10
+        ],
+        "extraKeyInputs": [
+          5,
+          10
+        ]
+      }
+    }
+  }
+}
+splash: {
+  "transformOverride": {
+    "rotate": 180
+  }
+}
+```
+
+**Derived from:** ambiso/opendeck-akp05 src/mappings.rs · ambiso/opendeck-akp05 CHANGELOG.md v0.9.3
+
 ### Ajazz AKP153E (rev. 2) \{#ajazz-akp153e-rev2}
 
 `ajazz-akp153e-rev2` · `mirabox-cora` · ✓ tested (Windows, 2026-09-15) · [compare entry](./devices.mdx#ajazz-akp153e-rev2)

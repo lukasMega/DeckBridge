@@ -78,3 +78,6 @@ CLAUDE.md
 
 # Device reference photos (copyrighted vendor/eshop imagery — reference only, never committed)
 .cache/
+/ts/src/akp05-strip-guided-probe.ts
+/ts/src/akp05-strip-probe.html
+/ts/src/akp05-strip-probe.ts

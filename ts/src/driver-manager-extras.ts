@@ -7,7 +7,13 @@ import { closeDriver, type WorkerHidDriver } from './hid-worker-host.js';
 import type { DeviceModel, DeviceModelOverride } from './devices/driver.js';
 import type { DriverMode } from './driver-manager-discovery.js';
 import { HID_POLL_INTERVAL_MS, MAX_DEVICE_SESSIONS, MDNS_SERVICE_NAME } from './types.js';
-import type { DockStatus, ExtraKeyConfig } from './types.js';
+import type {
+  DockStatus,
+  EncoderSettings,
+  ExtraKeyConfig,
+  TouchStripMode,
+  TouchWindowRegion,
+} from './types.js';
 import { DEVICE_MODELS, findModelById } from './devices/registry.js';
 import {
   DeviceSession,
@@ -18,6 +24,7 @@ import {
 import { deviceKeyFor, sharedSerialModelId } from './device-identity.js';
 import { coraPortConflict } from './cora-startup.js';
 import type { DeviceIdentitySettings } from './settings-store.js';
+import { touchStripOptionsOf } from './settings-store.js';
 
 export interface ExtraDockCoordinatorDeps {
   getShuttingDown: () => boolean;
@@ -58,6 +65,8 @@ export interface ExtraDockCoordinatorDeps {
   onSessionsChanged?: () => void;
   /** Per-dock mirror of raw CORA key images (WebUI selected-dock preview). */
   onImage?: (dockIndex: number, keyIndex: number, data: Uint8Array, format: 'jpeg' | 'bmp') => void;
+  /** WebUI strip-preview mirror; DeviceSession owns the device-side render. */
+  onTouchImage?: (dockIndex: number, data: Uint8Array, region?: TouchWindowRegion) => void;
   /** This dock's cached CORA frames, for repainting after a live tuning swap. */
   dockFramesSnapshot?: (dockIndex: number) => DockFrames;
   /** Per-device "ignore brightness from Elgato app" override, resolved by the
@@ -66,6 +75,10 @@ export interface ExtraDockCoordinatorDeps {
   /** Per-device extra-key config (293S 6th column), resolved by deviceKey +
    *  wire id — delegates to WebUIServer's persisted settings. */
   extraKeyConfigFor: (deviceKey: string, wireId: number) => ExtraKeyConfig | undefined;
+  /** Per-device touch-strip mode + encoder override, resolved live by deviceKey. */
+  touchStripModeFor: (deviceKey: string) => TouchStripMode;
+  touchStripRepaintMsFor: (deviceKey: string) => number;
+  encoderSettingsFor: (deviceKey: string) => EncoderSettings | undefined;
 }
 
 // Index 0 is the primary dock, so extras draw from 1..maxDocks-1 — an empty pool
@@ -79,6 +92,8 @@ export class ExtraDockCoordinator {
   // Keyed by hidPath (physical unit), NOT model.id — lets N same-model units
   // each hold their own session.
   private extraSessions = new Map<string, DeviceSession>();
+  // Per-hidPath post-pairing brightness resend timers.
+  private brightnessResendTimers = new Map<string, ReturnType<typeof setTimeout>>();
   /** Total docks allowed, primary included. 1 (the default) = single deck: no
    *  extras pool, and the scan timer never runs. Raised by setMaxDocks(). */
   private maxDocks = 1;
@@ -269,8 +284,15 @@ export class ExtraDockCoordinator {
       deviceKey,
       `${MDNS_SERVICE_NAME} (${model.name})`,
     );
+    const stripOptions = touchStripOptionsOf(deviceIdentity);
+    if (stripOptions) driver.setTouchStripOptions(stripOptions);
     const identity = sessionIdentity(index, deviceIdentity);
     const servers = factory(identity);
+    servers.childServer.on(
+      'touchImage',
+      ({ data, region }: { data: Uint8Array; region?: TouchWindowRegion }) =>
+        this.deps.onTouchImage?.(index, data, region),
+    );
     const session = new DeviceSession({
       identity,
       servers,
@@ -289,8 +311,17 @@ export class ExtraDockCoordinator {
       initialBrightness: deviceIdentity.brightness,
       initialImageMode: deviceIdentity.imageModeOverride ?? null,
       extraKeyConfigFor: (wireId) => this.deps.extraKeyConfigFor(deviceKey, wireId),
+      touchStripMode: this.deps.touchStripModeFor(deviceKey),
+      touchStripRepaintMs: () => this.deps.touchStripRepaintMsFor(deviceKey),
+      encoderOverride: () => ({
+        mode: this.deps.touchStripModeFor(deviceKey),
+        encoders: this.deps.encoderSettingsFor(deviceKey),
+      }),
     });
     this.extraSessions.set(hidPath, session);
+    servers.childServer.on('clientConnected', () =>
+      this.scheduleBrightnessResend(hidPath, session, deviceIdentity),
+    );
 
     try {
       await session.start();
@@ -312,12 +343,37 @@ export class ExtraDockCoordinator {
     }
   }
 
+  /** Re-push the saved brightness ~1s after pairing, as app.ts does for the
+   *  primary: the app's default-brightness handshake would stomp it.
+   *  `deviceIdentity` is the live settings entry, so this reads the current value. */
+  private scheduleBrightnessResend(
+    hidPath: string,
+    session: DeviceSession,
+    deviceIdentity: DeviceIdentitySettings,
+  ): void {
+    this.clearBrightnessResendTimer(hidPath);
+    const timer = setTimeout(() => {
+      this.brightnessResendTimers.delete(hidPath);
+      if (this.extraSessions.get(hidPath) === session)
+        session.setBrightness(deviceIdentity.brightness ?? session.status().brightness);
+    }, 1000);
+    this.brightnessResendTimers.set(hidPath, timer);
+  }
+
+  /** Cleared on teardown so it can't fire against a closed driver. */
+  private clearBrightnessResendTimer(hidPath: string): void {
+    const timer = this.brightnessResendTimers.get(hidPath);
+    if (timer) clearTimeout(timer);
+    this.brightnessResendTimers.delete(hidPath);
+  }
+
   /** Disconnect-driven teardown: the physical unit went away. Free the index so a
    *  new unit can reuse it. Keyed by hidPath (the physical interface). */
   private async teardownExtraSession(hidPath: string, index: number): Promise<void> {
     const session = this.extraSessions.get(hidPath);
     if (!session) return;
     this.extraSessions.delete(hidPath);
+    this.clearBrightnessResendTimer(hidPath);
     this.releaseIndex(index);
     await session.stop();
     log('info', 'coord', `extra dock down: ${hidPath} idx=${index}`);
@@ -328,6 +384,7 @@ export class ExtraDockCoordinator {
    *  by app.ts on shutdown. */
   async stopAllExtraSessions(): Promise<void> {
     const sessions = [...this.extraSessions.values()];
+    for (const hidPath of this.extraSessions.keys()) this.clearBrightnessResendTimer(hidPath);
     this.extraSessions.clear();
     this.freeIndices = freshIndexPool(this.maxDocks);
     for (const s of sessions) {
@@ -354,6 +411,11 @@ export class ExtraDockCoordinator {
   /** WebUI "Run now" for a command-widget extra key on the extra dock with this index. */
   forceRunExtraKey(index: number, wireId: number): void {
     this.sessionAt(index)?.forceRunExtraKey(wireId);
+  }
+
+  /** Switch who paints the touch strip on the extra dock at `index`. */
+  setTouchStripMode(index: number, mode: TouchStripMode): void {
+    this.sessionAt(index)?.setTouchStripMode(mode);
   }
 
   /** Tear down the extra docks running `modelId` ('' = all) so the next scan

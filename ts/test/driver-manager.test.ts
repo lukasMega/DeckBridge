@@ -8,7 +8,7 @@ import { MIRABOX_293S_MODEL } from '../src/devices/mirabox/mirabox-293s.js';
 import { MIRABOX_K1PRO_MODEL } from '../src/devices/mirabox/mirabox-k1pro.js';
 import type { SessionIdentity, SessionServers } from '../src/device-session.js';
 import type { DeviceModel, DeviceModelOverride } from '../src/devices/driver.js';
-import type { CommEntry, KeyState } from '../src/types.js';
+import type { CommEntry, EncoderSettings, KeyState, TouchStripMode } from '../src/types.js';
 import { ELGATO_TCP_PORT, MAX_DEVICE_SESSIONS, MAX_MULTI_DECK_SESSIONS } from '../src/types.js';
 import type { ChildGeometry } from '../src/capabilities.js';
 import type { DeviceConfig } from '../src/elgato-types.js';
@@ -51,6 +51,9 @@ function makeFakeChildServer() {
     setChildGeometryCalls: [] as ChildGeometry[],
     sendKeyEventCalls: [] as { keyIndex: number; state: KeyState }[],
     hasClient: false,
+    on() {
+      return this;
+    },
     setChildGeometry(geo: ChildGeometry) {
       this.setChildGeometryCalls.push(geo);
     },
@@ -103,6 +106,14 @@ function makeFakeWebUI() {
     // dock has a persisted override in these tests → default.
     isBrightnessOverride(_deviceKey: string): boolean {
       return false;
+    },
+    // Touch-strip mode + encoder override: none persisted → strip and knobs belong to the app.
+    touchStripModeFor(_deviceKey: string): TouchStripMode {
+      return 'elgato';
+    },
+    devicePrefs: { touchStripRepaintMsFor: (_deviceKey: string): number => 5000 },
+    encoderSettingsFor(_deviceKey: string): EncoderSettings | undefined {
+      return undefined;
     },
     getOrCreateDeviceIdentityCalls: [] as { deviceKey: string; defaultMdnsName: string }[],
     // Mirrors WebUIServer.getOrCreateDeviceIdentity: lookup-or-generate + memoize,
@@ -778,6 +789,7 @@ function setupCoord(maxDocks: number = MAX_MULTI_DECK_SESSIONS) {
     driversByPath,
     present,
     pathsByModel,
+    webui,
     getDocksChangedCalls: () => docksChangedCalls,
   };
 }
@@ -1044,6 +1056,57 @@ await test('C9. live tuning reaches an extra dock without tearing its session do
   assert.equal(extra!.closeCalls, 0, 'and was never closed');
   assert.equal(serversByIndex.get(1)?.server.stopCalls, 0, 'its CORA servers stayed up');
   assert.equal(driverManager.getDockStatuses().length, 2, 'both docks still present');
+});
+
+await test('C10. extra dock re-pushes the persisted brightness ~1s after Elgato pairing (B8)', async () => {
+  const { driverManager, identities, drivers, serversByIndex, present, webui } = setupCoord();
+  present.add(DEFAULT_MODEL.id);
+  present.add(MIRABOX_293_MODEL.id);
+
+  await driverManager.tryRealConnect();
+  await driverManager.__scanOnce();
+  const entry = webui.devices.find((d) => d.deviceKey === identities[0]?.deviceKey);
+  assert.ok(entry, 'precondition: extra dock has a persisted identity entry');
+  entry!.brightness = 66; // simulate a previously-saved preference
+
+  const extraDriver = drivers.get(MIRABOX_293_MODEL.id)!;
+  const callsBeforeConnect = extraDriver.brightnessCalls.length;
+  serversByIndex.get(1)!.childServer.emit('clientConnected');
+  assert.equal(
+    extraDriver.brightnessCalls.length,
+    callsBeforeConnect,
+    'no immediate resend on connect',
+  );
+
+  await new Promise((r) => setTimeout(r, 1100));
+  assert.equal(
+    extraDriver.brightnessCalls.at(-1),
+    66,
+    'persisted brightness re-pushed once pairing settles',
+  );
+});
+
+await test('C11. tearing an extra dock down clears its pending brightness resend', async () => {
+  const { driverManager, identities, drivers, serversByIndex, present, webui } = setupCoord();
+  present.add(DEFAULT_MODEL.id);
+  present.add(MIRABOX_293_MODEL.id);
+
+  await driverManager.tryRealConnect();
+  await driverManager.__scanOnce();
+  const entry = webui.devices.find((d) => d.deviceKey === identities[0]?.deviceKey);
+  entry!.brightness = 66;
+
+  const extraDriver = drivers.get(MIRABOX_293_MODEL.id)!;
+  serversByIndex.get(1)!.childServer.emit('clientConnected');
+  drivers.get(MIRABOX_293_MODEL.id)!.emit('disconnect'); // torn down before the resend fires
+  await flush();
+
+  await new Promise((r) => setTimeout(r, 1100));
+  assert.notEqual(
+    extraDriver.brightnessCalls.at(-1),
+    66,
+    'timer cleared by teardown — no resend against the closed driver',
+  );
 });
 
 // Multi-deck opt-in (settings.json `multiDeck`) — single deck is the default.

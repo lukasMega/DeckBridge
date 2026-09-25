@@ -21,7 +21,7 @@ await test('mdnsAdvertiseStart() returns false gracefully when native symbols ar
 });
 
 await test('mdnsAdvertiseStop() is a safe no-op when nothing was started', () => {
-  mdnsAdvertiseStop();
+  mdnsAdvertiseStop(5343);
 });
 
 summary();

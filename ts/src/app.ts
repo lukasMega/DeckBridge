@@ -1,10 +1,11 @@
 import { resolveTrayBin, startTray } from './tray.js';
 import type { TrayHandle, TrayState } from './tray.js';
-import { ElgatoServer, ElgatoChildServer } from './elgato.js';
+import { ElgatoServer, ElgatoChildServer, watchPairing } from './elgato.js';
 import { WebUIServer } from './web/server';
 import type { MockDeviceConfig } from './web/server';
 import { MockDriver } from './devices/mock.js';
 import type { ClientApp, CommEntry, ImageModeOverride, LogObject } from './types.js';
+import type { TouchStripMode } from './types.js';
 import { ELGATO_CHILD_PORT, ELGATO_TCP_PORT, WEBUI_PORT } from './types.js';
 import { advertisedGeometry, DEFAULT_MODEL, DEVICE_MODELS } from './devices/registry.js';
 import type { OverrideChangeKind } from './devices/model-overrides.js';
@@ -26,9 +27,7 @@ import { MIN_DWELL_MS, PING_SCHEDULE_SLACK_MS, PING_RETRY_INTERVAL_MS } from './
 
 const openBrowser = openPathInOS;
 
-// CLI parsing is the very first thing that happens: version/help/devices exit
-// immediately, and the flags must land in tjs.env before anything below reads it
-// (setupNativeLibs, WebUIServer's port, getInitialDriverMode, etc).
+// CLI parsing first: version/help/devices exit immediately; flags must land in tjs.env before anything below reads it.
 const cli = parseCli(userArgs());
 if (cli.command === 'version') {
   console.log(versionText());
@@ -43,9 +42,7 @@ if (cli.command === 'devices') {
   tjs.exit(0);
 }
 applyFlagsToEnv(cli.flags);
-// `diagnose` runs AFTER applyFlagsToEnv (it reports the effective flags/env and honours
-// --cache-dir) but before any server or device open — that's what makes it usable on the
-// freeze report, where the WebUI never comes up. Enumeration only, never hid_open.
+// diagnose runs after applyFlagsToEnv (reports effective flags/env, honours --cache-dir) but before any server/device open; enumeration only, never hid_open.
 if (cli.command === 'diagnose') {
   await runDiagnoseCommand(cli.flags);
   tjs.exit(0);
@@ -91,6 +88,7 @@ const childServer = new ElgatoChildServer(
   server.deviceConfig,
   false,
 );
+watchPairing(server, childServer, 'dock 0');
 
 let shuttingDown = false;
 let tray: TrayHandle | null = null;
@@ -99,9 +97,7 @@ let dailyPingTimer: ReturnType<typeof setInterval> | null = null;
 
 setWebUILog((level, component, message) => webui.log(level, component, message));
 
-// Last-resort handler: txiki hard-aborts the process on an unhandled promise
-// rejection unless preventDefault() is called. Calling it lets shutdown() run the
-// disconnect handshake / socket teardown / tray kill instead of a raw abort.
+// txiki hard-aborts on unhandled rejection unless preventDefault(); this lets shutdown() run the teardown instead.
 globalThis.addEventListener('unhandledrejection', (ev: PromiseRejectionEvent) => {
   ev.preventDefault();
   const reason =
@@ -166,6 +162,7 @@ const sessionServersFactory: SessionServersFactory = (identity) => {
     childSerial: identity.childSerial,
   });
   const cs = new ElgatoChildServer(defaultChildGeometry, identity.childPort, s.deviceConfig, false);
+  watchPairing(s, cs, `dock ${identity.index}`);
   s.on('serverLog', ({ level, component: c, message: m }: LogObject) => log(level, c, m));
   cs.on('serverLog', ({ level, component: c, message: m }: LogObject) => log(level, c, m));
   return { server: s, childServer: cs };
@@ -227,8 +224,8 @@ childServer.on('brightness', (level: number) => {
 });
 
 webui.on('regenPreviews', (_resizeOn: boolean) => {
-  for (const [keyIndex, jpeg] of webui.imageState.entries()) {
-    webui.notifyImageUpdate(keyIndex, jpeg);
+  for (const [keyIndex, data] of webui.imageState.entries()) {
+    webui.notifyImageUpdate(keyIndex, data, webui.imageChannel.imageFormat.get(keyIndex) ?? 'jpeg');
   }
 });
 
@@ -243,7 +240,7 @@ webui.on('setImageOverride', (mode: ImageModeOverride, dock?: number) => {
   // frames (imageState = the selected dock's live frames) so the change is
   // visible immediately.
   for (const [k, data] of webui.imageState) {
-    d?.renderCoraImage?.(k, data, webui.imageFormat.get(k) ?? 'jpeg');
+    d?.renderCoraImage?.(k, data, webui.imageChannel.imageFormat.get(k) ?? 'jpeg');
   }
 });
 
@@ -306,6 +303,10 @@ webui.on('extraKeyChanged', (dock: number) => {
 
 webui.on('extraKeyRunNow', (dock: number, wireId: number) => {
   driverManager.forceRunExtraKey(dock, wireId);
+});
+
+webui.on('touchStripModeChanged', (dock: number, mode: TouchStripMode) => {
+  driverManager.setTouchStripModeForDock(dock, mode);
 });
 
 webui.on('setDeviceMdnsName', (deviceKey: string, name: string) => {
@@ -472,7 +473,6 @@ await step('deckBr', `cora bind :${ELGATO_TCP_PORT}/:${ELGATO_CHILD_PORT}`, () =
     server,
     childServer,
     log,
-    webuiLog: (level, component, message) => webui.log(level, component, message),
     getShuttingDown: () => shuttingDown,
     elgatoTcpPort: ELGATO_TCP_PORT,
     elgatoChildPort: ELGATO_CHILD_PORT,

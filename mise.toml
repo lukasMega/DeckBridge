@@ -296,6 +296,33 @@ run = """
   DECKBRIDGE_NATIVE_LIB=$DECKBRIDGE_NATIVE_LIB $TJS run dist/d6-capture.js ${1:-}
 """
 
+[tasks.akp05-capture]
+description = "Ajazz AKP05/AKP05E raw input trace: encoder + touch-strip report codes (requires the device; Input Monitoring)"
+depends = ["tjs-setup", "deckbridge-native"]
+dir = "ts"
+run = """
+  node build.mjs --probe akp05-capture
+  DECKBRIDGE_NATIVE_LIB=$DECKBRIDGE_NATIVE_LIB $TJS run dist/akp05-capture.js
+"""
+
+[tasks.akp05-strip-probe]
+description = "Ajazz AKP05/AKP05E touch-strip output: JPEG size ladder (byte cap), slot origins and size, feature report 0x01 key check; answer in the browser page it opens on 127.0.0.1:3077 (requires the device; stop DeckBridge first)"
+depends = ["tjs-setup", "deckbridge-native"]
+dir = "ts"
+run = """
+  node build.mjs --probe akp05-strip-probe
+  DECKBRIDGE_NATIVE_LIB=$DECKBRIDGE_NATIVE_LIB $TJS run dist/akp05-strip-probe.js
+"""
+
+[tasks.akp05-strip-guided-probe]
+description = "Guided AKP05 strip probe: answer yes/no or numbers in terminal. Stop DeckBridge first. Optional: --dry-run"
+depends = ["tjs-setup", "deckbridge-native"]
+dir = "ts"
+run = """
+  node build.mjs --probe akp05-strip-guided-probe
+  DECKBRIDGE_NATIVE_LIB=$DECKBRIDGE_NATIVE_LIB $TJS run dist/akp05-strip-guided-probe.js ${1:-}
+"""
+
 [tasks.e2e]
 description = "Black-box smoke test of a packaged release zip (usage: mise run e2e -- dist/foo.zip)"
 run = "./scripts/e2e-smoke.sh ${1:-}"

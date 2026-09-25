@@ -20,6 +20,7 @@ import type {
   ControllerHost,
   DeviceModelInfo,
   DriverMode,
+  ExtraKeyUpdate,
   LogLevel,
   MockDeviceConfig,
   OverrideChange,
@@ -33,16 +34,19 @@ import type {
 import type {
   KeyState,
   CommEntry,
+  EncoderSettings,
   ExtraKeyConfig,
   ImageModeOverride,
   DockStatus,
   ClientApp,
+  TouchStripMode,
 } from '../../types.js';
 import { WEBUI_PORT, webuiBindAddr } from '../../types.js';
 import { StatusPublisher } from './status-publisher.js';
 import { buildStateResponse } from './state-response.js';
 import { LoggingController } from './logging-controller.js';
 import { DevicePrefsController } from './device-prefs-controller.js';
+import { EncodersController } from './encoders-controller.js';
 import { liveDiagnosticsInputs } from './diagnostics-sources.js';
 import type { DiagnosticsOptions } from './diagnostics.js';
 import { UpdateController } from './update-controller.js';
@@ -59,14 +63,12 @@ export class WebUIServer extends EventEmitter implements WebUIController {
   private readonly settingsIdentity: SettingsIdentityController;
   private readonly modelOverrides: ModelOverridesController;
   private readonly logging: LoggingController;
-  private readonly devicePrefs: DevicePrefsController;
+  readonly devicePrefs: DevicePrefsController;
+  private readonly encoders: EncodersController;
   readonly updates: UpdateController;
-  private readonly imageChannel = new ImageChannel(this.bus, () => this.selectedDock);
+  readonly imageChannel = new ImageChannel(this.bus, () => this.selectedDock);
   get imageState(): Map<number, Buffer> {
     return this.imageChannel.imageState;
-  }
-  get imageFormat(): Map<number, ImageFormat> {
-    return this.imageChannel.imageFormat;
   }
   get selectedDock(): number {
     return this.dockRegistry.selectedDock;
@@ -83,12 +85,17 @@ export class WebUIServer extends EventEmitter implements WebUIController {
   isBrightnessOverride(deviceKey: string): boolean {
     return this.devicePrefs.isBrightnessOverride(deviceKey);
   }
-  /** Same, by dock index (app.ts's Elgato→primary brightness gate). */
   isBrightnessOverrideForDock(index: number): boolean {
     return this.devicePrefs.isBrightnessOverride(this.dockRegistry.deviceKeyFor(index));
   }
   get imageModeOverride(): ImageModeOverride {
     return this.devicePrefs.imageModeOverride;
+  }
+  touchStripModeFor(deviceKey: string): TouchStripMode {
+    return this.devicePrefs.touchStripModeFor(deviceKey);
+  }
+  encoderSettingsFor(deviceKey: string): EncoderSettings | undefined {
+    return this.encoders.settingsFor(deviceKey);
   }
   private readonly status: StatusPublisher;
   private readonly stats: Stats = { uptimeMs: 0, elgatoRxPkts: 0, elgatoTxPkts: 0, imagesSent: 0 };
@@ -136,6 +143,7 @@ export class WebUIServer extends EventEmitter implements WebUIController {
       this.dockRegistry.selectedBrightness(),
     );
     this.extraKeys = new ExtraKeysController(host, this.bus);
+    this.encoders = new EncodersController(host);
     this.settingsIdentity = new SettingsIdentityController(
       host,
       (level) => this.trySetLogLevel(level),
@@ -164,8 +172,7 @@ export class WebUIServer extends EventEmitter implements WebUIController {
     this.updates = new UpdateController(host, __VERSION__, () => this.dockRegistry.list());
   }
 
-  // Device tuning (model overrides) — see devices/model-overrides.ts
-  /** Read by DriverManager at probe time; undefined = registry defaults. */
+  /** Device tuning (model overrides) — undefined = registry defaults. See devices/model-overrides.ts. */
   modelOverrideFor(modelId: string): DeviceModelOverride | undefined {
     return this.modelOverrides.overrideFor(modelId);
   }
@@ -187,8 +194,7 @@ export class WebUIServer extends EventEmitter implements WebUIController {
     return this.modelOverrides.tryReset(modelId);
   }
 
-  // `listen = false` (--no-webui): settings still load (identity/brightness/extra-keys must work
-  // headless too), but the HTTP/WS listener + broadcast timers never start — notify*/log/snapshot become no-ops.
+  // listen=false (--no-webui): settings still load, but the HTTP/WS listener + broadcast timers never start.
   async start(listen = true): Promise<void> {
     await this.settings.load(); // direct load — no broadcasts/hardware events fire before anything listens
     // app.ts already applied the persisted level before startup (it re-reads settings.json to
@@ -199,7 +205,10 @@ export class WebUIServer extends EventEmitter implements WebUIController {
       port: this._port,
       listenIp: webuiBindAddr(),
       fetch: (req, extra) => this.handleRequest(req, extra),
-      websocket: this.bus.websocketHandlers((ws) => this.bus.sendTo(ws, 'status', this.snapshot())),
+      websocket: this.bus.websocketHandlers((ws) => {
+        this.bus.sendTo(ws, 'status', this.snapshot());
+        this.imageChannel.sendTouchSnapshot(ws);
+      }),
     });
 
     this.bus.start(() => {
@@ -217,7 +226,6 @@ export class WebUIServer extends EventEmitter implements WebUIController {
     this.server = null;
   }
 
-  /** True if at least one WebUI WS client is connected. */
   hasClients(): boolean {
     return this.bus.size > 0;
   }
@@ -247,7 +255,6 @@ export class WebUIServer extends EventEmitter implements WebUIController {
     return this.imageChannel.dockFramesSnapshot(dock);
   }
 
-  /** Switch the live preview to another dock: swap in its cached frames and replay them. */
   selectDock(index: number): void {
     if (index === this.selectedDock) return;
     this.dockRegistry.selectedDock = index;
@@ -292,6 +299,14 @@ export class WebUIServer extends EventEmitter implements WebUIController {
     this.devicePrefs.setImageMode(mode);
   }
 
+  trySetTouchStripMode(mode: TouchStripMode): ReqError | null {
+    return this.devicePrefs.trySetTouchStripMode(mode);
+  }
+
+  trySetEncoders(settings: EncoderSettings): ReqError | null {
+    return this.encoders.trySet(settings);
+  }
+
   notifyBrightness(level: number): void {
     this.devicePrefs.broadcastBrightness(level);
   }
@@ -304,7 +319,6 @@ export class WebUIServer extends EventEmitter implements WebUIController {
     this.status.setElgatoStatus(connected, remoteAddr);
   }
 
-  /** Which CORA client (Elgato app vs Bitfocus Companion) was detected. Reset to 'unknown' on disconnect. */
   notifyClientApp(app: ClientApp): void {
     this.status.setFlag('clientApp', app);
   }
@@ -317,10 +331,9 @@ export class WebUIServer extends EventEmitter implements WebUIController {
     this.imageChannel.pruneDeadDocks(live);
     this.settings.syncDockBrightness(docks);
     this.status.publish();
-    // Extra-key configs resolve from the (possibly changed) selected deviceKey; re-push so a replug
-    // doesn't leave the client's map stale. Skipped when selectDock(0) below already covers it.
+    // Re-push per-device values after a replug (the selected deviceKey may have changed); selectDock(0) covers it too.
     if (this.selectedDock !== 0 && !live.has(this.selectedDock)) this.selectDock(0);
-    else this.bus.broadcast('extraKeys', { configs: this.selectedExtraKeyConfigs() });
+    else this.broadcastSelectedDeviceState();
   }
 
   notifyElgatoAppConflict(conflict: boolean): void {
@@ -335,13 +348,7 @@ export class WebUIServer extends EventEmitter implements WebUIController {
     Object.assign(this.stats, delta);
   }
 
-  notifyDeviceModel(model: {
-    id: string;
-    name: string;
-    keyCount: number;
-    columns: number;
-    rows: number;
-  }): void {
+  notifyDeviceModel(model: Parameters<StatusPublisher['setDeviceModel']>[0]): void {
     this.status.setDeviceModel(model);
   }
 
@@ -350,7 +357,8 @@ export class WebUIServer extends EventEmitter implements WebUIController {
   }
 
   private broadcastSelectedDeviceState(): void {
-    this.devicePrefs.broadcastSelected(this.selectedExtraKeyConfigs());
+    this.devicePrefs.broadcastSelected(this.extraKeys.selectedConfigs());
+    this.encoders.broadcastSelected();
   }
 
   private handleRequest(
@@ -383,7 +391,9 @@ export class WebUIServer extends EventEmitter implements WebUIController {
       deviceModels: this.deviceModels,
       deviceIdentity: this.settingsIdentity.identity(),
       realDeviceIdentity: this.dockRegistry.selectedStatus()?.realDeviceIdentity,
-      extraKeys: this.selectedExtraKeyConfigs(),
+      extraKeys: this.extraKeys.selectedConfigs(),
+      ...this.devicePrefs.touchStripState(),
+      encoders: this.encoders.selected(),
       logLevel: this.logLevel(),
       logFilePath: this.logFilePath(),
       multiDeck: this.settings.multiDeck,
@@ -401,18 +411,12 @@ export class WebUIServer extends EventEmitter implements WebUIController {
     return this.settings.multiDeck;
   }
 
-  // Extra keys (293S 6th column — see extra-keys.ts / extra-keys-controller.ts)
-
   extraKeyConfigFor(deviceKey: string, wireId: number): ExtraKeyConfig | undefined {
     return this.extraKeys.configFor(deviceKey, wireId);
   }
 
-  private selectedExtraKeyConfigs(): Record<string, ExtraKeyConfig> {
-    return this.extraKeys.selectedConfigs();
-  }
-
-  trySetExtraKey(wireId: number, cfg: ExtraKeyConfig): ReqError | null {
-    return this.extraKeys.trySet(wireId, cfg, this.selectedDock);
+  trySetExtraKey(wireId: number, update: ExtraKeyUpdate): ReqError | null {
+    return this.extraKeys.trySet(wireId, update, this.selectedDock);
   }
 
   tryRunExtraKeyNow(wireId: number): ReqError | null {
@@ -455,8 +459,6 @@ export class WebUIServer extends EventEmitter implements WebUIController {
     return this.dockRegistry.brightnessFor(index);
   }
 
-  // Settings JSON surface (see settings-identity-controller.ts)
-
   getSettingsJson(): string {
     return this.settingsIdentity.json();
   }
@@ -468,8 +470,6 @@ export class WebUIServer extends EventEmitter implements WebUIController {
   applySettingsJson(raw: string): void {
     this.settingsIdentity.applyJson(raw);
   }
-
-  // Logging + diagnostics (see logging-controller.ts / docs/troubleshooting.md)
 
   trySetLogLevel(level: unknown): ReqError | null {
     return this.logging.trySetLevel(level);

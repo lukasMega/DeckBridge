@@ -37,18 +37,24 @@ export class ActivityBuffers {
 
   comm(entry: Omit<CommEntry, 'ts'>): void {
     const full: CommEntry = { ts: Date.now(), ...entry };
+    // Ring buffer always fills — diagnostics reads it — but the WS broadcast is
+    // advanced-view-only: the simple UI has no comm/log panel to receive it.
     this.push(this.comms, full, COMM_BUFFER_MAX);
-    this.push(this.flushQueue, full, COMM_BUFFER_MAX);
-    this.startFlush();
+    if (!__SIMPLE_ONLY__) {
+      this.push(this.flushQueue, full, COMM_BUFFER_MAX);
+      this.startFlush();
+    }
   }
 
   log(level: LogLevel, component: string, message: string): void {
     const entry: LogEntry = { ts: Date.now(), level, component, message };
     this.push(this.logs, entry, LOG_BUFFER_MAX);
-    // Batched on comm()'s timer for the same reason: one broadcast per entry competes
-    // with the image hot path. The advanced log panel rAF-coalesces appends anyway.
-    this.push(this.logFlushQueue, entry, LOG_BUFFER_MAX);
-    this.startFlush();
+    if (!__SIMPLE_ONLY__) {
+      // Batched on comm()'s timer for the same reason: one broadcast per entry competes
+      // with the image hot path. The advanced log panel rAF-coalesces appends anyway.
+      this.push(this.logFlushQueue, entry, LOG_BUFFER_MAX);
+      this.startFlush();
+    }
   }
 
   stop(): void {

@@ -24,6 +24,8 @@ export const text = (body: string): Response =>
   });
 export const jpeg = (body: Buffer): Response =>
   new Response(body, { headers: { 'Content-Type': 'image/jpeg', 'Cache-Control': 'no-store' } });
+export const bmp = (body: Buffer): Response =>
+  new Response(body, { headers: { 'Content-Type': 'image/bmp', 'Cache-Control': 'no-store' } });
 
 export type ParsedBody<T> = { body: T } | { error: Response };
 

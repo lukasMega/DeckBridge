@@ -21,12 +21,19 @@ import type {
   ImageEvent,
   DockStatus,
   ImageModeOverride,
+  DialEvent,
+  TouchInputEvent,
+  TouchWindowRegion,
+  TouchStripMode,
 } from './types.js';
 import type { DeviceIdentitySettings } from './settings-store.js';
-import { advertisedGeometry } from './devices/registry.js';
-import { deviceInputToMk2Index } from './translator.js';
+import { advertisedGeometry, advertisedModel, advertisedTouchStrip } from './devices/registry.js';
+import { deviceInputToExtraKey, deviceInputToMk2Index } from './key-map.js';
 import { sendSplashImages } from './splash-sender.js';
 import { ExtraKeyWidgets } from './extra-keys.js';
+import { EncoderActions, type EncoderOverride } from './encoders.js';
+import { ExtraKeyActions } from './command-actions.js';
+import { emulationProfiles } from './devices/model-overrides.js';
 import type { DeviceDriver, DeviceModel, DeviceModelOverride } from './devices/driver.js';
 import type { ElgatoServer, ElgatoChildServer } from './elgato.js';
 import type { DeviceConfig } from './elgato-types.js';
@@ -91,9 +98,18 @@ export function buildDockStatus(s: DockStatusInput): DockStatus {
   // with the physical device's own values, and only when usePhysicalIdentity is set — everything
   // else is the dock's own fixed identity (dockSerial/mdns) or the shared defaults.
   const usePhysical = model.cora.usePhysicalIdentity;
+  const encoderCount = physicalEncoderCount(model);
+  const pressable = pressableExtraKeys(model);
   return {
     index: s.index,
     ...(model.keyMap.extraKeys ? { extraKeys: model.keyMap.extraKeys } : {}),
+    ...(pressable.length > 0 ? { pressableExtraKeys: pressable } : {}),
+    ...(model.widgetDisplays
+      ? { widgetDisplays: model.widgetDisplays.map(({ wireId, label }) => ({ wireId, label })) }
+      : {}),
+    ...(encoderCount ? { encoderCount } : {}),
+    ...(model.cora.advertiseAs ? { coraProfile: model.cora.advertiseAs } : {}),
+    ...advertisedTouchStrip(model),
     modelId: model.id,
     modelName: model.name,
     keyCount: model.keyCount,
@@ -104,7 +120,7 @@ export function buildDockStatus(s: DockStatusInput): DockStatus {
     elgatoConnected: s.elgatoConnected,
     brightness: s.brightness,
     dockFirmwareVersion: DEFAULT_DOCK_FIRMWARE_VERSION,
-    childFirmwareVersion: (usePhysical && deviceInfo?.firmware) || DEFAULT_CHILD_FIRMWARE_VERSION,
+    childFirmwareVersion: childFirmwareFor(model, deviceInfo),
     serialNumber: identity?.dockSerial ?? DEFAULT_DOCK_SERIAL_NUMBER,
     childSerialNumber:
       (usePhysical && deviceInfo?.serial) || identity?.childSerial || DEFAULT_CHILD_SERIAL_NUMBER,
@@ -122,6 +138,20 @@ export function buildDockStatus(s: DockStatusInput): DockStatus {
         }
       : {}),
   };
+}
+
+/** Knobs on the physical panel: the model's own count, else the most any of its
+ *  CORA emulations declares — AKP05E's knobs are described only by its Plus profile,
+ *  and exist (for the encoder override) whichever profile it advertises. */
+function physicalEncoderCount(model: DeviceModel): number {
+  const emulated = emulationProfiles(model).map((profile) => profile.encoderCount ?? 0);
+  return Math.max(model.encoderCount ?? 0, ...emulated);
+}
+
+/** The extra keys that have a switch — those with an entry in keyMap.extraKeyInputs. */
+function pressableExtraKeys(model: DeviceModel): readonly number[] {
+  const inputs = model.keyMap.extraKeyInputs ?? [];
+  return (model.keyMap.extraKeys ?? []).filter((_, i) => inputs[i] !== undefined);
 }
 
 export type DockFrames = Map<number, { data: Buffer; format: 'jpeg' | 'bmp' }>;
@@ -158,6 +188,14 @@ export function wireCommonDriverEvents(
      *  undefined for identity-mapped models. Key-map learn mode needs it —
      *  a wrong map is exactly what it is there to fix. */
     onKey: (mk2Index: number, state: KeyEvent['state'], wireId?: number) => void;
+    /** Press on an extra key with a switch (keyMap.extraKeyInputs); `wireId` is the
+     *  extra key's image wire id, as keyed in its ExtraKeyConfig. */
+    onExtraKey?: (wireId: number, state: KeyEvent['state']) => void;
+    /** Encoder press/rotate (Stream Deck + emulation). Dropped by the child
+     *  server when the advertised geometry declares no encoders. */
+    onDial?: (event: DialEvent) => void;
+    /** Touch-strip gesture (Stream Deck + emulation). */
+    onTouch?: (event: TouchInputEvent) => void;
     /** Sleep/wake re-init sent CLE ALL — repaint the extra-key widgets it wiped. */
     onReinit: () => void;
   },
@@ -169,13 +207,21 @@ export function wireCommonDriverEvents(
       return;
     }
     const index = deviceInputToMk2Index(e.keyIndex, model);
-    // Outside the emulated grid (293S 6th column) — display-only keys
-    // with no switches; nothing to dispatch.
-    if (index < 0) return;
     const wire = e.keyIndex.toString(16).padStart(2, '0');
+    if (index < 0) {
+      // Outside the emulated grid: an AKP05E right-column key (re-paired as a Stream
+      // Deck +) runs its DeckBridge command; the 293S 6th column has no switches.
+      const extraKey = deviceInputToExtraKey(e.keyIndex, model);
+      if (extraKey < 0) return;
+      log('info', 'key', `${model.id} wire=0x${wire} → extra key ${extraKey} ${e.state}`);
+      opts.onExtraKey?.(extraKey, e.state);
+      return;
+    }
     log('info', 'key', `${model.id} wire=0x${wire} → mk2=${index} ${e.state}`);
     opts.onKey(index, e.state, e.keyIndex);
   });
+  driver.on('dial', (e: DialEvent) => opts.onDial?.(e));
+  driver.on('touch', (e: TouchInputEvent) => opts.onTouch?.(e));
   driver.on('error', (err: Error) => log('error', model.id, err.message));
   driver.on('reinit', opts.onReinit);
   driver.on(
@@ -183,6 +229,14 @@ export function wireCommonDriverEvents(
     ({ level, component, message }: { level: LogLevel; component: string; message: string }) =>
       log(level, component, message),
   );
+}
+
+/** Child firmware reported over CORA: the physical device's own when the model
+ *  forwards it, else the advertised profile's line (the desktop rejects 1.01.x for a
+ *  Stream Deck +), else the shared default. */
+function childFirmwareFor(model: DeviceModel, deviceInfo: DeviceInfo | undefined): string {
+  if (model.cora.usePhysicalIdentity && deviceInfo?.firmware) return deviceInfo.firmware;
+  return advertisedModel(model).cora.childFirmwareVersion ?? DEFAULT_CHILD_FIRMWARE_VERSION;
 }
 
 /** Server-facing half of DriverManager.applyDeviceModel (no WebUI): advertises the
@@ -196,10 +250,14 @@ export function applyModelToServers(
 ): void {
   const pid = model.cora.productId;
   const geo = advertisedGeometry(model);
-  const configPatch: Partial<DeviceConfig> = { productId: pid };
-  if (model.cora.usePhysicalIdentity) {
-    if (deviceInfo?.serial) configPatch.childSerialNumber = deviceInfo.serial;
-    if (deviceInfo?.firmware) configPatch.childFirmwareVersion = deviceInfo.firmware;
+  // Always patched: the servers outlive a model, so a Plus firmware must not stick
+  // after the device is unplugged or re-paired as an MK.2.
+  const configPatch: Partial<DeviceConfig> = {
+    productId: pid,
+    childFirmwareVersion: childFirmwareFor(model, deviceInfo),
+  };
+  if (model.cora.usePhysicalIdentity && deviceInfo?.serial) {
+    configPatch.childSerialNumber = deviceInfo.serial;
   }
   server.setDeviceConfig(configPatch);
   server.setChildGeometry(geo);
@@ -236,6 +294,13 @@ export interface DeviceSessionOptions {
   /** This dock's persisted extra-key config (by device wire id), resolved per
    *  press by the coordinator (deviceKey captured there) — see extra-keys.ts. */
   extraKeyConfigFor?: (wireId: number) => ExtraKeyConfig | undefined;
+  /** This dock's persisted touch-strip mode. Default DEFAULT_TOUCH_STRIP_MODE. */
+  touchStripMode?: TouchStripMode;
+  /** This dock's 'deckbridge-repaint' interval, read live each widget tick. */
+  touchStripRepaintMs?: () => number;
+  /** This dock's strip mode + encoder settings, resolved per dial event (deviceKey
+   *  captured by the coordinator). Absent = knobs always reach the Elgato app. */
+  encoderOverride?: () => EncoderOverride | undefined;
 }
 
 export class DeviceSession {
@@ -255,6 +320,8 @@ export class DeviceSession {
   private readonly initialImageMode: ImageModeOverride;
   private readonly extraKeyConfigFor?: (wireId: number) => ExtraKeyConfig | undefined;
   private readonly extraKeys: ExtraKeyWidgets;
+  private readonly encoders: EncoderActions;
+  private readonly extraKeyActions: ExtraKeyActions;
   private brightness = DEFAULT_BRIGHTNESS;
   private stopped = false;
 
@@ -273,7 +340,14 @@ export class DeviceSession {
     this.brightness = opts.initialBrightness ?? DEFAULT_BRIGHTNESS;
     this.initialImageMode = opts.initialImageMode ?? null;
     this.extraKeyConfigFor = opts.extraKeyConfigFor;
-    this.extraKeys = new ExtraKeyWidgets(this.driver, (wireId) => this.extraKeyConfigFor?.(wireId));
+    this.extraKeys = new ExtraKeyWidgets(
+      this.driver,
+      (wireId) => this.extraKeyConfigFor?.(wireId),
+      opts.touchStripMode,
+      opts.touchStripRepaintMs,
+    );
+    this.encoders = new EncoderActions(() => opts.encoderOverride?.());
+    this.extraKeyActions = new ExtraKeyActions((wireId) => this.extraKeyConfigFor?.(wireId));
   }
 
   /** The underlying driver — used by DriverManager.getDriverForDock so app.ts
@@ -361,10 +435,20 @@ export class DeviceSession {
     this.extraKeys.forceRun(wireId);
   }
 
+  /** Switch who paints the touch strip (WebUI mode selector). */
+  setTouchStripMode(mode: TouchStripMode): void {
+    this.extraKeys.setTouchStripMode(mode);
+  }
+
   /** Mirror DriverManager.attachRealDriverListeners minus every WebUI hook. */
   private wireListeners(): void {
     wireCommonDriverEvents(this.driver, this.model, {
       onKey: (index, state) => this.childServer.sendKeyEvent(index, state),
+      onExtraKey: (wireId, state) => this.extraKeyActions.handleKey(wireId, state),
+      onDial: (event) => {
+        if (!this.encoders.handleDial(event)) this.childServer.sendDial(event);
+      },
+      onTouch: (event) => this.childServer.sendTouch(event),
       onReinit: () => this.repaintExtraKeys(),
     });
     this.driver.on('disconnect', () => {
@@ -378,6 +462,13 @@ export class DeviceSession {
       this.driver.renderCoraImage(keyIndex, data, format);
       this.onImage?.(keyIndex, data, format);
     });
+    this.childServer.on(
+      'touchImage',
+      ({ data, region }: { data: Uint8Array; region?: TouchWindowRegion }) => {
+        this.driver.renderTouchImage(data, region);
+        this.extraKeys.noteTouchFrame(region);
+      },
+    );
     this.childServer.on('brightness', (level: number) => {
       if (this.ignoreElgatoBrightness?.()) {
         log('debug', this.model.id, `brightness ${level} from Elgato ignored (override on)`);

@@ -3,15 +3,17 @@
 //! into Windows since 10 1703 — no Bonjour/avahi dependency, unlike macOS/Linux
 //! which shell out to `dns-sd`/`avahi-publish-service`).
 //!
-//! Only one registration is active at a time (deckbridge advertises a single
-//! CORA service), tracked in a module-level static. `start` fires the register
-//! call and returns immediately — Windows completes registration asynchronously
-//! and invokes the completion callback, which we ignore (fire-and-forget, per
-//! the "never block the CORA hot path" rule; TS never awaits mDNS readiness).
-//! `stop` deregisters synchronously, mirroring how the TS side's `stop()` kills
-//! the `dns-sd` subprocess synchronously on the other platforms.
+//! Registrations are keyed by port (one deckbridge process can run several
+//! docks, each with its own CORA TCP port), tracked in a module-level static
+//! map. `start` fires the register call and returns immediately — Windows
+//! completes registration asynchronously and invokes the completion callback,
+//! which we ignore (fire-and-forget, per the "never block the CORA hot path"
+//! rule; TS never awaits mDNS readiness). `stop` deregisters synchronously,
+//! mirroring how the TS side's `stop()` kills the `dns-sd` subprocess
+//! synchronously on the other platforms.
 
 use crate::util::ffi_guard;
+use std::collections::HashMap;
 use std::ffi::c_char;
 use std::ptr::null_mut;
 use std::sync::Mutex;
@@ -30,7 +32,7 @@ const DNS_SERVICE_REGISTER_REQUEST_VERSION1: u32 = 1;
 
 /// The in-flight/registered service instance, kept alive for `DnsServiceDeRegister`
 /// (it needs the same `DNS_SERVICE_INSTANCE*` that was registered) and to
-/// guarantee only one registration runs at a time.
+/// guarantee only one registration runs per port.
 struct ActiveRegistration {
     instance: *mut DNS_SERVICE_INSTANCE,
 }
@@ -38,7 +40,7 @@ struct ActiveRegistration {
 // safe to invoke from any thread, and access is serialized by the Mutex.
 unsafe impl Send for ActiveRegistration {}
 
-static ACTIVE: Mutex<Option<ActiveRegistration>> = Mutex::new(None);
+static ACTIVE: Mutex<Option<HashMap<u16, ActiveRegistration>>> = Mutex::new(None);
 
 fn to_wide(s: &str) -> Vec<u16> {
     s.encode_utf16().chain(std::iter::once(0)).collect()
@@ -88,9 +90,11 @@ pub unsafe extern "C" fn mdns_advertise_start(
         };
 
         let mut guard = ACTIVE.lock().unwrap_or_else(|e| e.into_inner());
-        // A previous registration must be torn down before starting a new one —
-        // DnsServiceRegister doesn't replace an existing instance in place.
-        if let Some(prev) = guard.take() {
+        let map = guard.get_or_insert_with(HashMap::new);
+        // A previous registration on this port must be torn down before starting
+        // a new one — DnsServiceRegister doesn't replace an existing instance in
+        // place. Registrations on other ports (other docks) are left untouched.
+        if let Some(prev) = map.remove(&port) {
             // SAFETY: prev.instance was registered by a prior advertise_start call.
             unsafe { deregister(prev.instance) };
         }
@@ -143,7 +147,7 @@ pub unsafe extern "C" fn mdns_advertise_start(
             return 0;
         }
 
-        *guard = Some(ActiveRegistration { instance });
+        map.insert(port, ActiveRegistration { instance });
         1
     })
 }
@@ -167,13 +171,15 @@ unsafe fn deregister(instance: *mut DNS_SERVICE_INSTANCE) {
     }
 }
 
-/// Stops advertising (no-op if nothing is registered). Blocking, per the plan:
-/// only `stop()` (app shutdown) may block; `start()` never does.
+/// Stops advertising on `port` (no-op if that port has no active registration;
+/// other ports' registrations are untouched). Blocking, per the plan: only
+/// `stop()` (app shutdown / dock stop) may block; `start()` never does.
 #[no_mangle]
-pub extern "C" fn mdns_advertise_stop() {
+pub extern "C" fn mdns_advertise_stop(port: u16) {
     ffi_guard((), || {
         let mut guard = ACTIVE.lock().unwrap_or_else(|e| e.into_inner());
-        if let Some(active) = guard.take() {
+        let Some(map) = guard.as_mut() else { return };
+        if let Some(active) = map.remove(&port) {
             // SAFETY: active.instance was registered by a prior advertise_start.
             unsafe { deregister(active.instance) };
         }

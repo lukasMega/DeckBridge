@@ -162,16 +162,18 @@ export default defineConfig([
         { type: 'plugin-worker', mode: 'full', pattern: 'src/plugin-worker.ts' },
         { type: 'plugin-worker-host', mode: 'full', pattern: 'src/plugin-host.ts' },
         { type: 'plugin-worker-ipc', mode: 'full', pattern: 'src/plugin-worker-protocol.ts' },
-        { type: 'transform', mode: 'full', pattern: ['src/translator.ts', 'src/image-render.ts', 'src/splash-sender.ts'] },
+        { type: 'transform', mode: 'full', pattern: ['src/translator.ts', 'src/image-render.ts'] },
         { type: 'image-main', mode: 'full', pattern: ['src/image-pipeline.ts', 'src/image-cache.ts', 'src/image-assembler.ts'] },
         { type: 'cora', mode: 'full', pattern: ['src/cora-*.ts', 'src/elgato*.ts', 'src/feature-response.ts'] },
         { type: 'infra', mode: 'full', pattern: ['src/native-libs.ts', 'src/mdns-advertiser.ts', 'src/tray.ts', 'src/settings-store.ts', 'src/device-identity.ts', 'src/os-utils.ts', 'src/log-file.ts', 'src/update-check.ts', 'src/daily-ping.ts', 'src/daily-ping-env.ts'] },
-        { type: 'app', mode: 'full', pattern: ['src/app.ts', 'src/driver-manager*.ts', 'src/cora-startup.ts', 'src/device-session.ts', 'src/extra-keys.ts'] },
-        { type: 'dev-entry', mode: 'full', pattern: ['src/mirabox-smoke.ts', 'src/k1pro-probe.ts', 'src/d6-capture.ts', 'src/probe-utils.ts'] },
+        { type: 'app', mode: 'full', pattern: ['src/app.ts', 'src/driver-manager*.ts', 'src/cora-startup.ts', 'src/device-session.ts', 'src/extra-keys.ts', 'src/encoders.ts', 'src/command-actions.ts'] },
+        { type: 'dev-entry', mode: 'full', pattern: ['src/mirabox-smoke.ts', 'src/k1pro-probe.ts', 'src/d6-capture.ts', 'src/akp05-capture.ts', 'src/akp05-strip-probe.ts', 'src/akp05-strip-guided-probe.ts', 'src/probe-utils.ts'] },
         { type: 'cli', mode: 'full', pattern: ['src/cli-devices.ts', 'src/cli-diagnose.ts'] },
         // worker-lifecycle.ts is a zero-import leaf (blob-URL spawn + deferred terminate)
         // shared by the hid worker hosts AND plugin-host — lifecycle only, no protocol.
-        { type: 'shared', mode: 'full', pattern: ['src/types.ts', 'src/logger.ts', 'src/capabilities.ts', 'src/comm-format.ts', 'src/cli.ts', 'src/worker-lifecycle.ts']
+        // key-map.ts + splash-sender.ts are pure (no FFI): main imports them without
+        // pulling translator.ts's ffi/image-proc onto the main thread.
+        { type: 'shared', mode: 'full', pattern: ['src/types.ts', 'src/logger.ts', 'src/capabilities.ts', 'src/comm-format.ts', 'src/cli.ts', 'src/worker-lifecycle.ts', 'src/splash-sender.ts', 'src/key-map.ts']
         },
       ],
     },
@@ -240,6 +242,12 @@ export default defineConfig([
               from: { element: { type: ['platform', 'ffi', 'shared', 'worker-ipc'] } },
               allow: { to: { element: { type: 'platform' } } },
             },
+            // splash-sender.ts (shared) embeds the "connected" splash image.
+            {
+              from: { element: { type: 'shared' } },
+              allow: { to: { element: { type: 'assets' } } },
+              message: 'shared may import assets ONLY for splash-sender.ts\'s splash image data.',
+            },
 
             // ── tier A (main thread) ──
             {
@@ -254,7 +262,7 @@ export default defineConfig([
                       'image-main',
                       'worker-host',
                       'devices',
-                      'transform',
+                      // driver-manager*.ts read cached HID discovery results (ffi/hid-discovery.js)
                       'ffi',
                       // extra-keys.ts composes widget key images from the packed bitmap font
                       'assets',

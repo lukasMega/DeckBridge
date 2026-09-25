@@ -11,7 +11,15 @@ import type {
   DeviceModel,
   DeviceModelOverride,
 } from './devices/driver.js';
-import type { ImageModeOverride, KeyEvent } from './types.js';
+import type {
+  ImageModeOverride,
+  KeyEvent,
+  DialEvent,
+  TouchInputEvent,
+  TouchStripOptions,
+  TouchWindowRegion,
+} from './types.js';
+import { DEFAULT_TOUCH_STRIP_OPTIONS } from './types.js';
 
 const OPEN_TIMEOUT_MS = 10_000;
 const CLOSE_GRACE_MS = 1_000;
@@ -35,6 +43,8 @@ export class WorkerHidDriver extends EventEmitter implements DeviceDriver {
   deviceFirmware: string | undefined = undefined;
   /** HID path the worker opened this device with — see device-identity.ts. */
   hidPath: string | undefined = undefined;
+  /** Last options posted — the worker resets to the defaults on open, and so does this. */
+  touchStripOptions: TouchStripOptions = DEFAULT_TOUCH_STRIP_OPTIONS;
   private worker: Worker | null = null;
   private objectUrl: string | null = null;
   private openResolve: (() => void) | null = null;
@@ -55,6 +65,7 @@ export class WorkerHidDriver extends EventEmitter implements DeviceDriver {
     if (this.openReject) {
       return Promise.reject(new Error('open already in flight'));
     }
+    this.touchStripOptions = DEFAULT_TOUCH_STRIP_OPTIONS;
     if (!this.worker) {
       const { worker: w, url } = spawnWorker(workerSource);
       this.objectUrl = url;
@@ -101,6 +112,27 @@ export class WorkerHidDriver extends EventEmitter implements DeviceDriver {
    *  and hid_write burst that would otherwise stall the main thread on connect. */
   sendSplashImage(keyIndex: number, bytes: Uint8Array, spec: DeviceImageSpec): void {
     this.post({ type: 'splashImage', keyIndex, bytes: new Uint8Array(bytes), spec });
+  }
+
+  /** Stream Deck + window image (or a partial-window region) → worker: split into
+   *  the device's touch segments and write each (off the main thread). */
+  renderTouchImage(bytes: Uint8Array, region?: TouchWindowRegion): void {
+    this.post({ type: 'touchImage', bytes: new Uint8Array(bytes), region });
+  }
+
+  /** Touch-strip zones DeckBridge widgets own — the worker withholds Elgato strip
+   *  segments for them. Copied so the caller may reuse its array. */
+  setTouchStripMask(wireIds: readonly number[]): void {
+    this.post({ type: 'setTouchStripMask', wireIds: [...wireIds] });
+  }
+
+  restoreTouchSegments(wireIds: readonly number[]): void {
+    this.post({ type: 'restoreTouchSegments', wireIds: [...wireIds] });
+  }
+
+  setTouchStripOptions(options: TouchStripOptions): void {
+    this.touchStripOptions = options;
+    this.post({ type: 'setTouchStripOptions', options: { ...options } });
   }
 
   setBrightness(level: number): void {
@@ -166,6 +198,12 @@ export class WorkerHidDriver extends EventEmitter implements DeviceDriver {
         break;
       case 'key':
         this.emit('key', { keyIndex: msg.keyIndex, state: msg.state } satisfies KeyEvent);
+        break;
+      case 'dial':
+        this.emit('dial', msg.event satisfies DialEvent);
+        break;
+      case 'touch':
+        this.emit('touch', msg.event satisfies TouchInputEvent);
         break;
       case 'comm':
         this.emit('comm', msg.entry);

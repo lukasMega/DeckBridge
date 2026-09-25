@@ -6,11 +6,16 @@ import type { BitmapFont } from './assets/font-atlas.js';
 import {
   COMMAND_INTERVAL_DEFAULT_MS,
   COMMAND_TIMEOUT_DEFAULT_MS,
+  DEFAULT_TOUCH_STRIP_MODE,
+  PLUS_TOUCH_WIDTH,
+  TOUCH_STRIP_REPAINT_DEFAULT_MS,
   type ExtraKeyConfig,
+  type TouchStripMode,
+  type TouchWindowRegion,
 } from './types.js';
 import type { DeviceDriver } from './devices/driver.js';
 import { splashSpec } from './splash-sender.js';
-import { platformName, readText } from './os-utils.js';
+import { runCommand } from './os-utils.js';
 import { log } from './logger.js';
 import { pluginValueFor, type PluginStatus } from './plugin-host.js';
 
@@ -99,10 +104,11 @@ function fontBits(font: BitmapFont): Uint8Array {
   return bits;
 }
 
-/** Blit one glyph (foreground pixels only) into a BGR pixel buffer. */
+/** Blit one glyph (foreground pixels only) into a width×height BGR pixel buffer. */
 function blitGlyph(
   px: Uint8Array,
-  size: number,
+  width: number,
+  height: number,
   font: BitmapFont,
   codepoint: number,
   x0: number,
@@ -115,12 +121,12 @@ function blitGlyph(
   const base = idx * rowBytes * font.height;
   for (let y = 0; y < font.height; y++) {
     const py = y0 + y;
-    if (py < 0 || py >= size) continue;
+    if (py < 0 || py >= height) continue;
     for (let x = 0; x < font.width; x++) {
       const on = bits[base + y * rowBytes + (x >> 3)]! & (0x80 >> (x & 7));
       const pxX = x0 + x;
-      if (!on || pxX < 0 || pxX >= size) continue;
-      const o = (py * size + pxX) * 3;
+      if (!on || pxX < 0 || pxX >= width) continue;
+      const o = (py * width + pxX) * 3;
       px[o] = FG[0];
       px[o + 1] = FG[1];
       px[o + 2] = FG[2];
@@ -128,10 +134,10 @@ function blitGlyph(
   }
 }
 
-/** Compose widget lines into an upright size×size 24-bit BMP (the worker
+/** Compose widget lines into an upright width×height 24-bit BMP (the worker
  *  transform accepts any format the image crate sniffs — BMP included). */
-export function composeWidgetBmp(lines: readonly WidgetLine[], size: number): Uint8Array {
-  const px = new Uint8Array(size * size * 3);
+export function composeWidgetBmp(lines: readonly WidgetLine[], width: number, height = width) {
+  const px = new Uint8Array(width * height * 3);
   for (let o = 0; o < px.length; o += 3) {
     px[o] = BG[0];
     px[o + 1] = BG[1];
@@ -139,35 +145,35 @@ export function composeWidgetBmp(lines: readonly WidgetLine[], size: number): Ui
   }
 
   const totalH = lines.reduce((h, l) => h + (l.big ? FONT_BIG : FONT_SMALL).height, 0);
-  let y = Math.max(0, Math.floor((size - totalH) / 2));
+  let y = Math.max(0, Math.floor((height - totalH) / 2));
   for (const line of lines) {
     const font = line.big ? FONT_BIG : FONT_SMALL;
-    const maxChars = Math.floor(size / font.width);
+    const maxChars = Math.floor(width / font.width);
     const text = Array.from(line.text).slice(0, maxChars);
-    let x = Math.floor((size - text.length * font.width) / 2);
+    let x = Math.floor((width - text.length * font.width) / 2);
     for (const ch of text) {
-      blitGlyph(px, size, font, ch.codePointAt(0)!, x, y);
+      blitGlyph(px, width, height, font, ch.codePointAt(0)!, x, y);
       x += font.width;
     }
     y += font.height;
   }
 
   // 24-bit bottom-up BMP: 14-byte file header + 40-byte BITMAPINFOHEADER.
-  const rowSize = Math.ceil((size * 3) / 4) * 4;
-  const dataSize = rowSize * size;
+  const rowSize = Math.ceil((width * 3) / 4) * 4;
+  const dataSize = rowSize * height;
   const buf = Buffer.alloc(54 + dataSize);
   buf.write('BM', 0, 'ascii');
   buf.writeUInt32LE(buf.length, 2);
   buf.writeUInt32LE(54, 10); // pixel data offset
   buf.writeUInt32LE(40, 14); // info header size
-  buf.writeInt32LE(size, 18);
-  buf.writeInt32LE(size, 22);
+  buf.writeInt32LE(width, 18);
+  buf.writeInt32LE(height, 22);
   buf.writeUInt16LE(1, 26); // planes
   buf.writeUInt16LE(24, 28); // bpp
   buf.writeUInt32LE(dataSize, 34);
-  for (let row = 0; row < size; row++) {
-    const srcY = size - 1 - row; // bottom-up
-    buf.set(px.subarray(srcY * size * 3, (srcY + 1) * size * 3), 54 + row * rowSize);
+  for (let row = 0; row < height; row++) {
+    const srcY = height - 1 - row; // bottom-up
+    buf.set(px.subarray(srcY * width * 3, (srcY + 1) * width * 3), 54 + row * rowSize);
   }
   return new Uint8Array(buf);
 }
@@ -254,21 +260,6 @@ function weatherTempFor(param: string | undefined, onUpdate: () => void): number
 
 const commandCache = new Map<string, CacheEntry<string>>();
 
-/** Read a spawned process' stdout to a string, killing it after `timeoutMs` so
- *  a hung command can't wedge the entry on inflight forever. */
-async function runCommand(cmd: string, timeoutMs: number): Promise<string> {
-  const args = platformName() === 'Windows' ? ['cmd', '/c', cmd] : ['sh', '-c', cmd];
-  const p = tjs.spawn(args, { stdout: 'pipe', stderr: 'ignore' });
-  const killer = setTimeout(() => p.kill(), timeoutMs);
-  try {
-    const out = await readText(p.stdout);
-    await p.wait();
-    return out;
-  } finally {
-    clearTimeout(killer);
-  }
-}
-
 /** Cached stdout of the command widget's command; re-runs at most every `intervalMs`. */
 function commandOutputFor(
   param: string | undefined,
@@ -291,6 +282,15 @@ function forceRunCommand(param: string | undefined, timeoutMs: number, onUpdate:
 
 // Per-dock scheduler
 
+/** A zone is DeckBridge's only when a real widget is assigned ('none' = unowned). */
+function owns(cfg: ExtraKeyConfig | undefined): boolean {
+  return cfg !== undefined && cfg.widget !== 'none';
+}
+
+function sameIds(a: readonly number[], b: readonly number[]): boolean {
+  return a.length === b.length && a.every((id, i) => id === b[i]);
+}
+
 /** Ticks once a second, re-renders every configured widget, and repaints a key only
  *  when its content changed (clock → one repaint per minute; idle cost is a few string
  *  compares). One instance per connected dock. */
@@ -299,27 +299,70 @@ export class ExtraKeyWidgets {
   private readonly configFor: (wireId: number) => ExtraKeyConfig | undefined;
   private timer: ReturnType<typeof setInterval> | undefined;
   private lastPainted = new Map<number, string>();
+  private mode: TouchStripMode;
+  /** Last touch-strip ownership mask pushed to the driver (see pushMask). */
+  private lastMask: readonly number[] = [];
+  /** Between start() and stop() — a dock that started with nothing to paint ('elgato'
+   *  strip, no side keys) must still begin ticking when an override mode is chosen. */
+  private active = false;
+  private readonly repaintIntervalMs: () => number;
+  /** 'deckbridge-repaint': when the Elgato app last drew on each strip zone. */
+  private lastElgatoFrameAt = new Map<number, number>();
+  /** 'deckbridge-repaint': strip zones currently showing a widget — the ones that
+   *  need the app's image put back when the widget leaves (nothing is masked). */
+  private widgetOnZone = new Set<number>();
 
-  constructor(driver: DeviceDriver, configFor: (wireId: number) => ExtraKeyConfig | undefined) {
+  constructor(
+    driver: DeviceDriver,
+    configFor: (wireId: number) => ExtraKeyConfig | undefined,
+    mode: TouchStripMode = DEFAULT_TOUCH_STRIP_MODE,
+    /** 'deckbridge-repaint' hold-off after an Elgato frame; read live, so a WebUI
+     *  change applies without a restart. */
+    repaintIntervalMs: () => number = () => TOUCH_STRIP_REPAINT_DEFAULT_MS,
+  ) {
     this.driver = driver;
     this.configFor = configFor;
+    this.mode = mode;
+    this.repaintIntervalMs = repaintIntervalMs;
   }
 
   start(): void {
-    if (!this.driver.model.keyMap.extraKeys || this.timer !== undefined) return;
-    this.tick();
-    this.timer = setInterval(() => this.tick(), 1000);
+    this.active = true;
+    // Unconditional: the worker drops its mask on every (re)open.
+    this.pushMask(true);
+    this.ensureTicking();
   }
 
   stop(): void {
+    this.active = false;
     if (this.timer !== undefined) clearInterval(this.timer);
     this.timer = undefined;
+  }
+
+  private ensureTicking(): void {
+    if (!this.active || this.widgetIds().length === 0 || this.timer !== undefined) return;
+    this.tick();
+    this.timer = setInterval(() => this.tick(), 1000);
   }
 
   /** Force a full repaint on the next tick (config change / device reinit). */
   repaint(): void {
     this.lastPainted.clear();
+    this.pushMask();
     if (this.timer !== undefined) this.tick();
+  }
+
+  /** Switch who drives the touch strip (widgetDisplays); side keys are unaffected.
+   *  No clearKey on leaving an override: the worker restores the last Elgato image
+   *  for every zone that leaves the mask. */
+  setTouchStripMode(mode: TouchStripMode): void {
+    if (this.mode === mode) return;
+    // Leaving to 'elgato' changes no mask, so the worker restores nothing by itself.
+    if (mode === 'elgato') this.restoreZones([...this.widgetOnZone]);
+    this.widgetOnZone.clear();
+    this.mode = mode;
+    this.repaint();
+    this.ensureTicking();
   }
 
   /** Build the render context for one widget, kicking off the background
@@ -352,21 +395,105 @@ export class ExtraKeyWidgets {
   }
 
   private tick(): void {
-    const extraKeys = this.driver.model.keyMap.extraKeys;
-    if (!extraKeys) return;
+    // Before painting, so an Elgato strip frame can't land on a newly owned zone.
+    this.pushMask();
+    const widgetIds = this.widgetIds();
+    if (widgetIds.length === 0) return;
     const now = new Date();
-    for (const wireId of extraKeys) {
+    for (const wireId of widgetIds) {
       const cfg = this.configFor(wireId);
+      if (this.leftToApp(wireId, cfg, now.getTime())) continue;
       const lines = cfg ? renderWidgetLines(cfg, this.contextFor(cfg, now)) : null;
       const sig = lines === null ? '' : JSON.stringify(lines);
       if (this.lastPainted.get(wireId) === sig) continue;
       this.lastPainted.set(wireId, sig);
-      if (lines === null) {
-        this.driver.clearKey(wireId);
-      } else if (this.driver.sendSplashImage) {
-        const spec = splashSpec(this.driver.model);
-        this.driver.sendSplashImage(wireId, composeWidgetBmp(lines, spec.width), spec);
-      }
+      this.paint(wireId, lines);
     }
+  }
+
+  /** 'deckbridge-repaint' zones the widget must not paint this tick: unassigned ones
+   *  (the app shows through) and ones inside an Elgato-frame hold-off. */
+  private leftToApp(wireId: number, cfg: ExtraKeyConfig | undefined, nowMs: number): boolean {
+    if (this.mode !== 'deckbridge-repaint' || !this.widgetDisplay(wireId)) return false;
+    if (owns(cfg)) return this.inElgatoHoldOff(wireId, nowMs);
+    // Forget the paint so a re-assign repaints.
+    this.lastPainted.delete(wireId);
+    if (this.widgetOnZone.has(wireId)) this.restoreZones([wireId]);
+    return true;
+  }
+
+  private paint(wireId: number, lines: ReturnType<typeof renderWidgetLines>): void {
+    if (lines === null) {
+      this.driver.clearKey(wireId);
+      return;
+    }
+    if (!this.driver.sendSplashImage) return;
+    const display = this.widgetDisplay(wireId);
+    const spec = display?.image ?? splashSpec(this.driver.model);
+    this.driver.sendSplashImage(wireId, composeWidgetBmp(lines, spec.width, spec.height), spec);
+    if (this.mode === 'deckbridge-repaint' && display) this.widgetOnZone.add(wireId);
+  }
+
+  /** An Elgato strip frame reached the device (nothing is masked under
+   *  'deckbridge-repaint'): the zones it covers show the app's image until the
+   *  repaint interval passes with no further frame, then the widget comes back. */
+  noteTouchFrame(region?: TouchWindowRegion): void {
+    const ids = this.widgetDisplayIds();
+    if (this.mode !== 'deckbridge-repaint' || ids.length === 0) return;
+    const sliceWidth = Math.floor(PLUS_TOUCH_WIDTH / ids.length);
+    const wholeStrip =
+      this.driver.touchStripOptions?.upload === 'always' && this.driver.model.touchStripDisplay;
+    const x = wholeStrip ? 0 : (region?.x ?? 0);
+    const w = wholeStrip ? PLUS_TOUCH_WIDTH : (region?.w ?? PLUS_TOUCH_WIDTH);
+    const nowMs = Date.now();
+    ids.forEach((wireId, i) => {
+      if (x >= (i + 1) * sliceWidth || x + w <= i * sliceWidth) return;
+      this.lastElgatoFrameAt.set(wireId, nowMs);
+      this.lastPainted.delete(wireId);
+      this.widgetOnZone.delete(wireId);
+    });
+  }
+
+  private restoreZones(wireIds: number[]): void {
+    for (const wireId of wireIds) this.widgetOnZone.delete(wireId);
+    if (this.active && wireIds.length > 0) this.driver.restoreTouchSegments?.(wireIds);
+  }
+
+  private inElgatoHoldOff(wireId: number, nowMs: number): boolean {
+    const at = this.lastElgatoFrameAt.get(wireId);
+    if (at === undefined) return false;
+    if (nowMs - at < this.repaintIntervalMs()) return true;
+    this.lastElgatoFrameAt.delete(wireId);
+    return false;
+  }
+
+  private widgetIds(): readonly number[] {
+    const sideKeys = this.driver.model.keyMap.extraKeys ?? [];
+    if (this.mode === 'elgato') return sideKeys;
+    return [...sideKeys, ...this.widgetDisplayIds()];
+  }
+
+  /** Strip zones whose Elgato images the worker must withhold: all of them under
+   *  'deckbridge-ignore', none otherwise — under 'deckbridge-repaint' the app's frames
+   *  always show, and the widget returns after a hold-off (noteTouchFrame). */
+  private stripMask(): readonly number[] {
+    return this.mode === 'deckbridge-ignore' ? this.widgetDisplayIds() : [];
+  }
+
+  /** Push the ownership mask when it changed (`force`: the worker lost it on open). */
+  private pushMask(force = false): void {
+    if (!this.active || this.widgetDisplayIds().length === 0) return;
+    const mask = this.stripMask();
+    if (!force && sameIds(mask, this.lastMask)) return;
+    this.lastMask = mask;
+    this.driver.setTouchStripMask?.(mask);
+  }
+
+  private widgetDisplayIds(): readonly number[] {
+    return this.driver.model.widgetDisplays?.map((display) => display.wireId) ?? [];
+  }
+
+  private widgetDisplay(wireId: number) {
+    return this.driver.model.widgetDisplays?.find((display) => display.wireId === wireId);
   }
 }

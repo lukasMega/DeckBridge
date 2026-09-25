@@ -9,7 +9,12 @@ import { KeyGridPreview } from '../components/KeyGridPreview.js';
 import { ExtraKeysPanel } from './extra-keys-panel.js';
 import { DockList } from './dock-cards.js';
 import { openSdApp, quitElgatoApp } from './handlers.js';
-import { isMultiDockView, clientAppName } from '../ui-helpers.js';
+import {
+  isMultiDockView,
+  clientAppName,
+  selectedCoraProfile,
+  selectedTouchStripSize,
+} from '../ui-helpers.js';
 
 export function StageReady({
   docks,
@@ -18,6 +23,8 @@ export function StageReady({
   const keyCount = useStore((s) => s.status.keyCount ?? 15);
   const columns = useStore((s) => s.status.columns ?? 5);
   const modelId = useStore((s) => s.status.modelId);
+  const coraProfile = useStore((s) => selectedCoraProfile(s.status));
+  const touchStrip = useStore((s) => selectedTouchStripSize(s.status));
   const selectedDock = useStore((s) => s.status.selectedDock ?? 0);
   const appName = useStore((s) => clientAppName(s.status.clientApp));
 
@@ -53,7 +60,14 @@ export function StageReady({
         <h1>Everything&apos;s working</h1>
         <p>Your Stream Deck is connected{appName} and ready to use.</p>
       </div>
-      <KeyGridPreview keyCount={keyCount} columns={columns} dimmed={false} modelId={modelId} />
+      <KeyGridPreview
+        keyCount={keyCount}
+        columns={columns}
+        dimmed={false}
+        modelId={modelId}
+        coraProfile={coraProfile}
+        touchStrip={touchStrip}
+      />
       <Brightness />
       <ExtraKeysPanel />
     </>
@@ -85,6 +99,8 @@ export function StageDeviceNoElgato({
   const keyCount = useStore((s) => s.status.keyCount ?? 15);
   const columns = useStore((s) => s.status.columns ?? 5);
   const modelId = useStore((s) => s.status.modelId);
+  const coraProfile = useStore((s) => selectedCoraProfile(s.status));
+  const touchStrip = useStore((s) => selectedTouchStripSize(s.status));
   const modelName = useStore((s) => s.status.modelName);
 
   return (
@@ -119,7 +135,14 @@ export function StageDeviceNoElgato({
           <RestartNote />
         </Step>
       </div>
-      <KeyGridPreview keyCount={keyCount} columns={columns} dimmed={true} modelId={modelId} />
+      <KeyGridPreview
+        keyCount={keyCount}
+        columns={columns}
+        dimmed={true}
+        modelId={modelId}
+        coraProfile={coraProfile}
+        touchStrip={touchStrip}
+      />
     </>
   );
 }

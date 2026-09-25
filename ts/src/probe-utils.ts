@@ -3,6 +3,8 @@ import { closeSidecar } from './translator.js';
 import { IS_MACOS, listHidPaths } from './ffi/hidapi.js';
 import { setupNativeLibs } from './native-libs.js';
 import { MiraboxDriver } from './mirabox.js';
+import { AJAZZ_AKP05E_MODEL } from './devices/ajazz/akp05e.js';
+import { AJAZZ_AKP05_MODEL } from './devices/ajazz/akp05.js';
 import type { DeviceModel } from './devices/driver.js';
 import type { KeyEvent } from './types.js';
 
@@ -62,6 +64,27 @@ export async function openProbeDevice(model: DeviceModel, prefix: string): Promi
     fail(prefix, `open failed: ${(e as Error).message}`, ...OPEN_REFUSED_HINTS);
   }
   return driver;
+}
+
+/** First AKP05E/AKP05 on the bus, or exits with the usual causes. The caller opens
+ *  it: each AKP05 probe subclasses `Akp05Driver` differently. */
+export function findAkp05Device(prefix: string): { model: DeviceModel; hidPath: string } {
+  for (const model of [AJAZZ_AKP05E_MODEL, AJAZZ_AKP05_MODEL]) {
+    for (const pid of model.usbProductIds) {
+      const paths = listHidPaths(model.usbVendorId, model.usagePage!, model.usage!, pid);
+      if (paths.length === 0) continue;
+      console.log(`${prefix} model: ${model.id} PID=0x${pid.toString(16).padStart(4, '0')}`);
+      if (paths.length > 1)
+        console.log(`${prefix} ${paths.length} units match — using ${paths[0]!}`);
+      return { model, hidPath: paths[0]! };
+    }
+  }
+  return fail(
+    prefix,
+    'no AKP05/AKP05E found on VID 0x0300 usage 0xffa0/1.',
+    'check the cable, and stop any running DeckBridge instance —',
+    'hidapi opens exclusively on macOS.',
+  );
 }
 
 /** Up to `max` .jpg/.jpeg names from `dir`, sorted, or null when the directory is

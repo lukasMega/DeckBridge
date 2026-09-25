@@ -1,10 +1,12 @@
 import type {
   CommEntry,
+  EncoderSettings,
   ExtraKeyConfig,
   ImageModeOverride,
   DockStatus,
   RealDeviceIdentity,
   ClientApp,
+  TouchStripMode,
 } from '../../types.js';
 import type {
   DeviceIdentity,
@@ -20,6 +22,8 @@ import type { OverrideChangeKind } from '../../devices/model-overrides.js';
 import type { DiagnosticsOptions } from './diagnostics.js';
 import type { PersistedSettings } from './persisted-settings.js';
 import type { UpdateController } from './update-controller.js';
+import type { DevicePrefsController } from './device-prefs-controller.js';
+import type { ImageChannel } from './image-channel.js';
 
 /** A rejected request: the message the WebUI shows, plus its HTTP status. */
 /** Result of a persisted device-tuning change: how the live session applies it
@@ -27,6 +31,9 @@ import type { UpdateController } from './update-controller.js';
 export interface OverrideChange {
   kind: OverrideChangeKind;
 }
+
+/** One POST to an extra key: a full widget config, or only its press command. */
+export type ExtraKeyUpdate = ExtraKeyConfig | { pressCommand: string };
 
 export interface ReqError {
   error: string;
@@ -109,8 +116,9 @@ export interface StatusSnapshot {
 
 export interface StateResponse extends StatusSnapshot {
   images: Record<string, number>;
-  logs: LogEntry[];
-  commLogs: CommEntry[];
+  // Omitted from the wire payload in simple-only builds — see state-response.ts.
+  logs?: LogEntry[];
+  commLogs?: CommEntry[];
   keyEvents: KeyEventEntry[];
   stats: Stats;
   mockConfig: MockDeviceConfig;
@@ -121,6 +129,10 @@ export interface StateResponse extends StatusSnapshot {
   realDeviceIdentity?: RealDeviceIdentity;
   // The SELECTED dock's extra-key assignments, keyed by device wire id.
   extraKeys: Record<string, ExtraKeyConfig>;
+  /** The SELECTED dock's touch-strip mode + knob override (AKP05E). */
+  touchStripMode: TouchStripMode;
+  touchStripRepaintMs: number;
+  encoders: EncoderSettings;
   /** Log level currently in effect (not merely the persisted one) + where the
    *  log file lives — both surfaced under Settings so a reporter can turn on
    *  debug logging and find the file. */
@@ -146,6 +158,7 @@ export interface WebUIController {
   readonly selectedDock: number;
   fullState(): StateResponse;
   getImage(key: number): Buffer | undefined;
+  readonly imageChannel: Pick<ImageChannel, 'imageFormat'>;
   notifyBrightness(level: number): void;
   notifyResizeToggle(enabled: boolean): void;
   notifyBrightnessOverride(enabled: boolean): void;
@@ -154,9 +167,11 @@ export interface WebUIController {
   applyMockConfig(parsed: Partial<MockDeviceConfig>): MockDeviceConfig;
   trySimulateKey(n: number): ReqError | null;
   trySelectDock(index: unknown): ReqError | null;
-  trySetExtraKey(wireId: number, cfg: ExtraKeyConfig): ReqError | null;
+  trySetExtraKey(wireId: number, update: ExtraKeyUpdate): ReqError | null;
   tryRunExtraKeyNow(wireId: number): ReqError | null;
   pluginsInfo(): Promise<PluginsInfo>;
+  trySetTouchStripMode(mode: TouchStripMode): ReqError | null;
+  trySetEncoders(settings: EncoderSettings): ReqError | null;
   getSettingsJson(): string;
   applySettingsJson(raw: string): void;
   openSettingsFile(): Promise<void>;
@@ -169,4 +184,5 @@ export interface WebUIController {
   buildDiagnosticsReport(opt?: DiagnosticsOptions): Promise<string>;
   saveDiagnosticsReport(opt?: DiagnosticsOptions): Promise<string | null>;
   readonly updates: UpdateController;
+  readonly devicePrefs: DevicePrefsController;
 }

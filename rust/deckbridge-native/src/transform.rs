@@ -5,6 +5,24 @@ use crate::util::{ffi_guard, write_err};
 use image::imageops::FilterType;
 use std::io::Cursor;
 
+/// Decode with decompression-bomb limits (S3) — bytes arrive from the LAN
+/// unauthenticated. Shared by `transform` and the touch-strip blit.
+pub(crate) fn decode_limited(input: &[u8]) -> Result<image::DynamicImage, String> {
+    let mut reader = image::ImageReader::new(Cursor::new(input))
+        .with_guessed_format()
+        .map_err(|e| format!("Image format error: {}", e))?;
+    let mut limits = image::Limits::default();
+    // Raised to 800 wide for the Stream Deck + window strip (800×100); height and
+    // alloc stay bounded so the 800×480 full LCD is still rejected by max_alloc.
+    limits.max_image_width = Some(800);
+    limits.max_image_height = Some(500);
+    limits.max_alloc = Some(900 * 1024);
+    reader.limits(limits);
+    reader
+        .decode()
+        .map_err(|e| format!("Image load error: {}", e))
+}
+
 /// Private transform helper: decode, rotate/flip, resize, encode (JPEG or BMP).
 /// EXIF auto-rotate is intentionally not performed (dropped for binary size — see plan).
 // The flat parameter list mirrors the FFI ABI of image_proc_transform.
@@ -26,26 +44,26 @@ pub(crate) fn transform(
     sharpen_sigma_tenths: u32,
     fill_mode: u32,
     crop_px: u32,
+    crop_x: u32,
+    crop_y: u32,
+    crop_w: u32,
+    crop_h: u32,
 ) -> Result<Vec<u8>, String> {
-    // Decompression-bomb defense: cap dimensions and intermediate allocations
-    // before decoding (S3) — bytes arrive from the LAN unauthenticated.
-    let mut reader = image::ImageReader::new(Cursor::new(input))
-        .with_guessed_format()
-        .map_err(|e| format!("Image format error: {}", e))?;
-    let mut limits = image::Limits::default();
-    limits.max_image_width = Some(500);
-    limits.max_image_height = Some(500);
-    limits.max_alloc = Some(900 * 1024);
-    reader.limits(limits);
-    let mut img = match reader.decode() {
-        Ok(i) => i,
-        Err(e) => return Err(format!("Image load error: {}", e)),
-    };
+    let mut img = decode_limited(input)?;
 
-    // Crop the source frame symmetrically before any rotate/flip/resize (the K1 Pro
-    // is fed an 80×80 Mini BMP whose outer ~10 px is dead border). Skip when the crop
-    // would leave nothing — guards tiny inputs and the no-op (crop_px == 0) case.
-    if crop_px > 0 {
+    // Region crop (Stream Deck + touch strip: split 800×100 into N segments) takes
+    // precedence over the symmetric crop. Region bounds are clamped to the source.
+    if crop_w > 0 && crop_h > 0 {
+        let (w, h) = (img.width(), img.height());
+        let x = crop_x.min(w.saturating_sub(1));
+        let y = crop_y.min(h.saturating_sub(1));
+        let rw = crop_w.min(w - x);
+        let rh = crop_h.min(h - y);
+        img = img.crop_imm(x, y, rw, rh);
+    } else if crop_px > 0 {
+        // Crop the source frame symmetrically before any rotate/flip/resize (the K1 Pro
+        // is fed an 80×80 Mini BMP whose outer ~10 px is dead border). Skip when the crop
+        // would leave nothing — guards tiny inputs and the no-op (crop_px == 0) case.
         let (w, h) = (img.width(), img.height());
         if w > 2 * crop_px && h > 2 * crop_px {
             img = img.crop_imm(crop_px, crop_px, w - 2 * crop_px, h - 2 * crop_px);
@@ -147,6 +165,10 @@ pub unsafe extern "C" fn image_proc_transform(
     sharpen_sigma_tenths: u32, // unsharp-mask sigma × 10; 0 = no sharpen
     fill_mode: u32,            // 0 = resize; 1 = pad-black; 2 = pad-average; 3 = pad-edge-clamp
     crop_px: u32, // pixels to crop from every side of the source before resize; 0 = none
+    crop_x: u32,  // region-crop left offset (used when crop_w/crop_h > 0)
+    crop_y: u32,  // region-crop top offset
+    crop_w: u32,  // region-crop width (0 = no region crop)
+    crop_h: u32,  // region-crop height (0 = no region crop)
     out_buf: *mut u8,
     out_cap: usize,
     err_buf: *mut u8,
@@ -178,6 +200,10 @@ pub unsafe extern "C" fn image_proc_transform(
             sharpen_sigma_tenths,
             fill_mode,
             crop_px,
+            crop_x,
+            crop_y,
+            crop_w,
+            crop_h,
         ) {
             Ok(bytes) => {
                 if bytes.len() > out_cap {

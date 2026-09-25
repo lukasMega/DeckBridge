@@ -4,10 +4,17 @@
  *  CORA ACK loop or the WebUI (P1). The main thread forwards raw CORA bytes via
  *  the 'image' worker message; this module owns the transform + the LRU cache. */
 import { debug, info, warn } from './logger.js';
-import { applyOverride, mk2IndexToDeviceImgId, transformImageForDevice } from './translator.js';
+import {
+  applyOverride,
+  blitImage,
+  canvasSliceToBmp,
+  transformImageForDevice,
+} from './translator.js';
+import { mk2IndexToDeviceImgId } from './key-map.js';
 import { imageCache, hashJpeg, makeCacheKey, specRevision } from './image-cache.js';
-import type { DeviceModel } from './devices/driver.js';
-import type { ImageModeOverride } from './types.js';
+import type { DeviceImageSpec, DeviceModel } from './devices/driver.js';
+import type { ImageModeOverride, TouchStripOptions, TouchWindowRegion } from './types.js';
+import { DEFAULT_TOUCH_STRIP_OPTIONS, PLUS_TOUCH_WIDTH, PLUS_TOUCH_HEIGHT } from './types.js';
 
 /** The slice of a driver this module needs: the native-bytes write. The model
  *  is passed separately because the low-level drivers keep `model` private. */
@@ -142,7 +149,7 @@ function revisionFor(model: DeviceModel): string {
 }
 
 /** Transform (if needed), cache, key-remap, and write one CORA image to the
- *  device. Resolves once the device write has been dispatched; throws on a
+ *  device. Returns once the device write has been dispatched; throws on a
  *  transform failure (the worker turns that into an 'error' message). */
 export function renderImage(
   driver: RenderTarget,
@@ -151,7 +158,7 @@ export function renderImage(
   coraBytes: Uint8Array,
   format: 'jpeg' | 'bmp',
   override: ImageModeOverride = null,
-): Promise<void> {
+): void {
   // Capture the raw input first so it's saved even if the transform throws.
   const rawDump = dumpRawReceived(keyIndex, coraBytes, format);
 
@@ -201,9 +208,181 @@ export function renderImage(
       : keyIndex;
   if (deviceKeyIndex < 0) {
     warn('image', `skipping image for out-of-range key ${keyIndex}`);
-    return Promise.resolve();
+    return;
   }
 
   driver.sendImage(deviceKeyIndex, entry.nativeBytes);
-  return Promise.resolve();
+}
+
+/** Every strip zone a region touches: the Elgato app's 200-px zones, the same split
+ *  ExtraKeyWidgets.noteTouchFrame uses. No region = the whole strip. */
+function touchedZones(count: number, region?: TouchWindowRegion): number[] {
+  const zoneWidth = Math.floor(PLUS_TOUCH_WIDTH / count);
+  const x = region?.x ?? 0;
+  const w = region?.w ?? PLUS_TOUCH_WIDTH;
+  const zones: number[] = [];
+  for (let i = 0; i < count; i++) {
+    if (x < (i + 1) * zoneWidth && x + w > i * zoneWidth) zones.push(i);
+  }
+  return zones;
+}
+
+function coversStrip(region?: TouchWindowRegion): boolean {
+  return (
+    !region ||
+    (region.x <= 0 &&
+      region.y <= 0 &&
+      region.x + region.w >= PLUS_TOUCH_WIDTH &&
+      region.y + region.h >= PLUS_TOUCH_HEIGHT)
+  );
+}
+
+/** Lossless intermediate for 'scale': the zone fitted into the slot, which the slot
+ *  spec then pads. */
+const ZONE_FIT_SPEC: DeviceImageSpec = {
+  format: 'bmp',
+  width: 0,
+  height: 0,
+  rotate: 0,
+  flipH: false,
+  flipV: false,
+  colorMode: 'rgb',
+  maxBytes: 0,
+  quality: 1,
+  resizeFilter: 'lanczos3',
+  transform: 'sidecar',
+};
+
+/** One dock's Stream Deck + window (800×100, RGB). The app sends full frames and
+ *  small patches (dial feedback); each is drawn into this canvas, then sent as one
+ *  full-strip upload or as every zone it touches, re-sent whole — a patch sent alone
+ *  would be stretched over its zone. Zones in the mask (DeckBridge widgets own them)
+ *  are drawn but never sent. See docs/side-keys.md. */
+export class TouchStripCanvas {
+  private readonly rgb = new Uint8Array(PLUS_TOUCH_WIDTH * PLUS_TOUCH_HEIGHT * 3);
+  private mask = new Set<number>();
+  private options: TouchStripOptions = DEFAULT_TOUCH_STRIP_OPTIONS;
+
+  /** A new device (or none): black strip, the app owns every zone, default options. */
+  reset(): void {
+    this.rgb.fill(0);
+    this.mask = new Set();
+    this.options = DEFAULT_TOUCH_STRIP_OPTIONS;
+  }
+
+  setOptions(options: TouchStripOptions): void {
+    this.options = options;
+  }
+
+  apply(
+    driver: RenderTarget,
+    model: DeviceModel,
+    bytes: Uint8Array,
+    region?: TouchWindowRegion,
+  ): void {
+    const displays = model.widgetDisplays;
+    if (!displays || displays.length === 0) return;
+    try {
+      blitImage(
+        this.rgb,
+        PLUS_TOUCH_WIDTH,
+        PLUS_TOUCH_HEIGHT,
+        bytes,
+        region?.x ?? 0,
+        region?.y ?? 0,
+      );
+    } catch (err) {
+      warn('touch', `touch window blit failed: ${(err as Error).message}`);
+      return;
+    }
+    if (this.options.upload === 'always' || coversStrip(region)) {
+      if (this.sendFullStrip(driver, model)) return;
+    }
+    for (const i of touchedZones(displays.length, region)) {
+      if (!this.mask.has(displays[i]!.wireId)) this.sendZone(driver, model, i);
+    }
+  }
+
+  /** Swap in a new ownership mask; every released zone gets the app's image back. */
+  setMask(driver: RenderTarget, model: DeviceModel, wireIds: readonly number[]): void {
+    const released = [...this.mask].filter((wireId) => !wireIds.includes(wireId));
+    this.mask = new Set(wireIds);
+    this.restore(driver, model, released);
+  }
+
+  /** Put the app's image back on these zones (black where it never drew). */
+  restore(driver: RenderTarget, model: DeviceModel, wireIds: readonly number[]): void {
+    const displays = model.widgetDisplays ?? [];
+    if (wireIds.length === 0) return;
+    if (displays.every(({ wireId }) => wireIds.includes(wireId))) {
+      if (this.sendFullStrip(driver, model)) return;
+    }
+    displays.forEach(({ wireId }, i) => {
+      if (wireIds.includes(wireId)) this.sendZone(driver, model, i);
+    });
+  }
+
+  /** One upload for the whole strip. False when the model has no full-strip surface
+   *  or a masked zone would be painted over — the caller sends per zone instead. */
+  private sendFullStrip(driver: RenderTarget, model: DeviceModel): boolean {
+    const strip = model.touchStripDisplay;
+    if (!strip || this.mask.size > 0) return false;
+    try {
+      const bmp = canvasSliceToBmp(
+        this.rgb,
+        PLUS_TOUCH_WIDTH,
+        PLUS_TOUCH_HEIGHT,
+        0,
+        PLUS_TOUCH_WIDTH,
+      );
+      driver.sendImage(strip.wireId, transformImageForDevice(bmp, strip.image));
+    } catch (err) {
+      warn('touch', `touch strip render failed: ${(err as Error).message}`);
+    }
+    return true;
+  }
+
+  private sendZone(driver: RenderTarget, model: DeviceModel, index: number): void {
+    const display = model.widgetDisplays![index]!;
+    try {
+      driver.sendImage(
+        display.wireId,
+        transformImageForDevice(this.zoneBmp(model, index), display.image),
+      );
+    } catch (err) {
+      warn('touch', `touch segment ${index} render failed: ${(err as Error).message}`);
+    }
+  }
+
+  /** The canvas part one zone shows. Without a full-strip surface the Elgato zone is
+   *  stretched into its display, as before the strip geometry was known. */
+  private zoneBmp(model: DeviceModel, index: number): Uint8Array {
+    const displays = model.widgetDisplays!;
+    const display = displays[index]!;
+    const strip = model.touchStripDisplay;
+    if (strip && display.stripX !== undefined && this.options.zoneFit === 'crop') {
+      const ratio = PLUS_TOUCH_WIDTH / strip.image.width;
+      const x = Math.round(display.stripX * ratio);
+      const w = Math.min(Math.round(display.image.width * ratio), PLUS_TOUCH_WIDTH - x);
+      return canvasSliceToBmp(this.rgb, PLUS_TOUCH_WIDTH, PLUS_TOUCH_HEIGHT, x, w);
+    }
+    const zoneWidth = Math.floor(PLUS_TOUCH_WIDTH / displays.length);
+    const zone = canvasSliceToBmp(
+      this.rgb,
+      PLUS_TOUCH_WIDTH,
+      PLUS_TOUCH_HEIGHT,
+      index * zoneWidth,
+      zoneWidth,
+    );
+    if (!strip) return zone;
+    const scale = Math.min(
+      display.image.width / zoneWidth,
+      display.image.height / PLUS_TOUCH_HEIGHT,
+    );
+    return transformImageForDevice(zone, {
+      ...ZONE_FIT_SPEC,
+      width: Math.round(zoneWidth * scale),
+      height: Math.round(PLUS_TOUCH_HEIGHT * scale),
+    });
+  }
 }

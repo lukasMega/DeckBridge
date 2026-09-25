@@ -9,8 +9,10 @@ import type {
 } from './ui-types.js';
 import { error } from './log.js';
 import { applyImage, clearImage, flashKey, resetPreviews } from './key-preview.js';
+import { applyTouchImage, resetTouchStrip, type TouchFrameMsg } from './touch-strip-preview.js';
 import * as store from './store.js';
 import type { StoreState } from './store.js';
+import { hydrate, type InitialState } from './hydrate.js';
 
 interface ImageEvt {
   mk2Index: number;
@@ -27,6 +29,7 @@ const handlers: Record<string, (d: unknown) => void> = {
     const prev = store.getSnapshot().status.selectedDock ?? 0;
     if ((next.selectedDock ?? 0) !== prev) {
       resetPreviews();
+      resetTouchStrip();
     }
     store.setStatus(next);
   },
@@ -35,6 +38,9 @@ const handlers: Record<string, (d: unknown) => void> = {
     // Imperative only: key-preview.ts paints these, no component reads them from the
     // store. Mirroring each frame in woke every useStore subscriber for nothing.
     applyImage(e.mk2Index, { v: e.v, data: e.data, format: e.format });
+  },
+  touchImage: (d) => {
+    applyTouchImage(d as TouchFrameMsg);
   },
   clear: (d) => {
     const idx = (d as { mk2Index: number }).mk2Index;
@@ -54,6 +60,15 @@ const handlers: Record<string, (d: unknown) => void> = {
   },
   extraKeys: (d) => {
     store.patch({ extraKeys: (d as { configs: StoreState['extraKeys'] }).configs });
+  },
+  touchStripMode: (d) => {
+    store.setTouchStripMode((d as { mode: StoreState['touchStripMode'] }).mode);
+  },
+  touchStripRepaint: (d) => {
+    store.setTouchStripRepaintMs((d as { ms: number }).ms);
+  },
+  encoders: (d) => {
+    store.setEncoders((d as { encoders: StoreState['encoders'] }).encoders);
   },
   keyEvent: (d) => {
     const e = d as KeyEvent;
@@ -90,12 +105,11 @@ export function connectWS(): void {
 
   ws.addEventListener('open', () => {
     if (_wsConnected) {
+      // Full re-hydrate: an app restart while disconnected changes more than images.
       void fetch('/api/state')
-        .then((r) => r.json() as Promise<{ images: Record<string, number> }>)
+        .then((r) => r.json() as Promise<InitialState>)
         .then((st) => {
-          for (const [k, v] of Object.entries(st.images)) {
-            applyImage(Number(k), { v });
-          }
+          hydrate(st);
           return undefined;
         });
     }

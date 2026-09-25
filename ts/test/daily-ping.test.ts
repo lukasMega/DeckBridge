@@ -310,6 +310,7 @@ await test('a thrown OS-version probe degrades the dim, it does not lose the pin
     now: () => fixedDate('2026-09-18T12:00:00Z', 0),
     platform: () => 'Windows',
     readOsVersion: () => Promise.reject(new Error('spawn failed')),
+    readLocale: () => Promise.resolve(''),
     suppress: () => null,
   });
   await t.ping();
@@ -375,6 +376,7 @@ await test('the day is marked before the send, so a dead collector is not retrie
     now: () => fixedDate('2026-09-18T12:00:00Z', -120),
     platform: () => 'macOS',
     readOsVersion: () => Promise.resolve('26.6.2\n'),
+    readLocale: () => Promise.resolve(''),
     suppress: () => null,
   });
   let threw = false;

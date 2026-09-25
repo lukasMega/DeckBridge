@@ -93,6 +93,41 @@ await runTest('applyOverrides posts the overrides and swaps the effective model'
   ]);
 });
 
+console.log('\nhid-worker-host: setTouchStripMask');
+
+await runTest('setTouchStripMask / restoreTouchSegments post a copy of the wire ids', () => {
+  const driver = new WorkerHidDriver(unknownModel);
+  const posted: Array<{ type: string; wireIds?: number[] }> = [];
+  (driver as unknown as { worker: { postMessage: (m: unknown) => void } }).worker = {
+    postMessage: (m: unknown) => posted.push(m as { type: string; wireIds?: number[] }),
+  };
+
+  const ids = [1, 3];
+  driver.setTouchStripMask(ids);
+  driver.setTouchStripMask([]);
+  driver.restoreTouchSegments(ids);
+  ids.push(4);
+
+  assert.deepEqual(posted, [
+    { type: 'setTouchStripMask', wireIds: [1, 3] },
+    { type: 'setTouchStripMask', wireIds: [] },
+    { type: 'restoreTouchSegments', wireIds: [1, 3] },
+  ]);
+  assert.notEqual(posted[0]!.wireIds, ids, 'caller array not aliased');
+});
+
+await runTest('setTouchStripOptions posts a copy of the options', () => {
+  const driver = new WorkerHidDriver(unknownModel);
+  const posted: unknown[] = [];
+  (driver as unknown as { worker: { postMessage: (m: unknown) => void } }).worker = {
+    postMessage: (m: unknown) => posted.push(m),
+  };
+  const options = { zoneFit: 'scale', upload: 'always' } as const;
+  driver.setTouchStripOptions(options);
+  assert.deepEqual(posted, [{ type: 'setTouchStripOptions', options }]);
+  assert.ok((posted[0] as { options: unknown }).options !== options, 'not aliased');
+});
+
 // Force exit: drivers that hit a failed open keep their worker alive (the fix),
 // which would otherwise keep the event loop running and hang the test runner.
 summaryExit();

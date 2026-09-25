@@ -4,6 +4,7 @@ mod hid;
 #[cfg(target_os = "windows")]
 mod mdns_windows;
 
+mod blit;
 mod bmp;
 mod jpeg;
 mod pad;
@@ -49,11 +50,11 @@ mod tests {
 
     #[test]
     fn bomb_rejected() {
-        // 60000x60000 declared dimensions exceed the 500x500 Limits — must be
+        // 60000x60000 declared dimensions exceed the 800x500 Limits — must be
         // rejected before any pixel-data allocation is attempted.
         let bomb = make_bmp_header(60_000, 60_000);
         let result = transform(
-            &bomb, 64, 64, 0, 80, false, 0, false, false, 0, 0, 0, 0, 0, 0, 0,
+            &bomb, 64, 64, 0, 80, false, 0, false, false, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
         );
         assert!(result.is_err(), "expected oversized BMP to be rejected");
     }
@@ -65,7 +66,7 @@ mod tests {
         let bmp = encode_bmp(img, 0).expect("encode_bmp should succeed");
 
         let out = transform(
-            &bmp, 8, 8, 0, 80, true, 0, false, false, 0, 0, 0, 0, 0, 0, 0,
+            &bmp, 8, 8, 0, 80, true, 0, false, false, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
         )
         .expect("transform should succeed for an in-limits image");
         assert!(!out.is_empty(), "JPEG output should be non-empty");

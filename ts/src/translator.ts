@@ -1,25 +1,9 @@
-import type { DeviceImageSpec, DeviceModel } from './devices/driver.js';
+import type { DeviceImageSpec } from './devices/driver.js';
 import type { ImageModeOverride } from './types.js';
 import { load, closeImageProc } from './ffi/image-proc.js';
-
-/** mk2 key index → device wire image id, driven by model.keyMap.
- *  Precedence: explicit array > offset > identity. */
-export function mk2IndexToDeviceImgId(mk2Index: number, model: DeviceModel): number {
-  const { coraToWireImage, imageOffset } = model.keyMap;
-  if (coraToWireImage) return coraToWireImage[mk2Index] ?? -1; // OOB / unused → -1
-  if (imageOffset != null) return mk2Index + imageOffset;
-  return mk2Index;
-}
-
-/** Device input wire code → mk2 index, driven by model.keyMap.
- *  Precedence: explicit array > offset > identity. Returns -1 for entries the
- *  array marks as unused (e.g. 293S 6th-column keys). */
-export function deviceInputToMk2Index(code: number, model: DeviceModel): number {
-  const { wireInputToCora, inputOffset } = model.keyMap;
-  if (wireInputToCora) return wireInputToCora[code] ?? -1;
-  if (inputOffset != null) return code - inputOffset;
-  return code;
-}
+// mk2IndexToDeviceImgId/deviceInputToMk2Index/deviceInputToExtraKey moved to
+// key-map.ts (pure, no ffi) so main-thread and worker code can use them without
+// pulling in this file's ffi/image-proc.js dependency.
 
 // Reusable scratch buffers — safe because FFI calls are synchronous on the single
 // JS thread and the result is copied into a fresh Buffer before returning. No await
@@ -117,6 +101,11 @@ export function transformImageForDevice(jpeg: Uint8Array, spec: DeviceImageSpec)
       Math.round((spec.sharpen ?? 0) * 10),
       fillModeFor(spec),
       spec.crop ?? 0,
+      // Region crop unused: touch-strip zones are sliced from the canvas (canvasSliceToBmp).
+      0,
+      0,
+      0,
+      0,
       OUT,
       OUT.length,
       ERR,
@@ -129,6 +118,63 @@ export function transformImageForDevice(jpeg: Uint8Array, spec: DeviceImageSpec)
     if (n < 0) throwImageProcError(n);
     return Buffer.from(OUT.subarray(0, n));
   }
+}
+
+/** Decode `image` (JPEG/BMP) into the top-down RGB24 `canvas` (cw×ch) at (x, y),
+ *  clipped to the canvas. */
+export function blitImage(
+  canvas: Uint8Array,
+  cw: number,
+  ch: number,
+  image: Uint8Array,
+  x: number,
+  y: number,
+): void {
+  const n = load().symbols.image_proc_blit(
+    canvas,
+    cw,
+    ch,
+    image,
+    image.length,
+    x,
+    y,
+    ERR,
+    ERR.length,
+  );
+  if (n < 0) throwImageProcError(n);
+}
+
+/** 24-bit BMP of the canvas columns [x, x + w) — the image transform's input format
+ *  for one touch-strip zone. Rows are bottom-up BGR, padded to 4 bytes. */
+export function canvasSliceToBmp(
+  canvas: Uint8Array,
+  cw: number,
+  ch: number,
+  x: number,
+  w: number,
+): Uint8Array {
+  const rowBytes = (w * 3 + 3) & ~3;
+  const bmp = new Uint8Array(54 + rowBytes * ch);
+  const view = new DataView(bmp.buffer);
+  bmp[0] = 0x42;
+  bmp[1] = 0x4d;
+  view.setUint32(2, bmp.length, true);
+  view.setUint32(10, 54, true);
+  view.setUint32(14, 40, true);
+  view.setInt32(18, w, true);
+  view.setInt32(22, ch, true);
+  view.setUint16(26, 1, true);
+  view.setUint16(28, 24, true);
+  for (let row = 0; row < ch; row++) {
+    const src = (row * cw + x) * 3;
+    const dst = 54 + (ch - 1 - row) * rowBytes;
+    for (let col = 0; col < w; col++) {
+      bmp[dst + col * 3] = canvas[src + col * 3 + 2]!;
+      bmp[dst + col * 3 + 1] = canvas[src + col * 3 + 1]!;
+      bmp[dst + col * 3 + 2] = canvas[src + col * 3]!;
+    }
+  }
+  return bmp;
 }
 
 /** Close the image-proc dylib handle. Kept for backwards-compatibility with

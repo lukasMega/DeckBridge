@@ -5,13 +5,19 @@
 // mode, or before the first connect) — that fallback is never persisted, since
 // it belongs to no physical device.
 import type { DeviceIdentitySettings } from '../../settings-store.js';
-import type { ImageModeOverride } from '../../types.js';
-import { DEFAULT_BRIGHTNESS_OVERRIDE } from '../../types.js';
-import type { ControllerHost } from './types.js';
+import type { ImageModeOverride, TouchStripMode } from '../../types.js';
+import {
+  DEFAULT_BRIGHTNESS_OVERRIDE,
+  DEFAULT_TOUCH_STRIP_MODE,
+  TOUCH_STRIP_REPAINT_DEFAULT_MS,
+} from '../../types.js';
+import type { ControllerHost, ReqError } from './types.js';
 
 export class DevicePrefsController {
   private runtimeBrightnessOverride = DEFAULT_BRIGHTNESS_OVERRIDE;
   private runtimeImageModeOverride: ImageModeOverride = null;
+  private runtimeTouchStripMode: TouchStripMode = DEFAULT_TOUCH_STRIP_MODE;
+  private runtimeTouchStripRepaintMs = TOUCH_STRIP_REPAINT_DEFAULT_MS;
 
   constructor(
     private readonly host: ControllerHost,
@@ -36,6 +42,65 @@ export class DevicePrefsController {
   get imageModeOverride(): ImageModeOverride {
     const e = this.host.settings.entryFor(this.host.selectedDeviceKey());
     return e ? (e.imageModeOverride ?? null) : this.runtimeImageModeOverride;
+  }
+
+  /** Per-device touch-strip mode — also read by the widget scheduler
+   *  (ExtraKeyWidgets) via DriverManager/DeviceSession. */
+  touchStripModeFor(deviceKey: string): TouchStripMode {
+    const e = this.host.settings.entryFor(deviceKey);
+    return e ? (e.touchStripMode ?? DEFAULT_TOUCH_STRIP_MODE) : this.runtimeTouchStripMode;
+  }
+
+  /** touchStripMode of the SELECTED dock (WebUI mode selector). */
+  get touchStripMode(): TouchStripMode {
+    return this.touchStripModeFor(this.host.selectedDeviceKey());
+  }
+
+  /** Store, broadcast, and let app.ts hand the strip over via 'touchStripModeChanged'.
+   *  409 when the selected dock has no strip — the mode would persist on a device it
+   *  means nothing for. */
+  trySetTouchStripMode(mode: TouchStripMode): ReqError | null {
+    if (!this.host.selectedDockStatus()?.widgetDisplays?.length) {
+      return { error: 'selected dock has no touch strip', status: 409 };
+    }
+    this.mutateSelectedEntryOrRuntime(
+      (e) => (e.touchStripMode = mode),
+      () => (this.runtimeTouchStripMode = mode),
+    );
+    this.host.broadcast('touchStripMode', { mode });
+    this.host.emit('touchStripModeChanged', this.host.selectedDock(), mode);
+    return null;
+  }
+
+  /** Per-device repaint hold-off — read live by ExtraKeyWidgets each tick,
+   *  so a change needs no event to reach the dock. */
+  touchStripRepaintMsFor(deviceKey: string): number {
+    const e = this.host.settings.entryFor(deviceKey);
+    return e
+      ? (e.touchStripRepaintMs ?? TOUCH_STRIP_REPAINT_DEFAULT_MS)
+      : this.runtimeTouchStripRepaintMs;
+  }
+
+  get touchStripRepaintMs(): number {
+    return this.touchStripRepaintMsFor(this.host.selectedDeviceKey());
+  }
+
+  /** The SELECTED dock's strip fields for /api/state. */
+  touchStripState(): { touchStripMode: TouchStripMode; touchStripRepaintMs: number } {
+    return { touchStripMode: this.touchStripMode, touchStripRepaintMs: this.touchStripRepaintMs };
+  }
+
+  /** 409 without a strip, same as trySetTouchStripMode. */
+  trySetTouchStripRepaintMs(ms: number): ReqError | null {
+    if (!this.host.selectedDockStatus()?.widgetDisplays?.length) {
+      return { error: 'selected dock has no touch strip', status: 409 };
+    }
+    this.mutateSelectedEntryOrRuntime(
+      (e) => (e.touchStripRepaintMs = ms),
+      () => (this.runtimeTouchStripRepaintMs = ms),
+    );
+    this.host.broadcast('touchStripRepaint', { ms });
+    return null;
   }
 
   setBrightnessOverride(enabled: boolean): void {
@@ -71,6 +136,8 @@ export class DevicePrefsController {
     this.host.broadcast('brightnessOverride', { enabled: this.brightnessOverride });
     this.host.broadcast('imageMode', { mode: this.imageModeOverride });
     this.host.broadcast('extraKeys', { configs: extraKeyConfigs });
+    this.host.broadcast('touchStripMode', { mode: this.touchStripMode });
+    this.host.broadcast('touchStripRepaint', { ms: this.touchStripRepaintMs });
   }
 
   /** Store a value on the SELECTED dock's persisted entry, or (no deviceKey) in

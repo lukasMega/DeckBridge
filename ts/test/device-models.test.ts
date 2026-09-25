@@ -4,9 +4,12 @@ import {
   DEVICE_MODELS,
   DEFAULT_MODEL,
   findModel,
+  findModelById,
+  CORA_PROFILES,
 } from '../src/devices/registry.js';
 import { MK2_MODEL } from '../src/devices/elgato/mk2.js';
 import { MINI_MODEL } from '../src/devices/elgato/mini.js';
+import { STREAM_DECK_PLUS_MODEL } from '../src/devices/elgato/plus.js';
 import { MIRABOX_293_MODEL } from '../src/devices/mirabox/mirabox-293.js';
 import { MIRABOX_293S_MODEL } from '../src/devices/mirabox/mirabox-293s.js';
 import { MIRABOX_K1PRO_MODEL } from '../src/devices/mirabox/mirabox-k1pro.js';
@@ -14,12 +17,15 @@ import {
   AJAZZ_AKP153E_REV2_MODEL,
   AJAZZ_AKP153R_REV2_MODEL,
 } from '../src/devices/ajazz/akp153-rev2.js';
+import { AJAZZ_AKP05E_MODEL } from '../src/devices/ajazz/akp05e.js';
+import { AJAZZ_AKP05_MODEL } from '../src/devices/ajazz/akp05.js';
 import { FIFINE_D6_MODEL, FIFINE_D6_REV2_MODEL } from '../src/devices/fifine/fifine-d6.js';
 import { AKP153_V1_CLONE_MODELS } from '../src/devices/rebadge/akp153-v1-clones.js';
-import { deviceInputToMk2Index } from '../src/translator.js';
+import { deviceInputToMk2Index } from '../src/key-map.js';
 import { modelToChildGeometry, buildCapabilitiesPacket } from '../src/capabilities.js';
 import {
   ELGATO_VID,
+  ELGATO_PLUS_PID,
   CHILD_CAPS_SERIAL_MAX_LEN,
   ELGATO_PKT_SIZE_RX,
   PKT_EVENT,
@@ -94,6 +100,76 @@ test('findModel returns MIRABOX_293_MODEL for the HSV293SV3 PID 0x1014', () => {
 test('findModel returns the Ajazz AKP153 rev.2 models for VID 0x0300', () => {
   assert.equal(findModel(0x0300, 0x3010)?.id, 'ajazz-akp153e-rev2');
   assert.equal(findModel(0x0300, 0x3011)?.id, 'ajazz-akp153r-rev2');
+});
+
+test('findModel returns each supported AKP05 PID', () => {
+  assert.equal(findModel(0x0300, 0x3004)?.id, 'ajazz-akp05e');
+  assert.equal(findModel(0x0300, 0x3006)?.id, 'ajazz-akp05');
+});
+
+test('AKP05E has its proven 2x5 output mapping', () => {
+  assert.equal(AJAZZ_AKP05E_MODEL.protocol, 'ajazz-akp05');
+  assert.equal(AJAZZ_AKP05E_MODEL.driverKind, 'custom');
+  assert.deepEqual(modelToChildGeometry(AJAZZ_AKP05E_MODEL), {
+    rows: 2,
+    columns: 5,
+    keyCount: 10,
+    keyWidth: 112,
+    keyHeight: 112,
+    productName: 'AJAZZ AKP05E',
+    encoderCount: 0,
+    touchWidth: 0,
+    touchHeight: 0,
+  });
+  // CORA already delivers key art upright for this panel; only the splash needs 180.
+  assert.equal(AJAZZ_AKP05E_MODEL.image.rotate, 0);
+  assert.equal(AJAZZ_AKP05E_MODEL.splash?.transformOverride?.rotate, 180);
+  assert.deepEqual(AJAZZ_AKP05E_MODEL.keyMap.coraToWireImage, [11, 12, 13, 14, 15, 6, 7, 8, 9, 10]);
+  // Input codes are 1-based row-order, not the image wire ids.
+  assert.deepEqual(AJAZZ_AKP05E_MODEL.keyMap.wireInputToCora, [-1, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9]);
+});
+
+test('AKP05 inherits AKP05E output protocol', () => {
+  assert.equal(AJAZZ_AKP05_MODEL.protocol, AJAZZ_AKP05E_MODEL.protocol);
+  assert.equal(AJAZZ_AKP05_MODEL.driverKind, AJAZZ_AKP05E_MODEL.driverKind);
+  assert.deepEqual(AJAZZ_AKP05_MODEL.image, AJAZZ_AKP05E_MODEL.image);
+  assert.deepEqual(AJAZZ_AKP05_MODEL.keyMap, AJAZZ_AKP05E_MODEL.keyMap);
+});
+
+// Stream Deck + emulation profile
+
+test('stream-deck-plus profile advertises Plus identity and touch geometry', () => {
+  assert.equal(STREAM_DECK_PLUS_MODEL.cora.productId, ELGATO_PLUS_PID);
+  assert.equal(STREAM_DECK_PLUS_MODEL.keyCount, 8);
+  assert.equal(STREAM_DECK_PLUS_MODEL.columns, 4);
+  assert.equal(STREAM_DECK_PLUS_MODEL.rows, 2);
+  assert.equal(STREAM_DECK_PLUS_MODEL.keyWidth, 120);
+  assert.equal(STREAM_DECK_PLUS_MODEL.keyHeight, 120);
+  assert.equal(STREAM_DECK_PLUS_MODEL.encoderCount, 4);
+  assert.equal(STREAM_DECK_PLUS_MODEL.touchWidth, 800);
+  assert.equal(STREAM_DECK_PLUS_MODEL.touchHeight, 100);
+  // The desktop rejects a 1.01.x child firmware for PID 0x0084; the Plus profile
+  // reports a 2.00.x line.
+  assert.equal(STREAM_DECK_PLUS_MODEL.cora.childFirmwareVersion, '2.00.026');
+});
+
+test('stream-deck-plus resolves as a cora profile but is not USB-probed', () => {
+  assert.equal(findModelById('stream-deck-plus')?.id, 'stream-deck-plus');
+  assert.ok(!DEVICE_MODELS.some((m) => m.id === 'stream-deck-plus'));
+  assert.equal(CORA_PROFILES[0]?.id, 'stream-deck-plus');
+  // The Plus USB PID must not be claimed by any probeable model.
+  assert.equal(findModel(0x0fd9, ELGATO_PLUS_PID), null);
+});
+
+test('AKP05E can be re-paired as Stream Deck + via cora.advertiseAs', () => {
+  const geo = advertisedGeometry({
+    ...AJAZZ_AKP05E_MODEL,
+    cora: { ...AJAZZ_AKP05E_MODEL.cora, advertiseAs: 'stream-deck-plus' },
+  });
+  assert.equal(geo.keyCount, 8);
+  assert.equal(geo.encoderCount, 4);
+  assert.equal(geo.touchWidth, 800);
+  assert.equal(geo.touchHeight, 100);
 });
 
 // Rev.1 PIDs now resolve to the v1 rebadge clones (akp153-v1-clones.ts), not the rev.2
@@ -309,8 +385,8 @@ test('findModel returns null for a known VID but unknown PID', () => {
 
 console.log('\ndevice-models: DEVICE_MODELS ordering');
 
-test('DEVICE_MODELS contains exactly 16 models', () => {
-  assert.equal(DEVICE_MODELS.length, 16);
+test('DEVICE_MODELS contains exactly 18 models', () => {
+  assert.equal(DEVICE_MODELS.length, 18);
 });
 
 test('DEFAULT_MODEL is MK2_MODEL', () => {
@@ -594,6 +670,20 @@ test('every model advertises a geometry that resolves', () => {
   }
 });
 
+test('every emulation names a CORA profile and maps its whole grid', () => {
+  for (const model of DEVICE_MODELS) {
+    for (const [id, emulation] of Object.entries(model.cora.emulations ?? {})) {
+      const profile = CORA_PROFILES.find((p) => p.id === id);
+      assert.ok(profile, `${model.id}: emulation '${id}' must be a CORA profile`);
+      assert.equal(
+        emulation.keyMap.coraToWireImage?.length,
+        profile!.keyCount,
+        `${model.id}: '${id}' coraToWireImage must cover every emulated key`,
+      );
+    }
+  }
+});
+
 test('every model declares positive wire sizes', () => {
   for (const model of DEVICE_MODELS) {
     assert.ok(model.wire.packetSize > 0, `${model.id}: wire.packetSize must be positive`);
@@ -719,6 +809,22 @@ test('buildCapabilitiesPacket uses mirabox-293s geometry correctly', () => {
   assert.equal(pkt[7], MIRABOX_293S_MODEL.keyCount);
   assert.equal(pkt.readUInt16LE(8), MIRABOX_293S_MODEL.keyWidth);
   assert.equal(pkt.readUInt16LE(10), MIRABOX_293S_MODEL.keyHeight);
+});
+
+test('buildCapabilitiesPacket writes Plus touch dims (layout byte unchanged)', () => {
+  const geo = modelToChildGeometry(STREAM_DECK_PLUS_MODEL);
+  const pkt = buildCapabilitiesPacket(FAKE_CONFIG, 5344, geo);
+  assert.equal(pkt[4], CHILD_CAPS_LAYOUT_TYPE);
+  assert.equal(pkt.readUInt16LE(12), 800);
+  assert.equal(pkt.readUInt16LE(14), 100);
+});
+
+test('buildCapabilitiesPacket writes zero touch dims for key-only models', () => {
+  const geo = modelToChildGeometry(MK2_MODEL);
+  const pkt = buildCapabilitiesPacket(FAKE_CONFIG, 5344, geo);
+  assert.equal(pkt[4], CHILD_CAPS_LAYOUT_TYPE);
+  assert.equal(pkt.readUInt16LE(12), 0);
+  assert.equal(pkt.readUInt16LE(14), 0);
 });
 
 // Summary

@@ -5,6 +5,7 @@ import type { DockStatus } from '../src/types.js';
 import { modelToChildGeometry } from '../src/capabilities.js';
 import { MK2_MODEL } from '../src/devices/elgato/mk2.js';
 import { MINI_MODEL } from '../src/devices/elgato/mini.js';
+import { STREAM_DECK_PLUS_MODEL } from '../src/devices/elgato/plus.js';
 import {
   CORA_MAGIC,
   encodeCoraFrame,
@@ -18,8 +19,10 @@ import { testAsync as runTest, summaryExit } from './helpers/harness.js';
 
 const TEST_PORT = 15343;
 const TEST_CHILD_PORT = 15344;
+const PLUS_TEST_CHILD_PORT = 15346;
 const MK2_CHILD_GEOMETRY = modelToChildGeometry(MK2_MODEL);
 const MINI_CHILD_GEOMETRY = modelToChildGeometry(MINI_MODEL);
+const PLUS_CHILD_GEOMETRY = modelToChildGeometry(STREAM_DECK_PLUS_MODEL);
 
 // Setup / teardown
 
@@ -92,6 +95,32 @@ try {
     const seq1 = keepalives[0]!.payload[5]!;
     assert.equal(keepalives[1]!.payload[5], (seq1 + 1) & 0xff);
     assert.equal(keepalives[2]!.payload[5], (seq1 + 2) & 0xff);
+  });
+
+  await runTest('keepalive ACKs are summarized once per minute', () => {
+    const logs: { level: string; message: string }[] = [];
+    const onServerLog = (entry: { level: string; message: string }): void => {
+      logs.push(entry);
+    };
+    const internals = server as unknown as {
+      keepaliveAckLogWindowStartedAt: number;
+      keepaliveAckLogCount: number;
+      handleCoraPacket: (flags: number, hidOp: number, messageId: number, payload: Buffer) => void;
+    };
+    server.on('serverLog', onServerLog);
+    try {
+      internals.handleCoraPacket(0, 0, 0, Buffer.from([0x03, 0x1a, 0]));
+      assert.equal(logs.length, 0);
+
+      internals.keepaliveAckLogWindowStartedAt = Date.now() - 60_000;
+      internals.handleCoraPacket(0, 0, 0, Buffer.from([0x03, 0x1a, 0]));
+      assert.equal(logs.length, 1);
+      assert.equal(logs[0]!.message, 'primary keepalive ACKs: 2/min (expected 600/min)');
+    } finally {
+      internals.keepaliveAckLogWindowStartedAt = 0;
+      internals.keepaliveAckLogCount = 0;
+      server.off('serverLog', onServerLog);
+    }
   });
 
   console.log('\nelgato server: feature reports');
@@ -279,8 +308,83 @@ try {
     const frame2 = await f.recv();
     assert.equal(frame2.payload[4 + 5], 0x00);
 
+    // MK.2 geometry has no strip: touch/dial must not reach the app, so the next
+    // frame is the key event, not a touch or encoder report.
+    childServer.sendTouch({ type: 'tap', x: 10, y: 10 });
+    childServer.sendDial({ index: 0, kind: 'press', state: 'down' });
+    childServer.sendKeyEvent(5, 'down');
+    let frame3 = await f.recv();
+    while (frame3.payload[1] === 0x0a) frame3 = await f.recv(); // skip keepalives
+    assert.equal(frame3.payload[1], 0x00); // buttons subtype
+    childServer.sendKeyEvent(5, 'up');
+
     await closeAndWait(childServer, f);
   });
+
+  await runTest(
+    'sendDialPress / sendDialRotate / sendTouch produce Plus input reports',
+    async () => {
+      // A Plus-geometry child server is required (encoderCount 4) — the MK.2 one
+      // above declares none, so sendDial* would no-op.
+      const plusChild = new ElgatoChildServer(
+        PLUS_CHILD_GEOMETRY,
+        PLUS_TEST_CHILD_PORT,
+        server.deviceConfig,
+        false,
+      );
+      // Only the connect-time keepalive: a periodic one could land between the reads below.
+      plusChild.keepaliveIntervalMs = 60_000;
+      await plusChild.start();
+      try {
+        const f = await connect(PLUS_TEST_CHILD_PORT);
+        await f.recv(); // drain keepalive
+
+        plusChild.sendDial({ index: 2, kind: 'press', state: 'down' });
+        const press = await f.recv();
+        assert.equal(press.payload[0], 0x01);
+        assert.equal(press.payload[1], 0x03); // encoder subtype
+        assert.equal(press.payload[2], 1 + 4); // contents type + one byte per encoder
+        assert.equal(press.payload[4], 0x00); // BTN
+        assert.equal(press.payload[5 + 2], 0x01); // encoder 2 pressed
+        assert.equal(press.payload[5 + 0], 0x00); // others released
+        assert.equal(press.payload[5 + 3], 0x00);
+
+        plusChild.sendDial({ index: 2, kind: 'press', state: 'up' });
+        const release = await f.recv();
+        assert.equal(release.payload[4], 0x00); // BTN
+        assert.equal(release.payload[5 + 2], 0x00); // released — mask bit cleared
+
+        plusChild.sendDial({ index: 1, kind: 'rotate', delta: -3 });
+        const rotate = await f.recv();
+        assert.equal(rotate.payload[0], 0x01);
+        assert.equal(rotate.payload[1], 0x03);
+        assert.equal(rotate.payload[4], 0x01); // rotate
+        const deltaByte = rotate.payload[5 + 1]!;
+        assert.equal(deltaByte >= 0x80 ? deltaByte - 0x100 : deltaByte, -3); // INT8 per encoder
+
+        plusChild.sendTouch({ type: 'swipe', x: 100, y: 20, endX: 300, endY: 40 });
+        const touch = await f.recv();
+        assert.equal(touch.payload[0], 0x01);
+        assert.equal(touch.payload[1], 0x02); // touch subtype
+        assert.equal(touch.payload[2], 0x0e); // FLICK payload length
+        assert.equal(touch.payload[4], 0x03); // swipe
+        assert.equal(touch.payload.readUInt16LE(6), 100); // x
+        assert.equal(touch.payload.readUInt16LE(8), 20); // y
+        assert.equal(touch.payload.readUInt16LE(10), 300); // endX
+        assert.equal(touch.payload.readUInt16LE(12), 40); // endY
+
+        plusChild.sendTouch({ type: 'tap', x: 5000, y: -7 });
+        const clamped = await f.recv();
+        assert.equal(clamped.payload[4], 0x01); // tap
+        assert.equal(clamped.payload.readUInt16LE(6), 799); // x clamped to strip
+        assert.equal(clamped.payload.readUInt16LE(8), 0); // y clamped to strip
+
+        await closeAndWait(plusChild, f);
+      } finally {
+        await plusChild.stop();
+      }
+    },
+  );
 
   /* oxlint-disable no-console no-control-regex */
   await runTest('GET_REPORT 0x05 returns child firmware version', async () => {
@@ -515,14 +619,12 @@ await runTest('retries on bind failure, logs conflict, and eventually succeeds',
   const server2 = new FakeCoraServer(2); // fails twice, then succeeds
   const childServer2 = new FakeCoraServer(0);
   const logs: { level: string; component: string; message: string }[] = [];
-  const webuiLogs: { level: string; component: string; message: string }[] = [];
 
   await startCoraWithRetry(
     {
       server: server2,
       childServer: childServer2,
       log: (level, component, message) => logs.push({ level, component, message }),
-      webuiLog: (level, component, message) => webuiLogs.push({ level, component, message }),
       getShuttingDown: () => false,
       elgatoTcpPort: 5343,
       elgatoChildPort: 5344,
@@ -542,8 +644,6 @@ await runTest('retries on bind failure, logs conflict, and eventually succeeds',
   assert.ok(errorLogs[0]!.message.includes('5343/5344'));
   assert.ok(errorLogs[0]!.message.includes('attempt 1'));
   assert.ok(errorLogs[1]!.message.includes('attempt 2'));
-  assert.equal(webuiLogs.length, 2, 'one webui conflict log per failed attempt');
-  assert.ok(webuiLogs[0]!.message.includes('is another DeckBridge / Elgato dock running?'));
 });
 
 await runTest('bails immediately if shutdown is already in progress', async () => {
@@ -556,7 +656,6 @@ await runTest('bails immediately if shutdown is already in progress', async () =
       server: server2,
       childServer: childServer2,
       log: (level, component, message) => logs.push({ level, component, message }),
-      webuiLog: () => {},
       getShuttingDown: () => true,
       elgatoTcpPort: 5343,
       elgatoChildPort: 5344,
@@ -580,7 +679,6 @@ await runTest('shuttingDown flag set during wait stops further retries', async (
       server: server2,
       childServer: childServer2,
       log: () => {},
-      webuiLog: () => {},
       getShuttingDown: () => shuttingDown,
       elgatoTcpPort: 5343,
       elgatoChildPort: 5344,

@@ -71,6 +71,7 @@ const FAMILY_OF_PROTOCOL = {
   'elgato-gen2': 'elgato',
   'mirabox-cora': 'mirabox-v3',
   'mirabox-cora-v1': 'mirabox-v1',
+  'ajazz-akp05': 'ajazz-akp05',
 };
 
 const FAMILIES = [
@@ -90,6 +91,13 @@ const FAMILIES = [
     title: 'Mirabox v1 board',
     blurb:
       'The 293S board and its rebadges: 512-byte packets, keydown-only firmware, a shared hardcoded serial, and a 6th key column outside the emulated MK.2 grid.',
+  },
+  {
+    key: 'ajazz-akp05',
+    // Not "AJAZZ AKP05": its auto-slug would clash with the model anchor #ajazz-akp05.
+    title: 'AJAZZ AKP05 family',
+    blurb:
+      'Dedicated 1024-byte CRT protocol: ten JPEG keys (CRT BAT uploads committed with CRT ULEND), four rotary encoders, a four-zone touch strip, and a 10 s keepalive.',
   },
 ];
 
@@ -118,12 +126,14 @@ const COLUMNS = {
     {
       key: 'id',
       label: 'Model id',
-      description: 'DeviceModel.id — stable kebab-case slug used as image-cache key, UI label and log tag.',
+      description:
+        'DeviceModel.id — stable kebab-case slug used as image-cache key, UI label and log tag.',
     },
     {
       key: 'vendor',
       label: 'Vendor',
-      description: 'Who sells the deck. Rebadges share a board with a tested model but not its vendor.',
+      description:
+        'Who sells the deck. Rebadges share a board with a tested model but not its vendor.',
     },
     {
       key: 'protocol',
@@ -162,7 +172,8 @@ const COLUMNS = {
       key: 'keyCount',
       label: 'Keys',
       numeric: true,
-      description: 'How many keys DeckBridge drives on this panel, extra keys outside the CORA grid included.',
+      description:
+        'How many keys DeckBridge drives on this panel, extra keys outside the CORA grid included.',
     },
     { key: 'columns', label: 'Cols', numeric: true, description: 'Key grid width, in keys.' },
     { key: 'rows', label: 'Rows', numeric: true, description: 'Key grid height, in keys.' },
@@ -332,7 +343,8 @@ const COLUMNS = {
     {
       key: 'reportId',
       label: 'Report id',
-      description: 'Leading HID report-id byte on every write: 0x00 on the 293 family, 0x04 on the K1 Pro.',
+      description:
+        'Leading HID report-id byte on every write: 0x00 on the 293 family, 0x04 on the K1 Pro.',
     },
     {
       key: 'chunkPadByte',
@@ -439,9 +451,7 @@ function imageCells(m) {
 function wireCells(m) {
   const w = m.wire;
   if (!w) {
-    return Object.fromEntries(
-      COLUMNS.wire.map((c) => [c.key, c.key === 'name' ? m.name : DASH]),
-    );
+    return Object.fromEntries(COLUMNS.wire.map((c) => [c.key, c.key === 'name' ? m.name : DASH]));
   }
   return {
     name: m.name,
@@ -521,9 +531,7 @@ const COMPARE_HEADERS = [
 ];
 
 function compareRow(m, note) {
-  const ids = m.usbProductIds
-    .map((p) => `\`${hex(m.usbVendorId)}:${hex(p)}\``)
-    .join('<br />');
+  const ids = m.usbProductIds.map((p) => `\`${hex(m.usbVendorId)}:${hex(p)}\``).join('<br />');
   const extra = m.keyMap.extraKeys?.length ? String(m.keyMap.extraKeys.length) : DASH;
   return [
     `[${escapeCell(m.name)}](#${m.id})`,
@@ -573,7 +581,14 @@ function devicesPage(models, notes) {
     out.push('');
     out.push(escapeMdx(family.blurb));
     out.push('');
-    out.push(scrollable(mdTable(COMPARE_HEADERS, group.map((m) => compareRow(m, notes[m.id])))));
+    out.push(
+      scrollable(
+        mdTable(
+          COMPARE_HEADERS,
+          group.map((m) => compareRow(m, notes[m.id])),
+        ),
+      ),
+    );
     out.push('');
   }
 
@@ -612,7 +627,10 @@ function devicesPage(models, notes) {
     out.push(`[Full spec →](./device-specs.mdx#${m.id})`);
     out.push('');
   }
-  return `${out.join('\n').replace(/\n{3,}/g, '\n\n').trimEnd()}\n`;
+  return `${out
+    .join('\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trimEnd()}\n`;
 }
 
 // page 2: specs
@@ -726,8 +744,8 @@ function specsPage(models, notes) {
   out.push('## Image spec');
   out.push('');
   out.push(
-    'How a CORA frame becomes the bytes this panel wants. The `format: \'bmp\'` short-circuit in',
-    '`image-pipeline` runs before any of this; `transform: \'passthrough\'` sends the CORA JPEG',
+    "How a CORA frame becomes the bytes this panel wants. The `format: 'bmp'` short-circuit in",
+    "`image-pipeline` runs before any of this; `transform: 'passthrough'` sends the CORA JPEG",
     'unchanged and is only valid at CORA-native resolution with no rotation, flip or size cap.',
   );
   out.push('');
@@ -753,7 +771,10 @@ function specsPage(models, notes) {
   );
   out.push('');
   out.push(...specSections(models, notes));
-  return `${out.join('\n').replace(/\n{3,}/g, '\n\n').trimEnd()}\n`;
+  return `${out
+    .join('\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trimEnd()}\n`;
 }
 
 // the JSON
@@ -775,7 +796,10 @@ function dataJson(models, notes) {
     Object.entries(COLUMNS).map(([table, cols]) => [
       table,
       {
-        columns: cols.map((c) => ({ ...c, defaultVisible: DEFAULT_VISIBLE[table].includes(c.key) })),
+        columns: cols.map((c) => ({
+          ...c,
+          defaultVisible: DEFAULT_VISIBLE[table].includes(c.key),
+        })),
         legend: DEFAULTS_LEGEND[table],
       },
     ]),
@@ -822,7 +846,9 @@ async function main() {
     });
     if (stale.length) {
       for (const [file] of stale) console.error(`stale: ${file.slice(REPO.length + 1)}`);
-      console.error("\nThe device docs no longer match DEVICE_MODELS. Run 'mise run docs-devices'.");
+      console.error(
+        "\nThe device docs no longer match DEVICE_MODELS. Run 'mise run docs-devices'.",
+      );
       process.exitCode = 1;
       return;
     }

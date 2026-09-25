@@ -11,6 +11,9 @@ import {
   PAYLOAD_TYPE_OUTPUT_REPORT,
   PAYLOAD_TYPE_FEATURE,
   IMG_CMD_WRITE,
+  IMG_CMD_LCD,
+  IMG_CMD_WINDOW,
+  IMG_CMD_WINDOW_PARTIAL,
   GEN1_IMG_CMD,
   IMAGE_CHUNK_KEY_OFFSET,
   GEN1_IMAGE_KEY_OFFSET,
@@ -131,6 +134,7 @@ export function handleChildOutputReportPacket(
   sendAckNak: (messageId: number, hidOp?: number) => void,
   handleImageChunk: (pkt: Buffer, messageId: number) => void,
   handleGen1ImageChunk: (pkt: Buffer, messageId: number) => void,
+  handleTouchOutput: (cmd: number, pkt: Buffer) => void,
 ): void {
   if (byte0 !== PAYLOAD_TYPE_OUTPUT_REPORT) return;
   const tracing = isLevelEnabled('debug');
@@ -142,6 +146,16 @@ export function handleChildOutputReportPacket(
     if (tracing) traceGen1ImageChunk(emitLog, payload, messageId, msSinceConnect);
     if (flags & CORA_FLAG_REQACK) sendAckNak(messageId, hidOp);
     handleGen1ImageChunk(payload, messageId);
+  } else if (
+    byte1 === IMG_CMD_LCD ||
+    byte1 === IMG_CMD_WINDOW ||
+    byte1 === IMG_CMD_WINDOW_PARTIAL
+  ) {
+    // Stream Deck + touch/LCD surface output. ACK-pace it (the app waits for the ACK
+    // before the next chunk), then hand the chunk to the child server, which decides
+    // which of these (only the window strip is assembled today) it can act on.
+    if (flags & CORA_FLAG_REQACK) sendAckNak(messageId, hidOp);
+    handleTouchOutput(byte1, payload);
   }
 }
 

@@ -46,6 +46,12 @@ export abstract class CoraServerBase extends EventEmitter {
     return this.client !== null;
   }
 
+  /** Close the attached client but keep listening. Unlike stop(), `client` stays
+   *  set until the socket's close handler runs, so 'clientDisconnected' fires. */
+  dropClient(): void {
+    this.client?.destroy();
+  }
+
   protected startServer(): Promise<void> {
     return new Promise((resolve, reject) => {
       let started = false;
@@ -87,6 +93,8 @@ export abstract class CoraServerBase extends EventEmitter {
     hidOp: number,
     messageId: number,
     description?: string,
+    // Read only by ElgatoChildServer's override (log level for the trace).
+    _noisy = false,
   ): void {
     const frame = encodeCoraFrame(payload, flags, hidOp, messageId);
     this.client?.write(frame);
@@ -100,7 +108,14 @@ export abstract class CoraServerBase extends EventEmitter {
     payload[2] = KEEPALIVE_SUBTYPE;
     payload[4] = 0x01;
     payload[KEEPALIVE_PKT_SEQ_OFFSET] = this.keepaliveSeq;
-    this.sendFrame(payload, 0, 0, this.keepaliveSeq, `CORA keepalive seq=${this.keepaliveSeq}`);
+    this.sendFrame(
+      payload,
+      0,
+      0,
+      this.keepaliveSeq,
+      `CORA keepalive seq=${this.keepaliveSeq}`,
+      true,
+    );
     this.keepaliveSeq = (this.keepaliveSeq + 1) & 0xff;
   }
 
@@ -111,10 +126,17 @@ export abstract class CoraServerBase extends EventEmitter {
       hidOp,
       messageId,
       `CORA AckNak for msgId=${messageId} hidOp=${hidOp}`,
+      true,
     );
   }
 
+  /** Without a 'comm' listener the per-frame hex dump is dead work. */
+  protected get commTracing(): boolean {
+    return this.listenerCount('comm') > 0;
+  }
+
   protected emitComm(direction: 'rx' | 'tx', human: string, data: Buffer): void {
+    if (!this.commTracing) return;
     const hex = formatCommHex(data);
     this.emit('comm', {
       direction,

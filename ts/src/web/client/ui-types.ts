@@ -5,6 +5,8 @@ import type { ClientApp, ExtraKeyWidget } from '../contract.js';
 
 export type {
   ClientApp,
+  EncoderCommands,
+  EncoderSettings,
   ExtraKeyWidget,
   PluginStatus,
   PluginsInfo,
@@ -13,8 +15,14 @@ export type {
   RealDeviceIdentity,
   KeyEventEntry as KeyEvent,
   DeviceModelInfo as DeviceModel,
+  TouchStripMode,
   UpdateInfo,
 } from '../contract.js';
+
+export interface TouchStripSize {
+  width: number;
+  height: number;
+}
 
 // Duplicated from server-side DockStatus (../../types.ts) — web-client cannot
 // import server/shared types (boundaries: web-client imports only web-client).
@@ -28,8 +36,13 @@ export interface DockUi {
   primaryPort: number;
   primaryConnected: boolean; // primary (Network Dock) CORA client = app discovered us
   elgatoConnected: boolean;
-  brightness?: number; // absent on legacy-synthesized entries (deriveDocks)
+  brightness: number;
   extraKeys?: number[]; // wire ids of keys outside the emulated grid (293S 6th column)
+  pressableExtraKeys?: number[]; // the extraKeys with a switch (AKP05E right column as a Plus)
+  widgetDisplays?: Array<{ wireId: number; label: string }>;
+  encoderCount?: number; // rotary encoders (knobs); absent/0 = none
+  coraProfile?: string; // re-paired CORA profile (cora.advertiseAs); absent = native
+  touchStripSize?: TouchStripSize; // advertised strip (Plus: 800×100)
 }
 
 export interface ExtraKeyCfg {
@@ -38,6 +51,7 @@ export interface ExtraKeyCfg {
   intervalMs?: number; // command/plugin widget: re-run/poll interval
   timeoutMs?: number; // command widget only: kill-timeout
   pluginArg?: string; // plugin widget only: per-key argument (ctx.param)
+  pressCommand?: string; // pressable extra keys only: shell command run on press
 }
 
 export interface Status {
@@ -54,7 +68,7 @@ export interface Status {
   elgatoAppConflict?: boolean;
   elgatoDevicePresent?: boolean;
   localIp?: string;
-  docks?: DockUi[];
+  docks: DockUi[];
   selectedDock?: number;
 }
 
@@ -103,11 +117,24 @@ export interface DeviceKeyMapOverride {
   extraKeys?: number[];
 }
 
+export interface DeviceCoraOverride {
+  advertiseAs?: string;
+  productId?: number;
+}
+
 export interface DeviceModelOverride {
   image?: DeviceImageOverride;
   keyMap?: DeviceKeyMapOverride;
   wire?: Record<string, number | boolean>;
   splash?: unknown;
+  cora?: DeviceCoraOverride;
+}
+
+/** A CORA emulation profile the device may re-pair as (from CORA_PROFILES). */
+export interface EmulationProfile {
+  id: string;
+  name: string;
+  productId: number;
 }
 
 /** GET /api/device-overrides payload. */
@@ -125,6 +152,8 @@ export interface DeviceOverridesView {
   effective: { image: DeviceEffectiveImage; keyMap: DeviceKeyMapOverride };
   /** `effective` projected to the settable fields — what the form seeds from. */
   tunable: DeviceModelOverride;
+  /** Emulation profiles a device may re-pair as. */
+  profiles?: EmulationProfile[];
 }
 export interface ServerLog {
   ts: number;

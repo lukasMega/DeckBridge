@@ -1,7 +1,14 @@
 import { render } from 'preact';
 import { act } from 'preact/test-utils';
 import { useLayoutEffect } from 'preact/hooks';
-import { addKeyEvent, patch, setBrightness, useStore } from '../src/web/client/store.js';
+import {
+  addKeyEvent,
+  getSnapshot,
+  patch,
+  setBrightness,
+  useStore,
+} from '../src/web/client/store.js';
+import { hydrate } from '../src/web/client/hydrate.js';
 import { CopyChip } from '../src/web/client/simple/controls.js';
 import { LogConsolePanel } from '../src/web/client/advanced-log-panel.js';
 import { DeviceTuningPanel } from '../src/web/client/simple/device-tuning.js';
@@ -9,7 +16,11 @@ import { DiagnosticsPanel } from '../src/web/client/simple/diagnostics-panel.js'
 import { MultiDeckPanel } from '../src/web/client/simple/multi-deck-panel.js';
 import { KeymapLearn } from '../src/web/client/simple/keymap-learn.js';
 import { DockList } from '../src/web/client/simple/dock-cards.js';
+import { ExtraKeysPanel } from '../src/web/client/simple/extra-keys-panel.js';
+import { ChipRadioGroup } from '../src/web/client/components/ChipRadioGroup.js';
 import { updateBadgeVersion } from '../src/web/client/ui-helpers.js';
+import { KeyGridPreview } from '../src/web/client/components/KeyGridPreview.js';
+import { applyTouchImage, resetTouchStrip } from '../src/web/client/touch-strip-preview.js';
 import type { DeviceOverridesView, DockUi, UpdateInfo } from '../src/web/client/ui-types.js';
 
 const root = document.createElement('div');
@@ -210,7 +221,103 @@ async function run(): Promise<void> {
   await runSettingsPanels();
   await runKeymapAndDiagnosticsPanels();
   await runMultiDockCards();
+  await runSideKeysPanel();
+  await runChipRadioGroup();
+  await runTouchStripPreview();
   runUpdateBadge();
+  runHydrateRegression();
+}
+
+// B4: WS reconnect used to re-apply only images, leaving extraKeys/encoders/
+// touchStripMode/brightnessOverride/updateInfo stale after an app restart.
+// hydrate() is now the single entry point for both first load and reconnect.
+function runHydrateRegression(): void {
+  patch({
+    extraKeys: {},
+    touchStripMode: 'elgato',
+    brightnessOverride: true,
+    updateInfo: undefined,
+  });
+  hydrate({
+    driverMode: 'real',
+    driverConnected: true,
+    elgatoConnected: true,
+    docks: [],
+    stats: { uptimeMs: 1, elgatoRxPkts: 0, elgatoTxPkts: 0, imagesSent: 0 },
+    images: {},
+    extraKeys: { '11': { widget: 'command', param: 'date' } },
+    touchStripMode: 'deckbridge-repaint',
+    brightnessOverride: false,
+    updateInfo: { enabled: true, current: '0.14.1', updateAvailable: true, latest: '0.15.0' },
+  });
+  const snap = getSnapshot();
+  check(
+    JSON.stringify(snap.extraKeys) ===
+      JSON.stringify({ '11': { widget: 'command', param: 'date' } }),
+    'hydrate() re-applies extraKeys',
+  );
+  check(snap.touchStripMode === 'deckbridge-repaint', 'hydrate() re-applies touchStripMode');
+  check(!snap.brightnessOverride, 'hydrate() re-applies brightnessOverride');
+  check(snap.updateInfo?.latest === '0.15.0', 'hydrate() re-applies updateInfo');
+  patch({
+    extraKeys: {},
+    touchStripMode: 'elgato',
+    brightnessOverride: true,
+    updateInfo: undefined,
+  });
+}
+
+/** Base64 JPEG body of a solid w×h block. */
+function solidJpeg(w: number, h: number, color: string): string {
+  const c = document.createElement('canvas');
+  c.width = w;
+  c.height = h;
+  const ctx = c.getContext('2d')!;
+  ctx.fillStyle = color;
+  ctx.fillRect(0, 0, w, h);
+  return c.toDataURL('image/jpeg', 1).split(',')[1]!;
+}
+
+/** Red channel at (x, y) once the async paint chain has drawn it. */
+async function stripRed(x: number, y: number, want: (r: number) => boolean): Promise<number> {
+  let r = -1;
+  for (let i = 0; i < 50; i++) {
+    const canvas = root.querySelector<HTMLCanvasElement>('canvas.touch-strip-preview');
+    r = canvas?.getContext('2d')?.getImageData(x, y, 1, 1).data[0] ?? -1;
+    if (want(r)) return r;
+    await new Promise((res) => setTimeout(res, 10));
+  }
+  return r;
+}
+
+async function runTouchStripPreview(): Promise<void> {
+  await act(() => render(<KeyGridPreview keyCount={8} columns={4} dimmed={false} />, root));
+  check(!root.querySelector('canvas.touch-strip-preview'), 'No strip canvas without a strip');
+
+  applyTouchImage({ data: solidJpeg(40, 10, '#ff0000') });
+  await act(() =>
+    render(
+      <KeyGridPreview
+        keyCount={8}
+        columns={4}
+        dimmed={false}
+        touchStrip={{ width: 40, height: 10 }}
+      />,
+      root,
+    ),
+  );
+  const canvas = root.querySelector<HTMLCanvasElement>('canvas.touch-strip-preview');
+  check(canvas?.width === 40 && canvas.height === 10, 'Strip canvas uses the advertised size');
+  check((await stripRed(5, 5, (r) => r > 200)) > 200, 'A frame seen before mount is painted');
+
+  applyTouchImage({ data: solidJpeg(20, 10, '#0000ff'), region: { x: 20, y: 0, w: 20, h: 10 } });
+  check((await stripRed(30, 5, (r) => r < 50)) < 50, 'A partial window lands at its region');
+  check((await stripRed(5, 5, (r) => r > 200)) > 200, 'A partial window leaves the rest');
+
+  resetTouchStrip();
+  const alpha = canvas!.getContext('2d')!.getImageData(5, 5, 1, 1).data[3];
+  check(alpha === 0, 'Dock switch clears the strip');
+  await act(() => render(null, root));
 }
 
 // Device tuning + diagnostics panels (simple/device-tuning.tsx,
@@ -290,7 +397,12 @@ async function settle(): Promise<void> {
 }
 
 /** Minimum status the learn-mode grid prompts need. */
-const baseStatus = { driverMode: 'real' as const, driverConnected: true, elgatoConnected: true };
+const baseStatus = {
+  driverMode: 'real' as const,
+  driverConnected: true,
+  elgatoConnected: true,
+  docks: [] as DockUi[],
+};
 
 async function checkBatchImageTransferTuning(): Promise<void> {
   for (const [modelId, enabled] of [
@@ -338,6 +450,51 @@ async function checkBatchImageTransferTuning(): Promise<void> {
   }
 }
 
+// Picking an emulation profile must not post the old grid's image draft: an explicit
+// image override wins over the profile's transform (it undid the Plus 180° rotation).
+async function checkEmulationProfileSwitch(): Promise<void> {
+  const view: DeviceOverridesView = {
+    ...OVERRIDES_VIEW,
+    modelId: 'ajazz-akp05e',
+    modelName: 'AJAZZ AKP05E',
+    overrides: { image: { quality: 0.7 } },
+    tunable: { image: { rotate: 0, width: 112, height: 112 }, cora: { productId: 0x80 } },
+    profiles: [{ id: 'stream-deck-plus', name: 'Stream Deck +', productId: 0x84 }],
+  };
+  const stub = stubFetch((_url, init) => ({
+    payload: init?.method === 'POST' ? { reconnecting: true } : view,
+  }));
+  try {
+    await act(() => patch({ status: { ...baseStatus, modelId: 'ajazz-akp05e' } }));
+    await act(() => render(<DeviceTuningPanel />, root));
+    await settle();
+    const select = root.querySelector<HTMLSelectElement>('#tuning-emulation-profile');
+    check(select !== null && select.value === '', 'Emulation profile seeds as native');
+    await act(() => {
+      select!.value = 'stream-deck-plus';
+      select!.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+    await click('#tuning-apply');
+    await settle();
+    const posted = stub.calls.find((call) => call.method === 'POST')?.body as {
+      overrides: Record<string, unknown>;
+    };
+    check(
+      JSON.stringify(posted.overrides.cora) ===
+        JSON.stringify({ advertiseAs: 'stream-deck-plus', productId: 0x84 }),
+      'Profile switch posts the cora target',
+    );
+    check(
+      !('image' in posted.overrides) && !('keyMap' in posted.overrides),
+      'Profile switch drops the previous grid image/keyMap overrides',
+    );
+  } finally {
+    stub.restore();
+    await act(() => render(null, root));
+    await act(() => patch({ status: baseStatus }));
+  }
+}
+
 async function runSettingsPanels(): Promise<void> {
   // Device tuning: renders the effective spec, not a blank form.
   {
@@ -368,6 +525,7 @@ async function runSettingsPanels(): Promise<void> {
   }
 
   await checkBatchImageTransferTuning();
+  await checkEmulationProfileSwitch();
 
   // A validation failure surfaces the server's error list.
   {
@@ -436,6 +594,7 @@ async function runSettingsPanels(): Promise<void> {
         primaryPort: 5325,
         primaryConnected: true,
         elgatoConnected: true,
+        brightness: 100,
       },
       {
         index: 1,
@@ -447,6 +606,7 @@ async function runSettingsPanels(): Promise<void> {
         primaryPort: 5345,
         primaryConnected: true,
         elgatoConnected: true,
+        brightness: 100,
       },
     ];
     const stub = stubFetch((url) => ({
@@ -511,6 +671,7 @@ async function runSettingsPanels(): Promise<void> {
         primaryPort: 5325,
         primaryConnected: true,
         elgatoConnected: true,
+        brightness: 100,
       },
       {
         index: 1,
@@ -522,6 +683,7 @@ async function runSettingsPanels(): Promise<void> {
         primaryPort: 5345,
         primaryConnected: true,
         elgatoConnected: true,
+        brightness: 100,
       },
     ];
     const stub = stubFetch((url, init) => {
@@ -721,6 +883,7 @@ const DOCKS: DockUi[] = [
     primaryPort: 5343,
     primaryConnected: true,
     elgatoConnected: true,
+    brightness: 100,
   },
   {
     index: 1,
@@ -732,6 +895,7 @@ const DOCKS: DockUi[] = [
     primaryPort: 5345,
     primaryConnected: true,
     elgatoConnected: true,
+    brightness: 100,
   },
 ];
 
@@ -830,6 +994,140 @@ async function runMultiDockCards(): Promise<void> {
     stub.restore();
     await act(() => render(null, root));
   }
+}
+
+// Side keys + touch strip (simple/extra-keys-panel.tsx): every row sits on the
+// shared grid, and the strip's rows/knobs follow the selected mode.
+const AKP05E_DOCK: DockUi = {
+  index: 0,
+  modelId: 'ajazz-akp05e',
+  modelName: 'AJAZZ AKP05E',
+  keyCount: 8,
+  columns: 4,
+  rows: 2,
+  primaryPort: 5343,
+  primaryConnected: true,
+  elgatoConnected: true,
+  brightness: 100,
+  extraKeys: [10, 11, 12],
+  pressableExtraKeys: [10, 11, 12],
+  widgetDisplays: [20, 21, 22, 23].map((wireId, i) => ({ wireId, label: `Zone ${i + 1}` })),
+  encoderCount: 4,
+};
+
+async function runSideKeysPanel(): Promise<void> {
+  const stub = stubFetch(() => ({ payload: { dir: '', files: [], status: {} } }));
+  const section = (title: string): Element =>
+    root.querySelector(`[role="group"][aria-label="${title}"]`)!;
+  const rows = (title: string, extra = ''): Element[] => [
+    ...section(title).querySelectorAll(`.xkey-row:not(.xkey-grid-head)${extra}`),
+  ];
+  try {
+    await act(() =>
+      patch({
+        status: { ...baseStatus, docks: [AKP05E_DOCK], selectedDock: 0 },
+        extraKeys: { '11': { widget: 'command', param: 'date' } },
+        touchStripMode: 'elgato',
+        encoders: { connectToApp: true },
+      }),
+    );
+    await act(() => render(<ExtraKeysPanel />, root));
+    await settle();
+
+    const sideRows = rows('Side keys');
+    check(
+      sideRows.length === 3 &&
+        sideRows.every(
+          (row) =>
+            row.querySelectorAll('.xkey-value').length === 1 &&
+            row.querySelector('.xkey-press-label') !== null,
+        ),
+      'Every side-key row has one value cell and an on-press line',
+    );
+    check(
+      sideRows.filter((row) => row.querySelector('.xkey-value.xkey-wide') !== null).length === 2,
+      'Value cell spans the settings track when the widget has no settings button',
+    );
+    check(
+      section('Side keys').querySelector('.xkey-grid-head')?.textContent === 'KeyShowsValue',
+      'Side keys grid has column captions',
+    );
+    check(
+      rows('Touch strip').length === 0 &&
+        section('Touch strip').textContent.includes('DeckBridge widgets are off') &&
+        section('Touch strip').querySelector('.xkeys-option') === null,
+      'Elgato strip mode hides zone rows, the repaint interval, and says why',
+    );
+
+    const modeSelect = root.querySelector<HTMLSelectElement>(
+      'select[aria-label="Touch strip mode"]',
+    )!;
+    modeSelect.value = 'deckbridge-repaint';
+    await act(() => {
+      modeSelect.dispatchEvent(new Event('change'));
+    });
+    await settle();
+    const modePost = stub.calls.find((c) => c.url === '/api/touch-strip-mode');
+    check(
+      (modePost?.body as { mode?: string } | undefined)?.mode === 'deckbridge-repaint',
+      'Touch strip mode select posts the picked mode',
+    );
+
+    await act(() => patch({ touchStripMode: 'deckbridge-repaint' }));
+    const repaintInput =
+      section('Touch strip').querySelector<HTMLInputElement>('.xkeys-option input');
+    check(repaintInput?.value === '5', 'Repaint mode shows the repaint interval, default 5 s');
+    repaintInput!.value = '2';
+    await act(() => {
+      repaintInput!.dispatchEvent(new Event('change'));
+    });
+    await settle();
+    const repaintPost = stub.calls.find((c) => c.url === '/api/touch-strip-repaint');
+    check(
+      (repaintPost?.body as { ms?: number } | undefined)?.ms === 2000,
+      'Repaint interval posts milliseconds',
+    );
+    check(
+      rows('Touch strip', ':not(.xkey-knob-row)').length === 4 &&
+        rows('Touch strip', '.xkey-knob-row').length === 0,
+      'Override mode shows zone rows; connected knobs show no command grid',
+    );
+    await act(() => patch({ encoders: { connectToApp: false } }));
+    check(
+      rows('Touch strip', '.xkey-knob-row').length === 4 &&
+        rows('Touch strip', '.xkey-knob-row').every(
+          (row) => row.querySelectorAll('input').length === 3,
+        ),
+      'Disconnected knobs show one press/right/left row per knob',
+    );
+  } finally {
+    stub.restore();
+    await act(() => render(null, root));
+    await act(() => patch({ status: baseStatus, extraKeys: {}, touchStripMode: 'elgato' }));
+  }
+}
+
+async function runChipRadioGroup(): Promise<void> {
+  let picked: number | undefined;
+  await act(() =>
+    render(
+      <ChipRadioGroup
+        name="chip-test"
+        label="Chip test"
+        value={0}
+        options={[0, 90].map((value) => ({ value, label: String(value) }))}
+        onChange={(value) => (picked = value)}
+      />,
+      root,
+    ),
+  );
+  check(
+    root.querySelector<HTMLInputElement>('input[name="chip-test"]:checked')?.value === '0',
+    'ChipRadioGroup checks the current value',
+  );
+  await act(() => root.querySelector<HTMLInputElement>('input[value="90"]')!.click());
+  check(picked === 90, 'ChipRadioGroup reports the typed option value');
+  await act(() => render(null, root));
 }
 
 void run()

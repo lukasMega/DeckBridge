@@ -1,18 +1,20 @@
 import assert from 'tjs:assert';
 import {
-  mk2IndexToDeviceImgId,
-  deviceInputToMk2Index,
   transformImageForDevice,
   fillModeFor,
   applyOverride,
+  blitImage,
+  canvasSliceToBmp,
 } from '../src/translator.js';
 import type { DeviceImageSpec } from '../src/devices/driver.js';
 import { MIRABOX_293_MODEL } from '../src/devices/mirabox/mirabox-293.js';
 import { MIRABOX_K1PRO_MODEL } from '../src/devices/mirabox/mirabox-k1pro.js';
+import { AJAZZ_AKP05E_MODEL } from '../src/devices/ajazz/akp05e.js';
 import { testAsync as test, summaryExit } from './helpers/harness.js';
 import { SOLID_RED_16X16_JPEG } from './helpers/fixtures.js';
 
-const coraToWireImage = MIRABOX_293_MODEL.keyMap.coraToWireImage!;
+// Index-mapping tests (mk2IndexToDeviceImgId/deviceInputToMk2Index/deviceInputToExtraKey)
+// moved to key-map.test.ts alongside their source (key-map.ts).
 
 // Parse JPEG SOF0/SOF1/SOF2 to extract image dimensions
 function getJpegDimensions(jpeg: Uint8Array): { width: number; height: number } | null {
@@ -40,81 +42,6 @@ function getJpegDimensions(jpeg: Uint8Array): { width: number; height: number } 
   }
   return null;
 }
-
-// Pure mapping tests (no sidecar needed)
-
-console.log('\ntranslator: index mapping');
-
-await test('mirabox-293 coraToWireImage has 15 entries, all unique, values 1–15', () => {
-  assert.equal(coraToWireImage.length, 15);
-  const vals = coraToWireImage.toSorted((a, b) => a - b);
-  assert.deepEqual(vals, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]);
-});
-
-await test('mk2IndexToDeviceImgId(0, mirabox-293) === 11 (top-left)', () => {
-  assert.equal(mk2IndexToDeviceImgId(0, MIRABOX_293_MODEL), 11);
-});
-
-await test('mk2IndexToDeviceImgId(4, mirabox-293) === 15 (top-right)', () => {
-  assert.equal(mk2IndexToDeviceImgId(4, MIRABOX_293_MODEL), 15);
-});
-
-await test('mk2IndexToDeviceImgId(14, mirabox-293) === 5 (bottom-right)', () => {
-  assert.equal(mk2IndexToDeviceImgId(14, MIRABOX_293_MODEL), 5);
-});
-
-await test('middle row (indices 5–9) maps to i+1', () => {
-  for (let i = 5; i <= 9; i++) {
-    assert.equal(mk2IndexToDeviceImgId(i, MIRABOX_293_MODEL), i + 1);
-  }
-});
-
-await test('mk2IndexToDeviceImgId(15, mirabox-293) === -1 (just past 15-entry array)', () => {
-  assert.equal(mk2IndexToDeviceImgId(15, MIRABOX_293_MODEL), -1);
-});
-
-await test('mk2IndexToDeviceImgId(99, mirabox-293) === -1 (far OOB)', () => {
-  assert.equal(mk2IndexToDeviceImgId(99, MIRABOX_293_MODEL), -1);
-});
-
-await test('deviceInputToMk2Index(0x01, mirabox-293) === 0', () => {
-  assert.equal(deviceInputToMk2Index(0x01, MIRABOX_293_MODEL), 0);
-});
-
-await test('deviceInputToMk2Index(0x0F, mirabox-293) === 14', () => {
-  assert.equal(deviceInputToMk2Index(0x0f, MIRABOX_293_MODEL), 14);
-});
-
-await test('round-trip: all codes 1–15 map to indices 0–14', () => {
-  for (let code = 1; code <= 15; code++) {
-    const idx = deviceInputToMk2Index(code, MIRABOX_293_MODEL);
-    assert.ok(idx >= 0 && idx <= 14);
-  }
-});
-
-// K1 Pro mapping tests
-
-console.log('\ntranslator: mirabox-k1pro index mapping');
-
-await test('mk2IndexToDeviceImgId(0, mirabox-k1pro) === 5 (top-left → device image 5)', () => {
-  assert.equal(mk2IndexToDeviceImgId(0, MIRABOX_K1PRO_MODEL), 5);
-});
-
-await test('deviceInputToMk2Index(0x05, mirabox-k1pro) === 0', () => {
-  assert.equal(deviceInputToMk2Index(0x05, MIRABOX_K1PRO_MODEL), 0);
-});
-
-await test('deviceInputToMk2Index(0x01, mirabox-k1pro) === 2', () => {
-  assert.equal(deviceInputToMk2Index(0x01, MIRABOX_K1PRO_MODEL), 2);
-});
-
-await test('deviceInputToMk2Index(0x25, mirabox-k1pro) === -1 (encoder code dropped)', () => {
-  assert.equal(deviceInputToMk2Index(0x25, MIRABOX_K1PRO_MODEL), -1);
-});
-
-await test('deviceInputToMk2Index(0x50, mirabox-k1pro) === -1 (encoder code dropped)', () => {
-  assert.equal(deviceInputToMk2Index(0x50, MIRABOX_K1PRO_MODEL), -1);
-});
 
 // fillModeFor mapping
 
@@ -277,6 +204,49 @@ await test('crop within bounds applies, then resizes to spec size', () => {
   const dims = getJpegDimensions(out);
   assert.equal(dims!.width, 32);
   assert.equal(dims!.height, 32);
+});
+
+// Touch-strip canvas (Stream Deck + window partial updates)
+
+console.log('\ntranslator: touch-strip canvas');
+
+await test('blitImage draws a patch at its offset and leaves the rest of the canvas', () => {
+  const cw = 40;
+  const canvas = new Uint8Array(cw * 20 * 3);
+  blitImage(canvas, cw, 20, SOLID_RED_16X16_JPEG, 8, 2);
+  const px = (x: number, y: number): number[] => [
+    ...canvas.subarray((y * cw + x) * 3, (y * cw + x) * 3 + 3),
+  ];
+  const [r, g, b] = px(10, 5);
+  assert.ok(r! > 200 && g! < 60 && b! < 60, `patch is red (got ${r},${g},${b})`);
+  assert.deepEqual(px(0, 0), [0, 0, 0]);
+  assert.deepEqual(px(30, 5), [0, 0, 0]);
+});
+
+await test('blitImage rejects undecodable input', () => {
+  assert.throws(() => blitImage(new Uint8Array(12), 4, 1, new Uint8Array([1, 2, 3]), 0, 0));
+});
+
+await test('canvasSliceToBmp: bottom-up BGR rows, padded to 4 bytes', () => {
+  // 3×2 canvas, slice x=1 w=1: rows hold (1,2,3) on top, (4,5,6) below.
+  const canvas = new Uint8Array([0, 0, 0, 1, 2, 3, 0, 0, 0, 0, 0, 0, 4, 5, 6, 0, 0, 0]);
+  const bmp = canvasSliceToBmp(canvas, 3, 2, 1, 1);
+  const view = new DataView(bmp.buffer);
+  assert.equal(bmp.length, 54 + 4 * 2, '3-byte rows padded to 4');
+  assert.equal(view.getInt32(18, true), 1);
+  assert.equal(view.getInt32(22, true), 2);
+  assert.deepEqual([...bmp.subarray(54, 57)], [6, 5, 4], 'bottom row first, BGR');
+  assert.deepEqual([...bmp.subarray(58, 61)], [3, 2, 1]);
+});
+
+await test('a canvas slice goes through the device transform', () => {
+  const canvas = new Uint8Array(800 * 100 * 3);
+  blitImage(canvas, 800, 100, SOLID_RED_16X16_JPEG, 210, 10);
+  const out = transformImageForDevice(
+    canvasSliceToBmp(canvas, 800, 100, 200, 200),
+    AJAZZ_AKP05E_MODEL.widgetDisplays![1]!.image,
+  );
+  assert.ok(out.length > 0);
 });
 
 // Summary

@@ -2,7 +2,7 @@
  *  Instantiates the right driver (Mirabox or Elgato) based on modelId,
  *  then bridges its EventEmitter events ↔ postMessage. */
 import type { MainToWorker, WorkerToMain } from './hid-worker-protocol.js';
-import type { ImageModeOverride, KeyEvent } from './types.js';
+import type { ImageModeOverride, KeyEvent, DialEvent, TouchInputEvent } from './types.js';
 import { DEVICE_MODELS } from './devices/registry.js';
 import type { DeviceModel, DeviceModelOverride } from './devices/driver.js';
 import { supportsImageBatching } from './devices/driver.js';
@@ -10,7 +10,8 @@ import { applyModelOverrides, overrideSummary, pinsImageFit } from './devices/mo
 import { imageCache } from './image-cache.js';
 import { ElgatoHidDriver } from './devices/hid-driver-base.js';
 import { MiraboxDriver } from './mirabox.js';
-import { renderImage } from './image-render.js';
+import { Akp05Driver } from './devices/ajazz/akp05-driver.js';
+import { renderImage, TouchStripCanvas } from './image-render.js';
 import { transformImageForDevice } from './translator.js';
 import { setWorkerPost, setLogLevel, info } from './logger.js';
 
@@ -23,7 +24,7 @@ setWorkerPost(scope.postMessage.bind(scope));
 
 const post = scope.postMessage.bind(scope);
 
-type AnyRealDriver = ElgatoHidDriver | MiraboxDriver;
+type AnyRealDriver = ElgatoHidDriver | MiraboxDriver | Akp05Driver;
 let driver: AnyRealDriver | null = null;
 let currentModel: DeviceModel | null = null;
 // Registry entry behind currentModel, kept so a live tuning swap ('setOverrides')
@@ -39,6 +40,10 @@ let imageOverride: ImageModeOverride = null;
 // device, otherwise it would overwrite resizeMode/padFill on every render.
 let imageFitPinned = false;
 
+// The app's whole strip plus the zones DeckBridge widgets own ('setTouchStripMask'):
+// a partial window update lands in place, and masked zones are drawn but never sent.
+const touchCanvas = new TouchStripCanvas();
+
 /** Driver factory keyed on `model.driverKind` — the single touch-point for
  *  registering a new driver implementation (Path C / 'custom' has none yet). */
 function createDriver(model: DeviceModel): AnyRealDriver {
@@ -48,7 +53,8 @@ function createDriver(model: DeviceModel): AnyRealDriver {
     case 'mirabox':
       return new MiraboxDriver(model);
     case 'custom':
-      throw new Error(`No driver implementation for driverKind 'custom' (model: ${model.id})`);
+      if (model.protocol === 'ajazz-akp05') return new Akp05Driver(model);
+      throw new Error(`No driver implementation for custom model: ${model.id}`);
   }
 }
 
@@ -71,6 +77,7 @@ async function handleOpen(
   // one. The cache key carries a spec revision too (image-render.ts); clearing
   // here additionally frees the stale entries instead of letting them age out.
   imageCache.clear();
+  touchCanvas.reset();
   if (overrides) {
     info('worker', `${model.id} opened with overrides: ${overrideSummary(overrides)}`);
   }
@@ -81,6 +88,8 @@ async function handleOpen(
   openRegistryModel = registryModel;
 
   d.on('key', (e: KeyEvent) => post({ type: 'key', keyIndex: e.keyIndex, state: e.state }));
+  d.on('dial', (e: DialEvent) => post({ type: 'dial', event: e }));
+  d.on('touch', (e: TouchInputEvent) => post({ type: 'touch', event: e }));
   d.on('error', (err: Error) => post({ type: 'error', message: err.message }));
   d.on('disconnect', () => post({ type: 'disconnect' }));
   d.on('reinit', () => post({ type: 'reinit' }));
@@ -88,7 +97,9 @@ async function handleOpen(
   try {
     await d.open(hidPath);
     const serial = d instanceof ElgatoHidDriver ? d.deviceSerial : undefined;
-    const firmware = d instanceof ElgatoHidDriver ? d.deviceFirmware : undefined;
+    let firmware: string | undefined;
+    if (d instanceof ElgatoHidDriver) firmware = d.deviceFirmware;
+    else if (d instanceof Akp05Driver) firmware = d.firmware;
     post({
       type: 'opened',
       ok: true,
@@ -114,15 +125,15 @@ function applyLiveOverrides(overrides?: DeviceModelOverride): void {
 
 /** Render one CORA image frame: transform (via image-render.ts) + notify main
  *  thread. Guards on driver+currentModel; no-ops if the driver is gone. */
-async function handleImage(
+function handleImage(
   keyIndex: number,
   bytes: Uint8Array,
   format: 'jpeg' | 'bmp',
   deferNotification: boolean,
-): Promise<void> {
+): void {
   if (!driver || !currentModel) return;
   const mode = imageFitPinned ? null : imageOverride;
-  await renderImage(driver, currentModel, keyIndex, bytes, format, mode);
+  renderImage(driver, currentModel, keyIndex, bytes, format, mode);
   if (!deferNotification) post({ type: 'imageSent', keyIndex });
 }
 
@@ -143,6 +154,32 @@ function handleSplashImage(
   driver.sendImage(keyIndex, nativeBytes);
 }
 
+type TouchStripMsg = Extract<
+  MainToWorker,
+  { type: 'touchImage' | 'setTouchStripMask' | 'restoreTouchSegments' | 'setTouchStripOptions' }
+>;
+
+function isTouchStripMsg(msg: MainToWorker): msg is TouchStripMsg {
+  return (
+    msg.type === 'touchImage' ||
+    msg.type === 'setTouchStripMask' ||
+    msg.type === 'restoreTouchSegments' ||
+    msg.type === 'setTouchStripOptions'
+  );
+}
+
+function handleTouchStripMsg(msg: TouchStripMsg): void {
+  if (msg.type === 'setTouchStripOptions') {
+    touchCanvas.setOptions(msg.options);
+    return;
+  }
+  const d = driver;
+  if (!d || !currentModel) return;
+  if (msg.type === 'touchImage') touchCanvas.apply(d, currentModel, msg.bytes, msg.region);
+  else if (msg.type === 'setTouchStripMask') touchCanvas.setMask(d, currentModel, msg.wireIds);
+  else touchCanvas.restore(d, currentModel, msg.wireIds);
+}
+
 /** Non-device state changes: no HID I/O, they only steer the next render. */
 function handleSetting(
   msg: Extract<MainToWorker, { type: 'setImageOverride' | 'setOverrides' | 'setLogLevel' }>,
@@ -153,12 +190,17 @@ function handleSetting(
 }
 
 async function handle(msg: MainToWorker, deferNotification: boolean): Promise<void> {
+  // Device path, not handleSetting: releasing/restoring a zone writes to the device.
+  if (isTouchStripMsg(msg)) {
+    handleTouchStripMsg(msg);
+    return;
+  }
   switch (msg.type) {
     case 'open':
       await handleOpen(msg.modelId, msg.hidPath, msg.overrides);
       break;
     case 'image':
-      await handleImage(msg.keyIndex, msg.bytes, msg.format, deferNotification);
+      handleImage(msg.keyIndex, msg.bytes, msg.format, deferNotification);
       break;
     case 'sendImage':
       driver?.sendImage(msg.keyIndex, msg.bytes);
@@ -177,6 +219,7 @@ async function handle(msg: MainToWorker, deferNotification: boolean): Promise<vo
       driver = null;
       currentModel = null;
       openRegistryModel = null;
+      touchCanvas.reset();
       await d?.close().catch(() => undefined);
       post({ type: 'closed' });
       break;

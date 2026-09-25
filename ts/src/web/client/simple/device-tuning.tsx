@@ -2,6 +2,8 @@
 // Supports runtime calibration before copying values into a registry PR.
 // Key-map wizard lives in keymap-learn.tsx.
 import { useCallback, useEffect, useRef, useState } from 'preact/hooks';
+import { ChipRadioGroup } from '../components/ChipRadioGroup.js';
+import type { ChipOption } from '../components/ChipRadioGroup.js';
 import { Collapsible } from '../components/Collapsible.js';
 import { CheckField, NumberField, SelectField } from '../components/Fields.js';
 import { useStore } from '../store.js';
@@ -14,15 +16,34 @@ import type { DeviceImageOverride, DeviceOverridesView } from '../ui-types.js';
 
 const ROTATIONS = [0, 90, 180, 270] as const;
 const RESIZE_FILTERS = ['triangle', 'nearest', 'lanczos3'] as const;
-const RESIZE_MODE_OPTIONS = [
+const ROTATION_CHIPS: ReadonlyArray<ChipOption<(typeof ROTATIONS)[number]>> = ROTATIONS.map(
+  (rotate) => ({ value: rotate, label: <span>{rotate}°</span>, title: `Rotate ${rotate} degrees` }),
+);
+
+function iconChips<T extends string>(
+  options: ReadonlyArray<{ value: T; icon: string; description: string }>,
+): ReadonlyArray<ChipOption<T>> {
+  return options.map(({ value, icon, description }) => ({
+    value,
+    title: description,
+    label: (
+      <>
+        <span aria-hidden="true">{icon}</span>
+        <span class="icon-radio-label">{value}</span>
+      </>
+    ),
+  }));
+}
+
+const RESIZE_MODE_CHIPS = iconChips([
   { value: 'resize', icon: '↔', description: 'Resize image to fit' },
   { value: 'pad', icon: '□', description: 'Pad image to fit' },
-] as const;
-const PAD_FILL_OPTIONS = [
+] as const);
+const PAD_FILL_CHIPS = iconChips([
   { value: 'black', icon: '●', description: 'Black padding' },
   { value: 'average', icon: '◐', description: 'Average-color padding' },
   { value: 'edge', icon: '▣', description: 'Edge-color padding' },
-] as const;
+] as const);
 
 /** Numeric fields rendered as a plain number input, with their bounds. Bounds
  *  mirror devices/model-overrides.ts — the server re-validates regardless. */
@@ -46,7 +67,7 @@ const NUMBER_FIELDS: ReadonlyArray<{
 function selectedModel(state: StoreState): string | undefined {
   const selectedDock = state.status.selectedDock ?? 0;
   return (
-    state.status.docks?.find((dock) => dock.index === selectedDock)?.modelId ?? state.status.modelId
+    state.status.docks.find((dock) => dock.index === selectedDock)?.modelId ?? state.status.modelId
   );
 }
 
@@ -78,6 +99,7 @@ export function DeviceTuningPanel(): preact.JSX.Element {
   const [view, setView] = useState<DeviceOverridesView | null>(null);
   const [image, setImage] = useState<DeviceImageOverride>({});
   const [batchImageTransfers, setBatchImageTransfers] = useState(false);
+  const [coraProfile, setCoraProfile] = useState('');
   const action = useAsyncAction();
   const resetFeedback = action.reset;
   const copy = useCopyText();
@@ -99,6 +121,7 @@ export function DeviceTuningPanel(): preact.JSX.Element {
       // Reloading intentionally discards drafts so edits never follow another dock.
       setImage({ ...data.tunable.image });
       setBatchImageTransfers(data.tunable.wire?.batchImageTransfers === true);
+      setCoraProfile(data.tunable.cora?.advertiseAs ?? '');
     },
     [selectedModelId],
   );
@@ -128,18 +151,24 @@ export function DeviceTuningPanel(): preact.JSX.Element {
   const apply = (): Promise<void> =>
     action.run(async () => {
       if (!activeView) return;
+      const overrides: Record<string, unknown> = { ...activeView.overrides, image };
+      if (typeof activeView.tunable.wire?.batchImageTransfers === 'boolean') {
+        overrides.wire = { ...activeView.overrides.wire, batchImageTransfers };
+      }
+      if (activeView.profiles?.length) {
+        const profile = activeView.profiles.find((p) => p.id === coraProfile);
+        if (profile) overrides.cora = { advertiseAs: profile.id, productId: profile.productId };
+        else delete overrides.cora;
+        // Image + key map are per grid: the draft was seeded from the old target and
+        // would override the new target's transform (e.g. undo the Plus 180°).
+        if (coraProfile !== (activeView.tunable.cora?.advertiseAs ?? '')) {
+          delete overrides.image;
+          delete overrides.keyMap;
+        }
+      }
       const parsed = await postJson<{ reconnecting?: boolean }>(
         '/api/device-overrides',
-        {
-          modelId: activeView.modelId,
-          overrides: {
-            ...activeView.overrides,
-            image,
-            ...(typeof activeView.tunable.wire?.batchImageTransfers === 'boolean'
-              ? { wire: { ...activeView.overrides.wire, batchImageTransfers } }
-              : {}),
-          },
-        },
+        { modelId: activeView.modelId, overrides },
         'Save failed',
       );
       action.setStatus(
@@ -194,56 +223,34 @@ export function DeviceTuningPanel(): preact.JSX.Element {
           <p class="tuning-group-label">Layout</p>
           <div class="tuning-field">
             <span>Rotation</span>
-            <div class="pad-fill-options rotation-options" role="radiogroup" aria-label="Rotation">
-              {ROTATIONS.map((rotate) => (
-                <label key={rotate} class="pad-fill-option" title={`Rotate ${rotate} degrees`}>
-                  <input
-                    type="radio"
-                    name="rotation"
-                    value={rotate}
-                    checked={(image.rotate ?? 0) === rotate}
-                    onChange={() => patch({ rotate })}
-                  />
-                  <span>{rotate}°</span>
-                </label>
-              ))}
-            </div>
+            <ChipRadioGroup
+              name="rotation"
+              label="Rotation"
+              class="rotation-options"
+              value={image.rotate ?? 0}
+              options={ROTATION_CHIPS}
+              onChange={(rotate) => patch({ rotate })}
+            />
           </div>
           <div class="tuning-field">
             <span>Image fit</span>
-            <div class="pad-fill-options" role="radiogroup" aria-label="Image fit">
-              {RESIZE_MODE_OPTIONS.map(({ value, icon, description }) => (
-                <label key={value} class="pad-fill-option" title={description}>
-                  <input
-                    type="radio"
-                    name="image-fit"
-                    value={value}
-                    checked={(image.resizeMode ?? 'resize') === value}
-                    onChange={() => patch({ resizeMode: value })}
-                  />
-                  <span aria-hidden="true">{icon}</span>
-                  <span class="icon-radio-label">{value}</span>
-                </label>
-              ))}
-            </div>
+            <ChipRadioGroup
+              name="image-fit"
+              label="Image fit"
+              value={image.resizeMode ?? 'resize'}
+              options={RESIZE_MODE_CHIPS}
+              onChange={(resizeMode) => patch({ resizeMode })}
+            />
           </div>
           <div class="tuning-field">
             <span>Pad fill</span>
-            <div class="pad-fill-options" role="radiogroup" aria-label="Pad fill">
-              {PAD_FILL_OPTIONS.map(({ value, icon, description }) => (
-                <label key={value} class="pad-fill-option" title={description}>
-                  <input
-                    type="radio"
-                    name="pad-fill"
-                    value={value}
-                    checked={(image.padFill ?? 'edge') === value}
-                    onChange={() => patch({ padFill: value })}
-                  />
-                  <span aria-hidden="true">{icon}</span>
-                  <span class="icon-radio-label">{value}</span>
-                </label>
-              ))}
-            </div>
+            <ChipRadioGroup
+              name="pad-fill"
+              label="Pad fill"
+              value={image.padFill ?? 'edge'}
+              options={PAD_FILL_CHIPS}
+              onChange={(padFill) => patch({ padFill })}
+            />
           </div>
         </div>
         <div class="tuning-group">
@@ -297,6 +304,25 @@ export function DeviceTuningPanel(): preact.JSX.Element {
           checked={batchImageTransfers}
           onChange={setBatchImageTransfers}
         />
+      )}
+
+      {activeView.profiles && activeView.profiles.length > 0 && (
+        <label class="tuning-field">
+          <span>Emulation profile</span>
+          <select
+            id="tuning-emulation-profile"
+            class="input"
+            value={coraProfile}
+            onChange={(e) => setCoraProfile((e.target as HTMLSelectElement).value)}
+          >
+            <option value="">Native (default)</option>
+            {activeView.profiles.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name}
+              </option>
+            ))}
+          </select>
+        </label>
       )}
 
       <Collapsible title="Advanced">

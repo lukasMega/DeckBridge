@@ -1,5 +1,5 @@
 import { SPLASH_STATES } from './assets/splash-states.js';
-import { mk2IndexToDeviceImgId } from './translator.js';
+import { mk2IndexToDeviceImgId } from './key-map.js';
 import type { DeviceDriver, DeviceImageSpec } from './devices/driver.js';
 import { log } from './logger.js';
 
@@ -47,10 +47,7 @@ export function sendSplashImages(driver: DeviceDriver): void {
   for (const mk2 of splashKeys) {
     // Match the live image path (image-pipeline.ts): remap mk2 → device wire id
     // when the model defines an image keyMap; Elgato (no keyMap) passes through.
-    const deviceKeyIndex =
-      model.keyMap.coraToWireImage || model.keyMap.imageOffset != null
-        ? mk2IndexToDeviceImgId(mk2, model)
-        : mk2;
+    const deviceKeyIndex = mk2IndexToDeviceImgId(mk2, model);
     // Every key gets the same device-independent "connected" image. Source
     // bytes are a constant — no copy needed here; WorkerHidDriver.sendSplashImage
     // copies before postMessage.

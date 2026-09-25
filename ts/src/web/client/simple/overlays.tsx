@@ -130,7 +130,12 @@ export function AboutPopover({ onClose }: Readonly<{ onClose: () => void }>): pr
 
   return (
     <div class="scrim" onClick={handleScrimClick}>
-      <div class="popover floating-surface">
+      <div
+        class="popover floating-surface"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="about-title"
+      >
         <button
           class="pop-close circle"
           aria-label="Close"
@@ -139,22 +144,25 @@ export function AboutPopover({ onClose }: Readonly<{ onClose: () => void }>): pr
           // eslint-disable-next-line @eslint-react/dom-no-dangerously-set-innerhtml -- static trusted SVG icon markup
           dangerouslySetInnerHTML={{ __html: ICON.close }}
         />
-        <h2>What is DeckBridge?</h2>
-        <p>
-          <strong>DeckBridge</strong> lets you use a USB Stream Deck with the Elgato Stream Deck app
-          over your local network. It runs on your computer and appears to the app as a network
-          device, so your keys and button images work over WiFi.
+        <h2 id="about-title">What is DeckBridge?</h2>
+        <p class="about-intro">
+          Use a USB Stream Deck with the Elgato Stream Deck app over your local network. DeckBridge
+          runs on your computer and appears as a network device.
         </p>
-        <p>It&apos;s a free, community-built tool for personal and hobby use.</p>
-        <p class="fine">
-          DeckBridge is not affiliated with, endorsed by, or supported by Elgato / Corsair.
-          &ldquo;Stream Deck&rdquo; and &ldquo;Elgato&rdquo; are trademarks of their respective
-          owners. DeckBridge is intended for hobby and personal use only —{' '}
-          <strong>not for professional use</strong> — and it{' '}
-          <strong>does not replace the Elgato Network Dock</strong>. For professional or reliable
-          setups, use officially supported Elgato hardware.
-        </p>
-        <p class="fine app-version">DeckBridge v{__VERSION__}</p>
+        <p class="about-usage">Free, community-built software for personal and hobby use.</p>
+        <div class="about-notice">
+          <h3>Independent project</h3>
+          <p>
+            DeckBridge is not affiliated with, endorsed by, or supported by Elgato or Corsair.
+            &ldquo;Stream Deck&rdquo; and &ldquo;Elgato&rdquo; are trademarks of their respective
+            owners.
+          </p>
+          <p>
+            For personal and hobby use only. Not for professional use. Does not replace the Elgato
+            Network Dock. For reliable setups, use officially supported Elgato hardware.
+          </p>
+        </div>
+        <p class="about-version">DeckBridge v{__VERSION__}</p>
       </div>
     </div>
   );

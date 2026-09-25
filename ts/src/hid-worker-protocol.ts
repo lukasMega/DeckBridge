@@ -1,5 +1,13 @@
 /** Generic USB HID worker message protocol. */
-import type { KeyState, CommEntry, ImageModeOverride } from './types.js';
+import type {
+  KeyState,
+  CommEntry,
+  ImageModeOverride,
+  DialEvent,
+  TouchInputEvent,
+  TouchStripOptions,
+  TouchWindowRegion,
+} from './types.js';
 import type { DeviceModelId, DeviceImageSpec, DeviceModelOverride } from './devices/driver.js';
 import type { LogLevel } from './logger.js';
 
@@ -40,6 +48,16 @@ export type MainToWorker =
   // worker ignores those sections regardless, since the open driver instance
   // keeps reading the model it opened with.
   | { type: 'setOverrides'; overrides?: DeviceModelOverride }
+  // Assembled Stream Deck + window image (800×100 JPEG, or a partial-window
+  // region) — the worker splits it into the device's touch-segment displays.
+  | { type: 'touchImage'; bytes: Uint8Array; region?: TouchWindowRegion }
+  // Touch-strip wire ids DeckBridge widgets own: 'touchImage' segments for them
+  // are withheld, and a zone leaving the mask gets the app's image back. The worker resets it to empty on open/close.
+  | { type: 'setTouchStripMask'; wireIds: number[] }
+  // Redraw the app's image (black if it never drew) on zones a widget just left.
+  | { type: 'restoreTouchSegments'; wireIds: number[] }
+  // Full-strip zone fit + upload policy (settings.json). Reset to the defaults on open.
+  | { type: 'setTouchStripOptions'; options: TouchStripOptions }
   // Runtime log-level change (WebUI "Debug logging"). Without this the USB
   // worker — where the interesting device traffic is — stays at its spawn-time
   // level while the main thread switches to debug.
@@ -50,6 +68,8 @@ export type WorkerToMain =
   | { type: 'opened'; ok: true; deviceSerial?: string; deviceFirmware?: string; hidPath?: string }
   | { type: 'opened'; ok: false; error: string }
   | { type: 'key'; keyIndex: number; state: KeyState }
+  | { type: 'dial'; event: DialEvent }
+  | { type: 'touch'; event: TouchInputEvent }
   | { type: 'comm'; entry: WorkerComm }
   | { type: 'log'; level: LogLevel; component: string; message: string }
   | { type: 'error'; message: string }

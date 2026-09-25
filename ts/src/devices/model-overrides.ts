@@ -2,9 +2,11 @@
 // Pure — no I/O/FFI — runs on main thread and USB worker. Applied ON TOP of a resolved
 // model, never in place of one; excluded fields mean it can't smuggle in a different driver.
 import {
+  CORA_OVERRIDE_KEYS,
   IMAGE_OVERRIDE_KEYS,
   WIRE_OVERRIDE_KEYS,
   supportsImageBatching,
+  type DeviceCoraSpec,
   type DeviceImageSpec,
   type DeviceKeyMap,
   type DeviceModel,
@@ -13,6 +15,7 @@ import {
   type DeviceWireSpec,
 } from './driver.js';
 import { fnv1aHex } from '../types.js';
+import { findModelById } from './registry.js';
 
 export type ValidationResult =
   | { ok: true; value: DeviceModelOverride }
@@ -32,7 +35,7 @@ const KEYMAP_KEYS = [
   'imageOffset',
   'extraKeys',
 ] as const;
-const SECTION_KEYS = ['image', 'keyMap', 'wire', 'splash'] as const;
+const SECTION_KEYS = ['image', 'keyMap', 'wire', 'splash', 'cora'] as const;
 
 type WireOverrideKey = (typeof WIRE_OVERRIDE_KEYS)[number];
 
@@ -77,6 +80,7 @@ function rejectUnknownKeys(
  *  per-field checks and the allowed-key list of their section. */
 type FieldSpec =
   | { kind: 'enum'; values: readonly (string | number)[] }
+  | { kind: 'string'; max?: number }
   | { kind: 'boolean' }
   | { kind: 'number'; min?: number; max?: number; integer?: boolean }
   | { kind: 'ints'; min: number; length?: (model: DeviceModel) => number }
@@ -129,6 +133,32 @@ const TRANSFORM_OVERRIDE_FIELDS: SectionFields = {
   flipH: { kind: 'boolean' },
   flipV: { kind: 'boolean' },
 };
+
+type CoraOverrideKey = (typeof CORA_OVERRIDE_KEYS)[number];
+
+const CORA_FIELDS: Record<CoraOverrideKey, FieldSpec> = {
+  advertiseAs: { kind: 'string', max: 64 },
+  productId: { kind: 'number', min: 0, max: 0xffff, integer: true },
+};
+
+/** Shape-check, then pin `advertiseAs` to a target this model has a mapping for and
+ *  `productId` to that target's PID — an unknown id would make advertisedModel()
+ *  throw on every connect, and a foreign profile would scramble the panel. */
+function validateCora(raw: unknown, model: DeviceModel, errors: Errors): void {
+  if (!validateSection(raw, CORA_FIELDS, 'cora', model, errors)) return;
+  const { advertiseAs, productId } = raw;
+  const targets = coraTargets(model);
+  if (typeof advertiseAs === 'string' && !targets.has(advertiseAs)) {
+    const allowed = [...targets.keys()].join(', ') || 'none';
+    errors.push(`cora.advertiseAs: not supported on ${model.name} (allowed: ${allowed})`);
+    return;
+  }
+  const expectedPid =
+    typeof advertiseAs === 'string' ? targets.get(advertiseAs)! : model.cora.productId;
+  if (typeof productId === 'number' && productId !== expectedPid) {
+    errors.push(`cora.productId: must be 0x${expectedPid.toString(16).padStart(4, '0')}`);
+  }
+}
 
 const SPLASH_FIELDS: SectionFields = {
   keys: { kind: 'ints', min: 0 },
@@ -190,6 +220,11 @@ function checkField(
     case 'boolean':
       if (typeof value !== 'boolean') errors.push(`${path}: must be a boolean`);
       return;
+    case 'string':
+      if (typeof value !== 'string') errors.push(`${path}: must be a string`);
+      else if (spec.max !== undefined && value.length > spec.max)
+        errors.push(`${path}: must be ≤ ${spec.max} characters`);
+      return;
     case 'enum':
       if (!spec.values.includes(value as string)) {
         errors.push(`${path}: must be one of ${spec.values.join(', ')}`);
@@ -241,9 +276,17 @@ export function validateModelOverride(raw: unknown, model: DeviceModel): Validat
   const errors: Errors = [];
   rejectUnknownKeys(raw, SECTION_KEYS, 'override', errors);
   if (raw.image !== undefined) validateSection(raw.image, IMAGE_FIELDS, 'image', model, errors);
-  if (raw.keyMap !== undefined) validateSection(raw.keyMap, KEYMAP_FIELDS, 'keyMap', model, errors);
+  // An emulated grid has its own key count (Plus = 8), so coraToWireImage is sized to it.
+  const advertiseAs = isPlainObject(raw.cora) ? raw.cora.advertiseAs : undefined;
+  const profile = selectedEmulation(model, advertiseAs)
+    ? findModelById(advertiseAs as string)
+    : null;
+  const keyModel = profile ? { ...model, keyCount: profile.keyCount } : model;
+  if (raw.keyMap !== undefined)
+    validateSection(raw.keyMap, KEYMAP_FIELDS, 'keyMap', keyModel, errors);
   if (raw.wire !== undefined) validateWire(raw.wire, model, errors);
   if (raw.splash !== undefined) validateSection(raw.splash, SPLASH_FIELDS, 'splash', model, errors);
+  if (raw.cora !== undefined) validateCora(raw.cora, model, errors);
   if (errors.length > 0) return { ok: false, errors };
   return { ok: true, value: raw };
 }
@@ -255,12 +298,46 @@ function defined<T extends object>(patch: T | undefined): Partial<T> {
   return Object.fromEntries(Object.entries(patch).filter(([, v]) => v !== undefined)) as Partial<T>;
 }
 
+/** The CORA profiles `model` may re-pair as (its `cora.emulations`), resolved. */
+export function emulationProfiles(model: DeviceModel): DeviceModel[] {
+  return Object.keys(model.cora.emulations ?? {})
+    .map((id) => findModelById(id))
+    .filter((profile): profile is DeviceModel => profile !== null);
+}
+
+/** Every `cora.advertiseAs` value `model` accepts, mapped to the PID it must advertise:
+ *  its own registry value (a no-op override) plus each resolvable emulation. */
+function coraTargets(model: DeviceModel): Map<string, number> {
+  const targets = new Map<string, number>();
+  if (model.cora.advertiseAs) targets.set(model.cora.advertiseAs, model.cora.productId);
+  for (const profile of emulationProfiles(model)) targets.set(profile.id, profile.cora.productId);
+  return targets;
+}
+
+/** The emulation `advertiseAs` selects on `model`, or undefined for native/geometry-only. */
+function selectedEmulation(model: DeviceModel, advertiseAs: unknown) {
+  const emulations = model.cora.emulations;
+  // hasOwn: an id like 'toString' must not resolve through the prototype.
+  if (typeof advertiseAs !== 'string' || !emulations || !Object.hasOwn(emulations, advertiseAs))
+    return undefined;
+  return emulations[advertiseAs];
+}
+
 /** Apply `ov` on top of `model`, returning a NEW model (inputs untouched).
- *  Per-section shallow merge; arrays replace wholesale. `undefined` never wins. */
+ *  Per-section shallow merge; arrays replace wholesale. `undefined` never wins.
+ *  A `cora.advertiseAs` naming one of the model's `cora.emulations` also adopts that
+ *  emulation's `image` + `keyMap` (the AKP05E re-pairing as a Stream Deck + needs a
+ *  180° transform + 4×2 key map) and the profile's PID, with any explicit user
+ *  `image`/`keyMap` override still winning on top. */
 export function applyModelOverrides(model: DeviceModel, ov?: DeviceModelOverride): DeviceModel {
   if (!ov || Object.keys(ov).length === 0) return model;
-  const image: DeviceImageSpec = { ...model.image, ...defined(ov.image) };
-  const keyMap: DeviceKeyMap = { ...model.keyMap, ...defined(ov.keyMap) };
+  const cora: DeviceCoraSpec = { ...model.cora, ...defined(ov.cora) };
+  const emulation = selectedEmulation(model, cora.advertiseAs);
+  if (emulation && ov.cora?.productId === undefined) {
+    cora.productId = findModelById(cora.advertiseAs!)?.cora.productId ?? cora.productId;
+  }
+  const image: DeviceImageSpec = { ...(emulation?.image ?? model.image), ...defined(ov.image) };
+  const keyMap: DeviceKeyMap = { ...(emulation?.keyMap ?? model.keyMap), ...defined(ov.keyMap) };
   const wire: DeviceWireSpec = { ...model.wire, ...defined(ov.wire) };
   const splash: DeviceSplashSpec | undefined = ov.splash ?? model.splash;
   return {
@@ -268,6 +345,7 @@ export function applyModelOverrides(model: DeviceModel, ov?: DeviceModelOverride
     image,
     keyMap,
     wire,
+    cora,
     ...(splash ? { splash } : {}),
   };
 }
@@ -300,7 +378,7 @@ export function overrideSummary(ov?: DeviceModelOverride): string {
  *  wire or splash changed, all of which are read at open(). */
 export type OverrideChangeKind = 'none' | 'live' | 'reopen';
 
-const OPEN_TIME_SECTIONS = ['keyMap', 'wire', 'splash'] as const;
+const OPEN_TIME_SECTIONS = ['keyMap', 'wire', 'splash', 'cora'] as const;
 
 /** Canonical form of one override section: key order and absent-vs-undefined
  *  normalized, so `{}`, `undefined` and `{ rotate: undefined }` all compare equal. */
@@ -363,12 +441,13 @@ function tunableWireKeys(model: DeviceModel): readonly WireOverrideKey[] {
 /** Tunable fields at their current (post-override) values — seeds the Device tuning
  *  form so every control starts at what the device actually uses. */
 export function tunableDefaults(model: DeviceModel): DeviceModelOverride {
-  const { image, keyMap, wire, splash } = model;
+  const { image, keyMap, wire, splash, cora } = model;
   return {
     image: project(image, IMAGE_OVERRIDE_KEYS),
     keyMap: project(keyMap, KEYMAP_KEYS),
     wire: project(wire, tunableWireKeys(model)),
     ...(splash ? { splash } : {}),
+    cora: project(cora, CORA_OVERRIDE_KEYS),
   };
 }
 

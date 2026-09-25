@@ -13,7 +13,13 @@ import type {
   StatusSnapshot,
   UpdateInfo,
 } from './types.js';
-import type { CommEntry, ExtraKeyConfig, RealDeviceIdentity } from '../../types.js';
+import type {
+  CommEntry,
+  EncoderSettings,
+  ExtraKeyConfig,
+  RealDeviceIdentity,
+  TouchStripMode,
+} from '../../types.js';
 
 export interface StateResponseInputs {
   snapshot: StatusSnapshot;
@@ -29,6 +35,9 @@ export interface StateResponseInputs {
   deviceIdentity: DeviceIdentity;
   realDeviceIdentity?: RealDeviceIdentity;
   extraKeys: Record<string, ExtraKeyConfig>;
+  touchStripMode: TouchStripMode;
+  touchStripRepaintMs: number;
+  encoders: EncoderSettings;
   logLevel: string;
   logFilePath: string;
   multiDeck: boolean;
@@ -43,8 +52,9 @@ export function buildStateResponse(input: StateResponseInputs): StateResponse {
   return {
     ...snapshot,
     images,
-    logs: activity.logs,
-    commLogs: activity.comms,
+    // Simple builds have no log/comm panel to render these — omit from the wire
+    // payload (client defaults them to [], see hydrate.ts).
+    ...(__SIMPLE_ONLY__ ? {} : { logs: activity.logs, commLogs: activity.comms }),
     keyEvents: activity.keyEvents,
     ...rest,
   };

@@ -1,12 +1,30 @@
 // WebUI wire types live in the `web-contract` leaf (web/contract.ts) so the
 // browser tier shares one declaration instead of mirroring ours. Re-exported
 // here so every existing `types.js` import keeps working.
-import type { ExtraKeyWidget, KeyState, RealDeviceIdentity } from './web/contract.js';
+import type {
+  ExtraKeyWidget,
+  KeyState,
+  RealDeviceIdentity,
+  TouchStripMode,
+} from './web/contract.js';
 
-export type { ClientApp, ExtraKeyWidget, KeyState, RealDeviceIdentity } from './web/contract.js';
+export type {
+  ClientApp,
+  EncoderCommands,
+  EncoderSettings,
+  ExtraKeyWidget,
+  KeyState,
+  RealDeviceIdentity,
+  TouchStripMode,
+} from './web/contract.js';
 
 export const ELGATO_VID = 0x0fd9;
 export const ELGATO_MK2_PID = 0x00a5;
+export const ELGATO_PLUS_PID = 0x0084;
+/** Stream Deck + touch-strip dimensions (pixels). The window-strip image is split
+ *  into one slice per device touch segment before rendering. */
+export const PLUS_TOUCH_WIDTH = 800;
+export const PLUS_TOUCH_HEIGHT = 100;
 export const ELGATO_TCP_PORT = 5343;
 export const ELGATO_PKT_SIZE_RX = 1024;
 export const ELGATO_PKT_SIZE_TX = 512;
@@ -70,7 +88,6 @@ export const DEFAULT_MAC_ADDRESS_STRING = '02:00:00:00:00:01';
 export const DEFAULT_MAC_ADDRESS = [0x02, 0x00, 0x00, 0x00, 0x00, 0x01] as const;
 
 // Key event packet layout
-export const KEY_EVENT_RESERVED_BYTE = 0x00;
 export const KEY_EVENT_STATE_OFFSET = 4;
 
 // Mirabox protocol padding
@@ -113,6 +130,16 @@ export const IMAGE_CHUNK_KEY_OFFSET = 2;
 export const IMAGE_CHUNK_FLAG_OFFSET = 3;
 export const IMAGE_CHUNK_LEN_OFFSET = 4;
 export const IMAGE_CHUNK_LAST_FLAG = 1;
+
+// Stream Deck + partial-window (0x0C) chunk header — one JPEG region of the 800×100
+// touch window, split across chunks that each repeat the region rectangle.
+export const PARTIAL_WINDOW_HEADER_SIZE = 16;
+export const PARTIAL_WINDOW_X_OFFSET = 2;
+export const PARTIAL_WINDOW_Y_OFFSET = 4;
+export const PARTIAL_WINDOW_W_OFFSET = 6;
+export const PARTIAL_WINDOW_H_OFFSET = 8;
+export const PARTIAL_WINDOW_LAST_OFFSET = 10;
+export const PARTIAL_WINDOW_SIZE_OFFSET = 13;
 
 // Server listen address — override with DECKBRIDGE_BIND (e.g. "127.0.0.1") to restrict
 // the CORA servers (5343/5344) to a single interface. WebUI honors the same override
@@ -172,6 +199,17 @@ export const PAYLOAD_TYPE_FEATURE = 0x03;
 // Image chunk sub-command (byte 1 when byte0 = 0x02)
 export const IMG_CMD_WRITE = 0x07;
 
+// Stream Deck + output-report image commands (byte 1 when byte0 = 0x02). Routing
+// only — see elgato-child-payload.ts; the 0x0B/0x0C chunk layouts are UNVERIFIED.
+export const IMG_CMD_LCD = 0x08; // full 800×480 LCD
+export const IMG_CMD_WINDOW = 0x0b; // window strip 800×100
+export const IMG_CMD_WINDOW_PARTIAL = 0x0c; // partial window (X/Y/W/H header)
+
+// Input report sub-types (byte 1 of the 0x01 input report the child server emits).
+export const INPUT_SUBTYPE_BUTTONS = 0x00;
+export const INPUT_SUBTYPE_TOUCH = 0x02;
+export const INPUT_SUBTYPE_ENCODER = 0x03;
+
 // Gen1 (Stream Deck Mini) image chunk constants
 export const GEN1_IMG_CMD = 0x01; // byte[1] in gen1 output report
 export const GEN1_IMAGE_HEADER_SIZE = 16;
@@ -191,6 +229,31 @@ export const REPORT_DEVICE_INFO = 0x0b;
 export interface KeyEvent {
   keyIndex: number;
   state: KeyState;
+}
+
+/** A rotary encoder event from a Stream Deck +-style device. `index` is the
+ *  encoder (0..encoderCount-1); a turn's `delta` is +1 clockwise / -1 counter-clockwise. */
+export type DialEvent =
+  | { index: number; kind: 'press'; state: KeyState }
+  | { index: number; kind: 'rotate'; delta: number };
+
+/** A touch-strip event from a Stream Deck +-style device, in strip coordinates
+ *  (0..touchWidth-1, 0..touchHeight-1). `endX`/`endY` are present for swipes. */
+export interface TouchInputEvent {
+  type: 'tap' | 'hold' | 'swipe';
+  x: number;
+  y: number;
+  endX?: number;
+  endY?: number;
+}
+
+/** A rectangular region of the Stream Deck + window (800×100) the app uploaded via
+ *  the partial-window command. Absent = a full-window (0x0B) image. */
+export interface TouchWindowRegion {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
 }
 
 export interface ImageEvent {
@@ -238,6 +301,53 @@ export const EXTRA_KEY_WIDGETS = [
   'plugin',
 ] as const satisfies readonly ExtraKeyWidget[];
 
+export const TOUCH_STRIP_MODES = [
+  'elgato',
+  'deckbridge-ignore',
+  'deckbridge-repaint',
+] as const satisfies readonly TouchStripMode[];
+
+export const DEFAULT_TOUCH_STRIP_MODE: TouchStripMode = 'elgato';
+
+/** How an Elgato strip zone (200 px) reaches a narrower slot window on a model with a
+ *  full-strip surface. 'crop' = the strip pixels at the slot window, exactly what a
+ *  full-strip upload shows there; 'scale' = the whole zone, fitted into the slot. */
+export type TouchStripZoneFit = 'crop' | 'scale';
+/** When a model with a full-strip surface gets one whole-strip upload instead of
+ *  per-slot uploads: 'full-frames' = only for a whole-strip frame from the app;
+ *  'always' = for every frame. Never while a zone is masked. */
+export type TouchStripUpload = 'full-frames' | 'always';
+
+export interface TouchStripOptions {
+  zoneFit: TouchStripZoneFit;
+  upload: TouchStripUpload;
+}
+
+export const TOUCH_STRIP_ZONE_FITS = ['crop', 'scale'] as const satisfies TouchStripZoneFit[];
+export const TOUCH_STRIP_UPLOADS = ['full-frames', 'always'] as const satisfies TouchStripUpload[];
+export const DEFAULT_TOUCH_STRIP_OPTIONS: Readonly<TouchStripOptions> = {
+  zoneFit: 'crop',
+  upload: 'full-frames',
+};
+
+/** 'deckbridge-repaint' hold-off: a widget returns to its strip zone this long after
+ *  the Elgato app last drew there (the app's image shows in between). */
+export const TOUCH_STRIP_REPAINT_DEFAULT_MS = 5000;
+export const TOUCH_STRIP_REPAINT_MIN_MS = 1000;
+export const TOUCH_STRIP_REPAINT_MAX_MS = 3_600_000;
+
+export function isTouchStripRepaintMs(v: unknown): v is number {
+  return (
+    Number.isInteger(v) &&
+    (v as number) >= TOUCH_STRIP_REPAINT_MIN_MS &&
+    (v as number) <= TOUCH_STRIP_REPAINT_MAX_MS
+  );
+}
+
+/** Cap on one encoder shell command (EncoderCommands press/rotateCw/rotateCcw) and
+ *  on an extra key's press command (ExtraKeyConfig.pressCommand). */
+export const ENCODER_COMMAND_MAX = 512;
+
 /** Cap on the widget param (text content / weather "lat,lon" / shell command /
  *  plugin file name) and on the plugin per-key argument (pluginArg). */
 export const EXTRA_KEY_PARAM_MAX = 128;
@@ -270,6 +380,9 @@ export interface ExtraKeyConfig {
   timeoutMs?: number;
   /** plugin widget only: the per-key argument passed to the plugin (ctx.param). */
   pluginArg?: string;
+  /** Shell command run on press — only extra keys with a switch
+   *  (keyMap.extraKeyInputs). Independent of the widget, so kept across widget changes. */
+  pressCommand?: string;
 }
 
 const inRange = (n: number, min: number, max: number): boolean => n >= min && n <= max;
@@ -291,7 +404,9 @@ export function isExtraKeyConfig(v: unknown): v is ExtraKeyConfig {
       (typeof r.timeoutMs === 'number' &&
         inRange(r.timeoutMs, COMMAND_TIMEOUT_MIN_MS, COMMAND_TIMEOUT_MAX_MS))) &&
     (r.pluginArg === undefined ||
-      (typeof r.pluginArg === 'string' && r.pluginArg.length <= EXTRA_KEY_PARAM_MAX))
+      (typeof r.pluginArg === 'string' && r.pluginArg.length <= EXTRA_KEY_PARAM_MAX)) &&
+    (r.pressCommand === undefined ||
+      (typeof r.pressCommand === 'string' && r.pressCommand.length <= ENCODER_COMMAND_MAX))
   );
 }
 
@@ -328,6 +443,18 @@ export interface DockStatus {
   // column). Present only when the model has any — the WebUI renders the
   // extra-keys panel off this.
   extraKeys?: readonly number[];
+  /** The `extraKeys` that have a switch (AKP05E right column as a Stream Deck +) —
+   *  the WebUI offers a press command only on these. */
+  pressableExtraKeys?: readonly number[];
+  /** Device-native widget displays outside CORA's key grid, such as AKP05E's touch strip. */
+  widgetDisplays?: readonly { wireId: number; label: string }[];
+  /** Physical rotary encoders (AKP05/AKP05E: 4) — the WebUI's knob-override rows. */
+  encoderCount?: number;
+  /** CORA profile this dock re-pairs as (`cora.advertiseAs`, e.g. AKP05E → 'stream-deck-plus').
+   *  The desktop's image orientation follows the profile, so the WebUI preview needs it. */
+  coraProfile?: string;
+  /** Advertised touch-strip size (Plus profile: 800×100) — the WebUI strip preview canvas. */
+  touchStripSize?: { width: number; height: number };
 }
 
 // Clear-and-null helpers. The guard-clear-forget-to-null sequence was written out

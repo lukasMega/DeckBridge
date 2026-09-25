@@ -5,14 +5,19 @@ import type { SessionServers } from '../src/device-session.js';
 import { generateDeviceIdentity } from '../src/device-identity.js';
 import { DEFAULT_MODEL } from '../src/devices/registry.js';
 import { MIRABOX_293S_MODEL } from '../src/devices/mirabox/mirabox-293s.js';
-import { deviceInputToMk2Index } from '../src/translator.js';
+import { AJAZZ_AKP05E_MODEL } from '../src/devices/ajazz/akp05e.js';
+import { applyModelOverrides } from '../src/devices/model-overrides.js';
+import { deviceInputToMk2Index } from '../src/key-map.js';
 import {
   ELGATO_TCP_PORT,
   ELGATO_CHILD_PORT,
   CORA_PORT_STRIDE,
   MDNS_SERVICE_NAME,
+  ELGATO_PLUS_PID,
+  DEFAULT_CHILD_FIRMWARE_VERSION,
 } from '../src/types.js';
-import type { KeyState } from '../src/types.js';
+import type { DialEvent, KeyState } from '../src/types.js';
+import type { EncoderOverride } from '../src/encoders.js';
 import type { ChildGeometry } from '../src/capabilities.js';
 import type { DeviceConfig } from '../src/elgato-types.js';
 import type { DeviceModel } from '../src/devices/driver.js';
@@ -74,6 +79,10 @@ class FakeChildServer extends EventEmitter {
   sendKeyEvent(keyIndex: number, state: KeyState): void {
     this.sendKeyEventCalls.push({ keyIndex, state });
   }
+  sendDialCalls: DialEvent[] = [];
+  sendDial(event: DialEvent): void {
+    this.sendDialCalls.push(event);
+  }
 }
 
 class FakeDriver extends EventEmitter {
@@ -112,7 +121,7 @@ function testIdentity(model: DeviceModel, deviceKey = 'test-device-key') {
   return generateDeviceIdentity(deviceKey, `${MDNS_SERVICE_NAME} (${model.name})`);
 }
 
-function makeSession(model: DeviceModel = DEFAULT_MODEL) {
+function makeSession(model: DeviceModel = DEFAULT_MODEL, encoderOverride?: EncoderOverride) {
   const server = new FakeServer();
   const childServer = new FakeChildServer();
   const driver = new FakeDriver(model);
@@ -136,6 +145,7 @@ function makeSession(model: DeviceModel = DEFAULT_MODEL) {
       imageCalls.push({ keyIndex, format });
     },
     ignoreElgatoBrightness: () => ignoreElgato,
+    encoderOverride: () => encoderOverride,
   });
   return {
     server,
@@ -207,6 +217,33 @@ await test('start() applies model to both servers and sends splash', async () =>
   assert.ok(driver.splashCalls.length > 0, 'splash images sent to driver');
 });
 
+await test('Plus emulation forwards a 2.00.x child firmware to the desktop', async () => {
+  const rePaired: DeviceModel = {
+    ...AJAZZ_AKP05E_MODEL,
+    cora: {
+      ...AJAZZ_AKP05E_MODEL.cora,
+      advertiseAs: 'stream-deck-plus',
+      productId: ELGATO_PLUS_PID,
+    },
+  };
+  const { server, session } = makeSession(rePaired);
+  await session.start();
+  assert.equal(
+    server.setDeviceConfigCalls[0]?.childFirmwareVersion,
+    '2.00.026',
+    're-paired Plus advertises the Plus firmware line, not the AKP05E default',
+  );
+});
+
+await test('a native model resets the child firmware to the default (no stale Plus line)', async () => {
+  const { server, session } = makeSession(AJAZZ_AKP05E_MODEL);
+  await session.start();
+  assert.equal(
+    server.setDeviceConfigCalls[0]?.childFirmwareVersion,
+    DEFAULT_CHILD_FIRMWARE_VERSION,
+  );
+});
+
 await test('key event translates via keymap and reaches childServer.sendKeyEvent', async () => {
   const { childServer, driver, session } = makeSession(MIRABOX_293S_MODEL);
   await session.start();
@@ -264,6 +301,73 @@ await test('an identity-mapped model reports no wire id', () => {
   });
   driver.emit('key', { keyIndex: 3, state: 'down' });
   assert.deepEqual(seen, [undefined]);
+});
+
+await test('dial events reach childServer.sendDial only when the knob override leaves them', async () => {
+  const connected = makeSession(AJAZZ_AKP05E_MODEL);
+  await connected.session.start();
+  connected.driver.emit('dial', { index: 1, kind: 'rotate', delta: 1 });
+  assert.deepEqual(connected.childServer.sendDialCalls, [{ index: 1, kind: 'rotate', delta: 1 }]);
+
+  // Disconnected with no command set: consumed, nothing spawned, nothing forwarded.
+  const override: EncoderOverride = {
+    mode: 'deckbridge-ignore',
+    encoders: { connectToApp: false },
+  };
+  const disconnected = makeSession(AJAZZ_AKP05E_MODEL, override);
+  await disconnected.session.start();
+  disconnected.driver.emit('dial', { index: 1, kind: 'rotate', delta: 1 });
+  disconnected.driver.emit('dial', { index: 1, kind: 'press', state: 'down' });
+  disconnected.driver.emit('dial', { index: 1, kind: 'press', state: 'up' });
+  assert.equal(disconnected.childServer.sendDialCalls.length, 0, 'consumed, not forwarded');
+});
+
+await test('status() reports the physical encoder count (AKP05E via its Plus emulation)', () => {
+  assert.equal(makeSession(AJAZZ_AKP05E_MODEL).session.status().encoderCount, 4);
+  assert.equal(makeSession(DEFAULT_MODEL).session.status().encoderCount, undefined, 'omitted');
+});
+
+await test('status() reports the re-paired CORA profile only when advertising as one', () => {
+  const plus = applyModelOverrides(AJAZZ_AKP05E_MODEL, {
+    cora: { advertiseAs: 'stream-deck-plus' },
+  });
+  assert.equal(makeSession(plus).session.status().coraProfile, 'stream-deck-plus');
+  assert.equal(makeSession(AJAZZ_AKP05E_MODEL).session.status().coraProfile, undefined, 'native');
+});
+
+await test('status() lists the AKP05E right column as pressable extra keys only as a Plus', () => {
+  const plus = applyModelOverrides(AJAZZ_AKP05E_MODEL, {
+    cora: { advertiseAs: 'stream-deck-plus' },
+  });
+  const status = makeSession(plus).session.status();
+  assert.deepEqual(status.extraKeys, [15, 10]);
+  assert.deepEqual(status.pressableExtraKeys, [15, 10]);
+  const native = makeSession(AJAZZ_AKP05E_MODEL).session.status();
+  assert.equal(native.extraKeys, undefined, 'native 5×2 grid has no extra keys');
+  assert.equal(native.pressableExtraKeys, undefined);
+});
+
+await test('a pressable extra key reaches onExtraKey by its image wire id, not onKey', () => {
+  const plus = applyModelOverrides(AJAZZ_AKP05E_MODEL, {
+    cora: { advertiseAs: 'stream-deck-plus' },
+  });
+  const driver = new EventEmitter() as unknown as WorkerHidDriver;
+  const keys: number[] = [];
+  const extras: Array<[number, string]> = [];
+  wireCommonDriverEvents(driver, plus, {
+    onKey: (mk2Index) => keys.push(mk2Index),
+    onExtraKey: (wireId, state) => extras.push([wireId, state]),
+    onReinit: () => undefined,
+  });
+  driver.emit('key', { keyIndex: 5, state: 'down' }); // top-right
+  driver.emit('key', { keyIndex: 10, state: 'up' }); // bottom-right
+  driver.emit('key', { keyIndex: 1, state: 'down' }); // Plus key 0
+  driver.emit('key', { keyIndex: 0, state: 'down' }); // unmapped
+  assert.deepEqual(extras, [
+    [15, 'down'],
+    [10, 'up'],
+  ]);
+  assert.deepEqual(keys, [0]);
 });
 
 await test('image event reaches driver.renderCoraImage', async () => {

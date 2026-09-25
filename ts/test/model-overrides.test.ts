@@ -2,6 +2,7 @@ import assert from 'tjs:assert';
 import {
   applyModelOverrides,
   classifyOverrideChange,
+  emulationProfiles,
   isModelOverridesRecord,
   overrideRevision,
   overrideSummary,
@@ -13,6 +14,8 @@ import type { DeviceModel } from '../src/devices/driver.js';
 import { DEVICE_MODELS } from '../src/devices/registry.js';
 import { MIRABOX_293_MODEL } from '../src/devices/mirabox/mirabox-293.js';
 import { MK2_MODEL } from '../src/devices/elgato/mk2.js';
+import { AJAZZ_AKP05E_MODEL } from '../src/devices/ajazz/akp05e.js';
+import { ELGATO_MK2_PID, ELGATO_PLUS_PID } from '../src/types.js';
 import { test, summary as reportSummary } from './helpers/harness.js';
 
 const MODEL: DeviceModel = MIRABOX_293_MODEL;
@@ -477,6 +480,103 @@ test('true only when tuning sets resizeMode or padFill', () => {
   assert.ok(!pinsImageFit({ image: { rotate: 90 } }));
   assert.ok(!pinsImageFit({}));
   assert.ok(!pinsImageFit());
+});
+
+// cora override section
+
+console.log('\ncora override');
+
+test('cora override validates, applies, and reopens', () => {
+  // 293 natively advertises as mk2: restating that (with the mk2 PID) is valid.
+  const native = { cora: { advertiseAs: 'mk2', productId: MODEL.cora.productId } };
+  assert.ok(validateModelOverride(native, MODEL).ok);
+  assert.ok(!validateModelOverride({ cora: { productId: -1 } }, MODEL).ok);
+  assert.ok(!validateModelOverride({ cora: { bogus: 1 } }, MODEL).ok);
+
+  const eff = applyModelOverrides(MODEL, native);
+  assert.equal(eff.cora.advertiseAs, 'mk2');
+  assert.equal(eff.cora.productId, MODEL.cora.productId);
+  // Non-cora sections and the untouched model are preserved (no emulation selected).
+  assert.equal(eff.cora.usePhysicalIdentity, MODEL.cora.usePhysicalIdentity);
+  assert.equal(eff.image, MODEL.image);
+
+  // A cora change reopens (it re-pairs the device).
+  assert.equal(classifyOverrideChange(undefined, { cora: { advertiseAs: 'mk2' } }), 'reopen');
+  // tunableDefaults projects the cora fields at their current values.
+  assert.equal(tunableDefaults(eff).cora?.advertiseAs, 'mk2');
+  assert.equal(tunableDefaults(eff).cora?.productId, MODEL.cora.productId);
+});
+
+test('cora.advertiseAs must name a target the model has a mapping for', () => {
+  // Unknown id: would make advertisedModel() throw on every connect.
+  const unknown = validateModelOverride({ cora: { advertiseAs: 'stream-deck-pluss' } }, MODEL);
+  assert.ok(!unknown.ok && unknown.errors[0]!.includes('cora.advertiseAs'));
+  // A real profile the model has no emulation for (its keyMap would scramble the panel).
+  assert.ok(!validateModelOverride({ cora: { advertiseAs: 'stream-deck-plus' } }, MODEL).ok);
+  assert.ok(!validateModelOverride({ cora: { advertiseAs: 'mini' } }, MODEL).ok);
+  // Prototype keys never resolve as an emulation.
+  assert.ok(!validateModelOverride({ cora: { advertiseAs: 'toString' } }, AJAZZ_AKP05E_MODEL).ok);
+  // The AKP05E declares the Plus emulation.
+  assert.ok(
+    validateModelOverride({ cora: { advertiseAs: 'stream-deck-plus' } }, AJAZZ_AKP05E_MODEL).ok,
+  );
+  assert.deepEqual(
+    emulationProfiles(AJAZZ_AKP05E_MODEL).map((p) => p.id),
+    ['stream-deck-plus'],
+  );
+  assert.deepEqual(emulationProfiles(MODEL), []);
+});
+
+test('cora.productId must match the advertised target', () => {
+  const plus = { advertiseAs: 'stream-deck-plus' };
+  assert.ok(
+    validateModelOverride({ cora: { ...plus, productId: ELGATO_PLUS_PID } }, AJAZZ_AKP05E_MODEL).ok,
+  );
+  assert.ok(
+    !validateModelOverride({ cora: { ...plus, productId: ELGATO_MK2_PID } }, AJAZZ_AKP05E_MODEL).ok,
+  );
+  // No advertiseAs: productId pinned to the model's own.
+  assert.ok(!validateModelOverride({ cora: { productId: ELGATO_PLUS_PID } }, MODEL).ok);
+});
+
+test('an emulation adopts its image + keyMap and the profile PID', () => {
+  const eff = applyModelOverrides(AJAZZ_AKP05E_MODEL, {
+    cora: { advertiseAs: 'stream-deck-plus' },
+  });
+  assert.equal(eff.cora.productId, ELGATO_PLUS_PID, 'PID derived from the profile');
+  // Image transform comes from the AKP05E's Plus emulation (112×112, 180° rotation).
+  assert.equal(eff.image.rotate, 180);
+  assert.equal(eff.image.width, 112);
+  // Key map drops the rightmost column: 8 keys, wire 5/10 input codes ignored.
+  assert.deepEqual(eff.keyMap.coraToWireImage, [11, 12, 13, 14, 6, 7, 8, 9]);
+  assert.deepEqual(eff.keyMap.wireInputToCora, [-1, 0, 1, 2, 3, -1, 4, 5, 6, 7, -1]);
+
+  // An explicit user image/keyMap override still wins on top of the emulation.
+  const tuned = applyModelOverrides(AJAZZ_AKP05E_MODEL, {
+    cora: { advertiseAs: 'stream-deck-plus' },
+    image: { rotate: 90 },
+  });
+  assert.equal(tuned.image.rotate, 90, 'user image override wins over the emulation default');
+  assert.equal(tuned.image.width, 112, 'unset emulation fields still adopted');
+
+  // A geometry-only target (the 293's native mk2) does NOT swap the image.
+  const geo = applyModelOverrides(MODEL, { cora: { advertiseAs: 'mk2' } });
+  assert.equal(geo.image, MODEL.image);
+});
+
+test('keyMap length is checked against the emulated grid', () => {
+  const plus = { advertiseAs: 'stream-deck-plus' };
+  const eight = [11, 12, 13, 14, 6, 7, 8, 9];
+  const ten = [11, 12, 13, 14, 15, 6, 7, 8, 9, 10];
+  assert.ok(
+    validateModelOverride({ cora: plus, keyMap: { coraToWireImage: eight } }, AJAZZ_AKP05E_MODEL)
+      .ok,
+  );
+  assert.ok(
+    !validateModelOverride({ cora: plus, keyMap: { coraToWireImage: ten } }, AJAZZ_AKP05E_MODEL).ok,
+  );
+  // Native AKP05E keeps its 10-key grid.
+  assert.ok(validateModelOverride({ keyMap: { coraToWireImage: ten } }, AJAZZ_AKP05E_MODEL).ok);
 });
 
 reportSummary();

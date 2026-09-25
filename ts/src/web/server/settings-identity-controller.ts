@@ -10,7 +10,7 @@ import type {
   ReqError,
 } from './types.js';
 import type { ImageModeOverride } from '../../types.js';
-import { MDNS_SERVICE_NAME } from '../../types.js';
+import { DEFAULT_TOUCH_STRIP_MODE, MDNS_SERVICE_NAME } from '../../types.js';
 
 export class SettingsIdentityController {
   constructor(
@@ -103,5 +103,8 @@ export class SettingsIdentityController {
     this.host.emit('extraKeyChanged', idx);
     const e = this.host.settings.entryFor(this.host.selectedDeviceKey());
     if (typeof e?.brightness === 'number') this.host.emit('setBrightness', e.brightness, idx);
+    if (e) {
+      this.host.emit('touchStripModeChanged', idx, e.touchStripMode ?? DEFAULT_TOUCH_STRIP_MODE);
+    }
   }
 }

@@ -9,6 +9,9 @@
     "src/mirabox-smoke.ts",
     "src/k1pro-probe.ts",
     "src/d6-capture.ts",
+    "src/akp05-capture.ts",
+    "src/akp05-strip-probe.ts",
+    "src/akp05-strip-guided-probe.ts",
     "test/**/*.test.ts",
     "scripts/*.mjs"
   ],

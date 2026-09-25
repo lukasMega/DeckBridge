@@ -8,15 +8,25 @@ import {
   DEFAULT_MAC_ADDRESS,
   MDNS_SERVICE_NAME,
 } from './types.js';
-import type { DockStatus } from './types.js';
+import type {
+  DialEvent,
+  DockStatus,
+  KeyState,
+  TouchStripMode,
+  TouchWindowRegion,
+} from './types.js';
 import { DEFAULT_MODEL } from './devices/registry.js';
 import { ExtraKeyWidgets } from './extra-keys.js';
+import { EncoderActions } from './encoders.js';
+import { ExtraKeyActions } from './command-actions.js';
 import { buildDockStatus, repaintFrames } from './device-session.js';
 import type { DeviceInfo } from './device-session.js';
 import type { DeviceDriver, DeviceModel, DeviceModelOverride } from './devices/driver.js';
-import type { ElgatoServer } from './elgato.js';
+import type { ElgatoServer, ElgatoChildServer } from './elgato.js';
+
 import type { WebUIServer } from './web/server';
 import type { DeviceIdentitySettings } from './settings-store.js';
+import { touchStripOptionsOf } from './settings-store.js';
 
 /** "aa:bb:cc:dd:ee:ff" → the 6 bytes CORA's deviceConfig wants, else `fallback`
  *  (a persisted identity and the mock config both feed setDeviceConfig). */
@@ -28,6 +38,8 @@ export function macToBytes(mac: string, fallback: number[]): number[] {
 export interface PrimaryDockDeps {
   webui: WebUIServer;
   server: ElgatoServer;
+  /** Its strip frames start the widgets' repaint-mode hold-off (noteTouchFrame). */
+  childServer?: Pick<ElgatoChildServer, 'on'>;
 }
 
 export class PrimaryDock {
@@ -47,6 +59,20 @@ export class PrimaryDock {
    *  Created per connect; config resolves per tick from persisted settings. */
   private widgets: ExtraKeyWidgets | null = null;
 
+  /** Knob override; resolves this dock's current identity per event. */
+  private readonly encoders = new EncoderActions(() => {
+    const key = this.identity?.deviceKey;
+    if (key === undefined) return undefined;
+    const { webui } = this.deps;
+    return { mode: webui.touchStripModeFor(key), encoders: webui.encoderSettingsFor(key) };
+  });
+
+  /** Extra-key press commands; resolves this dock's current identity per press. */
+  private readonly extraKeyActions = new ExtraKeyActions((wireId) => {
+    const key = this.identity?.deviceKey;
+    return key === undefined ? undefined : this.deps.webui.extraKeyConfigFor(key, wireId);
+  });
+
   /** The Elgato app's last CORA frames, captured on USB disconnect: the app
    *  keeps its TCP pairing across a replug and never re-pushes, so these are
    *  replayed over the splash on reconnect. Guarded by model id (a different
@@ -56,6 +82,9 @@ export class PrimaryDock {
 
   constructor(deps: PrimaryDockDeps) {
     this.deps = deps;
+    deps.childServer?.on('touchImage', ({ region }: { region?: TouchWindowRegion }) =>
+      this.widgets?.noteTouchFrame(region),
+    );
   }
 
   /** Resolve (or generate + persist) the identity for `deviceKey` and push it
@@ -80,7 +109,7 @@ export class PrimaryDock {
   }
 
   /** Seed the freshly connected driver with its persisted per-device settings
-   *  (brightness + image-mode override) before the splash. Only pushes what's
+   *  (brightness, image-mode override, strip options) before the splash. Only pushes what's
    *  actually persisted — absent = use the device/model default. */
   seedFromIdentity(driver: DeviceDriver): void {
     if (!this.identity) return;
@@ -91,6 +120,8 @@ export class PrimaryDock {
     if (this.identity.imageModeOverride != null) {
       driver.setImageOverride?.(this.identity.imageModeOverride);
     }
+    const stripOptions = touchStripOptionsOf(this.identity);
+    if (stripOptions) driver.setTouchStripOptions?.(stripOptions);
   }
 
   /** Apply + record a brightness level so status() reflects it. */
@@ -140,8 +171,11 @@ export class PrimaryDock {
     this.stopWidgets();
     const identity = this.identity;
     if (!identity) return;
-    this.widgets = new ExtraKeyWidgets(driver, (wireId) =>
-      this.deps.webui.extraKeyConfigFor(identity.deviceKey, wireId),
+    this.widgets = new ExtraKeyWidgets(
+      driver,
+      (wireId) => this.deps.webui.extraKeyConfigFor(identity.deviceKey, wireId),
+      this.deps.webui.touchStripModeFor(identity.deviceKey),
+      () => this.deps.webui.devicePrefs.touchStripRepaintMsFor(identity.deviceKey),
     );
     this.widgets.start();
   }
@@ -157,6 +191,21 @@ export class PrimaryDock {
 
   forceRunWidget(wireId: number): void {
     this.widgets?.forceRun(wireId);
+  }
+
+  /** Switch who paints the touch strip (WebUI mode selector). */
+  setTouchStripMode(mode: TouchStripMode): void {
+    this.widgets?.setTouchStripMode(mode);
+  }
+
+  /** True when the knob override consumed `event` — it must not reach the app. */
+  handleDial(event: DialEvent): boolean {
+    return this.encoders.handleDial(event);
+  }
+
+  /** Press on an extra key with a switch — runs its configured command. */
+  handleExtraKey(wireId: number, state: KeyState): void {
+    this.extraKeyActions.handleKey(wireId, state);
   }
 
   /** Dock status for the WebUI. Same builder as DeviceSession.status(), with the

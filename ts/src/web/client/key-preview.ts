@@ -93,8 +93,10 @@ export class KeyPreview {
     for (let i = 0; i < keyCount; i++) this.refreshKey(i);
   }
 
-  setModel(modelId?: string): void {
+  setModel(modelId?: string, coraProfile?: string): void {
     if (modelId) this.root.dataset['model'] = modelId;
+    if (coraProfile) this.root.dataset['cora'] = coraProfile;
+    else delete this.root.dataset['cora'];
   }
 
   refreshAll(): void {

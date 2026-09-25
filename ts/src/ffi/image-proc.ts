@@ -23,8 +23,23 @@ interface ImageProcSymbols {
     sharpenSigmaTenths: number, // sigma × 10; 0 = no sharpen
     fillMode: number, // 0 = resize; 1 = pad-black; 2 = pad-average; 3 = pad-edge-clamp
     cropPx: number, // pixels cropped from every source side before resize; 0 = none
+    cropX: number, // region-crop left offset (used when cropW/cropH > 0)
+    cropY: number, // region-crop top offset
+    cropW: number, // region-crop width (0 = no region crop)
+    cropH: number, // region-crop height (0 = no region crop)
     outBuf: Uint8Array,
     outCap: number,
+    errBuf: Uint8Array,
+    errCap: number,
+  ): number;
+  image_proc_blit(
+    canvas: Uint8Array, // top-down RGB24, cw × ch × 3 bytes, written in place
+    cw: number,
+    ch: number,
+    input: Uint8Array,
+    inputLen: number,
+    x: number,
+    y: number,
     errBuf: Uint8Array,
     errCap: number,
   ): number;
@@ -50,9 +65,17 @@ export function load(): { symbols: ImageProcSymbols; close(): void } {
         UINT32,
         UINT32,
         UINT32,
+        UINT32,
+        UINT32,
+        UINT32,
+        UINT32,
         BUFFER, SIZE_T,
         BUFFER, SIZE_T,
       ],
+      returns: INT,
+    },
+    image_proc_blit: {
+      args: [BUFFER, UINT32, UINT32, BUFFER, SIZE_T, UINT32, UINT32, BUFFER, SIZE_T],
       returns: INT,
     },
   }) as unknown as { symbols: ImageProcSymbols; close(): void };
