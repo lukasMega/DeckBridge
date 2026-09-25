@@ -1,4 +1,5 @@
 import { findHidPath, isNullPtr, IS_MACOS } from '../../ffi/hidapi.js';
+import type { HidapiSymbols } from '../../ffi/hidapi.js';
 import { HidDeviceBase } from '../hid-connection.js';
 import { debug, error, info } from '../../logger.js';
 import type { DeviceModel } from '../driver.js';
@@ -25,6 +26,9 @@ import {
 // reports stop until a key press partially wakes it. See docs/references.md.
 const KEEP_ALIVE_INTERVAL_MS = 10_000;
 
+const FIRMWARE_REPORT_ID = 0x01;
+const FIRMWARE_REPORT_SIZE = 20;
+
 // Input classification. Key codes are 1-based and row-ordered (1-10). Encoder codes
 // come through the same ACK report (byte 9 = code, byte 10 = stateByte) — the tables
 // below are the hardware-verified values from `mise run akp05-capture`, recorded in
@@ -48,7 +52,7 @@ const ENCODER_ROTATE_CODES: readonly (readonly [number, number])[] = [
 const TOUCH_SWIPE_LEFT = 0x38;
 const TOUCH_SWIPE_RIGHT = 0x39;
 
-// clearKey() images, one per slot size (keys 112×112, strip zones 128×128): baseline
+// clearKey() images, one per slot size (keys 112×112, strip slots 176×112): baseline
 // 4:2:0 black from the same jpeg-encoder the transform uses. A smaller image leaves the
 // rest of the slot showing its previous content.
 const BLACK_KEY_JPEG = Buffer.from(
@@ -56,7 +60,7 @@ const BLACK_KEY_JPEG = Buffer.from(
   'base64',
 );
 const BLACK_STRIP_JPEG = Buffer.from(
-  '/9j/4AAQSkZJRgABAgAAAQABAAD/wAARCACAAIADACIAAREBAhEB/9sAQwADAgIDAgIDAwMDBAMDBAUIBQUEBAUKBwcGCAwKDAwLCgsLDQ4SEA0OEQ4LCxAWEBETFBUVFQwPFxgWFBgSFBUU/9sAQwEDBAQFBAUJBQUJFA0LDRQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQU/8QAHwAAAQUBAQEBAQEAAAAAAAAAAAECAwQFBgcICQoL/8QAtRAAAgEDAwIEAwUFBAQAAAF9AQIDAAQRBRIhMUEGE1FhByJxFDKBkaEII0KxwRVS0fAkM2JyggkKFhcYGRolJicoKSo0NTY3ODk6Q0RFRkdISUpTVFVWV1hZWmNkZWZnaGlqc3R1dnd4eXqDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uHi4+Tl5ufo6erx8vP09fb3+Pn6/8QAHwEAAwEBAQEBAQEBAQAAAAAAAAECAwQFBgcICQoL/8QAtREAAgECBAQDBAcFBAQAAQJ3AAECAxEEBSExBhJBUQdhcRMiMoEIFEKRobHBCSMzUvAVYnLRChYkNOEl8RcYGRomJygpKjU2Nzg5OkNERUZHSElKU1RVVldYWVpjZGVmZ2hpanN0dXZ3eHl6goOEhYaHiImKkpOUlZaXmJmaoqOkpaanqKmqsrO0tba3uLm6wsPExcbHyMnK0tPU1dbX2Nna4uPk5ebn6Onq8vP09fb3+Pn6/9oADAMAAAERAhEAPwD8qqKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKAP/2Q==',
+  '/9j/4AAQSkZJRgABAgAAAQABAAD/wAARCABwALADACIAAREBAhEB/9sAQwADAgIDAgIDAwMDBAMDBAUIBQUEBAUKBwcGCAwKDAwLCgsLDQ4SEA0OEQ4LCxAWEBETFBUVFQwPFxgWFBgSFBUU/9sAQwEDBAQFBAUJBQUJFA0LDRQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQU/8QAHwAAAQUBAQEBAQEAAAAAAAAAAAECAwQFBgcICQoL/8QAtRAAAgEDAwIEAwUFBAQAAAF9AQIDAAQRBRIhMUEGE1FhByJxFDKBkaEII0KxwRVS0fAkM2JyggkKFhcYGRolJicoKSo0NTY3ODk6Q0RFRkdISUpTVFVWV1hZWmNkZWZnaGlqc3R1dnd4eXqDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uHi4+Tl5ufo6erx8vP09fb3+Pn6/8QAHwEAAwEBAQEBAQEBAQAAAAAAAAECAwQFBgcICQoL/8QAtREAAgECBAQDBAcFBAQAAQJ3AAECAxEEBSExBhJBUQdhcRMiMoEIFEKRobHBCSMzUvAVYnLRChYkNOEl8RcYGRomJygpKjU2Nzg5OkNERUZHSElKU1RVVldYWVpjZGVmZ2hpanN0dXZ3eHl6goOEhYaHiImKkpOUlZaXmJmaoqOkpaanqKmqsrO0tba3uLm6wsPExcbHyMnK0tPU1dbX2Nna4uPk5ebn6Onq8vP09fb3+Pn6/9oADAMAAAERAhEAPwD8qqKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigD/9k=',
   'base64',
 );
 
@@ -105,14 +109,27 @@ export class Akp05Driver extends HidDeviceBase {
     }
 
     this.device = device;
+    this.firmware = this.readFirmware(hid);
     this._startReadLoop(hid, this.model.wire.inSize, 5, (data, n) =>
       this.parseInput(Buffer.from(data.subarray(0, n))),
     );
     this.write(buildVer());
     this.writeInitSequence();
     this.keepAliveTimer = setInterval(() => this.writeKeepAlive(), KEEP_ALIVE_INTERVAL_MS);
-    info('hid', 'AKP05E opened; sent CRT VER + init sequence, keep-alive started');
+    info(
+      'hid',
+      `AKP05E opened (firmware ${this.firmware ?? 'unknown'}); sent CRT VER + init sequence, keep-alive started`,
+    );
     await Promise.resolve();
+  }
+
+  // The CRT VER reply never arrives on V3.AKP05E.02.007, but feature report 0x01
+  // returns the version text (mirajazz), and key input survives the read.
+  private readFirmware(hid: HidapiSymbols): string | undefined {
+    const buf = new Uint8Array(FIRMWARE_REPORT_SIZE);
+    buf[0] = FIRMWARE_REPORT_ID;
+    const n = hid.hid_get_feature_report(this.device, buf, buf.length);
+    return n > 0 ? parseVersionReport(buf.subarray(0, n)) : undefined;
   }
 
   // DIS + LIG + CLE-all + STP. opendeck-akp05 sends this on every connect, and it

@@ -16,8 +16,10 @@ import type {
   KeyEvent,
   DialEvent,
   TouchInputEvent,
+  TouchStripOptions,
   TouchWindowRegion,
 } from './types.js';
+import { DEFAULT_TOUCH_STRIP_OPTIONS } from './types.js';
 
 const OPEN_TIMEOUT_MS = 10_000;
 const CLOSE_GRACE_MS = 1_000;
@@ -41,6 +43,8 @@ export class WorkerHidDriver extends EventEmitter implements DeviceDriver {
   deviceFirmware: string | undefined = undefined;
   /** HID path the worker opened this device with — see device-identity.ts. */
   hidPath: string | undefined = undefined;
+  /** Last options posted — the worker resets to the defaults on open, and so does this. */
+  touchStripOptions: TouchStripOptions = DEFAULT_TOUCH_STRIP_OPTIONS;
   private worker: Worker | null = null;
   private objectUrl: string | null = null;
   private openResolve: (() => void) | null = null;
@@ -61,6 +65,7 @@ export class WorkerHidDriver extends EventEmitter implements DeviceDriver {
     if (this.openReject) {
       return Promise.reject(new Error('open already in flight'));
     }
+    this.touchStripOptions = DEFAULT_TOUCH_STRIP_OPTIONS;
     if (!this.worker) {
       const { worker: w, url } = spawnWorker(workerSource);
       this.objectUrl = url;
@@ -123,6 +128,11 @@ export class WorkerHidDriver extends EventEmitter implements DeviceDriver {
 
   restoreTouchSegments(wireIds: readonly number[]): void {
     this.post({ type: 'restoreTouchSegments', wireIds: [...wireIds] });
+  }
+
+  setTouchStripOptions(options: TouchStripOptions): void {
+    this.touchStripOptions = options;
+    this.post({ type: 'setTouchStripOptions', options: { ...options } });
   }
 
   setBrightness(level: number): void {

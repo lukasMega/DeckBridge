@@ -1,9 +1,5 @@
 import { Akp05Driver } from './devices/ajazz/akp05-driver.js';
-import { initProbeLibs } from './probe-utils.js';
-import { listHidPaths } from './ffi/hidapi.js';
-import { AJAZZ_AKP05E_MODEL } from './devices/ajazz/akp05e.js';
-import { AJAZZ_AKP05_MODEL } from './devices/ajazz/akp05.js';
-import type { DeviceModel } from './devices/driver.js';
+import { findAkp05Device, initProbeLibs } from './probe-utils.js';
 
 // Ajazz AKP05/AKP05E input trace. Records the one thing no reference project has:
 // the touch-strip report codes (zeccola/ajazz-akp05 and ambiso/opendeck-akp05 both
@@ -37,27 +33,7 @@ class CaptureDriver extends Akp05Driver {
 
 await initProbeLibs();
 
-let model: DeviceModel | null = null;
-let hidPath: string | null = null;
-for (const candidate of [AJAZZ_AKP05E_MODEL, AJAZZ_AKP05_MODEL]) {
-  for (const pid of candidate.usbProductIds) {
-    const paths = listHidPaths(candidate.usbVendorId, candidate.usagePage!, candidate.usage!, pid);
-    if (paths.length === 0) continue;
-    model = candidate;
-    hidPath = paths[0]!;
-    console.log(`${PREFIX} model: ${candidate.id} PID=0x${pid.toString(16).padStart(4, '0')}`);
-    if (paths.length > 1) console.log(`${PREFIX} ${paths.length} units match — using ${hidPath}`);
-    break;
-  }
-  if (model) break;
-}
-
-if (!model || !hidPath) {
-  console.log(`${PREFIX} no AKP05/AKP05E found on VID 0x0300 usage 0xffa0/1.`);
-  console.log(`${PREFIX} check the cable, and stop any running DeckBridge instance —`);
-  console.log(`${PREFIX} hidapi opens exclusively on macOS.`);
-  tjs.exit(1);
-}
+const { model, hidPath } = findAkp05Device(PREFIX);
 
 const driver = new CaptureDriver(model);
 try {

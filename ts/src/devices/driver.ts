@@ -1,5 +1,5 @@
 import type { EventEmitter } from 'node:events';
-import type { ImageModeOverride, TouchWindowRegion } from '../types.js';
+import type { ImageModeOverride, TouchStripOptions, TouchWindowRegion } from '../types.js';
 
 export type DeviceVendor =
   | 'mirabox'
@@ -147,6 +147,16 @@ export interface DeviceWidgetDisplay {
   wireId: number;
   label: string;
   image: DeviceImageSpec;
+  /** Left edge of this display's window on the full strip, in strip pixels. Only
+   *  meaningful with `DeviceModel.touchStripDisplay`. */
+  stripX?: number;
+}
+
+/** One image across the whole touch strip. Its wire id may also be a widget
+ *  display: the firmware draws each upload at its real size from the slot origin. */
+export interface DeviceTouchStripDisplay {
+  wireId: number;
+  image: DeviceImageSpec;
 }
 
 export type DriverKind = 'elgato-hid' | 'mirabox' | 'custom';
@@ -193,6 +203,7 @@ export interface DeviceModel {
   cora: DeviceCoraSpec;
   splash?: DeviceSplashSpec;
   widgetDisplays?: readonly DeviceWidgetDisplay[];
+  touchStripDisplay?: DeviceTouchStripDisplay;
   driverKind: DriverKind;
 }
 
@@ -292,6 +303,11 @@ export interface DeviceDriver extends EventEmitter {
   /** Put the last Elgato image back on these strip zones (cleared if the app never
    *  drew one) — a widget leaving an unmasked zone. `WorkerHidDriver` only. */
   restoreTouchSegments?(wireIds: readonly number[]): void;
+  /** Zone fit + upload policy for a full-strip model (settings.json, per dock). The
+   *  worker resets them to the defaults on open. `WorkerHidDriver` only. */
+  setTouchStripOptions?(options: TouchStripOptions): void;
+  /** The options last set (defaults after open). `WorkerHidDriver` only. */
+  readonly touchStripOptions?: TouchStripOptions;
   /** Live device-tuning swap — image-transform fields only, no reopen. The
    *  caller resolves `effectiveModel` (registry + overrides) and must have
    *  classified the change as 'live' first (classifyOverrideChange). Absent

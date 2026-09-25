@@ -460,6 +460,10 @@ test('applySettingsJson: bad touchStripMode / encoders fail the device-entry gua
   assert.equal(stored().length, 0, 'unknown mode rejected');
   ui.applySettingsJson(entry({ touchStripRepaintMs: 10 }));
   assert.equal(stored().length, 0, 'repaint interval below 1 s rejected');
+  ui.applySettingsJson(entry({ touchStripZoneFit: 'stretch' }));
+  assert.equal(stored().length, 0, 'unknown zone fit rejected');
+  ui.applySettingsJson(entry({ touchStripUpload: 'never' }));
+  assert.equal(stored().length, 0, 'unknown upload policy rejected');
   ui.applySettingsJson(entry({ encoders: { commands: { '7': { press: 'x' } } } }));
   assert.equal(stored().length, 0, 'knob index out of range rejected');
   ui.applySettingsJson(entry({ encoders: { commands: { '0': { press: 'x'.repeat(513) } } } }));
@@ -470,6 +474,10 @@ test('applySettingsJson: bad touchStripMode / encoders fail the device-entry gua
   );
   assert.equal(ui.touchStripModeFor('fake-device-0'), 'deckbridge-ignore');
   assert.deepEqual(ui.encoderSettingsFor('fake-device-0'), { connectToApp: false });
+  ui.applySettingsJson(entry({ touchStripZoneFit: 'scale', touchStripUpload: 'always' }));
+  assert.deepEqual(stored(), [
+    deviceEntry('fake-device-0', { touchStripZoneFit: 'scale', touchStripUpload: 'always' }),
+  ]);
 });
 
 test('extra-key press command: pressable keys only, widget and command replace independently', () => {
@@ -797,6 +805,8 @@ function deviceEntry(
     imageModeOverride: unknown;
     touchStripMode: unknown;
     touchStripRepaintMs: unknown;
+    touchStripZoneFit: unknown;
+    touchStripUpload: unknown;
     encoders: unknown;
   }> = {},
 ): Record<string, unknown> {

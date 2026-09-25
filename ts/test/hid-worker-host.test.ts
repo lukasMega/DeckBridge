@@ -116,6 +116,18 @@ await runTest('setTouchStripMask / restoreTouchSegments post a copy of the wire 
   assert.notEqual(posted[0]!.wireIds, ids, 'caller array not aliased');
 });
 
+await runTest('setTouchStripOptions posts a copy of the options', () => {
+  const driver = new WorkerHidDriver(unknownModel);
+  const posted: unknown[] = [];
+  (driver as unknown as { worker: { postMessage: (m: unknown) => void } }).worker = {
+    postMessage: (m: unknown) => posted.push(m),
+  };
+  const options = { zoneFit: 'scale', upload: 'always' } as const;
+  driver.setTouchStripOptions(options);
+  assert.deepEqual(posted, [{ type: 'setTouchStripOptions', options }]);
+  assert.ok((posted[0] as { options: unknown }).options !== options, 'not aliased');
+});
+
 // Force exit: drivers that hit a failed open keep their worker alive (the fix),
 // which would otherwise keep the event loop running and hang the test runner.
 summaryExit();

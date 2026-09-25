@@ -5,6 +5,7 @@ import type {
   ImageModeOverride,
   DialEvent,
   TouchInputEvent,
+  TouchStripOptions,
   TouchWindowRegion,
 } from './types.js';
 import type { DeviceModelId, DeviceImageSpec, DeviceModelOverride } from './devices/driver.js';
@@ -51,11 +52,12 @@ export type MainToWorker =
   // region) — the worker splits it into the device's touch-segment displays.
   | { type: 'touchImage'; bytes: Uint8Array; region?: TouchWindowRegion }
   // Touch-strip wire ids DeckBridge widgets own: 'touchImage' segments for them
-  // are withheld, and a zone leaving the mask gets its last Elgato image back
-  // (or is cleared). The worker resets it to empty on open/close.
+  // are withheld, and a zone leaving the mask gets the app's image back. The worker resets it to empty on open/close.
   | { type: 'setTouchStripMask'; wireIds: number[] }
-  // Resend the cached Elgato segment (or clear) on zones a widget just left.
+  // Redraw the app's image (black if it never drew) on zones a widget just left.
   | { type: 'restoreTouchSegments'; wireIds: number[] }
+  // Full-strip zone fit + upload policy (settings.json). Reset to the defaults on open.
+  | { type: 'setTouchStripOptions'; options: TouchStripOptions }
   // Runtime log-level change (WebUI "Debug logging"). Without this the USB
   // worker — where the interesting device traffic is — stays at its spawn-time
   // level while the main thread switches to debug.

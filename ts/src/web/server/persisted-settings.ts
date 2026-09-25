@@ -10,7 +10,13 @@ import { isModelOverridesRecord, validateModelOverride } from '../../devices/mod
 import { findModelById } from '../../devices/registry.js';
 import type { DeviceModelOverride } from '../../devices/driver.js';
 import { log } from '../../logger.js';
-import { isExtraKeyConfig, isTouchStripRepaintMs, TOUCH_STRIP_MODES } from '../../types.js';
+import {
+  isExtraKeyConfig,
+  isTouchStripRepaintMs,
+  TOUCH_STRIP_MODES,
+  TOUCH_STRIP_UPLOADS,
+  TOUCH_STRIP_ZONE_FITS,
+} from '../../types.js';
 import type { DockStatus, ExtraKeyConfig } from '../../types.js';
 import type { UpdateState } from '../../update-check.js';
 import { encoderSettingsError } from './encoders-controller.js';
@@ -25,6 +31,10 @@ function isExtraKeysRecord(v: unknown): v is Record<string, ExtraKeyConfig> {
 
 const isTouchStripMode = (v: unknown): boolean =>
   (TOUCH_STRIP_MODES as readonly unknown[]).includes(v);
+const isTouchStripZoneFit = (v: unknown): boolean =>
+  (TOUCH_STRIP_ZONE_FITS as readonly unknown[]).includes(v);
+const isTouchStripUpload = (v: unknown): boolean =>
+  (TOUCH_STRIP_UPLOADS as readonly unknown[]).includes(v);
 
 /** Strip bad optional per-device fields so they can't fail isDeviceIdentitySettings
  *  and drop the whole identity entry — that would regenerate MAC/serial and force an
@@ -40,6 +50,12 @@ function stripInvalidDeviceSettings(d: unknown): void {
   if (r.touchStripRepaintMs !== undefined && !isTouchStripRepaintMs(r.touchStripRepaintMs)) {
     delete r.touchStripRepaintMs;
   }
+  if (r.touchStripZoneFit !== undefined && !isTouchStripZoneFit(r.touchStripZoneFit)) {
+    delete r.touchStripZoneFit;
+  }
+  if (r.touchStripUpload !== undefined && !isTouchStripUpload(r.touchStripUpload)) {
+    delete r.touchStripUpload;
+  }
   if (r.encoders !== undefined && encoderSettingsError(r.encoders)) delete r.encoders;
   delete r.touchStripDisabled;
 }
@@ -54,6 +70,8 @@ function hasValidDeviceSettings(r: Record<string, unknown>): boolean {
     (r.extraKeys === undefined || isExtraKeysRecord(r.extraKeys)) &&
     (r.touchStripMode === undefined || isTouchStripMode(r.touchStripMode)) &&
     (r.touchStripRepaintMs === undefined || isTouchStripRepaintMs(r.touchStripRepaintMs)) &&
+    (r.touchStripZoneFit === undefined || isTouchStripZoneFit(r.touchStripZoneFit)) &&
+    (r.touchStripUpload === undefined || isTouchStripUpload(r.touchStripUpload)) &&
     (r.encoders === undefined || encoderSettingsError(r.encoders) === null)
   );
 }

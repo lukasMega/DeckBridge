@@ -309,6 +309,27 @@ export const TOUCH_STRIP_MODES = [
 
 export const DEFAULT_TOUCH_STRIP_MODE: TouchStripMode = 'elgato';
 
+/** How an Elgato strip zone (200 px) reaches a narrower slot window on a model with a
+ *  full-strip surface. 'crop' = the strip pixels at the slot window, exactly what a
+ *  full-strip upload shows there; 'scale' = the whole zone, fitted into the slot. */
+export type TouchStripZoneFit = 'crop' | 'scale';
+/** When a model with a full-strip surface gets one whole-strip upload instead of
+ *  per-slot uploads: 'full-frames' = only for a whole-strip frame from the app;
+ *  'always' = for every frame. Never while a zone is masked. */
+export type TouchStripUpload = 'full-frames' | 'always';
+
+export interface TouchStripOptions {
+  zoneFit: TouchStripZoneFit;
+  upload: TouchStripUpload;
+}
+
+export const TOUCH_STRIP_ZONE_FITS = ['crop', 'scale'] as const satisfies TouchStripZoneFit[];
+export const TOUCH_STRIP_UPLOADS = ['full-frames', 'always'] as const satisfies TouchStripUpload[];
+export const DEFAULT_TOUCH_STRIP_OPTIONS: Readonly<TouchStripOptions> = {
+  zoneFit: 'crop',
+  upload: 'full-frames',
+};
+
 /** 'deckbridge-repaint' hold-off: a widget returns to its strip zone this long after
  *  the Elgato app last drew there (the app's image shows in between). */
 export const TOUCH_STRIP_REPAINT_DEFAULT_MS = 5000;

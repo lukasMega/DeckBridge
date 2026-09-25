@@ -13,7 +13,11 @@ import type {
   ExtraKeyConfig,
   ImageModeOverride,
   TouchStripMode,
+  TouchStripOptions,
+  TouchStripUpload,
+  TouchStripZoneFit,
 } from './types.js';
+import { DEFAULT_TOUCH_STRIP_OPTIONS } from './types.js';
 import type { DeviceModelId, DeviceModelOverride } from './devices/driver.js';
 import type { UpdateState } from './update-check.js';
 
@@ -39,6 +43,12 @@ export interface DeviceIdentitySettings {
   touchStripMode?: TouchStripMode;
   /** 'deckbridge-repaint' hold-off after an Elgato frame; default TOUCH_STRIP_REPAINT_DEFAULT_MS. */
   touchStripRepaintMs?: number;
+  /** Full-strip models (AKP05E): how a 200-px app zone maps onto a slot window.
+   *  Default 'crop'. settings.json only — no WebUI control. */
+  touchStripZoneFit?: TouchStripZoneFit;
+  /** Full-strip models: when to send one whole-strip upload. Default 'full-frames'.
+   *  settings.json only — no WebUI control. */
+  touchStripUpload?: TouchStripUpload;
   /** Encoder override — only honored while touchStripMode is a deckbridge-* mode. */
   encoders?: EncoderSettings;
 }
@@ -169,4 +179,16 @@ export async function saveSettings(
       await tjs.remove(tmp);
     } catch {}
   }
+}
+
+/** A dock's persisted strip options (settings.json), or undefined when it keeps the
+ *  defaults — so the caller can skip a redundant worker message. */
+export function touchStripOptionsOf(entry: DeviceIdentitySettings): TouchStripOptions | undefined {
+  if (entry.touchStripZoneFit === undefined && entry.touchStripUpload === undefined) {
+    return undefined;
+  }
+  return {
+    zoneFit: entry.touchStripZoneFit ?? DEFAULT_TOUCH_STRIP_OPTIONS.zoneFit,
+    upload: entry.touchStripUpload ?? DEFAULT_TOUCH_STRIP_OPTIONS.upload,
+  };
 }

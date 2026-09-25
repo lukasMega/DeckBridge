@@ -147,7 +147,7 @@ export function SimpleApp(): preact.JSX.Element {
           {stageContent}
         </section>
         <footer class="disclaimer">
-          Not affiliated with Elgato · hobby use only · doesn&apos;t replace the Network Dock ·{' '}
+          Unofficial hobby project ·{' '}
           <button class="linkbtn" id="footerAbout" type="button" onClick={openAbout}>
             About
           </button>

@@ -50,6 +50,31 @@ Each zone keeps its own widget in both override modes. The "no widget" choice re
 left to the app. Leaving an override hands every zone back to the app. Side keys (293S,
 AKP05E right column) are not affected: they are DeckBridge widgets in every mode.
 
+### Strip geometry and uploads
+
+The AKP05E strip is one 800×112 panel (measured on firmware `V3.AKP05E.02.007`). It
+has four **slot windows**, each 176×112, at x = 0 / 208 / 416 / 624, with 32 px gaps.
+Each window sits above one encoder. An upload to a slot draws over the strip in place.
+The rest of the strip is not cleared.
+
+- **Full-strip upload.** A whole-strip image from the app is sent once, as one 800×112
+  image. This is the only upload that reaches the gaps.
+- **Per-slot upload.** A partial image (dial feedback) only re-sends the slots it
+  touches. The same applies when DeckBridge widgets own a zone (_ignore_ mode).
+- **Height.** The app's strip is 800×100. It is padded 1:1 to 112 rows with its own
+  edge colour, so text stays sharp.
+- **Upload cap.** The firmware decodes only the first **10 240 B** (10 packets) of an
+  upload and drops the rest. The part it drops shows as noise or old content at the
+  top. DeckBridge lowers the JPEG quality until each strip image fits.
+
+Two settings.json options per device (no web UI control) tune this. They apply on the
+next connect:
+
+| Key                 | Values                                  | Effect                                                                                                                                          |
+| ------------------- | --------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| `touchStripZoneFit` | `"crop"` (default), `"scale"`           | How a 200 px app zone fills a 176 px slot. `crop` shows the strip pixels under the slot, the same as a full-strip upload. `scale` fits the whole zone. |
+| `touchStripUpload`  | `"full-frames"` (default), `"always"`   | `always` sends every app image as a full-strip upload, so the gaps stay current. That is about 5× more USB traffic per dial tick. It is not used while a zone is masked. |
+
 > **No migration.** The earlier **"Elgato app controls it"** switch (`touchStripDisabled`
 > in settings.json) is gone and its value is dropped on load. Every strip starts in
 > **Elgato app only**; widgets you had assigned are kept, so picking an override mode

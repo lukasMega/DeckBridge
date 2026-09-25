@@ -11,6 +11,8 @@ import {
   isExtraKeyConfig,
   type ExtraKeyConfig,
   type TouchStripMode,
+  type TouchStripOptions,
+  type TouchStripUpload,
 } from '../src/types.js';
 import { MIRABOX_293S_MODEL } from '../src/devices/mirabox/mirabox-293s.js';
 import { AJAZZ_AKP05E_MODEL } from '../src/devices/ajazz/akp05e.js';
@@ -180,6 +182,13 @@ await test('background + glyph foreground pixels present', () => {
   assert.ok(fg > 50, `glyph pixels rendered (got ${fg})`);
 });
 
+await test('a non-square BMP gets its own width, height and row padding', () => {
+  const buf = Buffer.from(composeWidgetBmp([{ text: '8', big: true }], 175, 30));
+  assert.equal(buf.readUInt32LE(18), 175, 'width');
+  assert.equal(buf.readUInt32LE(22), 30, 'height');
+  assert.equal(buf.length, 54 + Math.ceil((175 * 3) / 4) * 4 * 30);
+});
+
 await test('blank text renders pure background', () => {
   const bmp = composeWidgetBmp([{ text: ' ', big: true }], SIZE);
   assert.equal(countFg(Buffer.from(bmp)), 0);
@@ -189,6 +198,7 @@ await test('blank text renders pure background', () => {
 
 class FakeDriver extends EventEmitter {
   model: DeviceModel = MIRABOX_293S_MODEL;
+  touchStripOptions?: TouchStripOptions;
   splashed: Array<{ keyIndex: number; bytes: Uint8Array; spec: DeviceImageSpec }> = [];
   cleared: number[] = [];
   masks: number[][] = [];
@@ -291,9 +301,15 @@ await test('AKP05E touch-strip widgets use all four zones and their image spec',
   assert.deepEqual(d.cleared, [2, 3, 4]);
   assert.equal(d.splashed.length, 1);
   assert.equal(d.splashed[0]!.keyIndex, 1);
-  assert.equal(d.splashed[0]!.spec.width, 128);
-  assert.equal(d.splashed[0]!.spec.height, 128);
+  assert.equal(d.splashed[0]!.spec.width, 176);
+  assert.equal(d.splashed[0]!.spec.height, 112);
   assert.equal(d.splashed[0]!.spec.rotate, 180);
+  const bmp = Buffer.from(d.splashed[0]!.bytes);
+  assert.deepEqual(
+    [bmp.readUInt32LE(18), bmp.readUInt32LE(22)],
+    [176, 112],
+    'BMP drawn at slot size',
+  );
 });
 
 console.log('\nExtraKeyWidgets touch-strip mode');
@@ -375,9 +391,11 @@ console.log('\nExtraKeyWidgets repaint hold-off');
 function repaintDock(
   zone1: () => ExtraKeyConfig | undefined,
   holdMs: number,
+  upload: TouchStripUpload = 'full-frames',
 ): { d: FakeDriver; w: ExtraKeyWidgets } {
   const d = new FakeDriver();
   d.model = AJAZZ_AKP05E_MODEL;
+  d.touchStripOptions = { zoneFit: 'crop', upload };
   const configFor = (wireId: number) => (wireId === 1 ? zone1() : undefined);
   return { d, w: new ExtraKeyWidgets(d, configFor, 'deckbridge-repaint', () => holdMs) };
 }
@@ -408,6 +426,15 @@ await test('a frame on another zone does not hold zone 1 off', () => {
   w.repaint();
   w.stop();
   assert.equal(d.splashed.length, 2, 'zone 1 repainted by repaint()');
+});
+
+await test("under 'always' a frame on another zone holds zone 1 off too", () => {
+  const { d, w } = repaintDock(() => HI, 3_600_000, 'always');
+  w.start();
+  w.noteTouchFrame({ x: 416, y: 40, w: 48, h: 48 });
+  w.repaint();
+  w.stop();
+  assert.equal(d.splashed.length, 1, 'the whole-strip upload covered zone 1');
 });
 
 await test('frames are ignored outside repaint mode', () => {

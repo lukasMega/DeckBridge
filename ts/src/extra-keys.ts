@@ -104,10 +104,11 @@ function fontBits(font: BitmapFont): Uint8Array {
   return bits;
 }
 
-/** Blit one glyph (foreground pixels only) into a BGR pixel buffer. */
+/** Blit one glyph (foreground pixels only) into a width×height BGR pixel buffer. */
 function blitGlyph(
   px: Uint8Array,
-  size: number,
+  width: number,
+  height: number,
   font: BitmapFont,
   codepoint: number,
   x0: number,
@@ -120,12 +121,12 @@ function blitGlyph(
   const base = idx * rowBytes * font.height;
   for (let y = 0; y < font.height; y++) {
     const py = y0 + y;
-    if (py < 0 || py >= size) continue;
+    if (py < 0 || py >= height) continue;
     for (let x = 0; x < font.width; x++) {
       const on = bits[base + y * rowBytes + (x >> 3)]! & (0x80 >> (x & 7));
       const pxX = x0 + x;
-      if (!on || pxX < 0 || pxX >= size) continue;
-      const o = (py * size + pxX) * 3;
+      if (!on || pxX < 0 || pxX >= width) continue;
+      const o = (py * width + pxX) * 3;
       px[o] = FG[0];
       px[o + 1] = FG[1];
       px[o + 2] = FG[2];
@@ -133,10 +134,10 @@ function blitGlyph(
   }
 }
 
-/** Compose widget lines into an upright size×size 24-bit BMP (the worker
+/** Compose widget lines into an upright width×height 24-bit BMP (the worker
  *  transform accepts any format the image crate sniffs — BMP included). */
-export function composeWidgetBmp(lines: readonly WidgetLine[], size: number): Uint8Array {
-  const px = new Uint8Array(size * size * 3);
+export function composeWidgetBmp(lines: readonly WidgetLine[], width: number, height = width) {
+  const px = new Uint8Array(width * height * 3);
   for (let o = 0; o < px.length; o += 3) {
     px[o] = BG[0];
     px[o + 1] = BG[1];
@@ -144,35 +145,35 @@ export function composeWidgetBmp(lines: readonly WidgetLine[], size: number): Ui
   }
 
   const totalH = lines.reduce((h, l) => h + (l.big ? FONT_BIG : FONT_SMALL).height, 0);
-  let y = Math.max(0, Math.floor((size - totalH) / 2));
+  let y = Math.max(0, Math.floor((height - totalH) / 2));
   for (const line of lines) {
     const font = line.big ? FONT_BIG : FONT_SMALL;
-    const maxChars = Math.floor(size / font.width);
+    const maxChars = Math.floor(width / font.width);
     const text = Array.from(line.text).slice(0, maxChars);
-    let x = Math.floor((size - text.length * font.width) / 2);
+    let x = Math.floor((width - text.length * font.width) / 2);
     for (const ch of text) {
-      blitGlyph(px, size, font, ch.codePointAt(0)!, x, y);
+      blitGlyph(px, width, height, font, ch.codePointAt(0)!, x, y);
       x += font.width;
     }
     y += font.height;
   }
 
   // 24-bit bottom-up BMP: 14-byte file header + 40-byte BITMAPINFOHEADER.
-  const rowSize = Math.ceil((size * 3) / 4) * 4;
-  const dataSize = rowSize * size;
+  const rowSize = Math.ceil((width * 3) / 4) * 4;
+  const dataSize = rowSize * height;
   const buf = Buffer.alloc(54 + dataSize);
   buf.write('BM', 0, 'ascii');
   buf.writeUInt32LE(buf.length, 2);
   buf.writeUInt32LE(54, 10); // pixel data offset
   buf.writeUInt32LE(40, 14); // info header size
-  buf.writeInt32LE(size, 18);
-  buf.writeInt32LE(size, 22);
+  buf.writeInt32LE(width, 18);
+  buf.writeInt32LE(height, 22);
   buf.writeUInt16LE(1, 26); // planes
   buf.writeUInt16LE(24, 28); // bpp
   buf.writeUInt32LE(dataSize, 34);
-  for (let row = 0; row < size; row++) {
-    const srcY = size - 1 - row; // bottom-up
-    buf.set(px.subarray(srcY * size * 3, (srcY + 1) * size * 3), 54 + row * rowSize);
+  for (let row = 0; row < height; row++) {
+    const srcY = height - 1 - row; // bottom-up
+    buf.set(px.subarray(srcY * width * 3, (srcY + 1) * width * 3), 54 + row * rowSize);
   }
   return new Uint8Array(buf);
 }
@@ -429,7 +430,7 @@ export class ExtraKeyWidgets {
     if (!this.driver.sendSplashImage) return;
     const display = this.widgetDisplay(wireId);
     const spec = display?.image ?? splashSpec(this.driver.model);
-    this.driver.sendSplashImage(wireId, composeWidgetBmp(lines, spec.width), spec);
+    this.driver.sendSplashImage(wireId, composeWidgetBmp(lines, spec.width, spec.height), spec);
     if (this.mode === 'deckbridge-repaint' && display) this.widgetOnZone.add(wireId);
   }
 
@@ -440,8 +441,10 @@ export class ExtraKeyWidgets {
     const ids = this.widgetDisplayIds();
     if (this.mode !== 'deckbridge-repaint' || ids.length === 0) return;
     const sliceWidth = Math.floor(PLUS_TOUCH_WIDTH / ids.length);
-    const x = region?.x ?? 0;
-    const w = region?.w ?? PLUS_TOUCH_WIDTH;
+    const wholeStrip =
+      this.driver.touchStripOptions?.upload === 'always' && this.driver.model.touchStripDisplay;
+    const x = wholeStrip ? 0 : (region?.x ?? 0);
+    const w = wholeStrip ? PLUS_TOUCH_WIDTH : (region?.w ?? PLUS_TOUCH_WIDTH);
     const nowMs = Date.now();
     ids.forEach((wireId, i) => {
       if (x >= (i + 1) * sliceWidth || x + w <= i * sliceWidth) return;

@@ -313,6 +313,7 @@ interface TjsFileHandle {
 }
 
 declare const tjs: {
+  readonly stdin: ReadableStream<Uint8Array>;
   readonly version: string;
   exit(code?: number): never;
   addSignalListener(signal: string, listener: () => void): void;

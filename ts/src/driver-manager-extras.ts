@@ -24,6 +24,7 @@ import {
 import { deviceKeyFor, sharedSerialModelId } from './device-identity.js';
 import { coraPortConflict } from './cora-startup.js';
 import type { DeviceIdentitySettings } from './settings-store.js';
+import { touchStripOptionsOf } from './settings-store.js';
 
 export interface ExtraDockCoordinatorDeps {
   getShuttingDown: () => boolean;
@@ -283,6 +284,8 @@ export class ExtraDockCoordinator {
       deviceKey,
       `${MDNS_SERVICE_NAME} (${model.name})`,
     );
+    const stripOptions = touchStripOptionsOf(deviceIdentity);
+    if (stripOptions) driver.setTouchStripOptions(stripOptions);
     const identity = sessionIdentity(index, deviceIdentity);
     const servers = factory(identity);
     servers.childServer.on(

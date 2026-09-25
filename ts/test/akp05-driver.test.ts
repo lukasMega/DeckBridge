@@ -154,6 +154,29 @@ test('sendImage frames BAT → 1024-byte data chunks → ULEND, one report id by
   assert.equal(last[1 + 476], 0, 'and zero padding after it');
 });
 
+test('firmware comes from feature report 0x01 (20 B); a failed read leaves it unknown', () => {
+  const read = (reply: string | null): { firmware: string | undefined; request: number[] } => {
+    const request: number[] = [];
+    const hid = {
+      hid_get_feature_report(_device: unknown, buf: Uint8Array, len: number): number {
+        request.push(buf[0]!, len);
+        if (reply === null) return -1;
+        buf.set(Buffer.from(reply, 'ascii'));
+        return reply.length;
+      },
+    };
+    const d = new WriteCaptureDriver() as unknown as {
+      readFirmware(h: unknown): string | undefined;
+    };
+    return { firmware: d.readFirmware(hid), request };
+  };
+  assert.deepEqual(read('V3.AKP05E.02.007\0'), {
+    firmware: 'V3.AKP05E.02.007',
+    request: [0x01, 20],
+  });
+  assert.equal(read(null).firmware, undefined);
+});
+
 /** Reassemble the JPEG a single sendImage() wrote: BAT length, then the data chunks. */
 function uploadedJpeg(reports: readonly Uint8Array[]): Uint8Array {
   const bat = reports[0]!.subarray(1);
@@ -175,16 +198,16 @@ function jpegSize(jpeg: Uint8Array): { width: number; height: number } {
   throw new Error('no SOF0 marker');
 }
 
-test('clearKey sends a decodable black JPEG sized to the slot (key 112, strip zone 128)', () => {
-  for (const [wire, size] of [
-    [11, 112],
-    [6, 112],
-    [1, 128],
+test('clearKey sends a decodable black JPEG sized to the slot (key 112, strip slot 176×112)', () => {
+  for (const [wire, width, height] of [
+    [11, 112, 112],
+    [6, 112, 112],
+    [1, 176, 112],
   ] as const) {
     const d = new WriteCaptureDriver();
     d.clearKey(wire);
     const jpeg = uploadedJpeg(d.reports);
-    assert.deepEqual(jpegSize(jpeg), { width: size, height: size }, `wire ${wire}`);
+    assert.deepEqual(jpegSize(jpeg), { width, height }, `wire ${wire}`);
     // Throws on a malformed stream (the old 1×1 constant had no Cb DC table).
     const decoded = transformImageForDevice(jpeg, { ...AJAZZ_AKP05E_MODEL.image, sharpen: 0 });
     assert.ok(decoded.length > 0, `wire ${wire} decodes`);

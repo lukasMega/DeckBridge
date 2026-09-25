@@ -1,5 +1,6 @@
 import assert from 'tjs:assert';
 import { renderImage, TouchStripCanvas } from '../src/image-render.js';
+import { blitImage, canvasSliceToBmp } from '../src/translator.js';
 import { AJAZZ_AKP05E_MODEL } from '../src/devices/ajazz/akp05e.js';
 import { MIRABOX_293_MODEL } from '../src/devices/mirabox/mirabox-293.js';
 import { testAsync as test, summaryExit } from './helpers/harness.js';
@@ -114,25 +115,135 @@ await test('passthrough model forwards original bytes unchanged', () => {
 
 console.log('\nimage-render: TouchStripCanvas');
 
-await test('a partial window re-sends only the zones it touches, each whole', () => {
+const STRIP = AJAZZ_AKP05E_MODEL.touchStripDisplay!;
+const SLOTS = AJAZZ_AKP05E_MODEL.widgetDisplays!;
+
+/** SOF0 frame size of a baseline JPEG. */
+function jpegSize(jpeg: Uint8Array): { width: number; height: number } {
+  for (let i = 0; i < jpeg.length - 8; i++) {
+    if (jpeg[i] === 0xff && jpeg[i + 1] === 0xc0) {
+      return {
+        height: (jpeg[i + 5]! << 8) | jpeg[i + 6]!,
+        width: (jpeg[i + 7]! << 8) | jpeg[i + 8]!,
+      };
+    }
+  }
+  throw new Error('no SOF0 marker');
+}
+
+/** An 800×100 BMP of random pixels — the worst case for the JPEG byte cap. */
+function noisyStripBmp(): Uint8Array {
+  const rgb = new Uint8Array(800 * 100 * 3);
+  let seed = 1;
+  for (let i = 0; i < rgb.length; i++) {
+    seed = (seed * 1103515245 + 12345) & 0x7fffffff;
+    rgb[i] = seed >> 16;
+  }
+  return canvasSliceToBmp(rgb, 800, 100, 0, 800);
+}
+
+/** Red pixels in a device JPEG (decoded through the same blit the canvas uses). */
+function redPixels(jpeg: Uint8Array): number {
+  const { width, height } = jpegSize(jpeg);
+  const rgb = new Uint8Array(width * height * 3);
+  blitImage(rgb, width, height, jpeg, 0, 0);
+  let red = 0;
+  for (let o = 0; o < rgb.length; o += 3) if (rgb[o]! > 128 && rgb[o + 1]! < 80) red++;
+  return red;
+}
+
+await test('a full window is one wire-1 upload, 800×112, within the byte cap', () => {
+  const driver = makeFakeDriver();
+  new TouchStripCanvas().apply(driver, AJAZZ_AKP05E_MODEL, noisyStripBmp());
+  assert.deepEqual(
+    driver.calls.map((c) => c.keyIndex),
+    [STRIP.wireId],
+  );
+  const jpeg = driver.calls[0]!.bytes;
+  assert.deepEqual(jpegSize(jpeg), { width: 800, height: 112 });
+  assert.ok(jpeg.length <= 10_240, `${jpeg.length} B fits the 10 240 B firmware cap`);
+});
+
+await test('a region covering the whole window is a full-strip upload too', () => {
+  const driver = makeFakeDriver();
+  new TouchStripCanvas().apply(driver, AJAZZ_AKP05E_MODEL, SOLID_RED_16X16_JPEG, {
+    x: 0,
+    y: 0,
+    w: 800,
+    h: 100,
+  });
+  assert.equal(driver.calls.length, 1);
+  assert.equal(jpegSize(driver.calls[0]!.bytes).width, 800);
+});
+
+await test('a partial window re-sends only the slots it touches, each 176×112', () => {
   const canvas = new TouchStripCanvas();
   const driver = makeFakeDriver();
   const patch = (x: number): void =>
     canvas.apply(driver, AJAZZ_AKP05E_MODEL, SOLID_RED_16X16_JPEG, { x, y: 40, w: 16, h: 16 });
   patch(416);
   patch(192); // straddles zones 1 and 2
-  const [z1, z2] = AJAZZ_AKP05E_MODEL.widgetDisplays!;
   assert.deepEqual(
     driver.calls.map((c) => c.keyIndex),
-    [AJAZZ_AKP05E_MODEL.widgetDisplays![2]!.wireId, z1!.wireId, z2!.wireId],
+    [SLOTS[2]!.wireId, SLOTS[0]!.wireId, SLOTS[1]!.wireId],
   );
-  assert.ok(driver.calls.every((c) => c.bytes.length > 0));
+  for (const call of driver.calls) {
+    assert.deepEqual(jpegSize(call.bytes), { width: 176, height: 112 });
+  }
 });
 
-await test('a full window (no region) re-sends every zone', () => {
+await test("'always' sends every patch as a full-strip upload", () => {
+  const canvas = new TouchStripCanvas();
+  canvas.setOptions({ zoneFit: 'crop', upload: 'always' });
   const driver = makeFakeDriver();
-  new TouchStripCanvas().apply(driver, AJAZZ_AKP05E_MODEL, SOLID_RED_16X16_JPEG);
-  assert.equal(driver.calls.length, AJAZZ_AKP05E_MODEL.widgetDisplays!.length);
+  canvas.apply(driver, AJAZZ_AKP05E_MODEL, SOLID_RED_16X16_JPEG, { x: 416, y: 40, w: 16, h: 16 });
+  assert.deepEqual(
+    driver.calls.map((c) => [c.keyIndex, jpegSize(c.bytes).width]),
+    [[STRIP.wireId, 800]],
+  );
+});
+
+await test('a masked zone turns a full window into per-slot uploads of the rest', () => {
+  const canvas = new TouchStripCanvas();
+  const driver = makeFakeDriver();
+  canvas.setMask(driver, AJAZZ_AKP05E_MODEL, [SLOTS[1]!.wireId]);
+  canvas.apply(driver, AJAZZ_AKP05E_MODEL, SOLID_RED_16X16_JPEG);
+  assert.deepEqual(
+    driver.calls.map((c) => c.keyIndex),
+    [SLOTS[0]!.wireId, SLOTS[2]!.wireId, SLOTS[3]!.wireId],
+  );
+});
+
+await test("'crop' shows the slot window's own pixels; 'scale' shows the whole zone", () => {
+  // A 16-px red patch at `x`; the first upload is the leftmost slot it touches.
+  const redIn = (zoneFit: 'crop' | 'scale', x: number): number => {
+    const canvas = new TouchStripCanvas();
+    canvas.setOptions({ zoneFit, upload: 'full-frames' });
+    const driver = makeFakeDriver();
+    canvas.apply(driver, AJAZZ_AKP05E_MODEL, SOLID_RED_16X16_JPEG, { x, y: 40, w: 16, h: 16 });
+    return redPixels(driver.calls[0]!.bytes);
+  };
+  assert.equal(redIn('crop', 190), 0, 'x 190–205 is zone 1 and gap only: slot 1 ends at 176');
+  assert.ok(redIn('scale', 184) > 0, 'scale keeps zone 1 x 184–199');
+  assert.ok(redIn('crop', 208) > 0, 'crop shows slot 2 x 208+');
+});
+
+await test('restoring every zone is one full-strip upload; fewer go per slot', () => {
+  const canvas = new TouchStripCanvas();
+  const driver = makeFakeDriver();
+  canvas.restore(
+    driver,
+    AJAZZ_AKP05E_MODEL,
+    SLOTS.map((d) => d.wireId),
+  );
+  canvas.restore(driver, AJAZZ_AKP05E_MODEL, [SLOTS[3]!.wireId]);
+  assert.deepEqual(
+    driver.calls.map((c) => [c.keyIndex, jpegSize(c.bytes).width]),
+    [
+      [STRIP.wireId, 800],
+      [SLOTS[3]!.wireId, 176],
+    ],
+  );
 });
 
 await test('an undecodable window sends nothing', () => {

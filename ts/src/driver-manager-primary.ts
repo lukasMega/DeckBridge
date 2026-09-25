@@ -26,6 +26,7 @@ import type { ElgatoServer, ElgatoChildServer } from './elgato.js';
 
 import type { WebUIServer } from './web/server';
 import type { DeviceIdentitySettings } from './settings-store.js';
+import { touchStripOptionsOf } from './settings-store.js';
 
 /** "aa:bb:cc:dd:ee:ff" → the 6 bytes CORA's deviceConfig wants, else `fallback`
  *  (a persisted identity and the mock config both feed setDeviceConfig). */
@@ -108,7 +109,7 @@ export class PrimaryDock {
   }
 
   /** Seed the freshly connected driver with its persisted per-device settings
-   *  (brightness + image-mode override) before the splash. Only pushes what's
+   *  (brightness, image-mode override, strip options) before the splash. Only pushes what's
    *  actually persisted — absent = use the device/model default. */
   seedFromIdentity(driver: DeviceDriver): void {
     if (!this.identity) return;
@@ -119,6 +120,8 @@ export class PrimaryDock {
     if (this.identity.imageModeOverride != null) {
       driver.setImageOverride?.(this.identity.imageModeOverride);
     }
+    const stripOptions = touchStripOptionsOf(this.identity);
+    if (stripOptions) driver.setTouchStripOptions?.(stripOptions);
   }
 
   /** Apply + record a brightness level so status() reflects it. */
