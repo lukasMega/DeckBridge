@@ -17,6 +17,7 @@ import { DriverManager, getInitialDriverMode } from './driver-manager.js';
 import { macToBytes } from './driver-manager-primary.js';
 import type { SessionServersFactory } from './device-session.js';
 import { startCoraWithRetry } from './cora-startup.js';
+import { setTapFeedbackSource } from './widget-refresh.js';
 import { isElgatoAppRunning, openPathInOS, platformName } from './os-utils.ts';
 import { parseCli, userArgs, applyFlagsToEnv, versionText, USAGE_TEXT, isLogLevel } from './cli.js';
 import { runDevicesCommand } from './cli-devices.js';
@@ -80,6 +81,8 @@ const webui = new WebUIServer(
   DEVICE_MODELS.map((m) => ({ id: m.id, name: m.name, keyCount: m.keyCount })),
   getInitialDriverMode(),
 );
+// Extra docks read their tap feedback through this (see widget-refresh.ts).
+setTapFeedbackSource((deviceKey) => webui.devicePrefs.tapFeedbackFor(deviceKey));
 const defaultChildGeometry = advertisedGeometry(DEFAULT_MODEL);
 const server = new ElgatoServer(defaultChildGeometry);
 const childServer = new ElgatoChildServer(

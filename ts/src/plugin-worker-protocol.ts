@@ -32,13 +32,16 @@ export type MainToPluginWorker =
       body: string;
       error?: string;
     }
-  | { type: 'ping'; seq: number };
+  | { type: 'ping'; seq: number }
+  // Tap refresh: poll this key now instead of at its next interval.
+  | { type: 'runNow'; key: string };
 
 export type PluginWorkerToMain =
   // One poll produced a value: string → textLines(); null → clear the key.
-  | { type: 'value'; key: string; value: string | null }
+  // `forced` = the poll a runNow asked for (ends the host's refresh).
+  | { type: 'value'; key: string; value: string | null; forced?: boolean }
   // Plugin threw (load or poll) — host marks the key ERR + warn-logs.
-  | { type: 'error'; key: string; message: string }
+  | { type: 'error'; key: string; message: string; forced?: boolean }
   // ctx.fetch proxy: the worker asks the main thread to run a real fetch.
   | { type: 'fetch'; fetchId: number; url: string; init?: PluginFetchInit }
   | { type: 'pong'; seq: number }

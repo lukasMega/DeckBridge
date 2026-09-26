@@ -1295,6 +1295,35 @@ async function checkWrapSelect(stub: Stub, card: Element): Promise<void> {
   await act(() => patch({ extraKeys: { '10': { widget: 'command', param: 'date' } } }));
 }
 
+async function checkPressAction(stub: Stub): Promise<void> {
+  const card = [...root.querySelectorAll('.xkey-card')][1]!;
+  const action = (): HTMLSelectElement =>
+    card.querySelector<HTMLSelectElement>('select[aria-label="Bottom side key press action"]')!;
+  const command = (): HTMLInputElement =>
+    card.querySelector<HTMLInputElement>('input[aria-label="Bottom side key press command"]')!;
+  check(
+    action().value === 'refresh' && command().disabled,
+    'Press action defaults to Refresh without a command; the command input is greyed out',
+  );
+  await act(() =>
+    patch({ extraKeys: { '10': { widget: 'command', param: 'date', pressCommand: 'ls' } } }),
+  );
+  check(
+    action().value === 'command' && !command().disabled && command().value === 'ls',
+    'Press action defaults to Command when a press command is set',
+  );
+  action().value = 'both';
+  await act(() => {
+    action().dispatchEvent(new Event('change'));
+  });
+  check(
+    JSON.stringify(lastPost(stub, '/api/extra-key/press')) ===
+      JSON.stringify({ wireId: 10, action: 'both' }),
+    'Press action select posts only the action, keeping the command',
+  );
+  await act(() => patch({ extraKeys: { '10': { widget: 'command', param: 'date' } } }));
+}
+
 async function checkTextSizePicker(stub: Stub, card: Element): Promise<void> {
   const size = (label: string): HTMLButtonElement =>
     card.querySelector<HTMLButtonElement>(`.xkey-size button[aria-label="${label}"]`)!;
@@ -1358,6 +1387,7 @@ async function runSideKeysPanel(): Promise<void> {
     await checkSideKeysHelp();
     await checkDeviceTestMode();
     await checkTextSize(stub);
+    await checkPressAction(stub);
 
     const cards = [...section('Side keys').querySelectorAll('.xkey-card')];
     check(

@@ -12,6 +12,7 @@ import type {
   DialEvent,
   DockStatus,
   KeyState,
+  TouchInputEvent,
   TouchStripMode,
   TouchWindowRegion,
 } from './types.js';
@@ -20,6 +21,7 @@ import { ExtraKeyWidgets } from './extra-keys.js';
 import { EncoderActions } from './encoders.js';
 import { ExtraKeyActions } from './command-actions.js';
 import { buildDockStatus, repaintFrames } from './device-session.js';
+import { knobRefresh, tapRefresh } from './device-session-status.js';
 import type { DeviceInfo } from './device-session.js';
 import type { DeviceDriver, DeviceModel, DeviceModelOverride } from './devices/driver.js';
 import type { ElgatoServer, ElgatoChildServer } from './elgato.js';
@@ -60,18 +62,26 @@ export class PrimaryDock {
   private widgets: ExtraKeyWidgets | null = null;
 
   /** Knob override; resolves this dock's current identity per event. */
-  private readonly encoders = new EncoderActions(() => {
-    const key = this.identity?.deviceKey;
-    if (key === undefined) return undefined;
-    const { webui } = this.deps;
-    return { mode: webui.touchStripModeFor(key), encoders: webui.encoderSettingsFor(key) };
-  });
+  private readonly encoders = new EncoderActions(
+    () => {
+      const key = this.identity?.deviceKey;
+      if (key === undefined) return undefined;
+      const { webui } = this.deps;
+      return { mode: webui.touchStripModeFor(key), encoders: webui.encoderSettingsFor(key) };
+    },
+    undefined,
+    (index) => knobRefresh(this.widgets, this.model, index),
+  );
 
-  /** Extra-key press commands; resolves this dock's current identity per press. */
-  private readonly extraKeyActions = new ExtraKeyActions((wireId) => {
-    const key = this.identity?.deviceKey;
-    return key === undefined ? undefined : this.deps.webui.extraKeyConfigFor(key, wireId);
-  });
+  /** Extra-key presses; resolves this dock's current identity per press. */
+  private readonly extraKeyActions = new ExtraKeyActions(
+    (wireId) => {
+      const key = this.identity?.deviceKey;
+      return key === undefined ? undefined : this.deps.webui.extraKeyConfigFor(key, wireId);
+    },
+    undefined,
+    (wireId) => this.widgets?.refresh(wireId),
+  );
 
   /** The Elgato app's last CORA frames, captured on USB disconnect: the app
    *  keeps its TCP pairing across a replug and never re-pushes, so these are
@@ -174,6 +184,7 @@ export class PrimaryDock {
       this.deps.webui.touchStripModeFor(identity.deviceKey),
       () => this.deps.webui.devicePrefs.touchStripRepaintMsFor(identity.deviceKey),
       (wireId, paint) => this.deps.webui.imageChannel.notifyDockWidgetPaint(0, wireId, paint),
+      { tapFeedback: () => this.deps.webui.devicePrefs.tapFeedbackFor(identity.deviceKey) },
     );
     this.widgets.start();
   }
@@ -201,7 +212,12 @@ export class PrimaryDock {
     return this.encoders.handleDial(event);
   }
 
-  /** Press on an extra key with a switch — runs its configured command. */
+  /** True when a strip tap refreshed one of this dock's widgets (not forwarded). */
+  handleTouch(event: TouchInputEvent): boolean {
+    return tapRefresh(this.widgets, this.model, event);
+  }
+
+  /** Press on an extra key with a switch — its command and/or a widget refresh. */
   handleExtraKey(wireId: number, state: KeyState): void {
     this.extraKeyActions.handleKey(wireId, state);
   }

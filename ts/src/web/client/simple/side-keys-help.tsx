@@ -20,7 +20,7 @@ function KeyDataFlow({ dock }: Readonly<{ dock: DockUi }>): preact.JSX.Element {
         Elgato sends grid key images through DeckBridge to device. Device grid key presses return
         through DeckBridge to Elgato. DeckBridge generates side key widget images locally.
         {pressable
-          ? 'Side key presses run local commands in DeckBridge and never reach Elgato.'
+          ? 'Side key presses refresh their widget or run local commands in DeckBridge and never reach Elgato.'
           : 'Side keys are display-only, without key press events.'}
       </desc>
       <defs>
@@ -122,7 +122,7 @@ function KeyDataFlow({ dock }: Readonly<{ dock: DockUi }>): preact.JSX.Element {
         {pressable ? (
           <>
             <text x="280" y="300">
-              Local commands
+              Refresh / commands
             </text>
             <text x="514" y="286">
               Side key presses

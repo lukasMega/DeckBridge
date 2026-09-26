@@ -108,7 +108,8 @@ encoders. **Connect knobs to Elgato app** (on by default) forwards presses and t
 the app as usual. Turn it off and every knob stops reaching the app; each gets a row with
 three shell commands, in the **Press**, **Turn right** and **Turn left** columns:
 
-- **Press** — runs once per press.
+- **Press** — runs once per press. Left empty, a press
+  [refreshes](#tap-to-refresh) the widget on the zone above the knob.
 - **Turn right** / **Turn left** — runs per clockwise / counter-clockwise detent. A fast
   spin coalesces: while a command is still running, further detents queue at most one
   follow-up run.
@@ -125,18 +126,68 @@ discarded. In **Elgato app only** mode the knobs always go to the app, whatever 
 ## Press commands
 
 On the AKP05/AKP05E paired as a **Stream Deck +**, each right-column side key has an
-**On press** line under its widget row: a shell command run once per press. It is independent of
-the widget — the key can show a clock and open an app on press, and changing either one
-keeps the other. The command runs like a [knob command](#knobs): `sh -c` / `cmd /c`,
-killed after **5 s**, capped at **512 characters**, output discarded; presses during a
-run queue at most one follow-up run. An empty field does nothing. Unlike the knobs, these
-keys never reach the Elgato app, so there is no mode to switch.
+**On press** line under its widget row: an action select and a shell command.
+
+- **Refresh** — [refreshes](#tap-to-refresh) the key's widget. The command field is
+  greyed out but keeps its text.
+- **Command** — runs the shell command once per press.
+- **Both** — refreshes the widget and runs the command.
+
+When no action is saved, a key with a press command runs it (**Command**) and a key
+without one refreshes (**Refresh**).
+
+The press side is independent of the widget — the key can show a clock and open an app
+on press, and changing either one keeps the other. The command runs like a
+[knob command](#knobs): `sh -c` / `cmd /c`, killed after **5 s**, capped at
+**512 characters**, output discarded; presses during a run queue at most one follow-up
+run. An empty field does nothing. Unlike the knobs, these keys never reach the Elgato
+app, so there is no mode to switch.
 
 The 293S side keys have no switches and show no press field.
 
 > **⚠ Security.** Same posture as the command widget below: the web UI has **no
 > authentication**, so anyone who can reach it can set a command that runs on this host.
 > Keep it on a **trusted personal LAN**.
+
+## Tap to refresh
+
+A widget can be refreshed from the device:
+
+- **Side key press** — with the **Refresh** or **Both** [press action](#press-commands).
+- **Strip tap** — a tap on a zone that shows a DeckBridge widget refreshes it. The tap is
+  not sent to the Elgato app. Taps on other zones, and holds and swipes anywhere, reach
+  the app as before. Under _repaint_, a zone showing the app's image passes its taps to
+  the app.
+- **Knob press** — with **Connect knobs to Elgato app** off, pressing a knob that has no
+  **Press** command refreshes the zone above it.
+
+What a refresh does depends on the widget:
+
+| Widget             | Refresh                                                                    |
+| ------------------ | -------------------------------------------------------------------------- |
+| **Command output** | Runs the command now, like **Run now**.                                    |
+| **Plugin (JS)**    | Polls the plugin now.                                                      |
+| **Weather**        | Refetches, at most once a minute per location; otherwise only repaints.    |
+| Clock, date, text  | Repaints only.                                                             |
+
+A command or plugin runs one at a time per key: taps during a run queue one follow-up
+run.
+
+### Feedback
+
+Two settings.json flags per device (next to `touchStripMode`, no web UI control) set what
+a refreshed widget shows:
+
+```jsonc
+"tapFeedback": { "flash": true, "placeholder": false }   // the defaults
+```
+
+- `flash` — the widget shows inverted colours for about **150 ms** on the tap.
+- `placeholder` — the widget shows `…` until the command, plugin or weather refetch
+  finishes (at most 15 s, or twice the command timeout).
+
+Both can be on: the flash comes first, then `…`. An absent flag takes its default; an
+invalid `tapFeedback` is ignored.
 
 ## Built-in widgets
 

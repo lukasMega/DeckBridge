@@ -7,6 +7,7 @@ export type {
   ClientApp,
   EncoderCommands,
   EncoderSettings,
+  ExtraKeyPressAction,
   ExtraKeyTextSize,
   ExtraKeyWidget,
   ExtraKeyWrap,

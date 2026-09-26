@@ -1,7 +1,7 @@
 // Configure display widgets on selected dock's extra keys (293S 6th column, AKP05E
 // right column as a Stream Deck +) and touch strip. The server renders content and
 // refreshes it, so this panel only picks the widget + its parameter — plus, for keys
-// with a switch, the shell command run on press.
+// with a switch, what a press does (refresh the widget / run a shell command / both).
 import { useEffect, useState } from 'preact/hooks';
 import { useStore } from '../store.js';
 import type {
@@ -59,7 +59,7 @@ function widgetSections(dock: DockUi | undefined): WidgetSection[] {
       title: 'Side keys',
       subtitle:
         pressable.size > 0
-          ? 'Right column outside the Elgato grid — show a value, run a command on press'
+          ? 'Right column outside the Elgato grid — show a value; a press refreshes it or runs a command'
           : 'Display-only right column — show a value on each key',
       touchStrip: false,
       encoderCount: 0,
@@ -96,7 +96,7 @@ function ExtraKeyRow({
   noneLabel?: string;
 }>): preact.JSX.Element {
   return (
-    <div class="xkey-row xkey-strip-row">
+    <div class="xkey-row">
       <span class="xkey-pos">
         {label}
         <ClippedBadge wireId={wireId} />
@@ -109,7 +109,12 @@ function ExtraKeyRow({
         plugins={plugins}
         pluginStatus={pluginStatus}
       />
-      <TextSizeControl wireId={wireId} label={label} cfg={cfg} />
+      {(cfg?.widget ?? 'none') !== 'none' && (
+        <>
+          <span class="xkey-press-label">Size</span>
+          <TextSizeControl wireId={wireId} label={label} cfg={cfg} />
+        </>
+      )}
     </div>
   );
 }
@@ -170,13 +175,7 @@ export function ExtraKeysPanel(): preact.JSX.Element | null {
             {section.touchStrip && stripMode === 'deckbridge-repaint' && <RepaintIntervalField />}
             {showRows && section.touchStrip && (
               <GridHeader
-                class="xkey-strip-row"
-                columns={[
-                  { label: 'Zone' },
-                  { label: 'Shows' },
-                  { label: 'Value', wide: true },
-                  { label: 'Size' },
-                ]}
+                columns={[{ label: 'Zone' }, { label: 'Shows' }, { label: 'Value', wide: true }]}
               />
             )}
             {showRows &&

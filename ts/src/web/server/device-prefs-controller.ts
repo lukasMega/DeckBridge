@@ -4,7 +4,8 @@
 // It falls back to a runtime-only value when there is no deviceKey yet (mock
 // mode, or before the first connect) — that fallback is never persisted, since
 // it belongs to no physical device.
-import type { DeviceIdentitySettings } from '../../settings-store.js';
+import type { DeviceIdentitySettings, TapFeedback } from '../../settings-store.js';
+import { tapFeedbackOf } from '../../settings-store.js';
 import type { TouchStripMode } from '../../types.js';
 import {
   DEFAULT_BRIGHTNESS_OVERRIDE,
@@ -72,6 +73,11 @@ export class DevicePrefsController {
     return e
       ? (e.touchStripRepaintMs ?? TOUCH_STRIP_REPAINT_DEFAULT_MS)
       : this.runtimeTouchStripRepaintMs;
+  }
+
+  /** Per-device tap-refresh feedback (settings.json only), read live per tap. */
+  tapFeedbackFor(deviceKey: string): TapFeedback {
+    return tapFeedbackOf(this.host.settings.entryFor(deviceKey));
   }
 
   get touchStripRepaintMs(): number {

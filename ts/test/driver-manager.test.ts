@@ -16,7 +16,8 @@ import type { ElgatoServer, ElgatoChildServer } from '../src/elgato.js';
 import type { WebUIServer } from '../src/web/server/index.js';
 import type { WorkerHidDriver } from '../src/hid-worker-host.js';
 import { generateDeviceIdentity } from '../src/device-identity.js';
-import type { DeviceIdentitySettings } from '../src/settings-store.js';
+import type { DeviceIdentitySettings, TapFeedback } from '../src/settings-store.js';
+import { DEFAULT_TAP_FEEDBACK } from '../src/settings-store.js';
 import { testAsync as test, summaryExit } from './helpers/harness.js';
 
 // Fakes
@@ -111,7 +112,10 @@ function makeFakeWebUI() {
     touchStripModeFor(_deviceKey: string): TouchStripMode {
       return 'elgato';
     },
-    devicePrefs: { touchStripRepaintMsFor: (_deviceKey: string): number => 5000 },
+    devicePrefs: {
+      touchStripRepaintMsFor: (_deviceKey: string): number => 5000,
+      tapFeedbackFor: (_deviceKey: string): TapFeedback => DEFAULT_TAP_FEEDBACK,
+    },
     encoderSettingsFor(_deviceKey: string): EncoderSettings | undefined {
       return undefined;
     },

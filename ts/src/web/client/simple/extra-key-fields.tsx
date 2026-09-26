@@ -1,8 +1,13 @@
 // Per-key widget controls shared by the touch-strip rows and the side-key cards:
 // widget select, its value input (text/location/command/plugin), the config
-// popover button, and the press command.
+// popover button, and the press action + command.
 import { useState } from 'preact/hooks';
-import type { ExtraKeyCfg, ExtraKeyWidget, PluginStatus } from '../ui-types.js';
+import type {
+  ExtraKeyCfg,
+  ExtraKeyPressAction,
+  ExtraKeyWidget,
+  PluginStatus,
+} from '../ui-types.js';
 import { ConfigButton, paramPlaceholder, postExtraKey, PARAM_MAX } from './extra-keys-popovers.js';
 import { CommandInput } from './command-input.js';
 import { fire } from '../ui-api.js';
@@ -243,18 +248,53 @@ export function WidgetValue({
   );
 }
 
-export function PressCommandInput({
+const PRESS_ACTIONS: ReadonlyArray<{ value: ExtraKeyPressAction; label: string }> = [
+  { value: 'refresh', label: 'Refresh' },
+  { value: 'command', label: 'Command' },
+  { value: 'both', label: 'Both' },
+];
+
+/** Mirrors effectivePressAction (extra-key-config.ts): unset = the command when there is one. */
+function effectivePressAction(cfg: ExtraKeyCfg | undefined): ExtraKeyPressAction {
+  return cfg?.pressAction ?? (cfg?.pressCommand?.trim() ? 'command' : 'refresh');
+}
+
+/** "On press": Refresh (the widget) / Command / Both, beside the press command —
+ *  greyed out, not hidden, while the action is Refresh so its text stays visible. */
+export function PressControls({
   wireId,
   label,
   cfg,
 }: Readonly<{ wireId: number; label: string; cfg?: ExtraKeyCfg }>): preact.JSX.Element {
+  const action = effectivePressAction(cfg);
   return (
-    <CommandInput
-      value={cfg?.pressCommand ?? ''}
-      label={`${label} side key press command`}
-      placeholder="shell command"
-      title="Shell command run on press"
-      onCommit={(command) => fire('/api/extra-key/press', { wireId, command })}
-    />
+    <div class="xkey-card-span xkey-press">
+      <select
+        class="input xkey-select xkey-press-action"
+        aria-label={`${label} side key press action`}
+        title="What a press on this key does"
+        value={action}
+        onChange={(e) =>
+          fire('/api/extra-key/press', {
+            wireId,
+            action: (e.target as HTMLSelectElement).value,
+          })
+        }
+      >
+        {PRESS_ACTIONS.map(({ value, label: text }) => (
+          <option key={value} value={value}>
+            {text}
+          </option>
+        ))}
+      </select>
+      <CommandInput
+        value={cfg?.pressCommand ?? ''}
+        label={`${label} side key press command`}
+        placeholder="shell command"
+        title="Shell command run on press"
+        disabled={action === 'refresh'}
+        onCommit={(command) => fire('/api/extra-key/press', { wireId, command })}
+      />
+    </div>
   );
 }

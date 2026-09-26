@@ -32,7 +32,7 @@ const FIRMWARE_REPORT_SIZE = 20;
 // Input classification. Key codes are 1-based and row-ordered (1-10). Encoder codes
 // come through the same ACK report (byte 9 = code, byte 10 = stateByte) — the tables
 // below are the hardware-verified values from `mise run akp05-capture`, recorded in
-// devices/device-notes.json. Touch-strip swipes are decoded; taps are not yet.
+// devices/device-notes.json.
 const KEY_CODE_MIN = 0x01;
 const KEY_CODE_MAX = 0x0a;
 /** Encoder press codes, left-to-right. stateByte 0x01 = down; the firmware sends no
@@ -51,6 +51,10 @@ const ENCODER_ROTATE_CODES: readonly (readonly [number, number])[] = [
  *  Stream Deck + 800×100 strip. Reference: opendeck-akp05 src/inputs.rs. */
 const TOUCH_SWIPE_LEFT = 0x38;
 const TOUCH_SWIPE_RIGHT = 0x39;
+/** Touch-strip tap codes, left-to-right: one per zone, aligned with the encoders.
+ *  No coordinates and no release report, so each tap lands on its zone's centre. */
+const TOUCH_TAP_CODES: readonly number[] = [0x40, 0x41, 0x42, 0x43];
+const TOUCH_STRIP_WIDTH = 800;
 
 // clearKey() images, one per slot size (keys 112×112, strip slots 176×112): baseline
 // 4:2:0 black from the same jpeg-encoder the transform uses. A smaller image leaves the
@@ -207,7 +211,17 @@ export class Akp05Driver extends HidDeviceBase {
       } satisfies TouchInputEvent);
       return;
     }
-    // Touch-strip tap and any other control: framing unverified — log for capture.
+    const tapIndex = TOUCH_TAP_CODES.indexOf(code);
+    if (tapIndex >= 0) {
+      const zoneWidth = TOUCH_STRIP_WIDTH / TOUCH_TAP_CODES.length;
+      this.emit('touch', {
+        type: 'tap',
+        x: Math.round((tapIndex + 0.5) * zoneWidth),
+        y: 50,
+      } satisfies TouchInputEvent);
+      return;
+    }
+    // Any other control: framing unverified — log for capture.
     this.emit('inputAction', `Unmapped control 0x${code.toString(16)} (state ${stateByte})`);
     debug('hid', `AKP05E unclassified input code=0x${code.toString(16)} state=${stateByte}`);
   }

@@ -501,8 +501,27 @@ test('extra-key press command: pressable keys only, widget and command replace i
   assert.equal(ui.trySetExtraKey(15, { widget: 'none' }), null);
   assert.equal(cfg(), undefined, 'nothing left → entry dropped');
 
+  assert.equal(ui.trySetExtraKey(15, { pressAction: 'both' }), null);
+  assert.deepEqual(cfg(), { widget: 'none', pressAction: 'both' }, 'an action alone persists');
+  assert.equal(ui.trySetExtraKey(15, { pressCommand: 'go' }), null);
+  assert.equal(ui.trySetExtraKey(15, { widget: 'clock' }), null);
+  assert.deepEqual(
+    cfg(),
+    { widget: 'clock', pressCommand: 'go', pressAction: 'both' },
+    'widget change keeps the whole press side',
+  );
+  assert.equal(ui.trySetExtraKey(15, { pressAction: 'refresh' }), null);
+  assert.deepEqual(cfg(), { widget: 'clock', pressCommand: 'go', pressAction: 'refresh' });
+  assert.equal(ui.trySetExtraKey(10, { pressAction: 'both' })?.status, 400, 'no switch');
+  assert.equal(ui.trySetExtraKey(15, { widget: 'none' }), null);
+  assert.equal(ui.trySetExtraKey(15, { pressCommand: '' }), null);
+  assert.deepEqual(cfg(), { widget: 'none', pressAction: 'refresh' });
+
   const entry = (extraKeys: unknown): string =>
     JSON.stringify({ devices: [{ ...deviceEntry('fake-device-0', {}), extraKeys }] });
+  ui.applySettingsJson(entry({ '15': { widget: 'none', pressAction: 'always' } }));
+  assert.deepEqual(cfg(), { widget: 'none', pressAction: 'refresh' }, 'bad action import ignored');
+  ui.applySettingsJson(entry({}));
   ui.applySettingsJson(entry({ '15': { widget: 'none', pressCommand: 'x'.repeat(513) } }));
   assert.equal(cfg(), undefined, 'over-long press command rejected');
   ui.applySettingsJson(entry({ '15': { widget: 'none', pressCommand: 'open -a Music' } }));
@@ -717,6 +736,11 @@ try {
       const long = 'x'.repeat(513);
       assert.equal((await post('/api/extra-key/press', { wireId: 15, command: long })).status, 400);
       assert.equal((await post('/api/extra-key/press', { wireId: 15, command: 'x' })).status, 400);
+      const error = async (body: unknown): Promise<string> =>
+        ((await (await post('/api/extra-key/press', body)).json()) as { error: string }).error;
+      assert.ok((await error({ wireId: 15 })).includes('command or action'));
+      assert.ok((await error({ wireId: 15, action: 'run' })).includes('refresh, command, both'));
+      assert.ok((await error({ wireId: 15, action: 'both' })).includes('no extra key'), 'valid');
     },
   );
 
@@ -805,6 +829,7 @@ function deviceEntry(
     touchStripZoneFit: unknown;
     touchStripUpload: unknown;
     encoders: unknown;
+    tapFeedback: unknown;
   }> = {},
 ): Record<string, unknown> {
   return {
@@ -1365,6 +1390,41 @@ await runWebTest(
     await ui.start(false); // load settings without binding a port
     assert.equal(ui.modelOverrideFor(TUNED_MODEL)?.image?.rotate, 180, 'valid entry survives');
     assert.equal(ui.modelOverrideFor('mirabox-293s'), undefined, 'invalid entry dropped');
+    await tjs.remove(root, { recursive: true }).catch(() => undefined);
+  },
+);
+
+await runWebTest(
+  'tapFeedback: defaults when absent, merged per flag, invalid ignored at load',
+  async () => {
+    const root = `${tjs.tmpDir}/webui-tap-feedback-${tjs.pid}`;
+    await saveSettings(
+      {
+        selectedDock: 0,
+        devices: [
+          deviceEntry('usb:A'),
+          deviceEntry('usb:B', { tapFeedback: { placeholder: true } }),
+          deviceEntry('usb:C', { tapFeedback: { flash: 'yes' } }),
+          deviceEntry('usb:D', { tapFeedback: [true] }),
+        ],
+      } as never,
+      root,
+    );
+    const ui = new WebUIServer(undefined, [], 'real', root);
+    await ui.start(false);
+    const prefs = ui.devicePrefs;
+    assert.deepEqual(prefs.tapFeedbackFor('usb:A'), { flash: true, placeholder: false }, 'absent');
+    assert.deepEqual(prefs.tapFeedbackFor('usb:B'), { flash: true, placeholder: true }, 'partial');
+    assert.deepEqual(
+      prefs.tapFeedbackFor('usb:C'),
+      { flash: true, placeholder: false },
+      'bad flag',
+    );
+    assert.deepEqual(prefs.tapFeedbackFor('usb:D'), { flash: true, placeholder: false }, 'array');
+    const devices = (JSON.parse(ui.getSettingsJson()) as { devices: Record<string, unknown>[] })
+      .devices;
+    assert.equal(devices.length, 4, 'a bad tapFeedback never drops the identity entry');
+    assert.equal(devices[2]!.tapFeedback, undefined, 'invalid field stripped');
     await tjs.remove(root, { recursive: true }).catch(() => undefined);
   },
 );

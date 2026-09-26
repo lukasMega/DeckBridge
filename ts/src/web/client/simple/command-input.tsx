@@ -8,6 +8,7 @@ export function CommandInput({
   label,
   placeholder,
   title,
+  disabled = false,
   onCommit,
 }: Readonly<{
   value: string;
@@ -15,6 +16,7 @@ export function CommandInput({
   label: string;
   placeholder: string;
   title: string;
+  disabled?: boolean;
   onCommit: (command: string) => void;
 }>): preact.JSX.Element {
   return (
@@ -26,6 +28,7 @@ export function CommandInput({
       placeholder={placeholder}
       title={title}
       aria-label={label}
+      disabled={disabled}
       onChange={(e) => onCommit((e.target as HTMLInputElement).value)}
     />
   );

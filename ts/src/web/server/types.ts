@@ -11,6 +11,7 @@ import type {
   DeviceIdentity,
   DeviceModelInfo,
   ExtraKeyPreviewResponse,
+  ExtraKeyPressAction,
   KeyEventEntry,
   MockDeviceConfig,
   PluginsInfo,
@@ -35,7 +36,13 @@ export interface OverrideChange {
 }
 
 /** One POST to an extra key: a full widget config, or only its press command. */
-export type ExtraKeyUpdate = ExtraKeyConfig | { pressCommand: string };
+export type ExtraKeyUpdate = ExtraKeyConfig | ExtraKeyPressUpdate;
+
+/** The press side of an extra key; an absent field keeps its stored value. */
+export interface ExtraKeyPressUpdate {
+  pressCommand?: string;
+  pressAction?: ExtraKeyPressAction;
+}
 
 /** A rejected request: the message the WebUI shows, plus its HTTP status. */
 export interface ReqError {

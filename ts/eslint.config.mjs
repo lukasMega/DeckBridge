@@ -166,7 +166,7 @@ export default defineConfig([
         { type: 'image-main', mode: 'full', pattern: ['src/image-pipeline.ts', 'src/image-cache.ts', 'src/image-assembler.ts'] },
         { type: 'cora', mode: 'full', pattern: ['src/cora-*.ts', 'src/elgato*.ts', 'src/feature-response.ts'] },
         { type: 'infra', mode: 'full', pattern: ['src/native-libs.ts', 'src/mdns-advertiser.ts', 'src/tray.ts', 'src/settings-store.ts', 'src/device-identity.ts', 'src/os-utils.ts', 'src/log-file.ts', 'src/update-check.ts', 'src/daily-ping.ts', 'src/daily-ping-env.ts'] },
-        { type: 'app', mode: 'full', pattern: ['src/app.ts', 'src/driver-manager*.ts', 'src/cora-startup.ts', 'src/device-session.ts', 'src/device-session-status.ts', 'src/extra-keys.ts', 'src/encoders.ts', 'src/command-actions.ts'] },
+        { type: 'app', mode: 'full', pattern: ['src/app.ts', 'src/driver-manager*.ts', 'src/cora-startup.ts', 'src/device-session.ts', 'src/device-session-status.ts', 'src/extra-keys.ts', 'src/widget-refresh.ts', 'src/encoders.ts', 'src/command-actions.ts'] },
         { type: 'dev-entry', mode: 'full', pattern: ['src/mirabox-smoke.ts', 'src/k1pro-probe.ts', 'src/d6-capture.ts', 'src/akp05-capture.ts', 'src/akp05-strip-probe.ts', 'src/akp05-strip-guided-probe.ts', 'src/probe-utils.ts'] },
         { type: 'cli', mode: 'full', pattern: ['src/cli-devices.ts', 'src/cli-diagnose.ts'] },
         // worker-lifecycle.ts is a zero-import leaf (blob-URL spawn + deferred terminate)

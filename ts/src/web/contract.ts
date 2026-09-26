@@ -12,6 +12,11 @@ export type KeyState = 'down' | 'up';
  *  `EXTRA_KEY_WIDGETS` list and proves it against this union with `satisfies`. */
 export type ExtraKeyWidget = 'none' | 'clock' | 'date' | 'text' | 'weather' | 'command' | 'plugin';
 
+/** What pressing an extra key with a switch does: refresh its widget, run its press
+ *  command, or both. Absent = 'command' when a press command is set, else 'refresh'.
+ *  `types.ts` holds the runtime `EXTRA_KEY_PRESS_ACTIONS` list. */
+export type ExtraKeyPressAction = 'refresh' | 'command' | 'both';
+
 /** Widget text size: a step on the font ladder relative to each line's default
  *  (0 = default), or 'fit' = the largest step that shows everything.
  *  `types.ts` holds the runtime `EXTRA_KEY_TEXT_SIZES` list. */

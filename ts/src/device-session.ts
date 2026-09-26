@@ -7,11 +7,14 @@ import type {
   ExtraKeyConfig,
   ImageEvent,
   DockStatus,
+  TouchInputEvent,
   TouchWindowRegion,
   TouchStripMode,
 } from './types.js';
 import { sendSplashImages } from './splash-sender.js';
 import { ExtraKeyWidgets } from './extra-keys.js';
+import { tapFeedbackFor } from './widget-refresh.js';
+import type { TapFeedback } from './settings-store.js';
 import type { WidgetPaint } from './widget-render.js';
 import { EncoderActions, type EncoderOverride } from './encoders.js';
 import { ExtraKeyActions } from './command-actions.js';
@@ -24,6 +27,8 @@ import {
   repaintFrames,
   wireCommonDriverEvents,
   applyModelToServers,
+  knobRefresh,
+  tapRefresh,
 } from './device-session-status.js';
 import type {
   DeviceInfo,
@@ -79,6 +84,9 @@ export interface DeviceSessionOptions {
   /** This dock's strip mode + encoder settings, resolved per dial event (deviceKey
    *  captured by the coordinator). Absent = knobs always reach the Elgato app. */
   encoderOverride?: () => EncoderOverride | undefined;
+  /** This dock's tap-refresh feedback flags, read per tap. Default: the settings
+   *  lookup app.ts registered (widget-refresh.ts setTapFeedbackSource). */
+  tapFeedback?: () => TapFeedback;
 }
 
 export class DeviceSession {
@@ -124,9 +132,18 @@ export class DeviceSession {
       opts.touchStripMode,
       opts.touchStripRepaintMs,
       opts.onWidgetPaint,
+      { tapFeedback: opts.tapFeedback ?? (() => tapFeedbackFor(opts.identity.deviceKey)) },
     );
-    this.encoders = new EncoderActions(() => opts.encoderOverride?.());
-    this.extraKeyActions = new ExtraKeyActions((wireId) => this.extraKeyConfigFor?.(wireId));
+    this.encoders = new EncoderActions(
+      () => opts.encoderOverride?.(),
+      undefined,
+      (index) => knobRefresh(this.extraKeys, this.model, index),
+    );
+    this.extraKeyActions = new ExtraKeyActions(
+      (wireId) => this.extraKeyConfigFor?.(wireId),
+      undefined,
+      (wireId) => this.extraKeys.refresh(wireId),
+    );
   }
 
   /** The underlying driver — exposed via DriverManager.getDriverForDock. */
@@ -217,6 +234,11 @@ export class DeviceSession {
     this.extraKeys.setTouchStripMode(mode);
   }
 
+  /** True when a strip tap refreshed one of this dock's widgets (not forwarded). */
+  handleTouch(event: TouchInputEvent): boolean {
+    return tapRefresh(this.extraKeys, this.model, event);
+  }
+
   /** Mirror DriverManager.attachRealDriverListeners minus every WebUI hook. */
   private wireListeners(): void {
     wireCommonDriverEvents(this.driver, this.model, {
@@ -226,7 +248,9 @@ export class DeviceSession {
       onDial: (event) => {
         if (!this.encoders.handleDial(event)) this.childServer.sendDial(event);
       },
-      onTouch: (event) => this.childServer.sendTouch(event),
+      onTouch: (event) => {
+        if (!this.handleTouch(event)) this.childServer.sendTouch(event);
+      },
       onReinit: () => this.repaintExtraKeys(),
     });
     this.driver.on('disconnect', () => {

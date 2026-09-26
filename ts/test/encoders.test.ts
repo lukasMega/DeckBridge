@@ -122,6 +122,38 @@ await test('a failed run frees the slot and still honours a pending re-run', asy
   assert.equal(runner.runs.length, 2, 'pending re-run after failure');
 });
 
+await test('a disconnected knob press with no command refreshes its zone; with one it runs', () => {
+  const runner = new FakeRunner();
+  const refreshed: number[] = [];
+  const actions = new EncoderActions(
+    () => DISCONNECTED,
+    runner.run,
+    (index) => refreshed.push(index),
+  );
+  assert.equal(actions.handleDial(press(1, 'down')), true, 'no commands → refresh, consumed');
+  assert.equal(actions.handleDial(press(2, 'down')), true, 'blank press command → refresh');
+  actions.handleDial(press(1, 'up'));
+  actions.handleDial(rotate(1, 1));
+  assert.equal(actions.handleDial(press(0, 'down')), true);
+  assert.deepEqual(refreshed, [1, 2], 'press down only, never a rotation or release');
+  assert.deepEqual(
+    runner.runs.map((r) => r.cmd),
+    ['echo press0'],
+    'a knob with a press command runs it instead',
+  );
+});
+
+await test('a connected knob press never refreshes', () => {
+  const refreshed: number[] = [];
+  const actions = new EncoderActions(
+    () => ({ mode: 'deckbridge-ignore', encoders: { connectToApp: true } }),
+    new FakeRunner().run,
+    (index) => refreshed.push(index),
+  );
+  assert.equal(actions.handleDial(press(1, 'down')), false);
+  assert.deepEqual(refreshed, []);
+});
+
 await test('a coalesced re-run is dropped when the knob was reconnected meanwhile', async () => {
   const { runner, actions, set } = setup();
   actions.handleDial(rotate(0, 1));
