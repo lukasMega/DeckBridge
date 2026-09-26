@@ -4,6 +4,7 @@
 import type { Broadcaster } from './broadcaster.js';
 import type { TouchWindowRegion } from '../../types.js';
 import type { ExtraKeyImageMsg } from '../contract.js';
+import type { WidgetPaint } from '../../widget-render.js';
 
 export type ImageFormat = 'jpeg' | 'bmp';
 export type DockFrame = { data: Buffer; format: ImageFormat };
@@ -21,8 +22,8 @@ export class ImageChannel {
   /** Per dock, in paint order: a full strip frame restarts the list, a partial
    *  window replaces the earlier frame for that same window. */
   private readonly dockTouch = new Map<number, Map<string, TouchFrame>>();
-  /** Per dock: last widget image painted on each side key, by wire id. */
-  private readonly dockExtraKeys = new Map<number, Map<number, Buffer>>();
+  /** Per dock: last widget paint on each side key / strip zone, by wire id. */
+  private readonly dockExtraKeys = new Map<number, Map<number, WidgetPaint>>();
 
   constructor(
     private readonly bus: Broadcaster,
@@ -75,17 +76,21 @@ export class ImageChannel {
     if (dock === this.selectedDock()) this.broadcastTouch({ data, region });
   }
 
-  /** Cache a side-key widget image (null = cleared); push it live only when that dock is selected. */
-  notifyDockExtraKeyImage(dock: number, wireId: number, bmp: Uint8Array | null): void {
-    let images = this.dockExtraKeys.get(dock);
-    if (!images) {
-      images = new Map();
-      this.dockExtraKeys.set(dock, images);
+  /** Cache a widget paint (null = cleared); push it live only when that dock is selected. */
+  notifyDockWidgetPaint(dock: number, wireId: number, paint: WidgetPaint | null): void {
+    let paints = this.dockExtraKeys.get(dock);
+    if (!paints) {
+      paints = new Map();
+      this.dockExtraKeys.set(dock, paints);
     }
-    const data = bmp ? Buffer.from(bmp) : undefined;
-    if (data) images.set(wireId, data);
-    else images.delete(wireId);
-    if (dock === this.selectedDock()) this.broadcastExtraKey(wireId, data);
+    if (paint) paints.set(wireId, paint);
+    else paints.delete(wireId);
+    if (dock === this.selectedDock()) this.broadcastExtraKey(wireId, paint ?? undefined);
+  }
+
+  /** Last paint of one of the selected dock's widgets (size previews re-lay its lines). */
+  selectedWidgetPaint(wireId: number): WidgetPaint | undefined {
+    return this.dockExtraKeys.get(this.selectedDock())?.get(wireId);
   }
 
   /** Key images load via /api/state; the strip has no per-key URL, so a new WS
@@ -94,14 +99,14 @@ export class ImageChannel {
     for (const frame of this.dockTouch.get(this.selectedDock())?.values() ?? []) {
       this.bus.sendTo(ws, 'touchImage', touchPayload(frame));
     }
-    for (const [wireId, data] of this.dockExtraKeys.get(this.selectedDock()) ?? []) {
-      this.bus.sendTo(ws, 'extraKeyImage', extraKeyPayload(wireId, data));
+    for (const [wireId, paint] of this.dockExtraKeys.get(this.selectedDock()) ?? []) {
+      this.bus.sendTo(ws, 'extraKeyImage', extraKeyPayload(wireId, paint));
     }
   }
 
-  private broadcastExtraKey(wireId: number, data?: Buffer): void {
+  private broadcastExtraKey(wireId: number, paint?: WidgetPaint): void {
     if (this.bus.size === 0) return;
-    this.bus.broadcast('extraKeyImage', extraKeyPayload(wireId, data));
+    this.bus.broadcast('extraKeyImage', extraKeyPayload(wireId, paint));
   }
 
   private broadcastTouch(frame: TouchFrame): void {
@@ -120,8 +125,8 @@ export class ImageChannel {
       this.notifyImageUpdate(key, data, format);
     }
     for (const frame of this.dockTouch.get(dock)?.values() ?? []) this.broadcastTouch(frame);
-    for (const [wireId, data] of this.dockExtraKeys.get(dock) ?? []) {
-      this.broadcastExtraKey(wireId, data);
+    for (const [wireId, paint] of this.dockExtraKeys.get(dock) ?? []) {
+      this.broadcastExtraKey(wireId, paint);
     }
   }
 
@@ -165,6 +170,12 @@ export function touchPayload({ data, region }: TouchFrame): {
   return { data: data.toString('base64'), ...(region ? { region } : {}) };
 }
 
-function extraKeyPayload(wireId: number, data?: Buffer): ExtraKeyImageMsg {
-  return data ? { wireId, data: data.toString('base64') } : { wireId };
+/** A strip zone's image is not mirrored (the strip preview shows the app's frames). */
+function extraKeyPayload(wireId: number, paint?: WidgetPaint): ExtraKeyImageMsg {
+  if (!paint) return { wireId };
+  return {
+    wireId,
+    ...(paint.zone ? { zone: true } : { data: Buffer.from(paint.bmp).toString('base64') }),
+    ...(paint.clipped ? { clipped: true } : {}),
+  };
 }

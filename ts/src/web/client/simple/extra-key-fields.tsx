@@ -53,10 +53,13 @@ function ParamInput({
     const raw = (e.target as HTMLInputElement).value;
     postExtraKey(
       wireId,
-      widget,
-      isText ? raw.replaceAll('\\n', '\n') : raw,
-      cfg?.intervalMs,
-      cfg?.timeoutMs,
+      {
+        widget,
+        param: isText ? raw.replaceAll('\\n', '\n') : raw,
+        intervalMs: cfg?.intervalMs,
+        timeoutMs: cfg?.timeoutMs,
+      },
+      cfg,
     );
   };
   return (
@@ -98,11 +101,25 @@ function PluginPicker({
       return;
     }
     setCustomMode(false);
-    postExtraKey(wireId, 'plugin', file || undefined, cfg?.intervalMs, undefined, cfg?.pluginArg);
+    postExtraKey(
+      wireId,
+      {
+        widget: 'plugin',
+        param: file || undefined,
+        intervalMs: cfg?.intervalMs,
+        pluginArg: cfg?.pluginArg,
+      },
+      cfg,
+    );
   };
   const handleCustomPath = (e: Event): void => {
     const p = (e.target as HTMLInputElement).value.trim();
-    if (p) postExtraKey(wireId, 'plugin', p, cfg?.intervalMs, undefined, cfg?.pluginArg);
+    if (!p) return;
+    postExtraKey(
+      wireId,
+      { widget: 'plugin', param: p, intervalMs: cfg?.intervalMs, pluginArg: cfg?.pluginArg },
+      cfg,
+    );
   };
 
   return (
@@ -160,10 +177,13 @@ export function WidgetSelect({
     const next = (e.target as HTMLSelectElement).value as ExtraKeyWidget;
     postExtraKey(
       wireId,
-      next,
-      next === widget ? (cfg?.param ?? '') : undefined,
-      cfg?.intervalMs,
-      cfg?.timeoutMs,
+      {
+        widget: next,
+        param: next === widget ? (cfg?.param ?? '') : undefined,
+        intervalMs: cfg?.intervalMs,
+        timeoutMs: cfg?.timeoutMs,
+      },
+      cfg,
     );
   };
   return (

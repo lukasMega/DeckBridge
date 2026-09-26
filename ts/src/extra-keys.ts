@@ -1,15 +1,17 @@
 // Display widgets for physical keys outside the emulated CORA grid
 // (model.keyMap.extraKeys — 293S 6th column, wire ids 16/17/18). Those keys have no
 // switches, so each shows a server-rendered value: clock, date, text, or weather.
-import { FONT_BIG, FONT_SMALL, fontGlyphIndex } from './assets/font-atlas.js';
-import type { BitmapFont } from './assets/font-atlas.js';
+import { composeLayout, layoutWidget, type WidgetLine, type WidgetPaint } from './widget-render.js';
 import {
   COMMAND_INTERVAL_DEFAULT_MS,
   COMMAND_TIMEOUT_DEFAULT_MS,
   DEFAULT_TOUCH_STRIP_MODE,
   PLUS_TOUCH_WIDTH,
   TOUCH_STRIP_REPAINT_DEFAULT_MS,
+  WRAPPABLE_WIDGETS,
   type ExtraKeyConfig,
+  type ExtraKeyTextSize,
+  type ExtraKeyWrap,
   type TouchStripMode,
   type TouchWindowRegion,
 } from './types.js';
@@ -19,18 +21,8 @@ import { runCommand } from './os-utils.js';
 import { log } from './logger.js';
 import { pluginValueFor, type PluginStatus } from './plugin-host.js';
 
-// Key panel colors — match the WebUI's former canvas icons.
-const BG = [0x14, 0x10, 0x10] as const; // BGR of #101014
-const FG = [0xec, 0xe8, 0xe8] as const; // BGR of #e8e8ec
-
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] as const;
 const MONTHS = 'Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec'.split(' ');
-
-/** One rendered line of a widget; big = FONT_BIG (16×32), else FONT_SMALL (8×16). */
-export interface WidgetLine {
-  text: string;
-  big: boolean;
-}
 
 /** Everything time/network-dependent a widget can show, injected for testability. */
 export interface WidgetContext {
@@ -92,90 +84,6 @@ export function renderWidgetLines(cfg: ExtraKeyConfig, ctx: WidgetContext): Widg
     case 'none':
       return null;
   }
-}
-
-const decodedFonts = new Map<BitmapFont, Uint8Array>();
-function fontBits(font: BitmapFont): Uint8Array {
-  let bits = decodedFonts.get(font);
-  if (!bits) {
-    bits = new Uint8Array(Buffer.from(font.bits, 'base64'));
-    decodedFonts.set(font, bits);
-  }
-  return bits;
-}
-
-/** Blit one glyph (foreground pixels only) into a width×height BGR pixel buffer. */
-function blitGlyph(
-  px: Uint8Array,
-  width: number,
-  height: number,
-  font: BitmapFont,
-  codepoint: number,
-  x0: number,
-  y0: number,
-): void {
-  const idx = fontGlyphIndex(codepoint);
-  if (idx < 0) return;
-  const rowBytes = Math.ceil(font.width / 8);
-  const bits = fontBits(font);
-  const base = idx * rowBytes * font.height;
-  for (let y = 0; y < font.height; y++) {
-    const py = y0 + y;
-    if (py < 0 || py >= height) continue;
-    for (let x = 0; x < font.width; x++) {
-      const on = bits[base + y * rowBytes + (x >> 3)]! & (0x80 >> (x & 7));
-      const pxX = x0 + x;
-      if (!on || pxX < 0 || pxX >= width) continue;
-      const o = (py * width + pxX) * 3;
-      px[o] = FG[0];
-      px[o + 1] = FG[1];
-      px[o + 2] = FG[2];
-    }
-  }
-}
-
-/** Compose widget lines into an upright width×height 24-bit BMP (the worker
- *  transform accepts any format the image crate sniffs — BMP included). */
-export function composeWidgetBmp(lines: readonly WidgetLine[], width: number, height = width) {
-  const px = new Uint8Array(width * height * 3);
-  for (let o = 0; o < px.length; o += 3) {
-    px[o] = BG[0];
-    px[o + 1] = BG[1];
-    px[o + 2] = BG[2];
-  }
-
-  const totalH = lines.reduce((h, l) => h + (l.big ? FONT_BIG : FONT_SMALL).height, 0);
-  let y = Math.max(0, Math.floor((height - totalH) / 2));
-  for (const line of lines) {
-    const font = line.big ? FONT_BIG : FONT_SMALL;
-    const maxChars = Math.floor(width / font.width);
-    const text = Array.from(line.text).slice(0, maxChars);
-    let x = Math.floor((width - text.length * font.width) / 2);
-    for (const ch of text) {
-      blitGlyph(px, width, height, font, ch.codePointAt(0)!, x, y);
-      x += font.width;
-    }
-    y += font.height;
-  }
-
-  // 24-bit bottom-up BMP: 14-byte file header + 40-byte BITMAPINFOHEADER.
-  const rowSize = Math.ceil((width * 3) / 4) * 4;
-  const dataSize = rowSize * height;
-  const buf = Buffer.alloc(54 + dataSize);
-  buf.write('BM', 0, 'ascii');
-  buf.writeUInt32LE(buf.length, 2);
-  buf.writeUInt32LE(54, 10); // pixel data offset
-  buf.writeUInt32LE(40, 14); // info header size
-  buf.writeInt32LE(width, 18);
-  buf.writeInt32LE(height, 22);
-  buf.writeUInt16LE(1, 26); // planes
-  buf.writeUInt16LE(24, 28); // bpp
-  buf.writeUInt32LE(dataSize, 34);
-  for (let row = 0; row < height; row++) {
-    const srcY = height - 1 - row; // bottom-up
-    buf.set(px.subarray(srcY * width * 3, (srcY + 1) * width * 3), 54 + row * rowSize);
-  }
-  return new Uint8Array(buf);
 }
 
 // Shared background-refresh cache (weather + command)
@@ -315,8 +223,8 @@ export class ExtraKeyWidgets {
     /** 'deckbridge-repaint' hold-off after an Elgato frame; read live, so a WebUI
      *  change applies without a restart. */
     private readonly repaintIntervalMs: () => number = () => TOUCH_STRIP_REPAINT_DEFAULT_MS,
-    /** WebUI mirror of each side-key paint (null = cleared); strip zones excluded. */
-    private readonly onSideKeyImage?: (wireId: number, bmp: Uint8Array | null) => void,
+    /** WebUI mirror of each widget paint (null = cleared), side keys and strip zones. */
+    private readonly onWidgetPaint?: (wireId: number, paint: WidgetPaint | null) => void,
   ) {}
 
   start(): void {
@@ -397,10 +305,12 @@ export class ExtraKeyWidgets {
       const cfg = this.configFor(wireId);
       if (this.leftToApp(wireId, cfg, now.getTime())) continue;
       const lines = cfg ? renderWidgetLines(cfg, this.contextFor(cfg, now)) : null;
-      const sig = lines === null ? '' : JSON.stringify(lines);
+      const textSize = cfg?.textSize ?? 0;
+      const wrap = cfg && WRAPPABLE_WIDGETS.includes(cfg.widget) ? cfg.wrap : undefined;
+      const sig = lines === null ? '' : JSON.stringify([textSize, wrap, lines]);
       if (this.lastPainted.get(wireId) === sig) continue;
       this.lastPainted.set(wireId, sig);
-      this.paint(wireId, lines);
+      this.paint(wireId, lines, textSize, wrap);
     }
   }
 
@@ -415,18 +325,27 @@ export class ExtraKeyWidgets {
     return true;
   }
 
-  private paint(wireId: number, lines: ReturnType<typeof renderWidgetLines>): void {
+  private paint(
+    wireId: number,
+    lines: WidgetLine[] | null,
+    textSize: ExtraKeyTextSize,
+    wrap: ExtraKeyWrap | undefined,
+  ): void {
     const display = this.widgetDisplay(wireId);
     if (lines === null) {
       this.driver.clearKey(wireId);
-      if (!display) this.onSideKeyImage?.(wireId, null);
+      this.onWidgetPaint?.(wireId, null);
       return;
     }
     if (!this.driver.sendSplashImage) return;
     const spec = display?.image ?? splashSpec(this.driver.model);
-    const bmp = composeWidgetBmp(lines, spec.width, spec.height);
+    const { width, height } = spec;
+    const layout = layoutWidget(lines, width, height, textSize, wrap);
+    const bmp = composeLayout(layout, width, height);
     this.driver.sendSplashImage(wireId, bmp, spec);
-    if (!display) this.onSideKeyImage?.(wireId, bmp);
+    const zone = display !== undefined;
+    const clipped = layout.clipped;
+    this.onWidgetPaint?.(wireId, { bmp, lines, width, height, clipped, wrap, zone });
     if (this.mode === 'deckbridge-repaint' && display) this.widgetOnZone.add(wireId);
   }
 

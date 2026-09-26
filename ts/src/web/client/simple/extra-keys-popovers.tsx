@@ -23,14 +23,15 @@ const STATUS_LABEL: Record<PluginStatus, string> = {
   disabled: 'disabled',
 };
 
-export function postExtraKey(
-  wireId: number,
-  widget: ExtraKeyWidget,
-  param?: string,
-  intervalMs?: number,
-  timeoutMs?: number,
-  pluginArg?: string,
-): void {
+/** The widget part of a key's config; the press command posts separately. */
+export type WidgetCfg = Omit<ExtraKeyCfg, 'pressCommand' | keyof DisplayPrefs>;
+/** How the widget text is drawn — kept across widget changes. */
+export type DisplayPrefs = Pick<ExtraKeyCfg, 'textSize' | 'wrap'>;
+
+/** The server replaces the whole widget part, so every post carries the display prefs too. */
+export function postExtraKey(wireId: number, next: WidgetCfg, prefs: DisplayPrefs = {}): void {
+  const { widget, param, intervalMs, timeoutMs, pluginArg } = next;
+  const { textSize, wrap } = prefs;
   fire('/api/extra-key', {
     wireId,
     widget,
@@ -38,6 +39,8 @@ export function postExtraKey(
     ...(intervalMs !== undefined ? { intervalMs } : {}),
     ...(timeoutMs !== undefined ? { timeoutMs } : {}),
     ...(pluginArg !== undefined ? { pluginArg } : {}),
+    ...(textSize !== undefined && textSize !== 0 ? { textSize } : {}),
+    ...(wrap !== undefined ? { wrap } : {}),
   });
 }
 
@@ -81,14 +84,26 @@ function CommandConfigPopover({
         min={INTERVAL_MIN_S}
         max={INTERVAL_MAX_S}
         value={intervalS}
-        onCommit={(ms) => postExtraKey(wireId, 'command', cfg?.param, ms, cfg?.timeoutMs)}
+        onCommit={(ms) =>
+          postExtraKey(
+            wireId,
+            { widget: 'command', param: cfg?.param, intervalMs: ms, timeoutMs: cfg?.timeoutMs },
+            cfg,
+          )
+        }
       />
       <SecondsField
         label="Timeout (s)"
         min={TIMEOUT_MIN_S}
         max={TIMEOUT_MAX_S}
         value={timeoutS}
-        onCommit={(ms) => postExtraKey(wireId, 'command', cfg?.param, cfg?.intervalMs, ms)}
+        onCommit={(ms) =>
+          postExtraKey(
+            wireId,
+            { widget: 'command', param: cfg?.param, intervalMs: cfg?.intervalMs, timeoutMs: ms },
+            cfg,
+          )
+        }
       />
       <button class="ghostbtn xkey-popover-run" type="button" onClick={handleRunNow}>
         {ran ? 'Ran ✓' : 'Run now'}
@@ -119,11 +134,13 @@ function PluginConfigPopover({
   const handleArg = (e: Event): void => {
     postExtraKey(
       wireId,
-      'plugin',
-      cfg?.param,
-      cfg?.intervalMs,
-      undefined,
-      (e.target as HTMLInputElement).value,
+      {
+        widget: 'plugin',
+        param: cfg?.param,
+        intervalMs: cfg?.intervalMs,
+        pluginArg: (e.target as HTMLInputElement).value,
+      },
+      cfg,
     );
   };
   const st = status ?? 'pending';
@@ -147,7 +164,13 @@ function PluginConfigPopover({
         min={INTERVAL_MIN_S}
         max={INTERVAL_MAX_S}
         value={intervalS}
-        onCommit={(ms) => postExtraKey(wireId, 'plugin', cfg?.param, ms, undefined, cfg?.pluginArg)}
+        onCommit={(ms) =>
+          postExtraKey(
+            wireId,
+            { widget: 'plugin', param: cfg?.param, intervalMs: ms, pluginArg: cfg?.pluginArg },
+            cfg,
+          )
+        }
       />
       <div class="xkey-popover-status">
         Status: <span class={`xkey-status xkey-status-${st}`}>{STATUS_LABEL[st]}</span>

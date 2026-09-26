@@ -7,9 +7,14 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
 const SPLEEN_RAW = 'https://raw.githubusercontent.com/fcambus/spleen/master';
+// Smallest → largest: FONT_LADDER order, which widget-render.ts indexes by size step.
 const FONTS = [
-  { name: 'FONT_BIG', file: 'spleen-16x32.bdf' },
-  { name: 'FONT_SMALL', file: 'spleen-8x16.bdf' },
+  { name: 'FONT_5X8', file: 'spleen-5x8.bdf' },
+  { name: 'FONT_6X12', file: 'spleen-6x12.bdf' },
+  { name: 'FONT_8X16', file: 'spleen-8x16.bdf' },
+  { name: 'FONT_12X24', file: 'spleen-12x24.bdf' },
+  { name: 'FONT_16X32', file: 'spleen-16x32.bdf' },
+  { name: 'FONT_32X64', file: 'spleen-32x64.bdf' },
 ];
 // ASCII printable + degree sign (weather widget).
 const CODEPOINTS = [...Array.from({ length: 95 }, (_, i) => 32 + i), 0xb0];
@@ -99,7 +104,7 @@ for (const { name, file } of FONTS) {
   version ||= /Spleen \S+ ([\d.]+)/.exec(text)?.[1] ?? 'unknown';
   const font = parseBdf(text);
   parts.push(
-    `export const ${name}: BitmapFont = {\n` +
+    `const ${name}: BitmapFont = {\n` +
       `  width: ${font.w},\n  height: ${font.h},\n` +
       `  bits:\n    '${packFont(font)}',\n};\n`,
   );
@@ -127,5 +132,8 @@ export interface BitmapFont {
 `;
 
 const outPath = join(dirname(fileURLToPath(import.meta.url)), '../ts/src/assets/font-atlas.ts');
-writeFileSync(outPath, header + parts.join('\n'));
+const ladder =
+  '\n/** Spleen sizes, smallest → largest. */\n' +
+  `export const FONT_LADDER: readonly BitmapFont[] = [${FONTS.map((f) => f.name).join(', ')}];\n`;
+writeFileSync(outPath, header + parts.join('\n') + ladder);
 console.log(`wrote ${outPath}`);

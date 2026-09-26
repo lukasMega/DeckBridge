@@ -32,7 +32,7 @@ const handlers: Record<string, (d: unknown) => void> = {
     if ((next.selectedDock ?? 0) !== prev) {
       resetPreviews();
       resetTouchStrip();
-      store.patch({ status: next, extraKeyImages: {} });
+      store.patch({ status: next, extraKeyImages: {}, extraKeyClipped: {} });
       return;
     }
     store.patch({ status: next });
@@ -47,11 +47,19 @@ const handlers: Record<string, (d: unknown) => void> = {
     applyTouchImage(d as TouchFrameMsg);
   },
   extraKeyImage: (d) => {
-    const { wireId, data } = d as ExtraKeyImageMsg;
-    const extraKeyImages = { ...store.getSnapshot().extraKeyImages };
+    const { wireId, data, clipped, zone } = d as ExtraKeyImageMsg;
+    const snap = store.getSnapshot();
+    const extraKeyClipped = { ...snap.extraKeyClipped };
+    if (clipped) extraKeyClipped[String(wireId)] = true;
+    else delete extraKeyClipped[String(wireId)];
+    if (zone) {
+      store.patch({ extraKeyClipped });
+      return;
+    }
+    const extraKeyImages = { ...snap.extraKeyImages };
     if (data) extraKeyImages[String(wireId)] = data;
     else delete extraKeyImages[String(wireId)];
-    store.patch({ extraKeyImages });
+    store.patch({ extraKeyImages, extraKeyClipped });
   },
   clear: (d) => {
     const idx = (d as { mk2Index: number }).mk2Index;

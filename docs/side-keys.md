@@ -26,6 +26,25 @@ for some, a parameter field or gear (⚙) button.
 Pick a widget and fill its parameter; it takes effect immediately, saved per key and
 restored on reconnect.
 
+### Text size
+
+Every display with a widget has a **size** control:
+
+- **A− / A+** move the text one step smaller or larger (−2 … +2). Each line keeps its role —
+  the date's day number stays bigger than its weekday and month.
+- **A** returns to the default size.
+- **Fit** picks the largest size at which all the text fits, and re-picks it whenever the
+  value changes (e.g. command output).
+- **▦** opens a picker with the widget rendered at every size; click one to use it.
+- **Wrap** (custom text, command output, plugin only) splits a line too wide for the
+  display: **words** breaks at spaces and splits a single over-long word mid-word;
+  **characters** fills each row and breaks anywhere. Off (the default) cuts the line at the
+  right edge. With **Fit**, the size is chosen after wrapping.
+
+The side-key tile updates as soon as the key repaints. When text does not fit at the
+chosen size, the tile (or the strip zone's label) shows a **clipped** badge — pick a
+smaller size or **Fit**.
+
 ## Touch strip modes
 
 On AKP05E the strip has two possible painters — DeckBridge widgets and the Elgato Stream
@@ -160,9 +179,11 @@ string.
 
 ## Rendering details
 
-- Values are drawn with a packed **Spleen** bitmap font (BSD-2), then transformed to each
-  display's native format like any other key image.
+- Values are drawn with packed **Spleen** bitmap fonts (BSD-2) in six sizes — 5×8, 6×12,
+  8×16, 12×24, 16×32 and 32×64 pixels per character, sharp with no smoothing — then
+  transformed to each display's native format like any other key image.
 - Up to **4 centered lines**, split on `\n`. Short single lines use a larger font.
+  A line too wide for the display is cut off unless wrapping is on (see [Text size](#text-size)).
 - The parameter is capped at **128 characters**.
 
 ## Going further

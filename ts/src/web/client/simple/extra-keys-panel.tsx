@@ -21,6 +21,7 @@ import { ConfigSection, GridHeader } from './config-section.js';
 import { SideKeysHelp } from './side-keys-help.js';
 import { WidgetSelect, WidgetValue, type PluginFiles } from './extra-key-fields.js';
 import { SideKeyCard } from './side-key-card.js';
+import { ClippedBadge, TextSizeControl } from './text-size-control.js';
 
 // Under an override mode 'none' decides what an unassigned strip zone shows.
 const NONE_LABEL: Partial<Record<TouchStripMode, string>> = {
@@ -95,8 +96,11 @@ function ExtraKeyRow({
   noneLabel?: string;
 }>): preact.JSX.Element {
   return (
-    <div class="xkey-row">
-      <span class="xkey-pos">{label}</span>
+    <div class="xkey-row xkey-strip-row">
+      <span class="xkey-pos">
+        {label}
+        <ClippedBadge wireId={wireId} />
+      </span>
       <WidgetSelect wireId={wireId} label={label} cfg={cfg} noneLabel={noneLabel} />
       <WidgetValue
         wireId={wireId}
@@ -105,6 +109,7 @@ function ExtraKeyRow({
         plugins={plugins}
         pluginStatus={pluginStatus}
       />
+      <TextSizeControl wireId={wireId} label={label} cfg={cfg} />
     </div>
   );
 }
@@ -165,7 +170,13 @@ export function ExtraKeysPanel(): preact.JSX.Element | null {
             {section.touchStrip && stripMode === 'deckbridge-repaint' && <RepaintIntervalField />}
             {showRows && section.touchStrip && (
               <GridHeader
-                columns={[{ label: 'Zone' }, { label: 'Shows' }, { label: 'Value', wide: true }]}
+                class="xkey-strip-row"
+                columns={[
+                  { label: 'Zone' },
+                  { label: 'Shows' },
+                  { label: 'Value', wide: true },
+                  { label: 'Size' },
+                ]}
               />
             )}
             {showRows &&

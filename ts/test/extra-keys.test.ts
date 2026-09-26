@@ -1,11 +1,6 @@
 import assert from 'tjs:assert';
 import { EventEmitter } from 'node:events';
-import {
-  ExtraKeyWidgets,
-  composeWidgetBmp,
-  parseLatLon,
-  renderWidgetLines,
-} from '../src/extra-keys.js';
+import { ExtraKeyWidgets, parseLatLon, renderWidgetLines } from '../src/extra-keys.js';
 import {
   TOUCH_STRIP_MODES,
   isExtraKeyConfig,
@@ -17,6 +12,7 @@ import {
 import { MIRABOX_293S_MODEL } from '../src/devices/mirabox/mirabox-293s.js';
 import { AJAZZ_AKP05E_MODEL } from '../src/devices/ajazz/akp05e.js';
 import type { DeviceImageSpec, DeviceModel } from '../src/devices/driver.js';
+import type { WidgetPaint } from '../src/widget-render.js';
 import { testAsync as test, summary } from './helpers/harness.js';
 
 // renderWidgetLines
@@ -142,58 +138,6 @@ await test('garbage / out-of-range / missing → null', () => {
   assert.equal(parseLatLon('0,181'), null);
 });
 
-// composeWidgetBmp
-
-console.log('\ncomposeWidgetBmp');
-
-const SIZE = 85;
-
-await test('produces a well-formed 24-bit BMP of the key size', () => {
-  const bmp = composeWidgetBmp([{ text: '8', big: true }], SIZE);
-  const buf = Buffer.from(bmp);
-  assert.equal(buf.toString('ascii', 0, 2), 'BM');
-  assert.equal(buf.readUInt32LE(2), buf.length, 'declared file size matches');
-  assert.equal(buf.readUInt32LE(18), SIZE, 'width');
-  assert.equal(buf.readUInt32LE(22), SIZE, 'height');
-  assert.equal(buf.readUInt16LE(28), 24, 'bpp');
-});
-
-/** Count foreground pixels, honouring the 4-byte BMP row padding. */
-function countFg(buf: ReturnType<typeof Buffer.from>): number {
-  const rowSize = Math.ceil((SIZE * 3) / 4) * 4;
-  let fg = 0;
-  for (let row = 0; row < SIZE; row++) {
-    for (let x = 0; x < SIZE; x++) {
-      const o = 54 + row * rowSize + x * 3;
-      if (buf[o] === 0xec && buf[o + 1] === 0xe8 && buf[o + 2] === 0xe8) fg++;
-    }
-  }
-  return fg;
-}
-
-await test('background + glyph foreground pixels present', () => {
-  const bmp = composeWidgetBmp([{ text: '8', big: true }], SIZE);
-  const buf = Buffer.from(bmp);
-  const rowSize = Math.ceil((SIZE * 3) / 4) * 4;
-  // (0,0) top-left = last stored row (bottom-up) → background #101014 (BGR).
-  const corner = 54 + (SIZE - 1) * rowSize;
-  assert.deepEqual([...buf.subarray(corner, corner + 3)], [0x14, 0x10, 0x10]);
-  const fg = countFg(buf);
-  assert.ok(fg > 50, `glyph pixels rendered (got ${fg})`);
-});
-
-await test('a non-square BMP gets its own width, height and row padding', () => {
-  const buf = Buffer.from(composeWidgetBmp([{ text: '8', big: true }], 175, 30));
-  assert.equal(buf.readUInt32LE(18), 175, 'width');
-  assert.equal(buf.readUInt32LE(22), 30, 'height');
-  assert.equal(buf.length, 54 + Math.ceil((175 * 3) / 4) * 4 * 30);
-});
-
-await test('blank text renders pure background', () => {
-  const bmp = composeWidgetBmp([{ text: ' ', big: true }], SIZE);
-  assert.equal(countFg(Buffer.from(bmp)), 0);
-});
-
 // ExtraKeyWidgets
 
 class FakeDriver extends EventEmitter {
@@ -288,30 +232,90 @@ await test('model without extraKeys → no device I/O, no timer', () => {
   assert.equal(d.splashed.length, 0);
 });
 
-await test('side-key paints are mirrored for the WebUI; strip zones are not', () => {
+await test('every widget paint is mirrored for the WebUI; strip zones flagged as zones', () => {
   const d = new FakeDriver();
   d.model = {
     ...AJAZZ_AKP05E_MODEL,
     keyMap: { ...AJAZZ_AKP05E_MODEL.keyMap, extraKeys: [15, 10] },
   };
-  const mirrored: Array<[number, Uint8Array | null]> = [];
+  const mirrored: Array<[number, WidgetPaint | null]> = [];
   const w = new ExtraKeyWidgets(
     d,
     (wireId) => (wireId === 15 || wireId === 1 ? { widget: 'text', param: 'Hi' } : undefined),
     'deckbridge-ignore',
     undefined,
-    (wireId, bmp) => mirrored.push([wireId, bmp]),
+    (wireId, paint) => mirrored.push([wireId, paint]),
   );
   w.start();
   w.stop();
   assert.deepEqual(
-    mirrored.map(([wireId, bmp]) => [wireId, bmp !== null]),
+    mirrored.map(([wireId, paint]) => [wireId, paint?.zone ?? null]),
     [
-      [15, true],
-      [10, false],
+      [15, false],
+      [10, null],
+      [1, true],
+      [2, null],
+      [3, null],
+      [4, null],
     ],
   );
-  assert.equal(mirrored[0]![1], d.splashed.find((p) => p.keyIndex === 15)!.bytes);
+  const side = mirrored[0]![1]!;
+  assert.equal(side.bmp, d.splashed.find((p) => p.keyIndex === 15)!.bytes);
+  assert.deepEqual(side.lines, [{ text: 'Hi', big: true }]);
+  assert.equal(side.clipped, false);
+  assert.equal(mirrored[2]![1]!.width, 176);
+});
+
+await test('wrap applies to free-text widgets only and repaints on change', () => {
+  const d = new FakeDriver();
+  let cfg: ExtraKeyConfig = { widget: 'text', param: 'The quick brown fox' };
+  const paints: WidgetPaint[] = [];
+  const w = new ExtraKeyWidgets(
+    d,
+    (wireId) => (wireId === 16 ? cfg : undefined),
+    undefined,
+    undefined,
+    (_id, paint) => {
+      if (paint) paints.push(paint);
+    },
+  );
+  w.start();
+  cfg = { ...cfg, wrap: 'words' };
+  tick(w);
+  cfg = { widget: 'clock', wrap: 'words' };
+  tick(w);
+  w.stop();
+  assert.deepEqual(
+    paints.map((p) => [p.wrap, p.clipped]),
+    [
+      [undefined, true],
+      ['words', false],
+      [undefined, false],
+    ],
+  );
+});
+
+await test('a text size change alone repaints; the paint reports clipping', () => {
+  const d = new FakeDriver();
+  let cfg: ExtraKeyConfig = { widget: 'text', param: 'Hello' };
+  const paints: WidgetPaint[] = [];
+  const w = new ExtraKeyWidgets(
+    d,
+    (wireId) => (wireId === 16 ? cfg : undefined),
+    undefined,
+    undefined,
+    (_id, paint) => {
+      if (paint) paints.push(paint);
+    },
+  );
+  w.start();
+  assert.equal(paints.length, 1);
+  assert.equal(paints[0]!.clipped, false);
+  cfg = { ...cfg, textSize: 2 };
+  tick(w);
+  w.stop();
+  assert.equal(paints.length, 2, 'size change repaints');
+  assert.equal(paints[1]!.clipped, true, '"Hello" at 32×64 does not fit 85 px');
 });
 
 await test('AKP05E touch-strip widgets use all four zones and their image spec', () => {
@@ -584,6 +588,23 @@ await test('accepts plugin widget with pluginArg, rejects over-long pluginArg', 
     'pluginArg cap',
   );
   assert.ok(!isExtraKeyConfig({ widget: 'plugin', pluginArg: 5 }), 'pluginArg must be a string');
+});
+
+await test('textSize: steps -2..+2 and fit accepted, anything else rejected', () => {
+  for (const textSize of ['fit', -2, -1, 0, 1, 2]) {
+    assert.ok(isExtraKeyConfig({ widget: 'clock', textSize }), String(textSize));
+  }
+  for (const textSize of [3, -3, 1.5, 'big', '1', null]) {
+    assert.ok(!isExtraKeyConfig({ widget: 'clock', textSize }), String(textSize));
+  }
+});
+
+await test('wrap: words/chars accepted, anything else rejected', () => {
+  assert.ok(isExtraKeyConfig({ widget: 'text', param: 'x', wrap: 'words' }));
+  assert.ok(isExtraKeyConfig({ widget: 'text', param: 'x', wrap: 'chars' }));
+  for (const wrap of [true, 'lines', 1]) {
+    assert.ok(!isExtraKeyConfig({ widget: 'text', wrap }), String(wrap));
+  }
 });
 
 await test('accepts command widget intervalMs/timeoutMs in range, rejects out of range', () => {

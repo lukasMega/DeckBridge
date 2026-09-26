@@ -8,6 +8,8 @@ import type { MockDeviceConfig } from './types.js';
 import {
   EXTRA_KEY_WIDGETS,
   EXTRA_KEY_PARAM_MAX,
+  EXTRA_KEY_TEXT_SIZES,
+  EXTRA_KEY_WRAPS,
   COMMAND_INTERVAL_MIN_MS,
   COMMAND_INTERVAL_MAX_MS,
   COMMAND_TIMEOUT_MIN_MS,
@@ -21,7 +23,9 @@ import {
 import type {
   EncoderSettings,
   ExtraKeyConfig,
+  ExtraKeyTextSize,
   ExtraKeyWidget,
+  ExtraKeyWrap,
   TouchStripMode,
 } from '../../types.js';
 import { encoderSettingsError } from './encoders-controller.js';
@@ -56,6 +60,7 @@ export const routes: Route[] = [
   postJson('/api/select-dock', selectDock),
   postJson('/api/extra-key', setExtraKey),
   postJson('/api/extra-key/run', runExtraKeyNow),
+  postJson('/api/extra-key/preview', previewExtraKey),
   postJson('/api/extra-key/press', setExtraKeyPress),
   postJson('/api/touch-strip-mode', setTouchStripMode),
   postJson('/api/touch-strip-repaint', setTouchStripRepaint),
@@ -195,6 +200,8 @@ interface ExtraKeyBody {
   intervalMs?: unknown;
   timeoutMs?: unknown;
   pluginArg?: unknown;
+  textSize?: unknown;
+  wrap?: unknown;
 }
 
 /** null when `v` is undefined or a number within [min, max]; else an error message. */
@@ -206,6 +213,12 @@ function validateOptionalMs(v: unknown, field: string, min: number, max: number)
   return null;
 }
 
+/** null when `v` is undefined or one of `allowed`; else an error message. */
+function validateOneOf(v: unknown, field: string, allowed: readonly unknown[]): string | null {
+  if (v === undefined || allowed.includes(v)) return null;
+  return `${field} must be one of: ${allowed.join(', ')}`;
+}
+
 /** Field validation for POST /api/extra-key; returns an error message or null. */
 function validateExtraKeyBody({
   wireId,
@@ -214,6 +227,8 @@ function validateExtraKeyBody({
   intervalMs,
   timeoutMs,
   pluginArg,
+  textSize,
+  wrap,
 }: ExtraKeyBody): string | null {
   if (!isNonNegInt(wireId)) return nonNegIntMessage('wireId');
   if (typeof widget !== 'string' || !(EXTRA_KEY_WIDGETS as readonly string[]).includes(widget)) {
@@ -229,12 +244,15 @@ function validateExtraKeyBody({
     return `pluginArg must be a string ≤ ${EXTRA_KEY_PARAM_MAX} chars`;
   }
   return (
+    validateOneOf(textSize, 'textSize', EXTRA_KEY_TEXT_SIZES) ??
+    validateOneOf(wrap, 'wrap', EXTRA_KEY_WRAPS) ??
     validateOptionalMs(
       intervalMs,
       'intervalMs',
       COMMAND_INTERVAL_MIN_MS,
       COMMAND_INTERVAL_MAX_MS,
-    ) ?? validateOptionalMs(timeoutMs, 'timeoutMs', COMMAND_TIMEOUT_MIN_MS, COMMAND_TIMEOUT_MAX_MS)
+    ) ??
+    validateOptionalMs(timeoutMs, 'timeoutMs', COMMAND_TIMEOUT_MIN_MS, COMMAND_TIMEOUT_MAX_MS)
   );
 }
 
@@ -243,13 +261,15 @@ function validateExtraKeyBody({
 function setExtraKey(body: ExtraKeyBody, { ui }: RouteContext): Response {
   const invalid = validateExtraKeyBody(body);
   if (invalid) return badRequest(invalid);
-  const { wireId, widget, param, intervalMs, timeoutMs, pluginArg } = body;
+  const { wireId, widget, param, intervalMs, timeoutMs, pluginArg, textSize, wrap } = body;
   const cfg: ExtraKeyConfig = {
     widget: widget as ExtraKeyWidget,
     ...(typeof param === 'string' && param ? { param } : {}),
     ...(typeof intervalMs === 'number' ? { intervalMs } : {}),
     ...(typeof timeoutMs === 'number' ? { timeoutMs } : {}),
     ...(typeof pluginArg === 'string' && pluginArg ? { pluginArg } : {}),
+    ...(textSize !== undefined && textSize !== 0 ? { textSize: textSize as ExtraKeyTextSize } : {}),
+    ...(wrap !== undefined ? { wrap: wrap as ExtraKeyWrap } : {}),
   };
   const err = ui.trySetExtraKey(wireId as number, cfg);
   return err ? json({ error: err.error }, err.status) : json({ ok: true, wireId, widget });
@@ -264,6 +284,13 @@ function runExtraKeyNow({ wireId }: RunExtraKeyBody, { ui }: RouteContext): Resp
   if (!isNonNegInt(wireId)) return badRequest(nonNegIntMessage('wireId'));
   const err = ui.tryRunExtraKeyNow(wireId);
   return err ? json({ error: err.error }, err.status) : json({ ok: true });
+}
+
+/** Text-size picker: the widget's last paint rendered at every text size (nothing saved). */
+function previewExtraKey({ wireId }: RunExtraKeyBody, { ui }: RouteContext): Response {
+  if (!isNonNegInt(wireId)) return badRequest(nonNegIntMessage('wireId'));
+  const res = ui.tryPreviewExtraKey(wireId);
+  return 'error' in res ? json({ error: res.error }, res.status) : json(res);
 }
 
 /** Shell command a pressable extra key runs on press ('' clears it). Separate from the

@@ -473,9 +473,12 @@ so they can't act as CORA keys but can show something. [extra-keys.ts](../ts/src
 the WebUI assign each one a **widget**: `clock`, `date`, `text`, `weather` (Open-Meteo, no API key,
 plain HTTP since the slim runtime has no TLS), `command` (runs a user-supplied shell command and
 shows its stdout — full trust, same tradeoff as a build script), `plugin` (below), or `none`.
-`renderWidgetLines()` picks the text, `composeWidgetBmp()` rasterizes it via a packed bitmap font
-(`assets/font-atlas.ts`) into a 24-bit BMP pushed through the existing splash path — so the worker's
-transform, not the main thread, does the FFI JPEG encode. A per-dock `ExtraKeyWidgets` scheduler
+`renderWidgetLines()` picks the text; [widget-render.ts](../ts/src/widget-render.ts) (`shared`) lays it
+out on a six-size Spleen bitmap-font ladder (`assets/font-atlas.ts`) at the key's `textSize` step (or
+`'fit'`) and rasterizes it into a 24-bit BMP pushed through the existing splash path — so the worker's
+transform, not the main thread, does the FFI JPEG encode. Each paint (bitmap, lines, clipped flag) is
+mirrored to the WebUI; `POST /api/extra-key/preview` re-lays the last painted lines at every size for
+the size picker, which is exact because the lines don't depend on the size. A per-dock `ExtraKeyWidgets` scheduler
 (one instance per connected dock: the primary's own, and one per `DeviceSession`) ticks every second
 and repaints a key only when its content changed.
 
