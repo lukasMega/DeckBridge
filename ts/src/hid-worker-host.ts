@@ -175,22 +175,26 @@ export class WorkerHidDriver extends EventEmitter implements DeviceDriver {
     });
   }
 
+  private onOpened(msg: Extract<WorkerToMain, { type: 'opened' }>): void {
+    if (msg.ok) {
+      this.deviceSerial = msg.deviceSerial;
+      this.deviceFirmware = msg.deviceFirmware;
+      this.hidPath = msg.hidPath;
+      this.settleOpen(this.openResolve, null);
+    } else {
+      // Failed open: reject but KEEP the worker alive for reuse. Terminating a
+      // worker that loaded hidapi is SIGBUS-prone on macOS, and a present-but-
+      // unopenable device (Input Monitoring denied) would otherwise spawn+terminate
+      // one every reconnect cycle. driver-manager re-issues open() on this instance;
+      // close() tears the worker down once, when it is no longer needed.
+      this.settleOpen(null, new Error(msg.error));
+    }
+  }
+
   private onWorkerMessage(msg: WorkerToMain): void {
     switch (msg.type) {
       case 'opened':
-        if (msg.ok) {
-          this.deviceSerial = msg.deviceSerial;
-          this.deviceFirmware = msg.deviceFirmware;
-          this.hidPath = msg.hidPath;
-          this.settleOpen(this.openResolve, null);
-        } else {
-          // Failed open: reject but KEEP the worker alive for reuse. Terminating a
-          // worker that loaded hidapi is SIGBUS-prone on macOS, and a present-but-
-          // unopenable device (Input Monitoring denied) would otherwise spawn+terminate
-          // one every reconnect cycle. driver-manager re-issues open() on this instance;
-          // close() tears the worker down once, when it is no longer needed.
-          this.settleOpen(null, new Error(msg.error));
-        }
+        this.onOpened(msg);
         break;
       case 'key':
         this.emit('key', { keyIndex: msg.keyIndex, state: msg.state } satisfies KeyEvent);
@@ -209,6 +213,9 @@ export class WorkerHidDriver extends EventEmitter implements DeviceDriver {
         break;
       case 'reinit':
         this.emit('reinit');
+        break;
+      case 'stripWrite':
+        this.emit('stripWrite', msg.wireId, msg.bytes, msg.full);
         break;
       case 'log':
         this.emit('log', { level: msg.level, component: msg.component, message: msg.message });

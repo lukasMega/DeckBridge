@@ -23,7 +23,17 @@ import { updateBadgeVersion } from '../src/web/client/ui-helpers.js';
 import { KeyGridPreview } from '../src/web/client/components/KeyGridPreview.js';
 import { applyImage, clearImageStore } from '../src/web/client/key-preview.js';
 import { applyTouchImage, resetTouchStrip } from '../src/web/client/touch-strip-preview.js';
-import type { DeviceOverridesView, DockUi, UpdateInfo } from '../src/web/client/ui-types.js';
+import {
+  applyStripWrite,
+  attachZoneCanvas,
+  resetStripZones,
+} from '../src/web/client/strip-zone-preview.js';
+import type {
+  DeviceOverridesView,
+  DockUi,
+  UpdateInfo,
+  WidgetDisplayInfo,
+} from '../src/web/client/ui-types.js';
 
 const root = document.createElement('div');
 document.body.appendChild(root);
@@ -229,6 +239,7 @@ async function run(): Promise<void> {
   await runSideKeysPanel();
   await runChipRadioGroup();
   await runTouchStripPreview();
+  await runStripZonePreview();
   runUpdateBadge();
   runHydrateRegression();
 }
@@ -323,6 +334,109 @@ async function runTouchStripPreview(): Promise<void> {
   const alpha = canvas!.getContext('2d')!.getImageData(5, 5, 1, 1).data[3];
   check(alpha === 0, 'Dock switch clears the strip');
   await act(() => render(null, root));
+}
+
+/** Base64 JPEG of a black w×h block with coloured rects `[x, y, w, h, color]`. */
+function rectsJpeg(w: number, h: number, rects: Array<[number, number, number, number, string]>) {
+  const c = document.createElement('canvas');
+  c.width = w;
+  c.height = h;
+  const ctx = c.getContext('2d')!;
+  ctx.fillStyle = '#000000';
+  ctx.fillRect(0, 0, w, h);
+  for (const [x, y, rw, rh, color] of rects) {
+    ctx.fillStyle = color;
+    ctx.fillRect(x, y, rw, rh);
+  }
+  return c.toDataURL('image/jpeg', 1).split(',')[1]!;
+}
+
+type Rgba = readonly [number, number, number, number];
+const isRed = ([r, g, b]: Rgba) => r > 200 && g < 60 && b < 60;
+const isBlue = ([r, g, b]: Rgba) => b > 200 && r < 60 && g < 60;
+const isBlack = ([r, g, b, a]: Rgba) => a > 200 && r < 40 && g < 40 && b < 40;
+const isBlank = ([, , , a]: Rgba) => a === 0;
+
+/** Pixel at (x, y) once the async zone paint chain has drawn what `want` expects. */
+async function zonePixel(
+  canvas: HTMLCanvasElement,
+  x: number,
+  y: number,
+  want: (p: Rgba) => boolean,
+) {
+  let p: Rgba = [0, 0, 0, 0];
+  for (let i = 0; i < 50; i++) {
+    const d = canvas.getContext('2d')!.getImageData(x, y, 1, 1).data;
+    p = [d[0]!, d[1]!, d[2]!, d[3]!];
+    if (want(p)) return true;
+    await new Promise((res) => setTimeout(res, 10));
+  }
+  return false;
+}
+
+function zone(wireId: number, stripX: number, rotate: 0 | 180 = 0): WidgetDisplayInfo {
+  const label = `Zone ${wireId}`;
+  return { wireId, label, width: 176, height: 112, stripX, rotate, flipH: false, flipV: false };
+}
+
+function zoneCanvas(z: WidgetDisplayInfo): { canvas: HTMLCanvasElement; detach: () => void } {
+  const canvas = document.createElement('canvas');
+  canvas.width = z.width;
+  canvas.height = z.height;
+  return { canvas, detach: attachZoneCanvas(canvas, z) };
+}
+
+// Device strip mirror (strip-zone-preview.ts): what each zone shows is exactly what
+// the device received — slots, full-strip uploads sliced at stripX, orientation undone.
+async function runStripZonePreview(): Promise<void> {
+  resetStripZones();
+  const z1 = zoneCanvas(zone(1, 0));
+  const z2 = zoneCanvas(zone(2, 204));
+  check(z2.canvas.dataset.empty === 'true', 'A zone with no device write is marked empty');
+
+  applyStripWrite({ wireId: 2, data: solidJpeg(176, 112, '#ff0000') });
+  check(await zonePixel(z2.canvas, 88, 56, isRed), 'A slot write paints its zone');
+  check(z2.canvas.dataset.empty === undefined, 'A painted zone is not marked empty');
+  check(z1.canvas.dataset.empty === 'true', 'A slot write leaves other zones alone');
+
+  const z3 = zoneCanvas(zone(3, 406, 180));
+  const topRed = rectsJpeg(176, 112, [
+    [0, 0, 176, 56, '#ff0000'],
+    [0, 56, 176, 56, '#0000ff'],
+  ]);
+  applyStripWrite({ wireId: 3, data: topRed });
+  check(
+    (await zonePixel(z3.canvas, 88, 100, isRed)) && (await zonePixel(z3.canvas, 88, 10, isBlue)),
+    'A rotate-180 zone is drawn upright (device top half lands at the bottom)',
+  );
+
+  applyStripWrite({ wireId: 1, data: solidJpeg(176, 112, '#0000ff') });
+  check(await zonePixel(z1.canvas, 88, 56, isBlue), 'Slot 1 write paints zone 1');
+  const full = rectsJpeg(800, 112, [[204, 0, 176, 112, '#ff0000']]);
+  applyStripWrite({ wireId: 1, data: full, full: true });
+  check(await zonePixel(z2.canvas, 88, 56, isRed), 'A full write is sliced at the zone stripX');
+  check(
+    await zonePixel(z1.canvas, 88, 56, isBlack),
+    'A full write replaces an earlier slot write (zone 1 shows the strip, not the slot)',
+  );
+  applyStripWrite({ wireId: 2, data: solidJpeg(176, 112, '#0000ff') });
+  check(await zonePixel(z2.canvas, 88, 56, isBlue), 'A slot write after a full write overrides it');
+
+  applyStripWrite({ clear: true });
+  check(
+    (await zonePixel(z2.canvas, 88, 56, isBlank)) && z2.canvas.dataset.empty === 'true',
+    'A clear blanks the zones and marks them empty',
+  );
+
+  applyStripWrite({ wireId: 4, data: solidJpeg(176, 112, '#ff0000') });
+  const z4 = zoneCanvas(zone(4, 610));
+  check(await zonePixel(z4.canvas, 88, 56, isRed), 'A canvas attached after a write paints it');
+  resetStripZones();
+  check(
+    (await zonePixel(z4.canvas, 88, 56, isBlank)) && z4.canvas.dataset.empty === 'true',
+    'Dock switch blanks the zones',
+  );
+  for (const z of [z1, z2, z3, z4]) z.detach();
 }
 
 // Device tuning + diagnostics panels (simple/device-tuning.tsx,
@@ -1151,7 +1265,16 @@ const AKP05E_DOCK: DockUi = {
   brightness: 100,
   extraKeys: [15, 10],
   pressableExtraKeys: [15, 10],
-  widgetDisplays: [20, 21, 22, 23].map((wireId, i) => ({ wireId, label: `Zone ${i + 1}` })),
+  widgetDisplays: [20, 21, 22, 23].map((wireId, i) => ({
+    wireId,
+    label: `Zone ${i + 1}`,
+    width: 176,
+    height: 112,
+    stripX: [0, 204, 406, 610][i],
+    rotate: 180 as const,
+    flipH: false,
+    flipV: false,
+  })),
   encoderCount: 4,
 };
 
@@ -1352,6 +1475,134 @@ async function checkTextSizePicker(stub: Stub, card: Element): Promise<void> {
   await act(() => patch({ extraKeys: { '10': { widget: 'command', param: 'date' } } }));
 }
 
+function checkElgatoStripZones(strip: Element): void {
+  check(
+    strip.querySelectorAll('[role="list"] .strip-zone-canvas').length === 4 &&
+      strip.querySelector('[role="tablist"]') === null &&
+      strip.querySelector('[role="tabpanel"]') === null &&
+      [...strip.querySelectorAll('.strip-zone-type')].every((t) => t.textContent === 'Elgato app'),
+    'Elgato strip mode keeps the 4 zone previews, labelled Elgato app, with no tabs or panel',
+  );
+}
+
+const zoneTabs = (strip: Element): HTMLButtonElement[] => [
+  ...strip.querySelectorAll<HTMLButtonElement>('[role="tablist"] [role="tab"]'),
+];
+const selectedTab = (strip: Element): number =>
+  zoneTabs(strip).findIndex((t) => t.getAttribute('aria-selected') === 'true');
+const zoneTypes = (strip: Element): string =>
+  [...strip.querySelectorAll('.strip-zone-type')].map((t) => t.textContent).join(',');
+
+async function pressZoneKey(strip: Element, key: string): Promise<void> {
+  const target = document.activeElement ?? zoneTabs(strip)[0]!;
+  await act(() => {
+    target.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true }));
+  });
+}
+
+async function checkZoneKeyboard(strip: Element): Promise<void> {
+  const tabs = (): Element[] => zoneTabs(strip);
+  const at = (i: number): boolean =>
+    selectedTab(strip) === i && tabs().indexOf(document.activeElement!) === i;
+  zoneTabs(strip)[1]!.focus();
+  await pressZoneKey(strip, 'ArrowRight');
+  check(at(2), 'ArrowRight selects and focuses the next zone');
+  await pressZoneKey(strip, 'End');
+  check(at(3), 'End selects the last zone');
+  await pressZoneKey(strip, 'Home');
+  check(at(0), 'Home selects the first zone');
+  await pressZoneKey(strip, 'ArrowLeft');
+  check(at(3), 'ArrowLeft from the first zone wraps to the last');
+  check(
+    zoneTabs(strip).every((t, i) => t.tabIndex === (i === 3 ? 0 : -1)),
+    'Only the selected tab is in the tab order',
+  );
+}
+
+async function checkStripZoneTabs(stub: Stub, strip: Element): Promise<void> {
+  const configs = {
+    '10': { widget: 'command' as const, param: 'date' },
+    '20': { widget: 'date' as const },
+    '21': {
+      widget: 'command' as const,
+      param: 'uptime',
+      textSize: 1 as const,
+      wrap: 'chars' as const,
+    },
+  };
+  check(
+    zoneTabs(strip).length === 4 && strip.querySelectorAll('[role="tabpanel"]').length === 1,
+    'Override mode shows 4 zone tabs and exactly one settings panel',
+  );
+  await act(() => patch({ extraKeys: configs }));
+  check(
+    zoneTypes(strip) === 'Date,Command,App controls,App controls',
+    'Zone indicators name each widget; unassigned zones show the app in repaint mode',
+  );
+  await act(() => patch({ touchStripMode: 'deckbridge-ignore' }));
+  check(zoneTypes(strip) === 'Date,Command,Blank,Blank', 'Unassigned zones read Blank in ignore');
+  await act(() => patch({ touchStripMode: 'deckbridge-repaint' }));
+
+  const panel = (): Element => strip.querySelector('[role="tabpanel"]')!;
+  const tabs = zoneTabs(strip);
+  check(
+    selectedTab(strip) === 0 &&
+      panel().getAttribute('aria-labelledby') === tabs[0]!.id &&
+      panel().querySelector('.strip-zone-title')?.textContent === 'Zone 1 zone',
+    'The first zone is selected by default and labels the settings panel',
+  );
+
+  const canvases = [...strip.querySelectorAll('.strip-zone-canvas')];
+  const callsBefore = stub.calls.length;
+  await act(() => tabs[1]!.click());
+  check(
+    selectedTab(strip) === 1 &&
+      panel().querySelector<HTMLInputElement>('.xkey-value input')?.value === 'uptime' &&
+      stub.calls.length === callsBefore,
+    'Clicking a zone selects it and shows its value, without posting anything',
+  );
+  const after = [...strip.querySelectorAll('.strip-zone-canvas')];
+  check(
+    after.length === 4 && after.every((c, i) => c === canvases[i]),
+    'Selecting a zone keeps every preview canvas mounted',
+  );
+
+  const shows = panel().querySelector<HTMLSelectElement>('select.xkey-select')!;
+  shows.value = 'clock';
+  await act(() => {
+    shows.dispatchEvent(new Event('change'));
+  });
+  check(
+    JSON.stringify(lastPost(stub, '/api/extra-key')) ===
+      JSON.stringify({ wireId: 21, widget: 'clock', textSize: 1, wrap: 'chars' }),
+    'The panel edits the selected zone and keeps its display prefs',
+  );
+
+  const navBefore = stub.calls.length;
+  await checkZoneKeyboard(strip);
+  check(
+    stub.calls.length === navBefore &&
+      !stub.calls.some((c) => c.url === '/api/extra-key/run') &&
+      stub.calls.filter((c) => c.url === '/api/extra-key/press').length ===
+        stub.calls.filter((c, i) => i < callsBefore && c.url === '/api/extra-key/press').length,
+    'Zone selection and keyboard navigation never post, run, or press',
+  );
+
+  await act(() => patch({ extraKeys: { ...configs, '23': { widget: 'clock' } } }));
+  check(
+    selectedTab(strip) === 3 && zoneTypes(strip).endsWith('Clock'),
+    'A live config update keeps the selected zone',
+  );
+
+  const status = getSnapshot().status;
+  await act(() =>
+    patch({ status: { ...status, docks: [AKP05E_DOCK, { ...AKP05E_DOCK, index: 1 }] } }),
+  );
+  await act(() => patch({ status: { ...getSnapshot().status, selectedDock: 1 } }));
+  check(selectedTab(strip) === 0, 'Switching docks resets the selection to the first zone');
+  await act(() => patch({ status, extraKeys: { '10': configs['10'] } }));
+}
+
 async function runSideKeysPanel(): Promise<void> {
   const stub = stubFetch((url) =>
     url === '/api/extra-key/preview'
@@ -1424,6 +1675,7 @@ async function runSideKeysPanel(): Promise<void> {
         section('Touch strip').querySelector('.xkeys-option') === null,
       'Elgato strip mode hides zone rows, the repaint interval, and says why',
     );
+    checkElgatoStripZones(section('Touch strip'));
 
     const modeSelect = root.querySelector<HTMLSelectElement>(
       'select[aria-label="Touch strip mode"]',
@@ -1454,10 +1706,10 @@ async function runSideKeysPanel(): Promise<void> {
       'Repaint interval posts milliseconds',
     );
     check(
-      rows('Touch strip', ':not(.xkey-knob-row)').length === 4 &&
-        rows('Touch strip', '.xkey-knob-row').length === 0,
-      'Override mode shows zone rows; connected knobs show no command grid',
+      rows('Touch strip', '.xkey-knob-row').length === 0,
+      'Connected knobs show no command grid',
     );
+    await checkStripZoneTabs(stub, section('Touch strip'));
     await act(() => patch({ encoders: { connectToApp: false } }));
     check(
       rows('Touch strip', '.xkey-knob-row').length === 4 &&

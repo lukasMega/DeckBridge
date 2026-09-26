@@ -1,7 +1,12 @@
 // WebUI wire types live in the `web-contract` leaf (web/contract.ts) so the
 // browser tier shares one declaration instead of mirroring ours. Re-exported
 // here so every existing `types.js` import keeps working.
-import type { KeyState, RealDeviceIdentity, TouchStripMode } from './web/contract.js';
+import type {
+  KeyState,
+  RealDeviceIdentity,
+  TouchStripMode,
+  WidgetDisplayInfo,
+} from './web/contract.js';
 
 export type {
   ClientApp,
@@ -14,6 +19,7 @@ export type {
   KeyState,
   RealDeviceIdentity,
   TouchStripMode,
+  WidgetDisplayInfo,
 } from './web/contract.js';
 
 export const ELGATO_VID = 0x0fd9;
@@ -363,7 +369,7 @@ export interface DockStatus {
    *  the WebUI offers a press command only on these. */
   pressableExtraKeys?: readonly number[];
   /** Device-native widget displays outside CORA's key grid, such as AKP05E's touch strip. */
-  widgetDisplays?: readonly { wireId: number; label: string }[];
+  widgetDisplays?: readonly WidgetDisplayInfo[];
   /** Physical rotary encoders (AKP05/AKP05E: 4) — the WebUI's knob-override rows. */
   encoderCount?: number;
   /** CORA profile this dock re-pairs as (`cora.advertiseAs`, e.g. AKP05E → 'stream-deck-plus').

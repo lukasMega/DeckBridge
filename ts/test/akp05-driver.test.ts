@@ -5,6 +5,7 @@ import { describePacket } from '../src/devices/ajazz/akp05-protocol.js';
 import { transformImageForDevice } from '../src/translator.js';
 import type { DialEvent, KeyEvent, TouchInputEvent } from '../src/types.js';
 import { test, summaryExit } from './helpers/harness.js';
+import { SOLID_RED_16X16_JPEG } from './helpers/fixtures.js';
 
 // Input classification only — no FFI, no open(). classifyInput is reached through
 // the protected parseInput, which is pure (parseAckReport + emit).
@@ -223,6 +224,57 @@ test('clearKey sends a decodable black JPEG sized to the slot (key 112, strip sl
     const decoded = transformImageForDevice(jpeg, { ...AJAZZ_AKP05E_MODEL.image, sharpen: 0 });
     assert.ok(decoded.length > 0, `wire ${wire} decodes`);
   }
+});
+
+type StripWrite = [wireId: number, jpeg: Uint8Array, full: boolean];
+
+function captureStripWrites(d: Akp05Driver): StripWrite[] {
+  const writes: StripWrite[] = [];
+  d.on('stripWrite', (wireId: number, jpeg: Uint8Array, full: boolean) =>
+    writes.push([wireId, jpeg, full]),
+  );
+  return writes;
+}
+
+const STRIP_SPEC = AJAZZ_AKP05E_MODEL.touchStripDisplay!.image;
+const SLOT_SPEC = AJAZZ_AKP05E_MODEL.widgetDisplays![0]!.image;
+
+test('sendImage emits stripWrite for strip wires only; full = full-strip width', () => {
+  const d = new WriteCaptureDriver();
+  const writes = captureStripWrites(d);
+  const slot = transformImageForDevice(SOLID_RED_16X16_JPEG, { ...SLOT_SPEC, sharpen: 0 });
+  const full = transformImageForDevice(SOLID_RED_16X16_JPEG, { ...STRIP_SPEC, sharpen: 0 });
+
+  d.sendImage(2, slot);
+  assert.deepEqual(writes, [[2, slot, false]], 'slot write on wire 2');
+  writes.length = 0;
+  d.sendImage(1, full);
+  assert.deepEqual(writes, [[1, full, true]], '800-wide on wire 1 is a full-strip write');
+  writes.length = 0;
+  d.sendImage(1, slot);
+  assert.deepEqual(writes, [[1, slot, false]], '176-wide on wire 1 is slot 1');
+  writes.length = 0;
+  d.sendImage(11, slot);
+  assert.deepEqual(writes, [], 'key wire emits nothing');
+  d.clearKey(3);
+  assert.equal(writes.length, 1, 'clearKey on a strip wire emits once');
+  assert.equal(writes[0]![0], 3);
+  assert.equal(writes[0]![2], false);
+});
+
+test('a failed write emits no stripWrite', () => {
+  class ThrowingDriver extends WriteCaptureDriver {
+    protected override _writeRaw(): number {
+      throw new Error('hid gone');
+    }
+  }
+  const d = new ThrowingDriver();
+  const writes = captureStripWrites(d);
+  const errors: Error[] = [];
+  d.on('error', (e: Error) => errors.push(e));
+  d.sendImage(2, new Uint8Array(100));
+  assert.deepEqual(writes, []);
+  assert.equal(errors.length, 1, 'the failure surfaces as error instead');
 });
 
 summaryExit();

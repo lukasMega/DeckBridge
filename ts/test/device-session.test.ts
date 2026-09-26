@@ -454,6 +454,43 @@ await test('a pressable extra key reaches onExtraKey by its image wire id, not o
   assert.deepEqual(keys, [0]);
 });
 
+await test('status() carries each strip zone geometry for the WebUI mirror', () => {
+  const zones = makeSession(AJAZZ_AKP05E_MODEL).session.status().widgetDisplays;
+  assert.equal(zones?.length, 4);
+  assert.deepEqual(zones?.[1], {
+    wireId: 2,
+    label: 'Left center',
+    width: 176,
+    height: 112,
+    stripX: 204,
+    rotate: 180,
+    flipH: false,
+    flipV: false,
+  });
+  assert.equal(makeSession(DEFAULT_MODEL).session.status().widgetDisplays, undefined);
+});
+
+await test('a driver stripWrite reaches the session onStripWrite', async () => {
+  const model = AJAZZ_AKP05E_MODEL;
+  const driver = new FakeDriver(model);
+  const writes: Array<[number, Uint8Array, boolean]> = [];
+  const session = new DeviceSession({
+    identity: sessionIdentity(1, testIdentity(model)),
+    servers: {
+      server: new FakeServer(),
+      childServer: new FakeChildServer(),
+    } as unknown as SessionServers,
+    driver: driver as unknown as WorkerHidDriver,
+    model,
+    onDisconnect: () => undefined,
+    onStripWrite: (wireId, jpeg, full) => writes.push([wireId, jpeg, full]),
+  });
+  await session.start();
+  const bytes = new Uint8Array([0xff, 0xd8]);
+  driver.emit('stripWrite', 2, bytes, false);
+  assert.deepEqual(writes, [[2, bytes, false]]);
+});
+
 await test('strip zones map left→right onto taps (800 px Plus strip) and knobs', () => {
   const plus = applyModelOverrides(AJAZZ_AKP05E_MODEL, {
     cora: { advertiseAs: 'stream-deck-plus' },

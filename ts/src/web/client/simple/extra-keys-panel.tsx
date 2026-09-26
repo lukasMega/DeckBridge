@@ -4,30 +4,17 @@
 // with a switch, what a press does (refresh the widget / run a shell command / both).
 import { useEffect, useState } from 'preact/hooks';
 import { useStore } from '../store.js';
-import type {
-  DockUi,
-  ExtraKeyCfg,
-  PluginStatus,
-  PluginsInfo,
-  TouchStripMode,
-} from '../ui-types.js';
+import type { DockUi, PluginsInfo, WidgetDisplayInfo } from '../ui-types.js';
 import {
   EncodersSection,
   RepaintIntervalField,
   TouchStripModeSelect,
   touchStripModeDescription,
 } from './touch-strip-panel.js';
-import { ConfigSection, GridHeader } from './config-section.js';
+import { ConfigSection } from './config-section.js';
 import { SideKeysHelp } from './side-keys-help.js';
-import { WidgetSelect, WidgetValue, type PluginFiles } from './extra-key-fields.js';
 import { SideKeyCard } from './side-key-card.js';
-import { ClippedBadge, TextSizeControl } from './text-size-control.js';
-
-// Under an override mode 'none' decides what an unassigned strip zone shows.
-const NONE_LABEL: Partial<Record<TouchStripMode, string>> = {
-  'deckbridge-ignore': 'Blank',
-  'deckbridge-repaint': 'App controls',
-};
+import { StripZones } from './strip-zones.js';
 
 const POSITION_LABELS: Readonly<Record<number, readonly string[]>> = {
   2: ['Top', 'Bottom'],
@@ -42,6 +29,8 @@ interface WidgetSection {
   /** Absent on the touch strip — its subtitle describes the selected mode. */
   subtitle?: string;
   touchStrip: boolean;
+  /** Touch-strip zones, sorted by wireId. */
+  displays: readonly WidgetDisplayInfo[];
   encoderCount: number;
   pressable: ReadonlySet<number>;
 }
@@ -62,61 +51,25 @@ function widgetSections(dock: DockUi | undefined): WidgetSection[] {
           ? 'Right column outside the Elgato grid — show a value; a press refreshes it or runs a command'
           : 'Display-only right column — show a value on each key',
       touchStrip: false,
+      displays: [],
       encoderCount: 0,
       pressable,
     });
   }
   const displays = dock?.widgetDisplays;
   if (displays) {
+    const sorted = displays.toSorted((a, b) => a.wireId - b.wireId);
     sections.push({
-      wireIds: displays.map((display) => display.wireId).toSorted((a, b) => a - b),
+      wireIds: sorted.map((display) => display.wireId),
       labels: new Map(displays.map((display) => [display.wireId, display.label])),
       title: 'Touch strip',
       touchStrip: true,
+      displays: sorted,
       encoderCount: dock.encoderCount ?? 0,
       pressable: new Set(),
     });
   }
   return sections;
-}
-
-function ExtraKeyRow({
-  wireId,
-  label,
-  cfg,
-  plugins,
-  pluginStatus,
-  noneLabel,
-}: Readonly<{
-  wireId: number;
-  label: string;
-  cfg?: ExtraKeyCfg;
-  plugins: PluginFiles;
-  pluginStatus?: PluginStatus;
-  noneLabel?: string;
-}>): preact.JSX.Element {
-  return (
-    <div class="xkey-row">
-      <span class="xkey-pos">
-        {label}
-        <ClippedBadge wireId={wireId} />
-      </span>
-      <WidgetSelect wireId={wireId} label={label} cfg={cfg} noneLabel={noneLabel} />
-      <WidgetValue
-        wireId={wireId}
-        label={label}
-        cfg={cfg}
-        plugins={plugins}
-        pluginStatus={pluginStatus}
-      />
-      {(cfg?.widget ?? 'none') !== 'none' && (
-        <>
-          <span class="xkey-press-label">Size</span>
-          <TextSizeControl wireId={wireId} label={label} cfg={cfg} />
-        </>
-      )}
-    </div>
-  );
 }
 
 // Renders nothing unless selected dock has extra keys in real mode.
@@ -156,8 +109,8 @@ export function ExtraKeysPanel(): preact.JSX.Element | null {
   return (
     <>
       {sections.map((section) => {
-        // Strip zones (and the knobs) are only DeckBridge's in an override mode; side keys always are.
-        const showRows = !section.touchStrip || stripMode !== 'elgato';
+        // Knob commands are only DeckBridge's in an override mode.
+        const knobOverride = stripMode !== 'elgato';
         return (
           <ConfigSection
             key={section.title}
@@ -173,40 +126,29 @@ export function ExtraKeysPanel(): preact.JSX.Element | null {
             }
           >
             {section.touchStrip && stripMode === 'deckbridge-repaint' && <RepaintIntervalField />}
-            {showRows && section.touchStrip && (
-              <GridHeader
-                columns={[{ label: 'Zone' }, { label: 'Shows' }, { label: 'Value', wide: true }]}
+            {section.touchStrip && (
+              <StripZones
+                key={dock?.index ?? 0}
+                displays={section.displays}
+                mode={stripMode}
+                configs={configs}
+                plugins={plugins}
               />
             )}
-            {showRows &&
-              section.wireIds.map((wireId) => {
-                const label = section.labels.get(wireId) ?? `Key ${wireId}`;
-                const cfg = configs[String(wireId)];
-                const pluginStatus = plugins.status[String(wireId)];
-                return section.touchStrip ? (
-                  <ExtraKeyRow
-                    key={wireId}
-                    wireId={wireId}
-                    label={label}
-                    cfg={cfg}
-                    plugins={plugins}
-                    pluginStatus={pluginStatus}
-                    noneLabel={NONE_LABEL[stripMode]}
-                  />
-                ) : (
-                  <SideKeyCard
-                    key={wireId}
-                    wireId={wireId}
-                    label={label}
-                    cfg={cfg}
-                    plugins={plugins}
-                    pluginStatus={pluginStatus}
-                    pressable={section.pressable.has(wireId)}
-                  />
-                );
-              })}
+            {!section.touchStrip &&
+              section.wireIds.map((wireId) => (
+                <SideKeyCard
+                  key={wireId}
+                  wireId={wireId}
+                  label={section.labels.get(wireId) ?? `Key ${wireId}`}
+                  cfg={configs[String(wireId)]}
+                  plugins={plugins}
+                  pluginStatus={plugins.status[String(wireId)]}
+                  pressable={section.pressable.has(wireId)}
+                />
+              ))}
             {section.encoderCount > 0 && (
-              <EncodersSection count={section.encoderCount} overrideEnabled={showRows} />
+              <EncodersSection count={section.encoderCount} overrideEnabled={knobOverride} />
             )}
           </ConfigSection>
         );

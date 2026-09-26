@@ -8,7 +8,14 @@ import { test, summary } from './helpers/harness.js';
 
 type Sent = {
   event: string;
-  data: { wireId?: number; data?: string; clipped?: boolean; zone?: boolean };
+  data: {
+    wireId?: number;
+    data?: string;
+    clipped?: boolean;
+    zone?: boolean;
+    full?: true;
+    clear?: true;
+  };
 };
 
 function channel(selected = 0) {
@@ -20,7 +27,8 @@ function channel(selected = 0) {
   } as unknown as Broadcaster;
   let dock = selected;
   const ch = new ImageChannel(bus, () => dock);
-  return { ch, sent, select: (i: number) => (dock = i) };
+  const setClients = (n: number) => ((bus as unknown as { size: number }).size = n);
+  return { ch, sent, select: (i: number) => (dock = i), setClients };
 }
 
 const BMP = new Uint8Array([0x42, 0x4d]);
@@ -96,6 +104,93 @@ test('selectedWidgetPaint reads the selected dock only', () => {
   assert.equal(ch.selectedWidgetPaint(15), undefined);
   select(1);
   assert.equal(ch.selectedWidgetPaint(15), PAINT);
+});
+
+console.log('\nImageChannel strip-write mirror');
+
+const SLOT_A = new Uint8Array([1, 2, 3]);
+const SLOT_B = new Uint8Array([4, 5, 6]);
+const FULL = new Uint8Array([7, 8, 9]);
+const b64 = (bytes: Uint8Array) => Buffer.from(bytes).toString('base64');
+const stripEvents = (sent: Sent[]) =>
+  sent.filter((s) => s.event === 'stripWrite').map((s) => s.data);
+function snapshot(ch: ImageChannel, sent: Sent[]): Sent['data'][] {
+  sent.length = 0;
+  ch.sendTouchSnapshot({} as ServerWebSocket);
+  return stripEvents(sent);
+}
+
+test('selected dock slot write broadcasts base64', () => {
+  const { ch, sent } = channel();
+  ch.notifyDockStripWrite(0, 2, SLOT_A, false);
+  ch.notifyDockStripWrite(0, 1, FULL, true);
+  assert.deepEqual(stripEvents(sent), [
+    { wireId: 2, data: b64(SLOT_A) },
+    { wireId: 1, data: b64(FULL), full: true },
+  ]);
+});
+
+test('other dock is cached silently, replayed on select after a clear', () => {
+  const { ch, sent, select } = channel();
+  ch.notifyDockStripWrite(1, 3, SLOT_A, false);
+  assert.equal(stripEvents(sent).length, 0);
+  select(1);
+  ch.replay(1);
+  assert.deepEqual(stripEvents(sent), [{ clear: true }, { wireId: 3, data: b64(SLOT_A) }]);
+});
+
+test('a full write drops earlier slots; later slots stack on it', () => {
+  const { ch, sent } = channel();
+  ch.notifyDockStripWrite(0, 2, SLOT_A, false);
+  ch.notifyDockStripWrite(0, 3, SLOT_A, false);
+  ch.notifyDockStripWrite(0, 1, FULL, true);
+  ch.notifyDockStripWrite(0, 4, SLOT_B, false);
+  assert.deepEqual(snapshot(ch, sent), [
+    { clear: true },
+    { wireId: 1, data: b64(FULL), full: true },
+    { wireId: 4, data: b64(SLOT_B) },
+  ]);
+});
+
+test('two writes to one slot keep the last', () => {
+  const { ch, sent } = channel();
+  ch.notifyDockStripWrite(0, 2, SLOT_A, false);
+  ch.notifyDockStripWrite(0, 2, SLOT_B, false);
+  assert.deepEqual(snapshot(ch, sent), [{ clear: true }, { wireId: 2, data: b64(SLOT_B) }]);
+});
+
+test('the mirror copies the bytes (a reused driver buffer cannot alter it)', () => {
+  const { ch, sent } = channel();
+  const bytes = new Uint8Array([1, 2, 3]);
+  ch.notifyDockStripWrite(0, 2, bytes, false);
+  bytes.fill(0);
+  assert.deepEqual(snapshot(ch, sent), [{ clear: true }, { wireId: 2, data: b64(SLOT_A) }]);
+});
+
+test('reset of the selected dock broadcasts clear and empties the snapshot', () => {
+  const { ch, sent } = channel();
+  ch.notifyDockStripWrite(0, 2, SLOT_A, false);
+  sent.length = 0;
+  ch.reset(0);
+  assert.deepEqual(stripEvents(sent), [{ clear: true }]);
+  assert.deepEqual(snapshot(ch, sent), [{ clear: true }]);
+});
+
+test('pruneDeadDocks drops a dead dock mirror', () => {
+  const { ch, sent, select } = channel();
+  ch.notifyDockStripWrite(1, 2, SLOT_A, false);
+  ch.pruneDeadDocks(new Set([0]));
+  select(1);
+  assert.deepEqual(snapshot(ch, sent), [{ clear: true }]);
+});
+
+test('no WS clients: nothing broadcast, still cached', () => {
+  const { ch, sent, setClients } = channel();
+  setClients(0);
+  ch.notifyDockStripWrite(0, 2, SLOT_A, false);
+  ch.replay(0);
+  assert.equal(stripEvents(sent).length, 0);
+  assert.deepEqual(snapshot(ch, sent), [{ clear: true }, { wireId: 2, data: b64(SLOT_A) }]);
 });
 
 console.log('\nwidgetPreviews');

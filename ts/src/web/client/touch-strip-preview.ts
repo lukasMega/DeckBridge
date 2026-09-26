@@ -20,9 +20,10 @@ function frameKey({ region }: TouchFrameMsg): string {
   return region ? `${region.x},${region.y},${region.w},${region.h}` : 'full';
 }
 
-async function decode(msg: TouchFrameMsg): Promise<HTMLImageElement | null> {
+/** Decode a base64 JPEG; null when the browser rejects it. */
+export async function decodeJpeg(data: string): Promise<HTMLImageElement | null> {
   const img = new Image();
-  img.src = `data:image/jpeg;base64,${msg.data}`;
+  img.src = `data:image/jpeg;base64,${data}`;
   try {
     await img.decode();
     return img;
@@ -37,7 +38,7 @@ async function paintFrames(
   gen: number,
 ): Promise<void> {
   for (const msg of msgs) {
-    const img = await decode(msg);
+    const img = await decodeJpeg(msg.data);
     if (!img || gen !== generation) continue;
     for (const canvas of list) {
       canvas.getContext('2d')?.drawImage(img, msg.region?.x ?? 0, msg.region?.y ?? 0);

@@ -19,9 +19,12 @@ right column become side keys too — and these have switches, so each can also
 
 Open the web UI (`http://localhost:3000`), select the dock, and use the **Side keys** or
 **Touch strip** panel. It appears only for a connected supported dock (not mock mode). Each
-display has a row — **Top / Middle / Bottom** on the 293S, **Top / Bottom** for the AKP05E
-right column, or four left-to-right zones on the AKP05E strip — with a widget dropdown and,
-for some, a parameter field or gear (⚙) button.
+side key has a row — **Top / Middle / Bottom** on the 293S, **Top / Bottom** for the AKP05E
+right column — with a widget dropdown and, for some, a parameter field or gear (⚙) button.
+
+The AKP05E strip shows four live zone previews in one row, left to right — exactly what each
+zone on the device shows now — each labelled with what it shows. Click a preview (or move
+between them with the arrow keys) to edit that zone in the settings panel below.
 
 Pick a widget and fill its parameter; it takes effect immediately, saved per key and
 restored on reconnect.

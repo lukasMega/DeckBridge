@@ -72,6 +72,8 @@ export type WorkerToMain =
   | { type: 'error'; message: string }
   // One image finished writing to the device — drives the WebUI imagesSent stat.
   | { type: 'imageSent'; keyIndex: number }
+  // A touch-strip upload reached the device — the WebUI strip preview mirrors it.
+  | { type: 'stripWrite'; wireId: number; bytes: Uint8Array; full: boolean }
   // The driver re-initialized the device (sleep/wake CLE ALL) — the main
   // thread repaints what it owns (extra-key icons).
   | { type: 'reinit' }

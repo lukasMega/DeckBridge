@@ -84,6 +84,9 @@ async function handleOpen(
   d.on('error', (err: Error) => post({ type: 'error', message: err.message }));
   d.on('disconnect', () => post({ type: 'disconnect' }));
   d.on('reinit', () => post({ type: 'reinit' }));
+  d.on('stripWrite', (wireId: number, bytes: Uint8Array, full: boolean) =>
+    post({ type: 'stripWrite', wireId, bytes, full }),
+  );
 
   try {
     await d.open(hidPath);

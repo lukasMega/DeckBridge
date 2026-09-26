@@ -4,8 +4,7 @@ import { cachedDiscoverySerial, installDiscoverySnapshot } from './ffi/hid-disco
 import { WorkerHidDriver, closeDriver } from './hid-worker-host.js';
 import { MockDriver } from './devices/mock.js';
 import { MAX_MULTI_DECK_SESSIONS } from './types.js';
-import type { KeyEvent, DockStatus, DialEvent } from './types.js';
-import type { TouchStripMode } from './types.js';
+import type { KeyEvent, DockStatus, DialEvent, TouchStripMode } from './types.js';
 import type { DeviceDriver, DeviceModel, DeviceModelOverride } from './devices/driver.js';
 import { applyModelOverrides, overrideSummary } from './devices/model-overrides.js';
 import type { OverrideChangeKind } from './devices/model-overrides.js';
@@ -27,8 +26,7 @@ import {
   type DriverMode,
 } from './driver-manager-discovery.js';
 
-export { getInitialDriverMode };
-export type { DriverManagerDeps, DriverMode };
+export { getInitialDriverMode, type DriverManagerDeps, type DriverMode };
 
 export class DriverManager {
   private readonly deps: DriverManagerDeps;
@@ -110,6 +108,7 @@ export class DriverManager {
       onAction: (index, message) => deps.webui.notifyDeviceAction(index, message),
       onTouchImage: (...args) => deps.webui.imageChannel.notifyDockTouchImage(...args),
       onWidgetPaint: (...args) => deps.webui.imageChannel.notifyDockWidgetPaint(...args),
+      onStripWrite: (...args) => deps.webui.imageChannel.notifyDockStripWrite(...args),
       dockFramesSnapshot: (dockIndex) => deps.webui.dockFramesSnapshot(dockIndex),
       isBrightnessOverride: (deviceKey) => deps.webui.isBrightnessOverride(deviceKey),
       extraKeyConfigFor: (deviceKey, wireId) => deps.webui.extraKeyConfigFor(deviceKey, wireId),
@@ -250,6 +249,7 @@ export class DriverManager {
       },
       onTouch: (e) => this.primary.handleTouch(e) || this.deps.childServer.sendTouch(e),
       onReinit: () => this.primary.repaintWidgets(),
+      onStripWrite: (...args) => this.deps.webui.imageChannel.notifyDockStripWrite(0, ...args),
     });
     driver.on('disconnect', () => {
       log('info', model.id, 'disconnected');

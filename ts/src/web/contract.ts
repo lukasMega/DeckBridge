@@ -42,6 +42,25 @@ export interface ExtraKeyImageMsg {
   zone?: boolean;
 }
 
+/** WS `stripWrite`: one touch-strip upload as it reached the device (base64 JPEG);
+ *  `full` = the whole strip, `clear` = drop the dock's mirror. */
+export type StripWriteMsg = { clear: true } | { wireId: number; data: string; full?: true };
+
+/** One touch-strip widget display, as the WebUI needs it to place device writes. */
+export interface WidgetDisplayInfo {
+  wireId: number;
+  label: string;
+  /** Device image size of this display (AKP05E slot: 176×112). */
+  width: number;
+  height: number;
+  /** Left edge on the full strip, in device strip pixels; absent = no full-strip surface. */
+  stripX?: number;
+  /** Device orientation applied to every strip upload; the preview undoes it. */
+  rotate: 0 | 90 | 180 | 270;
+  flipH: boolean;
+  flipV: boolean;
+}
+
 /** One size option rendered by POST /api/extra-key/preview. */
 export interface ExtraKeyPreview {
   textSize: ExtraKeyTextSize;
