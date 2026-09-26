@@ -161,7 +161,7 @@ await test('a full window is one wire-1 upload, 800×112, within the byte cap', 
   );
   const jpeg = driver.calls[0]!.bytes;
   assert.deepEqual(jpegSize(jpeg), { width: 800, height: 112 });
-  assert.ok(jpeg.length <= 10_240, `${jpeg.length} B fits the 10 240 B firmware cap`);
+  assert.ok(jpeg.length <= 10_100, `${jpeg.length} B fits the 10 100 B firmware cap`);
 });
 
 await test('a region covering the whole window is a full-strip upload too', () => {
@@ -225,7 +225,7 @@ await test("'crop' shows the slot window's own pixels; 'scale' shows the whole z
   };
   assert.equal(redIn('crop', 190), 0, 'x 190–205 is zone 1 and gap only: slot 1 ends at 176');
   assert.ok(redIn('scale', 184) > 0, 'scale keeps zone 1 x 184–199');
-  assert.ok(redIn('crop', 208) > 0, 'crop shows slot 2 x 208+');
+  assert.ok(redIn('crop', 203) > 0, 'crop shows slot 2 x 203+');
 });
 
 await test('restoring every zone is one full-strip upload; fewer go per slot', () => {

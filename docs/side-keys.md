@@ -53,7 +53,9 @@ AKP05E right column) are not affected: they are DeckBridge widgets in every mode
 ### Strip geometry and uploads
 
 The AKP05E strip is one 800×112 panel (measured on firmware `V3.AKP05E.02.007`). It
-has four **slot windows**, each 176×112, at x = 0 / 208 / 416 / 624, with 32 px gaps.
+has four **slot windows**, each 176×112, at x = 0 / 204 / 406 / 610, with 26–28 px gaps.
+The positions were matched by eye on hardware. The upstream 208 px pitch drew
+partial updates shifted left. Partial updates never reach x 786–800.
 Each window sits above one encoder. An upload to a slot draws over the strip in place.
 The rest of the strip is not cleared.
 
@@ -63,7 +65,7 @@ The rest of the strip is not cleared.
   touches. The same applies when DeckBridge widgets own a zone (_ignore_ mode).
 - **Height.** The app's strip is 800×100. It is padded 1:1 to 112 rows with its own
   edge colour, so text stays sharp.
-- **Upload cap.** The firmware decodes only the first **10 240 B** (10 packets) of an
+- **Upload cap.** The firmware decodes only the first **~10 100 B** of an
   upload and drops the rest. The part it drops shows as noise or old content at the
   top. DeckBridge lowers the JPEG quality until each strip image fits.
 
