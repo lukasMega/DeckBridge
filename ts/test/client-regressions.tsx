@@ -21,6 +21,7 @@ import { ExtraKeysPanel } from '../src/web/client/simple/extra-keys-panel.js';
 import { ChipRadioGroup } from '../src/web/client/components/ChipRadioGroup.js';
 import { updateBadgeVersion } from '../src/web/client/ui-helpers.js';
 import { KeyGridPreview } from '../src/web/client/components/KeyGridPreview.js';
+import { applyImage, clearImageStore } from '../src/web/client/key-preview.js';
 import { applyTouchImage, resetTouchStrip } from '../src/web/client/touch-strip-preview.js';
 import type { DeviceOverridesView, DockUi, UpdateInfo } from '../src/web/client/ui-types.js';
 
@@ -499,6 +500,16 @@ async function checkEmulationProfileSwitch(): Promise<void> {
   }
 }
 
+async function setCropRect(values: readonly string[]): Promise<void> {
+  const inputs = root.querySelectorAll<HTMLInputElement>('.tuning-crop-rect input');
+  for (const [i, value] of values.entries()) {
+    await act(() => {
+      inputs[i]!.value = value;
+      inputs[i]!.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+  }
+}
+
 async function checkImageFitApplicability(): Promise<void> {
   const view: DeviceOverridesView = {
     ...OVERRIDES_VIEW,
@@ -526,8 +537,97 @@ async function checkImageFitApplicability(): Promise<void> {
       window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
     });
     check(root.querySelector('#image-fit-help') === null, 'Escape closes image fit help');
+    await setCropRect(['4', '4', '112', '112']);
+    check(chip('image-fit', 'crop')?.disabled === true, 'Crop region 112×112: crop has no effect');
+    await click('#tuning-apply');
+    await settle();
+    const posted = stub.calls.find((c) => c.method === 'POST')?.body as
+      | { overrides?: { image?: { cropRect?: unknown } } }
+      | undefined;
+    check(
+      JSON.stringify(posted?.overrides?.image?.cropRect) ===
+        JSON.stringify({ x: 4, y: 4, width: 112, height: 112 }),
+      'Apply posts the crop region',
+    );
+    await setCropRect(['', '', '', '']);
+    check(chip('image-fit', 'crop')?.disabled === false, 'Blank crop region: whole image again');
   } finally {
     stub.restore();
+    await act(() => render(null, root));
+    await act(() => patch({ status: baseStatus }));
+  }
+}
+
+/** A 120×120 JPEG (base64), as the Elgato app would send for a Stream Deck + key. */
+function keyFrameBase64(): string {
+  const canvas = document.createElement('canvas');
+  canvas.width = 120;
+  canvas.height = 120;
+  const ctx = canvas.getContext('2d')!;
+  ctx.fillStyle = '#c33';
+  ctx.fillRect(0, 0, 120, 120);
+  return canvas.toDataURL('image/jpeg').split(',')[1]!;
+}
+
+async function openCropEditor(): Promise<void> {
+  await click('#crop-open');
+  // The frame loads through an <img>; give it a macrotask.
+  await act(() => new Promise<void>((resolve) => setTimeout(resolve, 50)));
+}
+
+async function checkCropEditor(): Promise<void> {
+  const view: DeviceOverridesView = {
+    ...OVERRIDES_VIEW,
+    overrides: { image: { quality: 0.7 } },
+    sourceSize: { width: 120, height: 120 },
+    tunable: {
+      ...OVERRIDES_VIEW.tunable,
+      image: { ...OVERRIDES_VIEW.tunable.image, crop: 6, resizeMode: 'crop' },
+    },
+  };
+  const stub = stubFetch((_url, init) => ({ payload: init?.method === 'POST' ? {} : view }));
+  const posts = (): Array<{ overrides?: { image?: Record<string, unknown> } }> =>
+    stub.calls.filter((c) => c.method === 'POST').map((c) => c.body as never);
+  try {
+    await act(() => patch({ status: { ...baseStatus, keyCount: 15 } }));
+    applyImage(2, { v: 1, data: keyFrameBase64(), format: 'jpeg' });
+    await act(() => render(<DeviceTuningPanel />, root));
+    await settle();
+    await openCropEditor();
+    check(root.querySelector('#image-crop-editor') !== null, 'Crop… opens the crop editor');
+    check(
+      root.querySelectorAll('.crop-key').length === 1,
+      'Crop editor lists only keys that have a frame',
+    );
+    const rect = root.querySelector<HTMLElement>('#crop-rect')!;
+    await act(() => {
+      rect.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
+    });
+    check(rect.style.left === `${5 * 4}px`, 'Arrow key moves the crop region by 1 source px');
+    await click('#crop-save');
+    await settle();
+    const saved = posts()[0]?.overrides?.image;
+    check(
+      JSON.stringify(saved?.cropRect) === JSON.stringify({ x: 5, y: 4, width: 112, height: 112 }),
+      'Save posts the crop region (key size 1:1 by default, moved 1 px)',
+    );
+    check(saved?.crop === 0, 'A crop region replaces the symmetric crop');
+    check(root.querySelector('#image-crop-editor') === null, 'Save closes the editor');
+
+    await openCropEditor();
+    await click('#crop-try');
+    await settle();
+    await click('#crop-cancel');
+    await settle();
+    const [, tried, restored] = posts();
+    check(tried?.overrides?.image?.cropRect !== undefined, 'Try on device posts the draft');
+    check(
+      JSON.stringify(restored?.overrides) === JSON.stringify(view.overrides),
+      'Cancel after Try restores the original override',
+    );
+  } finally {
+    stub.restore();
+    clearImageStore();
     await act(() => render(null, root));
     await act(() => patch({ status: baseStatus }));
   }
@@ -565,6 +665,7 @@ async function runSettingsPanels(): Promise<void> {
   await checkBatchImageTransferTuning();
   await checkEmulationProfileSwitch();
   await checkImageFitApplicability();
+  await checkCropEditor();
 
   // A validation failure surfaces the server's error list.
   {

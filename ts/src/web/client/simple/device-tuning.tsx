@@ -12,9 +12,10 @@ import { copyLabel, useCopyText } from '../use-copy-text.js';
 import { postJson } from '../ui-api.js';
 import { Feedback, useAsyncAction } from '../ui-async.js';
 import { KeymapLearn } from './keymap-learn.js';
+import { ImageCropEditor } from './image-crop-editor.js';
 import { ImageFitHelp, fitApplicability, padFillApplies } from './image-fit-help.js';
-import type { FitApplicability } from './image-fit-help.js';
-import type { DeviceImageOverride, DeviceOverridesView } from '../ui-types.js';
+import type { FitApplicability, Size } from './image-fit-help.js';
+import type { DeviceCropRect, DeviceImageOverride, DeviceOverridesView } from '../ui-types.js';
 
 const ROTATIONS = [0, 90, 180, 270] as const;
 const RESIZE_FILTERS = ['triangle', 'nearest', 'lanczos3'] as const;
@@ -93,6 +94,33 @@ const NUMBER_FIELDS: ReadonlyArray<{
   { key: 'crop', label: 'Crop (px per side)', min: 0, advanced: true },
 ];
 
+const CROP_RECT_FIELDS: ReadonlyArray<{ key: keyof DeviceCropRect; label: string; min: number }> = [
+  { key: 'x', label: 'X', min: 0 },
+  { key: 'y', label: 'Y', min: 0 },
+  { key: 'width', label: 'Width', min: 8 },
+  { key: 'height', label: 'Height', min: 8 },
+];
+
+/** All four blank = no region crop, so the key drops out of the posted override. */
+function withCropRectField(
+  image: DeviceImageOverride,
+  key: keyof DeviceCropRect,
+  value: number | undefined,
+): DeviceImageOverride {
+  const { cropRect, ...rest } = image;
+  const next: Partial<DeviceCropRect> = { ...cropRect };
+  if (value === undefined) delete next[key];
+  else next[key] = value;
+  return Object.keys(next).length > 0 ? { ...rest, cropRect: next } : rest;
+}
+
+function tuningKeySize(view: DeviceOverridesView, image: DeviceImageOverride): Size {
+  return {
+    width: image.width ?? view.effective.image.width ?? 0,
+    height: image.height ?? view.effective.image.height ?? 0,
+  };
+}
+
 function tuningFit(
   view: DeviceOverridesView,
   image: DeviceImageOverride,
@@ -100,7 +128,7 @@ function tuningFit(
   const width = image.width ?? view.effective.image.width;
   const height = image.height ?? view.effective.image.height;
   if (!view.sourceSize || !width || !height) return undefined;
-  return fitApplicability(view.sourceSize, { width, height }, image.crop);
+  return fitApplicability(view.sourceSize, { width, height }, image);
 }
 
 function selectedModel(state: StoreState): string | undefined {
@@ -277,6 +305,12 @@ export function DeviceTuningPanel(): preact.JSX.Element {
             <span class="tuning-label-row">
               Image fit
               {fit && <ImageFitHelp fit={fit} />}
+              <ImageCropEditor
+                view={activeView}
+                image={image}
+                keySize={tuningKeySize(activeView, image)}
+                onSaved={() => void load()}
+              />
             </span>
             <ChipRadioGroup
               name="image-fit"
@@ -382,6 +416,21 @@ export function DeviceTuningPanel(): preact.JSX.Element {
               onChange={(v) => patch({ [f.key]: v })}
             />
           ))}
+          <div class="tuning-field" role="group" aria-labelledby="tuning-crop-rect-label">
+            <span id="tuning-crop-rect-label">Crop region (source px, blank = whole image)</span>
+            <div class="tuning-dimensions tuning-crop-rect">
+              {CROP_RECT_FIELDS.map((f) => (
+                <NumberField
+                  key={f.key}
+                  label={f.label}
+                  value={image.cropRect?.[f.key]}
+                  min={f.min}
+                  max={1024}
+                  onChange={(v) => setImage(withCropRectField(image, f.key, v))}
+                />
+              ))}
+            </div>
+          </div>
           <SelectField
             label="Resize filter"
             value={image.resizeFilter ?? 'triangle'}

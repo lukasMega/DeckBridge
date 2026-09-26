@@ -51,8 +51,8 @@ pub(crate) fn transform(
 ) -> Result<Vec<u8>, String> {
     let mut img = decode_limited(input)?;
 
-    // Region crop (Stream Deck + touch strip: split 800×100 into N segments) takes
-    // precedence over the symmetric crop. Region bounds are clamped to the source.
+    // Region crop (DeviceImageSpec.cropRect) takes precedence over the symmetric crop.
+    // Region bounds are clamped to the source.
     if crop_w > 0 && crop_h > 0 {
         let (w, h) = (img.width(), img.height());
         let x = crop_x.min(w.saturating_sub(1));

@@ -1,4 +1,4 @@
-import type { DeviceImageSpec } from './devices/driver.js';
+import type { DeviceCropRect, DeviceImageSpec } from './devices/driver.js';
 import { load } from './ffi/image-proc.js';
 // mk2IndexToDeviceImgId/deviceInputToMk2Index/deviceInputToExtraKey moved to
 // key-map.ts (pure, no ffi) so main-thread and worker code can use them without
@@ -62,10 +62,14 @@ export function fillModeFor(spec: DeviceImageSpec): number {
   }
 }
 
+// Zero width/height = no region crop (transform.rs).
+const NO_REGION: DeviceCropRect = { x: 0, y: 0, width: 0, height: 0 };
+
 /** Transform a CORA JPEG for an Elgato device according to its DeviceImageSpec.
  *  Returns JPEG bytes for gen2 (MK.2) or BMP bytes for gen1 (Mini). */
 export function transformImageForDevice(jpeg: Uint8Array, spec: DeviceImageSpec): Buffer {
   const { symbols } = load();
+  const region = spec.cropRect ?? NO_REGION;
   for (;;) {
     const n = symbols.image_proc_transform(
       jpeg,
@@ -85,11 +89,10 @@ export function transformImageForDevice(jpeg: Uint8Array, spec: DeviceImageSpec)
       Math.round((spec.sharpen ?? 0) * 10),
       fillModeFor(spec),
       spec.crop ?? 0,
-      // Region crop unused: touch-strip zones are sliced from the canvas (canvasSliceToBmp).
-      0,
-      0,
-      0,
-      0,
+      region.x,
+      region.y,
+      region.width,
+      region.height,
       OUT,
       OUT.length,
       ERR,

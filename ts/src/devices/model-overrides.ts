@@ -88,6 +88,13 @@ type FieldSpec =
 
 type SectionFields = Record<string, FieldSpec>;
 
+const CROP_RECT_FIELDS = {
+  x: { kind: 'number', min: 0, max: MAX_DIMENSION, integer: true },
+  y: { kind: 'number', min: 0, max: MAX_DIMENSION, integer: true },
+  width: { kind: 'number', min: MIN_DIMENSION, max: MAX_DIMENSION, integer: true },
+  height: { kind: 'number', min: MIN_DIMENSION, max: MAX_DIMENSION, integer: true },
+} satisfies SectionFields;
+
 const IMAGE_FIELDS: Record<(typeof IMAGE_OVERRIDE_KEYS)[number], FieldSpec> = {
   rotate: { kind: 'enum', values: ROTATIONS },
   flipH: { kind: 'boolean' },
@@ -100,6 +107,7 @@ const IMAGE_FIELDS: Record<(typeof IMAGE_OVERRIDE_KEYS)[number], FieldSpec> = {
   blur: { kind: 'number', min: 0 },
   sharpen: { kind: 'number', min: 0 },
   crop: { kind: 'number', min: 0, integer: true },
+  cropRect: { kind: 'object', fields: CROP_RECT_FIELDS },
   resizeFilter: { kind: 'enum', values: RESIZE_FILTERS },
   resizeMode: { kind: 'enum', values: RESIZE_MODES },
   padFill: { kind: 'enum', values: PAD_FILLS },
@@ -252,6 +260,24 @@ function validateSection(
   return true;
 }
 
+/** cropRect rules that span fields. The source size is unknown here (it depends on the
+ *  advertised profile), so an oversize rect is clamped in transform.rs instead. */
+function validateImage(raw: unknown, model: DeviceModel, errors: Errors): void {
+  if (!validateSection(raw, IMAGE_FIELDS, 'image', model, errors)) return;
+  const rect = raw.cropRect;
+  if (!isPlainObject(rect)) return;
+  const missing = Object.keys(CROP_RECT_FIELDS).filter((key) => rect[key] === undefined);
+  if (missing.length > 0) errors.push(`image.cropRect: missing ${missing.join(', ')}`);
+  // transform.rs lets the region silently win over the symmetric crop.
+  const crop = raw.crop ?? model.image.crop ?? 0;
+  if (typeof crop === 'number' && crop > 0) {
+    errors.push(`image.cropRect: cannot combine with image.crop (${crop}) — set crop to 0`);
+  }
+  if ((raw.transform ?? model.image.transform) === 'passthrough') {
+    errors.push(`image.cropRect: needs transform 'sidecar' — passthrough sends the image as-is`);
+  }
+}
+
 function validateWire(raw: unknown, model: DeviceModel, errors: Errors): void {
   if (!validateSection(raw, WIRE_FIELDS, 'wire', model, errors)) return;
   if (raw.batchImageTransfers !== undefined && !supportsImageBatching(model)) {
@@ -275,7 +301,7 @@ export function validateModelOverride(raw: unknown, model: DeviceModel): Validat
   if (!isPlainObject(raw)) return { ok: false, errors: ['override must be an object'] };
   const errors: Errors = [];
   rejectUnknownKeys(raw, SECTION_KEYS, 'override', errors);
-  if (raw.image !== undefined) validateSection(raw.image, IMAGE_FIELDS, 'image', model, errors);
+  if (raw.image !== undefined) validateImage(raw.image, model, errors);
   // An emulated grid has its own key count (Plus = 8), so coraToWireImage is sized to it.
   const advertiseAs = isPlainObject(raw.cora) ? raw.cora.advertiseAs : undefined;
   const profile = selectedEmulation(model, advertiseAs)

@@ -169,6 +169,19 @@ await test('crop within bounds applies, then resizes to spec size', () => {
   assert.equal(dims!.height, 32);
 });
 
+await test('cropRect region is cut before the fit (1:1 crop mode keeps spec size)', () => {
+  // 16×16 source, region 4,4 8×8, crop fit into 8×8 — exercises the region args.
+  const spec = baseImageSpec({
+    width: 8,
+    height: 8,
+    resizeMode: 'crop',
+    cropRect: { x: 4, y: 4, width: 8, height: 8 },
+  });
+  const dims = getJpegDimensions(transformImageForDevice(SOLID_RED_16X16_JPEG, spec));
+  assert.equal(dims!.width, 8);
+  assert.equal(dims!.height, 8);
+});
+
 // Touch-strip canvas (Stream Deck + window partial updates)
 
 console.log('\ntranslator: touch-strip canvas');
