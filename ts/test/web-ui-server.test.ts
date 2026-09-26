@@ -509,6 +509,32 @@ test('extra-key press command: pressable keys only, widget and command replace i
   assert.deepEqual(cfg(), { widget: 'none', pressCommand: 'open -a Music' });
 });
 
+test('extra-key textSize is persisted with the widget; preview needs a paint', () => {
+  const ui = new WebUIServer(undefined, [], 'real', TEST_SETTINGS_ROOT);
+  ui.getOrCreateDeviceIdentity('fake-device-0', 'Dock');
+  ui.notifyDocks([{ ...fakeDockStatus(0), extraKeys: [15] }]);
+  const cfg = () => ui.extraKeyConfigFor('fake-device-0', 15);
+
+  assert.equal(ui.trySetExtraKey(15, { widget: 'text', param: 'Hello', textSize: 'fit' }), null);
+  assert.deepEqual(cfg(), { widget: 'text', param: 'Hello', textSize: 'fit' });
+
+  const none = ui.tryPreviewExtraKey(15);
+  assert.ok('error' in none && none.status === 404, 'nothing painted yet');
+  assert.ok('error' in ui.tryPreviewExtraKey(3), 'not a key on this dock');
+  ui.imageChannel.notifyDockWidgetPaint(0, 15, {
+    bmp: new Uint8Array(),
+    lines: [{ text: 'Hello', big: true }],
+    width: 85,
+    height: 85,
+    clipped: false,
+    zone: false,
+  });
+  const res = ui.tryPreviewExtraKey(15);
+  if ('error' in res) throw new Error(res.error);
+  assert.equal(res.wireId, 15);
+  assert.equal(res.previews.length, 6);
+});
+
 test("new WS client's initial snapshot carries stored docks", () => {
   const ui = new WebUIServer(undefined, [], 'real', TEST_SETTINGS_ROOT);
   ui.notifyDocks([fakeDockStatus(0), fakeDockStatus(1)]);
@@ -691,6 +717,35 @@ try {
       const long = 'x'.repeat(513);
       assert.equal((await post('/api/extra-key/press', { wireId: 15, command: long })).status, 400);
       assert.equal((await post('/api/extra-key/press', { wireId: 15, command: 'x' })).status, 400);
+    },
+  );
+
+  await runWebTest(
+    'POST /api/extra-key: bad textSize → 400 naming the allowed values',
+    async () => {
+      for (const textSize of [3, 'big', 1.5]) {
+        const res = await post('/api/extra-key', { wireId: 15, widget: 'clock', textSize });
+        assert.equal(res.status, 400, String(textSize));
+        const { error } = (await res.json()) as { error: string };
+        assert.equal(error, 'textSize must be one of: fit, -2, -1, 0, 1, 2');
+      }
+    },
+  );
+
+  await runWebTest('POST /api/extra-key: bad wrap → 400 naming the allowed values', async () => {
+    const res = await post('/api/extra-key', { wireId: 15, widget: 'text', wrap: 'lines' });
+    assert.equal(res.status, 400);
+    assert.equal(
+      ((await res.json()) as { error: string }).error,
+      'wrap must be one of: words, chars',
+    );
+  });
+
+  await runWebTest(
+    'POST /api/extra-key/preview: bad wireId → 400, MK.2 has no extra key → 400',
+    async () => {
+      assert.equal((await post('/api/extra-key/preview', { wireId: -1 })).status, 400);
+      assert.equal((await post('/api/extra-key/preview', { wireId: 15 })).status, 400);
     },
   );
 

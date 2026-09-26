@@ -34,6 +34,8 @@ export interface StoreState {
   extraKeys: Record<string, ExtraKeyCfg>;
   /** SELECTED dock's side-key widget images (base64 BMP), keyed by wire id. */
   extraKeyImages: Record<string, string>;
+  /** SELECTED dock's widgets (side keys + strip zones) whose text does not fit, by wire id. */
+  extraKeyClipped: Record<string, boolean>;
   /** SELECTED dock's touch-strip mode + knob override (AKP05E). */
   touchStripMode: TouchStripMode;
   /** 'deckbridge-repaint' hold-off after an Elgato frame. */
@@ -57,6 +59,7 @@ let state: StoreState = {
   deviceModels: [],
   extraKeys: {},
   extraKeyImages: {},
+  extraKeyClipped: {},
   touchStripMode: 'elgato',
   touchStripRepaintMs: TOUCH_STRIP_REPAINT_DEFAULT_MS,
   encoders: {},

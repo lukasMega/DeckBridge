@@ -13,6 +13,7 @@ import type {
   ExtraKeyConfig,
   TouchStripMode,
   TouchWindowRegion,
+  WidgetPaint,
 } from './types.js';
 import { DEVICE_MODELS, findModelById } from './devices/registry.js';
 import {
@@ -66,7 +67,7 @@ export interface ExtraDockCoordinatorDeps {
   onImage?: (dockIndex: number, keyIndex: number, data: Buffer, format: 'jpeg' | 'bmp') => void;
   /** WebUI strip + side-key preview mirrors; DeviceSession owns the device-side paint. */
   onTouchImage?: (dockIndex: number, data: Uint8Array, region?: TouchWindowRegion) => void;
-  onExtraKeyImage?: (dockIndex: number, wireId: number, bmp: Uint8Array | null) => void;
+  onWidgetPaint?: (dockIndex: number, wireId: number, paint: WidgetPaint | null) => void;
   /** This dock's cached CORA frames, for repainting after a live tuning swap. */
   dockFramesSnapshot?: (dockIndex: number) => DockFrames;
   /** Per-device "ignore brightness from Elgato app" override, resolved by the
@@ -307,7 +308,7 @@ export class ExtraDockCoordinator {
       },
       onStatusChange: this.deps.onSessionsChanged,
       onAction: (message) => this.deps.onAction?.(index, message),
-      onExtraKeyImage: (wireId, bmp) => this.deps.onExtraKeyImage?.(index, wireId, bmp),
+      onWidgetPaint: (wireId, paint) => this.deps.onWidgetPaint?.(index, wireId, paint),
       onImage: (keyIndex, data, format) => this.deps.onImage?.(index, keyIndex, data, format),
       ignoreElgatoBrightness: () => this.deps.isBrightnessOverride(deviceKey),
       initialBrightness: deviceIdentity.brightness,
@@ -388,9 +389,7 @@ export class ExtraDockCoordinator {
     for (const hidPath of this.extraSessions.keys()) this.clearBrightnessResendTimer(hidPath);
     this.extraSessions.clear();
     this.freeIndices = freshIndexPool(this.maxDocks);
-    for (const s of sessions) {
-      await s.stop();
-    }
+    for (const s of sessions) await s.stop();
     this.deps.onSessionsChanged?.();
   }
 

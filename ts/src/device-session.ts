@@ -12,6 +12,7 @@ import type {
 } from './types.js';
 import { sendSplashImages } from './splash-sender.js';
 import { ExtraKeyWidgets } from './extra-keys.js';
+import type { WidgetPaint } from './widget-render.js';
 import { EncoderActions, type EncoderOverride } from './encoders.js';
 import { ExtraKeyActions } from './command-actions.js';
 import type { DeviceModel, DeviceModelOverride } from './devices/driver.js';
@@ -73,8 +74,8 @@ export interface DeviceSessionOptions {
   touchStripMode?: TouchStripMode;
   /** This dock's 'deckbridge-repaint' interval, read live each widget tick. */
   touchStripRepaintMs?: () => number;
-  /** WebUI mirror of each side-key widget image (null = cleared). */
-  onExtraKeyImage?: (wireId: number, bmp: Uint8Array | null) => void;
+  /** WebUI mirror of each widget paint (null = cleared). */
+  onWidgetPaint?: (wireId: number, paint: WidgetPaint | null) => void;
   /** This dock's strip mode + encoder settings, resolved per dial event (deviceKey
    *  captured by the coordinator). Absent = knobs always reach the Elgato app. */
   encoderOverride?: () => EncoderOverride | undefined;
@@ -122,7 +123,7 @@ export class DeviceSession {
       (wireId) => this.extraKeyConfigFor?.(wireId),
       opts.touchStripMode,
       opts.touchStripRepaintMs,
-      opts.onExtraKeyImage,
+      opts.onWidgetPaint,
     );
     this.encoders = new EncoderActions(() => opts.encoderOverride?.());
     this.extraKeyActions = new ExtraKeyActions((wireId) => this.extraKeyConfigFor?.(wireId));

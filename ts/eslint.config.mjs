@@ -173,7 +173,7 @@ export default defineConfig([
         // shared by the hid worker hosts AND plugin-host — lifecycle only, no protocol.
         // key-map.ts + splash-sender.ts are pure (no FFI): main imports them without
         // pulling translator.ts's ffi/image-proc onto the main thread.
-        { type: 'shared', mode: 'full', pattern: ['src/types.ts', 'src/logger.ts', 'src/capabilities.ts', 'src/comm-format.ts', 'src/cli.ts', 'src/worker-lifecycle.ts', 'src/splash-sender.ts', 'src/key-map.ts']
+        { type: 'shared', mode: 'full', pattern: ['src/types.ts', 'src/logger.ts', 'src/capabilities.ts', 'src/comm-format.ts', 'src/cli.ts', 'src/worker-lifecycle.ts', 'src/splash-sender.ts', 'src/key-map.ts', 'src/widget-render.ts', 'src/extra-key-config.ts']
         },
       ],
     },

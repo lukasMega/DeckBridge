@@ -109,7 +109,7 @@ export class DriverManager {
         deps.webui.notifyDockImage(dockIndex, keyIndex, data, format),
       onAction: (index, message) => deps.webui.notifyDeviceAction(index, message),
       onTouchImage: (...args) => deps.webui.imageChannel.notifyDockTouchImage(...args),
-      onExtraKeyImage: (...args) => deps.webui.imageChannel.notifyDockExtraKeyImage(...args),
+      onWidgetPaint: (...args) => deps.webui.imageChannel.notifyDockWidgetPaint(...args),
       dockFramesSnapshot: (dockIndex) => deps.webui.dockFramesSnapshot(dockIndex),
       isBrightnessOverride: (deviceKey) => deps.webui.isBrightnessOverride(deviceKey),
       extraKeyConfigFor: (deviceKey, wireId) => deps.webui.extraKeyConfigFor(deviceKey, wireId),

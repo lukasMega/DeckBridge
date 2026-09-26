@@ -48,6 +48,7 @@ import { DevicePrefsController } from './device-prefs-controller.js';
 import { EncodersController } from './encoders-controller.js';
 import { liveDiagnosticsInputs } from './diagnostics-sources.js';
 import type { DiagnosticsOptions } from './diagnostics.js';
+import type { ExtraKeyPreviewResponse } from '../contract.js';
 import { UpdateController } from './update-controller.js';
 
 export { isAllowedWebRequest, isValidMacAddress, pickFallbackPort } from './web-request-guard.js';
@@ -407,6 +408,10 @@ export class WebUIServer extends EventEmitter implements WebUIController {
 
   tryRunExtraKeyNow(wireId: number): ReqError | null {
     return this.extraKeys.tryRunNow(wireId, this.selectedDock);
+  }
+
+  tryPreviewExtraKey(wireId: number): ExtraKeyPreviewResponse | ReqError {
+    return this.extraKeys.tryPreview(wireId, this.imageChannel.selectedWidgetPaint(wireId));
   }
 
   pluginsInfo(): Promise<PluginsInfo> {

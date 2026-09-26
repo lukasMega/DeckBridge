@@ -173,7 +173,7 @@ export class PrimaryDock {
       (wireId) => this.deps.webui.extraKeyConfigFor(identity.deviceKey, wireId),
       this.deps.webui.touchStripModeFor(identity.deviceKey),
       () => this.deps.webui.devicePrefs.touchStripRepaintMsFor(identity.deviceKey),
-      (wireId, bmp) => this.deps.webui.imageChannel.notifyDockExtraKeyImage(0, wireId, bmp),
+      (wireId, paint) => this.deps.webui.imageChannel.notifyDockWidgetPaint(0, wireId, paint),
     );
     this.widgets.start();
   }

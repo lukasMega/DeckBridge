@@ -1,14 +1,18 @@
 // Wire DTOs live in the `web-contract` leaf (../contract.ts) — the one element
 // web-client may import besides itself, type-only. Re-exported here under the
 // names the client already uses, so call sites keep importing from ui-types.
-import type { ClientApp, ExtraKeyWidget } from '../contract.js';
+import type { ClientApp, ExtraKeyTextSize, ExtraKeyWidget, ExtraKeyWrap } from '../contract.js';
 
 export type {
   ClientApp,
   EncoderCommands,
   EncoderSettings,
   ExtraKeyImageMsg,
+  ExtraKeyPreview,
+  ExtraKeyPreviewResponse,
+  ExtraKeyTextSize,
   ExtraKeyWidget,
+  ExtraKeyWrap,
   PluginStatus,
   PluginsInfo,
   Stats,
@@ -52,6 +56,8 @@ export interface ExtraKeyCfg {
   intervalMs?: number; // command/plugin widget: re-run/poll interval
   timeoutMs?: number; // command widget only: kill-timeout
   pluginArg?: string; // plugin widget only: per-key argument (ctx.param)
+  textSize?: ExtraKeyTextSize; // font-ladder step or 'fit'; absent = 0
+  wrap?: ExtraKeyWrap; // text/command/plugin: split long lines; absent = off
   pressCommand?: string; // pressable extra keys only: shell command run on press
 }
 

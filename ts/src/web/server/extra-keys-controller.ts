@@ -6,6 +6,9 @@ import { listPluginFiles, pluginKeyStatus } from '../../plugin-host.js';
 import type { PluginStatus } from '../../plugin-host.js';
 import type { Broadcaster } from './broadcaster.js';
 import type { ExtraKeyConfig } from '../../types.js';
+import type { WidgetPaint } from '../../widget-render.js';
+import type { ExtraKeyPreviewResponse } from '../contract.js';
+import { widgetPreviews } from './widget-preview.js';
 import type { ControllerHost, ExtraKeyUpdate, PluginsInfo, ReqError } from './types.js';
 
 /** The widget part of a config — `{ widget: 'none' }` when there is none yet. */
@@ -91,6 +94,13 @@ export class ExtraKeysController {
     }
     this.host.emit('extraKeyRunNow', selectedDock, wireId);
     return null;
+  }
+
+  /** Text-size picker thumbnails for one of the SELECTED dock's widgets, from its last paint. */
+  tryPreview(wireId: number, paint: WidgetPaint | undefined): ExtraKeyPreviewResponse | ReqError {
+    if (!this.onSelectedDock(wireId)) return this.noKeyError(wireId);
+    if (!paint) return { error: 'nothing painted on this key yet', status: 404 };
+    return { wireId, previews: widgetPreviews(paint) };
   }
 
   /** Plugin dropdown data + live per-key status for the SELECTED dock (read-only — the poll

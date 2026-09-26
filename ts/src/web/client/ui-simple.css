@@ -849,6 +849,123 @@ input[type='range'].range:disabled {
 .xkey-status-pending {
   color: var(--wait);
 }
+/* text size: A− / A / A+ / Fit / picker as one segmented control */
+.xkey-size {
+  display: inline-flex;
+  justify-self: start;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+}
+.xkey-display {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.xkeys-compact .xkey-display {
+  grid-column: 2 / -1;
+}
+.input.xkey-wrap {
+  width: auto;
+}
+.xkey-size-btn {
+  min-width: 28px;
+  height: 26px;
+  padding: 0 7px;
+  border: 0;
+  border-right: 1px solid var(--border);
+  background: none;
+  color: var(--fg-muted);
+  font: 600 12px var(--font);
+  cursor: pointer;
+}
+.xkey-size-btn:first-child {
+  border-radius: 7px 0 0 7px;
+}
+.xkey-size-btn:last-of-type {
+  border-right: 0;
+  border-radius: 0 7px 7px 0;
+}
+.xkey-size-btn:hover:not(:disabled) {
+  color: var(--fg);
+}
+.xkey-size-btn[aria-pressed='true'] {
+  color: var(--fg);
+  background: color-mix(in oklab, var(--fg) 10%, transparent);
+}
+.xkey-size-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+/* strip rows gain a Size track after the value/config tracks */
+.xkey-strip-row {
+  grid-template-columns: 52px 150px minmax(0, 1fr) 30px auto;
+}
+.xkey-size-picker {
+  width: 300px;
+}
+.xkey-size-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+.xkey-size-thumb {
+  display: grid;
+  justify-items: center;
+  gap: 4px;
+  padding: 5px;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  background: none;
+  color: var(--fg-muted);
+  font: 12px var(--font);
+  cursor: pointer;
+}
+.xkey-size-thumb:hover,
+.xkey-size-thumb.is-current {
+  border-color: var(--fg-muted);
+  color: var(--fg);
+}
+.xkey-size-thumb img {
+  display: block;
+  height: 56px;
+  max-width: 100%;
+  border-radius: 5px;
+  image-rendering: pixelated;
+}
+.xkey-size-note {
+  font-size: 13px;
+  color: var(--fg-muted);
+}
+.xkey-clipped-mark {
+  font-style: normal;
+  color: var(--wait);
+}
+/* over the tile's corner; inline after a strip zone's label */
+.xkey-tile {
+  position: relative;
+}
+.xkey-clipped {
+  padding: 1px 4px;
+  border-radius: 4px;
+  background: var(--wait);
+  color: oklch(0.2 0 0);
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+.xkey-tile .xkey-clipped {
+  position: absolute;
+  right: 2px;
+  bottom: 2px;
+}
+.xkey-pos .xkey-clipped {
+  display: block;
+  width: fit-content;
+  margin-top: 2px;
+}
 
 /* ============================================================
    Simple view — CHECKLIST states

@@ -9,6 +9,7 @@ import {
   WidgetValue,
   type PluginFiles,
 } from './extra-key-fields.js';
+import { ClippedBadge, TextSizeControl } from './text-size-control.js';
 
 function SideKeyTile({
   wireId,
@@ -22,6 +23,7 @@ function SideKeyTile({
       ) : (
         <span class="xkey-tile-empty">{label}</span>
       )}
+      <ClippedBadge wireId={wireId} />
     </div>
   );
 }
@@ -59,6 +61,12 @@ export function SideKeyCard({
               plugins={plugins}
               pluginStatus={pluginStatus}
             />
+          </>
+        )}
+        {(cfg?.widget ?? 'none') !== 'none' && (
+          <>
+            <span class="xkey-press-label">Size</span>
+            <TextSizeControl wireId={wireId} label={label} cfg={cfg} />
           </>
         )}
         {pressable && (

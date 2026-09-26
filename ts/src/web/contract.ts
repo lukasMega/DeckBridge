@@ -12,16 +12,42 @@ export type KeyState = 'down' | 'up';
  *  `EXTRA_KEY_WIDGETS` list and proves it against this union with `satisfies`. */
 export type ExtraKeyWidget = 'none' | 'clock' | 'date' | 'text' | 'weather' | 'command' | 'plugin';
 
+/** Widget text size: a step on the font ladder relative to each line's default
+ *  (0 = default), or 'fit' = the largest step that shows everything.
+ *  `types.ts` holds the runtime `EXTRA_KEY_TEXT_SIZES` list. */
+export type ExtraKeyTextSize = 'fit' | -2 | -1 | 0 | 1 | 2;
+
+/** How a free-text widget splits a line too wide for the display: at spaces (an
+ *  over-long word is split mid-word) or at any character. Absent = no wrapping. */
+export type ExtraKeyWrap = 'words' | 'chars';
+
 /** Who paints the touch strip (AKP05E). `elgato` = the app only; `deckbridge-ignore`
  *  = DeckBridge widgets, Elgato strip images dropped; `deckbridge-repaint` = DeckBridge
  *  widgets on assigned zones, Elgato content on the rest. `types.ts` holds the runtime
  *  `TOUCH_STRIP_MODES` list. */
 export type TouchStripMode = 'elgato' | 'deckbridge-ignore' | 'deckbridge-repaint';
 
-/** WS `extraKeyImage`: one side key's widget image as base64 BMP; no data = cleared. */
+/** WS `extraKeyImage`: one side key's widget image as base64 BMP; no data = cleared
+ *  (side key) or a status-only update (touch-strip `zone`, whose image is not mirrored). */
 export interface ExtraKeyImageMsg {
   wireId: number;
   data?: string;
+  /** The widget text did not fit at its text size. */
+  clipped?: boolean;
+  zone?: boolean;
+}
+
+/** One size option rendered by POST /api/extra-key/preview. */
+export interface ExtraKeyPreview {
+  textSize: ExtraKeyTextSize;
+  /** base64 BMP */
+  data: string;
+  clipped: boolean;
+}
+
+export interface ExtraKeyPreviewResponse {
+  wireId: number;
+  previews: ExtraKeyPreview[];
 }
 
 /** Shell commands one rotary encoder runs when disconnected from the Elgato app. */

@@ -10,6 +10,7 @@ import type {
 import type {
   DeviceIdentity,
   DeviceModelInfo,
+  ExtraKeyPreviewResponse,
   KeyEventEntry,
   MockDeviceConfig,
   PluginsInfo,
@@ -165,6 +166,7 @@ export interface WebUIController {
   trySelectDock(index: unknown): ReqError | null;
   trySetExtraKey(wireId: number, update: ExtraKeyUpdate): ReqError | null;
   tryRunExtraKeyNow(wireId: number): ReqError | null;
+  tryPreviewExtraKey(wireId: number): ExtraKeyPreviewResponse | ReqError;
   pluginsInfo(): Promise<PluginsInfo>;
   trySetTouchStripMode(mode: TouchStripMode): ReqError | null;
   trySetEncoders(settings: EncoderSettings): ReqError | null;

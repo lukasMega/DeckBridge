@@ -1109,8 +1109,134 @@ async function checkDeviceTestMode(): Promise<void> {
   toast.remove();
 }
 
+const PREVIEW_SIZES = ['fit', -2, -1, 0, 1, 2] as const;
+
+type Stub = ReturnType<typeof stubFetch>;
+const lastPost = (stub: Stub, url: string): Record<string, unknown> | undefined =>
+  stub.calls.findLast((c) => c.url === url)?.body as Record<string, unknown> | undefined;
+
+async function checkTextSize(stub: Stub): Promise<void> {
+  const cards = [...root.querySelectorAll('.xkey-card')];
+  const size = (label: string): HTMLButtonElement =>
+    cards[1]!.querySelector<HTMLButtonElement>(`.xkey-size button[aria-label="${label}"]`)!;
+  check(
+    cards[0]!.querySelector('.xkey-size') === null &&
+      cards[1]!.querySelector('.xkey-size') !== null,
+    'Text size control shows only on keys with a widget',
+  );
+  await act(() =>
+    patch({ extraKeys: { '10': { widget: 'command', param: 'date', textSize: 2 } } }),
+  );
+  check(size('Larger text').disabled && !size('Smaller text').disabled, 'A+ disabled at +2');
+  await act(() => size('Smaller text').click());
+  check(
+    JSON.stringify(lastPost(stub, '/api/extra-key')) ===
+      JSON.stringify({ wireId: 10, widget: 'command', param: 'date', textSize: 1 }),
+    'A− posts one step smaller with the rest of the widget config',
+  );
+  await act(() => size('Fit text').click());
+  check(lastPost(stub, '/api/extra-key')?.textSize === 'fit', 'Fit posts fit');
+  await act(() => size('Default text size').click());
+  check(
+    lastPost(stub, '/api/extra-key') !== undefined &&
+      !('textSize' in lastPost(stub, '/api/extra-key')!),
+    'A posts the default size (omitted)',
+  );
+
+  await act(() =>
+    patch({ extraKeys: { '10': { widget: 'command', param: 'date', textSize: -1 } } }),
+  );
+  await click('button[aria-label="Bottom side key command settings"]');
+  const interval = root.querySelector<HTMLInputElement>('.xkey-popover input')!;
+  interval.value = '30';
+  await act(() => {
+    interval.dispatchEvent(new Event('change'));
+  });
+  check(
+    lastPost(stub, '/api/extra-key')?.intervalMs === 30_000 &&
+      lastPost(stub, '/api/extra-key')?.textSize === -1,
+    'Changing another widget setting keeps the text size',
+  );
+  await click('button[aria-label="Bottom side key command settings"]');
+  await checkTextSizePicker(stub, cards[1]!);
+  await checkWrapSelect(stub, cards[1]!);
+}
+
+async function checkWrapSelect(stub: Stub, card: Element): Promise<void> {
+  await act(() =>
+    patch({ extraKeys: { '10': { widget: 'command', param: 'date', textSize: 1 } } }),
+  );
+  const select = card.querySelector<HTMLSelectElement>(
+    'select[aria-label="Bottom line wrapping"]',
+  )!;
+  check(select.value === 'off', 'Wrap select defaults to off on a free-text widget');
+  select.value = 'chars';
+  await act(() => {
+    select.dispatchEvent(new Event('change'));
+  });
+  check(
+    JSON.stringify(lastPost(stub, '/api/extra-key')) ===
+      JSON.stringify({ wireId: 10, widget: 'command', param: 'date', textSize: 1, wrap: 'chars' }),
+    'Wrap select posts the mode with the text size',
+  );
+  await act(() =>
+    patch({ extraKeys: { '10': { widget: 'command', param: 'date', wrap: 'words' } } }),
+  );
+  await act(() =>
+    card.querySelector<HTMLButtonElement>('button[aria-label="Larger text"]')!.click(),
+  );
+  check(lastPost(stub, '/api/extra-key')?.wrap === 'words', 'Size buttons keep the wrap mode');
+  await act(() => patch({ extraKeys: { '10': { widget: 'clock', wrap: 'words' } } }));
+  check(
+    card.querySelector('select[aria-label="Bottom line wrapping"]') === null,
+    'No wrap select on clock/date/weather',
+  );
+  await act(() => patch({ extraKeys: { '10': { widget: 'command', param: 'date' } } }));
+}
+
+async function checkTextSizePicker(stub: Stub, card: Element): Promise<void> {
+  const size = (label: string): HTMLButtonElement =>
+    card.querySelector<HTMLButtonElement>(`.xkey-size button[aria-label="${label}"]`)!;
+  check(card.querySelector('.xkey-clipped') === null, 'No clipped badge by default');
+  await act(() => patch({ extraKeyClipped: { '10': true } }));
+  check(card.querySelector('.xkey-tile .xkey-clipped') !== null, 'Clipped badge on the tile');
+  await act(() => patch({ extraKeyClipped: {} }));
+
+  await act(() => size('Bottom text size previews').click());
+  await settle();
+  const thumbs = [...card.querySelectorAll<HTMLButtonElement>('.xkey-size-thumb')];
+  check(
+    lastPost(stub, '/api/extra-key/preview')?.wireId === 10 &&
+      thumbs.length === 6 &&
+      thumbs[1]!.getAttribute('aria-pressed') === 'false' &&
+      thumbs[2]!.getAttribute('aria-pressed') === 'true' &&
+      thumbs[5]!.textContent.includes('clipped'),
+    'Size picker shows a thumbnail per size, marks the current one and clipped ones',
+  );
+  await act(() => thumbs[4]!.click());
+  check(
+    lastPost(stub, '/api/extra-key')?.textSize === 1 &&
+      card.querySelector('.xkey-size-picker') === null,
+    'Picking a thumbnail posts that size and closes the picker',
+  );
+  await act(() => patch({ extraKeys: { '10': { widget: 'command', param: 'date' } } }));
+}
+
 async function runSideKeysPanel(): Promise<void> {
-  const stub = stubFetch(() => ({ payload: { dir: '', files: [], status: {} } }));
+  const stub = stubFetch((url) =>
+    url === '/api/extra-key/preview'
+      ? {
+          payload: {
+            wireId: 10,
+            previews: PREVIEW_SIZES.map((textSize) => ({
+              textSize,
+              data: 'Qk0=',
+              clipped: textSize === 2,
+            })),
+          },
+        }
+      : { payload: { dir: '', files: [], status: {} } },
+  );
   const section = (title: string): Element =>
     root.querySelector(`[role="group"][aria-label="${title}"]`)!;
   const rows = (title: string, extra = ''): Element[] => [
@@ -1130,6 +1256,7 @@ async function runSideKeysPanel(): Promise<void> {
 
     await checkSideKeysHelp();
     await checkDeviceTestMode();
+    await checkTextSize(stub);
 
     const cards = [...section('Side keys').querySelectorAll('.xkey-card')];
     check(
