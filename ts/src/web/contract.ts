@@ -18,6 +18,12 @@ export type ExtraKeyWidget = 'none' | 'clock' | 'date' | 'text' | 'weather' | 'c
  *  `TOUCH_STRIP_MODES` list. */
 export type TouchStripMode = 'elgato' | 'deckbridge-ignore' | 'deckbridge-repaint';
 
+/** WS `extraKeyImage`: one side key's widget image as base64 BMP; no data = cleared. */
+export interface ExtraKeyImageMsg {
+  wireId: number;
+  data?: string;
+}
+
 /** Shell commands one rotary encoder runs when disconnected from the Elgato app. */
 export interface EncoderCommands {
   press?: string;

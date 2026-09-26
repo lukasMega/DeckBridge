@@ -80,6 +80,7 @@ async function handleOpen(
   d.on('key', (e: KeyEvent) => post({ type: 'key', keyIndex: e.keyIndex, state: e.state }));
   d.on('dial', (e: DialEvent) => post({ type: 'dial', event: e }));
   d.on('touch', (e: TouchInputEvent) => post({ type: 'touch', event: e }));
+  d.on('inputAction', (message: string) => post({ type: 'inputAction', message }));
   d.on('error', (err: Error) => post({ type: 'error', message: err.message }));
   d.on('disconnect', () => post({ type: 'disconnect' }));
   d.on('reinit', () => post({ type: 'reinit' }));

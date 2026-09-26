@@ -153,7 +153,7 @@ export function SimpleApp(): preact.JSX.Element {
           </button>
         </footer>
       </div>
-      <div class="toast" id="toast" />
+      <div class="toast" id="toast" role="status" aria-live="polite" />
       {aboutOpen && <AboutPopover onClose={closeAbout} />}
     </>
   );

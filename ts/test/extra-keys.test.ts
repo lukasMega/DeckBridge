@@ -288,6 +288,32 @@ await test('model without extraKeys → no device I/O, no timer', () => {
   assert.equal(d.splashed.length, 0);
 });
 
+await test('side-key paints are mirrored for the WebUI; strip zones are not', () => {
+  const d = new FakeDriver();
+  d.model = {
+    ...AJAZZ_AKP05E_MODEL,
+    keyMap: { ...AJAZZ_AKP05E_MODEL.keyMap, extraKeys: [15, 10] },
+  };
+  const mirrored: Array<[number, Uint8Array | null]> = [];
+  const w = new ExtraKeyWidgets(
+    d,
+    (wireId) => (wireId === 15 || wireId === 1 ? { widget: 'text', param: 'Hi' } : undefined),
+    'deckbridge-ignore',
+    undefined,
+    (wireId, bmp) => mirrored.push([wireId, bmp]),
+  );
+  w.start();
+  w.stop();
+  assert.deepEqual(
+    mirrored.map(([wireId, bmp]) => [wireId, bmp !== null]),
+    [
+      [15, true],
+      [10, false],
+    ],
+  );
+  assert.equal(mirrored[0]![1], d.splashed.find((p) => p.keyIndex === 15)!.bytes);
+});
+
 await test('AKP05E touch-strip widgets use all four zones and their image spec', () => {
   const d = new FakeDriver();
   d.model = AJAZZ_AKP05E_MODEL;

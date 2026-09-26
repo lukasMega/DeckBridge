@@ -5,8 +5,10 @@ import type {
   KeyEvent,
   ServerLog,
   CommLog,
+  ExtraKeyImageMsg,
   UpdateInfo,
 } from './ui-types.js';
+import { showDeviceAction } from './device-test-mode.js';
 import { error } from './log.js';
 import { applyImage, clearImage, flashKey, resetPreviews } from './key-preview.js';
 import { applyTouchImage, resetTouchStrip, type TouchFrameMsg } from './touch-strip-preview.js';
@@ -30,6 +32,8 @@ const handlers: Record<string, (d: unknown) => void> = {
     if ((next.selectedDock ?? 0) !== prev) {
       resetPreviews();
       resetTouchStrip();
+      store.patch({ status: next, extraKeyImages: {} });
+      return;
     }
     store.patch({ status: next });
   },
@@ -41,6 +45,13 @@ const handlers: Record<string, (d: unknown) => void> = {
   },
   touchImage: (d) => {
     applyTouchImage(d as TouchFrameMsg);
+  },
+  extraKeyImage: (d) => {
+    const { wireId, data } = d as ExtraKeyImageMsg;
+    const extraKeyImages = { ...store.getSnapshot().extraKeyImages };
+    if (data) extraKeyImages[String(wireId)] = data;
+    else delete extraKeyImages[String(wireId)];
+    store.patch({ extraKeyImages });
   },
   clear: (d) => {
     const idx = (d as { mk2Index: number }).mk2Index;
@@ -64,6 +75,7 @@ const handlers: Record<string, (d: unknown) => void> = {
   encoders: (d) => {
     store.patch({ encoders: (d as { encoders: StoreState['encoders'] }).encoders });
   },
+  deviceAction: (d) => showDeviceAction(d as { dockIndex: number; message: string }),
   keyEvent: (d) => {
     const e = d as KeyEvent;
     flashKey(e.mk2Index);

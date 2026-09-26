@@ -67,6 +67,7 @@ export type WorkerToMain =
   | { type: 'key'; keyIndex: number; state: KeyState }
   | { type: 'dial'; event: DialEvent }
   | { type: 'touch'; event: TouchInputEvent }
+  | { type: 'inputAction'; message: string }
   | { type: 'log'; level: LogLevel; component: string; message: string }
   | { type: 'error'; message: string }
   // One image finished writing to the device — drives the WebUI imagesSent stat.

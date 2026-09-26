@@ -295,17 +295,13 @@ function sameIds(a: readonly number[], b: readonly number[]): boolean {
  *  when its content changed (clock → one repaint per minute; idle cost is a few string
  *  compares). One instance per connected dock. */
 export class ExtraKeyWidgets {
-  private readonly driver: DeviceDriver;
-  private readonly configFor: (wireId: number) => ExtraKeyConfig | undefined;
   private timer: ReturnType<typeof setInterval> | undefined;
   private lastPainted = new Map<number, string>();
-  private mode: TouchStripMode;
   /** Last touch-strip ownership mask pushed to the driver (see pushMask). */
   private lastMask: readonly number[] = [];
   /** Between start() and stop() — a dock that started with nothing to paint ('elgato'
    *  strip, no side keys) must still begin ticking when an override mode is chosen. */
   private active = false;
-  private readonly repaintIntervalMs: () => number;
   /** 'deckbridge-repaint': when the Elgato app last drew on each strip zone. */
   private lastElgatoFrameAt = new Map<number, number>();
   /** 'deckbridge-repaint': strip zones currently showing a widget — the ones that
@@ -313,18 +309,15 @@ export class ExtraKeyWidgets {
   private widgetOnZone = new Set<number>();
 
   constructor(
-    driver: DeviceDriver,
-    configFor: (wireId: number) => ExtraKeyConfig | undefined,
-    mode: TouchStripMode = DEFAULT_TOUCH_STRIP_MODE,
+    private readonly driver: DeviceDriver,
+    private readonly configFor: (wireId: number) => ExtraKeyConfig | undefined,
+    private mode: TouchStripMode = DEFAULT_TOUCH_STRIP_MODE,
     /** 'deckbridge-repaint' hold-off after an Elgato frame; read live, so a WebUI
      *  change applies without a restart. */
-    repaintIntervalMs: () => number = () => TOUCH_STRIP_REPAINT_DEFAULT_MS,
-  ) {
-    this.driver = driver;
-    this.configFor = configFor;
-    this.mode = mode;
-    this.repaintIntervalMs = repaintIntervalMs;
-  }
+    private readonly repaintIntervalMs: () => number = () => TOUCH_STRIP_REPAINT_DEFAULT_MS,
+    /** WebUI mirror of each side-key paint (null = cleared); strip zones excluded. */
+    private readonly onSideKeyImage?: (wireId: number, bmp: Uint8Array | null) => void,
+  ) {}
 
   start(): void {
     this.active = true;
@@ -423,14 +416,17 @@ export class ExtraKeyWidgets {
   }
 
   private paint(wireId: number, lines: ReturnType<typeof renderWidgetLines>): void {
+    const display = this.widgetDisplay(wireId);
     if (lines === null) {
       this.driver.clearKey(wireId);
+      if (!display) this.onSideKeyImage?.(wireId, null);
       return;
     }
     if (!this.driver.sendSplashImage) return;
-    const display = this.widgetDisplay(wireId);
     const spec = display?.image ?? splashSpec(this.driver.model);
-    this.driver.sendSplashImage(wireId, composeWidgetBmp(lines, spec.width, spec.height), spec);
+    const bmp = composeWidgetBmp(lines, spec.width, spec.height);
+    this.driver.sendSplashImage(wireId, bmp, spec);
+    if (!display) this.onSideKeyImage?.(wireId, bmp);
     if (this.mode === 'deckbridge-repaint' && display) this.widgetOnZone.add(wireId);
   }
 

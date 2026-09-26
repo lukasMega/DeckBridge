@@ -303,6 +303,50 @@ await test('an identity-mapped model reports no wire id', () => {
   assert.deepEqual(seen, [undefined]);
 });
 
+await test('device action observer reports keys, knobs, touch and unknown inputs without consuming them', () => {
+  const driver = new EventEmitter() as unknown as WorkerHidDriver;
+  const messages: string[] = [];
+  let keys = 0;
+  let dials = 0;
+  let touches = 0;
+  wireCommonDriverEvents(
+    driver,
+    applyModelOverrides(AJAZZ_AKP05E_MODEL, { cora: { advertiseAs: 'stream-deck-plus' } }),
+    {
+      onAction: (message) => messages.push(message),
+      onKey: () => {
+        keys++;
+      },
+      onDial: () => {
+        dials++;
+      },
+      onTouch: () => {
+        touches++;
+      },
+      onReinit: () => undefined,
+    },
+  );
+  driver.emit('key', { keyIndex: 1, state: 'down' });
+  driver.emit('key', { keyIndex: 1, state: 'up' });
+  driver.emit('dial', { index: 0, kind: 'press', state: 'down' });
+  driver.emit('dial', { index: 0, kind: 'rotate', delta: -2 });
+  driver.emit('touch', { type: 'tap', x: 100, y: 50 });
+  driver.emit('touch', { type: 'swipe', x: 750, y: 50, endX: 50, endY: 50 });
+  driver.emit('inputAction', 'Unmapped control 0x40 (state 1)');
+  assert.deepEqual(messages, [
+    'Key 1 pressed',
+    'Key 1 released',
+    'Knob 1 pressed',
+    'Knob 1 turned left (2)',
+    'Knob 1 touch tap (100, 50)',
+    'Touch strip swipe (750, 50) → (50, 50)',
+    'Unmapped control 0x40 (state 1)',
+  ]);
+  assert.equal(keys, 2);
+  assert.equal(dials, 2);
+  assert.equal(touches, 2);
+});
+
 await test('dial events reach childServer.sendDial only when the knob override leaves them', async () => {
   const connected = makeSession(AJAZZ_AKP05E_MODEL);
   await connected.session.start();

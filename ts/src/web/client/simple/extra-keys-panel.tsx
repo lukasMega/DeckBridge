@@ -7,31 +7,20 @@ import { useStore } from '../store.js';
 import type {
   DockUi,
   ExtraKeyCfg,
-  ExtraKeyWidget,
   PluginStatus,
   PluginsInfo,
   TouchStripMode,
 } from '../ui-types.js';
-import { ConfigButton, paramPlaceholder, postExtraKey, PARAM_MAX } from './extra-keys-popovers.js';
 import {
   EncodersSection,
   RepaintIntervalField,
   TouchStripModeSelect,
   touchStripModeDescription,
 } from './touch-strip-panel.js';
-import { CommandInput } from './command-input.js';
 import { ConfigSection, GridHeader } from './config-section.js';
-import { fire } from '../ui-api.js';
-
-const WIDGET_OPTIONS: ReadonlyArray<{ value: ExtraKeyWidget; label: string }> = [
-  { value: 'none', label: 'Empty' },
-  { value: 'clock', label: 'Clock (24h)' },
-  { value: 'date', label: 'Date' },
-  { value: 'text', label: 'Custom text' },
-  { value: 'weather', label: 'Weather (°C)' },
-  { value: 'command', label: 'Command output' },
-  { value: 'plugin', label: 'Plugin (JS)' },
-];
+import { SideKeysHelp } from './side-keys-help.js';
+import { WidgetSelect, WidgetValue, type PluginFiles } from './extra-key-fields.js';
+import { SideKeyCard } from './side-key-card.js';
 
 // Under an override mode 'none' decides what an unassigned strip zone shows.
 const NONE_LABEL: Partial<Record<TouchStripMode, string>> = {
@@ -43,13 +32,7 @@ const POSITION_LABELS: Readonly<Record<number, readonly string[]>> = {
   2: ['Top', 'Bottom'],
   3: ['Top', 'Middle', 'Bottom'],
 };
-const PLUGIN_CUSTOM = '__custom__';
 const PLUGIN_STATUS_POLL_MS = 2000;
-
-const PARAM_NOUN: Partial<Record<ExtraKeyWidget, string>> = {
-  weather: 'location',
-  command: 'command',
-};
 
 interface WidgetSection {
   wireIds: readonly number[];
@@ -96,215 +79,33 @@ function widgetSections(dock: DockUi | undefined): WidgetSection[] {
   return sections;
 }
 
-// change (not input) — commits on blur/Enter. Only text widget maps "\n" to real line break.
-function ParamInput({
-  wireId,
-  label,
-  widget,
-  param,
-  cfg,
-}: Readonly<{
-  wireId: number;
-  label: string;
-  widget: ExtraKeyWidget;
-  param: string;
-  cfg?: ExtraKeyCfg;
-}>): preact.JSX.Element {
-  const isText = widget === 'text';
-  const handleParam = (e: Event): void => {
-    const raw = (e.target as HTMLInputElement).value;
-    postExtraKey(
-      wireId,
-      widget,
-      isText ? raw.replaceAll('\\n', '\n') : raw,
-      cfg?.intervalMs,
-      cfg?.timeoutMs,
-    );
-  };
-  return (
-    <input
-      class="input xkey-select xkey-param"
-      type="text"
-      maxLength={PARAM_MAX}
-      value={isText ? param.replaceAll('\n', '\\n') : param}
-      placeholder={paramPlaceholder(widget)}
-      aria-label={`${label} side key ${PARAM_NOUN[widget] ?? 'text'}`}
-      onChange={handleParam}
-    />
-  );
-}
-
-// "Custom path…" swaps dropdown for absolute-path input. Server resolves bare
-// names against plugins dir; absolute paths used as-is.
-function PluginPicker({
-  wireId,
-  label,
-  param,
-  cfg,
-  pluginFiles,
-  pluginsDir,
-}: Readonly<{
-  wireId: number;
-  label: string;
-  param: string;
-  cfg?: ExtraKeyCfg;
-  pluginFiles: string[];
-  pluginsDir: string;
-}>): preact.JSX.Element {
-  const [customMode, setCustomMode] = useState(false);
-  const isCustomParam = param.includes('/') || param.includes('\\');
-  const customActive = customMode || isCustomParam;
-
-  const handlePluginFile = (e: Event): void => {
-    const file = (e.target as HTMLSelectElement).value;
-    if (file === PLUGIN_CUSTOM) {
-      setCustomMode(true);
-      return;
-    }
-    setCustomMode(false);
-    postExtraKey(wireId, 'plugin', file || undefined, cfg?.intervalMs, undefined, cfg?.pluginArg);
-  };
-  const handleCustomPath = (e: Event): void => {
-    const p = (e.target as HTMLInputElement).value.trim();
-    if (p) postExtraKey(wireId, 'plugin', p, cfg?.intervalMs, undefined, cfg?.pluginArg);
-  };
-
-  return (
-    <>
-      <select
-        class={customActive ? 'input xkey-select' : 'input xkey-select xkey-param'}
-        value={customActive ? PLUGIN_CUSTOM : param}
-        title={`plugins dir: ${pluginsDir}`}
-        aria-label={`${label} side key plugin file`}
-        onChange={handlePluginFile}
-      >
-        {!param && !customActive && (
-          <option value="">
-            {pluginFiles.length > 0 ? 'choose plugin…' : 'no plugins in dir'}
-          </option>
-        )}
-        {!customActive && param && !pluginFiles.includes(param) && (
-          <option value={param}>{param} (missing)</option>
-        )}
-        {pluginFiles.map((f) => (
-          <option key={f} value={f}>
-            {f}
-          </option>
-        ))}
-        <option value={PLUGIN_CUSTOM}>Custom path…</option>
-      </select>
-      {customActive && (
-        <input
-          class="input xkey-select xkey-param"
-          type="text"
-          maxLength={PARAM_MAX}
-          value={isCustomParam ? param : ''}
-          placeholder="/absolute/path/plugin.js"
-          aria-label={`${label} side key plugin path`}
-          onChange={handleCustomPath}
-        />
-      )}
-    </>
-  );
-}
-
 function ExtraKeyRow({
   wireId,
   label,
   cfg,
-  pluginFiles,
-  pluginsDir,
+  plugins,
   pluginStatus,
   noneLabel,
-  pressable,
 }: Readonly<{
   wireId: number;
   label: string;
   cfg?: ExtraKeyCfg;
-  pluginFiles: string[];
-  pluginsDir: string;
+  plugins: PluginFiles;
   pluginStatus?: PluginStatus;
   noneLabel?: string;
-  pressable: boolean;
 }>): preact.JSX.Element {
-  const widget = cfg?.widget ?? 'none';
-  const param = cfg?.param ?? '';
-  const hasParam = widget === 'text' || widget === 'weather' || widget === 'command';
-  const hasConfig = widget === 'command' || widget === 'plugin';
-
-  const handleWidget = (e: Event): void => {
-    const next = (e.target as HTMLSelectElement).value as ExtraKeyWidget;
-    postExtraKey(
-      wireId,
-      next,
-      next === widget ? param : undefined,
-      cfg?.intervalMs,
-      cfg?.timeoutMs,
-    );
-  };
-
   return (
     <div class="xkey-row">
       <span class="xkey-pos">{label}</span>
-      <select
-        class="input xkey-select"
-        value={widget}
-        aria-label={`${label} side key widget`}
-        onChange={handleWidget}
-      >
-        {WIDGET_OPTIONS.map((o) => (
-          <option key={o.value} value={o.value}>
-            {o.value === 'none' ? (noneLabel ?? o.label) : o.label}
-          </option>
-        ))}
-      </select>
-      <div class={hasConfig ? 'xkey-value' : 'xkey-value xkey-wide'}>
-        {hasParam && (
-          <ParamInput wireId={wireId} label={label} widget={widget} param={param} cfg={cfg} />
-        )}
-        {widget === 'plugin' && (
-          <PluginPicker
-            wireId={wireId}
-            label={label}
-            param={param}
-            cfg={cfg}
-            pluginFiles={pluginFiles}
-            pluginsDir={pluginsDir}
-          />
-        )}
-      </div>
-      {hasConfig && (
-        <ConfigButton
-          wireId={wireId}
-          label={label}
-          widget={widget}
-          cfg={cfg}
-          pluginStatus={pluginStatus}
-        />
-      )}
-      {pressable && (
-        <>
-          <span class="xkey-press-label">On press</span>
-          <PressCommandInput wireId={wireId} label={label} cfg={cfg} />
-        </>
-      )}
+      <WidgetSelect wireId={wireId} label={label} cfg={cfg} noneLabel={noneLabel} />
+      <WidgetValue
+        wireId={wireId}
+        label={label}
+        cfg={cfg}
+        plugins={plugins}
+        pluginStatus={pluginStatus}
+      />
     </div>
-  );
-}
-
-function PressCommandInput({
-  wireId,
-  label,
-  cfg,
-}: Readonly<{ wireId: number; label: string; cfg?: ExtraKeyCfg }>): preact.JSX.Element {
-  return (
-    <CommandInput
-      value={cfg?.pressCommand ?? ''}
-      label={`${label} side key press command`}
-      placeholder="shell command"
-      title="Shell command run on press"
-      onCommit={(command) => fire('/api/extra-key/press', { wireId, command })}
-    />
   );
 }
 
@@ -351,35 +152,51 @@ export function ExtraKeysPanel(): preact.JSX.Element | null {
           <ConfigSection
             key={section.title}
             title={section.title}
-            subtitle={section.subtitle ?? touchStripModeDescription(stripMode)}
-            aside={section.touchStrip ? <TouchStripModeSelect mode={stripMode} /> : undefined}
+            compact={!section.touchStrip}
+            subtitle={section.touchStrip ? touchStripModeDescription(stripMode) : undefined}
+            aside={
+              section.touchStrip ? (
+                <TouchStripModeSelect mode={stripMode} />
+              ) : (
+                dock && <SideKeysHelp dock={dock} description={section.subtitle} />
+              )
+            }
           >
             {section.touchStrip && stripMode === 'deckbridge-repaint' && <RepaintIntervalField />}
-            {showRows && (
+            {showRows && section.touchStrip && (
               <GridHeader
-                columns={[
-                  { label: section.touchStrip ? 'Zone' : 'Key' },
-                  { label: 'Shows' },
-                  { label: 'Value', wide: true },
-                ]}
+                columns={[{ label: 'Zone' }, { label: 'Shows' }, { label: 'Value', wide: true }]}
               />
             )}
             {showRows &&
-              section.wireIds.map((wireId) => (
-                <ExtraKeyRow
-                  key={wireId}
-                  wireId={wireId}
-                  label={section.labels.get(wireId) ?? `Key ${wireId}`}
-                  cfg={configs[String(wireId)]}
-                  pluginFiles={plugins.files}
-                  pluginsDir={plugins.dir}
-                  pluginStatus={plugins.status[String(wireId)]}
-                  noneLabel={section.touchStrip ? NONE_LABEL[stripMode] : undefined}
-                  pressable={section.pressable.has(wireId)}
-                />
-              ))}
-            {showRows && section.encoderCount > 0 && (
-              <EncodersSection count={section.encoderCount} />
+              section.wireIds.map((wireId) => {
+                const label = section.labels.get(wireId) ?? `Key ${wireId}`;
+                const cfg = configs[String(wireId)];
+                const pluginStatus = plugins.status[String(wireId)];
+                return section.touchStrip ? (
+                  <ExtraKeyRow
+                    key={wireId}
+                    wireId={wireId}
+                    label={label}
+                    cfg={cfg}
+                    plugins={plugins}
+                    pluginStatus={pluginStatus}
+                    noneLabel={NONE_LABEL[stripMode]}
+                  />
+                ) : (
+                  <SideKeyCard
+                    key={wireId}
+                    wireId={wireId}
+                    label={label}
+                    cfg={cfg}
+                    plugins={plugins}
+                    pluginStatus={pluginStatus}
+                    pressable={section.pressable.has(wireId)}
+                  />
+                );
+              })}
+            {section.encoderCount > 0 && (
+              <EncodersSection count={section.encoderCount} overrideEnabled={showRows} />
             )}
           </ConfigSection>
         );

@@ -16,6 +16,7 @@ import { DiagnosticsPanel } from '../src/web/client/simple/diagnostics-panel.js'
 import { MultiDeckPanel } from '../src/web/client/simple/multi-deck-panel.js';
 import { KeymapLearn } from '../src/web/client/simple/keymap-learn.js';
 import { DockList } from '../src/web/client/simple/dock-cards.js';
+import { showDeviceAction } from '../src/web/client/device-test-mode.js';
 import { ExtraKeysPanel } from '../src/web/client/simple/extra-keys-panel.js';
 import { ChipRadioGroup } from '../src/web/client/components/ChipRadioGroup.js';
 import { updateBadgeVersion } from '../src/web/client/ui-helpers.js';
@@ -1041,17 +1042,72 @@ const AKP05E_DOCK: DockUi = {
   modelId: 'ajazz-akp05e',
   modelName: 'AJAZZ AKP05E',
   keyCount: 8,
-  columns: 4,
+  columns: 5,
   rows: 2,
   primaryPort: 5343,
   primaryConnected: true,
   elgatoConnected: true,
   brightness: 100,
-  extraKeys: [10, 11, 12],
-  pressableExtraKeys: [10, 11, 12],
+  extraKeys: [15, 10],
+  pressableExtraKeys: [15, 10],
   widgetDisplays: [20, 21, 22, 23].map((wireId, i) => ({ wireId, label: `Zone ${i + 1}` })),
   encoderCount: 4,
 };
+
+async function checkSideKeysHelp(): Promise<void> {
+  await click('button[aria-label="Side keys help"]');
+  await settle();
+  const help = root.querySelector<HTMLDialogElement>('dialog.side-keys-help');
+  check(help?.open === true, 'Side keys help opens modal dialog');
+  check(
+    help?.querySelectorAll('.side-keys-device-grid .side-keys-device-key').length === 8 &&
+      help.querySelectorAll('.side-keys-device-column .side-keys-device-key').length === 2,
+    'Help diagram uses selected dock grid and side keys',
+  );
+  check(
+    [...help!.querySelectorAll('.side-keys-device-grid .side-keys-device-key')]
+      .map((key) => key.textContent)
+      .join(',') === '1,2,3,4,6,7,8,9',
+    'Plus mode highlights only physical keys controlled by Elgato',
+  );
+  check(
+    [...help!.querySelectorAll('.side-keys-device-column .side-keys-device-key')]
+      .map((key) => key.textContent)
+      .join(',') === 'Top,Bottom' &&
+      help!.querySelector('.side-keys-sankey')?.textContent.includes('4 × 2 keys') === true,
+    'Plus mode labels physical side keys and correct Sankey grid size',
+  );
+  await click('button[aria-label="Close side keys help"]');
+  check(root.querySelector('dialog.side-keys-help') === null, 'Side keys help closes');
+}
+
+async function checkDeviceTestMode(): Promise<void> {
+  const toast = document.createElement('div');
+  toast.id = 'toast';
+  document.body.appendChild(toast);
+  const input = root.querySelector<HTMLInputElement>('.device-test-option input')!;
+  check(!input.checked, 'Device test mode defaults off');
+  showDeviceAction({ dockIndex: 0, message: 'Key 1 pressed' });
+  check(toast.textContent === '', 'Disabled test mode stays quiet');
+  await act(() => input.click());
+  check(getSnapshot().deviceTestMode, 'Test checkbox enables local observer');
+  showDeviceAction({ dockIndex: 1, message: 'Other dock action' });
+  check(toast.textContent === '', 'Test mode ignores other docks');
+  showDeviceAction({ dockIndex: 0, message: 'Knob 1 touch tap (100, 50)' });
+  check(
+    toast.textContent === 'Knob 1 touch tap (100, 50)' && toast.classList.contains('show'),
+    'Selected device action shows notification',
+  );
+  showDeviceAction({ dockIndex: 0, message: 'Knob 1 turned right (1)' });
+  check(toast.textContent === 'Knob 1 turned right (1)', 'Repeated actions update notification');
+  await act(() => input.click());
+  showDeviceAction({ dockIndex: 0, message: 'Key 2 pressed' });
+  check(
+    toast.textContent === 'Knob 1 turned right (1)',
+    'Disabling observer stops new notifications',
+  );
+  toast.remove();
+}
 
 async function runSideKeysPanel(): Promise<void> {
   const stub = stubFetch(() => ({ payload: { dir: '', files: [], status: {} } }));
@@ -1064,7 +1120,7 @@ async function runSideKeysPanel(): Promise<void> {
     await act(() =>
       patch({
         status: { ...baseStatus, docks: [AKP05E_DOCK], selectedDock: 0 },
-        extraKeys: { '11': { widget: 'command', param: 'date' } },
+        extraKeys: { '10': { widget: 'command', param: 'date' } },
         touchStripMode: 'elgato',
         encoders: { connectToApp: true },
       }),
@@ -1072,24 +1128,38 @@ async function runSideKeysPanel(): Promise<void> {
     await act(() => render(<ExtraKeysPanel />, root));
     await settle();
 
-    const sideRows = rows('Side keys');
+    await checkSideKeysHelp();
+    await checkDeviceTestMode();
+
+    const cards = [...section('Side keys').querySelectorAll('.xkey-card')];
     check(
-      sideRows.length === 3 &&
-        sideRows.every(
-          (row) =>
-            row.querySelectorAll('.xkey-value').length === 1 &&
-            row.querySelector('.xkey-press-label') !== null,
+      cards.length === 2 &&
+        cards.every(
+          (card) =>
+            card.querySelector('.xkey-tile') !== null &&
+            card.querySelector('.xkey-press-label:last-of-type')?.textContent === 'On press',
         ),
-      'Every side-key row has one value cell and an on-press line',
+      'Every side-key card has a preview tile and an on-press line',
     );
     check(
-      sideRows.filter((row) => row.querySelector('.xkey-value.xkey-wide') !== null).length === 2,
-      'Value cell spans the settings track when the widget has no settings button',
+      cards[0]!.querySelector('.xkey-value') === null &&
+        cards[1]!.querySelector('.xkey-value:not(.xkey-wide)') !== null &&
+        cards[1]!.querySelector('.xkey-config-btn') !== null,
+      'Value line shows only for widgets with a value, beside its settings button',
     );
     check(
-      section('Side keys').querySelector('.xkey-grid-head')?.textContent === 'KeyShowsValue',
-      'Side keys grid has column captions',
+      section('Side keys').querySelector('.xkey-grid-head') === null &&
+        cards.map((card) => card.querySelector('.xkey-tile-empty')?.textContent).join(',') ===
+          'Top,Bottom',
+      'Empty preview tiles show the key position',
     );
+    await act(() => patch({ extraKeyImages: { '10': 'Qk0=' } }));
+    check(
+      cards[1]!.querySelector<HTMLImageElement>('.xkey-tile img')?.src ===
+        'data:image/bmp;base64,Qk0=' && cards[0]!.querySelector('.xkey-tile img') === null,
+      'Side-key tile shows the live widget image',
+    );
+    await act(() => patch({ extraKeyImages: {} }));
     check(
       rows('Touch strip').length === 0 &&
         section('Touch strip').textContent.includes('DeckBridge widgets are off') &&

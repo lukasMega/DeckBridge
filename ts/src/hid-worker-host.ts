@@ -201,6 +201,9 @@ export class WorkerHidDriver extends EventEmitter implements DeviceDriver {
       case 'touch':
         this.emit('touch', msg.event satisfies TouchInputEvent);
         break;
+      case 'inputAction':
+        this.emit('inputAction', msg.message);
+        break;
       case 'imageSent':
         this.emit('imageSent', msg.keyIndex);
         break;
