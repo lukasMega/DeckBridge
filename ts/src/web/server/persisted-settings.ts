@@ -34,6 +34,20 @@ const isTouchStripZoneFit = (v: unknown): boolean =>
 const isTouchStripUpload = (v: unknown): boolean =>
   (TOUCH_STRIP_UPLOADS as readonly unknown[]).includes(v);
 
+/** Optional per-device fields shared by stripInvalidDeviceSettings and
+ *  hasValidDeviceSettings — one table so both stay in sync and neither trips
+ *  the complexity limit on a long if-chain. */
+const OPTIONAL_DEVICE_FIELDS: ReadonlyArray<{ key: string; isValid: (v: unknown) => boolean }> = [
+  { key: 'brightness', isValid: (v) => typeof v === 'number' },
+  { key: 'brightnessOverride', isValid: (v) => typeof v === 'boolean' },
+  { key: 'extraKeys', isValid: isExtraKeysRecord },
+  { key: 'touchStripMode', isValid: isTouchStripMode },
+  { key: 'touchStripRepaintMs', isValid: isTouchStripRepaintMs },
+  { key: 'touchStripZoneFit', isValid: isTouchStripZoneFit },
+  { key: 'touchStripUpload', isValid: isTouchStripUpload },
+  { key: 'encoders', isValid: (v) => !encoderSettingsError(v) },
+];
+
 /** Strip bad optional per-device fields so they can't fail isDeviceIdentitySettings
  *  and drop the whole identity entry — that would regenerate MAC/serial and force an
  *  Elgato re-pair. extraKeys: migration 2026-07-16 (action→widget model);
@@ -42,35 +56,17 @@ const isTouchStripUpload = (v: unknown): boolean =>
 function stripInvalidDeviceSettings(d: unknown): void {
   if (typeof d !== 'object' || d === null) return;
   const r = d as Record<string, unknown>;
-  if (r.extraKeys !== undefined && !isExtraKeysRecord(r.extraKeys)) delete r.extraKeys;
-  if (r.touchStripMode !== undefined && !isTouchStripMode(r.touchStripMode)) {
-    delete r.touchStripMode;
+  for (const { key, isValid } of OPTIONAL_DEVICE_FIELDS) {
+    if (r[key] !== undefined && !isValid(r[key])) delete r[key];
   }
-  if (r.touchStripRepaintMs !== undefined && !isTouchStripRepaintMs(r.touchStripRepaintMs)) {
-    delete r.touchStripRepaintMs;
-  }
-  if (r.touchStripZoneFit !== undefined && !isTouchStripZoneFit(r.touchStripZoneFit)) {
-    delete r.touchStripZoneFit;
-  }
-  if (r.touchStripUpload !== undefined && !isTouchStripUpload(r.touchStripUpload)) {
-    delete r.touchStripUpload;
-  }
-  if (r.encoders !== undefined && encoderSettingsError(r.encoders)) delete r.encoders;
   delete r.touchStripDisabled;
   delete r.imageModeOverride;
 }
 
 /** The optional per-device settings half of isDeviceIdentitySettings. */
 function hasValidDeviceSettings(r: Record<string, unknown>): boolean {
-  return (
-    (r.brightness === undefined || typeof r.brightness === 'number') &&
-    (r.brightnessOverride === undefined || typeof r.brightnessOverride === 'boolean') &&
-    (r.extraKeys === undefined || isExtraKeysRecord(r.extraKeys)) &&
-    (r.touchStripMode === undefined || isTouchStripMode(r.touchStripMode)) &&
-    (r.touchStripRepaintMs === undefined || isTouchStripRepaintMs(r.touchStripRepaintMs)) &&
-    (r.touchStripZoneFit === undefined || isTouchStripZoneFit(r.touchStripZoneFit)) &&
-    (r.touchStripUpload === undefined || isTouchStripUpload(r.touchStripUpload)) &&
-    (r.encoders === undefined || encoderSettingsError(r.encoders) === null)
+  return OPTIONAL_DEVICE_FIELDS.every(
+    ({ key, isValid }) => r[key] === undefined || isValid(r[key]),
   );
 }
 
@@ -192,11 +188,11 @@ export class PersistedSettings {
   /** A burst of saves coalesces onto one write of the newest snapshot. */
   private queueSave(snapshot: Settings): Promise<void> {
     this.pendingSave = snapshot;
-    this.saveChain = this.saveChain.then(async () => {
-      const next = this.pendingSave;
-      if (next === undefined) return;
+    this.saveChain = this.saveChain.then(async (): Promise<void> => {
+      const pending = this.pendingSave;
+      if (pending === undefined) return;
       this.pendingSave = undefined;
-      await saveSettings(next, this.cacheRoot);
+      return saveSettings(pending, this.cacheRoot);
     });
     return this.saveChain;
   }
