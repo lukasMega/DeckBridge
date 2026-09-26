@@ -521,7 +521,9 @@ async function checkImageFitApplicability(): Promise<void> {
         root.querySelector('#image-fit-target')?.textContent === '112×112 px',
       'Image fit help shows source and key sizes',
     );
-    await act(() => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' })));
+    await act(() => {
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+    });
     check(root.querySelector('#image-fit-help') === null, 'Escape closes image fit help');
   } finally {
     stub.restore();

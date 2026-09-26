@@ -37,6 +37,7 @@ export const DOC_ROUTES: readonly string[] = [
   'privacy',
   'device-specs',
   'adding-a-device',
+  'akp05-guided-probe',
   'side-keys',
   'plugin-widgets',
   'hidapi-ffi',
