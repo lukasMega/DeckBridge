@@ -655,6 +655,15 @@ input[type='range'].range:disabled {
   flex: 1;
   min-width: 0;
 }
+.xkey-press {
+  gap: 6px;
+}
+.xkey-card-span .input.xkey-press-action {
+  flex: none;
+}
+.xkey-press .input:disabled {
+  opacity: 0.5;
+}
 .side-keys-help-button {
   width: 22px;
   height: 22px;
@@ -780,7 +789,8 @@ input[type='range'].range:disabled {
   color: var(--fg-dim);
   text-align: right;
 }
-.xkey-press-label + .input {
+.xkey-press-label + .input,
+.xkey-press-label + .xkey-display {
   grid-column: 3 / -1;
 }
 .xkey-mode {
@@ -900,9 +910,6 @@ input[type='range'].range:disabled {
   cursor: default;
 }
 /* strip rows gain a Size track after the value/config tracks */
-.xkey-strip-row {
-  grid-template-columns: 52px 150px minmax(0, 1fr) 30px auto;
-}
 .xkey-size-picker {
   width: 300px;
 }

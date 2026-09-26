@@ -1,6 +1,7 @@
 import assert from 'tjs:assert';
 import { EventEmitter } from '../src/platform/events-shim.js';
 import { DeviceSession, sessionIdentity, wireCommonDriverEvents } from '../src/device-session.js';
+import { zoneForKnob, zoneForTouch } from '../src/device-session-status.js';
 import type { SessionServers } from '../src/device-session.js';
 import { generateDeviceIdentity } from '../src/device-identity.js';
 import { DEFAULT_MODEL } from '../src/devices/registry.js';
@@ -16,7 +17,13 @@ import {
   ELGATO_PLUS_PID,
   DEFAULT_CHILD_FIRMWARE_VERSION,
 } from '../src/types.js';
-import type { DialEvent, KeyState } from '../src/types.js';
+import type {
+  DialEvent,
+  ExtraKeyConfig,
+  KeyState,
+  TouchInputEvent,
+  TouchStripMode,
+} from '../src/types.js';
 import type { EncoderOverride } from '../src/encoders.js';
 import type { ChildGeometry } from '../src/capabilities.js';
 import type { DeviceConfig } from '../src/elgato-types.js';
@@ -83,6 +90,10 @@ class FakeChildServer extends EventEmitter {
   sendDial(event: DialEvent): void {
     this.sendDialCalls.push(event);
   }
+  sendTouchCalls: TouchInputEvent[] = [];
+  sendTouch(event: TouchInputEvent): void {
+    this.sendTouchCalls.push(event);
+  }
 }
 
 class FakeDriver extends EventEmitter {
@@ -115,6 +126,7 @@ class FakeDriver extends EventEmitter {
   clearKey(keyIndex: number): void {
     this.clearKeyCalls.push(keyIndex);
   }
+  renderTouchImage(): void {}
 }
 
 function testIdentity(model: DeviceModel, deviceKey = 'test-device-key') {
@@ -160,6 +172,34 @@ function makeSession(model: DeviceModel = DEFAULT_MODEL, encoderOverride?: Encod
     },
   };
 }
+
+/** An AKP05E re-paired as a Plus whose strip zones carry `configs`, in `mode`. */
+function makeStripSession(
+  mode: TouchStripMode,
+  configs: Record<number, ExtraKeyConfig>,
+  encoderOverride?: EncoderOverride,
+) {
+  const model = applyModelOverrides(AJAZZ_AKP05E_MODEL, {
+    cora: { advertiseAs: 'stream-deck-plus' },
+  });
+  const server = new FakeServer();
+  const childServer = new FakeChildServer();
+  const driver = new FakeDriver(model);
+  const session = new DeviceSession({
+    identity: sessionIdentity(1, testIdentity(model)),
+    servers: { server, childServer } as unknown as SessionServers,
+    driver: driver as unknown as WorkerHidDriver,
+    model,
+    onDisconnect: () => undefined,
+    extraKeyConfigFor: (wireId) => configs[wireId],
+    touchStripMode: mode,
+    encoderOverride: () => encoderOverride,
+    tapFeedback: () => ({ flash: true, placeholder: false }),
+  });
+  return { session, driver, childServer };
+}
+
+const tap = (x: number): TouchInputEvent => ({ type: 'tap', x, y: 50 });
 
 // Tests
 
@@ -412,6 +452,76 @@ await test('a pressable extra key reaches onExtraKey by its image wire id, not o
     [10, 'up'],
   ]);
   assert.deepEqual(keys, [0]);
+});
+
+await test('strip zones map left→right onto taps (800 px Plus strip) and knobs', () => {
+  const plus = applyModelOverrides(AJAZZ_AKP05E_MODEL, {
+    cora: { advertiseAs: 'stream-deck-plus' },
+  });
+  assert.deepEqual(
+    [0, 199, 200, 450, 799, 900].map((x) => zoneForTouch(plus, tap(x))),
+    [1, 1, 2, 3, 4, 4],
+  );
+  assert.deepEqual(
+    [0, 1, 2, 3, 4].map((i) => zoneForKnob(plus, i)),
+    [1, 2, 3, 4, undefined],
+  );
+  assert.equal(zoneForTouch(DEFAULT_MODEL, tap(10)), undefined, 'no strip');
+});
+
+await test('a tap on a zone showing a widget refreshes it; other gestures and zones reach the app', async () => {
+  const { session, driver, childServer } = makeStripSession('deckbridge-ignore', {
+    1: { widget: 'text', param: 'Hi' },
+    2: { widget: 'none' },
+  });
+  await session.start();
+  const before = driver.splashCalls.length;
+  driver.emit('touch', tap(100));
+  assert.equal(driver.splashCalls.length, before + 1, 'zone 1 flashed');
+  assert.equal(driver.splashCalls.at(-1), 1);
+  driver.emit('touch', tap(300));
+  driver.emit('touch', tap(500));
+  driver.emit('touch', { type: 'hold', x: 100, y: 50 });
+  driver.emit('touch', { type: 'swipe', x: 100, y: 50, endX: 700, endY: 50 });
+  await session.stop();
+  assert.deepEqual(
+    childServer.sendTouchCalls.map((e) => `${e.type} ${e.x}`),
+    ['tap 300', 'tap 500', 'hold 100', 'swipe 100'],
+    "'none' / unassigned zones, hold and swipe are forwarded",
+  );
+});
+
+await test("taps reach the app under 'elgato' and in a repaint-mode Elgato hold-off", async () => {
+  const configs = { 1: { widget: 'text', param: 'Hi' } as ExtraKeyConfig };
+  const elgato = makeStripSession('elgato', configs);
+  await elgato.session.start();
+  elgato.driver.emit('touch', tap(100));
+  await elgato.session.stop();
+  assert.equal(elgato.childServer.sendTouchCalls.length, 1, "'elgato' strip");
+
+  const repaint = makeStripSession('deckbridge-repaint', configs);
+  await repaint.session.start();
+  repaint.driver.emit('touch', tap(100));
+  assert.equal(repaint.childServer.sendTouchCalls.length, 0, 'widget showing → consumed');
+  repaint.childServer.emit('touchImage', { data: new Uint8Array(1), region: undefined });
+  repaint.driver.emit('touch', tap(100));
+  await repaint.session.stop();
+  assert.equal(repaint.childServer.sendTouchCalls.length, 1, "hold-off: the app's image shows");
+});
+
+await test('a disconnected knob press with no command refreshes the zone above it', async () => {
+  const { session, driver, childServer } = makeStripSession(
+    'deckbridge-ignore',
+    { 2: { widget: 'text', param: 'Hi' } },
+    { mode: 'deckbridge-ignore', encoders: { connectToApp: false } },
+  );
+  await session.start();
+  const before = driver.splashCalls.length;
+  driver.emit('dial', { index: 1, kind: 'press', state: 'down' });
+  driver.emit('dial', { index: 0, kind: 'press', state: 'down' });
+  await session.stop();
+  assert.deepEqual(driver.splashCalls.slice(before), [2], 'knob 2 → zone 2; zone 1 has no widget');
+  assert.equal(childServer.sendDialCalls.length, 0, 'consumed');
 });
 
 await test('image event reaches driver.renderCoraImage', async () => {

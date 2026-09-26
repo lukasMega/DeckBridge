@@ -1,6 +1,7 @@
 import assert from 'tjs:assert';
 import { EventEmitter } from 'node:events';
-import { ExtraKeyWidgets, parseLatLon, renderWidgetLines } from '../src/extra-keys.js';
+import { ExtraKeyWidgets, FLASH_MS, renderWidgetLines } from '../src/extra-keys.js';
+import { parseLatLon, WEATHER_FORCE_MIN_MS } from '../src/widget-refresh.js';
 import {
   TOUCH_STRIP_MODES,
   isExtraKeyConfig,
@@ -653,6 +654,239 @@ await test('forceRun is a no-op for a non-command (or unconfigured) key', () => 
   w.forceRun(17); // unconfigured
   w.stop();
   assert.equal(d.splashed.length, before, 'no repaint scheduled');
+});
+
+// ExtraKeyWidgets.refresh (tap to refresh)
+
+console.log('\nExtraKeyWidgets.refresh');
+
+/** Records each run and holds it open until the test settles it. */
+class FakeRunner {
+  readonly runs: string[] = [];
+  private readonly pending: PromiseWithResolvers<string>[] = [];
+  readonly run = (cmd: string): Promise<string> => {
+    this.runs.push(cmd);
+    const deferred = Promise.withResolvers<string>();
+    this.pending.push(deferred);
+    return deferred.promise;
+  };
+  async finishNext(out = 'ok', fail = false): Promise<void> {
+    const deferred = this.pending.shift();
+    if (fail) deferred?.reject(new Error('boom'));
+    else deferred?.resolve(out);
+    await macrotask();
+  }
+}
+
+const macrotask = (): Promise<void> => new Promise((r) => setTimeout(r, 0));
+
+await test('refresh() is false for none/unassigned keys, true for a widget', () => {
+  const d = new FakeDriver();
+  const configs: Record<number, ExtraKeyConfig> = { 16: { widget: 'none' }, 17: HI };
+  const w = new ExtraKeyWidgets(d, (wireId) => configs[wireId]);
+  w.start();
+  assert.equal(w.refresh(16), false, "'none'");
+  assert.equal(w.refresh(18), false, 'unassigned');
+  assert.equal(w.refresh(99), false, 'not a widget key of this dock');
+  assert.equal(w.refresh(17), true);
+  w.stop();
+});
+
+await test('clock / text refresh repaints once, nothing fetched', () => {
+  for (const cfg of [HI, { widget: 'clock' } as ExtraKeyConfig]) {
+    const d = new FakeDriver();
+    const runner = new FakeRunner();
+    const w = new ExtraKeyWidgets(
+      d,
+      (id) => (id === 16 ? cfg : undefined),
+      undefined,
+      undefined,
+      undefined,
+      {
+        run: runner.run,
+      },
+    );
+    w.start();
+    const before = d.splashed.length;
+    assert.equal(w.refresh(16), true);
+    w.stop();
+    assert.equal(d.splashed.length, before + 1, `${cfg.widget} repainted once`);
+    assert.equal(runner.runs.length, 0);
+  }
+});
+
+await test('command refresh reruns immediately; taps mid-run queue exactly one follow-up', async () => {
+  const d = new FakeDriver();
+  const runner = new FakeRunner();
+  const cfg: ExtraKeyConfig = { widget: 'command', param: 'refresh-coalesce-marker' };
+  const t = 1_000_000;
+  const w = new ExtraKeyWidgets(
+    d,
+    (id) => (id === 16 ? cfg : undefined),
+    undefined,
+    undefined,
+    undefined,
+    {
+      run: runner.run,
+      now: () => t,
+    },
+  );
+  w.start();
+  assert.equal(runner.runs.length, 1, 'first tick runs it');
+  await runner.finishNext('A');
+  assert.equal(w.refresh(16), true);
+  assert.equal(runner.runs.length, 2, 'bypasses the 10 s interval');
+  w.refresh(16);
+  w.refresh(16);
+  w.forceRun(16);
+  assert.equal(runner.runs.length, 2, 'one run at a time');
+  await runner.finishNext('B');
+  assert.equal(runner.runs.length, 3, 'exactly one follow-up');
+  await runner.finishNext('C');
+  w.stop();
+  assert.equal(runner.runs.length, 3, 'no further runs');
+});
+
+await test('weather refresh refetches only once 60 s passed since the last fetch', async () => {
+  const realFetch = globalThis.fetch;
+  let fetches = 0;
+  (globalThis as { fetch: unknown }).fetch = () => {
+    fetches++;
+    const body = { current_weather: { temperature: 20 + fetches } };
+    return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve(body) });
+  };
+  try {
+    const d = new FakeDriver();
+    let t = 5_000_000;
+    const cfg: ExtraKeyConfig = { widget: 'weather', param: '12.5,34.5' };
+    const w = new ExtraKeyWidgets(
+      d,
+      (id) => (id === 16 ? cfg : undefined),
+      undefined,
+      undefined,
+      undefined,
+      {
+        now: () => t,
+      },
+    );
+    w.start();
+    await macrotask();
+    assert.equal(fetches, 1, 'first tick fetches');
+    t += 30_000;
+    const before = d.splashed.length;
+    assert.equal(w.refresh(16), true);
+    assert.equal(fetches, 1, 'inside the floor → repaint only');
+    assert.equal(d.splashed.length, before + 1);
+    t += WEATHER_FORCE_MIN_MS - 30_000;
+    w.refresh(16);
+    await macrotask();
+    w.stop();
+    assert.equal(fetches, 2, 'refetched after 60 s, under the 10 min interval');
+  } finally {
+    (globalThis as { fetch: unknown }).fetch = realFetch;
+  }
+});
+
+// Tap feedback (flash / placeholder)
+
+console.log('\nExtraKeyWidgets tap feedback');
+
+/** BGR of the first stored pixel (bottom-left corner — always background). */
+const cornerBgr = (bmp: Uint8Array): number[] => [...bmp.subarray(54, 57)];
+const PANEL_BG = [0x14, 0x10, 0x10];
+const PANEL_FG = [0xec, 0xe8, 0xe8];
+const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
+
+await test('default feedback (tapFeedback absent) flashes inverted, then repaints after 150 ms', async () => {
+  const d = new FakeDriver();
+  const w = new ExtraKeyWidgets(d, (id) => (id === 16 ? HI : undefined));
+  w.start();
+  assert.deepEqual(cornerBgr(d.splashed[0]!.bytes), PANEL_BG);
+  w.refresh(16);
+  assert.equal(d.splashed.length, 2, 'flash painted at once');
+  assert.deepEqual(cornerBgr(d.splashed[1]!.bytes), PANEL_FG, 'colours swapped');
+  await sleep(FLASH_MS + 50);
+  assert.equal(d.splashed.length, 3, 'normal paint after the flash');
+  assert.deepEqual(cornerBgr(d.splashed[2]!.bytes), PANEL_BG);
+  w.stop();
+});
+
+await test('flash off + placeholder on: "…" until the command completes, then its output', async () => {
+  const d = new FakeDriver();
+  const runner = new FakeRunner();
+  const lines: string[][] = [];
+  const cfg: ExtraKeyConfig = { widget: 'command', param: 'placeholder-marker' };
+  const w = new ExtraKeyWidgets(
+    d,
+    (id) => (id === 16 ? cfg : undefined),
+    undefined,
+    undefined,
+    (id, paint) => {
+      if (id === 16) lines.push(paint ? paint.lines.map((l) => l.text) : []);
+    },
+    { run: runner.run, now: () => 1e6, tapFeedback: () => ({ flash: false, placeholder: true }) },
+  );
+  w.start();
+  await runner.finishNext('A');
+  w.refresh(16);
+  assert.deepEqual(lines.at(-1), ['…'], 'placeholder painted at once');
+  await runner.finishNext('B');
+  w.stop();
+  assert.deepEqual(lines.at(-1), ['B'], 'result replaces the placeholder');
+});
+
+await test('placeholder clears when the refresh fails', async () => {
+  const d = new FakeDriver();
+  const runner = new FakeRunner();
+  const lines: string[][] = [];
+  const cfg: ExtraKeyConfig = { widget: 'command', param: 'placeholder-fail-marker' };
+  const w = new ExtraKeyWidgets(
+    d,
+    (id) => (id === 16 ? cfg : undefined),
+    undefined,
+    undefined,
+    (id, paint) => {
+      if (id === 16) lines.push(paint ? paint.lines.map((l) => l.text) : []);
+    },
+    { run: runner.run, now: () => 1e6, tapFeedback: () => ({ flash: false, placeholder: true }) },
+  );
+  w.start();
+  await runner.finishNext('A');
+  w.refresh(16);
+  await runner.finishNext('', true);
+  w.stop();
+  assert.deepEqual(lines.at(-1), ['A'], 'last good value back, no "…" left');
+});
+
+await test('both flags: flash first, then "…" until done; repaint-only widgets skip the placeholder', async () => {
+  const d = new FakeDriver();
+  const runner = new FakeRunner();
+  const lines: string[][] = [];
+  const configs: Record<number, ExtraKeyConfig> = {
+    16: { widget: 'command', param: 'both-flags-marker' },
+    17: HI,
+  };
+  const w = new ExtraKeyWidgets(
+    d,
+    (id) => configs[id],
+    undefined,
+    undefined,
+    (id, paint) => {
+      if (id === 16 || id === 17) lines.push(paint ? paint.lines.map((l) => l.text) : []);
+    },
+    { run: runner.run, now: () => 1e6, tapFeedback: () => ({ flash: true, placeholder: true }) },
+  );
+  w.start();
+  await runner.finishNext('A');
+  const painted = d.splashed.length;
+  w.refresh(16);
+  w.refresh(17);
+  assert.equal(d.splashed.length, painted + 2, 'two flashes');
+  await sleep(FLASH_MS + 50);
+  assert.deepEqual(lines.slice(-2), [['…'], ['Hi']], 'command shows "…", text just repaints');
+  await runner.finishNext('B');
+  w.stop();
+  assert.deepEqual(lines.at(-2), ['B'], 'command result (then the text key)');
 });
 
 summary();

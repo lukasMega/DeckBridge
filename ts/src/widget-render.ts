@@ -173,6 +173,7 @@ function blitGlyph(
   codepoint: number,
   x0: number,
   y0: number,
+  fg: readonly number[],
 ): void {
   const idx = fontGlyphIndex(codepoint);
   if (idx < 0) return;
@@ -187,25 +188,32 @@ function blitGlyph(
       const pxX = x0 + x;
       if (!on || pxX < 0 || pxX >= width) continue;
       const o = (py * width + pxX) * 3;
-      px[o] = FG[0];
-      px[o + 1] = FG[1];
-      px[o + 2] = FG[2];
+      px[o] = fg[0]!;
+      px[o + 1] = fg[1]!;
+      px[o + 2] = fg[2]!;
     }
   }
 }
 
 /** Draw a layout into an upright width×height 24-bit BMP (the worker transform
- *  accepts any format the image crate sniffs — BMP included). */
-export function composeLayout(layout: WidgetLayout, width: number, height: number): Uint8Array {
+ *  accepts any format the image crate sniffs — BMP included). `inverted` swaps the
+ *  panel colours (tap-refresh flash). */
+export function composeLayout(
+  layout: WidgetLayout,
+  width: number,
+  height: number,
+  inverted = false,
+): Uint8Array {
+  const [bg, fg] = inverted ? [FG, BG] : [BG, FG];
   const px = new Uint8Array(width * height * 3);
   for (let o = 0; o < px.length; o += 3) {
-    px[o] = BG[0];
-    px[o + 1] = BG[1];
-    px[o + 2] = BG[2];
+    px[o] = bg[0];
+    px[o + 1] = bg[1];
+    px[o + 2] = bg[2];
   }
   for (const { chars, font, x, y } of layout.lines) {
     chars.forEach((ch, i) => {
-      blitGlyph(px, width, height, font, ch.codePointAt(0)!, x + i * font.width, y);
+      blitGlyph(px, width, height, font, ch.codePointAt(0)!, x + i * font.width, y, fg);
     });
   }
 

@@ -5,7 +5,7 @@
 // extra-key command widget (extra-keys.ts): loopback-only WebUI by default, but
 // `--bind` on the LAN lets anyone reaching :3000 run a command on this host.
 // Opt-in per control, trusted personal LAN only.
-import { COMMAND_TIMEOUT_DEFAULT_MS } from './types.js';
+import { COMMAND_TIMEOUT_DEFAULT_MS, effectivePressAction } from './types.js';
 import type { ExtraKeyConfig, KeyState } from './types.js';
 import { runCommand } from './os-utils.js';
 import { log } from './logger.js';
@@ -50,21 +50,29 @@ export class CommandSlots {
   }
 }
 
-/** Runs one dock's extra-key press commands (ExtraKeyConfig.pressCommand). */
+/** Runs one dock's extra-key presses: the press command (ExtraKeyConfig.pressCommand)
+ *  and/or a refresh of the key's widget, per ExtraKeyConfig.pressAction. */
 export class ExtraKeyActions {
   private readonly configFor: (wireId: number) => ExtraKeyConfig | undefined;
   private readonly slots: CommandSlots;
+  private readonly refresh: (wireId: number) => void;
 
   constructor(
     configFor: (wireId: number) => ExtraKeyConfig | undefined,
     run: CommandRunner = runCommand,
+    /** Tap refresh of the key's widget (ExtraKeyWidgets.refresh, via the dock). */
+    refresh: (wireId: number) => void = () => undefined,
   ) {
     this.configFor = configFor;
     this.slots = new CommandSlots('extra-key', run);
+    this.refresh = refresh;
   }
 
   handleKey(wireId: number, state: KeyState): void {
     if (state !== 'down') return;
+    const action = effectivePressAction(this.configFor(wireId));
+    if (action !== 'command') this.refresh(wireId);
+    if (action === 'refresh') return;
     this.slots.trigger(
       `key ${wireId} press`,
       () => this.configFor(wireId)?.pressCommand?.trim() || undefined,

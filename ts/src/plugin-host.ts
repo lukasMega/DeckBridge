@@ -63,6 +63,10 @@ interface HostEntry {
   status: PluginStatus;
   lastRequested: number;
   onUpdate: () => void;
+  /** A runNow is out and its poll has not reported yet — further taps join it. */
+  forcing: boolean;
+  /** Called when the forced poll reports (or the worker dies). */
+  settled: Array<() => void>;
 }
 
 const entryKey = (file: string, arg: string): string => `${file}\0${arg}`;
@@ -117,6 +121,8 @@ export class PluginHost {
         status: 'pending',
         lastRequested: now,
         onUpdate,
+        forcing: false,
+        settled: [],
       };
       this.entries.set(key, entry);
       this.killCount = 0; // fresh config → the worker gets fresh tries
@@ -136,6 +142,21 @@ export class PluginHost {
       }
     }
     return { value: entry.value, status: entry.status };
+  }
+
+  /** Tap refresh: poll this key now instead of at its next interval; taps before that
+   *  poll reports collapse into it. `onSettled` fires once it has. False = no running
+   *  plugin for the key (not requested yet, or disabled). */
+  forceRefresh(file: string | undefined, arg: string | undefined, onSettled?: () => void): boolean {
+    const f = file?.trim();
+    const entry = f ? this.entries.get(entryKey(f, arg ?? '')) : undefined;
+    if (!entry || entry.status === 'disabled' || !this.worker) return false;
+    if (onSettled) entry.settled.push(onSettled);
+    if (!entry.forcing) {
+      entry.forcing = true;
+      this.post({ type: 'runNow', key: entry.key });
+    }
+    return true;
   }
 
   /** Current status of a plugin key for the WebUI (no side effects). */
@@ -195,6 +216,8 @@ export class PluginHost {
     const w = this.worker;
     this.worker = null;
     this.awaitingPong = false;
+    // The respawned worker never answers a runNow the old one took.
+    for (const e of this.entries.values()) settleForced(e, true);
     // Deferred a macrotask — see terminateDeferred (worker-lifecycle.ts).
     if (w) terminateDeferred(w);
   }
@@ -252,10 +275,10 @@ export class PluginHost {
   private onMessage(msg: PluginWorkerToMain): void {
     switch (msg.type) {
       case 'value':
-        this.applyValue(msg.key, msg.value);
+        this.applyValue(msg.key, msg.value, msg.forced === true);
         break;
       case 'error':
-        this.applyError(msg.key, msg.message);
+        this.applyError(msg.key, msg.message, msg.forced === true);
         break;
       case 'fetch':
         void this.runFetch(msg.fetchId, msg.url, msg.init);
@@ -270,20 +293,22 @@ export class PluginHost {
     }
   }
 
-  private applyValue(key: string, value: string | null): void {
+  private applyValue(key: string, value: string | null, forced: boolean): void {
     const entry = this.entries.get(key);
     if (!entry) return;
     entry.value = value;
     entry.status = 'ok';
     entry.onUpdate();
+    settleForced(entry, forced);
   }
 
-  private applyError(key: string, message: string): void {
+  private applyError(key: string, message: string, forced: boolean): void {
     const entry = this.entries.get(key);
     if (!entry) return;
     log('warn', 'plugin', `${entry.file}: ${message}`);
     entry.status = 'err';
     entry.onUpdate();
+    settleForced(entry, forced);
   }
 
   /** Run a plugin's proxied fetch on the main thread. Only plain http:// works
@@ -320,6 +345,13 @@ export class PluginHost {
   }
 }
 
+/** End an entry's forced refresh when `forced` (its poll reported / its worker died). */
+function settleForced(entry: HostEntry, forced: boolean): void {
+  if (!forced) return;
+  entry.forcing = false;
+  for (const done of entry.settled.splice(0)) done();
+}
+
 function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
   let timer: ReturnType<typeof setTimeout>;
   const timeout = new Promise<T>((_, reject) => {
@@ -344,6 +376,15 @@ export function pluginValueFor(
   onUpdate: () => void,
 ): PluginValue {
   return getPluginHost().request(file, arg, intervalMs, onUpdate);
+}
+
+/** Tap refresh of a plugin widget key — see PluginHost.forceRefresh. */
+export function forcePluginRefresh(
+  file: string | undefined,
+  arg: string | undefined,
+  onSettled?: () => void,
+): boolean {
+  return getPluginHost().forceRefresh(file, arg, onSettled);
 }
 
 /** Status of a configured plugin key for the WebUI (Phase 2 consumer). */

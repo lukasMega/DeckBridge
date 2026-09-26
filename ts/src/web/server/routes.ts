@@ -8,6 +8,7 @@ import type { MockDeviceConfig } from './types.js';
 import {
   EXTRA_KEY_WIDGETS,
   EXTRA_KEY_PARAM_MAX,
+  EXTRA_KEY_PRESS_ACTIONS,
   EXTRA_KEY_TEXT_SIZES,
   EXTRA_KEY_WRAPS,
   COMMAND_INTERVAL_MIN_MS,
@@ -23,6 +24,7 @@ import {
 import type {
   EncoderSettings,
   ExtraKeyConfig,
+  ExtraKeyPressAction,
   ExtraKeyTextSize,
   ExtraKeyWidget,
   ExtraKeyWrap,
@@ -293,17 +295,30 @@ function previewExtraKey({ wireId }: RunExtraKeyBody, { ui }: RouteContext): Res
   return 'error' in res ? json({ error: res.error }, res.status) : json(res);
 }
 
-/** Shell command a pressable extra key runs on press ('' clears it). Separate from the
+/** A pressable extra key's press side: the shell command it runs ('' clears it) and/or
+ *  its action (refresh / command / both); an omitted field is kept. Separate from the
  *  widget POST so neither overwrites the other. */
 function setExtraKeyPress(
-  { wireId, command }: { wireId: unknown; command: unknown },
+  { wireId, command, action }: { wireId: unknown; command: unknown; action: unknown },
   { ui }: RouteContext,
 ): Response {
   if (!isNonNegInt(wireId)) return badRequest(nonNegIntMessage('wireId'));
-  if (typeof command !== 'string' || command.length > ENCODER_COMMAND_MAX) {
+  if (command === undefined && action === undefined) {
+    return badRequest('command or action is required');
+  }
+  if (
+    command !== undefined &&
+    (typeof command !== 'string' || command.length > ENCODER_COMMAND_MAX)
+  ) {
     return badRequest(`command must be a string ≤ ${ENCODER_COMMAND_MAX} chars`);
   }
-  const err = ui.trySetExtraKey(wireId, { pressCommand: command });
+  if (action !== undefined && !(EXTRA_KEY_PRESS_ACTIONS as readonly unknown[]).includes(action)) {
+    return badRequest(`action must be one of: ${EXTRA_KEY_PRESS_ACTIONS.join(', ')}`);
+  }
+  const err = ui.trySetExtraKey(wireId, {
+    ...(command !== undefined ? { pressCommand: command } : {}),
+    ...(action !== undefined ? { pressAction: action as ExtraKeyPressAction } : {}),
+  });
   return err ? json({ error: err.error }, err.status) : json({ ok: true });
 }
 

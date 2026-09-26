@@ -1,4 +1,4 @@
-import { loadSettings, saveSettings, settingsPath } from '../../settings-store.js';
+import { isTapFeedback, loadSettings, saveSettings, settingsPath } from '../../settings-store.js';
 import type { Settings, DeviceIdentitySettings, PersistedLogLevel } from '../../settings-store.js';
 import { isLogLevel } from '../../cli.js';
 import { openPathInOS } from '../../os-utils.ts';
@@ -46,6 +46,7 @@ const OPTIONAL_DEVICE_FIELDS: ReadonlyArray<{ key: string; isValid: (v: unknown)
   { key: 'touchStripZoneFit', isValid: isTouchStripZoneFit },
   { key: 'touchStripUpload', isValid: isTouchStripUpload },
   { key: 'encoders', isValid: (v) => !encoderSettingsError(v) },
+  { key: 'tapFeedback', isValid: isTapFeedback },
 ];
 
 /** Strip bad optional per-device fields so they can't fail isDeviceIdentitySettings

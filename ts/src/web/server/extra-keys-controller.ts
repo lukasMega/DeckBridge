@@ -9,26 +9,38 @@ import type { ExtraKeyConfig } from '../../types.js';
 import type { WidgetPaint } from '../../widget-render.js';
 import type { ExtraKeyPreviewResponse } from '../contract.js';
 import { widgetPreviews } from './widget-preview.js';
-import type { ControllerHost, ExtraKeyUpdate, PluginsInfo, ReqError } from './types.js';
+import type {
+  ControllerHost,
+  ExtraKeyPressUpdate,
+  ExtraKeyUpdate,
+  PluginsInfo,
+  ReqError,
+} from './types.js';
 
 /** The widget part of a config — `{ widget: 'none' }` when there is none yet. */
 function withoutPress(cfg: ExtraKeyConfig | undefined): ExtraKeyConfig {
   const widget: ExtraKeyConfig = { ...(cfg ?? { widget: 'none' }) };
   delete widget.pressCommand;
+  delete widget.pressAction;
   return widget;
 }
 
-/** `prev` with `update` applied — the widget and the press command replace
- *  independently. undefined = nothing left to persist. */
+/** `prev` with `update` applied — the widget and the press side (command + action)
+ *  replace independently. undefined = nothing left to persist. */
 function mergeExtraKey(
   prev: ExtraKeyConfig | undefined,
   update: ExtraKeyUpdate,
 ): ExtraKeyConfig | undefined {
-  const isWidget = 'widget' in update;
-  const widget = isWidget ? update : withoutPress(prev);
-  const pressCommand = (isWidget ? prev?.pressCommand : update.pressCommand)?.trim();
-  if (widget.widget === 'none' && !pressCommand) return undefined;
-  return { ...widget, ...(pressCommand ? { pressCommand } : {}) };
+  const press: ExtraKeyPressUpdate = 'widget' in update ? {} : update;
+  const widget = withoutPress('widget' in update ? update : prev);
+  const pressCommand = (press.pressCommand ?? prev?.pressCommand)?.trim();
+  const pressAction = press.pressAction ?? prev?.pressAction;
+  if (widget.widget === 'none' && !pressCommand && !pressAction) return undefined;
+  return {
+    ...widget,
+    ...(pressCommand ? { pressCommand } : {}),
+    ...(pressAction ? { pressAction } : {}),
+  };
 }
 
 export class ExtraKeysController {

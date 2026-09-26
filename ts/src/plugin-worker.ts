@@ -57,6 +57,10 @@ interface PluginContext {
 
 interface RunningPlugin extends PluginRunConfig {
   cancelled: boolean;
+  /** A runNow arrived: the next poll starts at once (repeats before it collapse). */
+  runNow: boolean;
+  /** Ends the current inter-poll sleep early. */
+  wake?: () => void;
 }
 const running = new Map<string, RunningPlugin>();
 
@@ -90,7 +94,18 @@ function pluginName(path: string): string {
   return path.split(/[/\\]/).pop() ?? path;
 }
 
-const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
+/** Sleep until the next poll, cut short by a runNow (handleRunNow). */
+function sleepUntilDue(rp: RunningPlugin, ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    const timer = setTimeout(done, ms);
+    function done(): void {
+      clearTimeout(timer);
+      rp.wake = undefined;
+      resolve();
+    }
+    rp.wake = done;
+  });
+}
 
 function effectiveInterval(rp: RunningPlugin, plugin: PluginModule): number {
   const requested = rp.intervalMs ?? plugin.interval ?? PLUGIN_INTERVAL_DEFAULT_MS;
@@ -110,7 +125,8 @@ async function loadPlugin(rp: RunningPlugin): Promise<PluginModule | null> {
     }
     return candidate;
   } catch (e) {
-    post({ type: 'error', key: rp.key, message: `load failed: ${(e as Error).message}` });
+    const message = `load failed: ${(e as Error).message}`;
+    post({ type: 'error', key: rp.key, message, forced: rp.runNow });
     running.delete(rp.key);
     return null;
   }
@@ -118,11 +134,11 @@ async function loadPlugin(rp: RunningPlugin): Promise<PluginModule | null> {
 
 /** Post one poll result. Throws on a non-string, non-nullish return — the
  *  caller's catch turns that into the same transient error a throw gets. */
-function postPollResult(rp: RunningPlugin, result: unknown): void {
+function postPollResult(rp: RunningPlugin, result: unknown, forced: boolean): void {
   if (result === null || result === undefined) {
-    post({ type: 'value', key: rp.key, value: null });
+    post({ type: 'value', key: rp.key, value: null, forced });
   } else if (typeof result === 'string') {
-    post({ type: 'value', key: rp.key, value: result.slice(0, PLUGIN_VALUE_MAX) });
+    post({ type: 'value', key: rp.key, value: result.slice(0, PLUGIN_VALUE_MAX), forced });
   } else {
     throw new Error('fetch() must return a string or null');
   }
@@ -133,9 +149,10 @@ async function pollLoop(rp: RunningPlugin): Promise<void> {
   if (!plugin) return;
 
   const name = pluginName(rp.path);
-  // Read through a function so TS doesn't narrow `cancelled` to always-false
+  // Read through functions so TS doesn't narrow `cancelled`/`runNow` to always-false
   // across the awaits (it's flipped by handleConfigure on another turn).
   const stopped = (): boolean => rp.cancelled;
+  const runNowQueued = (): boolean => rp.runNow;
   const ctx: PluginContext = {
     get param() {
       return rp.param;
@@ -146,15 +163,18 @@ async function pollLoop(rp: RunningPlugin): Promise<void> {
   };
 
   while (!stopped()) {
+    const forced = rp.runNow;
+    rp.runNow = false;
     try {
       const result = await plugin.fetch(ctx);
       if (stopped()) break;
-      postPollResult(rp, result);
+      postPollResult(rp, result, forced);
     } catch (e) {
       if (stopped()) break;
-      post({ type: 'error', key: rp.key, message: (e as Error).message });
+      post({ type: 'error', key: rp.key, message: (e as Error).message, forced });
     }
-    await sleep(effectiveInterval(rp, plugin));
+    // A runNow that landed mid-poll gets its own poll right away.
+    if (!runNowQueued()) await sleepUntilDue(rp, effectiveInterval(rp, plugin));
   }
 }
 
@@ -175,10 +195,21 @@ function handleConfigure(plugins: PluginRunConfig[]): void {
       existing.path = p.path;
       continue;
     }
-    const rp: RunningPlugin = { ...p, cancelled: false };
+    const rp: RunningPlugin = { ...p, cancelled: false, runNow: false };
     running.set(p.key, rp);
     void pollLoop(rp);
   }
+}
+
+function handleRunNow(key: string): void {
+  const rp = running.get(key);
+  if (!rp) {
+    // Load failed (or the key is going away): answer, so the host's refresh ends.
+    post({ type: 'error', key, message: 'plugin is not running', forced: true });
+    return;
+  }
+  rp.runNow = true;
+  rp.wake?.();
 }
 
 function handleFetchResult(msg: Extract<MainToPluginWorker, { type: 'fetchResult' }>): void {
@@ -200,6 +231,9 @@ scope.addEventListener('message', (ev: MessageEvent) => {
       break;
     case 'ping':
       post({ type: 'pong', seq: msg.seq });
+      break;
+    case 'runNow':
+      handleRunNow(msg.key);
       break;
   }
 });

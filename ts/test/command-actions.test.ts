@@ -1,6 +1,10 @@
 import assert from 'tjs:assert';
 import { ExtraKeyActions } from '../src/command-actions.js';
-import { COMMAND_TIMEOUT_DEFAULT_MS } from '../src/types.js';
+import {
+  COMMAND_TIMEOUT_DEFAULT_MS,
+  effectivePressAction,
+  isExtraKeyConfig,
+} from '../src/types.js';
 import type { ExtraKeyConfig } from '../src/types.js';
 import { testAsync as test, summary } from './helpers/harness.js';
 
@@ -26,10 +30,16 @@ class FakeRunner {
 function setup(initial: Record<number, ExtraKeyConfig>) {
   let configs = initial;
   const runner = new FakeRunner();
-  const actions = new ExtraKeyActions((wireId) => configs[wireId], runner.run);
+  const refreshed: number[] = [];
+  const actions = new ExtraKeyActions(
+    (wireId) => configs[wireId],
+    runner.run,
+    (wireId) => refreshed.push(wireId),
+  );
   return {
     runner,
     actions,
+    refreshed,
     set: (next: Record<number, ExtraKeyConfig>) => {
       configs = next;
     },
@@ -43,8 +53,8 @@ await test('press down runs the trimmed command with the default kill timeout; u
   assert.deepEqual(runner.runs, [{ cmd: 'open -a Music', timeoutMs: COMMAND_TIMEOUT_DEFAULT_MS }]);
 });
 
-await test('no config, no command, or a blank command runs nothing', () => {
-  const { runner, actions } = setup({
+await test('no config, no command, or a blank command runs nothing (it refreshes instead)', () => {
+  const { runner, actions, refreshed } = setup({
     10: { widget: 'clock' },
     15: { widget: 'none', pressCommand: '  ' },
   });
@@ -52,6 +62,37 @@ await test('no config, no command, or a blank command runs nothing', () => {
   actions.handleKey(15, 'down');
   actions.handleKey(3, 'down');
   assert.equal(runner.runs.length, 0);
+  assert.deepEqual(refreshed, [10, 15, 3], 'default without a command: refresh');
+});
+
+await test('pressAction: command / refresh / both; unset with a command keeps the command', () => {
+  const { runner, actions, refreshed } = setup({
+    1: { widget: 'clock', pressCommand: 'a' },
+    2: { widget: 'clock', pressCommand: 'b', pressAction: 'refresh' },
+    3: { widget: 'clock', pressCommand: 'c', pressAction: 'both' },
+    4: { widget: 'clock', pressCommand: 'd', pressAction: 'command' },
+    5: { widget: 'clock', pressAction: 'command' },
+  });
+  for (const wireId of [1, 2, 3, 4, 5]) actions.handleKey(wireId, 'down');
+  assert.deepEqual(
+    runner.runs.map((r) => r.cmd),
+    ['a', 'c', 'd'],
+  );
+  assert.deepEqual(refreshed, [2, 3], "'command' with no command does nothing");
+});
+
+await test('effectivePressAction defaults + isExtraKeyConfig pressAction guard', () => {
+  assert.equal(effectivePressAction(undefined), 'refresh');
+  assert.equal(effectivePressAction({ widget: 'clock' }), 'refresh');
+  assert.equal(effectivePressAction({ widget: 'clock', pressCommand: '  ' }), 'refresh');
+  assert.equal(effectivePressAction({ widget: 'clock', pressCommand: 'x' }), 'command');
+  assert.equal(effectivePressAction({ widget: 'clock', pressAction: 'both' }), 'both');
+  for (const pressAction of ['refresh', 'command', 'both']) {
+    assert.ok(isExtraKeyConfig({ widget: 'none', pressAction }), pressAction);
+  }
+  for (const pressAction of ['run', '', 1, null, true]) {
+    assert.ok(!isExtraKeyConfig({ widget: 'none', pressAction }), String(pressAction));
+  }
 });
 
 await test('presses while running coalesce into one re-run with the current command', async () => {

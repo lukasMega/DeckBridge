@@ -5,6 +5,7 @@ import type { MainToPluginWorker, PluginWorkerToMain } from '../src/plugin-worke
 import { testAsync as runTest, summaryExit } from './helpers/harness.js';
 
 const macrotask = (): Promise<void> => new Promise((r) => setTimeout(r, 0));
+const sleepMs = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
 
 const PLUGINS_DIR = `${tjs.tmpDir}/plugin-host-plugins`;
 // http:// on purpose — the ctx.fetch proxy is http-only (no TLS in the slim build).
@@ -252,6 +253,96 @@ await runTest('a key not re-requested is reaped; last one gone → worker stops'
   assert.equal(p.entries.size, 0, 'stale entry dropped');
   assert.equal(p.worker, null, 'worker stopped when no plugins remain');
   host.stop();
+});
+
+// forced refresh (tap to refresh)
+
+console.log('\nPluginHost.forceRefresh');
+
+const runNows = (w: FakeWorker): string[] =>
+  w.posted.flatMap((m) => (m.type === 'runNow' ? [m.key] : []));
+
+await runTest('force posts one runNow; repeats before the forced poll reports collapse', () => {
+  const { host, workers } = makeHost();
+  host.request('p.js', 'x', undefined, () => {});
+  const key = workers[0]!.configures()[0]!.plugins[0]!.key;
+  let settled = 0;
+  assert.equal(
+    host.forceRefresh('p.js', 'x', () => settled++),
+    true,
+  );
+  host.forceRefresh('p.js', 'x', () => settled++);
+  host.forceRefresh('p.js', 'x');
+  assert.deepEqual(runNows(workers[0]!), [key], 'one runNow for three taps');
+  workers[0]!.emit({ type: 'value', key, value: 'routine' });
+  assert.equal(settled, 0, 'a routine poll does not end the refresh');
+  workers[0]!.emit({ type: 'value', key, value: 'fresh', forced: true });
+  assert.equal(settled, 2, 'every waiter settled once');
+  host.forceRefresh('p.js', 'x');
+  assert.equal(runNows(workers[0]!).length, 2, 'a later tap posts again');
+  host.stop();
+});
+
+await runTest('a forced poll that throws still ends the refresh (ERR shown)', () => {
+  const { host, workers } = makeHost();
+  host.request('p.js', undefined, undefined, () => {});
+  const key = workers[0]!.configures()[0]!.plugins[0]!.key;
+  let settled = 0;
+  host.forceRefresh('p.js', undefined, () => settled++);
+  workers[0]!.emit({ type: 'error', key, message: 'boom', forced: true });
+  assert.equal(settled, 1);
+  assert.equal(host.statusOf('p.js'), 'err');
+  host.stop();
+});
+
+await runTest('unrequested / blank keys are not refreshable', () => {
+  const { host, workers } = makeHost();
+  assert.equal(host.forceRefresh('never.js', undefined), false);
+  assert.equal(host.forceRefresh('  ', undefined), false);
+  assert.equal(workers.length, 0, 'no worker spawned for a force');
+});
+
+await runTest('a worker death settles pending refreshes and lets the next tap post', async () => {
+  const { host, workers } = makeHost();
+  host.request('p.js', undefined, undefined, () => {});
+  let settled = 0;
+  host.forceRefresh('p.js', undefined, () => settled++);
+  workers[0]!.emitError('crash');
+  await macrotask();
+  assert.equal(settled, 1, 'settled on death');
+  host.forceRefresh('p.js', undefined);
+  assert.equal(runNows(workers[1]!).length, 1, 'the respawned worker gets a runNow');
+  host.stop();
+});
+
+await runTest('real worker: a forced key polls now, not at its 60 s interval', async () => {
+  const dir = `${tjs.tmpDir}/plugin-host-force-${tjs.pid}`;
+  await tjs.makeDir(dir, { recursive: true });
+  await tjs.writeFile(
+    `${dir}/count.js`,
+    'let n = 0;\nexport default { interval: 60000, async fetch() { n++; return String(n); } };\n',
+  );
+  const host = new PluginHost({ pluginsDir: dir });
+  const values: Array<string | null | undefined> = [];
+  const poll = (): void => {
+    values.push(host.request('count.js', undefined, undefined, poll).value);
+  };
+  try {
+    poll();
+    for (let i = 0; i < 100 && !values.includes('1'); i++) await sleepMs(20);
+    assert.ok(values.includes('1'), 'first poll reported');
+    const force = { settled: false };
+    host.forceRefresh('count.js', undefined, () => (force.settled = true));
+    host.forceRefresh('count.js', undefined);
+    for (let i = 0; i < 100 && !force.settled; i++) await sleepMs(20);
+    assert.ok(force.settled, 'forced poll reported');
+    await sleepMs(100);
+    assert.ok(values.includes('2'), 'second poll ran long before the interval');
+    assert.ok(!values.includes('3'), 'repeated forces collapsed into one poll');
+  } finally {
+    host.stop();
+    await tjs.remove(dir, { recursive: true });
+  }
 });
 
 // listPluginFiles

@@ -72,7 +72,7 @@ test('codes just outside the key range emit nothing', () => {
   const d = new TestDriver();
   d.feed(0x00, 0x01);
   d.feed(0x0b, 0x01);
-  d.feed(0x40, 0x00); // touch tap: not decoded yet
+  d.feed(0x44, 0x00); // just past the tap codes
   assert.deepEqual([d.keys, d.dials, d.touches], [[], [], []]);
 });
 
@@ -115,6 +115,17 @@ test('touch-strip swipe codes emit touch events with synthetic coordinates', () 
   assert.deepEqual(d.touches, [
     { type: 'swipe', x: 750, y: 50, endX: 50, endY: 50 },
     { type: 'swipe', x: 50, y: 50, endX: 750, endY: 50 },
+  ]);
+});
+
+test('touch-strip tap codes emit taps at each zone centre, left to right', () => {
+  const d = new TestDriver();
+  for (const code of [0x40, 0x41, 0x42, 0x43]) d.feed(code, 0);
+  assert.deepEqual(d.touches, [
+    { type: 'tap', x: 100, y: 50 },
+    { type: 'tap', x: 300, y: 50 },
+    { type: 'tap', x: 500, y: 50 },
+    { type: 'tap', x: 700, y: 50 },
   ]);
 });
 

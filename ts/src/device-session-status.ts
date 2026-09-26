@@ -13,6 +13,7 @@ import {
   DEFAULT_CHILD_SERIAL_NUMBER,
   DEFAULT_MAC_ADDRESS_STRING,
   MDNS_SERVICE_NAME,
+  PLUS_TOUCH_WIDTH,
 } from './types.js';
 import type { KeyEvent, DockStatus, DialEvent, TouchInputEvent } from './types.js';
 import type { DeviceIdentitySettings } from './settings-store.js';
@@ -23,6 +24,7 @@ import type { DeviceDriver, DeviceModel } from './devices/driver.js';
 import type { ElgatoServer, ElgatoChildServer } from './elgato.js';
 import type { DeviceConfig } from './elgato-types.js';
 import type { WorkerHidDriver } from './hid-worker-host.js';
+import type { ExtraKeyWidgets } from './extra-keys.js';
 
 /** Physical serial/firmware forwarded when model.cora.usePhysicalIdentity. */
 export interface DeviceInfo {
@@ -219,7 +221,7 @@ export function wireCommonDriverEvents(
     const { touchWidth, encoderCount } = advertisedGeometry(model);
     const zone =
       touchWidth && encoderCount && e.type !== 'swipe'
-        ? Math.floor(e.x / (touchWidth / encoderCount)) + 1
+        ? zoneIndex(e.x, touchWidth, encoderCount) + 1
         : undefined;
     const control = zone !== undefined ? `Knob ${zone} touch` : 'Touch strip';
     const end = e.endX !== undefined ? ` → (${e.endX}, ${e.endY})` : '';
@@ -234,6 +236,54 @@ export function wireCommonDriverEvents(
     ({ level, component, message }: { level: LogLevel; component: string; message: string }) =>
       log(level, component, message),
   );
+}
+
+/** 0-based zone under strip x when `width` is cut into `count` equal zones. */
+function zoneIndex(x: number, width: number, count: number): number {
+  return Math.min(Math.max(Math.floor(x / (width / count)), 0), count - 1);
+}
+
+/** The strip's widget displays left→right — the order tap zones and knobs count in. */
+function zonesLeftToRight(model: DeviceModel): number[] {
+  return (model.widgetDisplays ?? [])
+    .map((display, i) => ({ wireId: display.wireId, x: display.stripX ?? i }))
+    .toSorted((a, b) => a.x - b.x)
+    .map((zone) => zone.wireId);
+}
+
+/** The widget display (wire id) under a touch, in advertised strip coordinates. */
+export function zoneForTouch(model: DeviceModel, e: TouchInputEvent): number | undefined {
+  const zones = zonesLeftToRight(model);
+  if (zones.length === 0) return undefined;
+  const width = advertisedGeometry(model).touchWidth ?? PLUS_TOUCH_WIDTH;
+  return zones[zoneIndex(e.x, width, zones.length)];
+}
+
+/** The widget display (wire id) above knob `index`. */
+export function zoneForKnob(model: DeviceModel, index: number): number | undefined {
+  return zonesLeftToRight(model)[index];
+}
+
+/** A strip tap on a zone DeckBridge shows a widget on refreshes it and is consumed
+ *  (true); anything else — hold, swipe, an app-owned zone — goes to the app. */
+export function tapRefresh(
+  widgets: Pick<ExtraKeyWidgets, 'ownsZoneNow' | 'refresh'> | null,
+  model: DeviceModel,
+  e: TouchInputEvent,
+): boolean {
+  if (e.type !== 'tap' || !widgets) return false;
+  const wireId = zoneForTouch(model, e);
+  return wireId !== undefined && widgets.ownsZoneNow(wireId) && widgets.refresh(wireId);
+}
+
+/** Knob press refresh: the widget on the zone above knob `index`, if any. */
+export function knobRefresh(
+  widgets: Pick<ExtraKeyWidgets, 'refresh'> | null,
+  model: DeviceModel,
+  index: number,
+): void {
+  const wireId = zoneForKnob(model, index);
+  if (wireId !== undefined) widgets?.refresh(wireId);
 }
 
 /** Child firmware reported over CORA: the physical device's own when the model

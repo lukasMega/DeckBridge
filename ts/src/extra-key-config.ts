@@ -1,6 +1,11 @@
 // Extra-key widget config (settings.json `extraKeys`, keyed by wire id): the
 // persisted shape, its bounds, and the load/import guard.
-import type { ExtraKeyTextSize, ExtraKeyWidget, ExtraKeyWrap } from './web/contract.js';
+import type {
+  ExtraKeyPressAction,
+  ExtraKeyTextSize,
+  ExtraKeyWidget,
+  ExtraKeyWrap,
+} from './web/contract.js';
 
 // Extra keys (physical keys outside the emulated CORA grid)
 // 293S: the 6th column (wire ids 16/17/18) never maps to an MK.2 index, so
@@ -31,6 +36,12 @@ export const EXTRA_KEY_TEXT_SIZES = [
 ] as const satisfies readonly ExtraKeyTextSize[];
 
 export const EXTRA_KEY_WRAPS = ['words', 'chars'] as const satisfies readonly ExtraKeyWrap[];
+
+export const EXTRA_KEY_PRESS_ACTIONS = [
+  'refresh',
+  'command',
+  'both',
+] as const satisfies readonly ExtraKeyPressAction[];
 
 /** Widgets showing free text — the only ones a wrap setting applies to. */
 export const WRAPPABLE_WIDGETS: readonly ExtraKeyWidget[] = ['text', 'command', 'plugin'];
@@ -78,6 +89,15 @@ export interface ExtraKeyConfig {
   /** Shell command run on press — only extra keys with a switch
    *  (keyMap.extraKeyInputs). Independent of the widget, so kept across widget changes. */
   pressCommand?: string;
+  /** What a press does (pressable keys only) — see effectivePressAction. Part of the
+   *  press side like pressCommand, so also kept across widget changes. */
+  pressAction?: ExtraKeyPressAction;
+}
+
+/** A key's press action, defaulting to today's behaviour: its command when it has
+ *  one, else a refresh of its widget. */
+export function effectivePressAction(cfg: ExtraKeyConfig | undefined): ExtraKeyPressAction {
+  return cfg?.pressAction ?? (cfg?.pressCommand?.trim() ? 'command' : 'refresh');
 }
 
 const inRange = (n: number, min: number, max: number): boolean => n >= min && n <= max;
@@ -104,6 +124,8 @@ export function isExtraKeyConfig(v: unknown): v is ExtraKeyConfig {
       (EXTRA_KEY_TEXT_SIZES as readonly unknown[]).includes(r.textSize)) &&
     (r.wrap === undefined || (EXTRA_KEY_WRAPS as readonly unknown[]).includes(r.wrap)) &&
     (r.pressCommand === undefined ||
-      (typeof r.pressCommand === 'string' && r.pressCommand.length <= ENCODER_COMMAND_MAX))
+      (typeof r.pressCommand === 'string' && r.pressCommand.length <= ENCODER_COMMAND_MAX)) &&
+    (r.pressAction === undefined ||
+      (EXTRA_KEY_PRESS_ACTIONS as readonly unknown[]).includes(r.pressAction))
   );
 }

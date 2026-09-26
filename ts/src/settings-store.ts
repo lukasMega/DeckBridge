@@ -50,6 +50,33 @@ export interface DeviceIdentitySettings {
   touchStripUpload?: TouchStripUpload;
   /** Encoder override — only honored while touchStripMode is a deckbridge-* mode. */
   encoders?: EncoderSettings;
+  /** What a tap refresh shows on the widget; each absent flag takes its default
+   *  (DEFAULT_TAP_FEEDBACK). settings.json only — no WebUI control. */
+  tapFeedback?: Partial<TapFeedback>;
+}
+
+/** Tap-refresh feedback: `flash` = inverted colours for a moment on the tap;
+ *  `placeholder` = '…' until the refresh completes. Independent, both allowed. */
+export interface TapFeedback {
+  flash: boolean;
+  placeholder: boolean;
+}
+
+export const DEFAULT_TAP_FEEDBACK: TapFeedback = { flash: true, placeholder: false };
+
+/** Shape guard for a persisted tapFeedback: an object whose known flags are booleans. */
+export function isTapFeedback(v: unknown): v is Partial<TapFeedback> {
+  if (typeof v !== 'object' || v === null || Array.isArray(v)) return false;
+  const r = v as Record<string, unknown>;
+  return (
+    (r.flash === undefined || typeof r.flash === 'boolean') &&
+    (r.placeholder === undefined || typeof r.placeholder === 'boolean')
+  );
+}
+
+/** A dock's effective tap feedback: its persisted flags over the defaults. */
+export function tapFeedbackOf(entry: DeviceIdentitySettings | undefined): TapFeedback {
+  return { ...DEFAULT_TAP_FEEDBACK, ...entry?.tapFeedback };
 }
 
 /** Persisted log level. Precedence (documented in cli.ts's usage text and

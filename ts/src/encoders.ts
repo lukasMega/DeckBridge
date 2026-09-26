@@ -24,19 +24,31 @@ function actionFor(event: DialEvent): EncoderAction | null {
 export class EncoderActions {
   private readonly settingsFor: () => EncoderOverride | undefined;
   private readonly slots: CommandSlots;
+  private readonly refreshZone: (index: number) => void;
 
-  constructor(settingsFor: () => EncoderOverride | undefined, run: CommandRunner = runCommand) {
+  constructor(
+    settingsFor: () => EncoderOverride | undefined,
+    run: CommandRunner = runCommand,
+    /** Tap refresh of the strip zone above knob `index` (the dock maps it to a wire id). */
+    refreshZone: (index: number) => void = () => undefined,
+  ) {
     this.settingsFor = settingsFor;
     this.slots = new CommandSlots('encoder', run);
+    this.refreshZone = refreshZone;
   }
 
   /** True when the event is consumed — the caller must not forward it to the app.
-   *  A disconnected knob is always consumed, even with no command set. */
+   *  A disconnected knob is always consumed, even with no command set; a press with
+   *  no command refreshes the widget above the knob. */
   handleDial(event: DialEvent): boolean {
     if (!this.disconnected(this.settingsFor())) return false;
     // A press 'up' (the AKP05 driver synthesizes it) is swallowed: the command runs on 'down'.
     const action = actionFor(event);
-    if (action) this.trigger(event.index, action);
+    if (action === 'press' && !this.commandFor(event.index, 'press')) {
+      this.refreshZone(event.index);
+    } else if (action) {
+      this.trigger(event.index, action);
+    }
     return true;
   }
 

@@ -1,10 +1,10 @@
 // One side key: live preview tile (the widget image the server painted on the
-// device) beside its settings — widget, value, press command.
+// device) beside its settings — widget, value, press action + command.
 import { useStore } from '../store.js';
 import type { ExtraKeyCfg, PluginStatus } from '../ui-types.js';
 import {
   hasWidgetValue,
-  PressCommandInput,
+  PressControls,
   WidgetSelect,
   WidgetValue,
   type PluginFiles,
@@ -72,7 +72,7 @@ export function SideKeyCard({
         {pressable && (
           <>
             <span class="xkey-press-label">On press</span>
-            <PressCommandInput wireId={wireId} label={label} cfg={cfg} />
+            <PressControls wireId={wireId} label={label} cfg={cfg} />
           </>
         )}
       </div>
