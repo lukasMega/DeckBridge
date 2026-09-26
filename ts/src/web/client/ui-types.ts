@@ -7,6 +7,7 @@ import type {
   ExtraKeyTextSize,
   ExtraKeyWidget,
   ExtraKeyWrap,
+  WidgetDisplayInfo,
 } from '../contract.js';
 
 export type {
@@ -23,12 +24,14 @@ export type {
   PluginStatus,
   PluginsInfo,
   Stats,
+  StripWriteMsg,
   DeviceIdentity,
   RealDeviceIdentity,
   KeyEventEntry as KeyEvent,
   DeviceModelInfo as DeviceModel,
   TouchStripMode,
   UpdateInfo,
+  WidgetDisplayInfo,
 } from '../contract.js';
 
 export interface TouchStripSize {
@@ -51,7 +54,7 @@ export interface DockUi {
   brightness: number;
   extraKeys?: number[]; // wire ids of keys outside the emulated grid (293S 6th column)
   pressableExtraKeys?: number[]; // the extraKeys with a switch (AKP05E right column as a Plus)
-  widgetDisplays?: Array<{ wireId: number; label: string }>;
+  widgetDisplays?: WidgetDisplayInfo[];
   encoderCount?: number; // rotary encoders (knobs); absent/0 = none
   coraProfile?: string; // re-paired CORA profile (cora.advertiseAs); absent = native
   touchStripSize?: TouchStripSize; // advertised strip (Plus: 800×100)

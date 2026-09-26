@@ -365,7 +365,18 @@ test('duplicate notifyDocks call (same shape) does not broadcast again', () => {
   assert.equal(sent.length, 2 * perCall, 'a genuinely different list broadcasts again');
 });
 
-const STRIP = [{ wireId: 1, label: 'Left' }];
+const STRIP = [
+  {
+    wireId: 1,
+    label: 'Left',
+    width: 176,
+    height: 112,
+    stripX: 0,
+    rotate: 180 as const,
+    flipH: false,
+    flipV: false,
+  },
+];
 
 test('touch-strip mode: 409 without a strip, else persist + broadcast + touchStripModeChanged', () => {
   const ui = new WebUIServer(undefined, [], 'real', TEST_SETTINGS_ROOT);
@@ -622,13 +633,18 @@ test('touch-strip frames: full resets, a window replaces its own region, snapsho
     (ui as unknown as { bus: { clients: Set<ServerWebSocket> } }).bus.clients.values().next()
       .value!,
   );
-  const frames = sent.map((m) => JSON.parse(m) as { event: string; data: { data: string } });
+  const events = sent.map((m) => JSON.parse(m) as { event: string; data: { data: string } });
+  const frames = events.filter((f) => f.event === 'touchImage');
   assert.deepEqual(
     frames.map((f) => [...Buffer.from(f.data.data, 'base64')][0]),
     [1, 3, 4],
     'full frame, then windows in paint order; the repainted window moved last',
   );
-  assert.ok(frames.every((f) => f.event === 'touchImage'));
+  assert.deepEqual(
+    events.filter((f) => f.event !== 'touchImage'),
+    [{ event: 'stripWrite', data: { clear: true } }],
+    'the device-strip mirror only resets (nothing written yet)',
+  );
 
   sent.length = 0;
   touch.notifyDockTouchImage(0, new Uint8Array([5]));

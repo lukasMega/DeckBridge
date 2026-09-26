@@ -15,12 +15,18 @@ import {
   MDNS_SERVICE_NAME,
   PLUS_TOUCH_WIDTH,
 } from './types.js';
-import type { KeyEvent, DockStatus, DialEvent, TouchInputEvent } from './types.js';
+import type {
+  KeyEvent,
+  DockStatus,
+  DialEvent,
+  TouchInputEvent,
+  WidgetDisplayInfo,
+} from './types.js';
 import type { DeviceIdentitySettings } from './settings-store.js';
 import { advertisedGeometry, advertisedModel, advertisedTouchStrip } from './devices/registry.js';
 import { deviceInputToExtraKey, deviceInputToMk2Index } from './key-map.js';
 import { emulationProfiles } from './devices/model-overrides.js';
-import type { DeviceDriver, DeviceModel } from './devices/driver.js';
+import type { DeviceDriver, DeviceModel, DeviceWidgetDisplay } from './devices/driver.js';
 import type { ElgatoServer, ElgatoChildServer } from './elgato.js';
 import type { DeviceConfig } from './elgato-types.js';
 import type { WorkerHidDriver } from './hid-worker-host.js';
@@ -92,7 +98,7 @@ export function buildDockStatus(s: DockStatusInput): DockStatus {
     ...(model.keyMap.extraKeys ? { extraKeys: model.keyMap.extraKeys } : {}),
     ...(pressable.length > 0 ? { pressableExtraKeys: pressable } : {}),
     ...(model.widgetDisplays
-      ? { widgetDisplays: model.widgetDisplays.map(({ wireId, label }) => ({ wireId, label })) }
+      ? { widgetDisplays: model.widgetDisplays.map(widgetDisplayInfo) }
       : {}),
     ...(encoderCount ? { encoderCount } : {}),
     ...(model.cora.advertiseAs ? { coraProfile: model.cora.advertiseAs } : {}),
@@ -186,6 +192,8 @@ export function wireCommonDriverEvents(
     onTouch?: (event: TouchInputEvent) => void;
     /** Sleep/wake re-init sent CLE ALL — repaint the extra-key widgets it wiped. */
     onReinit: () => void;
+    /** A touch-strip upload reached the device (WebUI strip preview mirror). */
+    onStripWrite?: (wireId: number, jpeg: Uint8Array, full: boolean) => void;
   },
 ): void {
   driver.on('key', (e: KeyEvent) => {
@@ -231,11 +239,29 @@ export function wireCommonDriverEvents(
   driver.on('inputAction', (message: string) => opts.onAction?.(message));
   driver.on('error', (err: Error) => log('error', model.id, err.message));
   driver.on('reinit', opts.onReinit);
+  driver.on('stripWrite', (wireId: number, jpeg: Uint8Array, full: boolean) =>
+    opts.onStripWrite?.(wireId, jpeg, full),
+  );
   driver.on(
     'log',
     ({ level, component, message }: { level: LogLevel; component: string; message: string }) =>
       log(level, component, message),
   );
+}
+
+/** A widget display with the geometry the WebUI needs to place device strip writes. */
+function widgetDisplayInfo(display: DeviceWidgetDisplay): WidgetDisplayInfo {
+  const { wireId, label, image, stripX } = display;
+  return {
+    wireId,
+    label,
+    width: image.width,
+    height: image.height,
+    ...(stripX !== undefined ? { stripX } : {}),
+    rotate: image.rotate,
+    flipH: image.flipH,
+    flipV: image.flipV,
+  };
 }
 
 /** 0-based zone under strip x when `width` is cut into `count` equal zones. */

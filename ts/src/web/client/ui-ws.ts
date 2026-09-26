@@ -6,12 +6,14 @@ import type {
   ServerLog,
   CommLog,
   ExtraKeyImageMsg,
+  StripWriteMsg,
   UpdateInfo,
 } from './ui-types.js';
 import { showDeviceAction } from './device-test-mode.js';
 import { error } from './log.js';
 import { applyImage, clearImage, flashKey, resetPreviews } from './key-preview.js';
 import { applyTouchImage, resetTouchStrip, type TouchFrameMsg } from './touch-strip-preview.js';
+import { applyStripWrite, resetStripZones } from './strip-zone-preview.js';
 import * as store from './store.js';
 import type { StoreState } from './store.js';
 import { hydrate, type InitialState } from './hydrate.js';
@@ -32,6 +34,7 @@ const handlers: Record<string, (d: unknown) => void> = {
     if ((next.selectedDock ?? 0) !== prev) {
       resetPreviews();
       resetTouchStrip();
+      resetStripZones();
       store.patch({ status: next, extraKeyImages: {}, extraKeyClipped: {} });
       return;
     }
@@ -46,6 +49,7 @@ const handlers: Record<string, (d: unknown) => void> = {
   touchImage: (d) => {
     applyTouchImage(d as TouchFrameMsg);
   },
+  stripWrite: (d) => applyStripWrite(d as StripWriteMsg),
   extraKeyImage: (d) => {
     const { wireId, data, clipped, zone } = d as ExtraKeyImageMsg;
     const snap = store.getSnapshot();

@@ -3,13 +3,16 @@
 // frame so switching is instant (the Elgato app never re-pushes unprompted).
 import type { Broadcaster } from './broadcaster.js';
 import type { TouchWindowRegion } from '../../types.js';
-import type { ExtraKeyImageMsg } from '../contract.js';
+import type { ExtraKeyImageMsg, StripWriteMsg } from '../contract.js';
 import type { WidgetPaint } from '../../widget-render.js';
 
 export type ImageFormat = 'jpeg' | 'bmp';
 export type DockFrame = { data: Buffer; format: ImageFormat };
 /** One CORA touch-strip JPEG; no region = the full strip. */
 export type TouchFrame = { data: Buffer; region?: TouchWindowRegion };
+
+/** The device's current strip pixels: a full-strip write covers every slot. */
+type StripMirror = { full?: { wireId: number; data: Buffer }; slots: Map<number, Buffer> };
 
 /** Distinct partial windows kept per dock; the app repaints the same few zones. */
 const MAX_TOUCH_FRAMES = 32;
@@ -24,6 +27,8 @@ export class ImageChannel {
   private readonly dockTouch = new Map<number, Map<string, TouchFrame>>();
   /** Per dock: last widget paint on each side key / strip zone, by wire id. */
   private readonly dockExtraKeys = new Map<number, Map<number, WidgetPaint>>();
+  /** Per dock: mirror of the touch-strip uploads that reached the device. */
+  private readonly dockStrip = new Map<number, StripMirror>();
 
   constructor(
     private readonly bus: Broadcaster,
@@ -88,6 +93,23 @@ export class ImageChannel {
     if (dock === this.selectedDock()) this.broadcastExtraKey(wireId, paint ?? undefined);
   }
 
+  /** Cache a device strip upload; push it live only when that dock is selected. */
+  notifyDockStripWrite(dock: number, wireId: number, bytes: Uint8Array, full: boolean): void {
+    const data = Buffer.from(bytes);
+    let mirror = this.dockStrip.get(dock);
+    if (!mirror) {
+      mirror = { slots: new Map() };
+      this.dockStrip.set(dock, mirror);
+    }
+    if (full) {
+      mirror.full = { wireId, data };
+      mirror.slots.clear();
+    } else {
+      mirror.slots.set(wireId, data);
+    }
+    if (dock === this.selectedDock()) this.broadcastStrip(stripPayload(wireId, data, full));
+  }
+
   /** Last paint of one of the selected dock's widgets (size previews re-lay its lines). */
   selectedWidgetPaint(wireId: number): WidgetPaint | undefined {
     return this.dockExtraKeys.get(this.selectedDock())?.get(wireId);
@@ -102,6 +124,14 @@ export class ImageChannel {
     for (const [wireId, paint] of this.dockExtraKeys.get(this.selectedDock()) ?? []) {
       this.bus.sendTo(ws, 'extraKeyImage', extraKeyPayload(wireId, paint));
     }
+    for (const msg of stripMessages(this.dockStrip.get(this.selectedDock()))) {
+      this.bus.sendTo(ws, 'stripWrite', msg);
+    }
+  }
+
+  private broadcastStrip(msg: StripWriteMsg): void {
+    if (this.bus.size === 0) return;
+    this.bus.broadcast('stripWrite', msg);
   }
 
   private broadcastExtraKey(wireId: number, paint?: WidgetPaint): void {
@@ -128,6 +158,7 @@ export class ImageChannel {
     for (const [wireId, paint] of this.dockExtraKeys.get(dock) ?? []) {
       this.broadcastExtraKey(wireId, paint);
     }
+    for (const msg of stripMessages(this.dockStrip.get(dock))) this.broadcastStrip(msg);
   }
 
   /** Drop caches of docks no longer present (notifyDocks). */
@@ -140,6 +171,9 @@ export class ImageChannel {
     }
     for (const dock of this.dockExtraKeys.keys()) {
       if (!liveIndexes.has(dock)) this.dockExtraKeys.delete(dock);
+    }
+    for (const dock of this.dockStrip.keys()) {
+      if (!liveIndexes.has(dock)) this.dockStrip.delete(dock);
     }
   }
 
@@ -155,8 +189,10 @@ export class ImageChannel {
     this.dockTouch.delete(dock);
     const extraKeys = this.dockExtraKeys.get(dock);
     this.dockExtraKeys.delete(dock);
+    this.dockStrip.delete(dock);
     if (dock !== this.selectedDock()) return false;
     for (const wireId of extraKeys?.keys() ?? []) this.broadcastExtraKey(wireId);
+    this.broadcastStrip({ clear: true });
     this.clearLive();
     this.imageVersion.clear();
     return true;
@@ -178,4 +214,17 @@ function extraKeyPayload(wireId: number, paint?: WidgetPaint): ExtraKeyImageMsg 
     ...(paint.zone ? { zone: true } : { data: Buffer.from(paint.bmp).toString('base64') }),
     ...(paint.clipped ? { clipped: true } : {}),
   };
+}
+
+function stripPayload(wireId: number, data: Buffer, full: boolean): StripWriteMsg {
+  return { wireId, data: data.toString('base64'), ...(full ? { full: true as const } : {}) };
+}
+
+/** Clear first, then full before slots: that order rebuilds the device's pixels. */
+function stripMessages(mirror: StripMirror | undefined): StripWriteMsg[] {
+  const messages: StripWriteMsg[] = [{ clear: true }];
+  if (!mirror) return messages;
+  if (mirror.full) messages.push(stripPayload(mirror.full.wireId, mirror.full.data, true));
+  for (const [wireId, data] of mirror.slots) messages.push(stripPayload(wireId, data, false));
+  return messages;
 }

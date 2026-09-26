@@ -6,6 +6,7 @@ import type { DeviceModel } from '../driver.js';
 import type { DialEvent, KeyEvent, KeyState, TouchInputEvent } from '../../types.js';
 import { DEFAULT_BRIGHTNESS } from '../../types.js';
 import { parseAckReport } from '../mirabox-protocol.js';
+import { jpegSize } from '../jpeg-size.js';
 import {
   AKP05_CLEAR_ALL,
   buildBat,
@@ -238,14 +239,22 @@ export class Akp05Driver extends HidDeviceBase {
       this.write(buildBat(jpeg.length, keyIndex));
       forEachImageChunk(jpeg, this.writeScratch, 1, () => this.writeScratchOut());
       this.write(buildUlend());
+      // WebUI strip previews mirror exactly what reached the device.
+      if (this.isStripWire(keyIndex)) {
+        const full = jpegSize(jpeg)?.width === this.model.touchStripDisplay?.image.width;
+        this.emit('stripWrite', keyIndex, jpeg, full);
+      }
     } catch (cause) {
       this.emit('error', cause instanceof Error ? cause : new Error(String(cause)));
     }
   }
 
   clearKey(keyIndex: number): void {
-    const strip = this.model.widgetDisplays?.some((display) => display.wireId === keyIndex);
-    this.sendImage(keyIndex, strip ? BLACK_STRIP_JPEG : BLACK_KEY_JPEG);
+    this.sendImage(keyIndex, this.isStripWire(keyIndex) ? BLACK_STRIP_JPEG : BLACK_KEY_JPEG);
+  }
+
+  private isStripWire(wireId: number): boolean {
+    return this.model.widgetDisplays?.some((display) => display.wireId === wireId) ?? false;
   }
 
   setBrightness(level: number): void {

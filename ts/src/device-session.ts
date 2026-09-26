@@ -81,6 +81,8 @@ export interface DeviceSessionOptions {
   touchStripRepaintMs?: () => number;
   /** WebUI mirror of each widget paint (null = cleared). */
   onWidgetPaint?: (wireId: number, paint: WidgetPaint | null) => void;
+  /** WebUI mirror of each touch-strip upload that reached the device. */
+  onStripWrite?: (wireId: number, jpeg: Uint8Array, full: boolean) => void;
   /** This dock's strip mode + encoder settings, resolved per dial event (deviceKey
    *  captured by the coordinator). Absent = knobs always reach the Elgato app. */
   encoderOverride?: () => EncoderOverride | undefined;
@@ -101,6 +103,7 @@ export class DeviceSession {
   private readonly onDisconnect: () => void;
   private readonly onStatusChange?: () => void;
   private readonly onAction?: (message: string) => void;
+  private readonly onStripWrite?: (wireId: number, jpeg: Uint8Array, full: boolean) => void;
   private readonly onImage?: (keyIndex: number, data: Buffer, format: 'jpeg' | 'bmp') => void;
   private readonly ignoreElgatoBrightness?: () => boolean;
   private readonly initialBrightness?: number;
@@ -121,6 +124,7 @@ export class DeviceSession {
     this.onDisconnect = opts.onDisconnect;
     this.onStatusChange = opts.onStatusChange;
     this.onAction = opts.onAction;
+    this.onStripWrite = opts.onStripWrite;
     this.onImage = opts.onImage;
     this.ignoreElgatoBrightness = opts.ignoreElgatoBrightness;
     this.initialBrightness = opts.initialBrightness;
@@ -252,6 +256,7 @@ export class DeviceSession {
         if (!this.handleTouch(event)) this.childServer.sendTouch(event);
       },
       onReinit: () => this.repaintExtraKeys(),
+      onStripWrite: this.onStripWrite,
     });
     this.driver.on('disconnect', () => {
       log('info', this.model.id, 'disconnected');
