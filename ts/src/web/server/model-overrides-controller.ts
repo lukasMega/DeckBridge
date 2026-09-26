@@ -3,7 +3,7 @@
 // PersistedSettings, with the pure merge/validate living in devices/model-overrides.ts.
 import type { ControllerHost, ReqError } from './types.js';
 import type { DeviceModel, DeviceModelOverride } from '../../devices/driver.js';
-import { findModelById } from '../../devices/registry.js';
+import { advertisedModel, findModelById } from '../../devices/registry.js';
 import {
   applyModelOverrides,
   classifyOverrideChange,
@@ -35,6 +35,9 @@ export interface DeviceOverridesView {
   tunable: DeviceModelOverride;
   /** CORA profiles this model may re-pair as (its `cora.emulations`), with their PID. */
   profiles: Array<{ id: string; name: string; productId: number }>;
+  /** Key image size the Elgato app sends (the advertised model's key size) — what
+   *  the transform fits into `effective.image` width×height. */
+  sourceSize: { width: number; height: number };
 }
 
 export class ModelOverridesController {
@@ -68,6 +71,7 @@ export class ModelOverridesController {
     // look dead, and a view that disagreed with the hardware would mislead them.
     const safeMode = overridesDisabled();
     const effective = applyModelOverrides(model, safeMode ? undefined : overrides);
+    const advertised = advertisedModel(effective);
     return {
       modelId: id,
       modelName: model.name,
@@ -87,6 +91,7 @@ export class ModelOverridesController {
         name: p.name,
         productId: p.cora.productId,
       })),
+      sourceSize: { width: advertised.keyWidth, height: advertised.keyHeight },
     };
   }
 

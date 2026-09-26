@@ -1469,6 +1469,39 @@ input[type='range'].range:disabled {
   position: absolute;
   opacity: 0;
 }
+.chip-radio.is-disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.tuning-label-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.tuning-help {
+  appearance: none;
+  background: transparent;
+  padding: 0;
+  cursor: pointer;
+}
+.tuning-help:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+.image-fit-sizes {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 4px 12px;
+  margin: 0 0 14px;
+  font-size: 13px;
+}
+.image-fit-sizes dt {
+  color: var(--fg-muted);
+}
+.image-fit-sizes dd {
+  margin: 0;
+  font-family: var(--mono);
+}
 .settings-checkbox {
   display: flex;
   align-items: center;
@@ -1485,7 +1518,8 @@ input[type='range'].range:disabled {
 .toggle-row .settings-checkbox {
   margin: 0;
 }
-.multi-deck-help {
+.multi-deck-help,
+.tuning-help {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -1496,7 +1530,8 @@ input[type='range'].range:disabled {
   color: var(--fg-muted);
   cursor: help;
 }
-.multi-deck-help svg {
+.multi-deck-help svg,
+.tuning-help svg {
   width: 11px;
   height: 11px;
 }

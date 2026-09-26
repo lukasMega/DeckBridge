@@ -36,7 +36,6 @@ import type {
   CommEntry,
   EncoderSettings,
   ExtraKeyConfig,
-  ImageModeOverride,
   DockStatus,
   ClientApp,
   TouchStripMode,
@@ -73,12 +72,11 @@ export class WebUIServer extends EventEmitter implements WebUIController {
   get selectedDock(): number {
     return this.dockRegistry.selectedDock;
   }
-  resizeEnabled = true;
   setBrowserLocale(locale: string): void {
     this.settings.browserLocale = locale;
   }
 
-  // brightness/brightnessOverride/imageModeOverride live per-device in settings.devices[] — see device-prefs-controller.ts.
+  // brightness/brightnessOverride live per-device in settings.devices[] — see device-prefs-controller.ts.
   get brightnessOverride(): boolean {
     return this.devicePrefs.brightnessOverride;
   }
@@ -87,9 +85,6 @@ export class WebUIServer extends EventEmitter implements WebUIController {
   }
   isBrightnessOverrideForDock(index: number): boolean {
     return this.devicePrefs.isBrightnessOverride(this.dockRegistry.deviceKeyFor(index));
-  }
-  get imageModeOverride(): ImageModeOverride {
-    return this.devicePrefs.imageModeOverride;
   }
   touchStripModeFor(deviceKey: string): TouchStripMode {
     return this.devicePrefs.touchStripModeFor(deviceKey);
@@ -124,7 +119,6 @@ export class WebUIServer extends EventEmitter implements WebUIController {
     this.status = new StatusPublisher(
       () => ({
         brightness: this.dockRegistry.selectedBrightness(),
-        imageModeOverride: this.imageModeOverride,
         docks: this.dockRegistry.list(),
         selectedDock: this.selectedDock,
       }),
@@ -149,7 +143,6 @@ export class WebUIServer extends EventEmitter implements WebUIController {
       (level) => this.trySetLogLevel(level),
       () => this.status.driverMode,
       () => this.mockConfig,
-      () => this.imageModeOverride,
       (index) => this.trySelectDock(index),
       () => this.broadcastSelectedDeviceState(),
     );
@@ -285,18 +278,8 @@ export class WebUIServer extends EventEmitter implements WebUIController {
     if (this.imageChannel.reset(dock)) this.notifyRepaint();
   }
 
-  notifyResizeToggle(enabled: boolean): void {
-    this.resizeEnabled = enabled;
-    this.bus.broadcast('resizeToggle', { enabled });
-    this.emit('regenPreviews', enabled);
-  }
-
   notifyBrightnessOverride(enabled: boolean): void {
     this.devicePrefs.setBrightnessOverride(enabled);
-  }
-
-  notifyImageMode(mode: ImageModeOverride): void {
-    this.devicePrefs.setImageMode(mode);
   }
 
   trySetTouchStripMode(mode: TouchStripMode): ReqError | null {
@@ -386,7 +369,6 @@ export class WebUIServer extends EventEmitter implements WebUIController {
       activity: this.activity,
       stats: { ...this.stats, uptimeMs: Date.now() - this.startTime },
       mockConfig: this.mockConfig,
-      resizeEnabled: this.resizeEnabled,
       brightnessOverride: this.brightnessOverride,
       deviceModels: this.deviceModels,
       deviceIdentity: this.settingsIdentity.identity(),

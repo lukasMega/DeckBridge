@@ -1,6 +1,7 @@
 // Not a real test — reproduces the k1pro-probe JPEG variants byte-for-byte
 // and writes them to /tmp/k1pro-probe for offline boundary analysis.
-import { transformImageForDevice, closeSidecar } from '../src/translator.js';
+import { transformImageForDevice } from '../src/translator.js';
+import { closeImageProc } from '../src/ffi/image-proc.js';
 import { MIRABOX_K1PRO_MODEL } from '../src/devices/mirabox/mirabox-k1pro.js';
 
 function stripesBmp(): Buffer {
@@ -65,4 +66,4 @@ for (const t of targets) {
   await tjs.writeFile(`/tmp/k1pro-probe/v${t}.jpg`, padded);
 }
 console.log('wrote /tmp/k1pro-probe');
-closeSidecar();
+closeImageProc();

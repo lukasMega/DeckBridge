@@ -21,9 +21,10 @@ compile_error!("enable an encoder backend: `jpeg-upstream` (default) or `jpeg-fo
 #[cfg(test)]
 mod tests {
     use crate::bmp::encode_bmp;
-    use crate::pad::pad_to_canvas;
+    use crate::pad::{pad_to_canvas, FILL_CROP_OVERSIZE};
     use crate::transform::transform;
     use crate::util::{write_i32_le, write_u16_le, write_u32_le};
+    use image::imageops::FilterType;
     use image::DynamicImage;
 
     /// Build a minimal 54-byte BMP header (BITMAPFILEHEADER + BITMAPINFOHEADER)
@@ -87,7 +88,7 @@ mod tests {
     fn pad_to_canvas_dims_and_offset() {
         let src = DynamicImage::ImageRgba8(make_test_src());
         for fill_mode in [1u32, 2, 3] {
-            let out = pad_to_canvas(&src, 12, 12, fill_mode);
+            let out = pad_to_canvas(&src, 12, 12, fill_mode, FilterType::Triangle);
             assert_eq!(out.width(), 12);
             assert_eq!(out.height(), 12);
             let rgba = out.to_rgba8();
@@ -99,7 +100,7 @@ mod tests {
     #[test]
     fn pad_to_canvas_black_border() {
         let src = DynamicImage::ImageRgba8(make_test_src());
-        let out = pad_to_canvas(&src, 12, 12, 1).to_rgba8();
+        let out = pad_to_canvas(&src, 12, 12, 1, FilterType::Triangle).to_rgba8();
         // (0,0) is outside the centred 8×8 block (offset 2..10) → border, black.
         assert_eq!(*out.get_pixel(0, 0), image::Rgba([0, 0, 0, 255]));
     }
@@ -107,7 +108,7 @@ mod tests {
     #[test]
     fn pad_to_canvas_average_border() {
         let src = DynamicImage::ImageRgba8(make_test_src());
-        let out = pad_to_canvas(&src, 12, 12, 2).to_rgba8();
+        let out = pad_to_canvas(&src, 12, 12, 2, FilterType::Triangle).to_rgba8();
         // src is almost entirely red with one blue pixel; average should be
         // close to red (not black, not blue).
         let border = out.get_pixel(0, 0);
@@ -122,7 +123,7 @@ mod tests {
     #[test]
     fn pad_to_canvas_edge_clamp_corner_matches_source() {
         let src = DynamicImage::ImageRgba8(make_test_src());
-        let out = pad_to_canvas(&src, 12, 12, 3).to_rgba8();
+        let out = pad_to_canvas(&src, 12, 12, 3, FilterType::Triangle).to_rgba8();
         // Canvas (0,0) clamps to source (0,0) — the blue corner pixel.
         assert_eq!(*out.get_pixel(0, 0), image::Rgba([0, 0, 255, 255]));
         // Canvas (11,11) clamps to source (7,7) — solid red.
@@ -132,8 +133,63 @@ mod tests {
     #[test]
     fn pad_to_canvas_larger_than_canvas_falls_back_to_resize() {
         let src = DynamicImage::new_rgba8(20, 20);
-        let out = pad_to_canvas(&src, 12, 12, 3);
+        let out = pad_to_canvas(&src, 12, 12, 3, FilterType::Triangle);
         assert_eq!(out.width(), 12);
         assert_eq!(out.height(), 12);
+    }
+
+    #[test]
+    fn crop_oversize_trims_centre_one_to_one() {
+        // 120×120 into 112×112 (Stream Deck + art on an AKP05E key): trim 4 px per side.
+        let mut src = image::RgbaImage::new(120, 120);
+        src.put_pixel(4, 4, image::Rgba([0, 0, 255, 255]));
+        src.put_pixel(115, 115, image::Rgba([0, 255, 0, 255]));
+        let src = DynamicImage::ImageRgba8(src);
+        for fill in [1u32, 2, 3] {
+            let out = pad_to_canvas(
+                &src,
+                112,
+                112,
+                fill | FILL_CROP_OVERSIZE,
+                FilterType::Triangle,
+            )
+            .to_rgba8();
+            assert_eq!(out.dimensions(), (112, 112));
+            assert_eq!(*out.get_pixel(0, 0), image::Rgba([0, 0, 255, 255]));
+            assert_eq!(*out.get_pixel(111, 111), image::Rgba([0, 255, 0, 255]));
+        }
+    }
+
+    #[test]
+    fn crop_oversize_pads_undersize_axis() {
+        // 800×100 into 176×112: crop x, pad y (black) → rows 0..6 are border.
+        let mut src = image::RgbaImage::new(800, 100);
+        for p in src.pixels_mut() {
+            *p = image::Rgba([255, 0, 0, 255]);
+        }
+        let src = DynamicImage::ImageRgba8(src);
+        let out =
+            pad_to_canvas(&src, 176, 112, 1 | FILL_CROP_OVERSIZE, FilterType::Triangle).to_rgba8();
+        assert_eq!(out.dimensions(), (176, 112));
+        assert_eq!(*out.get_pixel(0, 0), image::Rgba([0, 0, 0, 255]));
+        assert_eq!(*out.get_pixel(0, 6), image::Rgba([255, 0, 0, 255]));
+        assert_eq!(*out.get_pixel(0, 106), image::Rgba([0, 0, 0, 255]));
+    }
+
+    #[test]
+    fn crop_oversize_smaller_source_matches_pad() {
+        let src = DynamicImage::ImageRgba8(make_test_src());
+        for fill in [1u32, 2, 3] {
+            let pad = pad_to_canvas(&src, 12, 12, fill, FilterType::Triangle).to_rgba8();
+            let crop = pad_to_canvas(
+                &src,
+                12,
+                12,
+                fill | FILL_CROP_OVERSIZE,
+                FilterType::Triangle,
+            )
+            .to_rgba8();
+            assert_eq!(pad, crop);
+        }
     }
 }

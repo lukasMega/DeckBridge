@@ -249,13 +249,13 @@ const COLUMNS = {
       key: 'resizeMode',
       label: 'Resize mode',
       description:
-        'How the source is fitted to width x height: resize interpolates to the panel size, pad keeps source pixels 1:1 and centres them in the canvas.',
+        'How the source is fitted to width x height: resize interpolates to the panel size, pad keeps source pixels 1:1 and centres them in the canvas (resizing a larger source), crop is pad that centre-crops a larger source instead.',
     },
     {
       key: 'padFill',
       label: 'Pad fill',
       description:
-        'Border fill used by resize mode pad: edge replicates the outer pixels, black, or average source colour. Ignored for resize.',
+        'Border fill used by resize modes pad and crop: edge replicates the outer pixels, black, or average source colour. Ignored for resize.',
     },
     {
       key: 'resizeFilter',

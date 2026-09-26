@@ -7,14 +7,15 @@ import type {
   ServerLog,
   CommLog,
   DeviceModel,
-  DeviceIdentity,
   EncoderSettings,
   ExtraKeyCfg,
   TouchStripMode,
   UpdateInfo,
 } from './ui-types.js';
 
-// Cap constants matching ui-logs.ts / ui-logs.ts KE_MAX
+// LOG_MAX matches advanced-log-panel.tsx's own LOG_MAX (DOM log trimming there mirrors
+// the store's cap so neither trims more eagerly than the other). KE_MAX has no external
+// mirror; it only bounds this store's keyEvents array.
 const LOG_MAX = 2000;
 const KE_MAX = 50;
 
@@ -27,10 +28,7 @@ export interface StoreState {
   serverLogs: ServerLog[];
   commLogs: CommLog[];
   keyEvents: KeyEvent[];
-  resizeEnabled: boolean;
-  imageMode: string | null;
   deviceModels: DeviceModel[];
-  deviceIdentity?: DeviceIdentity;
   /** SELECTED dock's extra-key assignments, keyed by device wire id. */
   extraKeys: Record<string, ExtraKeyCfg>;
   /** SELECTED dock's touch-strip mode + knob override (AKP05E). */
@@ -52,10 +50,7 @@ let state: StoreState = {
   serverLogs: [],
   commLogs: [],
   keyEvents: [],
-  resizeEnabled: true,
-  imageMode: null,
   deviceModels: [],
-  deviceIdentity: undefined,
   extraKeys: {},
   touchStripMode: 'elgato',
   touchStripRepaintMs: TOUCH_STRIP_REPAINT_DEFAULT_MS,
@@ -82,49 +77,9 @@ export function subscribe(fn: () => void): () => void {
 
 // Mutators
 
-function setField<K extends keyof StoreState>(key: K, value: StoreState[K]): void {
-  state = { ...state, [key]: value };
+export function patch(partial: Partial<StoreState>): void {
+  state = { ...state, ...partial };
   notify();
-}
-
-export function setStatus(status: Status): void {
-  setField('status', status);
-}
-
-export function setStats(stats: Stats): void {
-  setField('stats', stats);
-}
-
-export function setMockConfig(mockConfig: MockConfig): void {
-  setField('mockConfig', mockConfig);
-}
-
-export function setBrightness(brightness: number): void {
-  setField('brightness', brightness);
-}
-
-export function setBrightnessOverride(brightnessOverride: boolean): void {
-  setField('brightnessOverride', brightnessOverride);
-}
-
-export function setTouchStripMode(touchStripMode: TouchStripMode): void {
-  setField('touchStripMode', touchStripMode);
-}
-
-export function setTouchStripRepaintMs(touchStripRepaintMs: number): void {
-  setField('touchStripRepaintMs', touchStripRepaintMs);
-}
-
-export function setEncoders(encoders: EncoderSettings): void {
-  setField('encoders', encoders);
-}
-
-export function setResizeEnabled(resizeEnabled: boolean): void {
-  setField('resizeEnabled', resizeEnabled);
-}
-
-export function setImageMode(imageMode: string | null): void {
-  setField('imageMode', imageMode);
 }
 
 export function addServerLog(entry: ServerLog): void {
@@ -132,7 +87,7 @@ export function addServerLog(entry: ServerLog): void {
     state.serverLogs.length >= LOG_MAX
       ? [...state.serverLogs.slice(1), entry]
       : [...state.serverLogs, entry];
-  setField('serverLogs', serverLogs);
+  patch({ serverLogs });
 }
 
 export function addCommLog(entry: CommLog): void {
@@ -140,17 +95,12 @@ export function addCommLog(entry: CommLog): void {
     state.commLogs.length >= LOG_MAX
       ? [...state.commLogs.slice(1), entry]
       : [...state.commLogs, entry];
-  setField('commLogs', commLogs);
+  patch({ commLogs });
 }
 
 export function addKeyEvent(entry: KeyEvent): void {
   const keyEvents = [entry, ...state.keyEvents].slice(0, KE_MAX);
-  setField('keyEvents', keyEvents);
-}
-
-export function patch(partial: Partial<StoreState>): void {
-  state = { ...state, ...partial };
-  notify();
+  patch({ keyEvents });
 }
 
 // Local port of useSyncExternalStore (UPSTREAM: preact/compat/src/hooks.js, preact

@@ -29,7 +29,6 @@ export interface StateResponseInputs {
   activity: { logs: LogEntry[]; comms: CommEntry[]; keyEvents: KeyEventEntry[] };
   stats: Stats;
   mockConfig: MockDeviceConfig;
-  resizeEnabled: boolean;
   brightnessOverride: boolean;
   deviceModels: DeviceModelInfo[];
   deviceIdentity: DeviceIdentity;

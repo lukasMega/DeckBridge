@@ -6,6 +6,8 @@ export interface ChipOption<T extends string | number> {
   value: T;
   label: ComponentChildren;
   title?: string;
+  /** Option shown but not selectable (e.g. an image fit with no effect). */
+  disabled?: boolean;
 }
 
 export function ChipRadioGroup<T extends string | number>({
@@ -32,12 +34,17 @@ export function ChipRadioGroup<T extends string | number>({
       aria-label={label}
     >
       {options.map((option) => (
-        <label key={String(option.value)} class="chip-radio" title={option.title}>
+        <label
+          key={String(option.value)}
+          class={option.disabled === true ? 'chip-radio is-disabled' : 'chip-radio'}
+          title={option.title}
+        >
           <input
             type="radio"
             name={name}
             value={String(option.value)}
             checked={option.value === value}
+            disabled={option.disabled}
             onChange={() => onChange(option.value)}
           />
           {option.label}

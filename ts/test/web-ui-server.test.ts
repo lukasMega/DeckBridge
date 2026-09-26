@@ -327,7 +327,6 @@ test('fullState exposes selected dock real device identity', () => {
 /** What broadcastSelected() pushes for the selected dock, in order. */
 const SELECTED_DEVICE_EVENTS = [
   'brightnessOverride',
-  'imageMode',
   'extraKeys',
   'touchStripMode',
   'touchStripRepaint',
@@ -640,73 +639,17 @@ test('valid integer productId is masked and applied', () => {
   assert.equal(result.productId, 0x1234abcd & 0xffff, 'productId masked');
 });
 
-// WebUIServer: POST /api/image-mode
+// WebUIServer: misc validation-only routes (touch-strip-mode, touch-strip-repaint,
+// encoders, extra-key/press, removed touch-strip)
 
-console.log('\nwebui: POST /api/image-mode');
+console.log('\nwebui: misc route validation');
 
-const IMAGE_MODE_TEST_PORT = 13002;
-const imageModeUi = new WebUIServer(IMAGE_MODE_TEST_PORT, [], 'real', TEST_SETTINGS_ROOT);
-await imageModeUi.start();
+const ROUTES_TEST_PORT = 13002;
+const routesUi = new WebUIServer(ROUTES_TEST_PORT, [], 'real', TEST_SETTINGS_ROOT);
+await routesUi.start();
 
 try {
-  const base = `http://127.0.0.1:${imageModeUi.port}`;
-
-  async function postImageMode(mode: unknown): Promise<Response> {
-    return fetch(`${base}/api/image-mode`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ mode }),
-    });
-  }
-
-  test('initial imageModeOverride is null', () => {
-    assert.equal(imageModeUi.fullState().imageModeOverride, null);
-  });
-
-  await runWebTest('valid mode "pad-edge" → 200 ok, reflected in fullState', async () => {
-    const r = await postImageMode('pad-edge');
-    assert.equal(r.status, 200);
-    const body = (await r.json()) as { ok: unknown; mode: unknown };
-    assert.ok(body.ok);
-    assert.equal(body.mode, 'pad-edge');
-    assert.equal(imageModeUi.fullState().imageModeOverride, 'pad-edge');
-  });
-
-  await runWebTest("valid mode 'default' → 200 ok, fullState override → null", async () => {
-    const r = await postImageMode('default');
-    assert.equal(r.status, 200);
-    const body = (await r.json()) as { ok: unknown; mode: unknown };
-    assert.ok(body.ok);
-    assert.equal(body.mode, 'default');
-    assert.equal(imageModeUi.fullState().imageModeOverride, null);
-  });
-
-  for (const mode of ['resize', 'pad-black', 'pad-average']) {
-    await runWebTest(`valid mode '${mode}' → 200 ok, reflected in fullState`, async () => {
-      const r = await postImageMode(mode);
-      assert.equal(r.status, 200);
-      assert.equal(imageModeUi.fullState().imageModeOverride, mode);
-    });
-  }
-
-  await runWebTest('invalid mode string → 400', async () => {
-    const r = await postImageMode('sideways');
-    assert.equal(r.status, 400);
-  });
-
-  await runWebTest('non-string mode → 400', async () => {
-    const r = await postImageMode(123);
-    assert.equal(r.status, 400);
-  });
-
-  await runWebTest('invalid JSON body → 400', async () => {
-    const r = await fetch(`${base}/api/image-mode`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: 'not-json',
-    });
-    assert.equal(r.status, 400);
-  });
+  const base = `http://127.0.0.1:${routesUi.port}`;
 
   const post = (path: string, body: unknown): Promise<Response> =>
     fetch(`${base}${path}`, {
@@ -755,7 +698,7 @@ try {
     assert.equal((await post('/api/touch-strip', { disabled: true })).status, 404);
   });
 } finally {
-  await imageModeUi.stop().catch(() => undefined);
+  await routesUi.stop().catch(() => undefined);
 }
 
 // WebUIServer: GET /api/image/:key content type by stored format
@@ -802,7 +745,6 @@ function deviceEntry(
   settings: Partial<{
     brightness: number;
     brightnessOverride: boolean;
-    imageModeOverride: unknown;
     touchStripMode: unknown;
     touchStripRepaintMs: unknown;
     touchStripZoneFit: unknown;
@@ -832,44 +774,27 @@ test('getSettingsJson: notifyDocks syncs each dock brightness into its device en
   );
 });
 
-test('applySettingsJson: devices[] import applies per-device override + imageMode to selected dock', () => {
+test('applySettingsJson: devices[] import applies per-device override to selected dock', () => {
   const ui = new WebUIServer(undefined, [], 'real', TEST_SETTINGS_ROOT);
   ui.notifyDocks([{ ...fakeDockStatus(0), brightness: 10 }]);
   ui.applySettingsJson(
     JSON.stringify({
-      devices: [
-        deviceEntry('fake-device-0', { brightnessOverride: true, imageModeOverride: 'pad-black' }),
-      ],
+      devices: [deviceEntry('fake-device-0', { brightnessOverride: true })],
     }),
   );
   assert.equal(ui.fullState().brightnessOverride, true, "selected dock's override resolved");
-  assert.equal(ui.snapshot().imageModeOverride, 'pad-black', "selected dock's imageMode resolved");
 });
 
-test('applySettingsJson: null imageModeOverride on the selected device clears it', () => {
-  const ui = new WebUIServer(undefined, [], 'real', TEST_SETTINGS_ROOT);
-  ui.notifyDocks([fakeDockStatus(0)]);
-  ui.applySettingsJson(
-    JSON.stringify({ devices: [deviceEntry('fake-device-0', { imageModeOverride: 'pad-black' })] }),
-  );
-  assert.equal(ui.snapshot().imageModeOverride, 'pad-black');
-  ui.applySettingsJson(
-    JSON.stringify({ devices: [deviceEntry('fake-device-0', { imageModeOverride: null })] }),
-  );
-  assert.equal(ui.snapshot().imageModeOverride, null);
-});
-
-test('applySettingsJson: a device entry with an invalid imageModeOverride is rejected (guard), state unchanged', () => {
+test('applySettingsJson: a device entry with an invalid touchStripMode is rejected (guard), state unchanged', () => {
   const ui = new WebUIServer(undefined, [], 'real', TEST_SETTINGS_ROOT);
   ui.notifyDocks([fakeDockStatus(0)]);
   ui.applySettingsJson(
     JSON.stringify({
-      devices: [deviceEntry('fake-device-0', { imageModeOverride: 'not-a-mode' })],
+      devices: [deviceEntry('fake-device-0', { touchStripMode: 'not-a-mode' })],
     }),
   );
   const parsed = JSON.parse(ui.getSettingsJson()) as { devices?: unknown[] };
   assert.ok(!parsed.devices || parsed.devices.length === 0, 'malformed entry not stored');
-  assert.equal(ui.snapshot().imageModeOverride, null, 'runtime state unaffected');
 });
 
 test('applySettingsJson throws on malformed JSON, state unchanged', () => {

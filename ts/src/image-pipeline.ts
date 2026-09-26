@@ -52,7 +52,10 @@ export function setupImageHandler(
     getDriver()?.renderCoraImage?.(keyIndex, data, format);
 
     // WebUI mirror. Dock 0 = primary; the WebUI broadcasts only the selected dock.
-    webui.notifyDockImage(0, keyIndex, Buffer.from(data), format);
+    // No copy: `data` is a fresh Buffer.concat result from image-assembler.ts that
+    // nothing else mutates, and ImageChannel treats cached frames as shared/immutable
+    // (see image-channel.ts's dockFramesSnapshot doc).
+    webui.notifyDockImage(0, keyIndex, data, format);
     perfOnWebUI();
   });
 

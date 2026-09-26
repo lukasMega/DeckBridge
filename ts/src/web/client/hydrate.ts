@@ -22,9 +22,7 @@ export interface InitialState extends Status {
   logs?: ServerLog[];
   commLogs?: CommLog[];
   keyEvents?: KeyEvent[];
-  resizeEnabled?: boolean;
   brightnessOverride?: boolean;
-  imageModeOverride?: string | null;
   deviceModels?: DeviceModel[];
   deviceIdentity?: DeviceIdentity;
   extraKeys?: Record<string, ExtraKeyCfg>;
@@ -57,11 +55,8 @@ export function hydrate(st: InitialState): void {
     stats: st.stats,
     mockConfig: st.mockConfig,
     brightness: st.brightness ?? 82,
-    resizeEnabled: st.resizeEnabled ?? true,
     brightnessOverride: st.brightnessOverride ?? true,
-    imageMode: st.imageModeOverride ?? null,
     deviceModels: st.deviceModels ?? [],
-    deviceIdentity: st.deviceIdentity,
     ...sideKeysState(st),
     updateInfo: st.updateInfo,
     serverLogs: st.logs ?? [],

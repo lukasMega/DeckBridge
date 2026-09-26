@@ -4,7 +4,7 @@ import { ElgatoServer, ElgatoChildServer, watchPairing } from './elgato.js';
 import { WebUIServer } from './web/server';
 import type { MockDeviceConfig } from './web/server';
 import { MockDriver } from './devices/mock.js';
-import type { ClientApp, CommEntry, ImageModeOverride, LogObject } from './types.js';
+import type { ClientApp, CommEntry, LogObject } from './types.js';
 import type { TouchStripMode } from './types.js';
 import { ELGATO_CHILD_PORT, ELGATO_TCP_PORT, WEBUI_PORT } from './types.js';
 import { advertisedGeometry, DEFAULT_MODEL, DEVICE_MODELS } from './devices/registry.js';
@@ -223,25 +223,8 @@ childServer.on('brightness', (level: number) => {
   webui.notifyRepaint();
 });
 
-webui.on('regenPreviews', (_resizeOn: boolean) => {
-  for (const [keyIndex, data] of webui.imageState.entries()) {
-    webui.notifyImageUpdate(keyIndex, data, webui.imageChannel.imageFormat.get(keyIndex) ?? 'jpeg');
-  }
-});
-
 webui.on('setBrightness', (level: number, dock?: number) => {
   driverManager.setDockBrightness(dock ?? 0, level);
-});
-
-webui.on('setImageOverride', (mode: ImageModeOverride, dock?: number) => {
-  const d = driverManager.getDriverForDock(dock ?? 0);
-  d?.setImageOverride?.(mode);
-  // The Elgato app won't resend on a mode flip — repaint from the stored CORA
-  // frames (imageState = the selected dock's live frames) so the change is
-  // visible immediately.
-  for (const [k, data] of webui.imageState) {
-    d?.renderCoraImage?.(k, data, webui.imageChannel.imageFormat.get(k) ?? 'jpeg');
-  }
 });
 
 // The WebUI already applied the level to the main thread; forward it to the USB

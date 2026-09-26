@@ -1,5 +1,6 @@
 // temp analysis: measure k1pro splash encode sizes (old vs new spec)
-import { transformImageForDevice, closeSidecar } from '../src/translator.js';
+import { transformImageForDevice } from '../src/translator.js';
+import { closeImageProc } from '../src/ffi/image-proc.js';
 import { MIRABOX_K1PRO_MODEL } from '../src/devices/mirabox/mirabox-k1pro.js';
 import { SPLASH_STATES } from '../src/assets/splash-states.js';
 
@@ -17,4 +18,4 @@ for (const name of ['connecting', 'connected', 'error'] as const) {
     await tjs.writeFile(`/tmp/k1pro-splash/${name}-mb${mb}.jpg`, out);
   }
 }
-closeSidecar();
+closeImageProc();

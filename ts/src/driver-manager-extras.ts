@@ -64,7 +64,7 @@ export interface ExtraDockCoordinatorDeps {
    *  to notify the WebUI. */
   onSessionsChanged?: () => void;
   /** Per-dock mirror of raw CORA key images (WebUI selected-dock preview). */
-  onImage?: (dockIndex: number, keyIndex: number, data: Uint8Array, format: 'jpeg' | 'bmp') => void;
+  onImage?: (dockIndex: number, keyIndex: number, data: Buffer, format: 'jpeg' | 'bmp') => void;
   /** WebUI strip-preview mirror; DeviceSession owns the device-side render. */
   onTouchImage?: (dockIndex: number, data: Uint8Array, region?: TouchWindowRegion) => void;
   /** This dock's cached CORA frames, for repainting after a live tuning swap. */
@@ -309,7 +309,6 @@ export class ExtraDockCoordinator {
       onImage: (keyIndex, data, format) => this.deps.onImage?.(index, keyIndex, data, format),
       ignoreElgatoBrightness: () => this.deps.isBrightnessOverride(deviceKey),
       initialBrightness: deviceIdentity.brightness,
-      initialImageMode: deviceIdentity.imageModeOverride ?? null,
       extraKeyConfigFor: (wireId) => this.deps.extraKeyConfigFor(deviceKey, wireId),
       touchStripMode: this.deps.touchStripModeFor(deviceKey),
       touchStripRepaintMs: () => this.deps.touchStripRepaintMsFor(deviceKey),

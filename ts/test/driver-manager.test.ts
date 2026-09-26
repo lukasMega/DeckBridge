@@ -229,7 +229,6 @@ class RepaintFakeDriver extends EventEmitter {
   sendImage(): void {}
   clearKey(): void {}
   setBrightness(): void {}
-  setImageOverride(): void {}
   renderCoraImage(key: number, _bytes: unknown, format: 'jpeg' | 'bmp'): void {
     this.renderCoraImageCalls.push({ key, format });
   }
@@ -1204,7 +1203,6 @@ class CapturingDriver extends EventEmitter {
     this.renderCalls.push(keyIndex);
   }
   sendSplashImage(): void {}
-  setImageOverride(): void {}
   setLogLevel(): void {}
   renderCalls: number[] = [];
   applyOverridesCalls: { overrides: DeviceModelOverride | undefined; modelId: string }[] = [];

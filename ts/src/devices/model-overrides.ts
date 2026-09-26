@@ -23,7 +23,7 @@ export type ValidationResult =
 
 const ROTATIONS = [0, 90, 180, 270];
 const RESIZE_FILTERS = ['triangle', 'nearest', 'lanczos3'];
-const RESIZE_MODES = ['resize', 'pad'];
+const RESIZE_MODES = ['resize', 'pad', 'crop'];
 const PAD_FILLS = ['black', 'average', 'edge'];
 const TRANSFORMS = ['passthrough', 'sidecar'];
 const PACKET_SIZES = [512, 1024];
@@ -348,14 +348,6 @@ export function applyModelOverrides(model: DeviceModel, ov?: DeviceModelOverride
     cora,
     ...(splash ? { splash } : {}),
   };
-}
-
-/** True when device tuning pins the image fit (`image.resizeMode`/`padFill`).
- *  The legacy per-device `imageModeOverride` (types.ts, applied last in
- *  image-render.ts) would otherwise silently overwrite it, making the tuning
- *  form's "Image fit" control a no-op. Tuning wins; see docs/troubleshooting.md. */
-export function pinsImageFit(ov?: DeviceModelOverride): boolean {
-  return ov?.image?.resizeMode !== undefined || ov?.image?.padFill !== undefined;
 }
 
 /** One-line summary for logs and the diagnostics header, so a bug report from a

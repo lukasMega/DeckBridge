@@ -21,8 +21,6 @@ import type { DockStatus, ExtraKeyConfig } from '../../types.js';
 import type { UpdateState } from '../../update-check.js';
 import { encoderSettingsError } from './encoders-controller.js';
 
-const IMAGE_MODE_SETTINGS = [null, 'resize', 'pad-black', 'pad-average', 'pad-edge'];
-
 /** Shape guard for a persisted/imported extraKeys map (wire id → config). */
 function isExtraKeysRecord(v: unknown): v is Record<string, ExtraKeyConfig> {
   if (typeof v !== 'object' || v === null || Array.isArray(v)) return false;
@@ -39,7 +37,8 @@ const isTouchStripUpload = (v: unknown): boolean =>
 /** Strip bad optional per-device fields so they can't fail isDeviceIdentitySettings
  *  and drop the whole identity entry — that would regenerate MAC/serial and force an
  *  Elgato re-pair. extraKeys: migration 2026-07-16 (action→widget model);
- *  touchStripDisabled: replaced by touchStripMode 2026-09-22, no migration. */
+ *  touchStripDisabled: replaced by touchStripMode 2026-09-22, no migration;
+ *  imageModeOverride: replaced by overrides.image.resizeMode/padFill, no migration. */
 function stripInvalidDeviceSettings(d: unknown): void {
   if (typeof d !== 'object' || d === null) return;
   const r = d as Record<string, unknown>;
@@ -58,6 +57,7 @@ function stripInvalidDeviceSettings(d: unknown): void {
   }
   if (r.encoders !== undefined && encoderSettingsError(r.encoders)) delete r.encoders;
   delete r.touchStripDisabled;
+  delete r.imageModeOverride;
 }
 
 /** The optional per-device settings half of isDeviceIdentitySettings. */
@@ -65,8 +65,6 @@ function hasValidDeviceSettings(r: Record<string, unknown>): boolean {
   return (
     (r.brightness === undefined || typeof r.brightness === 'number') &&
     (r.brightnessOverride === undefined || typeof r.brightnessOverride === 'boolean') &&
-    (r.imageModeOverride === undefined ||
-      IMAGE_MODE_SETTINGS.includes(r.imageModeOverride as null)) &&
     (r.extraKeys === undefined || isExtraKeysRecord(r.extraKeys)) &&
     (r.touchStripMode === undefined || isTouchStripMode(r.touchStripMode)) &&
     (r.touchStripRepaintMs === undefined || isTouchStripRepaintMs(r.touchStripRepaintMs)) &&
@@ -126,7 +124,7 @@ export function sanitizeModelOverrides(raw: unknown): Record<string, DeviceModel
 }
 
 /** The settings.json slice owned by the WebUI server: the selected dock and the
- *  per-physical-device entries (identity + brightness/override/imageMode/
+ *  per-physical-device entries (identity + brightness/override/
  *  extraKeys), keyed by device-identity.ts's deviceKeyFor(). This class is the
  *  sole settings.json writer — DriverManager/DeviceSession resolve identities
  *  through getOrCreateIdentity() rather than touching disk themselves. */

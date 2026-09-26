@@ -399,7 +399,7 @@ each. Extras have no WebUI grid/tray/saved-frame-replay in v1 — that stays pri
 
 ## Settings persistence
 
-Per-device settings (brightness, brightness override, image-mode override, extra-key widget config)
+Per-device settings (brightness, brightness override, extra-key widget config)
 and device identity (a stable MAC/serial pair so the Elgato desktop doesn't see a "new" device every
 reconnect) persist to `<cacheRoot>/settings.json` (same cache root as the extracted native libs; see
 [Build pipeline](#build-pipeline)):
@@ -433,7 +433,7 @@ Nothing outside these four files touches `settings.json` directly — `DriverMan
 
 ### Dynamic grid
 
-The key grid rebuilds when the model changes: `rebuildGrid(keyCount, columns)` sets `grid.style.gridTemplateColumns` and creates the right number of buttons. Initial render is 5×3 (MK.2 default); the first `status` WebSocket message (sent on connect) rebuilds to the actual layout.
+The key grid rebuilds when the model changes: `KeyPreview.rebuild(keyCount, columns)` (key-preview.ts) sets `root.style.gridTemplateColumns` and creates the right number of buttons; `KeyGridPreview.tsx` calls it from an effect keyed on `[keyCount, columns, modelId, coraProfile, clickable]`. Initial render is 5×3 (MK.2 default); the first `status` WebSocket message (sent on connect) rebuilds to the actual layout.
 
 | Device | Grid |
 |--------|------|

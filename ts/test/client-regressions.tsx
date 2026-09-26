@@ -5,8 +5,8 @@ import {
   addKeyEvent,
   getSnapshot,
   patch,
-  setBrightness,
   useStore,
+  TOUCH_STRIP_REPAINT_DEFAULT_MS,
 } from '../src/web/client/store.js';
 import { hydrate } from '../src/web/client/hydrate.js';
 import { CopyChip } from '../src/web/client/simple/controls.js';
@@ -33,13 +33,13 @@ function check(condition: boolean, message: string): void {
   results.push(message);
 }
 
-function SelectedValue({ field }: Readonly<{ field: 'brightness' | 'imageMode' }>) {
+function SelectedValue({ field }: Readonly<{ field: 'brightness' | 'touchStripRepaintMs' }>) {
   const value = useStore((s) => s[field]);
   return <output>{value}</output>;
 }
 
 function UpdateDuringMount() {
-  useLayoutEffect(() => setBrightness(42), []);
+  useLayoutEffect(() => patch({ brightness: 42 }), []);
   return null;
 }
 
@@ -69,13 +69,13 @@ async function run(): Promise<void> {
   // Cases replace navigator.clipboard; the last installs a pending writeText.
   // Restore the real descriptor before later tests.
   const originalClipboard = Object.getOwnPropertyDescriptor(navigator, 'clipboard');
-  patch({ brightness: 10, imageMode: 'resize' });
+  patch({ brightness: 10, touchStripRepaintMs: 1234 });
   await act(() => render(<SelectedValue field="brightness" />, root));
   check(root.textContent === '10', 'Initial selector reads snapshot');
-  await act(() => render(<SelectedValue field="imageMode" />, root));
-  check(root.textContent === 'resize', 'Changed selector updates without store mutation');
-  await act(() => patch({ imageMode: 'pad-black' }));
-  check(root.textContent === 'pad-black', 'Subscription uses latest selector');
+  await act(() => render(<SelectedValue field="touchStripRepaintMs" />, root));
+  check(root.textContent === '1234', 'Changed selector updates without store mutation');
+  await act(() => patch({ touchStripRepaintMs: 4321 }));
+  check(root.textContent === '4321', 'Subscription uses latest selector');
   await act(() => render(null, root));
   await act(() =>
     render(
@@ -88,23 +88,26 @@ async function run(): Promise<void> {
   );
   check(root.textContent === '42', 'Mount-time store mutation is observed');
   await act(() => render(null, root));
-  await act(() => setBrightness(99));
+  await act(() => patch({ brightness: 99 }));
   check(root.textContent === '', 'Unmounted subscriber stays removed');
 
   await act(() => render(<FreshObjectSelector />, root));
   const rendersAfterMount = freshSelectorRenders;
   check(root.textContent === '99', 'Fresh-object selector reads snapshot');
-  await act(() => setBrightness(7));
+  await act(() => patch({ brightness: 7 }));
   check(root.textContent === '7', 'Fresh-object selector tracks updates');
   check(
     freshSelectorRenders - rendersAfterMount <= 2,
     `Fresh-object selector settles (${freshSelectorRenders - rendersAfterMount} renders per update)`,
   );
-  await act(() => patch({ imageMode: 'resize' }));
+  await act(() => patch({ touchStripRepaintMs: 999 }));
   check(
     freshSelectorRenders - rendersAfterMount <= 2,
     'Unrelated store change does not re-render a shallow-equal selection',
   );
+  // Restore the default so later cases (e.g. runSideKeysPanel) that read the
+  // repaint interval without setting it first see the documented default.
+  patch({ touchStripRepaintMs: TOUCH_STRIP_REPAINT_DEFAULT_MS });
   await act(() => render(null, root));
 
   for (const advanced of [false, true]) {
@@ -495,6 +498,38 @@ async function checkEmulationProfileSwitch(): Promise<void> {
   }
 }
 
+async function checkImageFitApplicability(): Promise<void> {
+  const view: DeviceOverridesView = {
+    ...OVERRIDES_VIEW,
+    modelId: 'ajazz-akp05e',
+    modelName: 'AJAZZ AKP05E',
+    sourceSize: { width: 120, height: 120 },
+  };
+  const stub = stubFetch(() => ({ payload: view }));
+  const chip = (name: string, value: string): HTMLInputElement | null =>
+    root.querySelector<HTMLInputElement>(`input[name="${name}"][value="${value}"]`);
+  try {
+    await act(() => patch({ status: { ...baseStatus, modelId: 'ajazz-akp05e' } }));
+    await act(() => render(<DeviceTuningPanel />, root));
+    await settle();
+    check(chip('image-fit', 'pad')?.disabled === true, '120→112: pad disabled (no effect)');
+    check(chip('image-fit', 'crop')?.disabled === false, '120→112: crop enabled');
+    check(chip('pad-fill', 'edge')?.disabled === true, 'resize mode: pad fill disabled');
+    await click('#image-fit-help-btn');
+    check(
+      root.querySelector('#image-fit-source')?.textContent === '120×120 px' &&
+        root.querySelector('#image-fit-target')?.textContent === '112×112 px',
+      'Image fit help shows source and key sizes',
+    );
+    await act(() => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' })));
+    check(root.querySelector('#image-fit-help') === null, 'Escape closes image fit help');
+  } finally {
+    stub.restore();
+    await act(() => render(null, root));
+    await act(() => patch({ status: baseStatus }));
+  }
+}
+
 async function runSettingsPanels(): Promise<void> {
   // Device tuning: renders the effective spec, not a blank form.
   {
@@ -526,6 +561,7 @@ async function runSettingsPanels(): Promise<void> {
 
   await checkBatchImageTransferTuning();
   await checkEmulationProfileSwitch();
+  await checkImageFitApplicability();
 
   // A validation failure surfaces the server's error list.
   {

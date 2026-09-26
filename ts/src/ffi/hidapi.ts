@@ -106,24 +106,6 @@ export function getReportDescriptor(
 }
 
 interface HidEnumSymbols {
-  mirabox_hid_find_path(
-    vid: number,
-    pid: number,
-    usagePage: number,
-    usage: number,
-    buf: Uint8Array,
-    bufLen: number,
-  ): number;
-  mirabox_hid_present(vid: number, pid: number): number;
-  mirabox_hid_serial_for_path(path: string, buf: Uint8Array, bufLen: number): number;
-  mirabox_hid_list_paths(
-    vid: number,
-    pid: number,
-    usagePage: number,
-    usage: number,
-    buf: Uint8Array,
-    bufLen: number,
-  ): number;
   mirabox_hid_list_all(buf: Uint8Array, bufLen: number): number;
 }
 
@@ -141,22 +123,6 @@ function loadHidEnum(): { symbols: HidEnumSymbols; close(): void } | null {
   debug('ffi', `loading ${HID_ENUM} hid enum: ${path}`);
   try {
     const lib = FFI.dlopen(path, {
-      mirabox_hid_find_path: {
-        args: [UINT16, UINT16, UINT16, UINT16, BUFFER, SIZE_T],
-        returns: INT,
-      },
-      mirabox_hid_present: {
-        args: [UINT16, UINT16],
-        returns: INT,
-      },
-      mirabox_hid_serial_for_path: {
-        args: [STRING, BUFFER, SIZE_T],
-        returns: INT,
-      },
-      mirabox_hid_list_paths: {
-        args: [UINT16, UINT16, UINT16, UINT16, BUFFER, SIZE_T],
-        returns: INT,
-      },
       mirabox_hid_list_all: {
         args: [BUFFER, SIZE_T],
         returns: INT,
@@ -207,7 +173,7 @@ let _snapshotAt = 0;
 
 /** Cached full HID enumeration, refreshed when older than `maxAgeMs` (0 forces a
  *  fresh one). [] when deckbridge-native is unavailable or enumeration failed —
- *  callers fall back to their own native filtered call in that case. */
+ *  callers (via hidSnapshotOrFresh) retry once, uncached, before matching. */
 export function hidSnapshot(maxAgeMs = SNAPSHOT_TTL_MS): HidDeviceInfo[] {
   const now = Date.now();
   if (_snapshotAt !== 0 && now - _snapshotAt < maxAgeMs) return _snapshot;
@@ -227,19 +193,51 @@ export function invalidateHidSnapshot(): void {
   _snapshot = [];
 }
 
-function matchesModel(
-  d: HidDeviceInfo,
-  vid: number,
-  pid: number,
-  usagePage: number,
-  usage: number,
-): boolean {
+/** One VID/PID/usage-page/usage filter for a HID query. `productIds` omitted
+ *  matches any product ID; `usagePage`/`usage` omitted matches any value.
+ *  Shared between every VID/PID-filtered helper below and hid-discovery.ts's
+ *  `cachedDiscoveryPaths`, so there is exactly one place that knows how a
+ *  device row is matched against a query — no per-query native fallback
+ *  reimplements this. */
+export interface HidQuery {
+  vendorId: number;
+  productIds?: readonly number[];
+  usagePage?: number;
+  usage?: number;
+}
+
+/** Pure — no FFI, just field comparisons against an already-enumerated row. */
+export function matchesHidQuery(d: HidDeviceInfo, q: HidQuery): boolean {
   return (
-    d.vendorId === vid &&
-    (pid === 0 || d.productId === pid) &&
-    d.usagePage === usagePage &&
-    d.usage === usage
+    d.vendorId === q.vendorId &&
+    (q.productIds === undefined || q.productIds.includes(d.productId)) &&
+    (q.usagePage === undefined || d.usagePage === q.usagePage) &&
+    (q.usage === undefined || d.usage === q.usage)
   );
+}
+
+/** Every path in `devices` matching `q`, de-duplicated. Pure. */
+export function hidPathsMatching(devices: readonly HidDeviceInfo[], q: HidQuery): string[] {
+  return [...new Set(devices.filter((d) => matchesHidQuery(d, q)).map((d) => d.path))];
+}
+
+function singlePidQuery(
+  vendorId: number,
+  pid: number,
+  usagePage?: number,
+  usage?: number,
+): HidQuery {
+  return { vendorId, productIds: pid === 0 ? undefined : [pid], usagePage, usage };
+}
+
+/** The cached snapshot, or — when it's empty (enum lib unavailable, or nothing
+ *  was connected at the last sweep) — a same-tick fresh enumeration. This is
+ *  the one native re-check every VID/PID-filtered helper below falls back to:
+ *  no separate per-query native entry point, just an uncached call to the
+ *  same full enumeration `listAllHidDevices()` already uses. */
+function hidSnapshotOrFresh(): HidDeviceInfo[] {
+  const snap = hidSnapshot();
+  return snap.length > 0 ? snap : hidSnapshot(0);
 }
 
 export function findHidPath(vid: number, usagePage: number, usage: number, pid = 0): string | null {
@@ -247,34 +245,11 @@ export function findHidPath(vid: number, usagePage: number, usage: number, pid =
     'ffi',
     `findHidPath: vid=0x${vid.toString(16)} pid=0x${pid.toString(16)} usagePage=0x${usagePage.toString(16)} usage=0x${usage.toString(16)}`,
   );
-  const snap = hidSnapshot();
-  if (snap.length > 0) {
-    const hit = snap.find((d) => matchesModel(d, vid, pid, usagePage, usage));
-    debug('ffi', hit ? `hid snapshot: found path=${hit.path}` : 'hid snapshot: no device found');
-    return hit?.path ?? null;
-  }
-  return nativeFindHidPath(vid, usagePage, usage, pid);
-}
-
-/** Single-query native fallback for findHidPath — used only when the snapshot is
- *  empty (enum lib missing, or enumeration failed). */
-function nativeFindHidPath(
-  vid: number,
-  usagePage: number,
-  usage: number,
-  pid: number,
-): string | null {
-  return hidEnumCall<string | null>('mirabox_hid_find_path', null, (sym) => {
-    const buf = new Uint8Array(512);
-    const found = sym.mirabox_hid_find_path(vid, pid, usagePage, usage, buf, buf.length);
-    if (!found) {
-      debug('ffi', 'mirabox_hid_find_path: no device found');
-      return null;
-    }
-    const path = decodeNulTerminated(buf);
-    debug('ffi', `mirabox_hid_find_path: found path=${path}`);
-    return path;
-  });
+  const hit = hidSnapshotOrFresh().find((d) =>
+    matchesHidQuery(d, singlePidQuery(vid, pid, usagePage, usage)),
+  );
+  debug('ffi', hit ? `hid snapshot: found path=${hit.path}` : 'hid snapshot: no device found');
+  return hit?.path ?? null;
 }
 
 /** Every HID device path matching this VID+usagePage+usage (+optional PID),
@@ -283,25 +258,7 @@ function nativeFindHidPath(
  *  hid_open_path. Returns [] when the enum lib is missing or nothing matches.
  *  Param order mirrors findHidPath. */
 export function listHidPaths(vid: number, usagePage: number, usage: number, pid = 0): string[] {
-  const snap = hidSnapshot();
-  if (snap.length > 0) {
-    const paths = snap
-      .filter((d) => matchesModel(d, vid, pid, usagePage, usage))
-      .map((d) => d.path);
-    return [...new Set(paths)];
-  }
-  return nativeListHidPaths(vid, usagePage, usage, pid);
-}
-
-function nativeListHidPaths(vid: number, usagePage: number, usage: number, pid: number): string[] {
-  return hidEnumCall<string[]>('mirabox_hid_list_paths', [], (sym) => {
-    const buf = new Uint8Array(4096);
-    const count = sym.mirabox_hid_list_paths(vid, pid, usagePage, usage, buf, buf.length);
-    if (count <= 0) return [];
-    return decodeNulTerminated(buf)
-      .split('\n')
-      .filter((s) => s.length > 0);
-  });
+  return hidPathsMatching(hidSnapshotOrFresh(), singlePidQuery(vid, pid, usagePage, usage));
 }
 
 /** True if a HID device with this VID+PID is connected, via deckbridge-native
@@ -310,19 +267,7 @@ function nativeListHidPaths(vid: number, usagePage: number, usage: number, pid: 
  *  load hidapi in a throwaway worker, both of which segfault on macOS. Returns
  *  false (no device) when deckbridge-native is unavailable. */
 export function hidDevicePresent(vid: number, pid: number): boolean {
-  const snap = hidSnapshot();
-  if (snap.length > 0) {
-    return snap.some((d) => d.vendorId === vid && (pid === 0 || d.productId === pid));
-  }
-  return nativeHidDevicePresent(vid, pid);
-}
-
-function nativeHidDevicePresent(vid: number, pid: number): boolean {
-  return hidEnumCall(
-    'mirabox_hid_present',
-    false,
-    (sym) => sym.mirabox_hid_present(vid, pid) === 1,
-  );
+  return hidSnapshotOrFresh().some((d) => matchesHidQuery(d, singlePidQuery(vid, pid)));
 }
 
 /** USB serial-number string of the device at `hidPath` (from deckbridge-native
@@ -330,23 +275,10 @@ function nativeHidDevicePresent(vid: number, pid: number): boolean {
  *  serial, or the enum lib is missing. Used to build a stable per-device key
  *  (VID:PID:serial) that survives reboot/replug, unlike the IOKit path. */
 export function hidSerialForPath(hidPath: string): string | null {
-  const snap = hidSnapshot();
-  if (snap.length > 0) {
-    const hit = snap.find((d) => d.path === hidPath);
-    // A row exists but carries no serial: that is an answer (null), not a reason to
-    // re-enumerate natively — mirabox_hid_serial_for_path would report the same.
-    if (hit) return hit.serial && hit.serial !== TSV_ABSENT ? hit.serial : null;
-    return null;
-  }
-  return nativeHidSerialForPath(hidPath);
-}
-
-function nativeHidSerialForPath(hidPath: string): string | null {
-  return hidEnumCall<string | null>('mirabox_hid_serial_for_path', null, (sym) => {
-    const buf = new Uint8Array(256);
-    const found = sym.mirabox_hid_serial_for_path(hidPath, buf, buf.length);
-    return found ? decodeNulTerminated(buf) : null;
-  });
+  // A row exists but carries no serial: that is an answer (null), not a reason
+  // to re-enumerate — a fresh sweep would report the same.
+  const hit = hidSnapshotOrFresh().find((d) => d.path === hidPath);
+  return hit?.serial && hit.serial !== TSV_ABSENT ? hit.serial : null;
 }
 
 /** One row of the unfiltered HID enumeration (see listAllHidDevices). */

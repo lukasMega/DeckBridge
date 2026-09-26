@@ -1,43 +1,52 @@
 use image::{imageops::FilterType, DynamicImage};
 
-/// Pad a source image into a `w`×`h` canvas, centred with a floor split (top-left
-/// bias: offset = (canvas - src) / 2, rounding down). Inputs larger than the canvas
-/// in either axis cannot be padded without cropping, so fall back to a resize.
+/// `fill_mode` bit: centre-crop axes where the source is larger than the canvas
+/// instead of falling back to a resize (resizeMode 'crop').
+pub(crate) const FILL_CROP_OVERSIZE: u32 = 4;
+
+/// Place a source image 1:1 into a `w`×`h` canvas, centred with a floor split
+/// (top-left bias: offset = floor((canvas - src) / 2)).
 ///
-/// `fill_mode`: 1 = black border, 2 = average-colour border, 3 = edge-clamp
-/// (replicate nearest source pixel — interior, edges, and corners in one loop).
-pub(crate) fn pad_to_canvas(src: &DynamicImage, w: u32, h: u32, fill_mode: u32) -> DynamicImage {
+/// `fill_mode` low bits: 1 = black border, 2 = average-colour border, 3 = edge-clamp
+/// (replicate nearest source pixel). Without `FILL_CROP_OVERSIZE`, a source larger
+/// than the canvas in either axis cannot be padded without cropping, so it falls back
+/// to a resize with `filter`; with it, the oversize axes are centre-cropped.
+pub(crate) fn pad_to_canvas(
+    src: &DynamicImage,
+    w: u32,
+    h: u32,
+    fill_mode: u32,
+    filter: FilterType,
+) -> DynamicImage {
     let s = src.to_rgba8();
     let (sw, sh) = (s.width(), s.height());
-    if sw > w || sh > h {
-        return src.resize_exact(w, h, FilterType::Triangle);
+    let crop = fill_mode & FILL_CROP_OVERSIZE != 0;
+    if !crop && (sw > w || sh > h) {
+        return src.resize_exact(w, h, filter);
     }
-    let off_x = (w - sw) / 2; // floor → top-left bias
-    let off_y = (h - sh) / 2;
+    // Negative offset = centre-crop on that axis.
+    let off_x = (w as i64 - sw as i64).div_euclid(2);
+    let off_y = (h as i64 - sh as i64).div_euclid(2);
+    let fill = match fill_mode & !FILL_CROP_OVERSIZE {
+        2 => Some(average_rgba(&s)),
+        3 => None,
+        _ => Some(image::Rgba([0, 0, 0, 255])),
+    };
     let mut out = image::RgbaImage::new(w, h);
-
-    match fill_mode {
-        3 => {
-            // edge-clamp: one loop covers interior + edges + corners
-            for y in 0..h {
-                let sy = (y as i32 - off_y as i32).clamp(0, sh as i32 - 1) as u32;
-                for x in 0..w {
-                    let sx = (x as i32 - off_x as i32).clamp(0, sw as i32 - 1) as u32;
-                    out.put_pixel(x, y, *s.get_pixel(sx, sy));
-                }
-            }
-        }
-        _ => {
-            // 1 = black, 2 = average
-            let fill = if fill_mode == 2 {
-                average_rgba(&s)
-            } else {
-                image::Rgba([0, 0, 0, 255])
+    for y in 0..h {
+        let sy = y as i64 - off_y;
+        for x in 0..w {
+            let sx = x as i64 - off_x;
+            let inside = (0..sw as i64).contains(&sx) && (0..sh as i64).contains(&sy);
+            let px = match fill {
+                Some(f) if !inside => f,
+                // Inside, or edge-clamp: one clamp covers interior, edges and corners.
+                _ => *s.get_pixel(
+                    sx.clamp(0, sw as i64 - 1) as u32,
+                    sy.clamp(0, sh as i64 - 1) as u32,
+                ),
             };
-            for p in out.pixels_mut() {
-                *p = fill;
-            }
-            image::imageops::overlay(&mut out, &s, off_x as i64, off_y as i64);
+            out.put_pixel(x, y, px);
         }
     }
     DynamicImage::ImageRgba8(out)

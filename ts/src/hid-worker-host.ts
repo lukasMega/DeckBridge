@@ -12,7 +12,6 @@ import type {
   DeviceModelOverride,
 } from './devices/driver.js';
 import type {
-  ImageModeOverride,
   KeyEvent,
   DialEvent,
   TouchInputEvent,
@@ -96,10 +95,13 @@ export class WorkerHidDriver extends EventEmitter implements DeviceDriver {
   }
 
   /** Raw CORA image → worker: transform + cache + write happen off the main
-   *  thread (P1). Copy the bytes so the structured clone never aliases a buffer
-   *  the caller may reuse. */
+   *  thread (P1). No pre-copy here: `post()` (txiki postMessage) always
+   *  structured-clones its argument SYNCHRONOUSLY before returning (mod_channel.c
+   *  `channel_msg_build` → `JS_WriteObject2` runs in the sender ctx, not deferred),
+   *  so the clone can never observe a later mutation of `bytes` — a manual copy
+   *  made just before this call would only be copied again by the clone itself. */
   renderCoraImage(keyIndex: number, bytes: Uint8Array, format: 'jpeg' | 'bmp'): void {
-    this.post({ type: 'image', keyIndex, bytes: new Uint8Array(bytes), format });
+    this.post({ type: 'image', keyIndex, bytes, format });
   }
 
   sendImage(keyIndex: number, bytes: Uint8Array): void {
@@ -111,7 +113,7 @@ export class WorkerHidDriver extends EventEmitter implements DeviceDriver {
    *  writes the native bytes to the device. Offloads the synchronous FFI transform
    *  and hid_write burst that would otherwise stall the main thread on connect. */
   sendSplashImage(keyIndex: number, bytes: Uint8Array, spec: DeviceImageSpec): void {
-    this.post({ type: 'splashImage', keyIndex, bytes: new Uint8Array(bytes), spec });
+    this.post({ type: 'imageWithSpec', keyIndex, bytes: new Uint8Array(bytes), spec });
   }
 
   /** Stream Deck + window image (or a partial-window region) → worker: split into
@@ -141,12 +143,6 @@ export class WorkerHidDriver extends EventEmitter implements DeviceDriver {
 
   clearKey(keyIndex: number): void {
     this.post({ type: 'clearKey', keyIndex });
-  }
-
-  /** WebUI runtime image-fit override (resize ⇄ pad-black/avg/edge). No device
-   *  I/O — the worker just stores the mode for the next 'image' render. */
-  setImageOverride(mode: ImageModeOverride): void {
-    this.post({ type: 'setImageOverride', mode });
   }
 
   /** Live device-tuning swap (image fields only — see classifyOverrideChange).
@@ -204,9 +200,6 @@ export class WorkerHidDriver extends EventEmitter implements DeviceDriver {
         break;
       case 'touch':
         this.emit('touch', msg.event satisfies TouchInputEvent);
-        break;
-      case 'comm':
-        this.emit('comm', msg.entry);
         break;
       case 'imageSent':
         this.emit('imageSent', msg.keyIndex);

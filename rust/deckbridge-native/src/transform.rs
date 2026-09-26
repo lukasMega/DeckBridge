@@ -70,9 +70,15 @@ pub(crate) fn transform(
         }
     }
 
+    let filter = match resize_filter {
+        1 => FilterType::Nearest,
+        2 => FilterType::Lanczos3,
+        _ => FilterType::Triangle,
+    };
+
     // Pad in the SOURCE frame (bias is anchored pre-rotation), then rotate/flip.
     if fill_mode != 0 {
-        img = pad_to_canvas(&img, width, height, fill_mode);
+        img = pad_to_canvas(&img, width, height, fill_mode, filter);
     }
 
     img = match rotate {
@@ -90,11 +96,6 @@ pub(crate) fn transform(
 
     // Resize only in fill_mode 0 — a pad already produced a width×height canvas.
     if fill_mode == 0 && !skip_resize {
-        let filter = match resize_filter {
-            1 => FilterType::Nearest,
-            2 => FilterType::Lanczos3,
-            _ => FilterType::Triangle,
-        };
         img = img.resize_exact(width, height, filter);
     }
 
@@ -126,13 +127,15 @@ pub(crate) fn transform(
 ///
 /// format: 0 = JPEG, 1 = BMP. max_bytes: JPEG size cap (0 = no cap; ignored for BMP).
 /// quality: 1..=100 percent (JPEG only). skip_resize / flip_h / flip_v: 0 or 1.
-/// resize_filter: 0 = Triangle (default), 1 = Nearest.
+/// resize_filter: 0 = Triangle (default), 1 = Nearest, 2 = Lanczos3.
 /// fill_mode: 0 = resize (current behaviour, honours skip_resize); 1 = pad with a
 /// black border; 2 = pad with an average-colour border; 3 = pad with an edge-clamp
 /// (replicate) border. Pad modes (>0) keep the source pixels 1:1, centre them in a
 /// width×height canvas with a floor-split (top-left bias) offset, fill the border
 /// per the mode, and pad BEFORE rotate/flip so the centring bias is anchored to the
-/// source frame. Inputs larger than the canvas in either axis fall back to a resize.
+/// source frame. Inputs larger than the canvas in either axis fall back to a resize
+/// (with `resize_filter`), unless bit 4 is set (5/6/7 = crop + black/average/edge):
+/// then the oversize axes are centre-cropped 1:1 instead.
 /// crop_px: pixels trimmed from every side of the source before rotate/flip/resize
 /// (0 = none); ignored when it would leave a non-positive dimension.
 ///
@@ -161,14 +164,14 @@ pub unsafe extern "C" fn image_proc_transform(
     format: i32,      // 0 = JPEG, 1 = BMP
     bmp_ppm: i32,
     blur_sigma_tenths: u32,    // Gaussian sigma × 10; 0 = no blur
-    resize_filter: u32,        // 0 = Triangle (default), 1 = Nearest
+    resize_filter: u32,        // 0 = Triangle (default), 1 = Nearest, 2 = Lanczos3
     sharpen_sigma_tenths: u32, // unsharp-mask sigma × 10; 0 = no sharpen
-    fill_mode: u32,            // 0 = resize; 1 = pad-black; 2 = pad-average; 3 = pad-edge-clamp
-    crop_px: u32, // pixels to crop from every side of the source before resize; 0 = none
-    crop_x: u32,  // region-crop left offset (used when crop_w/crop_h > 0)
-    crop_y: u32,  // region-crop top offset
-    crop_w: u32,  // region-crop width (0 = no region crop)
-    crop_h: u32,  // region-crop height (0 = no region crop)
+    fill_mode: u32, // 0 = resize; 1-3 = pad black/average/edge; +4 = centre-crop oversize
+    crop_px: u32,   // pixels to crop from every side of the source before resize; 0 = none
+    crop_x: u32,    // region-crop left offset (used when crop_w/crop_h > 0)
+    crop_y: u32,    // region-crop top offset
+    crop_w: u32,    // region-crop width (0 = no region crop)
+    crop_h: u32,    // region-crop height (0 = no region crop)
     out_buf: *mut u8,
     out_cap: usize,
     err_buf: *mut u8,

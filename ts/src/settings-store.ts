@@ -1,17 +1,17 @@
 // Persists a small set of "real hardware" WebUI settings (brightness,
-// brightness-override, image-mode override, selected dock) to disk so they
-// survive a restart. Everything else (mock config, driver mode) stays
-// runtime-only — see .claude/plans/2026-07-13_persistent-settings.md.
+// brightness-override, selected dock) to disk so they survive a restart.
+// Everything else (mock config, driver mode) stays runtime-only — see
+// .claude/plans/2026-07-13_persistent-settings.md.
 //
 // Disk-write pattern mirrors native-libs.ts: makeDir(recursive) → write to
 // <target>.tmp-<pid> → rename() for atomicity.
 import { log } from './logger.js';
+import type { CliLogLevel } from './cli.js';
 import { defaultCacheRoot } from './native-libs.js';
 import { SERIAL_KEY_PREFIX } from './device-identity.js';
 import type {
   EncoderSettings,
   ExtraKeyConfig,
-  ImageModeOverride,
   TouchStripMode,
   TouchStripOptions,
   TouchStripUpload,
@@ -24,7 +24,7 @@ import type { UpdateState } from './update-check.js';
 /** One physical device's persisted state, keyed by device-identity.ts's
  *  deviceKeyFor() (v1: the HID path). Holds both the stable identity
  *  (mdns/mac/serials — see .claude/plans/2026-07-14_per-device-identity.md) and
- *  the per-device settings (brightness/override/imageMode — see
+ *  the per-device settings (brightness/override — see
  *  2026-07-15_per-device-settings.md). Settings fields are optional: absent =
  *  use the hardcoded default until the user changes it. */
 export interface DeviceIdentitySettings {
@@ -35,7 +35,6 @@ export interface DeviceIdentitySettings {
   childSerial: string;
   brightness?: number;
   brightnessOverride?: boolean;
-  imageModeOverride?: ImageModeOverride;
   /** DeckBridge-native actions for keys outside the emulated grid (293S 6th
    *  column), keyed by device wire id — see extra-keys.ts. */
   extraKeys?: Record<string, ExtraKeyConfig>;
@@ -55,8 +54,9 @@ export interface DeviceIdentitySettings {
 
 /** Persisted log level. Precedence (documented in cli.ts's usage text and
  *  docs/troubleshooting.md): CLI flag > DECKBRIDGE_LOG_LEVEL > settings.json >
- *  build-time `__LOG_LEVEL__`. */
-export type PersistedLogLevel = 'debug' | 'info' | 'warn' | 'error' | 'silent';
+ *  build-time `__LOG_LEVEL__`. Alias of cli.ts's canonical CliLogLevel (the
+ *  single source of truth for accepted levels) so the two can't drift apart. */
+export type PersistedLogLevel = CliLogLevel;
 
 export interface Settings {
   selectedDock?: number;

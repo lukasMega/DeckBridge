@@ -1,7 +1,7 @@
 /**
- * AdvHeader — back button, status chips, mode/model/resize/image-mode/anim
- * controls, stats, theme button. Brightness moved to a panels-column card
- * (simple Brightness component) in AdvancedApp.
+ * AdvHeader — back button, status chips, mode/model/anim controls, stats,
+ * theme button. Brightness moved to a panels-column card (simple Brightness
+ * component) in AdvancedApp.
  *
  * Split out of AdvancedApp.tsx (file-size refactor, no behavior change).
  */
@@ -27,14 +27,6 @@ function fmtUp(ms: number): string {
 function switchToSimple(): void {
   document.documentElement.setAttribute('data-mode', 'simple');
   localStorage.setItem('deckbridge.mode', 'simple');
-}
-
-function toggleResize(): void {
-  fire('/api/resize-toggle');
-}
-
-function handleImageModeChange(e: Event): void {
-  fire('/api/image-mode', { mode: (e.target as HTMLSelectElement).value });
 }
 
 function handleModelChange(e: Event): void {
@@ -186,8 +178,6 @@ function HeaderStats({
 export function AdvHeader(): preact.JSX.Element {
   const status = useStore((s) => s.status);
   const stats = useStore((s) => s.stats);
-  const resizeEnabled = useStore((s) => s.resizeEnabled);
-  const imageMode = useStore((s) => s.imageMode);
   const deviceModels = useStore((s) => s.deviceModels);
 
   const uptime = useUptime(stats.uptimeMs);
@@ -220,27 +210,6 @@ export function AdvHeader(): preact.JSX.Element {
         {modeBtnText}
       </button>
       <ModelSelect deviceModels={deviceModels} status={status} />
-      <button
-        id="resize-toggle"
-        type="button"
-        class={resizeEnabled ? 'ghostbtn active' : 'ghostbtn'}
-        onClick={toggleResize}
-      >
-        {resizeEnabled ? 'R' : '1:1'}
-      </button>
-      <select
-        id="image-mode"
-        class="input"
-        title="Image fit (experimental, applies to active driver)"
-        onChange={handleImageModeChange}
-        value={imageMode ?? 'default'}
-      >
-        <option value="default">Fit: Model default</option>
-        <option value="resize">Fit: Resize</option>
-        <option value="pad-black">Fit: Pad · Black</option>
-        <option value="pad-average">Fit: Pad · Avg</option>
-        <option value="pad-edge">Fit: Pad · Edge</option>
-      </select>
       <button
         id="anim-toggle"
         type="button"

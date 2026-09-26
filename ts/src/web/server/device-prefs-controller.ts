@@ -1,11 +1,11 @@
 // Per-device preferences that live on the SELECTED dock's settings.json entry:
-// the "ignore brightness from the Elgato app" flag and the image-fit override.
+// the "ignore brightness from the Elgato app" flag.
 //
-// Both fall back to a runtime-only value when there is no deviceKey yet (mock
+// It falls back to a runtime-only value when there is no deviceKey yet (mock
 // mode, or before the first connect) — that fallback is never persisted, since
 // it belongs to no physical device.
 import type { DeviceIdentitySettings } from '../../settings-store.js';
-import type { ImageModeOverride, TouchStripMode } from '../../types.js';
+import type { TouchStripMode } from '../../types.js';
 import {
   DEFAULT_BRIGHTNESS_OVERRIDE,
   DEFAULT_TOUCH_STRIP_MODE,
@@ -15,7 +15,6 @@ import type { ControllerHost, ReqError } from './types.js';
 
 export class DevicePrefsController {
   private runtimeBrightnessOverride = DEFAULT_BRIGHTNESS_OVERRIDE;
-  private runtimeImageModeOverride: ImageModeOverride = null;
   private runtimeTouchStripMode: TouchStripMode = DEFAULT_TOUCH_STRIP_MODE;
   private runtimeTouchStripRepaintMs = TOUCH_STRIP_REPAINT_DEFAULT_MS;
 
@@ -36,12 +35,6 @@ export class DevicePrefsController {
   /** brightnessOverride of the SELECTED dock (WebUI toggle). */
   get brightnessOverride(): boolean {
     return this.isBrightnessOverride(this.host.selectedDeviceKey());
-  }
-
-  /** imageModeOverride of the SELECTED dock; null = model default. */
-  get imageModeOverride(): ImageModeOverride {
-    const e = this.host.settings.entryFor(this.host.selectedDeviceKey());
-    return e ? (e.imageModeOverride ?? null) : this.runtimeImageModeOverride;
   }
 
   /** Per-device touch-strip mode — also read by the widget scheduler
@@ -114,16 +107,6 @@ export class DevicePrefsController {
       this.host.emit('setBrightness', this.selectedBrightness(), this.host.selectedDock());
   }
 
-  /** Store, broadcast, and let app.ts apply it via 'setImageOverride'. */
-  setImageMode(mode: ImageModeOverride): void {
-    this.mutateSelectedEntryOrRuntime(
-      (e) => (e.imageModeOverride = mode),
-      () => (this.runtimeImageModeOverride = mode),
-    );
-    this.host.broadcast('imageMode', { mode });
-    this.host.emit('setImageOverride', mode, this.host.selectedDock());
-  }
-
   /** Broadcast-only: brightness is persisted per-device via notifyDocks; this
    *  just pushes the slider value. */
   broadcastBrightness(level: number): void {
@@ -134,7 +117,6 @@ export class DevicePrefsController {
    *  switch or a settings import) — none of them are in the status snapshot. */
   broadcastSelected(extraKeyConfigs: unknown): void {
     this.host.broadcast('brightnessOverride', { enabled: this.brightnessOverride });
-    this.host.broadcast('imageMode', { mode: this.imageModeOverride });
     this.host.broadcast('extraKeys', { configs: extraKeyConfigs });
     this.host.broadcast('touchStripMode', { mode: this.touchStripMode });
     this.host.broadcast('touchStripRepaint', { ms: this.touchStripRepaintMs });

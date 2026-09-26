@@ -2,7 +2,15 @@
  * inventory remains in hidapi.ts for explicit diagnostics only. */
 import FFI from 'tjs:ffi';
 import { debug, warn } from '../logger.js';
-import { BUFFER, INT, SIZE_T, STRING, parseHidRows, type HidDeviceInfo } from './hidapi.js';
+import {
+  BUFFER,
+  INT,
+  SIZE_T,
+  STRING,
+  hidPathsMatching,
+  parseHidRows,
+  type HidDeviceInfo,
+} from './hidapi.js';
 import { guardedCall, LIST_BUF_BYTES, TSV_ABSENT } from './native-load.js';
 
 interface DiscoverySymbols {
@@ -50,16 +58,7 @@ export function cachedDiscoveryPaths(
   usagePage?: number,
   usage?: number,
 ): string[] {
-  const paths = snapshot
-    .filter(
-      (d) =>
-        d.vendorId === vendorId &&
-        productIds.includes(d.productId) &&
-        (usagePage === undefined || d.usagePage === usagePage) &&
-        (usage === undefined || d.usage === usage),
-    )
-    .map((d) => d.path);
-  return [...new Set(paths)];
+  return hidPathsMatching(snapshot, { vendorId, productIds, usagePage, usage });
 }
 
 /** Drop the native library's cached HidApi so the next scan re-runs hid_init.

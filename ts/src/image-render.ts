@@ -4,16 +4,11 @@
  *  CORA ACK loop or the WebUI (P1). The main thread forwards raw CORA bytes via
  *  the 'image' worker message; this module owns the transform + the LRU cache. */
 import { debug, info, warn } from './logger.js';
-import {
-  applyOverride,
-  blitImage,
-  canvasSliceToBmp,
-  transformImageForDevice,
-} from './translator.js';
+import { blitImage, canvasSliceToBmp, transformImageForDevice } from './translator.js';
 import { mk2IndexToDeviceImgId } from './key-map.js';
 import { imageCache, hashJpeg, makeCacheKey, specRevision } from './image-cache.js';
 import type { DeviceImageSpec, DeviceModel } from './devices/driver.js';
-import type { ImageModeOverride, TouchStripOptions, TouchWindowRegion } from './types.js';
+import type { TouchStripOptions, TouchWindowRegion } from './types.js';
 import { DEFAULT_TOUCH_STRIP_OPTIONS, PLUS_TOUCH_WIDTH, PLUS_TOUCH_HEIGHT } from './types.js';
 
 /** The slice of a driver this module needs: the native-bytes write. The model
@@ -157,16 +152,14 @@ export function renderImage(
   keyIndex: number,
   coraBytes: Uint8Array,
   format: 'jpeg' | 'bmp',
-  override: ImageModeOverride = null,
 ): void {
   // Capture the raw input first so it's saved even if the transform throws.
   const rawDump = dumpRawReceived(keyIndex, coraBytes, format);
 
-  // Effective image spec: model default, overlaid with any WebUI runtime
-  // override (null = model default unchanged). The override discriminator
-  // goes into the cache key so a mode switch can't serve a stale entry.
-  const eff = applyOverride(model.image, override);
-  const hash = makeCacheKey(model.id, hashJpeg(coraBytes), override ?? 'def', revisionFor(model));
+  // Effective image spec is the model's own (device tuning already merged in
+  // at open()/'setOverrides' time — see devices/model-overrides.ts).
+  const eff = model.image;
+  const hash = makeCacheKey(model.id, hashJpeg(coraBytes), 'def', revisionFor(model));
   let entry = imageCache.get(hash);
 
   if (!entry) {
@@ -201,11 +194,9 @@ export function renderImage(
   // Pair the device-bound bytes with the raw input under one seq (cache hit or miss).
   dumpTransformed(rawDump, keyIndex, entry.nativeBytes, model.image.format);
 
-  // Map CORA key index → device-native key index (identity when no keyMap).
-  const deviceKeyIndex =
-    model.keyMap.coraToWireImage || model.keyMap.imageOffset != null
-      ? mk2IndexToDeviceImgId(keyIndex, model)
-      : keyIndex;
+  // Map CORA key index → device-native key index (mk2IndexToDeviceImgId already
+  // falls back to identity when the model has no keyMap array/offset).
+  const deviceKeyIndex = mk2IndexToDeviceImgId(keyIndex, model);
   if (deviceKeyIndex < 0) {
     warn('image', `skipping image for out-of-range key ${keyIndex}`);
     return;
