@@ -186,6 +186,7 @@ export function wireCommonDriverEvents(
     /** `wireId` is the raw device code the press arrived on (pre-keyMap);
      *  undefined for identity-mapped models. Key-map learn mode needs it —
      *  a wrong map is exactly what it is there to fix. */
+    onAction?: (message: string) => void;
     onKey: (mk2Index: number, state: KeyEvent['state'], wireId?: number) => void;
     /** Press on an extra key with a switch (keyMap.extraKeyInputs); `wireId` is the
      *  extra key's image wire id, as keyed in its ExtraKeyConfig. */
@@ -200,6 +201,8 @@ export function wireCommonDriverEvents(
   },
 ): void {
   driver.on('key', (e: KeyEvent) => {
+    const key = hasInputKeyMap(model) ? e.keyIndex : e.keyIndex + 1;
+    opts.onAction?.(`Key ${key} ${e.state === 'down' ? 'pressed' : 'released'}`);
     if (!hasInputKeyMap(model)) {
       log('info', 'key', `${model.id} key=${e.keyIndex} ${e.state}`);
       opts.onKey(e.keyIndex, e.state);
@@ -219,8 +222,25 @@ export function wireCommonDriverEvents(
     log('info', 'key', `${model.id} wire=0x${wire} → mk2=${index} ${e.state}`);
     opts.onKey(index, e.state, e.keyIndex);
   });
-  driver.on('dial', (e: DialEvent) => opts.onDial?.(e));
-  driver.on('touch', (e: TouchInputEvent) => opts.onTouch?.(e));
+  driver.on('dial', (e: DialEvent) => {
+    let action: string;
+    if (e.kind === 'press') action = e.state === 'down' ? 'pressed' : 'released';
+    else action = `turned ${e.delta > 0 ? 'right' : 'left'} (${Math.abs(e.delta)})`;
+    opts.onAction?.(`Knob ${e.index + 1} ${action}`);
+    opts.onDial?.(e);
+  });
+  driver.on('touch', (e: TouchInputEvent) => {
+    const { touchWidth, encoderCount } = advertisedGeometry(model);
+    const zone =
+      touchWidth && encoderCount && e.type !== 'swipe'
+        ? Math.floor(e.x / (touchWidth / encoderCount)) + 1
+        : undefined;
+    const control = zone !== undefined ? `Knob ${zone} touch` : 'Touch strip';
+    const end = e.endX !== undefined ? ` → (${e.endX}, ${e.endY})` : '';
+    opts.onAction?.(`${control} ${e.type} (${e.x}, ${e.y})${end}`);
+    opts.onTouch?.(e);
+  });
+  driver.on('inputAction', (message: string) => opts.onAction?.(message));
   driver.on('error', (err: Error) => log('error', model.id, err.message));
   driver.on('reinit', opts.onReinit);
   driver.on(
@@ -278,6 +298,7 @@ export interface DeviceSessionOptions {
    *  completing, stop() completing, or the child CORA client (dis)connecting.
    *  Opaque to DeviceSession: the coordinator uses it to notify the WebUI. */
   onStatusChange?: () => void;
+  onAction?: (message: string) => void;
   /** Mirror of each raw CORA key image, called AFTER the driver render is
    *  queued (USB first). Opaque: the coordinator routes it to the WebUI's
    *  selected-dock preview. */
@@ -296,6 +317,8 @@ export interface DeviceSessionOptions {
   touchStripMode?: TouchStripMode;
   /** This dock's 'deckbridge-repaint' interval, read live each widget tick. */
   touchStripRepaintMs?: () => number;
+  /** WebUI mirror of each side-key widget image (null = cleared). */
+  onExtraKeyImage?: (wireId: number, bmp: Uint8Array | null) => void;
   /** This dock's strip mode + encoder settings, resolved per dial event (deviceKey
    *  captured by the coordinator). Absent = knobs always reach the Elgato app. */
   encoderOverride?: () => EncoderOverride | undefined;
@@ -312,6 +335,7 @@ export class DeviceSession {
   private readonly deviceInfo?: DeviceInfo;
   private readonly onDisconnect: () => void;
   private readonly onStatusChange?: () => void;
+  private readonly onAction?: (message: string) => void;
   private readonly onImage?: (keyIndex: number, data: Buffer, format: 'jpeg' | 'bmp') => void;
   private readonly ignoreElgatoBrightness?: () => boolean;
   private readonly initialBrightness?: number;
@@ -331,6 +355,7 @@ export class DeviceSession {
     this.deviceInfo = opts.deviceInfo;
     this.onDisconnect = opts.onDisconnect;
     this.onStatusChange = opts.onStatusChange;
+    this.onAction = opts.onAction;
     this.onImage = opts.onImage;
     this.ignoreElgatoBrightness = opts.ignoreElgatoBrightness;
     this.initialBrightness = opts.initialBrightness;
@@ -341,6 +366,7 @@ export class DeviceSession {
       (wireId) => this.extraKeyConfigFor?.(wireId),
       opts.touchStripMode,
       opts.touchStripRepaintMs,
+      opts.onExtraKeyImage,
     );
     this.encoders = new EncoderActions(() => opts.encoderOverride?.());
     this.extraKeyActions = new ExtraKeyActions((wireId) => this.extraKeyConfigFor?.(wireId));
@@ -437,6 +463,7 @@ export class DeviceSession {
   /** Mirror DriverManager.attachRealDriverListeners minus every WebUI hook. */
   private wireListeners(): void {
     wireCommonDriverEvents(this.driver, this.model, {
+      onAction: this.onAction,
       onKey: (index, state) => this.childServer.sendKeyEvent(index, state),
       onExtraKey: (wireId, state) => this.extraKeyActions.handleKey(wireId, state),
       onDial: (event) => {

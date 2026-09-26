@@ -208,6 +208,7 @@ export class Akp05Driver extends HidDeviceBase {
       return;
     }
     // Touch-strip tap and any other control: framing unverified — log for capture.
+    this.emit('inputAction', `Unmapped control 0x${code.toString(16)} (state ${stateByte})`);
     debug('hid', `AKP05E unclassified input code=0x${code.toString(16)} state=${stateByte}`);
   }
 

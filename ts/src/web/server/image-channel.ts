@@ -3,6 +3,7 @@
 // frame so switching is instant (the Elgato app never re-pushes unprompted).
 import type { Broadcaster } from './broadcaster.js';
 import type { TouchWindowRegion } from '../../types.js';
+import type { ExtraKeyImageMsg } from '../contract.js';
 
 export type ImageFormat = 'jpeg' | 'bmp';
 export type DockFrame = { data: Buffer; format: ImageFormat };
@@ -20,6 +21,8 @@ export class ImageChannel {
   /** Per dock, in paint order: a full strip frame restarts the list, a partial
    *  window replaces the earlier frame for that same window. */
   private readonly dockTouch = new Map<number, Map<string, TouchFrame>>();
+  /** Per dock: last widget image painted on each side key, by wire id. */
+  private readonly dockExtraKeys = new Map<number, Map<number, Buffer>>();
 
   constructor(
     private readonly bus: Broadcaster,
@@ -72,12 +75,33 @@ export class ImageChannel {
     if (dock === this.selectedDock()) this.broadcastTouch({ data, region });
   }
 
+  /** Cache a side-key widget image (null = cleared); push it live only when that dock is selected. */
+  notifyDockExtraKeyImage(dock: number, wireId: number, bmp: Uint8Array | null): void {
+    let images = this.dockExtraKeys.get(dock);
+    if (!images) {
+      images = new Map();
+      this.dockExtraKeys.set(dock, images);
+    }
+    const data = bmp ? Buffer.from(bmp) : undefined;
+    if (data) images.set(wireId, data);
+    else images.delete(wireId);
+    if (dock === this.selectedDock()) this.broadcastExtraKey(wireId, data);
+  }
+
   /** Key images load via /api/state; the strip has no per-key URL, so a new WS
    *  client is sent the selected dock's frames in paint order. */
   sendTouchSnapshot(ws: ServerWebSocket): void {
     for (const frame of this.dockTouch.get(this.selectedDock())?.values() ?? []) {
       this.bus.sendTo(ws, 'touchImage', touchPayload(frame));
     }
+    for (const [wireId, data] of this.dockExtraKeys.get(this.selectedDock()) ?? []) {
+      this.bus.sendTo(ws, 'extraKeyImage', extraKeyPayload(wireId, data));
+    }
+  }
+
+  private broadcastExtraKey(wireId: number, data?: Buffer): void {
+    if (this.bus.size === 0) return;
+    this.bus.broadcast('extraKeyImage', extraKeyPayload(wireId, data));
   }
 
   private broadcastTouch(frame: TouchFrame): void {
@@ -92,10 +116,13 @@ export class ImageChannel {
 
   /** Replay a dock's cached frames onto the live channel (dock-select / settings import). */
   replay(dock: number): void {
-    const cache = this.dockImages.get(dock);
-    if (!cache) return;
-    for (const [key, { data, format }] of cache) this.notifyImageUpdate(key, data, format);
+    for (const [key, { data, format }] of this.dockImages.get(dock) ?? []) {
+      this.notifyImageUpdate(key, data, format);
+    }
     for (const frame of this.dockTouch.get(dock)?.values() ?? []) this.broadcastTouch(frame);
+    for (const [wireId, data] of this.dockExtraKeys.get(dock) ?? []) {
+      this.broadcastExtraKey(wireId, data);
+    }
   }
 
   /** Drop caches of docks no longer present (notifyDocks). */
@@ -105,6 +132,9 @@ export class ImageChannel {
     }
     for (const dock of this.dockTouch.keys()) {
       if (!liveIndexes.has(dock)) this.dockTouch.delete(dock);
+    }
+    for (const dock of this.dockExtraKeys.keys()) {
+      if (!liveIndexes.has(dock)) this.dockExtraKeys.delete(dock);
     }
   }
 
@@ -118,7 +148,10 @@ export class ImageChannel {
   reset(dock: number): boolean {
     this.dockImages.delete(dock);
     this.dockTouch.delete(dock);
+    const extraKeys = this.dockExtraKeys.get(dock);
+    this.dockExtraKeys.delete(dock);
     if (dock !== this.selectedDock()) return false;
+    for (const wireId of extraKeys?.keys() ?? []) this.broadcastExtraKey(wireId);
     this.clearLive();
     this.imageVersion.clear();
     return true;
@@ -130,4 +163,8 @@ export function touchPayload({ data, region }: TouchFrame): {
   region?: TouchWindowRegion;
 } {
   return { data: data.toString('base64'), ...(region ? { region } : {}) };
+}
+
+function extraKeyPayload(wireId: number, data?: Buffer): ExtraKeyImageMsg {
+  return data ? { wireId, data: data.toString('base64') } : { wireId };
 }

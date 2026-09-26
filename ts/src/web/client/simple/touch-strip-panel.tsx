@@ -1,7 +1,7 @@
 // Touch-strip ownership (AKP05E) and the knob override that rides on it. The
 // knobs can only leave the Elgato app while DeckBridge owns the strip — see
 // docs/side-keys.md.
-import { useStore } from '../store.js';
+import { patch, useStore } from '../store.js';
 import type { EncoderCommands, TouchStripMode } from '../ui-types.js';
 import { CheckField, SecondsField } from '../components/Fields.js';
 import { fire } from '../ui-api.js';
@@ -104,20 +104,34 @@ export function RepaintIntervalField(): preact.JSX.Element {
 }
 
 /** Knob sub-block — the caller renders it only in a deckbridge-* strip mode. */
-export function EncodersSection({ count }: Readonly<{ count: number }>): preact.JSX.Element {
+export function EncodersSection({
+  count,
+  overrideEnabled = true,
+}: Readonly<{ count: number; overrideEnabled?: boolean }>): preact.JSX.Element {
   const encoders = useStore((s) => s.encoders);
   const connected = encoders.connectToApp ?? true;
+  const testMode = useStore((s) => s.deviceTestMode);
   return (
     <div class="xkeys-knobs">
       <div class="preview-head xkeys-head">
         <span class="preview-label">Knobs</span>
-        <CheckField
-          label="Connect knobs to Elgato app"
-          checked={connected}
-          onChange={(v) => fire('/api/encoders', { connectToApp: v })}
-        />
+        {overrideEnabled && (
+          <CheckField
+            label="Connect knobs to Elgato app"
+            checked={connected}
+            onChange={(v) => fire('/api/encoders', { connectToApp: v })}
+          />
+        )}
       </div>
-      {!connected && (
+      <div class="device-test-option">
+        <CheckField
+          label="Test mode"
+          checked={testMode}
+          onChange={(enabled) => patch({ deviceTestMode: enabled })}
+        />
+        <span>Show device actions. Commands still run.</span>
+      </div>
+      {overrideEnabled && !connected && (
         <>
           <GridHeader class="xkey-knob-row" columns={KNOB_COLUMNS} />
           {Array.from({ length: count }, (_, i) => (

@@ -53,8 +53,7 @@ export class DriverManager {
   /** Idle workers (open() failed), reused per model.id — spawn/terminate per retry SIGBUSes on macOS; drained on switchMode. */
   private idleDrivers = new Map<string, WorkerHidDriver>();
 
-  /** Multi-device coordinator (extras only). Deps are closures over this instance's
-   * mutable state — always-current values without an import cycle. */
+  /** Multi-device coordinator (extras only); deps are closures over this instance's state. */
   private readonly extraCoordinator: ExtraDockCoordinator;
 
   // Test seams (no hardware/FFI), overridden via __set* below. Presence by enumeration, never trial hid_open — segfaults on macOS (IOKit/dlclose churn).
@@ -108,7 +107,9 @@ export class DriverManager {
       // No copy: `data` is immutable-by-convention here, same as the primary-dock mirror in image-pipeline.ts.
       onImage: (dockIndex, keyIndex, data, format) =>
         deps.webui.notifyDockImage(dockIndex, keyIndex, data, format),
+      onAction: (index, message) => deps.webui.notifyDeviceAction(index, message),
       onTouchImage: (...args) => deps.webui.imageChannel.notifyDockTouchImage(...args),
+      onExtraKeyImage: (...args) => deps.webui.imageChannel.notifyDockExtraKeyImage(...args),
       dockFramesSnapshot: (dockIndex) => deps.webui.dockFramesSnapshot(dockIndex),
       isBrightnessOverride: (deviceKey) => deps.webui.isBrightnessOverride(deviceKey),
       extraKeyConfigFor: (deviceKey, wireId) => deps.webui.extraKeyConfigFor(deviceKey, wireId),
@@ -142,8 +143,7 @@ export class DriverManager {
     return this.driverMode;
   }
 
-  /** Push a runtime log-level change to every live USB worker. Workers spawned
-   * later inherit it from DECKBRIDGE_LOG_LEVEL, which app.ts keeps in sync. */
+  /** Push a log-level change to live USB workers; new ones read DECKBRIDGE_LOG_LEVEL. */
   setLogLevel(level: string): void {
     this.realDriver?.setLogLevel(level);
     for (const d of this.idleDrivers.values()) d.setLogLevel(level);
@@ -235,11 +235,11 @@ export class DriverManager {
     return this.pacer.delayMs;
   }
 
-  /** Attach event handlers to a freshly created real driver — once per instance; reused
-   *  idle drivers keep their listeners. Common wiring shared with extras. */
+  /** Wire a fresh real driver once; reused idle drivers keep their listeners. */
   private attachRealDriverListeners(driver: WorkerHidDriver, model: DeviceModel): void {
     driver.on('imageSent', () => this.deps.webui.notifyStats({ imagesSent: ++this.imagesSent }));
     wireCommonDriverEvents(driver, model, {
+      onAction: (message) => this.deps.webui.notifyDeviceAction(0, message),
       onKey: (index, state, wireId) => {
         this.deps.childServer.sendKeyEvent(index, state);
         this.deps.webui.notifyKeyEvent(index, state, wireId);

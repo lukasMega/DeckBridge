@@ -58,15 +58,15 @@ export interface ExtraDockCoordinatorDeps {
    *  for `deviceKey` — delegates to WebUIServer, the sole settings.json
    *  writer (device-identity.ts is pure). */
   getOrCreateDeviceIdentity: (deviceKey: string, defaultMdnsName: string) => DeviceIdentitySettings;
-  /** Called whenever the set of extra sessions, or any one session's status()
-   *  shape, may have changed — a dock created, torn down, or its child CORA
-   *  client (dis)connected. Opaque to the coordinator: DriverManager uses it
-   *  to notify the WebUI. */
+  /** A dock was created/torn down or its child CORA client (dis)connected;
+   *  DriverManager notifies the WebUI. */
   onSessionsChanged?: () => void;
+  onAction?: (dockIndex: number, message: string) => void;
   /** Per-dock mirror of raw CORA key images (WebUI selected-dock preview). */
   onImage?: (dockIndex: number, keyIndex: number, data: Buffer, format: 'jpeg' | 'bmp') => void;
-  /** WebUI strip-preview mirror; DeviceSession owns the device-side render. */
+  /** WebUI strip + side-key preview mirrors; DeviceSession owns the device-side paint. */
   onTouchImage?: (dockIndex: number, data: Uint8Array, region?: TouchWindowRegion) => void;
+  onExtraKeyImage?: (dockIndex: number, wireId: number, bmp: Uint8Array | null) => void;
   /** This dock's cached CORA frames, for repainting after a live tuning swap. */
   dockFramesSnapshot?: (dockIndex: number) => DockFrames;
   /** Per-device "ignore brightness from Elgato app" override, resolved by the
@@ -306,6 +306,8 @@ export class ExtraDockCoordinator {
         void this.teardownExtraSession(hidPath, index);
       },
       onStatusChange: this.deps.onSessionsChanged,
+      onAction: (message) => this.deps.onAction?.(index, message),
+      onExtraKeyImage: (wireId, bmp) => this.deps.onExtraKeyImage?.(index, wireId, bmp),
       onImage: (keyIndex, data, format) => this.deps.onImage?.(index, keyIndex, data, format),
       ignoreElgatoBrightness: () => this.deps.isBrightnessOverride(deviceKey),
       initialBrightness: deviceIdentity.brightness,

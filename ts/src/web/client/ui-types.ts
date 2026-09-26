@@ -7,6 +7,7 @@ export type {
   ClientApp,
   EncoderCommands,
   EncoderSettings,
+  ExtraKeyImageMsg,
   ExtraKeyWidget,
   PluginStatus,
   PluginsInfo,

@@ -224,6 +224,10 @@ export class WebUIServer extends EventEmitter implements WebUIController {
   }
 
   /** `wireId` (raw device code, pre-keyMap) is what key-map learn mode records. */
+  notifyDeviceAction(dockIndex: number, message: string): void {
+    this.bus.broadcast('deviceAction', { dockIndex, message });
+  }
+
   notifyKeyEvent(mk2Index: number, state: KeyState, wireId?: number): void {
     this.activity.keyEvent(mk2Index, state, wireId);
   }

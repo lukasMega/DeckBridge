@@ -28,9 +28,12 @@ export interface StoreState {
   serverLogs: ServerLog[];
   commLogs: CommLog[];
   keyEvents: KeyEvent[];
+  deviceTestMode: boolean;
   deviceModels: DeviceModel[];
   /** SELECTED dock's extra-key assignments, keyed by device wire id. */
   extraKeys: Record<string, ExtraKeyCfg>;
+  /** SELECTED dock's side-key widget images (base64 BMP), keyed by wire id. */
+  extraKeyImages: Record<string, string>;
   /** SELECTED dock's touch-strip mode + knob override (AKP05E). */
   touchStripMode: TouchStripMode;
   /** 'deckbridge-repaint' hold-off after an Elgato frame. */
@@ -50,8 +53,10 @@ let state: StoreState = {
   serverLogs: [],
   commLogs: [],
   keyEvents: [],
+  deviceTestMode: false,
   deviceModels: [],
   extraKeys: {},
+  extraKeyImages: {},
   touchStripMode: 'elgato',
   touchStripRepaintMs: TOUCH_STRIP_REPAINT_DEFAULT_MS,
   encoders: {},

@@ -4,18 +4,20 @@ import type { ComponentChildren } from 'preact';
 
 export function ConfigSection({
   title,
+  compact = false,
   subtitle,
   aside,
   children,
 }: Readonly<{
   title: string;
+  compact?: boolean;
   subtitle?: ComponentChildren;
   /** Right end of the head row (e.g. a mode select). */
   aside?: ComponentChildren;
   children?: ComponentChildren;
 }>): preact.JSX.Element {
   return (
-    <div class="xkeys" role="group" aria-label={title}>
+    <div class={compact ? 'xkeys xkeys-compact' : 'xkeys'} role="group" aria-label={title}>
       <div class="preview-head xkeys-head">
         <span class="preview-label">{title}</span>
         {aside}
