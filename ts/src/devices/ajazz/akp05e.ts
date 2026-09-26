@@ -18,15 +18,16 @@ const KEY_IMAGE: DeviceImageSpec = {
 
 // Strip geometry and the upload cap were measured on V3.AKP05E.02.007 (see
 // docs/side-keys.md): 800×112 at wire id 1 and the firmware decodes only the first
-// 10 240 B of an upload. Slot windows (wire ids 1–4) are 176×112 at x = 0 / 203 / 406 /
-// 609 (203 px pitch, bracketed by eye on hardware; upstream's 208 drew partials shifted).
+// ~10 100 B of an upload — a 10 123 B full-strip frame lost its tail, 10 100 B and
+// 9 216 B caps drew intact. Slot windows (wire ids 1–4) are 176×112 at x = 0 / 204 /
+// 406 / 610 (bracketed by eye on hardware; upstream's 208 pitch drew partials shifted).
 // Elgato's 800×100 strip is padded 1:1 to 112 rows with its edge colour.
 const TOUCH_SLOT_IMAGE: DeviceImageSpec = {
   ...KEY_IMAGE,
   width: 176,
   height: 112,
   rotate: 180,
-  maxBytes: 10_240,
+  maxBytes: 10_100,
   sharpen: 0,
   resizeMode: 'pad',
   padFill: 'edge',
