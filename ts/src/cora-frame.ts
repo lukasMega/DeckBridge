@@ -80,7 +80,13 @@ export class CoraFrameReader {
       );
       this.buffer = this.buffer.subarray(Math.max(0, dropped)) as Buffer;
     }
-    this.buffer = Buffer.concat([this.buffer, chunk]);
+    // Steady state: drainFrames() below fully drains every complete frame each
+    // time, so `buffer` is usually empty when the next chunk lands — adopt it
+    // directly instead of concat-copying it onto nothing. `chunk` is a fresh,
+    // exclusively-owned per-read buffer (tcp.ts wraps it, never reused by txiki),
+    // so holding onto it here is safe. Only merge-copy when a partial frame or
+    // split magic is still pending from last time.
+    this.buffer = this.buffer.length === 0 ? chunk : Buffer.concat([this.buffer, chunk]);
   }
 
   private hasMagicAtStart(): boolean {

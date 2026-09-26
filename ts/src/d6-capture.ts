@@ -1,8 +1,11 @@
 import { MiraboxDriver } from './mirabox.js';
-import { closeSidecar, transformImageForDevice } from './translator.js';
+import { transformImageForDevice } from './translator.js';
 import { exitOnSigint, initProbeLibs, logKeyEvents } from './probe-utils.js';
+import { closeImageProc } from './ffi/image-proc.js';
 import { getReportDescriptor, hidSerialForPath, listHidPaths } from './ffi/hidapi.js';
 import { parseOutputReportSize } from './devices/hid-report-descriptor.js';
+import { CRT_DESCRIBERS } from './devices/mirabox-protocol.js';
+import { formatCommHex } from './comm-format.js';
 import { FIFINE_D6_MODEL, FIFINE_D6_REV2_MODEL } from './devices/fifine/fifine-d6.js';
 import type { DeviceModel } from './devices/driver.js';
 
@@ -26,6 +29,49 @@ class CaptureDriver extends MiraboxDriver {
   captureDescriptor(): Uint8Array | null {
     if (!this.device || !this.hidLib) return null;
     return getReportDescriptor(this.hidLib.symbols, this.device, 4096);
+  }
+
+  // Comm tracing: MiraboxDriver's write()/parseInput() call these as no-op hooks (real
+  // devices have no listener, since hid-worker never forwards 'comm' out of the worker
+  // thread — see mirabox.ts). This probe is the one place that DOES attach a 'comm'
+  // listener (S4, below), so it's the one place worth paying for the description work.
+
+  protected override traceWrite(pkt: Buffer): void {
+    if (this.listenerCount('comm') === 0) return;
+    this.emitComm(this.describeWrite(pkt), pkt, 'tx');
+  }
+
+  protected override traceRead(human: string, data: Buffer): void {
+    if (this.listenerCount('comm') === 0) return;
+    this.emitComm(human, data, 'rx');
+  }
+
+  private describeWrite(pkt: Buffer): string {
+    const isCrt = pkt[0] === 0x43 && pkt[1] === 0x52 && pkt[2] === 0x54;
+    if (!isCrt) return 'image-data chunk';
+    const cmd = String.fromCharCode(pkt[5] ?? 0, pkt[6] ?? 0, pkt[7] ?? 0);
+    return this.describeCrtCmd(pkt, cmd);
+  }
+
+  private describeCrtCmd(pkt: Buffer, cmd: string): string {
+    const b = (i: number): number => pkt[i] ?? 0;
+    const describe = CRT_DESCRIBERS[cmd];
+    if (describe) return describe(b);
+    const full = String.fromCharCode(b(5), b(6), b(7), b(8), b(9), b(10), b(11));
+    if (full === 'CONNECT') return 'CRT CONNECT (heartbeat)';
+    return `CRT ${cmd}`;
+  }
+
+  private emitComm(human: string, data: Buffer, direction: 'rx' | 'tx' = 'tx'): void {
+    const hex = formatCommHex(data);
+    this.emit('comm', {
+      direction,
+      protocol: 'mirabox',
+      component: 'mirabox',
+      human,
+      hex,
+      totalBytes: data.length,
+    });
   }
 }
 
@@ -249,7 +295,7 @@ if (want('s4')) {
 // on the event loop — that makes `mise run d6-capture -- s1` a plain one-shot capture.
 if (!want('s4')) {
   await driver.close();
-  closeSidecar();
+  closeImageProc();
   console.log('[done] closed.');
   tjs.exit(0);
 }

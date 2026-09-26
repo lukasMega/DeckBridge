@@ -31,7 +31,7 @@ const handlers: Record<string, (d: unknown) => void> = {
       resetPreviews();
       resetTouchStrip();
     }
-    store.setStatus(next);
+    store.patch({ status: next });
   },
   image: (d) => {
     const e = d as ImageEvt;
@@ -46,29 +46,23 @@ const handlers: Record<string, (d: unknown) => void> = {
     const idx = (d as { mk2Index: number }).mk2Index;
     clearImage(idx);
   },
-  resizeToggle: (d) => {
-    store.setResizeEnabled((d as { enabled: boolean }).enabled);
-  },
-  imageMode: (d) => {
-    store.setImageMode((d as { mode: string | null }).mode);
-  },
   brightnessOverride: (d) => {
-    store.setBrightnessOverride((d as { enabled: boolean }).enabled);
+    store.patch({ brightnessOverride: (d as { enabled: boolean }).enabled });
   },
   brightness: (d) => {
-    store.setBrightness((d as { level: number }).level);
+    store.patch({ brightness: (d as { level: number }).level });
   },
   extraKeys: (d) => {
     store.patch({ extraKeys: (d as { configs: StoreState['extraKeys'] }).configs });
   },
   touchStripMode: (d) => {
-    store.setTouchStripMode((d as { mode: StoreState['touchStripMode'] }).mode);
+    store.patch({ touchStripMode: (d as { mode: StoreState['touchStripMode'] }).mode });
   },
   touchStripRepaint: (d) => {
-    store.setTouchStripRepaintMs((d as { ms: number }).ms);
+    store.patch({ touchStripRepaintMs: (d as { ms: number }).ms });
   },
   encoders: (d) => {
-    store.setEncoders((d as { encoders: StoreState['encoders'] }).encoders);
+    store.patch({ encoders: (d as { encoders: StoreState['encoders'] }).encoders });
   },
   keyEvent: (d) => {
     const e = d as KeyEvent;
@@ -87,10 +81,10 @@ const handlers: Record<string, (d: unknown) => void> = {
     for (const e of d as CommLog[]) store.addCommLog(e);
   },
   stats: (d) => {
-    store.setStats(d as Stats);
+    store.patch({ stats: d as Stats });
   },
   mockConfig: (d) => {
-    store.setMockConfig(d as MockConfig);
+    store.patch({ mockConfig: d as MockConfig });
   },
   update: (d) => {
     store.patch({ updateInfo: d as UpdateInfo });

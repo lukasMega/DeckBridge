@@ -1,5 +1,5 @@
 import {
-  SSE_KEEPALIVE_INTERVAL_MS,
+  WS_KEEPALIVE_INTERVAL_MS,
   STATS_BROADCAST_INTERVAL_MS,
   clearRepeating,
 } from '../../types.js';
@@ -45,7 +45,7 @@ export class Broadcaster {
   start(emitStats: () => void): void {
     this.keepaliveTimer = setInterval(() => {
       this.send(wsMsg('ping', null));
-    }, SSE_KEEPALIVE_INTERVAL_MS);
+    }, WS_KEEPALIVE_INTERVAL_MS);
     this.statsTimer = setInterval(emitStats, STATS_BROADCAST_INTERVAL_MS);
   }
 

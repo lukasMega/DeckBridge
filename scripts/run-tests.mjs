@@ -18,7 +18,11 @@ if (!tjs) {
 }
 
 // These run only on CI (CI env var set by GitHub Actions) — too slow for local iteration.
-const CI_ONLY_TESTS = new Set(['hash-bench.test.ts', 'image-cache.test.ts']);
+const CI_ONLY_TESTS = new Set([
+  'hash-bench.test.ts',
+  'image-cache.test.ts',
+  'image-copy-bench.test.ts',
+]);
 
 const opts = { cwd: tsDir, encoding: 'utf8' };
 const files = readdirSync(join(tsDir, 'test'))

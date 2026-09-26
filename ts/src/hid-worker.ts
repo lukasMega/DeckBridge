@@ -2,11 +2,11 @@
  *  Instantiates the right driver (Mirabox or Elgato) based on modelId,
  *  then bridges its EventEmitter events ↔ postMessage. */
 import type { MainToWorker, WorkerToMain } from './hid-worker-protocol.js';
-import type { ImageModeOverride, KeyEvent, DialEvent, TouchInputEvent } from './types.js';
+import type { KeyEvent, DialEvent, TouchInputEvent } from './types.js';
 import { DEVICE_MODELS } from './devices/registry.js';
 import type { DeviceModel, DeviceModelOverride } from './devices/driver.js';
 import { supportsImageBatching } from './devices/driver.js';
-import { applyModelOverrides, overrideSummary, pinsImageFit } from './devices/model-overrides.js';
+import { applyModelOverrides, overrideSummary } from './devices/model-overrides.js';
 import { imageCache } from './image-cache.js';
 import { ElgatoHidDriver } from './devices/hid-driver-base.js';
 import { MiraboxDriver } from './mirabox.js';
@@ -30,15 +30,6 @@ let currentModel: DeviceModel | null = null;
 // Registry entry behind currentModel, kept so a live tuning swap ('setOverrides')
 // re-merges from the registry instead of layering on an already-merged model.
 let openRegistryModel: DeviceModel | null = null;
-
-// WebUI runtime image-mode override (resize ⇄ pad-black/avg/edge), set via
-// 'setImageOverride'. null = use the model default. Module-level state is
-// safe: the worker processes messages on its serial promise queue (`queue`
-// below), so 'setImageOverride' is ordered w.r.t. 'image' messages.
-let imageOverride: ImageModeOverride = null;
-// Device tuning pins image fit → the legacy imageOverride is ignored for this
-// device, otherwise it would overwrite resizeMode/padFill on every render.
-let imageFitPinned = false;
 
 // The app's whole strip plus the zones DeckBridge widgets own ('setTouchStripMask'):
 // a partial window update lands in place, and masked zones are drawn but never sent.
@@ -72,7 +63,6 @@ async function handleOpen(
   // Same pure merge the main thread ran, applied on top of OUR registry lookup —
   // driverKind/VID/PID therefore always come from the registry, never the message.
   const model = applyModelOverrides(registryModel, overrides);
-  imageFitPinned = pinsImageFit(overrides);
   // A changed image spec must not be served from entries encoded under the old
   // one. The cache key carries a spec revision too (image-render.ts); clearing
   // here additionally frees the stale entries instead of letting them age out.
@@ -118,7 +108,6 @@ async function handleOpen(
 function applyLiveOverrides(overrides?: DeviceModelOverride): void {
   if (!openRegistryModel) return;
   currentModel = applyModelOverrides(openRegistryModel, overrides);
-  imageFitPinned = pinsImageFit(overrides);
   imageCache.clear();
   info('worker', `${currentModel.id} tuning applied live: ${overrideSummary(overrides)}`);
 }
@@ -132,8 +121,7 @@ function handleImage(
   deferNotification: boolean,
 ): void {
   if (!driver || !currentModel) return;
-  const mode = imageFitPinned ? null : imageOverride;
-  renderImage(driver, currentModel, keyIndex, bytes, format, mode);
+  renderImage(driver, currentModel, keyIndex, bytes, format);
   if (!deferNotification) post({ type: 'imageSent', keyIndex });
 }
 
@@ -181,11 +169,8 @@ function handleTouchStripMsg(msg: TouchStripMsg): void {
 }
 
 /** Non-device state changes: no HID I/O, they only steer the next render. */
-function handleSetting(
-  msg: Extract<MainToWorker, { type: 'setImageOverride' | 'setOverrides' | 'setLogLevel' }>,
-): void {
-  if (msg.type === 'setImageOverride') imageOverride = msg.mode;
-  else if (msg.type === 'setOverrides') applyLiveOverrides(msg.overrides);
+function handleSetting(msg: Extract<MainToWorker, { type: 'setOverrides' | 'setLogLevel' }>): void {
+  if (msg.type === 'setOverrides') applyLiveOverrides(msg.overrides);
   else setLogLevel(msg.level);
 }
 
@@ -205,7 +190,7 @@ async function handle(msg: MainToWorker, deferNotification: boolean): Promise<vo
     case 'sendImage':
       driver?.sendImage(msg.keyIndex, msg.bytes);
       break;
-    case 'splashImage':
+    case 'imageWithSpec':
       handleSplashImage(msg.keyIndex, msg.bytes, msg.spec);
       break;
     case 'setBrightness':
@@ -224,7 +209,7 @@ async function handle(msg: MainToWorker, deferNotification: boolean): Promise<vo
       post({ type: 'closed' });
       break;
     }
-    // setImageOverride / setOverrides / setLogLevel — no device I/O.
+    // setOverrides / setLogLevel — no device I/O.
     default:
       handleSetting(msg);
   }
@@ -266,7 +251,7 @@ scope.addEventListener('message', (ev: MessageEvent) => {
     currentModel &&
     supportsImageBatching(currentModel) &&
     currentModel.wire.batchImageTransfers === true &&
-    (msg.type === 'image' || msg.type === 'sendImage' || msg.type === 'splashImage')
+    (msg.type === 'image' || msg.type === 'sendImage' || msg.type === 'imageWithSpec')
   ) {
     pendingImages.push(msg);
     if (pendingImages.length === 15) enqueueImageBatch();

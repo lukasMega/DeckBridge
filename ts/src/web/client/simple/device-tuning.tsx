@@ -12,6 +12,8 @@ import { copyLabel, useCopyText } from '../use-copy-text.js';
 import { postJson } from '../ui-api.js';
 import { Feedback, useAsyncAction } from '../ui-async.js';
 import { KeymapLearn } from './keymap-learn.js';
+import { ImageFitHelp, fitApplicability, padFillApplies } from './image-fit-help.js';
+import type { FitApplicability } from './image-fit-help.js';
 import type { DeviceImageOverride, DeviceOverridesView } from '../ui-types.js';
 
 const ROTATIONS = [0, 90, 180, 270] as const;
@@ -38,12 +40,39 @@ function iconChips<T extends string>(
 const RESIZE_MODE_CHIPS = iconChips([
   { value: 'resize', icon: '↔', description: 'Resize image to fit' },
   { value: 'pad', icon: '□', description: 'Pad image to fit' },
+  { value: 'crop', icon: '⧈', description: 'Crop image centre 1:1' },
 ] as const);
+
+/** Fit chips with the no-effect modes disabled, so a choice never silently no-ops. */
+function resizeModeChips(fit: FitApplicability | undefined): typeof RESIZE_MODE_CHIPS {
+  if (!fit) return RESIZE_MODE_CHIPS;
+  return RESIZE_MODE_CHIPS.map((chip) => {
+    if (chip.value === 'pad' && !fit.padApplies) {
+      return { ...chip, disabled: true, title: 'No effect: image is not smaller than the key' };
+    }
+    if (chip.value === 'crop' && !fit.cropApplies) {
+      return { ...chip, disabled: true, title: 'No effect: image is not larger than the key' };
+    }
+    return chip;
+  });
+}
 const PAD_FILL_CHIPS = iconChips([
   { value: 'black', icon: '●', description: 'Black padding' },
   { value: 'average', icon: '◐', description: 'Average-color padding' },
   { value: 'edge', icon: '▣', description: 'Edge-color padding' },
 ] as const);
+
+function padFillChips(
+  fit: FitApplicability | undefined,
+  mode: 'resize' | 'pad' | 'crop',
+): typeof PAD_FILL_CHIPS {
+  if (padFillApplies(fit, mode)) return PAD_FILL_CHIPS;
+  return PAD_FILL_CHIPS.map((chip) => ({
+    ...chip,
+    disabled: true,
+    title: 'No effect: nothing to pad',
+  }));
+}
 
 /** Numeric fields rendered as a plain number input, with their bounds. Bounds
  *  mirror devices/model-overrides.ts — the server re-validates regardless. */
@@ -63,6 +92,16 @@ const NUMBER_FIELDS: ReadonlyArray<{
   { key: 'blur', label: 'Blur sigma', min: 0, step: 0.1, advanced: true },
   { key: 'crop', label: 'Crop (px per side)', min: 0, advanced: true },
 ];
+
+function tuningFit(
+  view: DeviceOverridesView,
+  image: DeviceImageOverride,
+): FitApplicability | undefined {
+  const width = image.width ?? view.effective.image.width;
+  const height = image.height ?? view.effective.image.height;
+  if (!view.sourceSize || !width || !height) return undefined;
+  return fitApplicability(view.sourceSize, { width, height }, image.crop);
+}
 
 function selectedModel(state: StoreState): string | undefined {
   const selectedDock = state.status.selectedDock ?? 0;
@@ -199,6 +238,8 @@ export function DeviceTuningPanel(): preact.JSX.Element {
   const dimensions = NUMBER_FIELDS.filter((f) => f.key === 'width' || f.key === 'height');
   const basic = NUMBER_FIELDS.filter((f) => !f.advanced && f.key !== 'width' && f.key !== 'height');
   const advanced = NUMBER_FIELDS.filter((f) => f.advanced);
+  const fit = tuningFit(activeView, image);
+  const fitMode = image.resizeMode ?? 'resize';
 
   return (
     <Collapsible
@@ -233,12 +274,15 @@ export function DeviceTuningPanel(): preact.JSX.Element {
             />
           </div>
           <div class="tuning-field">
-            <span>Image fit</span>
+            <span class="tuning-label-row">
+              Image fit
+              {fit && <ImageFitHelp fit={fit} />}
+            </span>
             <ChipRadioGroup
               name="image-fit"
               label="Image fit"
-              value={image.resizeMode ?? 'resize'}
-              options={RESIZE_MODE_CHIPS}
+              value={fitMode}
+              options={resizeModeChips(fit)}
               onChange={(resizeMode) => patch({ resizeMode })}
             />
           </div>
@@ -248,7 +292,7 @@ export function DeviceTuningPanel(): preact.JSX.Element {
               name="pad-fill"
               label="Pad fill"
               value={image.padFill ?? 'edge'}
-              options={PAD_FILL_CHIPS}
+              options={padFillChips(fit, fitMode)}
               onChange={(padFill) => patch({ padFill })}
             />
           </div>

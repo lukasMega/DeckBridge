@@ -9,7 +9,6 @@ import type {
   MockDeviceConfig,
   ReqError,
 } from './types.js';
-import type { ImageModeOverride } from '../../types.js';
 import { DEFAULT_TOUCH_STRIP_MODE, MDNS_SERVICE_NAME } from '../../types.js';
 
 export class SettingsIdentityController {
@@ -18,7 +17,6 @@ export class SettingsIdentityController {
     private readonly applyLogLevel: (level: unknown) => void,
     private readonly driverMode: () => DriverMode,
     private readonly mockConfig: () => MockDeviceConfig,
-    private readonly imageModeOverride: () => ImageModeOverride,
     private readonly trySelectDock: (index: unknown) => ReqError | null,
     private readonly broadcastSelectedDeviceState: () => void,
   ) {}
@@ -94,12 +92,11 @@ export class SettingsIdentityController {
     }
   }
 
-  /** Push the selected dock's persisted brightness/override/imageMode to its driver + WS clients
+  /** Push the selected dock's persisted brightness/override to its driver + WS clients
    *  (used after a settings import). */
   private reapplySelectedDeviceLive(): void {
     const idx = this.host.selectedDock();
     this.broadcastSelectedDeviceState();
-    this.host.emit('setImageOverride', this.imageModeOverride(), idx);
     this.host.emit('extraKeyChanged', idx);
     const e = this.host.settings.entryFor(this.host.selectedDeviceKey());
     if (typeof e?.brightness === 'number') this.host.emit('setBrightness', e.brightness, idx);

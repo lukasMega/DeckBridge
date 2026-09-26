@@ -1,8 +1,6 @@
 /** Generic USB HID worker message protocol. */
 import type {
   KeyState,
-  CommEntry,
-  ImageModeOverride,
   DialEvent,
   TouchInputEvent,
   TouchStripOptions,
@@ -10,8 +8,6 @@ import type {
 } from './types.js';
 import type { DeviceModelId, DeviceImageSpec, DeviceModelOverride } from './devices/driver.js';
 import type { LogLevel } from './logger.js';
-
-export type WorkerComm = Omit<CommEntry, 'ts'>;
 
 export type MainToWorker =
   // `hidPath` targets a SPECIFIC unclaimed HID interface (multi-device: two
@@ -33,14 +29,15 @@ export type MainToWorker =
   | { type: 'image'; keyIndex: number; bytes: Uint8Array; format: 'jpeg' | 'bmp' }
   // Already-native bytes (pre-encoded) — written verbatim, no transform.
   | { type: 'sendImage'; keyIndex: number; bytes: Uint8Array }
-  // Splash source image: the worker transforms with the provided spec (which
-  // may differ from model.image) and then writes it. Offloads the
-  // synchronous FFI call that would otherwise stall the main thread on every
-  // device connect (see P1 / Finding 1).
-  | { type: 'splashImage'; keyIndex: number; bytes: Uint8Array; spec: DeviceImageSpec }
+  // Source image with an explicit transform spec (which may differ from
+  // model.image — splash orientation overrides, or a widget's own geometry;
+  // see splash-sender.ts and extra-keys.ts). The worker transforms with the
+  // given spec and then writes it. Offloads the synchronous FFI call that
+  // would otherwise stall the main thread on every device connect (see P1 /
+  // Finding 1).
+  | { type: 'imageWithSpec'; keyIndex: number; bytes: Uint8Array; spec: DeviceImageSpec }
   | { type: 'setBrightness'; level: number }
   | { type: 'clearKey'; keyIndex: number }
-  | { type: 'setImageOverride'; mode: ImageModeOverride }
   // Live device-tuning swap — image-transform fields only, so no reopen is
   // needed. Re-merged on top of the worker's OWN registry entry, exactly like
   // 'open'. The main thread sends this only when keyMap/wire/splash are
@@ -70,7 +67,6 @@ export type WorkerToMain =
   | { type: 'key'; keyIndex: number; state: KeyState }
   | { type: 'dial'; event: DialEvent }
   | { type: 'touch'; event: TouchInputEvent }
-  | { type: 'comm'; entry: WorkerComm }
   | { type: 'log'; level: LogLevel; component: string; message: string }
   | { type: 'error'; message: string }
   // One image finished writing to the device — drives the WebUI imagesSent stat.

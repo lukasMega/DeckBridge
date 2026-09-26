@@ -112,7 +112,7 @@ export const HID_POLL_INTERVAL_MS = 3_000;
 // WebUI server
 export const WEBUI_PORT = 3000;
 export const WEBUI_LISTEN_ADDRESS = '127.0.0.1';
-export const SSE_KEEPALIVE_INTERVAL_MS = 30_000;
+export const WS_KEEPALIVE_INTERVAL_MS = 30_000;
 export const STATS_BROADCAST_INTERVAL_MS = 5_000;
 export const KEY_EVENT_BUFFER_MAX = 50;
 export const COMM_BUFFER_MAX = 500;
@@ -258,7 +258,10 @@ export interface TouchWindowRegion {
 
 export interface ImageEvent {
   keyIndex: number;
-  data: Uint8Array; // holds JPEG (gen2) or BMP (gen1)
+  // Always a Buffer in practice (produced by Buffer.concat in image-assembler.ts);
+  // typed as such so consumers can pass it on (WebUI cache, worker postMessage)
+  // without a defensive re-copy. Holds JPEG (gen2) or BMP (gen1).
+  data: Buffer;
   format: 'jpeg' | 'bmp';
 }
 
@@ -277,11 +280,6 @@ export interface LogObject {
   component: string;
   message: string;
 }
-
-/** WebUI runtime override for image fit, applied on top of the model default.
- *  'resize' / 'pad-black' / 'pad-average' / 'pad-edge' force a fit mode;
- *  null = use the model's own resizeMode/padFill (see DeviceImageSpec). */
-export type ImageModeOverride = 'resize' | 'pad-black' | 'pad-average' | 'pad-edge' | null;
 
 // Extra keys (physical keys outside the emulated CORA grid)
 // 293S: the 6th column (wire ids 16/17/18) never maps to an MK.2 index, so

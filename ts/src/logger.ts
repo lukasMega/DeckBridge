@@ -1,6 +1,11 @@
+import type { CliLogLevel } from './cli.js';
+
 declare const __LOG_LEVEL__: number;
 
-export type LogLevel = 'debug' | 'info' | 'warn' | 'error';
+/** The levels a message can actually be logged at. Derived from cli.ts's
+ *  LOG_LEVELS (the single source of truth for accepted levels) minus 'silent',
+ *  which configures logging OFF rather than naming a level to log AT. */
+export type LogLevel = Exclude<CliLogLevel, 'silent'>;
 
 const LOG_LEVEL_MAP: Record<string, number> = { debug: 0, info: 1, warn: 2, error: 3, silent: 4 };
 

@@ -88,12 +88,12 @@ sequenceDiagram
 
     PIPE->>HOST: renderCoraImage(keyIndex, data, format)
     HOST-->>REND: postMessage 'image' {keyIndex, bytes, format}
-    Note over REND: key = model.id : mode : specRevision : FNV1a32(full data)<br/>cache hit → reuse nativeBytes, skip transform
+    Note over REND: key = model.id : specRevision : FNV1a32(full data)<br/>cache hit → reuse nativeBytes, skip transform
 
     alt bmp in & device bmp [Mini]  OR  transform passthrough [MK.2]
         Note over REND: nativeBytes = data (forwarded unchanged)
     else transform sidecar [Mirabox 293 / 293S / K1 Pro]
-        REND->>RS: transformImageForDevice(data, applyOverride(model.image, override))
+        REND->>RS: transformImageForDevice(data, model.image)
         RS-->>REND: resized/rotated JPEG (K1 Pro: BMP→JPEG)
     end
 
@@ -106,8 +106,8 @@ sequenceDiagram
 
 Key behaviours (the format/cache/remap logic now lives in `renderImage` in `image-render.ts`, on the worker; `setupImageHandler` on the main thread only broadcasts to the WebUI and calls `renderCoraImage`):
 
-- **No per-brand branching.** The native format is chosen purely from `format` and the effective image spec: BMP input whose device format is also BMP (true gen1 Mini) → forward as-is; `transform === 'passthrough'` → forward the CORA JPEG as-is; otherwise (`transform === 'sidecar'`) → `transformImageForDevice(data, applyOverride(model.image, override))` (resize/pad + `rotate`/`flipH`/`flipV`, re-encode). The K1 Pro takes the sidecar path even though its input is BMP, because its device format is JPEG (BMP→JPEG).
-- **WebUI image-fit override.** The WebUI can switch the fit mode at runtime (`ImageModeOverride`: `resize` ⇄ `pad-black`/`pad-average`/`pad-edge`, `null` = model default). The main thread forwards it with `WorkerHidDriver.setImageOverride()`; the worker stores it (`imageOverride`, ordered on its serial queue w.r.t. `'image'` messages) and `renderImage` overlays it onto `model.image` via `applyOverride()`. The override discriminator is part of the cache key, so flipping modes never serves a stale entry.
+- **No per-brand branching.** The native format is chosen purely from `format` and the effective image spec: BMP input whose device format is also BMP (true gen1 Mini) → forward as-is; `transform === 'passthrough'` → forward the CORA JPEG as-is; otherwise (`transform === 'sidecar'`) → `transformImageForDevice(data, model.image)` (resize/pad + `rotate`/`flipH`/`flipV`, re-encode). The K1 Pro takes the sidecar path even though its input is BMP, because its device format is JPEG (BMP→JPEG).
+- **Image fit is device tuning, not a runtime WebUI toggle.** `model.image.resizeMode`/`padFill` come from the model default merged with the user's per-model device tuning (Settings → Device tuning, `POST /api/device-overrides`); the effective spec is fixed for the life of the open driver (or swapped in place by a live tuning change, `'setOverrides'`) — `renderImage` never overlays a separate runtime override.
 - **WebUI shows the CORA arrival image.** Device-native bytes live only on the worker and go straight to the device (the old `setImageState(nativeBytes)` step was dropped with P1); the upright CORA image is the better preview anyway.
 - **Device key remap:** `deviceKeyIndex = (model.keyMap.coraToWireImage || model.keyMap.imageOffset != null) ? mk2IndexToDeviceImgId(keyIndex, model) : keyIndex`. Elgato models (empty `keyMap`) use identity; Mirabox models remap via their `coraToWireImage` array. An out-of-range key (`-1`) is skipped (warn).
 - **Wire chunk padding (K1 Pro):** inside `MiraboxDriver.sendImage`, models with `wire.chunkPadByte` get the JPEG wire-encoded by `padChunkBoundaries()` — one sacrificial `0x00` after every 1023 payload bytes, because the K1 Pro firmware drops the last byte of every full 1024-byte chunk (see internal probe notes). The BAT length is the padded wire length.
@@ -203,7 +203,6 @@ Regression tests for all of the above (including the lane-3 family by name) are 
 |---|---|---|
 | `imageState` | `notifyImageUpdate` / `setImageState` | The **CORA arrival image** bytes for each key (the same bytes base64-broadcast to the browser) |
 | `imageFormat` | `notifyImageUpdate` | Per-key wire format (`'jpeg'`/`'bmp'`) of the last CORA frame, so a later repaint uses the right MIME |
-| `imageModeOverride` | `notifyImageMode` | Current WebUI fit override (`ImageModeOverride`); mirrored to the worker via the `setImageOverride` event |
 
 `notifyImageUpdate(mk2Index, data, format = 'jpeg')` stores `data` (and `format` in `imageFormat`), bumps the per-key version, and broadcasts a WebSocket `image` event (`{ mk2Index, v, data: b64, format }`). `setImageState(mk2Index, jpeg)` (updates `imageState` + bumps the version, no WS broadcast) is retained on `WebUIServer` as a capability but is **no longer called by the live image path** (see "WebUI shows the CORA arrival image" above).
 
@@ -235,15 +234,15 @@ return entry.data ? `data:${mime};base64,${entry.data}` : `/api/image/${index}?v
 | File | Role |
 |---|---|
 | `ts/src/image-pipeline.ts` | `setupImageHandler(childServer, webui, getDriver)` (main thread) — immediate WebUI base64 push, then forwards raw CORA bytes via `getDriver()?.renderCoraImage?.(...)` |
-| `ts/src/image-render.ts` | `renderImage(driver, model, keyIndex, coraBytes, format, override)` (worker) — `applyOverride` + transform (deckbridge-native FFI) + LRU cache + CORA→wire remap + `sendImage` to the device |
+| `ts/src/image-render.ts` | `renderImage(driver, model, keyIndex, coraBytes, format)` (worker) — transform (deckbridge-native FFI) + LRU cache + CORA→wire remap + `sendImage` to the device |
 | `ts/src/app.ts` | Wires it up: `setupImageHandler(childServer, webui, getCurrentDriver)` |
 | `ts/src/image-assembler.ts` | `assembleImageChunk()` (gen2 JPEG) · `assembleGen1ImageChunk()` (gen1 BMP, BMP `bfSize` trim) |
 | `ts/src/elgato-child-server.ts` | `ElgatoChildServer.handleCoraPacket` — dispatches `IMG_CMD_WRITE` / `GEN1_IMG_CMD`, emits `'image'` |
-| `ts/src/image-cache.ts` | `LruCache` (`IMAGE_CACHE_SIZE` = 100) · `hashJpeg()` (full-buffer FNV-1a 32-bit) · `makeCacheKey(modelId, hash, mode)` |
-| `ts/src/translator.ts` | `transformImageForDevice(jpeg, spec)` (resize/rotate/flip/format) · `applyOverride(spec, mode)` (WebUI fit override) · `mk2IndexToDeviceImgId()` · `deviceInputToMk2Index()` |
+| `ts/src/image-cache.ts` | `LruCache` (`IMAGE_CACHE_SIZE` = 100) · `hashJpeg()` (full-buffer FNV-1a 32-bit) · `makeCacheKey(modelId, hash)` |
+| `ts/src/translator.ts` | `transformImageForDevice(jpeg, spec)` (resize/rotate/flip/format) · `mk2IndexToDeviceImgId()` · `deviceInputToMk2Index()` |
 | `rust/deckbridge-native/src/lib.rs` | Rust deckbridge-native cdylib (`image_proc_transform` over FFI): reads EXIF, rotates/flips pixels, resizes, re-encodes JPEG (or BMP) |
-| `ts/src/hid-worker.ts` · `hid-worker-host.ts` | USB worker entry + `WorkerHidDriver` proxy — carry the `'image'` / `'imageSent'` / `'setImageOverride'` messages across the thread boundary |
-| `ts/src/web/server/web-ui-server.ts` | `notifyImageUpdate()` · `notifyImageMode()` · `imageState`/`imageFormat` maps (`setImageState()` retained but unused by the image path) |
+| `ts/src/hid-worker.ts` · `hid-worker-host.ts` | USB worker entry + `WorkerHidDriver` proxy — carry the `'image'` / `'imageSent'` messages across the thread boundary |
+| `ts/src/web/server/web-ui-server.ts` | `notifyImageUpdate()` · `imageState`/`imageFormat` maps (`setImageState()` retained but unused by the image path) |
 | `ts/src/web/client/key-preview.ts` | Shared `KeyPreview` grid + image store + `imageSrc()` — single render path for both views |
 | `ts/src/web/client/ui-base.css` | Per-model `.key-grid[data-model] .key-cell img` rotation (single source of truth) |
 | `ts/src/web/client/advanced-key-grid.tsx` | Advanced view — Preact component owning a persistent `KeyPreview`; `rebuild/setModel/setClickable` on `status` changes |

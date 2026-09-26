@@ -2,7 +2,6 @@ import assert from 'tjs:assert';
 import {
   transformImageForDevice,
   fillModeFor,
-  applyOverride,
   blitImage,
   canvasSliceToBmp,
 } from '../src/translator.js';
@@ -84,50 +83,14 @@ await test('fillModeFor: pad + undefined padFill defaults to edge → 3', () => 
   assert.equal(fillModeFor(baseImageSpec({ resizeMode: 'pad' })), 3);
 });
 
+await test('fillModeFor: crop adds 4 to the pad value', () => {
+  assert.equal(fillModeFor(baseImageSpec({ resizeMode: 'crop', padFill: 'black' })), 5);
+  assert.equal(fillModeFor(baseImageSpec({ resizeMode: 'crop', padFill: 'average' })), 6);
+  assert.equal(fillModeFor(baseImageSpec({ resizeMode: 'crop' })), 7);
+});
+
 await test('fillModeFor: undefined resizeMode → 0', () => {
   assert.equal(fillModeFor(baseImageSpec({ resizeMode: undefined })), 0);
-});
-
-// applyOverride
-
-console.log('\ntranslator: applyOverride');
-
-await test('applyOverride: null mode returns spec unchanged', () => {
-  const spec = baseImageSpec({ resizeMode: 'pad', padFill: 'edge' });
-  assert.equal(applyOverride(spec, null), spec);
-});
-
-await test("applyOverride: 'resize' → resizeMode 'resize'", () => {
-  const spec = baseImageSpec({ resizeMode: 'pad', padFill: 'edge' });
-  const eff = applyOverride(spec, 'resize');
-  assert.equal(eff.resizeMode, 'resize');
-  assert.equal(eff.padFill, 'edge'); // untouched, ignored when resizeMode !== 'pad'
-});
-
-await test("applyOverride: 'pad-black' → pad + black", () => {
-  const eff = applyOverride(baseImageSpec(), 'pad-black');
-  assert.equal(eff.resizeMode, 'pad');
-  assert.equal(eff.padFill, 'black');
-});
-
-await test("applyOverride: 'pad-average' → pad + average", () => {
-  const eff = applyOverride(baseImageSpec(), 'pad-average');
-  assert.equal(eff.resizeMode, 'pad');
-  assert.equal(eff.padFill, 'average');
-});
-
-await test("applyOverride: 'pad-edge' → pad + edge", () => {
-  const eff = applyOverride(baseImageSpec(), 'pad-edge');
-  assert.equal(eff.resizeMode, 'pad');
-  assert.equal(eff.padFill, 'edge');
-});
-
-await test('applyOverride: other spec fields preserved', () => {
-  const spec = baseImageSpec({ width: 85, height: 85, quality: 0.6 });
-  const eff = applyOverride(spec, 'pad-black');
-  assert.equal(eff.width, 85);
-  assert.equal(eff.height, 85);
-  assert.equal(eff.quality, 0.6);
 });
 
 // Image transform tests (uses Rust sidecar)

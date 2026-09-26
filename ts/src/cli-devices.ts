@@ -1,6 +1,6 @@
 /** `deckbridge devices` subcommand: lists detected stream-deck HID devices, then
- *  the caller exits. Enumeration only — mirabox_hid_list_paths/_present are pure
- *  enumeration calls into deckbridge-native, never hid_open (macOS SIGBUS on a
+ *  the caller exits. Enumeration only — listHidPaths/hidDevicePresent match against
+ *  a deckbridge-native enumeration snapshot, never hid_open (macOS SIGBUS on a
  *  bad trial-open; see driver-manager.ts's defaultPresenceCheck for the same rule). */
 import { setupNativeLibs } from './native-libs.js';
 import { hidDevicePresent, hidSerialForPath, listHidPaths } from './ffi/hidapi.js';

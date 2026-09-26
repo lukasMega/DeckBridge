@@ -96,7 +96,7 @@ export interface DeviceImageOverride {
   sharpen?: number;
   crop?: number;
   resizeFilter?: 'triangle' | 'nearest' | 'lanczos3';
-  resizeMode?: 'resize' | 'pad';
+  resizeMode?: 'resize' | 'pad' | 'crop';
   padFill?: 'black' | 'average' | 'edge';
   transform?: 'passthrough' | 'sidecar';
 }
@@ -154,6 +154,8 @@ export interface DeviceOverridesView {
   tunable: DeviceModelOverride;
   /** Emulation profiles a device may re-pair as. */
   profiles?: EmulationProfile[];
+  /** Key image size the Elgato app sends for the advertised model. */
+  sourceSize?: { width: number; height: number };
 }
 export interface ServerLog {
   ts: number;

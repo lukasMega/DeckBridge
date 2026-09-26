@@ -2,7 +2,6 @@ import type {
   CommEntry,
   EncoderSettings,
   ExtraKeyConfig,
-  ImageModeOverride,
   DockStatus,
   RealDeviceIdentity,
   ClientApp,
@@ -24,8 +23,10 @@ import type { PersistedSettings } from './persisted-settings.js';
 import type { UpdateController } from './update-controller.js';
 import type { DevicePrefsController } from './device-prefs-controller.js';
 import type { ImageChannel } from './image-channel.js';
+// Canonical LogLevel lives in logger.ts (derived from cli.ts's LOG_LEVELS);
+// re-exported below so existing web-server call sites keep importing from types.js.
+import type { LogLevel } from '../../logger.js';
 
-/** A rejected request: the message the WebUI shows, plus its HTTP status. */
 /** Result of a persisted device-tuning change: how the live session applies it
  *  (see classifyOverrideChange). */
 export interface OverrideChange {
@@ -35,6 +36,7 @@ export interface OverrideChange {
 /** One POST to an extra key: a full widget config, or only its press command. */
 export type ExtraKeyUpdate = ExtraKeyConfig | { pressCommand: string };
 
+/** A rejected request: the message the WebUI shows, plus its HTTP status. */
 export interface ReqError {
   error: string;
   status: number;
@@ -78,7 +80,7 @@ export type {
   UpdateInfo,
 } from '../contract.js';
 
-export type LogLevel = 'debug' | 'info' | 'warn' | 'error';
+export type { LogLevel };
 export type DriverMode = 'real' | 'mock';
 
 export interface LogEntry {
@@ -109,7 +111,6 @@ export interface StatusSnapshot {
    *  blocking access" screen so it doesn't fire for non-Elgato hardware. */
   elgatoDevicePresent: boolean;
   localIp: string;
-  imageModeOverride: ImageModeOverride;
   docks: DockStatus[];
   selectedDock: number;
 }
@@ -122,7 +123,6 @@ export interface StateResponse extends StatusSnapshot {
   keyEvents: KeyEventEntry[];
   stats: Stats;
   mockConfig: MockDeviceConfig;
-  resizeEnabled: boolean;
   brightnessOverride: boolean;
   deviceModels: DeviceModelInfo[];
   deviceIdentity: DeviceIdentity;
@@ -152,18 +152,14 @@ export interface StateResponse extends StatusSnapshot {
  */
 export interface WebUIController {
   emit(event: string, ...args: unknown[]): boolean;
-  readonly resizeEnabled: boolean;
   readonly brightnessOverride: boolean;
-  readonly imageModeOverride: ImageModeOverride;
   readonly selectedDock: number;
   fullState(): StateResponse;
   getImage(key: number): Buffer | undefined;
   readonly imageChannel: Pick<ImageChannel, 'imageFormat'>;
   notifyBrightness(level: number): void;
-  notifyResizeToggle(enabled: boolean): void;
   notifyBrightnessOverride(enabled: boolean): void;
   setBrowserLocale(locale: string): void;
-  notifyImageMode(mode: ImageModeOverride): void;
   applyMockConfig(parsed: Partial<MockDeviceConfig>): MockDeviceConfig;
   trySimulateKey(n: number): ReqError | null;
   trySelectDock(index: unknown): ReqError | null;

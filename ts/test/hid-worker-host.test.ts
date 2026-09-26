@@ -50,25 +50,6 @@ await runTest('a second open() reuses the kept worker and rejects the same way',
   assert.equal(internal.worker, null, 'close() tears down the reused worker');
 });
 
-console.log('\nhid-worker-host: setImageOverride');
-
-await runTest('setImageOverride posts {type: setImageOverride, mode}', () => {
-  const driver = new WorkerHidDriver(unknownModel);
-  const posted: unknown[] = [];
-  // Bypass the real worker — `post()` only needs `this.worker.postMessage`.
-  (driver as unknown as { worker: { postMessage: (m: unknown) => void } }).worker = {
-    postMessage: (m: unknown) => posted.push(m),
-  };
-
-  driver.setImageOverride('pad-edge');
-  driver.setImageOverride(null);
-
-  assert.deepEqual(posted, [
-    { type: 'setImageOverride', mode: 'pad-edge' },
-    { type: 'setImageOverride', mode: null },
-  ]);
-});
-
 console.log('\nhid-worker-host: applyOverrides');
 
 await runTest('applyOverrides posts the overrides and swaps the effective model', () => {

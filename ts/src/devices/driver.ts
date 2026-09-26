@@ -1,5 +1,5 @@
 import type { EventEmitter } from 'node:events';
-import type { ImageModeOverride, TouchStripOptions, TouchWindowRegion } from '../types.js';
+import type { TouchStripOptions, TouchWindowRegion } from '../types.js';
 
 export type DeviceVendor =
   | 'mirabox'
@@ -49,9 +49,11 @@ export interface DeviceImageSpec {
   resizeFilter?: 'triangle' | 'nearest' | 'lanczos3';
   /** How the CORA image is fitted to width×height. 'resize' (default) interpolates;
    *  'pad' keeps source pixels 1:1 and centres them (floor split, top-left bias),
-   *  falling back to 'resize' when the source is larger. 293S: 72×72 into 85×85. */
-  resizeMode?: 'resize' | 'pad';
-  /** Border fill for resizeMode:'pad'. 'edge' (default) = clamp-to-edge replicate;
+   *  falling back to 'resize' when the source is larger. 293S: 72×72 into 85×85.
+   *  'crop' is 'pad' that centre-crops larger axes instead of resizing — 1:1, no
+   *  resampling (Stream Deck + 120×120 art on a 112×112 AKP05E key). */
+  resizeMode?: 'resize' | 'pad' | 'crop';
+  /** Border fill for resizeMode 'pad'/'crop'. 'edge' (default) = clamp-to-edge replicate;
    *  'black' = black border; 'average' = mean source colour. Ignored for 'resize'. */
   padFill?: 'black' | 'average' | 'edge';
   /** How image-pipeline routes a CORA JPEG. 'passthrough' sends it unchanged — only
@@ -286,9 +288,6 @@ export interface DeviceDriver extends EventEmitter {
    *  `WorkerHidDriver` implements it, doing the transform off the main thread;
    *  `MockDriver` and the in-worker drivers expose native-bytes `sendImage` only. */
   renderCoraImage?(keyIndex: number, coraBytes: Uint8Array, format: 'jpeg' | 'bmp'): void;
-  /** Set (null clears) a WebUI image-fit override on top of this model's
-   *  resizeMode/padFill for later `renderCoraImage` calls. `WorkerHidDriver` only. */
-  setImageOverride?(mode: ImageModeOverride): void;
   /** Send a splash source image, transformed with `spec` (which may differ from
    *  model.image — splash sources are upright). `WorkerHidDriver` only, keeping the
    *  FFI transform and hid_write burst off the main thread. */

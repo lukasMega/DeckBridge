@@ -20,7 +20,6 @@ import type {
   KeyEvent,
   ImageEvent,
   DockStatus,
-  ImageModeOverride,
   DialEvent,
   TouchInputEvent,
   TouchWindowRegion,
@@ -282,15 +281,14 @@ export interface DeviceSessionOptions {
   /** Mirror of each raw CORA key image, called AFTER the driver render is
    *  queued (USB first). Opaque: the coordinator routes it to the WebUI's
    *  selected-dock preview. */
-  onImage?: (keyIndex: number, data: Uint8Array, format: 'jpeg' | 'bmp') => void;
+  onImage?: (keyIndex: number, data: Buffer, format: 'jpeg' | 'bmp') => void;
   /** True while this dock's "ignore brightness from Elgato app" override is
    *  on — the Elgato-app brightness for this dock is dropped then. Resolved per
    *  dock (by deviceKey) by the coordinator, not a global flag. */
   ignoreElgatoBrightness?: () => boolean;
-  /** This dock's persisted brightness/image-mode (from settings.json via
+  /** This dock's persisted brightness (from settings.json via
    *  getOrCreateDeviceIdentity) — seeded onto the driver in start(). */
   initialBrightness?: number;
-  initialImageMode?: ImageModeOverride;
   /** This dock's persisted extra-key config (by device wire id), resolved per
    *  press by the coordinator (deviceKey captured there) — see extra-keys.ts. */
   extraKeyConfigFor?: (wireId: number) => ExtraKeyConfig | undefined;
@@ -314,10 +312,9 @@ export class DeviceSession {
   private readonly deviceInfo?: DeviceInfo;
   private readonly onDisconnect: () => void;
   private readonly onStatusChange?: () => void;
-  private readonly onImage?: (keyIndex: number, data: Uint8Array, format: 'jpeg' | 'bmp') => void;
+  private readonly onImage?: (keyIndex: number, data: Buffer, format: 'jpeg' | 'bmp') => void;
   private readonly ignoreElgatoBrightness?: () => boolean;
   private readonly initialBrightness?: number;
-  private readonly initialImageMode: ImageModeOverride;
   private readonly extraKeyConfigFor?: (wireId: number) => ExtraKeyConfig | undefined;
   private readonly extraKeys: ExtraKeyWidgets;
   private readonly encoders: EncoderActions;
@@ -338,7 +335,6 @@ export class DeviceSession {
     this.ignoreElgatoBrightness = opts.ignoreElgatoBrightness;
     this.initialBrightness = opts.initialBrightness;
     this.brightness = opts.initialBrightness ?? DEFAULT_BRIGHTNESS;
-    this.initialImageMode = opts.initialImageMode ?? null;
     this.extraKeyConfigFor = opts.extraKeyConfigFor;
     this.extraKeys = new ExtraKeyWidgets(
       this.driver,
@@ -350,8 +346,7 @@ export class DeviceSession {
     this.extraKeyActions = new ExtraKeyActions((wireId) => this.extraKeyConfigFor?.(wireId));
   }
 
-  /** The underlying driver — used by DriverManager.getDriverForDock so app.ts
-   *  can apply this dock's image-mode override + repaint. */
+  /** The underlying driver — exposed via DriverManager.getDriverForDock. */
   getDriver(): WorkerHidDriver {
     return this.driver;
   }
@@ -415,9 +410,8 @@ export class DeviceSession {
     applyModelToServers(this.server, this.childServer, this.model, this.deviceInfo);
     this.wireListeners();
     // Seed this dock's persisted per-device settings before the splash so it boots at
-    // the user's saved brightness/image-mode. Only push when actually persisted — an
+    // the user's saved brightness. Only push when actually persisted — an
     // absent value means "use the device/model default", so we skip the redundant HID write.
-    if (this.initialImageMode !== null) this.driver.setImageOverride(this.initialImageMode);
     if (this.initialBrightness !== undefined) this.driver.setBrightness(this.initialBrightness);
     sendSplashImages(this.driver);
     this.extraKeys.start();

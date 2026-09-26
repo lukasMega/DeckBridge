@@ -22,7 +22,6 @@ import type {
   EncoderSettings,
   ExtraKeyConfig,
   ExtraKeyWidget,
-  ImageModeOverride,
   TouchStripMode,
 } from '../../types.js';
 import { encoderSettingsError } from './encoders-controller.js';
@@ -50,11 +49,6 @@ export const routes: Route[] = [
   postJson('/api/device-model', setDeviceModel, 'invalid request'),
   postJson('/api/brightness', setBrightness),
   postJson('/api/brightness-override', setBrightnessOverride),
-  post('/api/resize-toggle', ({ ui }) => {
-    ui.notifyResizeToggle(!ui.resizeEnabled);
-    return json({ ok: true, enabled: ui.resizeEnabled });
-  }),
-  postJson('/api/image-mode', setImageMode),
   post('/api/key/:n', ({ ui, params }) => {
     const err = ui.trySimulateKey(Number(params.n));
     return err ? json({ error: err.error }, err.status) : noContent();
@@ -339,20 +333,6 @@ function setBrightnessOverride({ enabled }: { enabled: unknown }, { ui }: RouteC
   if (typeof enabled !== 'boolean') return badRequest('enabled must be a boolean');
   ui.notifyBrightnessOverride(enabled);
   return json({ ok: true, enabled: ui.brightnessOverride });
-}
-
-const IMAGE_MODE_VALUES = ['resize', 'pad-black', 'pad-average', 'pad-edge', 'default'] as const;
-
-function setImageMode({ mode }: { mode: unknown }, { ui }: RouteContext): Response {
-  if (
-    typeof mode !== 'string' ||
-    !IMAGE_MODE_VALUES.includes(mode as (typeof IMAGE_MODE_VALUES)[number])
-  ) {
-    return badRequest(`mode must be one of: ${IMAGE_MODE_VALUES.join(', ')}`);
-  }
-  const effective: ImageModeOverride = mode === 'default' ? null : (mode as ImageModeOverride);
-  ui.notifyImageMode(effective);
-  return json({ ok: true, mode });
 }
 
 function setMockConfig(body: Partial<MockDeviceConfig>, { ui }: RouteContext): Response {

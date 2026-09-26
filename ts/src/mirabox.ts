@@ -3,7 +3,6 @@ import type { HidapiSymbols } from './ffi/hidapi.js';
 import { probeOutputReportSize } from './devices/hid-report-descriptor.js';
 import { HidDeviceBase } from './devices/hid-connection.js';
 import { debug, info, warn } from './logger.js';
-import { formatCommHex } from './comm-format.js';
 import { CLEAR_ALL_KEYS, DEFAULT_BRIGHTNESS, HID_REPORT_ID_BYTE } from './types.js';
 import type { KeyEvent, KeyState } from './types.js';
 import type { DeviceModel } from './devices/driver.js';
@@ -13,7 +12,6 @@ import {
   CMD_HAN,
   CMD_STP,
   CMD_CONNECT,
-  CRT_DESCRIBERS,
   buildCrt,
   buildBat,
   padChunkBoundaries,
@@ -284,40 +282,14 @@ export class MiraboxDriver extends HidDeviceBase {
     this.write(this._buildLig(level));
   }
 
-  private describeWrite(pkt: Buffer): string {
-    const isCrt = pkt[0] === 0x43 && pkt[1] === 0x52 && pkt[2] === 0x54;
-    if (!isCrt) return 'image-data chunk';
-    const cmd = String.fromCharCode(pkt[5] ?? 0, pkt[6] ?? 0, pkt[7] ?? 0);
-    return this.describeCrtCmd(pkt, cmd);
-  }
+  // Comm tracing (the human-readable write/read descriptions the 'comm' event carries)
+  // is a no-op here: hid-worker never forwards 'comm' out of the worker thread, so a real
+  // device has no listener to ever satisfy. d6-capture.ts's CaptureDriver overrides these
+  // two hooks to get real tracing when run as a standalone dev probe.
 
-  private describeCrtCmd(pkt: Buffer, cmd: string): string {
-    const b = (i: number): number => pkt[i] ?? 0;
-    const describe = CRT_DESCRIBERS[cmd];
-    if (describe) return describe(b);
-    const full = String.fromCharCode(b(5), b(6), b(7), b(8), b(9), b(10), b(11));
-    if (full === 'CONNECT') return 'CRT CONNECT (heartbeat)';
-    return `CRT ${cmd}`;
-  }
+  protected traceWrite(_pkt: Buffer): void {}
 
-  /** Only d6-capture subscribes; hid-worker never forwards 'comm', so for a real
-   *  device this is dead work on every 1024B chunk. */
-  private get commTracing(): boolean {
-    return this.listenerCount('comm') > 0;
-  }
-
-  private emitComm(human: string, data: Buffer, direction: 'rx' | 'tx' = 'tx'): void {
-    if (!this.commTracing) return;
-    const hex = formatCommHex(data);
-    this.emit('comm', {
-      direction,
-      protocol: 'mirabox',
-      component: 'mirabox',
-      human,
-      hex,
-      totalBytes: data.length,
-    });
-  }
+  protected traceRead(_human: string, _data: Buffer): void {}
 
   private write(pkt: Buffer): void {
     if (pkt.length !== this.pktSize) {
@@ -330,29 +302,28 @@ export class MiraboxDriver extends HidDeviceBase {
     arr[0] = this.reportId;
     arr.set(pkt, 1);
     this._writeRaw(arr, 'hid', (n, errStr) => `hid_write returned ${n}: ${errStr}`);
-    if (this.commTracing) this.emitComm(this.describeWrite(pkt), pkt, 'tx');
+    this.traceWrite(pkt);
   }
 
   private parseInput(data: Buffer): void {
     const parsed = parseAckReport(data, this.reportId);
     if (!parsed) {
-      this.emitComm('unknown input', data, 'rx');
+      this.traceRead('unknown input', data);
       return;
     }
     const { keyIndex, stateByte } = parsed;
 
     if (this.model.wire.synthesizeKeyUp) {
       // v1 only sends keydown; synthesize a keyup immediately after.
-      this.emitComm(
+      this.traceRead(
         `ACK key=0x${keyIndex.toString(16).padStart(2, '0')} down (synthesized up)`,
         data,
-        'rx',
       );
       this.emit('key', { keyIndex, state: 'down' } satisfies KeyEvent);
       this.emit('key', { keyIndex, state: 'up' } satisfies KeyEvent);
     } else {
       const state: KeyState = stateByte === 0x01 ? 'down' : 'up';
-      this.emitComm(`ACK key=0x${keyIndex.toString(16).padStart(2, '0')} ${state}`, data, 'rx');
+      this.traceRead(`ACK key=0x${keyIndex.toString(16).padStart(2, '0')} ${state}`, data);
       this.emit('key', { keyIndex, state } satisfies KeyEvent);
     }
   }

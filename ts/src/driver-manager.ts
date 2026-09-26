@@ -4,7 +4,7 @@ import { cachedDiscoverySerial, installDiscoverySnapshot } from './ffi/hid-disco
 import { WorkerHidDriver, closeDriver } from './hid-worker-host.js';
 import { MockDriver } from './devices/mock.js';
 import { MAX_MULTI_DECK_SESSIONS } from './types.js';
-import type { KeyEvent, CommEntry, DockStatus, DialEvent, TouchInputEvent } from './types.js';
+import type { KeyEvent, DockStatus, DialEvent, TouchInputEvent } from './types.js';
 import type { TouchStripMode } from './types.js';
 import type { DeviceDriver, DeviceModel, DeviceModelOverride } from './devices/driver.js';
 import { applyModelOverrides, overrideSummary } from './devices/model-overrides.js';
@@ -105,8 +105,9 @@ export class DriverManager {
       getOrCreateDeviceIdentity: (deviceKey, defaultMdnsName) =>
         deps.webui.getOrCreateDeviceIdentity(deviceKey, defaultMdnsName),
       onSessionsChanged: () => this.deps.onDocksChanged?.(),
+      // No copy: `data` is immutable-by-convention here, same as the primary-dock mirror in image-pipeline.ts.
       onImage: (dockIndex, keyIndex, data, format) =>
-        deps.webui.notifyDockImage(dockIndex, keyIndex, Buffer.from(data), format),
+        deps.webui.notifyDockImage(dockIndex, keyIndex, data, format),
       onTouchImage: (...args) => deps.webui.imageChannel.notifyDockTouchImage(...args),
       dockFramesSnapshot: (dockIndex) => deps.webui.dockFramesSnapshot(dockIndex),
       isBrightnessOverride: (deviceKey) => deps.webui.isBrightnessOverride(deviceKey),
@@ -237,7 +238,6 @@ export class DriverManager {
   /** Attach event handlers to a freshly created real driver — once per instance; reused
    *  idle drivers keep their listeners. Common wiring shared with extras. */
   private attachRealDriverListeners(driver: WorkerHidDriver, model: DeviceModel): void {
-    driver.on('comm', (entry: Omit<CommEntry, 'ts'>) => this.deps.webui.notifyComm(entry));
     driver.on('imageSent', () => this.deps.webui.notifyStats({ imagesSent: ++this.imagesSent }));
     wireCommonDriverEvents(driver, model, {
       onKey: (index, state, wireId) => {

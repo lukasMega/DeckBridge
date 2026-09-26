@@ -1,5 +1,5 @@
 /** Shared plumbing for the manual hardware probes (dev-entry tier). */
-import { closeSidecar } from './translator.js';
+import { closeImageProc } from './ffi/image-proc.js';
 import { IS_MACOS, listHidPaths } from './ffi/hidapi.js';
 import { setupNativeLibs } from './native-libs.js';
 import { MiraboxDriver } from './mirabox.js';
@@ -139,7 +139,7 @@ export async function readProbeJpegDir(
 export function exitOnSigint(driver: MiraboxDriver): void {
   tjs.addSignalListener('SIGINT', () => {
     void driver.close().then(() => {
-      closeSidecar();
+      closeImageProc();
       tjs.exit(0);
       return undefined;
     });

@@ -109,16 +109,13 @@ export class PrimaryDock {
   }
 
   /** Seed the freshly connected driver with its persisted per-device settings
-   *  (brightness, image-mode override, strip options) before the splash. Only pushes what's
+   *  (brightness, strip options) before the splash. Only pushes what's
    *  actually persisted — absent = use the device/model default. */
   seedFromIdentity(driver: DeviceDriver): void {
     if (!this.identity) return;
     if (this.identity.brightness !== undefined) {
       this.brightness = this.identity.brightness;
       driver.setBrightness(this.brightness);
-    }
-    if (this.identity.imageModeOverride != null) {
-      driver.setImageOverride?.(this.identity.imageModeOverride);
     }
     const stripOptions = touchStripOptionsOf(this.identity);
     if (stripOptions) driver.setTouchStripOptions?.(stripOptions);

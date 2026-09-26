@@ -1,6 +1,5 @@
 import type { DeviceImageSpec } from './devices/driver.js';
-import type { ImageModeOverride } from './types.js';
-import { load, closeImageProc } from './ffi/image-proc.js';
+import { load } from './ffi/image-proc.js';
 // mk2IndexToDeviceImgId/deviceInputToMk2Index/deviceInputToExtraKey moved to
 // key-map.ts (pure, no ffi) so main-thread and worker code can use them without
 // pulling in this file's ffi/image-proc.js dependency.
@@ -13,6 +12,8 @@ import { load, closeImageProc } from './ffi/image-proc.js';
 let OUT = new Uint8Array(256 * 1024); // worst case ~19 KB (Mini 80×80 BMP)
 const ERR = new Uint8Array(256);
 const OUT_MAX_BYTES = 4 * 1024 * 1024; // hard cap on scratch-buffer growth
+// Mirrors pad.rs FILL_CROP_OVERSIZE.
+const FILL_CROP_OVERSIZE = 4;
 
 /** Throw for a non-(-2) error result from image_proc_transform, decoding ERR if present. */
 function throwImageProcError(n: number): never {
@@ -45,36 +46,19 @@ export function resizeFilterFor(spec: DeviceImageSpec): number {
 }
 
 /** Map a DeviceImageSpec's resizeMode/padFill to the FFI `fill_mode: u32` enum.
- *  0 = resize (default); 1 = pad-black; 2 = pad-average; 3 = pad-edge-clamp. */
+ *  0 = resize (default); 1 = pad-black; 2 = pad-average; 3 = pad-edge-clamp;
+ *  'crop' adds FILL_CROP_OVERSIZE (4) to the pad value. */
 export function fillModeFor(spec: DeviceImageSpec): number {
-  if ((spec.resizeMode ?? 'resize') !== 'pad') return 0;
+  const mode = spec.resizeMode ?? 'resize';
+  if (mode === 'resize') return 0;
+  const crop = mode === 'crop' ? FILL_CROP_OVERSIZE : 0;
   switch (spec.padFill ?? 'edge') {
     case 'black':
-      return 1;
+      return 1 + crop;
     case 'average':
-      return 2;
+      return 2 + crop;
     default:
-      return 3; // 'edge'
-  }
-}
-
-/** Overlay a WebUI runtime image-mode override onto a DeviceImageSpec, returning
- *  the effective spec. `null` (no override) returns `spec` unchanged — the
- *  model default applies. Otherwise overlays `resizeMode`/`padFill` derived
- *  from the override, leaving all other fields (size, rotate, quality, ...)
- *  untouched. */
-export function applyOverride(spec: DeviceImageSpec, mode: ImageModeOverride): DeviceImageSpec {
-  switch (mode) {
-    case null:
-      return spec;
-    case 'resize':
-      return { ...spec, resizeMode: 'resize' };
-    case 'pad-black':
-      return { ...spec, resizeMode: 'pad', padFill: 'black' };
-    case 'pad-average':
-      return { ...spec, resizeMode: 'pad', padFill: 'average' };
-    case 'pad-edge':
-      return { ...spec, resizeMode: 'pad', padFill: 'edge' };
+      return 3 + crop; // 'edge'
   }
 }
 
@@ -175,10 +159,4 @@ export function canvasSliceToBmp(
     }
   }
   return bmp;
-}
-
-/** Close the image-proc dylib handle. Kept for backwards-compatibility with
- *  mirabox-smoke.ts and any other importer of the old `closeSidecar` name. */
-export function closeSidecar(): void {
-  closeImageProc();
 }

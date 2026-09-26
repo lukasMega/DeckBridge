@@ -55,7 +55,6 @@ await test('write then read back returns identical data', async () => {
         childSerial: 'A7FZA5191ILSNQ',
         brightness: 42,
         brightnessOverride: true,
-        imageModeOverride: 'pad-edge',
       },
     ],
   };
@@ -102,7 +101,6 @@ await test('devices[] with per-device settings round-trips through save/load', a
         childSerial: 'A7FZA5191ILSNQ',
         brightness: 24,
         brightnessOverride: true,
-        imageModeOverride: null,
       },
       {
         deviceKey: '/dev/hidraw5',
@@ -112,7 +110,6 @@ await test('devices[] with per-device settings round-trips through save/load', a
         childSerial: 'A7FZA5191I01NQ',
         brightness: 55,
         brightnessOverride: true,
-        imageModeOverride: 'pad-edge',
       },
     ],
   };
