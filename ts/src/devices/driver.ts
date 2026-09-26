@@ -23,6 +23,13 @@ export type DeviceProtocol =
 // eslint-disable-next-line sonarjs/redundant-type-aliases
 export type DeviceModelId = string;
 
+export interface DeviceCropRect {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
 export interface DeviceImageSpec {
   format: 'jpeg' | 'bmp';
   width: number;
@@ -44,6 +51,10 @@ export interface DeviceImageSpec {
    *  fed an 80×80 Mini BMP with a dead outer edge: crop 6 → 68×68, then resize to
    *  64×64. Ignored when it would leave a non-positive dimension. */
   crop?: number;
+  /** Source-pixel region cut out before rotate/flip/fit, so the fit step sees only this
+   *  part of the Elgato app's image (off-centre art, a one-sided dead border). Clamped
+   *  to the source; cannot be combined with `crop`. */
+  cropRect?: DeviceCropRect;
   /** JPEG resize filter; default 'triangle'. K1 Pro uses 'nearest' to match the
    *  known-good keydeck/mirajazz recipe; 'lanczos3' upscales best (293: 72→112). */
   resizeFilter?: 'triangle' | 'nearest' | 'lanczos3';
@@ -227,6 +238,7 @@ export const IMAGE_OVERRIDE_KEYS = [
   'blur',
   'sharpen',
   'crop',
+  'cropRect',
   'resizeFilter',
   'resizeMode',
   'padFill',

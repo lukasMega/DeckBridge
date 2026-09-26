@@ -1701,6 +1701,9 @@ input[type='range'].range:disabled {
   grid-template-columns: repeat(2, minmax(0, 80px));
   gap: 8px;
 }
+.tuning-crop-rect {
+  grid-template-columns: repeat(4, minmax(0, 72px));
+}
 .tuning-field .input {
   width: 100%;
 }
@@ -2031,4 +2034,105 @@ select.input {
 }
 .device-test-option .settings-checkbox {
   margin: 0;
+}
+.crop-open {
+  margin-left: auto;
+  padding: 2px 10px;
+  font-size: 12px;
+}
+.popover.crop-editor {
+  max-width: 760px;
+}
+.crop-keys {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+.crop-key {
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border: 2px solid var(--border);
+  border-radius: 6px;
+  background: #000;
+  overflow: hidden;
+  cursor: pointer;
+}
+.crop-key[aria-pressed='true'] {
+  border-color: var(--accent);
+}
+.crop-key img {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+.crop-stage {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  align-items: flex-start;
+}
+.crop-source {
+  position: relative;
+  line-height: 0;
+  touch-action: none;
+}
+.crop-source canvas,
+.crop-preview canvas {
+  image-rendering: pixelated;
+  border: 1px solid var(--border);
+}
+.crop-rect {
+  position: absolute;
+  box-sizing: border-box;
+  border: 2px solid var(--accent);
+  box-shadow: 0 0 0 9999px oklch(0 0 0 / 0.45);
+  cursor: move;
+}
+.crop-handle {
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  background: var(--accent);
+  border-radius: 2px;
+}
+.crop-handle-nw {
+  left: -7px;
+  top: -7px;
+  cursor: nwse-resize;
+}
+.crop-handle-ne {
+  right: -7px;
+  top: -7px;
+  cursor: nesw-resize;
+}
+.crop-handle-sw {
+  left: -7px;
+  bottom: -7px;
+  cursor: nesw-resize;
+}
+.crop-handle-se {
+  right: -7px;
+  bottom: -7px;
+  cursor: nwse-resize;
+}
+.crop-preview {
+  margin: 0;
+  max-width: 260px;
+}
+.crop-preview figcaption {
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--fg-muted);
+}
+.crop-fields {
+  margin-top: 12px;
+}
+.crop-tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
 }

@@ -177,6 +177,56 @@ mod tests {
     }
 
     #[test]
+    fn region_crop_then_crop_fit_is_one_to_one() {
+        // cropRect (20,10,112,112) of a 160×130 frame into a 112×112 key: the region's
+        // corners land exactly on the output corners, no resampling.
+        let mut src = image::RgbImage::from_pixel(160, 130, image::Rgb([255, 0, 0]));
+        src.put_pixel(20, 10, image::Rgb([0, 0, 255]));
+        src.put_pixel(131, 121, image::Rgb([0, 255, 0]));
+        let bmp = encode_bmp(DynamicImage::ImageRgb8(src), 0).expect("encode_bmp");
+        let out = transform(
+            &bmp,
+            112,
+            112,
+            0,
+            80,
+            false,
+            0,
+            false,
+            false,
+            1,
+            0,
+            0,
+            0,
+            0,
+            3 | FILL_CROP_OVERSIZE,
+            0,
+            20,
+            10,
+            112,
+            112,
+        )
+        .expect("transform with region crop");
+        let out = image::load_from_memory(&out).expect("decode BMP").to_rgb8();
+        assert_eq!(out.dimensions(), (112, 112));
+        assert_eq!(*out.get_pixel(0, 0), image::Rgb([0, 0, 255]));
+        assert_eq!(*out.get_pixel(111, 111), image::Rgb([0, 255, 0]));
+        assert_eq!(*out.get_pixel(1, 1), image::Rgb([255, 0, 0]));
+    }
+
+    #[test]
+    fn region_crop_is_clamped_to_source() {
+        // A rect past the right/bottom edge is clamped, not rejected.
+        let bmp = encode_bmp(DynamicImage::new_rgb8(16, 16), 0).expect("encode_bmp");
+        let out = transform(
+            &bmp, 16, 16, 0, 80, false, 0, false, false, 1, 0, 0, 0, 0, 0, 0, 12, 12, 100, 100,
+        )
+        .expect("oversize region must clamp");
+        let out = image::load_from_memory(&out).expect("decode BMP");
+        assert_eq!((out.width(), out.height()), (16, 16));
+    }
+
+    #[test]
     fn crop_oversize_smaller_source_matches_pad() {
         let src = DynamicImage::ImageRgba8(make_test_src());
         for fill in [1u32, 2, 3] {

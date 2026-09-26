@@ -88,6 +88,13 @@ export interface MockConfig {
   macAddress?: string;
 }
 
+export interface DeviceCropRect {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
 /** Tunable subset of a DeviceModel — mirrors server-side DeviceModelOverride
  *  (devices/driver.ts, see the boundaries note at the top of this file). Only
  *  the fields the Device tuning form exposes are typed here. */
@@ -102,6 +109,8 @@ export interface DeviceImageOverride {
   blur?: number;
   sharpen?: number;
   crop?: number;
+  /** Partial while the form is being edited; the server rejects an incomplete rect. */
+  cropRect?: Partial<DeviceCropRect>;
   resizeFilter?: 'triangle' | 'nearest' | 'lanczos3';
   resizeMode?: 'resize' | 'pad' | 'crop';
   padFill?: 'black' | 'average' | 'edge';

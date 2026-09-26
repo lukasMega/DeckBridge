@@ -80,12 +80,17 @@ Some boards are supported from documentation, not hardware we own. **Settings �
 tuning** fixes them at runtime:
 
 - Rotation, flip H/V, image fit, JPEG quality and size.
+- **Crop…** (next to Image fit) picks which part of the Elgato app's key image lands on
+  the key: drag the region over a real key frame, then **Try on device** to see the exact
+  result, **Save** to keep it or **Cancel** to go back. Useful for off-centre art or a dead
+  border on one side. The same region is under Advanced as X/Y/Width/Height; leave all four
+  blank for the whole image.
 - **Key-map learn mode** records which raw code each physical key sends.
 - **Copy overrides as JSON** — please send working values back, see
   [Adding a device](./adding-a-device.md).
 
 Tuning is stored per model id under `modelOverrides` in `settings.json`. Image settings
-(rotation, flip, fit, quality, size, sharpen/blur/crop) are swapped into the running
+(rotation, flip, fit, quality, size, sharpen/blur/crop, crop region) are swapped into the running
 session and the deck repaints straight away; key-map, wire and splash changes reconnect
 the device, because the driver reads those when it opens the device. If it leaves the panel dark: **Reset to defaults**, or start with
 `./deckbridge run --no-overrides` to ignore all tuning for one session. Active tuning is

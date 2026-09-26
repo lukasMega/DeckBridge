@@ -13,6 +13,7 @@ import type { DeviceModel } from '../src/devices/driver.js';
 import { DEVICE_MODELS } from '../src/devices/registry.js';
 import { MIRABOX_293_MODEL } from '../src/devices/mirabox/mirabox-293.js';
 import { MK2_MODEL } from '../src/devices/elgato/mk2.js';
+import { MIRABOX_K1PRO_MODEL } from '../src/devices/mirabox/mirabox-k1pro.js';
 import { AJAZZ_AKP05E_MODEL } from '../src/devices/ajazz/akp05e.js';
 import { ELGATO_MK2_PID, ELGATO_PLUS_PID } from '../src/types.js';
 import { test, summary as reportSummary } from './helpers/harness.js';
@@ -130,6 +131,37 @@ test('enum fields are checked against their member lists', () => {
   assertRejects({ image: { resizeMode: 'stretch' } }, 'image.resizeMode');
   assertRejects({ image: { padFill: 'white' } }, 'image.padFill');
   assertRejects({ image: { transform: 'native' } }, 'image.transform');
+});
+
+test('cropRect needs all four integer fields within bounds', () => {
+  const rect = { x: 4, y: 0, width: 112, height: 112 };
+  assert.deepEqual(errorsFor({ image: { cropRect: rect } }), []);
+  assertRejects(
+    { image: { cropRect: { x: 4, y: 0, width: 112 } } },
+    'image.cropRect: missing height',
+  );
+  assertRejects({ image: { cropRect: { ...rect, x: -1 } } }, 'image.cropRect.x');
+  assertRejects({ image: { cropRect: { ...rect, width: 7 } } }, 'image.cropRect.width');
+  assertRejects({ image: { cropRect: { ...rect, height: 10.5 } } }, 'image.cropRect.height');
+  assertRejects({ image: { cropRect: { ...rect, z: 1 } } }, 'image.cropRect.z: unknown field');
+  assertRejects({ image: { cropRect: [4, 0, 112, 112] } }, 'image.cropRect: must be an object');
+});
+
+test('cropRect cannot combine with the symmetric crop or passthrough', () => {
+  const cropRect = { x: 0, y: 0, width: 64, height: 64 };
+  assertRejects({ image: { cropRect, crop: 2 } }, 'cannot combine with image.crop (2)');
+  // K1 Pro ships crop: 6, so a cropRect needs an explicit crop: 0.
+  assertRejects({ image: { cropRect } }, 'image.crop (6)', MIRABOX_K1PRO_MODEL);
+  assert.deepEqual(errorsFor({ image: { cropRect, crop: 0 } }, MIRABOX_K1PRO_MODEL), []);
+  assertRejects({ image: { cropRect } }, "needs transform 'sidecar'", MK2_MODEL);
+  assert.deepEqual(errorsFor({ image: { cropRect, transform: 'sidecar' } }, MK2_MODEL), []);
+});
+
+test('a cropRect change is live and changes the image revision', () => {
+  const a = { image: { cropRect: { x: 0, y: 0, width: 64, height: 64 } } };
+  const b = { image: { cropRect: { x: 8, y: 0, width: 64, height: 64 } } };
+  assert.equal(classifyOverrideChange(a, b), 'live');
+  assert.notEqual(overrideRevision(a), overrideRevision(b));
 });
 
 test('flips must be booleans', () => {

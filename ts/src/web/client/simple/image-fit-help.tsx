@@ -2,6 +2,7 @@
 import { useState } from 'preact/hooks';
 import { ICON } from '../ui-icons.js';
 import { useDismiss } from '../ui-hooks.js';
+import type { DeviceImageOverride } from '../ui-types.js';
 
 export interface Size {
   width: number;
@@ -9,7 +10,7 @@ export interface Size {
 }
 
 export interface FitApplicability {
-  /** Source after the symmetric Crop setting — what the fit step receives. */
+  /** Source after Crop / Crop region — what the fit step receives. */
   source: Size;
   target: Size;
   /** 'pad' changes the output: source fits inside target and is smaller on an axis. */
@@ -18,18 +19,35 @@ export interface FitApplicability {
   cropApplies: boolean;
 }
 
+/** Source size after the pre-fit crop, mirroring transform.rs: a complete region wins
+ *  and is clamped to the source; the symmetric crop is skipped if it leaves nothing. */
+function croppedSource(
+  sourceSize: Size,
+  trim: Pick<DeviceImageOverride, 'crop' | 'cropRect'>,
+): Size {
+  const r = trim.cropRect;
+  if (r?.x !== undefined && r.y !== undefined && r.width && r.height) {
+    const x = Math.min(r.x, sourceSize.width - 1);
+    const y = Math.min(r.y, sourceSize.height - 1);
+    return {
+      width: Math.min(r.width, sourceSize.width - x),
+      height: Math.min(r.height, sourceSize.height - y),
+    };
+  }
+  const crop = trim.crop ?? 0;
+  const cropped = sourceSize.width > 2 * crop && sourceSize.height > 2 * crop;
+  return cropped
+    ? { width: sourceSize.width - 2 * crop, height: sourceSize.height - 2 * crop }
+    : sourceSize;
+}
+
 /** Which fit modes change the output for `source` → `target`, mirroring pad.rs. */
 export function fitApplicability(
   sourceSize: Size,
   target: Size,
-  cropPx: number | undefined,
+  trim: Pick<DeviceImageOverride, 'crop' | 'cropRect'>,
 ): FitApplicability {
-  const crop = cropPx ?? 0;
-  // transform.rs skips a crop that would leave nothing.
-  const cropped = sourceSize.width > 2 * crop && sourceSize.height > 2 * crop;
-  const source = cropped
-    ? { width: sourceSize.width - 2 * crop, height: sourceSize.height - 2 * crop }
-    : sourceSize;
+  const source = croppedSource(sourceSize, trim);
   const larger = source.width > target.width || source.height > target.height;
   const smaller = source.width < target.width || source.height < target.height;
   return { source, target, padApplies: smaller && !larger, cropApplies: larger };
