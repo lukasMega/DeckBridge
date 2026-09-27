@@ -1,9 +1,8 @@
 // Stage renderers — one per device state (see deriveState in ui-helpers).
-import { useStore } from '../store.js';
-import { useFetched } from '../ui-api.js';
-import { ICON } from '../ui-icons.js';
+import { useStore } from '../lib/store.js';
+import { useFetched } from '../lib/ui-api.js';
+import { ICON, Icon } from '../components/Icon.js';
 import type { DockUi } from '../ui-types.js';
-import { Icon } from './Icon.js';
 import { Step, Brightness, ManualAddPanel, RestartNote } from './controls.js';
 import { KeyGridPreview } from '../components/KeyGridPreview.js';
 import { ExtraKeysPanel } from './extra-keys-panel.js';

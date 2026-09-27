@@ -1,4 +1,4 @@
-import type { StateResponse } from './ui-types.js';
+import type { StateResponse } from '../ui-types.js';
 import * as store from './store.js';
 
 /**

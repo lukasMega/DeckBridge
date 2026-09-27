@@ -1,3 +1,5 @@
+// Inline SVG icons and the leaf widgets that render them — one home so the
+// dangerouslySetInnerHTML boilerplate is written once.
 export const ICON = {
   check:
     '<svg viewBox="0 0 16 16" fill="none"><path d="M3.5 8.5l3 3 6-7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
@@ -13,3 +15,53 @@ export const ICON = {
     '<svg width="13" height="13" viewBox="0 0 14 14" fill="none"><path d="M2 2l10 10M12 2L2 12" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>',
   gear: '<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M6.57 1.81 h2.86 l-0.02 1.86 l1.63 0.95 l1.6 -0.95 l1.43 2.47 l-1.62 0.91 v1.9 l1.62 0.91 l-1.43 2.47 l-1.6 -0.95 l-1.63 0.95 l0.02 1.86 h-2.86 l0.02 -1.86 l-1.63 -0.95 l-1.6 0.95 l-1.43 -2.47 l1.62 -0.91 v-1.9 l-1.62 -0.91 l1.43 -2.47 l1.6 0.95 l1.63 -0.95z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/><circle cx="8" cy="8" r="2.1" stroke="currentColor" stroke-width="1.3"/></svg>',
 };
+
+/** Inline SVG/HTML in a <span>. `title` also names it for assistive tech —
+ *  a native tooltip alone is not exposed reliably. */
+export function Icon({
+  html,
+  class: cls,
+  title,
+}: Readonly<{ html: string; class?: string; title?: string }>): preact.JSX.Element {
+  return (
+    <span
+      class={cls}
+      title={title}
+      role={title === undefined ? undefined : 'img'}
+      aria-label={title}
+      tabIndex={title === undefined ? undefined : 0}
+      // eslint-disable-next-line @eslint-react/dom-no-dangerously-set-innerhtml -- static trusted SVG icon markup
+      dangerouslySetInnerHTML={{ __html: html }}
+    />
+  );
+}
+
+/** The "?" help affordance used by steps and the manual-add panel. */
+export function HelpButton({
+  helpId,
+  onHelp,
+  ariaLabel,
+  title,
+}: Readonly<{
+  helpId: string;
+  onHelp: (id: string) => void;
+  ariaLabel: string;
+  title: string;
+}>): preact.JSX.Element {
+  return (
+    <button
+      class="step-help circle"
+      type="button"
+      data-help={helpId}
+      aria-label={ariaLabel}
+      title={title}
+      onClick={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        onHelp(helpId);
+      }}
+      // eslint-disable-next-line @eslint-react/dom-no-dangerously-set-innerhtml -- static trusted SVG icon markup
+      dangerouslySetInnerHTML={{ __html: ICON.help }}
+    />
+  );
+}

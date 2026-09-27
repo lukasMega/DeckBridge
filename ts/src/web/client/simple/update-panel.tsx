@@ -4,8 +4,8 @@
 import { useState } from 'preact/hooks';
 import { Collapsible } from '../components/Collapsible.js';
 import { ToggleRow } from '../components/Fields.js';
-import { postJson } from '../ui-api.js';
-import { Feedback, useAsyncAction } from '../ui-async.js';
+import { postJson } from '../lib/ui-api.js';
+import { Feedback, useAsyncAction } from '../lib/ui-async.js';
 import type { UpdateInfo } from '../ui-types.js';
 
 /** `info` null = the settings page hasn't read /api/state yet. */

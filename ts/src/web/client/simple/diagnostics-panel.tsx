@@ -6,8 +6,8 @@ import { useState } from 'preact/hooks';
 import { Collapsible } from '../components/Collapsible.js';
 import { CheckField } from '../components/Fields.js';
 import { IdentityRow } from '../components/IdentityRow.js';
-import { postJson } from '../ui-api.js';
-import { Feedback, useAsyncAction } from '../ui-async.js';
+import { postJson } from '../lib/ui-api.js';
+import { Feedback, useAsyncAction } from '../lib/ui-async.js';
 
 /** Shown next to both report buttons and repeated as the report's own first line
  *  (diagnostics.ts REVIEW_NOTICE) — the file outlives this screen. */

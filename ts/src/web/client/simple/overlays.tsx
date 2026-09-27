@@ -1,18 +1,17 @@
 // Full-stage overlays: the About popover, the Settings page, and the
 // per-step help screen.
 import { useEffect, useRef, useState } from 'preact/hooks';
-import { ICON } from '../ui-icons.js';
+import { ICON, Icon } from '../components/Icon.js';
 import { HELP } from '../ui-help.js';
-import { Icon } from './Icon.js';
 import { Collapsible } from '../components/Collapsible.js';
 import { IdentityRow } from '../components/IdentityRow.js';
 import { DiagnosticsPanel } from './diagnostics-panel.js';
 import { MultiDeckPanel } from './multi-deck-panel.js';
 import { UpdatePanel } from './update-panel.js';
 import { DeviceTuningPanel } from './device-tuning.js';
-import { postJson, useFetched } from '../ui-api.js';
-import { Feedback, useAsyncAction, type AsyncAction } from '../ui-async.js';
-import { useDismiss } from '../ui-hooks.js';
+import { postJson, useFetched } from '../lib/ui-api.js';
+import { Feedback, useAsyncAction, type AsyncAction } from '../lib/ui-async.js';
+import { useDismiss } from '../lib/ui-hooks.js';
 import type { DeviceIdentity, RealDeviceIdentity, StateResponse, UpdateInfo } from '../ui-types.js';
 
 /** Labels for the identifiers DeckBridge actually sends to the Elgato app,

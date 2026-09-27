@@ -9,9 +9,9 @@
  */
 import { Fragment } from 'preact';
 import { useState, useEffect } from 'preact/hooks';
-import { useStore } from './store.js';
-import { fire } from './ui-api.js';
-import { Collapsible } from './components/Collapsible.js';
+import { useStore } from '../lib/store.js';
+import { fire } from '../lib/ui-api.js';
+import { Collapsible } from '../components/Collapsible.js';
 
 const MAC_DEFAULT = '02:00:00:00:00:01';
 

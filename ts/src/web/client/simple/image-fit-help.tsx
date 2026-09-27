@@ -1,7 +1,7 @@
 // Image fit applicability + the `?` modal explaining source vs device key size.
 import { useState } from 'preact/hooks';
-import { ICON } from '../ui-icons.js';
-import { useDismiss } from '../ui-hooks.js';
+import { ICON } from '../components/Icon.js';
+import { useDismiss } from '../lib/ui-hooks.js';
 import type { DeviceImageOverride } from '../ui-types.js';
 
 export interface Size {

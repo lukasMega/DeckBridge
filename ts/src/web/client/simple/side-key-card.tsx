@@ -1,6 +1,6 @@
 // One side key: live preview tile (the widget image the server painted on the
 // device) beside its settings — widget, value, press action + command.
-import { useStore } from '../store.js';
+import { useStore } from '../lib/store.js';
 import type { ExtraKeyCfg, PluginStatus } from '../ui-types.js';
 import {
   hasWidgetValue,

@@ -1,9 +1,8 @@
 import { useRef, useState } from 'preact/hooks';
 import type { ExtraKeyCfg, ExtraKeyWidget, PluginStatus } from '../ui-types.js';
-import { ICON } from '../ui-icons.js';
-import { fire } from '../ui-api.js';
-import { useDismiss } from '../ui-hooks.js';
-import { Icon } from './Icon.js';
+import { ICON, Icon } from '../components/Icon.js';
+import { fire } from '../lib/ui-api.js';
+import { useDismiss } from '../lib/ui-hooks.js';
 import { SecondsField } from '../components/Fields.js';
 
 // Interval/timeout bounds mirror types.ts, in seconds for UI.

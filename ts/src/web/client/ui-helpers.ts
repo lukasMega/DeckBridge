@@ -1,5 +1,4 @@
 import type { ClientApp, DockUi, Status, TouchStripSize, UpdateInfo } from './ui-types.js';
-import type { DeviceState } from './ui-state.js';
 
 /** " to the Elgato app" / " to the Bitfocus Companion app" / "" — appended
  *  after "connected" in the ready-stage copy. Empty string (generic "connected
@@ -10,6 +9,8 @@ export function clientAppName(app: ClientApp | undefined): string {
   if (app === 'bitfocus') return ' to the Bitfocus Companion app';
   return '';
 }
+
+export type DeviceState = 'no-device' | 'no-device-elgato-conflict' | 'device-no-elgato' | 'ready';
 
 export function deriveState(s: Status): DeviceState {
   if (!s.driverConnected) {
@@ -48,23 +49,6 @@ export function selectedCoraProfile(s: Status): string | undefined {
 export function selectedTouchStripSize(s: Status): TouchStripSize | undefined {
   const selected = s.selectedDock;
   return s.docks.find((d) => d.index === selected)?.touchStripSize;
-}
-
-export type ThemePref = 'light' | 'dark' | 'auto';
-
-/** Mirrors the inline pre-paint script in ui.html — must stay in sync. */
-export function getTheme(): ThemePref {
-  const t = localStorage.getItem('deckbridge.theme');
-  return t === 'light' || t === 'dark' ? t : 'auto';
-}
-
-export function setTheme(pref: ThemePref): void {
-  if (pref === 'auto') localStorage.removeItem('deckbridge.theme');
-  else localStorage.setItem('deckbridge.theme', pref);
-  const dark =
-    pref === 'dark' ||
-    (pref === 'auto' && window.matchMedia('(prefers-color-scheme: dark)').matches);
-  document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
 }
 
 export function deeplink(url: string): void {

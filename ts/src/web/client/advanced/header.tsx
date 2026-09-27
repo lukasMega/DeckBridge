@@ -6,11 +6,11 @@
  * Split out of AdvancedApp.tsx (file-size refactor, no behavior change).
  */
 import { useState, useEffect, useRef } from 'preact/hooks';
-import { useStore } from './store.js';
-import { StatusChip, type StatusChipVariant } from './components/StatusChip.js';
-import { ThemeButton } from './components/ThemeButton.js';
-import { fire } from './ui-api.js';
-import type { DeviceModel, Stats, Status } from './ui-types.js';
+import { useStore } from '../lib/store.js';
+import { StatusChip, type StatusChipVariant } from '../components/StatusChip.js';
+import { ThemeButton } from '../components/ThemeButton.js';
+import { fire } from '../lib/ui-api.js';
+import type { DeviceModel, Stats, Status } from '../ui-types.js';
 
 // Uptime formatter (mirrors ui-status.ts)
 

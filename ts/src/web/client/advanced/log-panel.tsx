@@ -6,10 +6,10 @@
  */
 import { useState, useEffect, useRef } from 'preact/hooks';
 import type { RefObject } from 'preact';
-import { subscribe as storeSubscribe, getSnapshot } from './store.js';
-import type { StoreState } from './store.js';
-import type { ServerLog, CommLog } from './ui-types.js';
-import { useCopyText } from './use-copy-text.js';
+import { subscribe as storeSubscribe, getSnapshot } from '../lib/store.js';
+import type { StoreState } from '../lib/store.js';
+import type { ServerLog, CommLog } from '../ui-types.js';
+import { useCopyText } from '../lib/use-copy-text.js';
 
 // Constants
 

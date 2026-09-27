@@ -1,10 +1,10 @@
 // Touch-strip ownership (AKP05E) and the knob override that rides on it. The
 // knobs can only leave the Elgato app while DeckBridge owns the strip — see
 // docs/side-keys.md.
-import { patch, useStore } from '../store.js';
+import { patch, useStore } from '../lib/store.js';
 import type { EncoderCommands, TouchStripMode } from '../ui-types.js';
 import { CheckField, SecondsField } from '../components/Fields.js';
-import { fire } from '../ui-api.js';
+import { fire } from '../lib/ui-api.js';
 import { CommandInput } from './command-input.js';
 import { GridHeader } from './config-section.js';
 

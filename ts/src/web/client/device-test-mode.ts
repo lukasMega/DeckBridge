@@ -1,4 +1,4 @@
-import { getSnapshot } from './store.js';
+import { getSnapshot } from './lib/store.js';
 import { showToast } from './ui-helpers.js';
 
 /** Observer only: device commands and Elgato forwarding continue normally. */

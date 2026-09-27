@@ -636,8 +636,8 @@ real DOM in **headless Chrome** — `ts/scripts/test-client.mjs` bundles it to a
 temp HTML page with `--dump-dom`, and asserts the dumped DOM contains `data-result="pass"`
 (browser from `CHROME_BIN`, else the macOS Chrome path, else `google-chrome` on `PATH`). It covers
 the parts that can't run under `tjs`: the hand-rolled `useSyncExternalStore` port and the
-shallow-memo `useStore` selector in `ts/src/web/client/store.ts`, plus the clipboard copy UI
-(`use-copy-text.ts`, `CopyChip`, `LogConsolePanel`). It is a `.tsx`, not a `*.test.ts`, so
+shallow-memo `useStore` selector in `ts/src/web/client/lib/store.ts`, plus the clipboard copy UI
+(`lib/use-copy-text.ts`, `CopyChip`, `LogConsolePanel`). It is a `.tsx`, not a `*.test.ts`, so
 `mise run test` never picks it up; `ci-checks` runs it as the `test-client` task.
 
 | Area | Test files · notable coverage |

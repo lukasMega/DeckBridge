@@ -3,12 +3,11 @@
 // components/KeyGridPreview.tsx — shared with the advanced view.)
 import { useState, useEffect, useRef } from 'preact/hooks';
 import type { ComponentChildren } from 'preact';
-import { useStore } from '../store.js';
-import { useCopyText } from '../use-copy-text.js';
-import { ICON } from '../ui-icons.js';
-import { CORA_PORT } from '../ui-state.js';
-import { fire } from '../ui-api.js';
-import { Icon, HelpButton } from './Icon.js';
+import { useStore } from '../lib/store.js';
+import { useCopyText } from '../lib/use-copy-text.js';
+import { ICON, Icon, HelpButton } from '../components/Icon.js';
+import { CORA_PORT } from '../ui-help.js';
+import { fire } from '../lib/ui-api.js';
 import { postBrightnessOverride, restartElgatoApp } from './handlers.js';
 
 /** "Back" pill used by the settings and help screens. */

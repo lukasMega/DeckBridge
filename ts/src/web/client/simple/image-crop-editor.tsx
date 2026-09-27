@@ -3,10 +3,10 @@
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { NumberField } from '../components/Fields.js';
 import { getImageEntry, imageSrc } from '../key-preview.js';
-import { useStore } from '../store.js';
-import { postJson } from '../ui-api.js';
-import { useDismiss } from '../ui-hooks.js';
-import { ICON } from '../ui-icons.js';
+import { useStore } from '../lib/store.js';
+import { postJson } from '../lib/ui-api.js';
+import { useDismiss } from '../lib/ui-hooks.js';
+import { ICON } from '../components/Icon.js';
 import type { DeviceCropRect, DeviceImageOverride, DeviceOverridesView } from '../ui-types.js';
 import {
   centredRect,

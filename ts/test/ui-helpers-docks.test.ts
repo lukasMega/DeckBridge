@@ -1,7 +1,7 @@
 import assert from 'tjs:assert';
 import { selectedCoraProfile } from '../src/web/client/ui-helpers.js';
 import type { Status } from '../src/web/client/ui-types.js';
-import { EMPTY_STATUS } from '../src/web/client/store.js';
+import { EMPTY_STATUS } from '../src/web/client/lib/store.js';
 import { DOCK_IDENTITY } from './helpers/dock-fixture.js';
 import { test, summaryExit } from './helpers/harness.js';
 

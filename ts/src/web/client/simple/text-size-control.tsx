@@ -2,7 +2,7 @@
 // showing the widget at every size. The server repaints on each change, so the
 // side-key tile is the live preview; the picker thumbnails are server-rendered too.
 import { useEffect, useRef, useState } from 'preact/hooks';
-import { useStore } from '../store.js';
+import { useStore } from '../lib/store.js';
 import type {
   ExtraKeyCfg,
   ExtraKeyPreview,
@@ -12,8 +12,8 @@ import type {
   ExtraKeyWidget,
   ExtraKeyWrap,
 } from '../ui-types.js';
-import { postJson } from '../ui-api.js';
-import { useDismiss, useKeepInApp } from '../ui-hooks.js';
+import { postJson } from '../lib/ui-api.js';
+import { useDismiss, useKeepInApp } from '../lib/ui-hooks.js';
 import { postExtraKey } from './extra-keys-popovers.js';
 import { TextStyleButton } from './text-style-popover.js';
 

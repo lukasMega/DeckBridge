@@ -247,6 +247,6 @@ the server's `broadcast<K>` and the client's handler table are both typed by it.
 | `ts/src/web/server/image-channel.ts` | Per-dock frame cache · `notifyDockImage()` · `sendSnapshot()` for a new WS client · `replay()` on dock select |
 | `ts/src/web/client/key-preview.ts` | Shared `KeyPreview` grid + image store + `imageSrc()` — single render path for both views |
 | `ts/src/web/client/ui-base.css` | Per-model `.key-grid[data-model] .key-cell img` rotation (single source of truth) |
-| `ts/src/web/client/advanced-key-grid.tsx` | Advanced view — Preact component owning a persistent `KeyPreview`; `rebuild/setModel/setClickable` on `status` changes |
+| `ts/src/web/client/advanced/key-grid.tsx` | Advanced view — Preact component owning a persistent `KeyPreview`; `rebuild/setModel/setClickable` on `status` changes |
 | `ts/src/web/client/simple/controls.tsx` | Simple view — Preact component creating its `KeyPreview` on mount, rebuilding on prop changes |
-| `ts/src/web/client/ui-ws.ts` | WS message handler — `applyImage`/`clearImage`/`flashKey` into the shared image store |
+| `ts/src/web/client/lib/ui-ws.ts` | WS message handler — `applyImage`/`resetPreviews`/`flashKey` into the shared image store |
