@@ -1,5 +1,4 @@
 import type { ChildGeometry, DeviceModel } from './driver.js';
-import { modelToChildGeometry } from '../shared/capabilities.js';
 import { MK2_MODEL } from './elgato/mk2.js';
 import { MINI_MODEL } from './elgato/mini.js';
 import { MIRABOX_293_MODEL } from './mirabox/mirabox-293.js';
@@ -56,6 +55,20 @@ export function findModel(vid: number, pid: number): DeviceModel | null {
     }
   }
   return null;
+}
+
+export function modelToChildGeometry(model: DeviceModel): ChildGeometry {
+  return {
+    rows: model.rows,
+    columns: model.columns,
+    keyCount: model.keyCount,
+    keyWidth: model.keyWidth,
+    keyHeight: model.keyHeight,
+    productName: model.name,
+    encoderCount: model.encoderCount ?? 0,
+    touchWidth: model.touchWidth ?? 0,
+    touchHeight: model.touchHeight ?? 0,
+  };
 }
 
 /** The model whose geometry `model` emulates over CORA — itself unless it sets

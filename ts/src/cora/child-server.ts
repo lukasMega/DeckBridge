@@ -1,52 +1,63 @@
 import type { ImageAssembly } from './image-assembler.js';
-import * as net from '../platform/tcp.js';
+import type * as net from '../platform/tcp.js';
 import {
-  ELGATO_CHILD_PORT,
   ELGATO_PKT_SIZE_TX,
   HID_OP_SEND_REPORT,
   HID_OP_GET_REPORT,
   PAYLOAD_TYPE_FEATURE,
+  PAYLOAD_TYPE_OUTPUT_REPORT,
   REPORT_BUTTON_STATE_INPUT,
   REPORT_SECONDARY_DETECT,
   KEY_EVENT_STATE_OFFSET,
-  RECONNECT_DELAY_MS,
-  IMG_CMD_LCD,
-  IMG_CMD_WINDOW_PARTIAL,
   INPUT_SUBTYPE_BUTTONS,
-  clearTimer,
+  IMG_CMD_WRITE,
+  IMG_CMD_LCD,
+  IMG_CMD_WINDOW,
+  IMG_CMD_WINDOW_PARTIAL,
+  GEN1_IMG_CMD,
+  IMAGE_CHUNK_KEY_OFFSET,
+  GEN1_IMAGE_KEY_OFFSET,
+  FEATURE_KEEPALIVE_ACK,
+  FEATURE_GET_CAPABILITIES,
+  FEATURE_GET_DEVICE_INFO,
 } from '../shared/types.js';
 import type { DialEvent, KeyState, TouchInputEvent } from '../shared/types.js';
 import { isLevelEnabled } from '../shared/logger.js';
-import { CORA_FLAG_VERBATIM, encodeCoraFrame } from './frame.js';
+import {
+  CORA_FLAG_RESULT,
+  CORA_FLAG_REQACK,
+  CORA_FLAG_VERBATIM,
+  CORA_VERBATIM_RESULT,
+  encodeCoraFrame,
+} from './frame.js';
 import { CoraServerBase } from './server-base.js';
 import { describeChildPayload } from './describe.js';
-import type { DeviceConfig } from './types.js';
-import { buildCapabilitiesPacket, type ChildGeometry } from '../shared/capabilities.js';
+import type { DeviceConfig, LogFn } from './types.js';
+import type { ChildGeometry } from '../devices/driver.js';
 import {
-  handleChildVerbatimProbe,
-  handleChildFeatureRequest,
-  handleChildOutputReportPacket,
-  extractChildBrightness,
-  assembleChildImageChunk,
-  assembleChildGen1ImageChunk,
-  type SendFrameFn,
-  type LogFn,
+  CHILD_REPORT_SPECS,
+  buildCapabilitiesPacket,
+  buildVerbatimProbeReport,
+} from './responses.js';
+import {
+  isValidChildImageKey,
+  parseChildBrightness,
+  traceGen1ImageChunk,
+  traceImageChunk,
 } from './child-payload.js';
-import { assembleImageChunk, assemblePartialWindowChunk } from './image-assembler.js';
-import { createGetReportHandlers, type GetReportHandler } from './child-report-handlers.js';
+import { assembleGen1ImageChunk, assembleImageChunk } from './image-assembler.js';
+import { ChildReconnector } from './child-reconnector.js';
+import { TouchStripAssembler } from './touch-strip-assembler.js';
 import {
   buildEncoderPressReport,
   buildEncoderRotateReport,
   buildTouchReport,
 } from './plus-reports.js';
 
-type ReconnectState = 'idle' | 'in-progress' | 'scheduled';
-
 export class ElgatoChildServer extends CoraServerBase {
   private imagePages: Map<number, ImageAssembly> = new Map();
   private gen1ImagePages: Map<number, ImageAssembly> = new Map();
-  private touchPages: Map<number, ImageAssembly> = new Map();
-  private partialWindowPages: Map<string, ImageAssembly> = new Map();
+  private readonly touchStrip = new TouchStripAssembler();
   private warnedOobKeys = new Set<number>();
   private childGeometry: ChildGeometry;
   private keyStates: Uint8Array;
@@ -54,26 +65,12 @@ export class ElgatoChildServer extends CoraServerBase {
    *  Plus encoder press report. */
   private encoderPressMask = 0;
   private readonly deviceConfig: DeviceConfig;
-  private remoteAddress: string | null = null;
-  private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
-  private reconnectEnabled = false;
-  private reconnectState: ReconnectState = 'idle';
-  private outboundSocket: net.Socket | null = null;
-  private readonly enableOutboundReconnect: boolean;
+  private readonly reconnector: ChildReconnector;
   private sessionStartTs = 0;
   private sessionId = 0;
 
-  // Stable bound refs handed to the extracted payload handlers so the
-  // ACK-paced hot path (handleCoraPacket, image chunks) doesn't allocate a
-  // fresh closure per packet.
-  private readonly sendFrameFn: SendFrameFn = this.sendFrame.bind(this);
+  // Bound once so the ACK-paced hot path doesn't allocate a closure per chunk.
   private readonly emitLogFn: LogFn = this.emitLog.bind(this);
-  private readonly sendAckNakFn = this.sendAckNak.bind(this);
-  private readonly handleImageChunkFn = this.handleImageChunk.bind(this);
-  private readonly handleGen1ImageChunkFn = this.handleGen1ImageChunk.bind(this);
-  private readonly handleTouchOutputFn = this.handleTouchOutput.bind(this);
-  private readonly buildSelfDeviceInfoFn = (): Buffer => this.buildSelfDeviceInfo();
-  private readonly getReportHandlers: Map<number, GetReportHandler>;
 
   protected componentName = 'elgato-child';
 
@@ -87,11 +84,13 @@ export class ElgatoChildServer extends CoraServerBase {
     this.childGeometry = childGeometry;
     this.keyStates = new Uint8Array(childGeometry.keyCount);
     this.deviceConfig = deviceConfig;
-    this.enableOutboundReconnect = enableOutboundReconnect;
-    this.getReportHandlers = createGetReportHandlers(
-      this.deviceConfig,
-      this.sendFrameFn,
-      this.emitLogFn,
+    this.reconnector = new ChildReconnector(
+      {
+        hasClient: () => !!this.client,
+        accept: (socket) => this.acceptConnection(socket),
+        logInfo: (message) => this.logInfo(message),
+      },
+      enableOutboundReconnect,
     );
     this.on('clientDisconnected', this.onChildClientDisconnected);
   }
@@ -109,25 +108,16 @@ export class ElgatoChildServer extends CoraServerBase {
     this.logInfo(`child session ended (duration=${duration})`);
     this.sessionStartTs = 0;
     this.sessionId++;
-    this.logInfo(
-      `reconnect state: inProgress=${this.reconnectState === 'in-progress'} scheduled=${this.reconnectState === 'scheduled'} hasClient=${!!this.client} sessionId=${this.sessionId}`,
-    );
-    if (!this.reconnectEnabled || this.reconnectState !== 'idle') return;
-    this.tryConnectOutbound();
+    this.reconnector.onDisconnected(this.sessionId);
   };
 
   async start(): Promise<void> {
     await this.startServer();
-    this.reconnectEnabled = true;
+    this.reconnector.start();
   }
 
   async stop(): Promise<void> {
-    this.reconnectEnabled = false;
-    if (this.outboundSocket) {
-      this.outboundSocket.destroy();
-      this.outboundSocket = null;
-    }
-    this.reconnectTimer = clearTimer(this.reconnectTimer);
+    this.reconnector.stop();
     await this.stopServer();
   }
 
@@ -235,193 +225,119 @@ export class ElgatoChildServer extends CoraServerBase {
       this.emit('clientAppDetected', 'bitfocus');
     }
 
-    if (
-      isVerbatim &&
-      handleChildVerbatimProbe(byte0, hidOp, messageId, this.deviceConfig, this.sendFrameFn)
-    )
-      return;
-    if (
-      byte0 === PAYLOAD_TYPE_FEATURE &&
-      handleChildFeatureRequest(
-        byte1,
-        hidOp,
-        messageId,
-        this.buildSelfDeviceInfoFn,
-        this.sendFrameFn,
-      )
-    )
+    if (isVerbatim) {
+      const probe = buildVerbatimProbeReport(byte0, this.deviceConfig);
+      if (probe) {
+        this.sendFrame(probe, CORA_VERBATIM_RESULT, hidOp, messageId);
+        return;
+      }
+    }
+    if (byte0 === PAYLOAD_TYPE_FEATURE && this.handleFeatureRequest(byte1, hidOp, messageId))
       return;
     if (hidOp === HID_OP_GET_REPORT) {
-      this.handleGetReport(byte0, flags, hidOp, messageId, payload);
+      this.handleGetReport(byte0, messageId, payload);
       return;
     }
     if (hidOp === HID_OP_SEND_REPORT || byte0 === PAYLOAD_TYPE_FEATURE) {
-      this.handleSendReport(payload, flags, hidOp, messageId);
+      this.handleSendReport(payload, flags, messageId);
       return;
     }
-    handleChildOutputReportPacket(
-      byte0,
-      byte1,
-      flags,
-      hidOp,
+    if (byte0 === PAYLOAD_TYPE_OUTPUT_REPORT)
+      this.handleOutputReport(byte1, flags, hidOp, messageId, payload);
+  }
+
+  private handleFeatureRequest(byte1: number, hidOp: number, messageId: number): boolean {
+    switch (byte1) {
+      case FEATURE_KEEPALIVE_ACK:
+      case FEATURE_GET_DEVICE_INFO:
+        return true;
+      case FEATURE_GET_CAPABILITIES:
+        this.sendFrame(this.buildSelfDeviceInfo(), CORA_FLAG_RESULT, hidOp, messageId);
+        return true;
+      default:
+        return false;
+    }
+  }
+
+  private handleGetReport(reportId: number, messageId: number, payload: Buffer): void {
+    const spec = CHILD_REPORT_SPECS.get(reportId);
+    if (!spec) return;
+    const r = spec.build(this.deviceConfig, reportId);
+    spec.trace?.(this.emitLogFn, messageId, payload, r);
+    this.sendFrame(
+      r,
+      CORA_VERBATIM_RESULT,
+      0,
       messageId,
-      payload,
-      this.sessionStartTs ? Date.now() - this.sessionStartTs : 0,
-      this.emitLogFn,
-      this.sendAckNakFn,
-      this.handleImageChunkFn,
-      this.handleGen1ImageChunkFn,
-      this.handleTouchOutputFn,
+      spec.desc?.(this.deviceConfig, messageId),
     );
   }
 
-  private handleGetReport(
-    reportId: number,
-    _flags: number,
-    _hidOp: number,
-    messageId: number,
-    payload: Buffer,
-  ): void {
-    this.getReportHandlers.get(reportId)?.(messageId, payload);
-  }
-
-  private handleSendReport(
-    payload: Buffer,
-    flags: number,
-    _hidOp: number,
-    messageId: number,
-  ): void {
+  private handleSendReport(payload: Buffer, flags: number, messageId: number): void {
     if (payload.length < 3) return;
-    extractChildBrightness(
-      payload,
-      flags,
-      messageId,
-      (level) => this.emit('brightness', level),
-      this.sendAckNakFn,
-    );
+    const level = parseChildBrightness(payload);
+    if (level === undefined) return;
+    this.emit('brightness', level);
+    if (flags & CORA_FLAG_REQACK) this.sendAckNak(messageId);
   }
 
-  private handleImageChunk(pkt: Buffer, _messageId: number): void {
-    assembleChildImageChunk(
-      pkt,
-      this.imagePages,
-      this.childGeometry.keyCount,
-      this.warnedOobKeys,
-      this.emitLogFn,
-      (event) => this.emit('image', event),
-    );
-  }
-
-  private handleGen1ImageChunk(pkt: Buffer, _messageId: number): void {
-    assembleChildGen1ImageChunk(
-      pkt,
-      this.gen1ImagePages,
-      this.childGeometry.keyCount,
-      this.warnedOobKeys,
-      this.emitLogFn,
-      (event) => this.emit('image', event),
-    );
-  }
-
-  /** Stream Deck + touch/LCD output commands (0x08 LCD, 0x0B window strip,
-   *  0x0C partial window). The window strip (0x0B) and partial window (0x0C) are
-   *  assembled and forwarded to the device's touch segments; the full LCD (0x08,
-   *  800×480) has no equivalent surface, so it is ACKed and dropped with a trace. */
-  private handleTouchOutput(cmd: number, pkt: Buffer): void {
-    // Hex dumps only at debug: these chunks ride the ACK-paced path.
-    const tracing = isLevelEnabled('debug');
-    if (cmd === IMG_CMD_LCD) {
-      if (tracing) {
-        this.emitLog(
-          'debug',
-          `child rx: LCD output dropped (no 800×480 surface): ${(pkt.subarray(0, 16) as Buffer).toString('hex')}`,
-        );
-      }
-      return;
-    }
-    if (cmd === IMG_CMD_WINDOW_PARTIAL) {
-      const region = assemblePartialWindowChunk(this.partialWindowPages, pkt);
-      if (region) {
-        if (tracing)
-          this.emitLog(
-            'debug',
-            `child rx: partial window assembled ${region.w}×${region.h} @ ${region.x},${region.y} (${region.data.length} B)`,
-          );
-        this.emit('touchImage', {
-          data: region.data,
-          region: { x: region.x, y: region.y, w: region.w, h: region.h },
-        });
-      }
-      return;
-    }
-    // 0x0B window strip — assemble as a gen2 image chunk (assumed layout).
-    if (tracing) {
-      this.emitLog(
-        'debug',
-        `child rx: window-strip chunk: ${(pkt.subarray(0, 8) as Buffer).toString('hex')}`,
-      );
-    }
-    const assembled = assembleImageChunk(this.touchPages, pkt);
-    if (assembled) {
-      if (tracing)
-        this.emitLog('debug', `child rx: window strip assembled ${assembled.data.length} B`);
-      this.emit('touchImage', { data: assembled.data });
-    }
-  }
-
-  private tryConnectOutbound(): void {
-    if (!this.reconnectEnabled || !this.remoteAddress || !this.enableOutboundReconnect) return;
-    if (this.client) {
-      this.logInfo('skip outbound reconnect — client already connected');
-      return;
-    }
-    if (this.reconnectState === 'scheduled') {
-      this.logInfo('skip outbound reconnect — already scheduled');
-      return;
-    }
-    if (this.reconnectState === 'in-progress') {
-      this.logInfo('skip outbound reconnect — in progress');
-      return;
-    }
-    this.reconnectState = 'in-progress';
-    const addr = this.remoteAddress;
-    this.logInfo(`child outbound connect to ${addr}:${ELGATO_CHILD_PORT}`);
-    const sock = net.createConnection({ host: addr, port: ELGATO_CHILD_PORT }, () => {
-      this.reconnectTimer = clearTimer(this.reconnectTimer);
-      this.logInfo(`child outbound connected to ${addr}`);
-      this.reconnectState = 'idle';
-      this.outboundSocket = null;
-      this.acceptConnection(sock);
-    });
-    this.outboundSocket = sock;
-    sock.on('error', (err) => {
-      if (this.outboundSocket !== sock) {
+  /** Image and Stream Deck + surface chunks. ACK before assembly: Elgato waits for
+   *  the ACK before sending the next chunk, so assembly must not delay it. */
+  private handleOutputReport(
+    cmd: number,
+    flags: number,
+    hidOp: number,
+    messageId: number,
+    payload: Buffer,
+  ): void {
+    const ack = (flags & CORA_FLAG_REQACK) !== 0;
+    switch (cmd) {
+      case IMG_CMD_WRITE:
+        if (isLevelEnabled('debug')) {
+          traceImageChunk(this.emitLogFn, payload, messageId, this.msSinceConnect());
+        }
+        if (ack) this.sendAckNak(messageId, hidOp);
+        this.handleImageChunk(payload);
         return;
+      case GEN1_IMG_CMD:
+        if (isLevelEnabled('debug')) {
+          traceGen1ImageChunk(this.emitLogFn, payload, messageId, this.msSinceConnect());
+        }
+        if (ack) this.sendAckNak(messageId, hidOp);
+        this.handleGen1ImageChunk(payload);
+        return;
+      case IMG_CMD_LCD:
+      case IMG_CMD_WINDOW:
+      case IMG_CMD_WINDOW_PARTIAL: {
+        if (ack) this.sendAckNak(messageId, hidOp);
+        const touch = this.touchStrip.accept(cmd, payload, this.emitLogFn);
+        if (touch) this.emit('touchImage', touch);
       }
-      this.logInfo(`child outbound connect failed: ${err.message}, retry ${RECONNECT_DELAY_MS}ms`);
-      sock.destroy();
-      this.outboundSocket = null;
-      this.reconnectState = 'scheduled';
-      this.reconnectTimer = setTimeout(() => {
-        this.reconnectTimer = null;
-        this.reconnectState = 'idle';
-        this.tryConnectOutbound();
-      }, RECONNECT_DELAY_MS);
-    });
+    }
+  }
+
+  private msSinceConnect(): number {
+    return this.sessionStartTs ? Date.now() - this.sessionStartTs : 0;
+  }
+
+  private handleImageChunk(pkt: Buffer): void {
+    const keyCount = this.childGeometry.keyCount;
+    const key = pkt[IMAGE_CHUNK_KEY_OFFSET]!;
+    if (!isValidChildImageKey(key, keyCount, this.warnedOobKeys, this.emitLogFn)) return;
+    const event = assembleImageChunk(this.imagePages, pkt);
+    if (event) this.emit('image', event);
+  }
+
+  private handleGen1ImageChunk(pkt: Buffer): void {
+    const keyCount = this.childGeometry.keyCount;
+    const key = pkt[GEN1_IMAGE_KEY_OFFSET]! - 1;
+    if (!isValidChildImageKey(key, keyCount, this.warnedOobKeys, this.emitLogFn)) return;
+    const event = assembleGen1ImageChunk(this.gen1ImagePages, pkt);
+    if (event) this.emit('image', event);
   }
 
   protected onClientConnected(socket: net.Socket): void {
-    this.remoteAddress = socket.remoteAddress;
-    this.reconnectState = 'idle';
-    if (this.outboundSocket) {
-      this.outboundSocket.destroy();
-      this.outboundSocket = null;
-      this.logInfo('destroyed pending outbound socket (inbound client connected)');
-    }
-    if (this.reconnectTimer) {
-      this.reconnectTimer = clearTimer(this.reconnectTimer);
-      this.logInfo('cancelled pending outbound reconnect (inbound client connected)');
-    }
+    this.reconnector.onInbound(socket.remoteAddress);
     this.logInfo(
       `child TCP connection attempt from ${socket.remoteAddress} (session=${this.sessionId + 1})`,
     );
@@ -430,8 +346,7 @@ export class ElgatoChildServer extends CoraServerBase {
     this.keyStates = new Uint8Array(this.childGeometry.keyCount);
     this.imagePages = new Map();
     this.gen1ImagePages = new Map();
-    this.touchPages = new Map();
-    this.partialWindowPages = new Map();
+    this.touchStrip.reset();
     this.encoderPressMask = 0;
     this.warnedOobKeys.clear();
     this.sendKeepalive();

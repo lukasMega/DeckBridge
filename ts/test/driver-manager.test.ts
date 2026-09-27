@@ -14,7 +14,7 @@ import {
   MAX_DEVICE_SESSIONS,
   MAX_MULTI_DECK_SESSIONS,
 } from '../src/shared/types.js';
-import type { ChildGeometry } from '../src/shared/capabilities.js';
+import type { ChildGeometry } from '../src/devices/driver.js';
 import type { DeviceConfig } from '../src/cora/types.js';
 import type { ElgatoServer } from '../src/cora/primary-server.js';
 import type { ElgatoChildServer } from '../src/cora/child-server.js';

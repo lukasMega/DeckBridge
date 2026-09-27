@@ -22,7 +22,8 @@ import { AJAZZ_AKP05_MODEL } from '../src/devices/ajazz/akp05.js';
 import { FIFINE_D6_MODEL, FIFINE_D6_REV2_MODEL } from '../src/devices/fifine/fifine-d6.js';
 import { AKP153_V1_CLONE_MODELS } from '../src/devices/rebadge/akp153-v1-clones.js';
 import { deviceInputToMk2Index } from '../src/shared/key-map.js';
-import { modelToChildGeometry, buildCapabilitiesPacket } from '../src/shared/capabilities.js';
+import { modelToChildGeometry } from '../src/devices/registry.js';
+import { buildCapabilitiesPacket } from '../src/cora/responses.js';
 import {
   ELGATO_VID,
   ELGATO_PLUS_PID,

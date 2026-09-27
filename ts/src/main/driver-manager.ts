@@ -20,13 +20,13 @@ import {
   defaultListModelPaths,
   defaultPresenceCheck,
   elgatoHardwarePresent,
-  getInitialDriverMode,
   resolveRealDeviceIdentity,
+} from './driver-manager-discovery.js';
+import {
+  getInitialDriverMode,
   type DriverManagerDeps,
   type DriverMode,
-} from './driver-manager-discovery.js';
-
-export { getInitialDriverMode, type DriverManagerDeps, type DriverMode };
+} from './driver-manager-deps.js';
 
 export class DriverManager {
   private readonly deps: DriverManagerDeps;

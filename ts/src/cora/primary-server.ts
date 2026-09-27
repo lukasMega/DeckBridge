@@ -24,8 +24,8 @@ import { CORA_FLAG_RESULT } from './frame.js';
 import { CoraServerBase } from './server-base.js';
 import { describeCoraPayload } from './describe.js';
 import type { DeviceConfig } from './types.js';
-import { buildFeatureResponse } from './feature-response.js';
-import { buildCapabilitiesPacket, type ChildGeometry } from '../shared/capabilities.js';
+import { buildCapabilitiesPacket, buildFeatureResponse } from './responses.js';
+import type { ChildGeometry } from '../devices/driver.js';
 import { MdnsAdvertiser } from '../infra/mdns-advertiser.js';
 
 export type { DeviceConfig };

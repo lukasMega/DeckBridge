@@ -12,7 +12,7 @@ import {
   DEFAULT_CHILD_SERIAL_NUMBER,
   ELGATO_MK2_PID,
 } from '../src/shared/types.js';
-import { modelToChildGeometry } from '../src/shared/capabilities.js';
+import { modelToChildGeometry } from '../src/devices/registry.js';
 import { MINI_MODEL } from '../src/devices/elgato/mini.js';
 import { CORA_FLAG_VERBATIM, CORA_FLAG_REQACK } from '../src/cora/frame.js';
 import { setLogLevel } from '../src/shared/logger.js';

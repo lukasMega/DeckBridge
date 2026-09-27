@@ -8,7 +8,7 @@ import { findModelById } from '../devices/registry.js';
 import type { DeviceDriver, DeviceModel, DeviceModelOverride } from '../devices/driver.js';
 import type { WorkerHidDriver } from '../worker/hid-worker-host.js';
 import type { PrimaryDock } from './driver-manager-primary.js';
-import type { DriverMode } from './driver-manager-discovery.js';
+import type { DriverMode } from './driver-manager-deps.js';
 
 /** The slice of DriverManager this module drives. `reopenSession` is the
  *  manager's own teardown (clear driver state, notify, close, reschedule) —

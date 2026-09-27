@@ -2,7 +2,7 @@
 // to keep that file under the line-count cap.
 import type { WorkerHidDriver } from '../worker/hid-worker-host.js';
 import type { DeviceModel, DeviceModelOverride } from '../devices/driver.js';
-import type { DriverMode } from './driver-manager-discovery.js';
+import type { DriverMode } from './driver-manager-deps.js';
 import type {
   EncoderSettings,
   ExtraKeyConfig,

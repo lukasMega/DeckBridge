@@ -1,6 +1,7 @@
 import assert from 'tjs:assert';
 import { EventEmitter } from 'node:events';
-import { ExtraKeyWidgets, FLASH_MS, renderWidgetLines } from '../src/main/extra-keys.js';
+import { ExtraKeyWidgets, FLASH_MS } from '../src/main/extra-keys.js';
+import { renderWidgetLines } from '../src/main/widget-lines.js';
 import { parseLatLon, WEATHER_FORCE_MIN_MS } from '../src/main/widget-refresh.js';
 import {
   TOUCH_STRIP_MODES,

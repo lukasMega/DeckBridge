@@ -6,3 +6,5 @@ export interface DeviceConfig {
   productId: number;
   macAddress: number[];
 }
+
+export type LogFn = (level: 'debug' | 'info' | 'warn' | 'error', message: string) => void;
