@@ -146,6 +146,27 @@ await test('a file without the new keys still loads (purely additive schema)', a
   assert.equal(result.modelOverrides, undefined);
 });
 
+await test('pairedAt on a devices[] entry and elgatoAutoRestart* round-trip through save/load', async () => {
+  const dir = `${ROOT}/elgato-auto-restart-roundtrip`;
+  const data: Settings = {
+    selectedDock: 0,
+    elgatoAutoRestart: false,
+    elgatoAutoRestartDelayS: 30,
+    devices: [
+      {
+        deviceKey: '/dev/hidraw3',
+        mdnsServiceName: 'Network Stream Deck',
+        macAddress: '02:1a:2b:3c:4d:5e',
+        dockSerial: 'A7FZA5190ILSAA',
+        childSerial: 'A7FZA5191ILSNQ',
+        pairedAt: '2026-09-27T10:00:00.000Z',
+      },
+    ],
+  };
+  await saveSettings(data, dir);
+  assert.deepEqual(await loadSettings(dir), data);
+});
+
 // Cleanup + summary
 
 try {

@@ -132,6 +132,17 @@ function makeFakeWebUI() {
       return this.devices.find((d) => d.deviceKey === deviceKey);
     },
     persist(): void {},
+    markPairedCalls: [] as string[],
+    // Mirrors PersistedSettings.markPaired's shape closely enough for the
+    // extra-dock coordinator's clientConnected handler, which calls it
+    // unconditionally on every pairing.
+    markPaired(deviceKey: string): boolean {
+      this.markPairedCalls.push(deviceKey);
+      const entry = this.entryFor(deviceKey);
+      if (!entry || entry.pairedAt !== undefined) return false;
+      entry.pairedAt = new Date().toISOString();
+      return true;
+    },
     for(deviceKey: string): DockPrefs {
       return new DockPrefs(this, deviceKey);
     },

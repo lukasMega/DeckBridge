@@ -37,6 +37,7 @@ import { DevicePrefsController } from './device-prefs-controller.js';
 import { EncodersController } from './encoders-controller.js';
 import { liveDiagnosticsInputs } from './diagnostics-sources.js';
 import { UpdateController } from './update-controller.js';
+import { ElgatoAppController } from './elgato-app-controller.js';
 
 export { isAllowedWebRequest, isValidMacAddress, pickFallbackPort } from './web-request-guard.js';
 
@@ -56,6 +57,7 @@ export class WebUIServer extends EventEmitter implements WebUIController, WebUIC
   readonly logging: LoggingController;
   readonly updates: UpdateController;
   readonly settingsFile: SettingsFileController;
+  readonly elgatoApp: ElgatoAppController;
   private readonly controllers: WebUIControllers;
   readonly imageChannel = new ImageChannel(this.bus, () => this.selectedDock);
   get selectedDock(): number {
@@ -129,6 +131,7 @@ export class WebUIServer extends EventEmitter implements WebUIController, WebUIC
     );
     this.updates = new UpdateController(host, __VERSION__);
     this.settingsFile = new SettingsFileController(host, this.logging);
+    this.elgatoApp = new ElgatoAppController(host);
     this.controllers = {
       settings: this.settings,
       devicePrefs: this.devicePrefs,
@@ -138,6 +141,7 @@ export class WebUIServer extends EventEmitter implements WebUIController, WebUIC
       logging: this.logging,
       updates: this.updates,
       settingsFile: this.settingsFile,
+      elgatoApp: this.elgatoApp,
     };
   }
 
@@ -312,6 +316,7 @@ export class WebUIServer extends EventEmitter implements WebUIController, WebUIC
       logFilePath: this.logging.path(),
       multiDeck: this.settings.multiDeck,
       updateInfo: this.updates.info(),
+      elgatoAutoRestart: this.elgatoApp.state(),
     });
   }
 

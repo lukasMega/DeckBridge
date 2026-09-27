@@ -75,6 +75,8 @@ export class DriverManager {
       }),
       settings: deps.settings,
       onSessionsChanged: () => this.deps.onDocksChanged?.(),
+      onDockConnected: (index, deviceKey) => this.deps.onDockConnected?.(index, deviceKey),
+      onElgatoAttached: (index) => this.deps.onElgatoAttached?.(index),
       // No copy: `data` is immutable-by-convention here, same as the primary-dock mirror in image-pipeline.ts.
       onImage: (dockIndex, keyIndex, data, format) =>
         deps.webui.notifyDockImage(dockIndex, keyIndex, data, format),
@@ -273,6 +275,7 @@ export class DriverManager {
     sendSplashImages(driver);
     this.primary.repaintFromSavedFrames(driver);
     this.primary.startWidgets(driver);
+    this.deps.onDockConnected?.(0, this.primary.identity?.deviceKey ?? '');
     this.deps.onDocksChanged?.();
   }
 

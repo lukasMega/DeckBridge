@@ -53,6 +53,7 @@ export function NumberField({
   min,
   max,
   step,
+  disabled,
   onChange,
 }: Readonly<{
   label: string;
@@ -62,6 +63,7 @@ export function NumberField({
   min: number;
   max?: number;
   step?: number;
+  disabled?: boolean;
   onChange: (v: number | undefined) => void;
 }>): preact.JSX.Element {
   return (
@@ -74,6 +76,7 @@ export function NumberField({
         max={max}
         step={step ?? 1}
         value={value ?? ''}
+        disabled={disabled}
         onInput={(e) => onChange(numberOrUndefined((e.target as HTMLInputElement).value))}
       />
     </label>
@@ -117,11 +120,13 @@ export function CheckField({
   id,
   label,
   checked,
+  disabled,
   onChange,
 }: Readonly<{
   id?: string;
   label: string;
   checked: boolean;
+  disabled?: boolean;
   onChange: (v: boolean) => void;
 }>): preact.JSX.Element {
   return (
@@ -130,6 +135,7 @@ export function CheckField({
         id={id}
         type="checkbox"
         checked={checked}
+        disabled={disabled}
         onChange={(e) => onChange((e.target as HTMLInputElement).checked)}
       />
       <span>{label}</span>
@@ -141,18 +147,20 @@ export function ToggleRow({
   id,
   label,
   checked,
+  disabled,
   onChange,
   children,
 }: Readonly<{
   id?: string;
   label: string;
   checked: boolean;
+  disabled?: boolean;
   onChange: (checked: boolean) => void;
   children?: preact.ComponentChildren;
 }>): preact.JSX.Element {
   return (
     <div class="toggle-row">
-      <CheckField id={id} label={label} checked={checked} onChange={onChange} />
+      <CheckField id={id} label={label} checked={checked} disabled={disabled} onChange={onChange} />
       {children}
     </div>
   );

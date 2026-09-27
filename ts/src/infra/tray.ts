@@ -16,6 +16,14 @@ export interface TrayHandle {
   close(): void;
 }
 
+/** Tray stdout events routed to app.ts. `onRestartElgatoApp` is the manual path
+ *  for the "Restart Elgato App" menu item — the tray only emits the event, TS
+ *  owns settings/logging/isElgatoAppRunning (see rust/deckbridge-tray/README.md). */
+export interface TrayHandlers {
+  onQuit(): void;
+  onRestartElgatoApp(): void;
+}
+
 /** What the tray shows, from the live state app.ts gathers. `deviceName` is
  *  whatever model is open (Mirabox or Elgato hardware); "Elgato" in the strings
  *  means the Stream Deck app on the other end of CORA. */
@@ -73,23 +81,25 @@ class TrayProcess implements TrayHandle {
 
   private constructor() {}
 
-  static create(binaryPath: string, onQuit: () => void): TrayProcess {
+  static create(binaryPath: string, handlers: TrayHandlers): TrayProcess {
     const self = new TrayProcess();
     // Only set cwd for absolute paths — tjs resolves the binary path relative to cwd,
     // so a relative binaryPath + cwd would produce a wrong path like "rust/deckbridge-tray/deckbridge-tray".
     const cwd = isAbsolutePath(binaryPath) ? parentDir(binaryPath) : undefined;
     const proc = tjs.spawn([binaryPath], { stdout: 'pipe', ...(cwd ? { cwd } : {}) });
     self.proc = proc;
-    void self._readLoop(proc, onQuit);
+    void self._readLoop(proc, handlers);
     return self;
   }
 
-  private _handleTrayEvent(ev: { event: string; port?: number }, onQuit: () => void): void {
+  private _handleTrayEvent(ev: { event: string; port?: number }, handlers: TrayHandlers): void {
     if (ev.event === 'ready' && ev.port) void this._connect(ev.port);
-    if (ev.event === 'quit') onQuit();
+    if (ev.event === 'quit') handlers.onQuit();
+    if (ev.event === 'restart_elgato_app') handlers.onRestartElgatoApp();
+    // Unknown events (open_webui, check_requirements — acted on in Rust) are ignored.
   }
 
-  private async _readLoop(proc: TjsProcess, onQuit: () => void): Promise<void> {
+  private async _readLoop(proc: TjsProcess, handlers: TrayHandlers): Promise<void> {
     const reader = proc.stdout.getReader();
     let buf = '';
     try {
@@ -103,7 +113,10 @@ class TrayProcess implements TrayHandle {
           const trimmed = line.trim();
           if (!trimmed) continue;
           try {
-            this._handleTrayEvent(JSON.parse(trimmed) as { event: string; port?: number }, onQuit);
+            this._handleTrayEvent(
+              JSON.parse(trimmed) as { event: string; port?: number },
+              handlers,
+            );
           } catch {
             /* ignore malformed stdout */
           }
@@ -187,9 +200,9 @@ export async function resolveTrayBin(): Promise<string> {
   return '';
 }
 
-export function startTray(binaryPath: string, onQuit: () => void): TrayHandle | null {
+export function startTray(binaryPath: string, handlers: TrayHandlers): TrayHandle | null {
   try {
-    return TrayProcess.create(binaryPath, onQuit);
+    return TrayProcess.create(binaryPath, handlers);
   } catch {
     return null;
   }

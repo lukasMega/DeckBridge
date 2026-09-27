@@ -216,6 +216,7 @@ struct TrayHandles {
     update_item: MenuItem,
     open_ui_id: tray_icon::menu::MenuId,
     check_req_id: tray_icon::menu::MenuId,
+    restart_elgato_id: tray_icon::menu::MenuId,
     quit_id: tray_icon::menu::MenuId,
 }
 
@@ -227,10 +228,12 @@ fn build_tray(icons: &Icons) -> TrayHandles {
     let update_item = MenuItem::new("Checking for updates…", false, None);
     let open_ui_item = MenuItem::new("Open Web UI", true, None);
     let check_req_item = MenuItem::new("Check Requirements", true, None);
+    let restart_elgato_item = MenuItem::new("Restart Elgato App", true, None);
     let quit_item = MenuItem::new("Quit", true, None);
 
     let open_ui_id = open_ui_item.id().clone();
     let check_req_id = check_req_item.id().clone();
+    let restart_elgato_id = restart_elgato_item.id().clone();
     let quit_id = quit_item.id().clone();
 
     tray_menu
@@ -241,6 +244,7 @@ fn build_tray(icons: &Icons) -> TrayHandles {
             &PredefinedMenuItem::separator(),
             &open_ui_item,
             &check_req_item,
+            &restart_elgato_item,
             &PredefinedMenuItem::separator(),
             &quit_item,
         ])
@@ -260,6 +264,7 @@ fn build_tray(icons: &Icons) -> TrayHandles {
         update_item,
         open_ui_id,
         check_req_id,
+        restart_elgato_id,
         quit_id,
     }
 }
@@ -382,6 +387,11 @@ fn main() {
                     } else if ev.id == handles.check_req_id {
                         open_browser("http://localhost:3000/requirements");
                         emit("check_requirements", None);
+                    } else if ev.id == handles.restart_elgato_id {
+                        // TS owns the restart flow (settings, isElgatoAppRunning,
+                        // logging) — no browser open or work here, unlike the two
+                        // items above.
+                        emit("restart_elgato_app", None);
                     } else if ev.id == handles.quit_id {
                         emit("quit", None);
                         tray_handles.take();

@@ -74,6 +74,48 @@ curl on the system (Linux minimal installs) silently disables the check — it n
 blocks startup or shows an error, but the diagnostics report's **update check** section
 will say so.
 
+## Restarting the Elgato app
+
+The Elgato Stream Deck app only re-dials network docks on launch, so a dock that appears
+while the app is already running stays blank until the app is restarted. DeckBridge does
+this for you automatically for a deck it has seen paired before, and always offers a
+manual restart.
+
+**"Paired before"** means the Elgato app's **child** CORA connection has attached to that
+dock at least once — DeckBridge records the timestamp as `pairedAt` on the device's entry
+in `settings.json` the first time that happens. It does not read the Elgato app's own
+config. If you're updating from an older version, your existing decks have no `pairedAt`
+yet — the auto-restart starts working after their next successful pairing.
+
+**Automatic path**, once per DeckBridge start:
+
+1. A dock with `pairedAt` connects over USB and the Elgato app is running **on this
+   machine**. Only macOS and Windows — a remote Elgato app on another computer is out of
+   reach and is left alone.
+2. DeckBridge waits a grace delay (default **10 s**, configurable 3–120) for the Elgato
+   app to attach to that dock by itself.
+3. If it hasn't attached when the delay runs out, and nothing else disqualifies the
+   restart, DeckBridge quits the Elgato app (deeplink, then a kill fallback if it doesn't
+   quit in time), waits a few seconds, and launches it again.
+
+The restart is skipped, with a one-line log explaining why, when: it already ran once
+this process; the toggle is off; a dock connects that was never paired; the Elgato app
+isn't running locally; every paired dock is already attached; or the Elgato app currently
+holds the USB deck itself (the "Elgato conflict" state — see [Web UI
+states](./features.md#web-ui-states)), since restarting it there risks it grabbing the
+hardware back mid-handoff.
+
+**Manual restart**, any time: **Settings → Elgato app → Restart Elgato app now** in the
+web UI, or tray → **Restart Elgato App**. Both run the same code path, whether or not a
+restart already fired automatically this session.
+
+**Settings.** Web UI **Settings → Elgato app** has the toggle and the grace delay. The
+same two values live in `settings.json`:
+
+- `"elgatoAutoRestart": false` — turn the automatic path off (default: on, same as
+  `updateCheck`). The manual restart (tray/WebUI) always works regardless of this.
+- `"elgatoAutoRestartDelayS": 15` — grace delay in seconds, clamped to 3–120 (default 10).
+
 ## Device tuning
 
 Some boards are supported from documentation, not hardware we own. **Settings → Device

@@ -184,6 +184,15 @@ export interface UpdateInfo {
   error?: 'no-curl' | 'network' | 'parse';
 }
 
+/** GET /api/state's `elgatoAutoRestart` field, and the POST /api/elgato-auto-restart
+ *  reply — see infra/elgato-app.ts §4.4. `supported` is false on Linux (no Elgato
+ *  app build), where the WebUI shows a note and disables the controls. */
+export interface ElgatoAutoRestartState {
+  enabled: boolean;
+  delayS: number;
+  supported: boolean;
+}
+
 /** Server log level; `silent` never reaches the wire. */
 export type WireLogLevel = 'debug' | 'info' | 'warn' | 'error';
 
@@ -336,6 +345,10 @@ export interface StateResponse extends StatusSnapshot {
   multiDeck: boolean;
   /** GitHub-release update check (update-check.ts) — cached, no network. */
   updateInfo: UpdateInfo;
+  /** Elgato-app auto-restart opt-out + grace delay (settings.json
+   *  `elgatoAutoRestart`/`elgatoAutoRestartDelayS`) — read once per Settings-page
+   *  mount, like `updateInfo`. */
+  elgatoAutoRestart: ElgatoAutoRestartState;
 }
 
 // Device tuning (GET /api/device-overrides). The server's DeviceModelOverride

@@ -8,6 +8,7 @@ import type {
 import type { OverrideChangeKind } from '../../devices/model-overrides.js';
 import type { PersistedSettings } from '../../infra/settings.js';
 import type { UpdateController } from './update-controller.js';
+import type { ElgatoAppController } from './elgato-app-controller.js';
 import type { DevicePrefsController } from './device-prefs-controller.js';
 import type { EncodersController } from './encoders-controller.js';
 import type { ExtraKeysController } from './extra-keys-controller.js';
@@ -83,6 +84,7 @@ export type {
   LogEntry,
   StatusSnapshot,
   StateResponse,
+  ElgatoAutoRestartState,
 } from '../contract.js';
 
 export type { LogLevel };
@@ -97,6 +99,7 @@ export interface WebUIControllers {
   readonly logging: LoggingController;
   readonly updates: UpdateController;
   readonly settingsFile: SettingsFileController;
+  readonly elgatoApp: ElgatoAppController;
 }
 
 /**

@@ -6,6 +6,7 @@ export type {
   CommEntry as CommLog,
   DeviceOverridesView,
   DockStatus as DockUi,
+  ElgatoAutoRestartState,
   EncoderCommands,
   EncoderSettings,
   ExtraKeyConfig as ExtraKeyCfg,

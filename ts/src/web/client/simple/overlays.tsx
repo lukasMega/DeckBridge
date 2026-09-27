@@ -8,11 +8,18 @@ import { IdentityRow } from '../components/IdentityRow.js';
 import { DiagnosticsPanel } from './diagnostics-panel.js';
 import { MultiDeckPanel } from './multi-deck-panel.js';
 import { UpdatePanel } from './update-panel.js';
+import { ElgatoAppPanel } from './elgato-app-panel.js';
 import { DeviceTuningPanel } from './device-tuning.js';
 import { postJson, useFetched } from '../lib/ui-api.js';
 import { Feedback, useAsyncAction, type AsyncAction } from '../lib/ui-async.js';
 import { useDismiss } from '../lib/ui-hooks.js';
-import type { DeviceIdentity, RealDeviceIdentity, StateResponse, UpdateInfo } from '../ui-types.js';
+import type {
+  DeviceIdentity,
+  ElgatoAutoRestartState,
+  RealDeviceIdentity,
+  StateResponse,
+  UpdateInfo,
+} from '../ui-types.js';
 
 /** Labels for the identifiers DeckBridge actually sends to the Elgato app,
  *  in the order they're most useful for troubleshooting/pairing. mDNS service
@@ -170,7 +177,13 @@ export function AboutPopover({ onClose }: Readonly<{ onClose: () => void }>): pr
 /** The slice of GET /api/state the Settings page reads once per mount. */
 type SettingsState = Pick<
   StateResponse,
-  'deviceIdentity' | 'realDeviceIdentity' | 'logLevel' | 'logFilePath' | 'multiDeck' | 'updateInfo'
+  | 'deviceIdentity'
+  | 'realDeviceIdentity'
+  | 'logLevel'
+  | 'logFilePath'
+  | 'multiDeck'
+  | 'updateInfo'
+  | 'elgatoAutoRestart'
 >;
 
 /** null logLevel = state not read yet, which DiagnosticsPanel renders as unknown. */
@@ -186,6 +199,10 @@ function diagnosticsProps(state: SettingsState | null): {
 
 function updateInfoFor(state: SettingsState | null): UpdateInfo | null {
   return state?.updateInfo ?? null;
+}
+
+function elgatoAutoRestartFor(state: SettingsState | null): ElgatoAutoRestartState | null {
+  return state?.elgatoAutoRestart ?? null;
 }
 
 /** Identity reported by the physical USB device. Absent in mock mode. */
@@ -346,6 +363,7 @@ export function SettingsPage({ onBack }: Readonly<{ onBack: () => void }>): prea
 
       <MultiDeckPanel enabled={state.data ? state.data.multiDeck : null} />
       <UpdatePanel info={updateInfoFor(state.data)} />
+      <ElgatoAppPanel state={elgatoAutoRestartFor(state.data)} />
       <DiagnosticsPanel {...diagnosticsProps(state.data)} />
       <DeviceTuningPanel />
 

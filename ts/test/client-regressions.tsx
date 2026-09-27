@@ -15,6 +15,7 @@ import { LogConsolePanel } from '../src/web/client/advanced/log-panel.js';
 import { DeviceTuningPanel } from '../src/web/client/simple/device-tuning.js';
 import { DiagnosticsPanel } from '../src/web/client/simple/diagnostics-panel.js';
 import { MultiDeckPanel } from '../src/web/client/simple/multi-deck-panel.js';
+import { ElgatoAppPanel } from '../src/web/client/simple/elgato-app-panel.js';
 import { KeymapLearn } from '../src/web/client/simple/keymap-learn.js';
 import { DockList } from '../src/web/client/simple/dock-cards.js';
 import { showDeviceAction } from '../src/web/client/device-test-mode.js';
@@ -33,6 +34,7 @@ import {
 import type {
   DeviceOverridesView,
   DockUi,
+  ElgatoAutoRestartState,
   UpdateInfo,
   WidgetDisplayInfo,
 } from '../src/web/client/ui-types.js';
@@ -274,6 +276,7 @@ function runHydrateRegression(): void {
     logFilePath: '',
     multiDeck: false,
     updateInfo: { enabled: true, current: '0.14.1', updateAvailable: true, latest: '0.15.0' },
+    elgatoAutoRestart: { enabled: true, delayS: 10, supported: true },
   });
   const snap = getSnapshot();
   check(
@@ -1132,6 +1135,55 @@ async function runKeymapAndDiagnosticsPanels(): Promise<void> {
       check(box()?.checked === true, 'The toggle updates after a successful post');
     } finally {
       stub.restore();
+      await act(() => render(null, root));
+    }
+  }
+
+  // Elgato-app auto-restart panel: toggle posts + reflects state, the delay
+  // field disables with the toggle, and an unsupported platform shows the note
+  // and disables every control.
+  {
+    const state: ElgatoAutoRestartState = { enabled: true, delayS: 10, supported: true };
+    const stub = stubFetch(() => ({ payload: { enabled: false, delayS: 10 } }));
+    try {
+      await act(() => render(<ElgatoAppPanel state={state} />, root));
+      await settle();
+      const box = (): HTMLInputElement | null => root.querySelector('#toggle-elgato-auto-restart');
+      const delayInput = (): HTMLInputElement | null =>
+        root.querySelector('.tuning-field input[type="number"]');
+      check(box()?.checked === true, 'Elgato auto-restart toggle starts on (the fixture state)');
+      check(delayInput()?.disabled === false, 'Delay field is enabled while the toggle is on');
+
+      await click('#toggle-elgato-auto-restart');
+      await settle();
+      const post = stub.calls.find((c) => c.url === '/api/elgato-auto-restart');
+      check(
+        (post?.body as { enabled?: boolean } | undefined)?.enabled === false,
+        'Disabling posts enabled:false',
+      );
+      check(box()?.checked === false, 'The toggle updates after a successful post');
+      check(delayInput()?.disabled === true, 'Delay field disables once the toggle is off');
+    } finally {
+      stub.restore();
+      await act(() => render(null, root));
+    }
+  }
+  {
+    const unsupported: ElgatoAutoRestartState = { enabled: true, delayS: 10, supported: false };
+    try {
+      await act(() => render(<ElgatoAppPanel state={unsupported} />, root));
+      await settle();
+      check(
+        root.textContent.includes('Only on macOS and Windows'),
+        'Unsupported platform shows the note',
+      );
+      const box = (): HTMLInputElement | null => root.querySelector('#toggle-elgato-auto-restart');
+      check(box()?.disabled === true, 'Toggle is disabled on an unsupported platform');
+      const restartBtn = Array.from(root.querySelectorAll('button')).find((b) =>
+        b.textContent.includes('Restart Elgato app now'),
+      );
+      check(restartBtn?.disabled === true, '"Restart now" is disabled on an unsupported platform');
+    } finally {
       await act(() => render(null, root));
     }
   }
