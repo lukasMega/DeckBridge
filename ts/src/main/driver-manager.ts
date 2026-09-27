@@ -1,13 +1,14 @@
 import { log, step } from '../shared/logger.js';
 import { overridesDisabled } from '../shared/cli.js';
-import { cachedDiscoverySerial, installDiscoverySnapshot } from '../ffi/hid-discovery.js';
-import { WorkerHidDriver, closeDriver } from '../worker/hid-worker-host.js';
+import { closeDriver } from '../worker/hid-worker-host.js';
+import type { WorkerHidDriver } from '../worker/hid-worker-host.js';
 import { MockDriver } from '../devices/mock.js';
 import { MAX_MULTI_DECK_SESSIONS } from '../shared/types.js';
 import type { KeyEvent, DockStatus, DialEvent, TouchStripMode } from '../shared/types.js';
 import type { DeviceDriver, DeviceModel, DeviceModelOverride } from '../devices/driver.js';
 import { applyModelOverrides, overrideSummary } from '../devices/model-overrides.js';
 import type { OverrideChangeKind } from '../devices/model-overrides.js';
+import type { DockPrefs } from '../infra/dock-prefs.js';
 import { advertisedGeometry, DEVICE_MODELS, DEFAULT_MODEL } from '../devices/registry.js';
 import { sendSplashImages } from '../shared/splash-sender.js';
 import { applyModelToServers, wireCommonDriverEvents } from './device-session.js';
@@ -15,13 +16,13 @@ import { PrimaryDock } from './driver-manager-primary.js';
 import { applyTuningChange } from './driver-manager-tuning.js';
 import { ProbePacer } from './driver-manager-pacing.js';
 import { ExtraDockCoordinator } from './driver-manager-extras.js';
-import { HidScanWorkerHost } from '../worker/hid-scan-worker-host.js';
 import {
-  defaultListModelPaths,
-  defaultPresenceCheck,
   elgatoHardwarePresent,
+  nativeHidDiscovery,
   resolveRealDeviceIdentity,
+  type HidDiscovery,
 } from './driver-manager-discovery.js';
+import { WorkerPool } from './worker-pool.js';
 import {
   getInitialDriverMode,
   type DriverManagerDeps,
@@ -42,42 +43,22 @@ export class DriverManager {
   /** Probe interval, adapted to how slow HID enumeration is (driver-manager-pacing.ts). */
   private readonly pacer = new ProbePacer();
 
-  /** Process-lifetime discovery worker: Windows HID calls may stall but never block CORA/WebUI. */
-  private readonly hidScanner = new HidScanWorkerHost();
+  /** USB enumeration off the main thread (driver-manager-discovery.ts). */
+  private readonly discovery: HidDiscovery;
+
+  /** Parked workers of failed opens, shared with the extras (worker-pool.ts). */
+  private readonly pool: WorkerPool;
 
   /** Primary dock (index 0) state: identity, brightness, widgets, saved-frame replay. */
   private readonly primary: PrimaryDock;
 
-  /** Idle workers (open() failed), reused per model.id — spawn/terminate per retry SIGBUSes on macOS; drained on switchMode. */
-  private idleDrivers = new Map<string, WorkerHidDriver>();
-
   /** Multi-device coordinator (extras only); deps are closures over this instance's state. */
   private readonly extraCoordinator: ExtraDockCoordinator;
 
-  // Test seams (no hardware/FFI), overridden via __set* below. Presence by enumeration, never trial hid_open — segfaults on macOS (IOKit/dlclose churn).
-  private makeRealDriver: (model: DeviceModel, ov?: DeviceModelOverride) => WorkerHidDriver = (
-    model,
-    ov,
-  ) => new WorkerHidDriver(model, ov);
-  private isModelPresent: (model: DeviceModel) => boolean = defaultPresenceCheck;
-  private listModelPaths: (model: DeviceModel) => string[] = defaultListModelPaths;
-  private requireTargetedPath = true;
-  /** One supported-device worker scan per sweep. Every per-model query then reads
-   * its installed snapshot. Cleared by __setPresenceCheck so tests skip FFI. */
-  private refreshHidSnapshot: () => Promise<number> = async () => {
-    try {
-      const result = await this.hidScanner.scan();
-      installDiscoverySnapshot(result.devices);
-      return result.tookMs;
-    } catch (e) {
-      installDiscoverySnapshot([]);
-      log('error', 'hid', `discovery worker failed: ${(e as Error).message}`);
-      return 0;
-    }
-  };
-
   constructor(deps: DriverManagerDeps) {
     this.deps = deps;
+    this.discovery = deps.discovery ?? nativeHidDiscovery();
+    this.pool = deps.pool ?? new WorkerPool();
     this.primary = new PrimaryDock(deps);
     this.extraCoordinator = new ExtraDockCoordinator({
       getShuttingDown: deps.getShuttingDown,
@@ -85,22 +66,13 @@ export class DriverManager {
       isProbeInFlight: () => this.probeInFlight,
       sessionServersFactory: deps.sessionServersFactory ?? null,
       getRealDriver: () => this.realDriver,
-      refreshHidSnapshot: () => this.refreshHidSnapshot(),
-      listModelPaths: (model) => this.listModelPaths(model),
-      serialForPath: (hidPath) => cachedDiscoverySerial(hidPath),
+      discovery: this.discovery,
+      pool: this.pool,
       effectiveModelFor: (model) => ({
         model: this.effectiveModel(model),
         override: this.overrideFor(model.id),
       }),
-      makeRealDriver: (model, ov) => this.makeRealDriver(model, ov),
-      takeIdleDriver: (modelId) => {
-        const d = this.idleDrivers.get(modelId);
-        this.idleDrivers.delete(modelId);
-        return d;
-      },
-      parkIdleDriver: (modelId, driver) => this.idleDrivers.set(modelId, driver),
-      getOrCreateDeviceIdentity: (deviceKey, defaultMdnsName) =>
-        deps.webui.getOrCreateDeviceIdentity(deviceKey, defaultMdnsName),
+      settings: deps.settings,
       onSessionsChanged: () => this.deps.onDocksChanged?.(),
       // No copy: `data` is immutable-by-convention here, same as the primary-dock mirror in image-pipeline.ts.
       onImage: (dockIndex, keyIndex, data, format) =>
@@ -110,12 +82,6 @@ export class DriverManager {
       onWidgetPaint: (...args) => deps.webui.imageChannel.notifyDockWidgetPaint(...args),
       onStripWrite: (...args) => deps.webui.imageChannel.notifyDockStripWrite(...args),
       dockFramesSnapshot: (dockIndex) => deps.webui.dockFramesSnapshot(dockIndex),
-      isBrightnessOverride: (deviceKey) => deps.webui.isBrightnessOverride(deviceKey),
-      extraKeyConfigFor: (deviceKey, wireId) => deps.webui.extraKeyConfigFor(deviceKey, wireId),
-      touchStripModeFor: (deviceKey) => deps.webui.touchStripModeFor(deviceKey),
-      touchStripRepaintMsFor: (deviceKey) =>
-        deps.webui.devicePrefs.touchStripRepaintMsFor(deviceKey),
-      encoderSettingsFor: (deviceKey) => deps.webui.encoderSettingsFor(deviceKey),
     });
   }
 
@@ -138,6 +104,11 @@ export class DriverManager {
     this.deps.onDocksChanged?.();
   }
 
+  /** Live per-device prefs of the primary dock (runtime fallback before its identity). */
+  primaryPrefs(): DockPrefs {
+    return this.deps.settings.for(this.primary.identity?.deviceKey ?? '');
+  }
+
   getDriverMode(): DriverMode {
     return this.driverMode;
   }
@@ -145,7 +116,7 @@ export class DriverManager {
   /** Push a log-level change to live USB workers; new ones read DECKBRIDGE_LOG_LEVEL. */
   setLogLevel(level: string): void {
     this.realDriver?.setLogLevel(level);
-    for (const d of this.idleDrivers.values()) d.setLogLevel(level);
+    this.pool.setLogLevel(level);
     this.extraCoordinator.setLogLevel(level);
   }
 
@@ -153,38 +124,15 @@ export class DriverManager {
     return this.reconnectAttemptCount;
   }
 
-  /** Test-only: override the real-driver factory used by probeAndOpen(). */
-  __setRealDriverFactory(
-    fn: (model: DeviceModel, ov?: DeviceModelOverride) => WorkerHidDriver,
-  ): void {
-    this.makeRealDriver = fn;
-  }
-
-  __resetRealDriverFactory(): void {
-    this.makeRealDriver = (model, ov) => new WorkerHidDriver(model, ov);
-  }
-
   /** User tuning for `modelId`, undefined in safe mode (`--no-overrides`)/when unset. Shared with the WebUI view. */
   private overrideFor(modelId: string): DeviceModelOverride | undefined {
     if (overridesDisabled()) return undefined;
-    return this.deps.webui.modelOverrideFor(modelId);
+    return this.deps.settings.overrideFor(modelId);
   }
 
   /** Model + user tuning; downstream sees the effective model, registry never mutated. */
   private effectiveModel(model: DeviceModel): DeviceModel {
     return applyModelOverrides(model, this.overrideFor(model.id));
-  }
-
-  /** Test-only: override the device-presence check used by probeAndOpen(). */
-  __setPresenceCheck(fn: (model: DeviceModel) => boolean): void {
-    this.isModelPresent = fn;
-    this.refreshHidSnapshot = () => Promise.resolve(0);
-    this.requireTargetedPath = false;
-  }
-
-  /** Test-only: override the extra-dock coordinator's per-model path enumeration. */
-  __setListModelPaths(fn: (model: DeviceModel) => string[]): void {
-    this.listModelPaths = fn;
   }
 
   applyDeviceModel(
@@ -255,7 +203,7 @@ export class DriverManager {
       log('info', model.id, 'disconnected');
       // Re-init native HID stack before next probe: without it a replug of the
       // same unit can stay invisible to enumeration for the rest of the process.
-      this.hidScanner.requestReset();
+      this.discovery.requestReset();
       this.primary.onDisconnect(model.id);
       this.currentDriver = null;
       this.realDriver = null;
@@ -270,8 +218,8 @@ export class DriverManager {
   /** Enumerate supported devices in dedicated worker. Duration feeds the
    * pacer; even a stalled scan cannot starve CORA/WebUI work (issue #67.2). */
   private async presentModels(): Promise<DeviceModel[]> {
-    const took = await this.refreshHidSnapshot();
-    const present = DEVICE_MODELS.filter((model) => this.isModelPresent(model));
+    const took = await this.discovery.scan();
+    const present = DEVICE_MODELS.filter((model) => this.discovery.present(model));
     log('debug', 'hid', `enumerate took ${took}ms, ${present.length} model(s) present`);
     this.pacer.note(took);
     return present;
@@ -285,24 +233,22 @@ export class DriverManager {
       // e.g. Input Monitoring denied) — it connects the moment open() succeeds.
       const override = this.overrideFor(model.id);
       const effective = applyModelOverrides(model, override);
-      const hidPath = this.listModelPaths(effective)[0];
-      if (!hidPath && this.requireTargetedPath) {
+      const hidPath = this.discovery.paths(effective)[0];
+      if (!hidPath && this.discovery.requireTargetedPath) {
         log('warn', 'hid', `${model.id} has no usage-matched HID path`);
         continue;
       }
-      const parked = this.idleDrivers.get(model.id);
-      const driver = parked ?? this.makeRealDriver(effective, override);
-      if (!parked) this.attachRealDriverListeners(driver, effective);
+      const { driver, fresh } = this.pool.acquire(effective, override);
+      if (fresh) this.attachRealDriverListeners(driver, effective);
       try {
         await step('hid', `probe ${model.id} (overrides: ${overrideSummary(override)})`, () =>
           driver.open(hidPath),
         );
-        this.idleDrivers.delete(model.id);
         return driver;
       } catch (e) {
         log('debug', 'hid', `${model.id} open failed: ${(e as Error).message}`);
         // Keep worker alive, listeners intact, for next retry.
-        this.idleDrivers.set(model.id, driver);
+        this.pool.park(model.id, driver);
       }
     }
     return null;
@@ -351,14 +297,18 @@ export class DriverManager {
 
     if (!found) {
       log('warn', 'hid', `no device found — retrying in ${this.pacer.delayMs / 1000}s`);
-      this.deps.webui.notifyElgatoDevicePresent(elgatoHardwarePresent(this.isModelPresent));
+      this.deps.webui.notifyElgatoDevicePresent(elgatoHardwarePresent(this.discovery));
       this.scheduleReconnect();
       this.deps.onTrayChange();
       return null;
     }
     this.deps.webui.notifyElgatoDevicePresent(false);
     this.realDriver = found;
-    const { deviceKey, serial } = resolveRealDeviceIdentity(found.hidPath, found.model);
+    const { deviceKey, serial } = resolveRealDeviceIdentity(
+      this.discovery,
+      found.hidPath,
+      found.model,
+    );
     this.primary.resolveIdentity(deviceKey);
     this.applyDeviceModel(found.model, {
       serial: found.deviceSerial ?? serial ?? undefined,
@@ -444,9 +394,7 @@ export class DriverManager {
     this.realDriver = null;
     if (prevReal && prevReal !== prevCurrent) await closeDriver(prevReal);
     if (prevCurrent) await closeDriver(prevCurrent);
-    // Drain idle workers — one-off terminate off the hot retry loop, no thread leaks.
-    for (const d of this.idleDrivers.values()) await closeDriver(d);
-    this.idleDrivers.clear();
+    await this.pool.closeAll();
     // Extras are real-mode only; going to real, scanExtras() rebuilds them.
     await this.stopAllExtraSessions();
     this.driverMode = newMode;

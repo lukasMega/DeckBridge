@@ -34,7 +34,7 @@ export interface ParsedCli {
 export type CliParseResult = { ok: true; cli: ParsedCli } | { ok: false; error: string };
 
 const COMMANDS = ['run', 'devices', 'diagnose', 'version', 'help'] as const;
-/** Single source of truth for the accepted levels — reused by the persisted-settings
+/** Single source of truth for the accepted levels — reused by the infra/settings.ts
  *  guard and POST /api/log-level so the three can't drift apart. */
 export const LOG_LEVELS = ['debug', 'info', 'warn', 'error', 'silent'] as const;
 export type CliLogLevel = (typeof LOG_LEVELS)[number];

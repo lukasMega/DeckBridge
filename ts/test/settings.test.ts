@@ -1,9 +1,9 @@
 import assert from 'tjs:assert';
-import { PersistedSettings } from '../src/web/server/persisted-settings.js';
+import { PersistedSettings } from '../src/infra/settings.js';
 import { settingsPath, loadSettings, saveSettings } from '../src/infra/settings-store.js';
 import { testAsync as test, summary } from './helpers/harness.js';
 
-const ROOT = `${tjs.tmpDir}/persisted-settings-test-${tjs.pid}`;
+const ROOT = `${tjs.tmpDir}/settings-test-${tjs.pid}`;
 
 // persist() save race (B3): rapid successive persist() calls must not let an
 // older write+rename pair finish after a newer one and leave a stale snapshot.
@@ -83,6 +83,35 @@ await test('importDevices() folds them too', async () => {
   const settings = new PersistedSettings(`${ROOT}/import`);
   assert.ok(settings.importDevices([legacyDevice('usb:MIGRATE2')]));
   assert.deepEqual(settings.entryFor('usb:MIGRATE2')?.extraKeys, MIGRATED);
+  await settings.flush();
+});
+
+console.log('\nPersistedSettings.for() — DockPrefs');
+
+await test('no entry: setters write the runtime fallback, never the file', () => {
+  const settings = new PersistedSettings(`${ROOT}/prefs-runtime`);
+  const prefs = settings.for('');
+  assert.equal(prefs.brightnessOverride(), true, 'default');
+  prefs.setBrightnessOverride(false);
+  prefs.setStripMode('deckbridge-ignore');
+  assert.equal(settings.for('').brightnessOverride(), false, 'shared by every no-entry lookup');
+  assert.equal(settings.for('usb:NONE').stripMode(), 'deckbridge-ignore');
+  assert.equal(prefs.setExtraKeyConfigs({ '15': { widget: 'clock' } }), false, 'needs an entry');
+  assert.ok(!settings.json().includes('deckbridge-ignore'), 'nothing persisted');
+});
+
+await test('with an entry: reads live and persists writes', async () => {
+  const settings = new PersistedSettings(`${ROOT}/prefs-entry`);
+  settings.getOrCreateIdentity('usb:PREFS', 'Dock');
+  const prefs = settings.for('usb:PREFS');
+  prefs.setRepaintMs(2000);
+  prefs.setEncoders({ connectToApp: false });
+  assert.ok(prefs.setExtraKeyConfigs({ '15': { widget: 'clock' } }));
+  assert.equal(settings.entryFor('usb:PREFS')?.touchStripRepaintMs, 2000);
+  assert.deepEqual(prefs.extraKeyConfig(15), { widget: 'clock' });
+  prefs.setEncoders({});
+  assert.ok(!('encoders' in settings.entryFor('usb:PREFS')!), 'empty clears the field');
+  assert.equal(settings.runtime.touchStripRepaintMs, 5000, 'runtime fallback untouched');
   await settings.flush();
 });
 

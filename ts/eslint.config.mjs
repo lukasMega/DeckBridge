@@ -209,6 +209,13 @@ export default defineConfig([
               message:
                 "infra may import ffi ONLY for mdns-advertiser.ts's native Windows mDNS advertise (ffi/mdns.ts) — fire-and-forget dlopen, never device I/O.",
             },
+            // settings.ts validates persisted modelOverrides against the static registry.
+            {
+              from: { element: { type: 'infra' } },
+              allow: { to: { element: { type: 'devices' } } },
+              message:
+                'infra may import devices ONLY for settings.ts: the static registry + pure model-override validation — never device I/O.',
+            },
 
             // ── universal leaves (excluding web-client: G1 keeps the browser tier importing
             //    only web-client — see the dedicated web-client rule below) ──

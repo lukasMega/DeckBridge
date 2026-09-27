@@ -1,5 +1,5 @@
-import { resolveTrayBin, startTray } from '../infra/tray.js';
-import type { TrayHandle, TrayState } from '../infra/tray.js';
+import { buildTrayState, resolveTrayBin, startTray } from '../infra/tray.js';
+import type { TrayHandle } from '../infra/tray.js';
 import { ElgatoServer } from '../cora/primary-server.js';
 import { ElgatoChildServer } from '../cora/child-server.js';
 import { watchPairing } from '../cora/pairing-watchdog.js';
@@ -8,7 +8,12 @@ import type { MockDeviceConfig } from '../web/server/index.js';
 import { MockDriver } from '../devices/mock.js';
 import type { ClientApp, CommEntry, LogObject } from '../shared/types.js';
 import type { TouchStripMode } from '../shared/types.js';
-import { ELGATO_CHILD_PORT, ELGATO_TCP_PORT, WEBUI_PORT } from '../shared/types.js';
+import {
+  DEFAULT_BRIGHTNESS,
+  ELGATO_CHILD_PORT,
+  ELGATO_TCP_PORT,
+  WEBUI_PORT,
+} from '../shared/types.js';
 import { advertisedGeometry, DEFAULT_MODEL, DEVICE_MODELS } from '../devices/registry.js';
 import type { OverrideChangeKind } from '../devices/model-overrides.js';
 import { log, setWebUILog, setLogLevel, step } from '../shared/logger.js';
@@ -20,19 +25,12 @@ import { getInitialDriverMode } from './driver-manager-deps.js';
 import { macToBytes } from './driver-manager-primary.js';
 import type { SessionServersFactory } from './device-session.js';
 import { startCoraWithRetry } from './cora-startup.js';
-import { setTapFeedbackSource } from './widget-refresh.js';
 import { isElgatoAppRunning, openPathInOS, platformName } from '../infra/os-utils.ts';
-import {
-  parseCli,
-  userArgs,
-  applyFlagsToEnv,
-  versionText,
-  USAGE_TEXT,
-  isLogLevel,
-} from '../shared/cli.js';
+import { parseCli, userArgs, applyFlagsToEnv, versionText, USAGE_TEXT } from '../shared/cli.js';
 import { runDevicesCommand } from '../cli/devices.js';
 import { runDiagnoseCommand } from '../cli/diagnose.js';
-import { loadSettings } from '../infra/settings-store.js';
+import { PersistedSettings } from '../infra/settings.js';
+import { createDailyPing, sendBeacon } from '../infra/daily-ping.js';
 import { STARTUP_DELAY_MS, CHECK_INTERVAL_MS } from '../infra/update-check.js';
 import {
   MIN_DWELL_MS,
@@ -62,21 +60,21 @@ if (cli.command === 'diagnose') {
   await runDiagnoseCommand(cli.flags);
   tjs.exit(0);
 }
-// Log level precedence: --log-level / $DECKBRIDGE_LOG_LEVEL (already in env) win,
-// else settings.json's "logLevel". Winner goes back into env so USB workers inherit it.
-if (tjs.env.DECKBRIDGE_LOG_LEVEL) {
-  setLogLevel(tjs.env.DECKBRIDGE_LOG_LEVEL);
-} else {
-  const { logLevel } = await loadSettings();
-  if (isLogLevel(logLevel)) {
-    setLogLevel(logLevel);
-    tjs.env.DECKBRIDGE_LOG_LEVEL = logLevel;
-  }
-}
 // Disk sink first — before setupNativeLibs, before any HID call. defaultCacheRoot()
 // is pure (env + tjs.homeDir), so this needs no native lib, and a freeze anywhere
 // below still leaves the breadcrumb that names the step it hung on.
 startLogFile();
+// Loaded once, before any reader: dropped-entry warnings land in the log file.
+const settings = new PersistedSettings();
+await settings.load();
+// Log level precedence: --log-level / $DECKBRIDGE_LOG_LEVEL (already in env) win,
+// else settings.json's "logLevel". Winner goes back into env so USB workers inherit it.
+if (tjs.env.DECKBRIDGE_LOG_LEVEL) {
+  setLogLevel(tjs.env.DECKBRIDGE_LOG_LEVEL);
+} else if (settings.logLevel) {
+  setLogLevel(settings.logLevel);
+  tjs.env.DECKBRIDGE_LOG_LEVEL = settings.logLevel;
+}
 const headless = cli.flags.headless;
 const noWebui = cli.flags.noWebui;
 
@@ -94,9 +92,8 @@ const webui = new WebUIServer(
   webuiPort,
   DEVICE_MODELS.map((m) => ({ id: m.id, name: m.name, keyCount: m.keyCount })),
   getInitialDriverMode(),
+  settings,
 );
-// Extra docks read their tap feedback through this (see widget-refresh.ts).
-setTapFeedbackSource((deviceKey) => webui.devicePrefs.tapFeedbackFor(deviceKey));
 const defaultChildGeometry = advertisedGeometry(DEFAULT_MODEL);
 const server = new ElgatoServer(defaultChildGeometry);
 const childServer = new ElgatoChildServer(
@@ -123,47 +120,17 @@ globalThis.addEventListener('unhandledrejection', (ev: PromiseRejectionEvent) =>
   shutdown().catch(() => tjs.exit(1));
 });
 
-function buildTrayState(): TrayState {
-  const driver = driverManager.getCurrentDriver();
-  const driverConnected = driver !== null && driverManager.getDriverMode() === 'real';
-  const { elgatoConnected } = webui.snapshot();
-  // The USB device is whatever model is actually open (Mirabox OR Elgato hardware);
-  // "Elgato" in these strings means the Stream Deck app on the other end of CORA.
-  const deviceName = driver?.model.name ?? 'Device';
-  let icon: TrayState['icon'];
-  let status: string;
-  if (driverConnected && elgatoConnected) {
-    icon = 'full';
-    status = `${deviceName} + Elgato app connected`;
-  } else if (driverConnected) {
-    icon = 'usb_only';
-    status = `${deviceName} connected (Elgato app not paired)`;
-  } else {
-    icon = 'disconnected';
-    const attempts = driverManager.getReconnectAttemptCount();
-    status = attempts > 0 ? `No device (attempt ${attempts})` : 'No device';
-  }
-  const update = webui.updates.info();
-  let updateText = 'Using latest version';
-  if (!update.enabled) {
-    updateText = 'Update checks disabled';
-  } else if (update.updateAvailable) {
-    updateText = `Update available: v${update.latest ?? '?'}`;
-  } else if (update.lastCheckedAt === undefined) {
-    updateText = 'Checking for updates…';
-  }
-  return {
-    icon,
-    status,
-    reconnectAttempts: driverManager.getReconnectAttemptCount(),
-    updateAvailable: update.updateAvailable && update.latest !== update.dismissedVersion,
-    updateText,
-    version: __VERSION__,
-  };
-}
-
 function pushTrayState(): void {
-  tray?.push(buildTrayState());
+  const driver = driverManager.getCurrentDriver();
+  tray?.push(
+    buildTrayState({
+      deviceName: driver?.model.name,
+      driverConnected: driver !== null && driverManager.getDriverMode() === 'real',
+      elgatoConnected: webui.snapshot().elgatoConnected,
+      reconnectAttempts: driverManager.getReconnectAttemptCount(),
+      update: webui.updates.info(),
+    }),
+  );
 }
 
 webui.updates.setOnChange(pushTrayState);
@@ -187,6 +154,7 @@ const sessionServersFactory: SessionServersFactory = (identity) => {
 
 const driverManager = new DriverManager({
   webui,
+  settings,
   server,
   childServer,
   onTrayChange: pushTrayState,
@@ -218,7 +186,10 @@ childServer.on('clientConnected', (addr: string) => {
   // stomp the user's setting.
   setTimeout(() => {
     if (shuttingDown) return;
-    driverManager.setDockBrightness(0, webui.brightnessForDock(0));
+    driverManager.setDockBrightness(
+      0,
+      driverManager.primaryPrefs().brightness() ?? DEFAULT_BRIGHTNESS,
+    );
   }, 1000);
 });
 
@@ -230,7 +201,7 @@ childServer.on('clientDisconnected', () => {
 });
 
 childServer.on('brightness', (level: number) => {
-  if (webui.isBrightnessOverrideForDock(0)) {
+  if (driverManager.primaryPrefs().brightnessOverride()) {
     log('debug', 'elgato', `brightness ${level} from Elgato ignored (override on)`);
     return;
   }
@@ -308,12 +279,7 @@ webui.on('touchStripModeChanged', (dock: number, mode: TouchStripMode) => {
   driverManager.setTouchStripModeForDock(dock, mode);
 });
 
-webui.on('setDeviceMdnsName', (deviceKey: string, name: string) => {
-  const ok = webui.updateDeviceMdnsName(deviceKey, name);
-  if (!ok) {
-    log('warn', 'deckBr', `setDeviceMdnsName: no persisted identity for deviceKey=${deviceKey}`);
-    return;
-  }
+webui.on('mdnsNameChanged', (deviceKey: string, name: string) => {
   driverManager.applyMdnsNameForDeviceKey(deviceKey, name);
 });
 
@@ -417,18 +383,27 @@ if (tjs.env.DECKBRIDGE_MOCK !== '1') {
   // Own delay, not the update check's 30 s: MIN_DWELL_MS keeps CI/sandbox runs
   // from beaconing (daily-ping-env.ts) and lets a boot-time device enumerate
   // before the ping calls it "no device". Slack absorbs setTimeout jitter.
+  const dailyPing = createDailyPing({
+    currentVersion: __VERSION__,
+    isEnabled: () => settings.a7s ?? true,
+    getLastPingDay: () => settings.a7sDay,
+    setLastPingDay: (day) => settings.setDailyPingDay(day),
+    modelIds: () => driverManager.getDockStatuses().map((d) => d.modelId),
+    send: sendBeacon,
+    platform: platformName,
+    browserLocale: () => settings.browserLocale,
+  });
   const runPing = (): void => {
-    void webui.updates.ping().catch((e: unknown) => log('debug', 'dailyPing', String(e)));
+    void dailyPing.ping().catch((e: unknown) => log('debug', 'dailyPing', String(e)));
   };
   setTimeout(runPing, MIN_DWELL_MS + PING_SCHEDULE_SLACK_MS);
   dailyPingTimer = setInterval(runPing, PING_RETRY_INTERVAL_MS);
 }
 
-// --no-webui: settings still load (see WebUIServer.start), the HTTP/WS listener doesn't.
-await step('deckBr', `webui bind :${webuiPort}`, () => webui.start(!noWebui));
 if (noWebui) {
   log('info', 'web', 'WebUI disabled (--no-webui)');
 } else {
+  await step('deckBr', `webui bind :${webuiPort}`, () => webui.start());
   log('info', 'web', `WebUI: http://localhost:${webui.port}`);
 }
 
@@ -489,7 +464,7 @@ if (driverManager.getDriverMode() === 'mock') {
 // Seed the dock cap from settings.json before asking for scanning. Multi-deck is
 // opt-in: with it off (the default) startScan() installs no timer at all, so a
 // connected single deck ends USB enumeration for good.
-await driverManager.setMultiDeck(webui.multiDeckEnabled());
+await driverManager.setMultiDeck(settings.multiDeck);
 // Safe in mock mode: scanExtras() guards on driverMode==='real' and a connected
 // primary, so it's a no-op until a real primary is up.
 driverManager.startScan();

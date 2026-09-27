@@ -6,30 +6,23 @@ import { badRequest, css, html, js, json, noContent, text } from './http.js';
 import { isNonNegInt, nonNegIntMessage } from './types.js';
 import type { MockDeviceConfig } from './types.js';
 import {
-  EXTRA_KEY_WIDGETS,
-  EXTRA_KEY_PARAM_MAX,
   EXTRA_KEY_PRESS_ACTIONS,
-  COMMAND_INTERVAL_MIN_MS,
-  COMMAND_INTERVAL_MAX_MS,
-  COMMAND_TIMEOUT_MIN_MS,
-  COMMAND_TIMEOUT_MAX_MS,
   ENCODER_COMMAND_MAX,
   TOUCH_STRIP_MODES,
   TOUCH_STRIP_REPAINT_MIN_MS,
   TOUCH_STRIP_REPAINT_MAX_MS,
   compactTextStyle,
+  extraKeyConfigError,
+  isOneOf,
   isTouchStripRepaintMs,
-  textStyleError,
 } from '../../shared/types.js';
 import type {
   EncoderSettings,
   ExtraKeyConfig,
-  ExtraKeyPressAction,
   ExtraKeyTextStyle,
   ExtraKeyWidget,
-  TouchStripMode,
 } from '../../shared/types.js';
-import { encoderSettingsError } from './encoders-controller.js';
+import { encoderSettingsError } from '../../shared/encoder-settings.js';
 
 // The complete HTTP surface, declarative. WebSocket upgrade (/api/ws) is handled
 // before dispatch in WebUIServer; everything else lives here.
@@ -40,8 +33,8 @@ export const routes: Route[] = [
   get('/requirements', () => html(assets.requirementsHtml)),
   get('/api/requirements', async () => json(await checkRequirements())),
   get('/api/state', ({ ui }) => json(ui.fullState())),
-  get('/api/plugins', async ({ ui }) => json(await ui.pluginsInfo())),
-  get('/api/settings', ({ ui }) => json(JSON.parse(ui.getSettingsJson()))),
+  get('/api/plugins', async ({ extraKeys }) => json(await extraKeys.pluginsInfo())),
+  get('/api/settings', ({ settings }) => json(JSON.parse(settings.json()))),
 
   postJson('/api/driver-mode', setDriverMode),
   postJson('/api/mock-config', setMockConfig),
@@ -61,36 +54,36 @@ export const routes: Route[] = [
   postJson('/api/touch-strip-repaint', setTouchStripRepaint),
   postJson('/api/encoders', setEncoders),
   post('/api/settings', setSettings),
-  post('/api/settings/open-in-os', async ({ ui }) => {
-    await ui.openSettingsFile();
+  post('/api/settings/open-in-os', async ({ settings }) => {
+    await settings.openFile();
     return json({ ok: true });
   }),
   postJson('/api/device-identity/mdns-name', setDeviceMdnsName),
   postJson('/api/log-level', setLogLevelRoute),
   postJson('/api/multi-deck', setMultiDeckRoute),
   postJson('/api/browser-locale', setBrowserLocaleRoute),
-  post('/api/logs/open-in-os', async ({ ui }) => {
-    await ui.openLogsFolder();
+  post('/api/logs/open-in-os', async ({ logging }) => {
+    await logging.openFolder();
     return json({ ok: true });
   }),
 
-  get('/api/device-overrides', ({ ui, url }) => {
+  get('/api/device-overrides', ({ modelOverrides, url }) => {
     const modelId = url.searchParams.get('modelId') ?? undefined;
-    const view = ui.deviceOverridesView(modelId);
+    const view = modelOverrides.view(modelId);
     return 'error' in view ? json({ error: view.error }, view.status) : json(view);
   }),
   postJson('/api/device-overrides', setDeviceOverrides),
   postJson('/api/device-overrides/reset', resetDeviceOverrides),
 
-  get('/api/update', ({ ui }) => json(ui.updates.info())),
-  post('/api/update/check', async ({ ui }) => json(await ui.updates.check(true))),
+  get('/api/update', ({ updates }) => json(updates.info())),
+  post('/api/update/check', async ({ updates }) => json(await updates.check(true))),
   postJson('/api/update/dismiss', dismissUpdate),
   postJson('/api/update-check-enabled', setUpdateCheckEnabled),
 
   // text/plain, not JSON: the report is meant to be pasted verbatim into an issue.
-  get('/api/diagnostics', async ({ ui, url }) => {
+  get('/api/diagnostics', async ({ logging, url }) => {
     const redact = url.searchParams.get('redactCommands') === '1';
-    return text(await ui.buildDiagnosticsReport({ redactCommands: redact }));
+    return text(await logging.buildReport({ redactCommands: redact }));
   }),
   post('/api/diagnostics/save', saveDiagnostics),
 ];
@@ -99,9 +92,9 @@ export const routes: Route[] = [
  *  error list so the UI can show every bad field at once. */
 function setDeviceOverrides(
   body: { modelId?: unknown; overrides?: unknown },
-  { ui }: RouteContext,
+  { modelOverrides }: RouteContext,
 ): Response {
-  const r = ui.trySetModelOverride(body.modelId, body.overrides ?? {});
+  const r = modelOverrides.trySet(body.modelId, body.overrides ?? {});
   if ('error' in r) return json({ error: r.error }, r.status);
   // An image-only change is swapped into the running session and the deck is
   // repainted; keyMap/wire/splash need the next open(), so the session reopens
@@ -109,15 +102,18 @@ function setDeviceOverrides(
   return json({ ok: true, reconnecting: r.kind === 'reopen' });
 }
 
-function resetDeviceOverrides({ modelId }: { modelId: unknown }, { ui }: RouteContext): Response {
-  const r = ui.tryResetModelOverride(modelId);
+function resetDeviceOverrides(
+  { modelId }: { modelId: unknown },
+  { modelOverrides }: RouteContext,
+): Response {
+  const r = modelOverrides.tryReset(modelId);
   if ('error' in r) return json({ error: r.error }, r.status);
   return json({ ok: true, reconnecting: r.kind === 'reopen' });
 }
 
 /** Write the report next to settings.json and reveal it in the OS file manager —
  *  the path for users who would rather attach a file than paste text. */
-async function saveDiagnostics({ req, ui }: RouteContext): Promise<Response> {
+async function saveDiagnostics({ req, logging }: RouteContext): Promise<Response> {
   let redactCommands = false;
   try {
     const raw = await req.text();
@@ -125,37 +121,43 @@ async function saveDiagnostics({ req, ui }: RouteContext): Promise<Response> {
   } catch {
     return badRequest('invalid JSON');
   }
-  const path = await ui.saveDiagnosticsReport({ redactCommands });
+  const path = await logging.saveReport({ redactCommands });
   return path ? json({ ok: true, path }) : json({ error: 'could not write report' }, 500);
 }
 
 /** WebUI "Check for updates" close-button: remembers the version so the badge
  *  doesn't reappear until a newer one ships. */
-function dismissUpdate({ version }: { version: unknown }, { ui }: RouteContext): Response {
+function dismissUpdate({ version }: { version: unknown }, { updates }: RouteContext): Response {
   if (typeof version !== 'string' || !version)
     return badRequest('version must be a non-empty string');
-  return json(ui.updates.dismiss(version));
+  return json(updates.dismiss(version));
 }
 
 /** WebUI "Check for updates" toggle (opt-out; settings.json `updateCheck`). */
-function setUpdateCheckEnabled({ enabled }: { enabled: unknown }, { ui }: RouteContext): Response {
+function setUpdateCheckEnabled(
+  { enabled }: { enabled: unknown },
+  { updates }: RouteContext,
+): Response {
   if (typeof enabled !== 'boolean') return badRequest('enabled must be a boolean');
-  ui.updates.setEnabled(enabled);
+  updates.setEnabled(enabled);
   return json({ ok: true, enabled });
 }
 
 /** WebUI "Debug logging" toggle. Levels are validated against cli.ts's LOG_LEVELS
  *  (the single source of truth, shared with --log-level and settings.json). */
-function setLogLevelRoute({ level }: { level: unknown }, { ui }: RouteContext): Response {
-  const err = ui.trySetLogLevel(level);
+function setLogLevelRoute({ level }: { level: unknown }, { logging }: RouteContext): Response {
+  const err = logging.trySetLevel(level);
   return err ? json({ error: err.error }, err.status) : json({ ok: true, level });
 }
 
 /** WebUI "Use two decks at once" toggle. Disabling it also disconnects a live
  *  second dock (DriverManager.setMultiDeck). */
-function setMultiDeckRoute({ enabled }: { enabled: unknown }, { ui }: RouteContext): Response {
+function setMultiDeckRoute(
+  { enabled }: { enabled: unknown },
+  { settingsFile }: RouteContext,
+): Response {
   if (typeof enabled !== 'boolean') return badRequest('enabled must be a boolean');
-  ui.setMultiDeck(enabled);
+  settingsFile.setMultiDeck(enabled);
   return json({ ok: true, enabled });
 }
 
@@ -163,10 +165,13 @@ function setMultiDeckRoute({ enabled }: { enabled: unknown }, { ui }: RouteConte
  *  daily-ping.ts's locale dim when the OS-level probe fails. Length-capped —
  *  same reasoning as daily-ping.ts's other closed-vocabulary fields: an
  *  unbounded string is an unbounded fingerprint, not just an unbounded key. */
-function setBrowserLocaleRoute({ locale }: { locale: unknown }, { ui }: RouteContext): Response {
+function setBrowserLocaleRoute(
+  { locale }: { locale: unknown },
+  { settings }: RouteContext,
+): Response {
   if (typeof locale !== 'string' || !locale || locale.length > 35)
     return badRequest('locale must be a non-empty string of at most 35 characters');
-  ui.setBrowserLocale(locale);
+  settings.browserLocale = locale;
   return json({ ok: true });
 }
 
@@ -198,54 +203,16 @@ interface ExtraKeyBody {
   style?: unknown;
 }
 
-/** null when `v` is undefined or a number within [min, max]; else an error message. */
-function validateOptionalMs(v: unknown, field: string, min: number, max: number): string | null {
-  if (v === undefined) return null;
-  if (typeof v !== 'number' || v < min || v > max) {
-    return `${field} must be a number between ${min} and ${max}`;
-  }
-  return null;
-}
-
 /** Field validation for POST /api/extra-key; returns an error message or null. */
-function validateExtraKeyBody({
-  wireId,
-  widget,
-  param,
-  intervalMs,
-  timeoutMs,
-  pluginArg,
-  style,
-}: ExtraKeyBody): string | null {
-  if (!isNonNegInt(wireId)) return nonNegIntMessage('wireId');
-  if (typeof widget !== 'string' || !(EXTRA_KEY_WIDGETS as readonly string[]).includes(widget)) {
-    return `widget must be one of: ${EXTRA_KEY_WIDGETS.join(', ')}`;
-  }
-  if (param !== undefined && (typeof param !== 'string' || param.length > EXTRA_KEY_PARAM_MAX)) {
-    return `param must be a string ≤ ${EXTRA_KEY_PARAM_MAX} chars`;
-  }
-  if (
-    pluginArg !== undefined &&
-    (typeof pluginArg !== 'string' || pluginArg.length > EXTRA_KEY_PARAM_MAX)
-  ) {
-    return `pluginArg must be a string ≤ ${EXTRA_KEY_PARAM_MAX} chars`;
-  }
-  return (
-    (style === undefined ? null : textStyleError(style)) ??
-    validateOptionalMs(
-      intervalMs,
-      'intervalMs',
-      COMMAND_INTERVAL_MIN_MS,
-      COMMAND_INTERVAL_MAX_MS,
-    ) ??
-    validateOptionalMs(timeoutMs, 'timeoutMs', COMMAND_TIMEOUT_MIN_MS, COMMAND_TIMEOUT_MAX_MS)
-  );
+function extraKeyBodyError(body: ExtraKeyBody): string | null {
+  if (!isNonNegInt(body.wireId)) return nonNegIntMessage('wireId');
+  return extraKeyConfigError(body);
 }
 
 /** Assign a display widget to one of the selected dock's extra keys (293S 6th
  *  column, AKP05E right column). The server renders and refreshes the key itself. */
-function setExtraKey(body: ExtraKeyBody, { ui }: RouteContext): Response {
-  const invalid = validateExtraKeyBody(body);
+function setExtraKey(body: ExtraKeyBody, { extraKeys }: RouteContext): Response {
+  const invalid = extraKeyBodyError(body);
   if (invalid) return badRequest(invalid);
   const { wireId, widget, param, intervalMs, timeoutMs, pluginArg } = body;
   const style = body.style === undefined ? {} : compactTextStyle(body.style as ExtraKeyTextStyle);
@@ -257,7 +224,7 @@ function setExtraKey(body: ExtraKeyBody, { ui }: RouteContext): Response {
     ...(typeof pluginArg === 'string' && pluginArg ? { pluginArg } : {}),
     ...(Object.keys(style).length > 0 ? { style } : {}),
   };
-  const err = ui.trySetExtraKey(wireId as number, cfg);
+  const err = extraKeys.trySet(wireId as number, cfg);
   return err ? json({ error: err.error }, err.status) : json({ ok: true, wireId, widget });
 }
 
@@ -266,16 +233,16 @@ interface RunExtraKeyBody {
 }
 
 /** Force an immediate re-run of a command-widget extra key (WebUI "Run now"). */
-function runExtraKeyNow({ wireId }: RunExtraKeyBody, { ui }: RouteContext): Response {
+function runExtraKeyNow({ wireId }: RunExtraKeyBody, { extraKeys }: RouteContext): Response {
   if (!isNonNegInt(wireId)) return badRequest(nonNegIntMessage('wireId'));
-  const err = ui.tryRunExtraKeyNow(wireId);
+  const err = extraKeys.tryRunNow(wireId);
   return err ? json({ error: err.error }, err.status) : json({ ok: true });
 }
 
 /** Text-size picker: the widget's last paint rendered at every text size (nothing saved). */
-function previewExtraKey({ wireId }: RunExtraKeyBody, { ui }: RouteContext): Response {
+function previewExtraKey({ wireId }: RunExtraKeyBody, { extraKeys }: RouteContext): Response {
   if (!isNonNegInt(wireId)) return badRequest(nonNegIntMessage('wireId'));
-  const res = ui.tryPreviewExtraKey(wireId);
+  const res = extraKeys.tryPreview(wireId);
   return 'error' in res ? json({ error: res.error }, res.status) : json(res);
 }
 
@@ -284,7 +251,7 @@ function previewExtraKey({ wireId }: RunExtraKeyBody, { ui }: RouteContext): Res
  *  widget POST so neither overwrites the other. */
 function setExtraKeyPress(
   { wireId, command, action }: { wireId: unknown; command: unknown; action: unknown },
-  { ui }: RouteContext,
+  { extraKeys }: RouteContext,
 ): Response {
   if (!isNonNegInt(wireId)) return badRequest(nonNegIntMessage('wireId'));
   if (command === undefined && action === undefined) {
@@ -296,42 +263,42 @@ function setExtraKeyPress(
   ) {
     return badRequest(`command must be a string ≤ ${ENCODER_COMMAND_MAX} chars`);
   }
-  if (action !== undefined && !(EXTRA_KEY_PRESS_ACTIONS as readonly unknown[]).includes(action)) {
+  if (action !== undefined && !isOneOf(EXTRA_KEY_PRESS_ACTIONS, action)) {
     return badRequest(`action must be one of: ${EXTRA_KEY_PRESS_ACTIONS.join(', ')}`);
   }
-  const err = ui.trySetExtraKey(wireId, {
+  const err = extraKeys.trySet(wireId, {
     ...(command !== undefined ? { pressCommand: command } : {}),
-    ...(action !== undefined ? { pressAction: action as ExtraKeyPressAction } : {}),
+    ...(action !== undefined ? { pressAction: action } : {}),
   });
   return err ? json({ error: err.error }, err.status) : json({ ok: true });
 }
 
 /** Who paints the touch strip: the Elgato app only, or DeckBridge widgets over it. */
-function setTouchStripMode({ mode }: { mode: unknown }, { ui }: RouteContext): Response {
-  if (!(TOUCH_STRIP_MODES as readonly unknown[]).includes(mode)) {
+function setTouchStripMode({ mode }: { mode: unknown }, { devicePrefs }: RouteContext): Response {
+  if (!isOneOf(TOUCH_STRIP_MODES, mode)) {
     return badRequest(`mode must be one of: ${TOUCH_STRIP_MODES.join(', ')}`);
   }
-  const err = ui.trySetTouchStripMode(mode as TouchStripMode);
+  const err = devicePrefs.trySetTouchStripMode(mode);
   return err ? json({ error: err.error }, err.status) : json({ ok: true, mode });
 }
 
 /** How long after the Elgato app's last strip frame 'deckbridge-repaint' brings a widget back. */
-function setTouchStripRepaint({ ms }: { ms: unknown }, { ui }: RouteContext): Response {
+function setTouchStripRepaint({ ms }: { ms: unknown }, { devicePrefs }: RouteContext): Response {
   if (!isTouchStripRepaintMs(ms)) {
     return badRequest(
       `ms must be an integer ${TOUCH_STRIP_REPAINT_MIN_MS}–${TOUCH_STRIP_REPAINT_MAX_MS}`,
     );
   }
-  const err = ui.devicePrefs.trySetTouchStripRepaintMs(ms);
+  const err = devicePrefs.trySetTouchStripRepaintMs(ms);
   return err ? json({ error: err.error }, err.status) : json({ ok: true, ms });
 }
 
 /** Knob override: connect to the Elgato app, or run per-knob shell commands. */
-function setEncoders(body: unknown, { ui }: RouteContext): Response {
+function setEncoders(body: unknown, { encoders }: RouteContext): Response {
   const invalid = encoderSettingsError(body);
   if (invalid) return badRequest(invalid);
   const { connectToApp, commands } = body as EncoderSettings;
-  const err = ui.trySetEncoders({
+  const err = encoders.trySet({
     ...(connectToApp !== undefined ? { connectToApp } : {}),
     ...(commands !== undefined ? { commands } : {}),
   });
@@ -355,10 +322,13 @@ function setDeviceModel({ modelId }: { modelId: unknown }, { ui }: RouteContext)
   return json({ ok: true, modelId });
 }
 
-function setBrightnessOverride({ enabled }: { enabled: unknown }, { ui }: RouteContext): Response {
+function setBrightnessOverride(
+  { enabled }: { enabled: unknown },
+  { devicePrefs }: RouteContext,
+): Response {
   if (typeof enabled !== 'boolean') return badRequest('enabled must be a boolean');
-  ui.notifyBrightnessOverride(enabled);
-  return json({ ok: true, enabled: ui.brightnessOverride });
+  devicePrefs.setBrightnessOverride(enabled);
+  return json({ ok: true, enabled: devicePrefs.brightnessOverride });
 }
 
 function setMockConfig(body: Partial<MockDeviceConfig>, { ui }: RouteContext): Response {
@@ -369,7 +339,7 @@ const MDNS_NAME_MAX_LEN = 63; // sane cap — dns-sd/avahi service instance name
 
 function setDeviceMdnsName(
   { deviceKey, name }: { deviceKey: unknown; name: unknown },
-  { ui }: RouteContext,
+  { ui, settings }: RouteContext,
 ): Response {
   if (typeof deviceKey !== 'string' || !deviceKey) {
     return badRequest('deviceKey must be a non-empty string');
@@ -378,16 +348,20 @@ function setDeviceMdnsName(
     return badRequest('name must be a non-empty string');
   }
   const trimmed = name.trim().slice(0, MDNS_NAME_MAX_LEN);
-  ui.emit('setDeviceMdnsName', deviceKey, trimmed);
+  if (!settings.updateMdnsName(deviceKey, trimmed)) {
+    return json({ error: `no persisted identity for deviceKey ${deviceKey}` }, 404);
+  }
+  // Persisted; app.ts re-advertises the live dock under the new name.
+  ui.emit('mdnsNameChanged', deviceKey, trimmed);
   return json({ ok: true, name: trimmed });
 }
 
-async function setSettings({ req, ui }: RouteContext): Promise<Response> {
+async function setSettings({ req, settings, settingsFile }: RouteContext): Promise<Response> {
   const raw = await req.text();
   try {
-    ui.applySettingsJson(raw);
+    settingsFile.applyJson(raw);
   } catch (e) {
     return badRequest((e as Error).message || 'invalid settings');
   }
-  return json({ ok: true, settings: JSON.parse(ui.getSettingsJson()) as unknown });
+  return json({ ok: true, settings: JSON.parse(settings.json()) as unknown });
 }

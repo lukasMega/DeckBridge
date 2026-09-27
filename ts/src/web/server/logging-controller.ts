@@ -7,7 +7,7 @@ import { buildLiveDiagnostics, saveLiveDiagnostics } from './diagnostics-sources
 import type { LiveDiagnosticsInputs } from './diagnostics-sources.js';
 import type { DiagnosticsOptions } from './diagnostics.js';
 import { activeLogFilePath, logDir, logFilePath } from '../../infra/log-file.js';
-import { currentLogLevel, setLogLevel } from '../../shared/logger.js';
+import { currentLogLevel, log, setLogLevel } from '../../shared/logger.js';
 import { isLogLevel, LOG_LEVELS } from '../../shared/cli.js';
 import { openPathInOS } from '../../infra/os-utils.ts';
 
@@ -51,7 +51,9 @@ export class LoggingController {
     return buildLiveDiagnostics(this.liveInputs(), opt);
   }
 
-  saveReport(opt: DiagnosticsOptions = {}): Promise<string | null> {
-    return saveLiveDiagnostics(this.liveInputs(), opt);
+  async saveReport(opt: DiagnosticsOptions = {}): Promise<string | null> {
+    const path = await saveLiveDiagnostics(this.liveInputs(), opt);
+    if (path === null) log('error', 'webui', 'diagnostics save failed');
+    return path;
   }
 }

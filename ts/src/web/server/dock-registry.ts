@@ -1,6 +1,6 @@
 // Tracks the live per-dock status list + which dock is selected, and resolves per-dock
 // deviceKey/brightness against it (settings.devices[] keyed by deviceKey).
-import type { PersistedSettings } from './persisted-settings.js';
+import type { PersistedSettings } from '../../infra/settings.js';
 import { isNonNegInt, nonNegIntError } from './types.js';
 import type { ReqError } from './types.js';
 import type { DockStatus } from '../../shared/types.js';
@@ -64,9 +64,5 @@ export class DockRegistry {
 
   selectedBrightness(): number {
     return this.selectedStatus()?.brightness ?? DEFAULT_BRIGHTNESS;
-  }
-
-  brightnessFor(index: number): number {
-    return this.settings.entryFor(this.deviceKeyFor(index))?.brightness ?? DEFAULT_BRIGHTNESS;
   }
 }

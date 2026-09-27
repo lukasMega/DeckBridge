@@ -1,5 +1,6 @@
 import assert from 'tjs:assert';
 import {
+  buildTrayState,
   parentDir,
   isAbsolutePath,
   resolveTrayBin,
@@ -125,6 +126,39 @@ await asyncTest('returns "" when the env var is unset and no sidecar exists', as
   } finally {
     if (prev !== undefined) tjs.env.DECKBRIDGE_TRAY_BIN = prev;
   }
+});
+
+// buildTrayState
+
+console.log('\nbuildTrayState');
+
+const LATEST = { enabled: true, current: '1.0.0', updateAvailable: false, lastCheckedAt: 1 };
+const trayInput = {
+  deviceName: 'Mirabox 293S',
+  driverConnected: true,
+  elgatoConnected: true,
+  reconnectAttempts: 0,
+  update: LATEST,
+};
+
+test('device + Elgato app → full icon', () => {
+  const s = buildTrayState(trayInput);
+  assert.equal(s.icon, 'full');
+  assert.equal(s.status, 'Mirabox 293S + Elgato app connected');
+  assert.equal(s.updateText, 'Using latest version');
+});
+
+test('no device → attempt count in status', () => {
+  const s = buildTrayState({ ...trayInput, driverConnected: false, reconnectAttempts: 3 });
+  assert.equal(s.icon, 'disconnected');
+  assert.equal(s.status, 'No device (attempt 3)');
+});
+
+test('dismissed update is not flagged', () => {
+  const update = { ...LATEST, updateAvailable: true, latest: '1.1.0', dismissedVersion: '1.1.0' };
+  const s = buildTrayState({ ...trayInput, update });
+  assert.equal(s.updateText, 'Update available: v1.1.0');
+  assert.equal(s.updateAvailable, false);
 });
 
 // Summary

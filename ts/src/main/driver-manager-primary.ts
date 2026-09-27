@@ -28,6 +28,8 @@ import type { ElgatoServer } from '../cora/primary-server.js';
 import type { ElgatoChildServer } from '../cora/child-server.js';
 
 import type { WebUIServer } from '../web/server/index.js';
+import type { PersistedSettings } from '../infra/settings.js';
+import type { DockPrefs } from '../infra/dock-prefs.js';
 import type { DeviceIdentitySettings } from '../infra/settings-store.js';
 import { touchStripOptionsOf } from '../infra/settings-store.js';
 
@@ -40,6 +42,7 @@ export function macToBytes(mac: string, fallback: number[]): number[] {
 
 export interface PrimaryDockDeps {
   webui: WebUIServer;
+  settings: PersistedSettings;
   server: ElgatoServer;
   /** Its strip frames start the widgets' repaint-mode hold-off (noteTouchFrame). */
   childServer?: Pick<ElgatoChildServer, 'on'>;
@@ -65,10 +68,8 @@ export class PrimaryDock {
   /** Knob override; resolves this dock's current identity per event. */
   private readonly encoders = new EncoderActions(
     () => {
-      const key = this.identity?.deviceKey;
-      if (key === undefined) return undefined;
-      const { webui } = this.deps;
-      return { mode: webui.touchStripModeFor(key), encoders: webui.encoderSettingsFor(key) };
+      const prefs = this.prefs();
+      return prefs && { mode: prefs.stripMode(), encoders: prefs.encoders() };
     },
     undefined,
     (index) => knobRefresh(this.widgets, this.model, index),
@@ -76,10 +77,7 @@ export class PrimaryDock {
 
   /** Extra-key presses; resolves this dock's current identity per press. */
   private readonly extraKeyActions = new ExtraKeyActions(
-    (wireId) => {
-      const key = this.identity?.deviceKey;
-      return key === undefined ? undefined : this.deps.webui.extraKeyConfigFor(key, wireId);
-    },
+    (wireId) => this.prefs()?.extraKeyConfig(wireId),
     undefined,
     (wireId) => this.widgets?.refresh(wireId),
   );
@@ -90,6 +88,11 @@ export class PrimaryDock {
    *  device must not inherit them); cleared after replay. */
   private savedFrames: Map<number, { data: Buffer; format: 'jpeg' | 'bmp' }> | null = null;
   private savedModelId: string | null = null;
+
+  /** Undefined before identity: no per-device settings apply yet. */
+  private prefs(): DockPrefs | undefined {
+    return this.identity && this.deps.settings.for(this.identity.deviceKey);
+  }
 
   constructor(deps: PrimaryDockDeps) {
     this.deps = deps;
@@ -104,7 +107,7 @@ export class PrimaryDock {
    *  singleton created before any device connects — its identity can only
    *  change post-construction. */
   resolveIdentity(deviceKey: string): void {
-    const identity = this.deps.webui.getOrCreateDeviceIdentity(deviceKey, MDNS_SERVICE_NAME);
+    const identity = this.deps.settings.getOrCreateIdentity(deviceKey, MDNS_SERVICE_NAME);
     this.identity = identity;
     const macAddress = macToBytes(identity.macAddress, [...DEFAULT_MAC_ADDRESS]);
     this.deps.server.setDeviceConfig({ serialNumber: identity.dockSerial, macAddress });
@@ -177,15 +180,15 @@ export class PrimaryDock {
    *  extraKeys or before identity. */
   startWidgets(driver: DeviceDriver): void {
     this.stopWidgets();
-    const identity = this.identity;
-    if (!identity) return;
+    const prefs = this.prefs();
+    if (!prefs) return;
     this.widgets = new ExtraKeyWidgets(
       driver,
-      (wireId) => this.deps.webui.extraKeyConfigFor(identity.deviceKey, wireId),
-      this.deps.webui.touchStripModeFor(identity.deviceKey),
-      () => this.deps.webui.devicePrefs.touchStripRepaintMsFor(identity.deviceKey),
+      (wireId) => prefs.extraKeyConfig(wireId),
+      prefs.stripMode(),
+      () => prefs.repaintMs(),
       (wireId, paint) => this.deps.webui.imageChannel.notifyDockWidgetPaint(0, wireId, paint),
-      { tapFeedback: () => this.deps.webui.devicePrefs.tapFeedbackFor(identity.deviceKey) },
+      { tapFeedback: () => prefs.tapFeedback() },
     );
     this.widgets.start();
   }

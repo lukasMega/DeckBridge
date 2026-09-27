@@ -1,7 +1,7 @@
 import { readJson } from './http.js';
-import type { WebUIController } from './types.js';
+import type { WebUIController, WebUIControllers } from './types.js';
 
-export interface RouteContext {
+export interface RouteContext extends WebUIControllers {
   req: Request;
   url: URL;
   params: Record<string, string>;

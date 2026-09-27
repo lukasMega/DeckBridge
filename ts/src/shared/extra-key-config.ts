@@ -197,32 +197,53 @@ export function normalizeExtraKeyConfig(cfg: ExtraKeyConfig): ExtraKeyConfig {
   return Object.keys(style).length > 0 ? { ...rest, style } : rest;
 }
 
-/** Shape guard for one persisted/imported extra-key entry. */
-// oxlint-disable-next-line complexity
-export function isExtraKeyConfig(v: unknown): v is ExtraKeyConfig {
-  if (typeof v !== 'object' || v === null) return false;
+const optional =
+  (check: StyleCheck): StyleCheck =>
+  (v, field) =>
+    v === undefined ? null : check(v, field);
+const stringUpTo =
+  (max: number): StyleCheck =>
+  (v, field) =>
+    typeof v === 'string' && v.length <= max ? null : `${field} must be a string ≤ ${max} chars`;
+const numberIn =
+  (min: number, max: number): StyleCheck =>
+  (v, field) =>
+    typeof v === 'number' && inRange(v, min, max)
+      ? null
+      : `${field} must be a number between ${min} and ${max}`;
+
+/** Every optional config field; unknown fields are ignored. */
+const CONFIG_CHECKS: ReadonlyArray<[string, StyleCheck]> = [
+  ['param', optional(stringUpTo(EXTRA_KEY_PARAM_MAX))],
+  ['pluginArg', optional(stringUpTo(EXTRA_KEY_PARAM_MAX))],
+  ['style', optional((v) => textStyleError(v))],
+  ['intervalMs', optional(numberIn(COMMAND_INTERVAL_MIN_MS, COMMAND_INTERVAL_MAX_MS))],
+  ['timeoutMs', optional(numberIn(COMMAND_TIMEOUT_MIN_MS, COMMAND_TIMEOUT_MAX_MS))],
+  ['pressCommand', optional(stringUpTo(ENCODER_COMMAND_MAX))],
+  ['pressAction', optional(oneOf(EXTRA_KEY_PRESS_ACTIONS))],
+  // Legacy top-level fields — folded into style by normalizeExtraKeyConfig.
+  ['textSize', optional(oneOf(EXTRA_KEY_TEXT_SIZES))],
+  ['wrap', optional(oneOf(EXTRA_KEY_WRAPS))],
+];
+
+/** `v` is one of `allowed` — the enum guard shared by route bodies and settings.json. */
+export const isOneOf = <T>(allowed: readonly T[], v: unknown): v is T =>
+  (allowed as readonly unknown[]).includes(v);
+
+/** null when `v` is a valid extra-key config (POST body or persisted entry); else
+ *  a message naming the bad field. */
+export function extraKeyConfigError(v: unknown): string | null {
+  if (typeof v !== 'object' || v === null) return 'config must be an object';
   const r = v as Record<string, unknown>;
-  return (
-    typeof r.widget === 'string' &&
-    (EXTRA_KEY_WIDGETS as readonly string[]).includes(r.widget) &&
-    (r.param === undefined ||
-      (typeof r.param === 'string' && r.param.length <= EXTRA_KEY_PARAM_MAX)) &&
-    (r.intervalMs === undefined ||
-      (typeof r.intervalMs === 'number' &&
-        inRange(r.intervalMs, COMMAND_INTERVAL_MIN_MS, COMMAND_INTERVAL_MAX_MS))) &&
-    (r.timeoutMs === undefined ||
-      (typeof r.timeoutMs === 'number' &&
-        inRange(r.timeoutMs, COMMAND_TIMEOUT_MIN_MS, COMMAND_TIMEOUT_MAX_MS))) &&
-    (r.pluginArg === undefined ||
-      (typeof r.pluginArg === 'string' && r.pluginArg.length <= EXTRA_KEY_PARAM_MAX)) &&
-    (r.style === undefined || textStyleError(r.style) === null) &&
-    // Legacy top-level fields — folded into style by normalizeExtraKeyConfig.
-    (r.textSize === undefined ||
-      (EXTRA_KEY_TEXT_SIZES as readonly unknown[]).includes(r.textSize)) &&
-    (r.wrap === undefined || (EXTRA_KEY_WRAPS as readonly unknown[]).includes(r.wrap)) &&
-    (r.pressCommand === undefined ||
-      (typeof r.pressCommand === 'string' && r.pressCommand.length <= ENCODER_COMMAND_MAX)) &&
-    (r.pressAction === undefined ||
-      (EXTRA_KEY_PRESS_ACTIONS as readonly unknown[]).includes(r.pressAction))
-  );
+  if (!isOneOf(EXTRA_KEY_WIDGETS, r.widget)) {
+    return `widget must be one of: ${EXTRA_KEY_WIDGETS.join(', ')}`;
+  }
+  for (const [field, check] of CONFIG_CHECKS) {
+    const err = check(r[field], field);
+    if (err) return err;
+  }
+  return null;
 }
+
+export const isExtraKeyConfig = (v: unknown): v is ExtraKeyConfig =>
+  extraKeyConfigError(v) === null;

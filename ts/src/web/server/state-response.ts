@@ -5,6 +5,7 @@
 import type {
   DeviceIdentity,
   DeviceModelInfo,
+  DriverMode,
   KeyEventEntry,
   LogEntry,
   MockDeviceConfig,
@@ -13,8 +14,11 @@ import type {
   StatusSnapshot,
   UpdateInfo,
 } from './types.js';
+import { defaultMockConfig } from './mock-config.js';
+import { MDNS_SERVICE_NAME } from '../../shared/types.js';
 import type {
   CommEntry,
+  DockStatus,
   EncoderSettings,
   ExtraKeyConfig,
   RealDeviceIdentity,
@@ -50,5 +54,28 @@ export function buildStateResponse(input: StateResponseInputs): StateResponse {
     ...(__SIMPLE_ONLY__ ? {} : { logs: activity.logs, commLogs: activity.comms }),
     keyEvents: activity.keyEvents,
     ...rest,
+  };
+}
+
+/** Identifiers sent to the Elgato app for the SELECTED dock (Settings, read-only):
+ *  mockConfig in mock mode (mock is only ever dock 0, no deviceKey → WebUI hides the
+ *  rename control), else the selected dock's identity, else fixed defaults before
+ *  the first notifyDocks. */
+export function selectedDeviceIdentity(
+  driverMode: DriverMode,
+  mockConfig: MockDeviceConfig,
+  dock: DockStatus | undefined,
+): DeviceIdentity {
+  if (driverMode === 'mock') return { ...mockConfig, mdnsServiceName: MDNS_SERVICE_NAME };
+  if (!dock) return { ...defaultMockConfig(), mdnsServiceName: MDNS_SERVICE_NAME };
+  return {
+    dockFirmwareVersion: dock.dockFirmwareVersion,
+    childFirmwareVersion: dock.childFirmwareVersion,
+    serialNumber: dock.serialNumber,
+    childSerialNumber: dock.childSerialNumber,
+    productId: dock.productId,
+    macAddress: dock.macAddress,
+    mdnsServiceName: dock.mdnsServiceName,
+    deviceKey: dock.deviceKey || undefined,
   };
 }

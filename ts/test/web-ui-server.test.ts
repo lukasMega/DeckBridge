@@ -11,6 +11,14 @@ import type { Settings } from '../src/infra/settings-store.js';
 import type { DockStatus } from '../src/shared/types.js';
 import type { StatusSnapshot } from '../src/web/contract.js';
 import { test, testAsync as runWebTest, summaryExit } from './helpers/harness.js';
+import { PersistedSettings } from '../src/infra/settings.js';
+
+/** WebUIServer over settings loaded from `root`, as app.ts loads them before construction. */
+async function webUIAt(root: string, port?: number): Promise<WebUIServer> {
+  const settings = new PersistedSettings(root);
+  await settings.load();
+  return new WebUIServer(port, [], 'real', settings);
+}
 
 // Isolate settings.json writes from the real user cache dir — every mutator
 // that touches a persisted field now writes to disk (see settings-store.ts).
@@ -234,7 +242,7 @@ test('stop() clears all clients', () => {
 console.log('\nWebUIServer.resetImages');
 
 test('drops the selected dock frames and broadcasts imagesReset', () => {
-  const ui = new WebUIServer(undefined, [], 'real', TEST_SETTINGS_ROOT);
+  const ui = new WebUIServer(undefined, [], 'real', new PersistedSettings(TEST_SETTINGS_ROOT));
   ui.notifyDockImage(0, 0, Buffer.from([1, 2, 3]));
   ui.notifyDockImage(0, 1, Buffer.from([4, 5, 6]));
   assert.equal(ui.imageChannel.selectedImages().size, 2, 'two images set');
@@ -296,12 +304,12 @@ function connectMockClient(ui: WebUIServer): { sent: string[] } {
 }
 
 test('snapshot.docks defaults to empty array', () => {
-  const ui = new WebUIServer(undefined, [], 'real', TEST_SETTINGS_ROOT);
+  const ui = new WebUIServer(undefined, [], 'real', new PersistedSettings(TEST_SETTINGS_ROOT));
   assert.deepEqual(ui.fullState().docks, []);
 });
 
 test('fullState exposes selected dock real device identity', () => {
-  const ui = new WebUIServer(undefined, [], 'real', TEST_SETTINGS_ROOT);
+  const ui = new WebUIServer(undefined, [], 'real', new PersistedSettings(TEST_SETTINGS_ROOT));
   const realDeviceIdentity = {
     modelName: 'Stream Deck MK.2',
     serialNumber: 'REAL123',
@@ -323,7 +331,7 @@ const SELECTED_DEVICE_EVENTS = [
 ];
 
 test('notifyDocks broadcasts status + selected-device state to a connected WS client', () => {
-  const ui = new WebUIServer(undefined, [], 'real', TEST_SETTINGS_ROOT);
+  const ui = new WebUIServer(undefined, [], 'real', new PersistedSettings(TEST_SETTINGS_ROOT));
   const { sent } = connectMockClient(ui);
   sent.length = 0; // discard the initial-connect snapshot
 
@@ -339,7 +347,7 @@ test('notifyDocks broadcasts status + selected-device state to a connected WS cl
 });
 
 test('duplicate notifyDocks call (same shape) does not broadcast again', () => {
-  const ui = new WebUIServer(undefined, [], 'real', TEST_SETTINGS_ROOT);
+  const ui = new WebUIServer(undefined, [], 'real', new PersistedSettings(TEST_SETTINGS_ROOT));
   const { sent } = connectMockClient(ui);
   sent.length = 0;
 
@@ -368,179 +376,187 @@ const STRIP = [
 ];
 
 test('touch-strip mode: 409 without a strip, else persist + broadcast + touchStripModeChanged', () => {
-  const ui = new WebUIServer(undefined, [], 'real', TEST_SETTINGS_ROOT);
+  const ui = new WebUIServer(undefined, [], 'real', new PersistedSettings(TEST_SETTINGS_ROOT));
   ui.notifyDocks([fakeDockStatus(0)]);
-  assert.equal(ui.trySetTouchStripMode('deckbridge-ignore')?.status, 409, 'MK.2 has no strip');
-  assert.equal(ui.touchStripModeFor('fake-device-0'), 'elgato', 'default is Elgato app only');
+  assert.equal(
+    ui.devicePrefs.trySetTouchStripMode('deckbridge-ignore')?.status,
+    409,
+    'MK.2 has no strip',
+  );
+  assert.equal(
+    ui.settings.for('fake-device-0').stripMode(),
+    'elgato',
+    'default is Elgato app only',
+  );
 
-  ui.getOrCreateDeviceIdentity('fake-device-0', 'Dock');
+  ui.settings.getOrCreateIdentity('fake-device-0', 'Dock');
   ui.notifyDocks([{ ...fakeDockStatus(0), widgetDisplays: STRIP }]);
   const { sent } = connectMockClient(ui);
   sent.length = 0;
   const changed: unknown[][] = [];
   ui.on('touchStripModeChanged', (...args: unknown[]) => changed.push(args));
 
-  assert.equal(ui.trySetTouchStripMode('deckbridge-repaint'), null);
+  assert.equal(ui.devicePrefs.trySetTouchStripMode('deckbridge-repaint'), null);
   assert.deepEqual(changed, [[0, 'deckbridge-repaint']]);
   assert.deepEqual(JSON.parse(sent[0]!), {
     event: 'touchStripMode',
     data: { mode: 'deckbridge-repaint' },
   });
-  assert.equal(ui.touchStripModeFor('fake-device-0'), 'deckbridge-repaint');
+  assert.equal(ui.settings.for('fake-device-0').stripMode(), 'deckbridge-repaint');
   assert.equal(ui.fullState().touchStripMode, 'deckbridge-repaint');
-  const saved = JSON.parse(ui.getSettingsJson()) as { devices: { touchStripMode?: string }[] };
+  const saved = JSON.parse(ui.settings.json()) as { devices: { touchStripMode?: string }[] };
   assert.equal(saved.devices[0]!.touchStripMode, 'deckbridge-repaint', 'persisted per device');
 });
 
 test('touch-strip repaint interval: 409 without a strip, default 5 s, else persist + broadcast', () => {
-  const ui = new WebUIServer(undefined, [], 'real', TEST_SETTINGS_ROOT);
+  const ui = new WebUIServer(undefined, [], 'real', new PersistedSettings(TEST_SETTINGS_ROOT));
   ui.notifyDocks([fakeDockStatus(0)]);
   assert.equal(ui.devicePrefs.trySetTouchStripRepaintMs(2000)?.status, 409, 'MK.2 has no strip');
-  assert.equal(ui.devicePrefs.touchStripRepaintMsFor('fake-device-0'), 5000, 'default is 5 s');
+  assert.equal(ui.settings.for('fake-device-0').repaintMs(), 5000, 'default is 5 s');
 
-  ui.getOrCreateDeviceIdentity('fake-device-0', 'Dock');
+  ui.settings.getOrCreateIdentity('fake-device-0', 'Dock');
   ui.notifyDocks([{ ...fakeDockStatus(0), widgetDisplays: STRIP }]);
   const { sent } = connectMockClient(ui);
   sent.length = 0;
 
   assert.equal(ui.devicePrefs.trySetTouchStripRepaintMs(2000), null);
   assert.deepEqual(JSON.parse(sent[0]!), { event: 'touchStripRepaint', data: { ms: 2000 } });
-  assert.equal(ui.devicePrefs.touchStripRepaintMsFor('fake-device-0'), 2000);
+  assert.equal(ui.settings.for('fake-device-0').repaintMs(), 2000);
   assert.equal(ui.fullState().touchStripRepaintMs, 2000);
-  const saved = JSON.parse(ui.getSettingsJson()) as {
+  const saved = JSON.parse(ui.settings.json()) as {
     devices: { touchStripRepaintMs?: number }[];
   };
   assert.equal(saved.devices[0]!.touchStripRepaintMs, 2000, 'persisted per device');
 });
 
 test('encoders: 409 without a strip or knobs, 400 past the last knob', () => {
-  const ui = new WebUIServer(undefined, [], 'real', TEST_SETTINGS_ROOT);
+  const ui = new WebUIServer(undefined, [], 'real', new PersistedSettings(TEST_SETTINGS_ROOT));
   ui.notifyDocks([{ ...fakeDockStatus(0), encoderCount: 4 }]);
-  assert.equal(ui.trySetEncoders({ connectToApp: false })?.status, 409, 'no strip');
+  assert.equal(ui.encoders.trySet({ connectToApp: false })?.status, 409, 'no strip');
   ui.notifyDocks([{ ...fakeDockStatus(0), widgetDisplays: STRIP }]);
-  assert.equal(ui.trySetEncoders({ connectToApp: false })?.status, 409, 'no knobs');
+  assert.equal(ui.encoders.trySet({ connectToApp: false })?.status, 409, 'no knobs');
   ui.notifyDocks([{ ...fakeDockStatus(0), widgetDisplays: STRIP, encoderCount: 2 }]);
-  assert.equal(ui.trySetEncoders({ commands: { '2': { press: 'x' } } })?.status, 400);
+  assert.equal(ui.encoders.trySet({ commands: { '2': { press: 'x' } } })?.status, 400);
 });
 
 test('encoders: merges per knob, trims blanks, persists and broadcasts', () => {
-  const ui = new WebUIServer(undefined, [], 'real', TEST_SETTINGS_ROOT);
-  ui.getOrCreateDeviceIdentity('fake-device-0', 'Dock');
+  const ui = new WebUIServer(undefined, [], 'real', new PersistedSettings(TEST_SETTINGS_ROOT));
+  ui.settings.getOrCreateIdentity('fake-device-0', 'Dock');
   ui.notifyDocks([{ ...fakeDockStatus(0), widgetDisplays: STRIP, encoderCount: 4 }]);
   const { sent } = connectMockClient(ui);
   sent.length = 0;
 
-  assert.equal(ui.trySetEncoders({ connectToApp: false }), null);
+  assert.equal(ui.encoders.trySet({ connectToApp: false }), null);
   assert.equal(
-    ui.trySetEncoders({
+    ui.encoders.trySet({
       commands: { '0': { press: ' mute ', rotateCw: 'up' }, '1': { press: 'a' } },
     }),
     null,
   );
-  assert.equal(ui.trySetEncoders({ commands: { '1': { press: '' } } }), null, 'emptied knob');
+  assert.equal(ui.encoders.trySet({ commands: { '1': { press: '' } } }), null, 'emptied knob');
 
   const expected = { connectToApp: false, commands: { '0': { press: 'mute', rotateCw: 'up' } } };
-  assert.deepEqual(ui.encoderSettingsFor('fake-device-0'), expected);
+  assert.deepEqual(ui.settings.for('fake-device-0').encoders(), expected);
   assert.deepEqual(ui.fullState().encoders, expected);
   assert.deepEqual(JSON.parse(sent.at(-1)!), { event: 'encoders', data: { encoders: expected } });
-  const saved = JSON.parse(ui.getSettingsJson()) as { devices: { encoders?: unknown }[] };
+  const saved = JSON.parse(ui.settings.json()) as { devices: { encoders?: unknown }[] };
   assert.deepEqual(saved.devices[0]!.encoders, expected, 'persisted per device');
 });
 
 test('applySettingsJson: bad touchStripMode / encoders fail the device-entry guard', () => {
-  const ui = new WebUIServer(undefined, [], 'real', TEST_SETTINGS_ROOT);
+  const ui = new WebUIServer(undefined, [], 'real', new PersistedSettings(TEST_SETTINGS_ROOT));
   ui.notifyDocks([fakeDockStatus(0)]);
   const entry = (extra: Parameters<typeof deviceEntry>[1]): string =>
     JSON.stringify({ devices: [deviceEntry('fake-device-0', extra)] });
   const stored = (): unknown[] =>
-    (JSON.parse(ui.getSettingsJson()) as { devices?: unknown[] }).devices ?? [];
+    (JSON.parse(ui.settings.json()) as { devices?: unknown[] }).devices ?? [];
 
-  ui.applySettingsJson(entry({ touchStripMode: 'sometimes' }));
+  ui.settingsFile.applyJson(entry({ touchStripMode: 'sometimes' }));
   assert.equal(stored().length, 0, 'unknown mode rejected');
-  ui.applySettingsJson(entry({ touchStripRepaintMs: 10 }));
+  ui.settingsFile.applyJson(entry({ touchStripRepaintMs: 10 }));
   assert.equal(stored().length, 0, 'repaint interval below 1 s rejected');
-  ui.applySettingsJson(entry({ touchStripZoneFit: 'stretch' }));
+  ui.settingsFile.applyJson(entry({ touchStripZoneFit: 'stretch' }));
   assert.equal(stored().length, 0, 'unknown zone fit rejected');
-  ui.applySettingsJson(entry({ touchStripUpload: 'never' }));
+  ui.settingsFile.applyJson(entry({ touchStripUpload: 'never' }));
   assert.equal(stored().length, 0, 'unknown upload policy rejected');
-  ui.applySettingsJson(entry({ encoders: { commands: { '7': { press: 'x' } } } }));
+  ui.settingsFile.applyJson(entry({ encoders: { commands: { '7': { press: 'x' } } } }));
   assert.equal(stored().length, 0, 'knob index out of range rejected');
-  ui.applySettingsJson(entry({ encoders: { commands: { '0': { press: 'x'.repeat(513) } } } }));
+  ui.settingsFile.applyJson(entry({ encoders: { commands: { '0': { press: 'x'.repeat(513) } } } }));
   assert.equal(stored().length, 0, 'over-long command rejected');
 
-  ui.applySettingsJson(
+  ui.settingsFile.applyJson(
     entry({ touchStripMode: 'deckbridge-ignore', encoders: { connectToApp: false } }),
   );
-  assert.equal(ui.touchStripModeFor('fake-device-0'), 'deckbridge-ignore');
-  assert.deepEqual(ui.encoderSettingsFor('fake-device-0'), { connectToApp: false });
-  ui.applySettingsJson(entry({ touchStripZoneFit: 'scale', touchStripUpload: 'always' }));
+  assert.equal(ui.settings.for('fake-device-0').stripMode(), 'deckbridge-ignore');
+  assert.deepEqual(ui.settings.for('fake-device-0').encoders(), { connectToApp: false });
+  ui.settingsFile.applyJson(entry({ touchStripZoneFit: 'scale', touchStripUpload: 'always' }));
   assert.deepEqual(stored(), [
     deviceEntry('fake-device-0', { touchStripZoneFit: 'scale', touchStripUpload: 'always' }),
   ]);
 });
 
 test('extra-key press command: pressable keys only, widget and command replace independently', () => {
-  const ui = new WebUIServer(undefined, [], 'real', TEST_SETTINGS_ROOT);
-  ui.getOrCreateDeviceIdentity('fake-device-0', 'Dock');
+  const ui = new WebUIServer(undefined, [], 'real', new PersistedSettings(TEST_SETTINGS_ROOT));
+  ui.settings.getOrCreateIdentity('fake-device-0', 'Dock');
   ui.notifyDocks([{ ...fakeDockStatus(0), extraKeys: [15, 10], pressableExtraKeys: [15] }]);
   const changed: unknown[][] = [];
   ui.on('extraKeyChanged', (...args: unknown[]) => changed.push(args));
-  const cfg = () => ui.extraKeyConfigFor('fake-device-0', 15);
+  const cfg = () => ui.settings.for('fake-device-0').extraKeyConfig(15);
 
-  assert.equal(ui.trySetExtraKey(10, { pressCommand: 'x' })?.status, 400, 'no switch');
-  assert.equal(ui.trySetExtraKey(3, { pressCommand: 'x' })?.status, 400, 'no such extra key');
-  assert.equal(ui.trySetExtraKey(15, { pressCommand: ' say hi ' }), null);
+  assert.equal(ui.extraKeys.trySet(10, { pressCommand: 'x' })?.status, 400, 'no switch');
+  assert.equal(ui.extraKeys.trySet(3, { pressCommand: 'x' })?.status, 400, 'no such extra key');
+  assert.equal(ui.extraKeys.trySet(15, { pressCommand: ' say hi ' }), null);
   assert.deepEqual(cfg(), { widget: 'none', pressCommand: 'say hi' }, 'trimmed, no widget yet');
   assert.equal(changed.length, 0, 'a press command needs no repaint');
 
-  assert.equal(ui.trySetExtraKey(15, { widget: 'clock' }), null);
+  assert.equal(ui.extraKeys.trySet(15, { widget: 'clock' }), null);
   assert.deepEqual(cfg(), { widget: 'clock', pressCommand: 'say hi' }, 'widget keeps command');
   assert.deepEqual(changed, [[0]]);
-  assert.equal(ui.trySetExtraKey(15, { pressCommand: '' }), null);
+  assert.equal(ui.extraKeys.trySet(15, { pressCommand: '' }), null);
   assert.deepEqual(cfg(), { widget: 'clock' }, 'command cleared, widget kept');
-  assert.equal(ui.trySetExtraKey(15, { widget: 'none' }), null);
+  assert.equal(ui.extraKeys.trySet(15, { widget: 'none' }), null);
   assert.equal(cfg(), undefined, 'nothing left → entry dropped');
 
-  assert.equal(ui.trySetExtraKey(15, { pressAction: 'both' }), null);
+  assert.equal(ui.extraKeys.trySet(15, { pressAction: 'both' }), null);
   assert.deepEqual(cfg(), { widget: 'none', pressAction: 'both' }, 'an action alone persists');
-  assert.equal(ui.trySetExtraKey(15, { pressCommand: 'go' }), null);
-  assert.equal(ui.trySetExtraKey(15, { widget: 'clock' }), null);
+  assert.equal(ui.extraKeys.trySet(15, { pressCommand: 'go' }), null);
+  assert.equal(ui.extraKeys.trySet(15, { widget: 'clock' }), null);
   assert.deepEqual(
     cfg(),
     { widget: 'clock', pressCommand: 'go', pressAction: 'both' },
     'widget change keeps the whole press side',
   );
-  assert.equal(ui.trySetExtraKey(15, { pressAction: 'refresh' }), null);
+  assert.equal(ui.extraKeys.trySet(15, { pressAction: 'refresh' }), null);
   assert.deepEqual(cfg(), { widget: 'clock', pressCommand: 'go', pressAction: 'refresh' });
-  assert.equal(ui.trySetExtraKey(10, { pressAction: 'both' })?.status, 400, 'no switch');
-  assert.equal(ui.trySetExtraKey(15, { widget: 'none' }), null);
-  assert.equal(ui.trySetExtraKey(15, { pressCommand: '' }), null);
+  assert.equal(ui.extraKeys.trySet(10, { pressAction: 'both' })?.status, 400, 'no switch');
+  assert.equal(ui.extraKeys.trySet(15, { widget: 'none' }), null);
+  assert.equal(ui.extraKeys.trySet(15, { pressCommand: '' }), null);
   assert.deepEqual(cfg(), { widget: 'none', pressAction: 'refresh' });
 
   const entry = (extraKeys: unknown): string =>
     JSON.stringify({ devices: [{ ...deviceEntry('fake-device-0', {}), extraKeys }] });
-  ui.applySettingsJson(entry({ '15': { widget: 'none', pressAction: 'always' } }));
+  ui.settingsFile.applyJson(entry({ '15': { widget: 'none', pressAction: 'always' } }));
   assert.deepEqual(cfg(), { widget: 'none', pressAction: 'refresh' }, 'bad action import ignored');
-  ui.applySettingsJson(entry({}));
-  ui.applySettingsJson(entry({ '15': { widget: 'none', pressCommand: 'x'.repeat(513) } }));
+  ui.settingsFile.applyJson(entry({}));
+  ui.settingsFile.applyJson(entry({ '15': { widget: 'none', pressCommand: 'x'.repeat(513) } }));
   assert.equal(cfg(), undefined, 'over-long press command rejected');
-  ui.applySettingsJson(entry({ '15': { widget: 'none', pressCommand: 'open -a Music' } }));
+  ui.settingsFile.applyJson(entry({ '15': { widget: 'none', pressCommand: 'open -a Music' } }));
   assert.deepEqual(cfg(), { widget: 'none', pressCommand: 'open -a Music' });
 });
 
 test('extra-key style is persisted with the widget; preview needs a paint', () => {
-  const ui = new WebUIServer(undefined, [], 'real', TEST_SETTINGS_ROOT);
-  ui.getOrCreateDeviceIdentity('fake-device-0', 'Dock');
+  const ui = new WebUIServer(undefined, [], 'real', new PersistedSettings(TEST_SETTINGS_ROOT));
+  ui.settings.getOrCreateIdentity('fake-device-0', 'Dock');
   ui.notifyDocks([{ ...fakeDockStatus(0), extraKeys: [15] }]);
-  const cfg = () => ui.extraKeyConfigFor('fake-device-0', 15);
+  const cfg = () => ui.settings.for('fake-device-0').extraKeyConfig(15);
 
   const style = { textSize: 'fit' as const };
-  assert.equal(ui.trySetExtraKey(15, { widget: 'text', param: 'Hello', style }), null);
+  assert.equal(ui.extraKeys.trySet(15, { widget: 'text', param: 'Hello', style }), null);
   assert.deepEqual(cfg(), { widget: 'text', param: 'Hello', style });
 
-  const none = ui.tryPreviewExtraKey(15);
+  const none = ui.extraKeys.tryPreview(15);
   assert.ok('error' in none && none.status === 404, 'nothing painted yet');
-  assert.ok('error' in ui.tryPreviewExtraKey(3), 'not a key on this dock');
+  assert.ok('error' in ui.extraKeys.tryPreview(3), 'not a key on this dock');
   ui.imageChannel.notifyDockWidgetPaint(0, 15, {
     bmp: new Uint8Array(),
     lines: [{ text: 'Hello', big: true }],
@@ -550,14 +566,14 @@ test('extra-key style is persisted with the widget; preview needs a paint', () =
     style: {},
     zone: false,
   });
-  const res = ui.tryPreviewExtraKey(15);
+  const res = ui.extraKeys.tryPreview(15);
   if ('error' in res) throw new Error(res.error);
   assert.equal(res.wireId, 15);
   assert.equal(res.previews.length, 6);
 });
 
 test("new WS client's initial snapshot carries stored docks", () => {
-  const ui = new WebUIServer(undefined, [], 'real', TEST_SETTINGS_ROOT);
+  const ui = new WebUIServer(undefined, [], 'real', new PersistedSettings(TEST_SETTINGS_ROOT));
   ui.notifyDocks([fakeDockStatus(0), fakeDockStatus(1)]);
 
   const { sent } = connectMockClient(ui);
@@ -573,7 +589,7 @@ test("new WS client's initial snapshot carries stored docks", () => {
 console.log('\nWebUIServer selected-dock preview mirror');
 
 test('notifyDockImage broadcasts only the selected dock, caches the rest', () => {
-  const ui = new WebUIServer(undefined, [], 'real', TEST_SETTINGS_ROOT);
+  const ui = new WebUIServer(undefined, [], 'real', new PersistedSettings(TEST_SETTINGS_ROOT));
   const { sent } = connectMockClient(ui);
   sent.length = 0;
 
@@ -588,7 +604,7 @@ test('notifyDockImage broadcasts only the selected dock, caches the rest', () =>
 });
 
 test('selectDock swaps the channel and replays the cached frames', () => {
-  const ui = new WebUIServer(undefined, [], 'real', TEST_SETTINGS_ROOT);
+  const ui = new WebUIServer(undefined, [], 'real', new PersistedSettings(TEST_SETTINGS_ROOT));
   ui.notifyDocks([fakeDockStatus(0), fakeDockStatus(1)]);
   ui.notifyDockImage(0, 0, Buffer.from([1]), 'jpeg');
   ui.notifyDockImage(1, 2, Buffer.from([7, 7]), 'bmp');
@@ -611,7 +627,7 @@ test('selectDock swaps the channel and replays the cached frames', () => {
 });
 
 test('touch-strip frames: full resets, a window replaces its own region, snapshot in order', () => {
-  const ui = new WebUIServer(undefined, [], 'real', TEST_SETTINGS_ROOT);
+  const ui = new WebUIServer(undefined, [], 'real', new PersistedSettings(TEST_SETTINGS_ROOT));
   ui.notifyDocks([fakeDockStatus(0), fakeDockStatus(1)]);
   const touch = ui.imageChannel;
   const a = { x: 0, y: 0, w: 200, h: 100 };
@@ -647,7 +663,7 @@ test('touch-strip frames: full resets, a window replaces its own region, snapsho
 });
 
 test('selecting an unknown/removed dock is rejected; unplug falls back to 0', () => {
-  const ui = new WebUIServer(undefined, [], 'real', TEST_SETTINGS_ROOT);
+  const ui = new WebUIServer(undefined, [], 'real', new PersistedSettings(TEST_SETTINGS_ROOT));
   ui.notifyDocks([fakeDockStatus(0), fakeDockStatus(1)]);
 
   assert.equal(ui.trySelectDock(7)?.status, 404, 'unknown dock index rejected');
@@ -662,7 +678,7 @@ test('selecting an unknown/removed dock is rejected; unplug falls back to 0', ()
 });
 
 test('selectDock: snapshot brightness follows the selected dock (per-device)', () => {
-  const ui = new WebUIServer(undefined, [], 'real', TEST_SETTINGS_ROOT);
+  const ui = new WebUIServer(undefined, [], 'real', new PersistedSettings(TEST_SETTINGS_ROOT));
   ui.notifyDocks([
     { ...fakeDockStatus(0), brightness: 22 },
     { ...fakeDockStatus(1), brightness: 65 },
@@ -682,14 +698,14 @@ test('selectDock: snapshot brightness follows the selected dock (per-device)', (
 console.log('\nWebUIServer.applyMockConfig productId');
 
 test('NaN productId leaves previous PID unchanged', () => {
-  const ui = new WebUIServer(undefined, [], 'real', TEST_SETTINGS_ROOT);
+  const ui = new WebUIServer(undefined, [], 'real', new PersistedSettings(TEST_SETTINGS_ROOT));
   const before = ui.fullState().mockConfig.productId;
   const result = ui.applyMockConfig({ productId: Number.NaN });
   assert.equal(result.productId, before, 'productId unchanged for NaN');
 });
 
 test('valid integer productId is masked and applied', () => {
-  const ui = new WebUIServer(undefined, [], 'real', TEST_SETTINGS_ROOT);
+  const ui = new WebUIServer(undefined, [], 'real', new PersistedSettings(TEST_SETTINGS_ROOT));
   const result = ui.applyMockConfig({ productId: 0x1234abcd });
   assert.equal(result.productId, 0x1234abcd & 0xffff, 'productId masked');
 });
@@ -700,7 +716,7 @@ test('valid integer productId is masked and applied', () => {
 console.log('\nwebui: misc route validation');
 
 const ROUTES_TEST_PORT = 13002;
-const routesUi = new WebUIServer(ROUTES_TEST_PORT, [], 'real', TEST_SETTINGS_ROOT);
+const routesUi = await webUIAt(TEST_SETTINGS_ROOT, ROUTES_TEST_PORT);
 await routesUi.start();
 
 try {
@@ -814,10 +830,10 @@ function deviceEntry(
 }
 
 test('getSettingsJson: notifyDocks syncs each dock brightness into its device entry', () => {
-  const ui = new WebUIServer(undefined, [], 'real', TEST_SETTINGS_ROOT);
-  ui.getOrCreateDeviceIdentity('fake-device-0', 'Dock');
+  const ui = new WebUIServer(undefined, [], 'real', new PersistedSettings(TEST_SETTINGS_ROOT));
+  ui.settings.getOrCreateIdentity('fake-device-0', 'Dock');
   ui.notifyDocks([{ ...fakeDockStatus(0), brightness: 33 }]);
-  const parsed = JSON.parse(ui.getSettingsJson()) as { devices?: { brightness?: number }[] };
+  const parsed = JSON.parse(ui.settings.json()) as { devices?: { brightness?: number }[] };
   assert.equal(
     parsed.devices?.[0]?.brightness,
     33,
@@ -826,9 +842,9 @@ test('getSettingsJson: notifyDocks syncs each dock brightness into its device en
 });
 
 test('applySettingsJson: devices[] import applies per-device override to selected dock', () => {
-  const ui = new WebUIServer(undefined, [], 'real', TEST_SETTINGS_ROOT);
+  const ui = new WebUIServer(undefined, [], 'real', new PersistedSettings(TEST_SETTINGS_ROOT));
   ui.notifyDocks([{ ...fakeDockStatus(0), brightness: 10 }]);
-  ui.applySettingsJson(
+  ui.settingsFile.applyJson(
     JSON.stringify({
       devices: [deviceEntry('fake-device-0', { brightnessOverride: true })],
     }),
@@ -837,33 +853,33 @@ test('applySettingsJson: devices[] import applies per-device override to selecte
 });
 
 test('applySettingsJson: a device entry with an invalid touchStripMode is rejected (guard), state unchanged', () => {
-  const ui = new WebUIServer(undefined, [], 'real', TEST_SETTINGS_ROOT);
+  const ui = new WebUIServer(undefined, [], 'real', new PersistedSettings(TEST_SETTINGS_ROOT));
   ui.notifyDocks([fakeDockStatus(0)]);
-  ui.applySettingsJson(
+  ui.settingsFile.applyJson(
     JSON.stringify({
       devices: [deviceEntry('fake-device-0', { touchStripMode: 'not-a-mode' })],
     }),
   );
-  const parsed = JSON.parse(ui.getSettingsJson()) as { devices?: unknown[] };
+  const parsed = JSON.parse(ui.settings.json()) as { devices?: unknown[] };
   assert.ok(!parsed.devices || parsed.devices.length === 0, 'malformed entry not stored');
 });
 
 test('applySettingsJson throws on malformed JSON, state unchanged', () => {
-  const ui = new WebUIServer(undefined, [], 'real', TEST_SETTINGS_ROOT);
+  const ui = new WebUIServer(undefined, [], 'real', new PersistedSettings(TEST_SETTINGS_ROOT));
   ui.notifyDocks([{ ...fakeDockStatus(0), brightness: 20 }]);
-  assert.throws(() => ui.applySettingsJson('not-json{{'));
+  assert.throws(() => ui.settingsFile.applyJson('not-json{{'));
   assert.equal(ui.snapshot().brightness, 20, 'brightness unchanged after rejected input');
 });
 
 test('applySettingsJson throws on a JSON array (not an object)', () => {
-  const ui = new WebUIServer(undefined, [], 'real', TEST_SETTINGS_ROOT);
-  assert.throws(() => ui.applySettingsJson('[1,2,3]'));
+  const ui = new WebUIServer(undefined, [], 'real', new PersistedSettings(TEST_SETTINGS_ROOT));
+  assert.throws(() => ui.settingsFile.applyJson('[1,2,3]'));
 });
 
 test('applySettingsJson: an unknown selectedDock is ignored, not fatal', () => {
-  const ui = new WebUIServer(undefined, [], 'real', TEST_SETTINGS_ROOT);
+  const ui = new WebUIServer(undefined, [], 'real', new PersistedSettings(TEST_SETTINGS_ROOT));
   ui.notifyDocks([fakeDockStatus(0)]);
-  ui.applySettingsJson(JSON.stringify({ selectedDock: 99 }));
+  ui.settingsFile.applyJson(JSON.stringify({ selectedDock: 99 }));
   assert.equal(ui.fullState().selectedDock, 0, 'selection stays on the primary');
 });
 
@@ -879,12 +895,12 @@ test('getOrCreateDeviceIdentity: absent key generates + appears in getSettingsJs
   // WebUIServer wiring: a newly-generated identity is reflected in-memory via
   // currentSettings() immediately, without depending on async disk I/O timing.
   const dir = `${DEVICE_IDENTITY_TEST_ROOT}/generate`;
-  const ui = new WebUIServer(undefined, [], 'real', dir);
-  const identity = ui.getOrCreateDeviceIdentity('/dev/hidraw3', 'My Dock');
+  const ui = new WebUIServer(undefined, [], 'real', new PersistedSettings(dir));
+  const identity = ui.settings.getOrCreateIdentity('/dev/hidraw3', 'My Dock');
   assert.equal(identity.deviceKey, '/dev/hidraw3');
   assert.equal(identity.mdnsServiceName, 'My Dock');
 
-  const body = JSON.parse(ui.getSettingsJson()) as { devices?: { deviceKey: string }[] };
+  const body = JSON.parse(ui.settings.json()) as { devices?: { deviceKey: string }[] };
   assert.ok(Array.isArray(body.devices), 'devices[] present in the settings snapshot');
   assert.equal(body.devices?.length, 1, 'exactly one entry');
   assert.equal(
@@ -896,29 +912,29 @@ test('getOrCreateDeviceIdentity: absent key generates + appears in getSettingsJs
 
 test('getOrCreateDeviceIdentity: present key reuses the stored entry, does not re-persist', () => {
   const dir = `${DEVICE_IDENTITY_TEST_ROOT}/reuse`;
-  const ui = new WebUIServer(undefined, [], 'real', dir);
-  const first = ui.getOrCreateDeviceIdentity('/dev/hidraw3', 'My Dock');
-  const second = ui.getOrCreateDeviceIdentity('/dev/hidraw3', 'A Different Default');
+  const ui = new WebUIServer(undefined, [], 'real', new PersistedSettings(dir));
+  const first = ui.settings.getOrCreateIdentity('/dev/hidraw3', 'My Dock');
+  const second = ui.settings.getOrCreateIdentity('/dev/hidraw3', 'A Different Default');
   assert.equal(second, first, 'same object reference — not regenerated');
   assert.equal(second.mdnsServiceName, 'My Dock', 'original name kept, default ignored on reuse');
 });
 
 test('updateDeviceMdnsName: renames an existing entry, returns true', () => {
   const dir = `${DEVICE_IDENTITY_TEST_ROOT}/rename`;
-  const ui = new WebUIServer(undefined, [], 'real', dir);
-  ui.getOrCreateDeviceIdentity('/dev/hidraw3', 'My Dock');
-  const ok = ui.updateDeviceMdnsName('/dev/hidraw3', 'Renamed Dock');
+  const ui = new WebUIServer(undefined, [], 'real', new PersistedSettings(dir));
+  ui.settings.getOrCreateIdentity('/dev/hidraw3', 'My Dock');
+  const ok = ui.settings.updateMdnsName('/dev/hidraw3', 'Renamed Dock');
   assert.equal(ok, true);
   assert.equal(
-    ui.getOrCreateDeviceIdentity('/dev/hidraw3', 'ignored').mdnsServiceName,
+    ui.settings.getOrCreateIdentity('/dev/hidraw3', 'ignored').mdnsServiceName,
     'Renamed Dock',
   );
 });
 
 test('updateDeviceMdnsName: unknown deviceKey returns false, no-op', () => {
   const dir = `${DEVICE_IDENTITY_TEST_ROOT}/unknown`;
-  const ui = new WebUIServer(undefined, [], 'real', dir);
-  const ok = ui.updateDeviceMdnsName('/dev/nonexistent', 'Whatever');
+  const ui = new WebUIServer(undefined, [], 'real', new PersistedSettings(dir));
+  const ok = ui.settings.updateMdnsName('/dev/nonexistent', 'Whatever');
   assert.equal(ok, false);
 });
 
@@ -927,20 +943,16 @@ test('updateDeviceMdnsName: unknown deviceKey returns false, no-op', () => {
 console.log('\nwebui: POST /api/device-identity/mdns-name');
 
 const MDNS_ROUTE_TEST_PORT = 13004;
-const mdnsRouteUi = new WebUIServer(
-  MDNS_ROUTE_TEST_PORT,
-  [],
-  'real',
-  `${DEVICE_IDENTITY_TEST_ROOT}/route`,
-);
+const mdnsRouteUi = await webUIAt(`${DEVICE_IDENTITY_TEST_ROOT}/route`, MDNS_ROUTE_TEST_PORT);
 await mdnsRouteUi.start();
 
 try {
   const base = `http://127.0.0.1:${mdnsRouteUi.port}`;
 
-  await runWebTest('valid body → 200, emits setDeviceMdnsName with trimmed name', async () => {
+  await runWebTest('valid body → 200, persists and emits mdnsNameChanged', async () => {
+    mdnsRouteUi.settings.getOrCreateIdentity('/dev/hidraw3', 'Dock');
     let emitted: unknown[] | null = null;
-    mdnsRouteUi.on('setDeviceMdnsName', (...args: unknown[]) => {
+    mdnsRouteUi.on('mdnsNameChanged', (...args: unknown[]) => {
       emitted = args;
     });
     const r = await fetch(`${base}/api/device-identity/mdns-name`, {
@@ -957,6 +969,21 @@ try {
       ['/dev/hidraw3', 'My Dock'],
       'event carries deviceKey + trimmed name',
     );
+    assert.equal(mdnsRouteUi.settings.entryFor('/dev/hidraw3')?.mdnsServiceName, 'My Dock');
+  });
+
+  await runWebTest('unknown deviceKey → 404, nothing emitted', async () => {
+    let emitted = false;
+    mdnsRouteUi.on('mdnsNameChanged', () => {
+      emitted = true;
+    });
+    const r = await fetch(`${base}/api/device-identity/mdns-name`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ deviceKey: '/dev/none', name: 'My Dock' }),
+    });
+    assert.equal(r.status, 404);
+    assert.equal(emitted, false);
   });
 
   await runWebTest('missing deviceKey → 400', async () => {
@@ -994,7 +1021,7 @@ try {
 console.log('\nwebui: GET/POST /api/settings');
 
 const SETTINGS_TEST_PORT = 13003;
-const settingsUi = new WebUIServer(SETTINGS_TEST_PORT, [], 'real', TEST_SETTINGS_ROOT);
+const settingsUi = await webUIAt(TEST_SETTINGS_ROOT, SETTINGS_TEST_PORT);
 await settingsUi.start();
 
 try {
@@ -1022,7 +1049,7 @@ try {
       body: JSON.stringify({ selectedDock: 0, devices: [device] }),
     });
     assert.equal(r.status, 200);
-    const back = JSON.parse(settingsUi.getSettingsJson()) as {
+    const back = JSON.parse(settingsUi.settings.json()) as {
       devices?: { brightness?: number }[];
     };
     assert.equal(back.devices?.[0]?.brightness, 77, 'imported device entry applied + retained');
@@ -1070,10 +1097,10 @@ await runWebTest('start() drops path-keyed entries, keeps usb:<serial> keys', as
     },
     PRUNE_ROOT,
   );
-  const ui = new WebUIServer(PRUNE_TEST_PORT, [], 'real', PRUNE_ROOT);
+  const ui = await webUIAt(PRUNE_ROOT, PRUNE_TEST_PORT);
   await ui.start();
   try {
-    const body = JSON.parse(ui.getSettingsJson()) as { devices?: { deviceKey: string }[] };
+    const body = JSON.parse(ui.settings.json()) as { devices?: { deviceKey: string }[] };
     assert.equal(body.devices?.length, 1, 'only the serial-keyed entry survives');
     assert.equal(body.devices?.[0]?.deviceKey, 'usb:0300D0782F51');
   } finally {
@@ -1097,16 +1124,15 @@ await runWebTest(
       },
       PRUNE_ROOT,
     );
-    const ui = new WebUIServer(undefined, [], 'real', PRUNE_ROOT);
-    await ui.start(false);
-    const body = JSON.parse(ui.getSettingsJson()) as { devices?: Record<string, unknown>[] };
+    const ui = await webUIAt(PRUNE_ROOT);
+    const body = JSON.parse(ui.settings.json()) as { devices?: Record<string, unknown>[] };
     assert.equal(body.devices?.length, 1, 'identity entry survives (no Elgato re-pair)');
     const entry = body.devices![0]!;
     assert.equal(entry.brightness, 42);
     for (const k of ['touchStripMode', 'encoders', 'touchStripDisabled']) {
       assert.ok(!(k in entry), `${k} stripped`);
     }
-    assert.equal(ui.touchStripModeFor('usb:0300D0782F51'), 'elgato');
+    assert.equal(ui.settings.for('usb:0300D0782F51').stripMode(), 'elgato');
   },
 );
 
@@ -1121,51 +1147,50 @@ const TUNED_MODEL = 'mirabox-293';
 await runWebTest(
   'batch transfer tuning persists, resets, and rejects unsupported devices',
   async () => {
-    const ui = new WebUIServer(undefined, [], 'real', TEST_SETTINGS_ROOT);
+    const ui = new WebUIServer(undefined, [], 'real', new PersistedSettings(TEST_SETTINGS_ROOT));
     for (const [modelId, defaultEnabled] of [
       ['mirabox-293s', true],
       ['ajazz-akp153', false],
     ] as const) {
-      ui.tryResetModelOverride(modelId);
-      const initial = ui.deviceOverridesView(modelId);
+      ui.modelOverrides.tryReset(modelId);
+      const initial = ui.modelOverrides.view(modelId);
       assert.ok(!('error' in initial));
       if ('error' in initial) continue;
       assert.equal(initial.tunable.wire!.batchImageTransfers, defaultEnabled);
       assert.ok(
         !(
           'error' in
-          ui.trySetModelOverride(modelId, { wire: { batchImageTransfers: !defaultEnabled } })
+          ui.modelOverrides.trySet(modelId, { wire: { batchImageTransfers: !defaultEnabled } })
         ),
         'batching toggles on a supported board',
       );
-      const saved = ui.deviceOverridesView(modelId);
+      const saved = ui.modelOverrides.view(modelId);
       assert.ok(!('error' in saved));
       if (!('error' in saved))
         assert.equal(saved.effective.wire?.batchImageTransfers, !defaultEnabled);
       const importRoot = `${TEST_SETTINGS_ROOT}-batch-import`;
-      await saveSettings(JSON.parse(ui.getSettingsJson()) as Settings, importRoot);
-      const restoredUi = new WebUIServer(undefined, [], 'real', importRoot);
-      await restoredUi.start(false);
-      const persisted = restoredUi.deviceOverridesView(modelId);
+      await saveSettings(JSON.parse(ui.settings.json()) as Settings, importRoot);
+      const restoredUi = await webUIAt(importRoot);
+      const persisted = restoredUi.modelOverrides.view(modelId);
       assert.ok(!('error' in persisted));
       if (!('error' in persisted))
         assert.equal(persisted.tunable.wire?.batchImageTransfers, !defaultEnabled);
       await restoredUi.stop();
-      ui.tryResetModelOverride(modelId);
-      const reset = ui.deviceOverridesView(modelId);
+      ui.modelOverrides.tryReset(modelId);
+      const reset = ui.modelOverrides.view(modelId);
       if (!('error' in reset))
         assert.equal(reset.tunable.wire?.batchImageTransfers, defaultEnabled);
     }
     assert.ok(
-      'error' in ui.trySetModelOverride('fifine-d6', { wire: { batchImageTransfers: true } }),
+      'error' in ui.modelOverrides.trySet('fifine-d6', { wire: { batchImageTransfers: true } }),
       'batching is rejected on a model without the 293S board',
     );
   },
 );
 
 test('device-overrides view seeds from the registry when nothing is persisted', () => {
-  const ui = new WebUIServer(undefined, [], 'real', TEST_SETTINGS_ROOT);
-  const view = ui.deviceOverridesView(TUNED_MODEL);
+  const ui = new WebUIServer(undefined, [], 'real', new PersistedSettings(TEST_SETTINGS_ROOT));
+  const view = ui.modelOverrides.view(TUNED_MODEL);
   assert.ok(!('error' in view), 'known model resolves');
   if (!('error' in view)) {
     assert.equal(view.modelId, TUNED_MODEL);
@@ -1175,13 +1200,13 @@ test('device-overrides view seeds from the registry when nothing is persisted', 
 });
 
 test('device-overrides default view follows the selected dock', () => {
-  const ui = new WebUIServer(undefined, [], 'real', TEST_SETTINGS_ROOT);
+  const ui = new WebUIServer(undefined, [], 'real', new PersistedSettings(TEST_SETTINGS_ROOT));
   ui.notifyDocks([
     { ...fakeDockStatus(0), modelId: TUNED_MODEL },
     { ...fakeDockStatus(1), modelId: 'mirabox-293s', modelName: 'Mirabox 293S' },
   ]);
   ui.selectDock(1);
-  const view = ui.deviceOverridesView();
+  const view = ui.modelOverrides.view();
   assert.ok(!('error' in view));
   if (!('error' in view)) assert.equal(view.modelId, 'mirabox-293s');
 });
@@ -1190,7 +1215,7 @@ test('the form seed round-trips: POSTing `tunable` unchanged is accepted', () =>
   // Regression: the panel used to seed from `effective`, which carries the
   // non-tunable protocol facts (format/colorMode/bmpPpm) as well — so pressing
   // Apply without touching anything failed with "image.format: unknown field".
-  const ui = new WebUIServer(undefined, [], 'real', TEST_SETTINGS_ROOT);
+  const ui = new WebUIServer(undefined, [], 'real', new PersistedSettings(TEST_SETTINGS_ROOT));
   for (const modelId of [
     'mk2',
     'mini',
@@ -1199,20 +1224,20 @@ test('the form seed round-trips: POSTing `tunable` unchanged is accepted', () =>
     'fifine-d6',
     'ajazz-akp153',
   ]) {
-    const view = ui.deviceOverridesView(modelId);
+    const view = ui.modelOverrides.view(modelId);
     assert.ok(!('error' in view), `${modelId} resolves`);
     if ('error' in view) continue;
     assert.ok(
-      !('error' in ui.trySetModelOverride(modelId, view.tunable)),
+      !('error' in ui.modelOverrides.trySet(modelId, view.tunable)),
       `${modelId}: the seed the UI renders must be a valid override`,
     );
-    ui.tryResetModelOverride(modelId);
+    ui.modelOverrides.tryReset(modelId);
   }
 });
 
 test('`tunable` excludes the protocol facts `effective` exposes', () => {
-  const ui = new WebUIServer(undefined, [], 'real', TEST_SETTINGS_ROOT);
-  const view = ui.deviceOverridesView('mk2');
+  const ui = new WebUIServer(undefined, [], 'real', new PersistedSettings(TEST_SETTINGS_ROOT));
+  const view = ui.modelOverrides.view('mk2');
   assert.ok(!('error' in view));
   if ('error' in view) return;
   assert.equal(view.effective.image.format, 'jpeg', 'effective keeps format for display');
@@ -1224,59 +1249,59 @@ test('`tunable` excludes the protocol facts `effective` exposes', () => {
 
 test('a seeded-then-edited override is still accepted', () => {
   // The actual user flow: open the panel, change rotation, press Apply.
-  const ui = new WebUIServer(undefined, [], 'real', TEST_SETTINGS_ROOT);
-  const view = ui.deviceOverridesView(TUNED_MODEL);
+  const ui = new WebUIServer(undefined, [], 'real', new PersistedSettings(TEST_SETTINGS_ROOT));
+  const view = ui.modelOverrides.view(TUNED_MODEL);
   assert.ok(!('error' in view));
   if ('error' in view) return;
   const edited = { ...view.overrides, image: { ...view.tunable.image, rotate: 90 as const } };
-  assert.ok(!('error' in ui.trySetModelOverride(TUNED_MODEL, edited)), 'the edited seed applies');
-  const after = ui.deviceOverridesView(TUNED_MODEL);
+  assert.ok(!('error' in ui.modelOverrides.trySet(TUNED_MODEL, edited)), 'the edited seed applies');
+  const after = ui.modelOverrides.view(TUNED_MODEL);
   assert.ok(!('error' in after) && after.effective.image.rotate === 90);
-  ui.tryResetModelOverride(TUNED_MODEL);
+  ui.modelOverrides.tryReset(TUNED_MODEL);
 });
 
 test('device-overrides view 404s on an unknown model id', () => {
-  const ui = new WebUIServer(undefined, [], 'real', TEST_SETTINGS_ROOT);
-  const view = ui.deviceOverridesView('not-a-model');
+  const ui = new WebUIServer(undefined, [], 'real', new PersistedSettings(TEST_SETTINGS_ROOT));
+  const view = ui.modelOverrides.view('not-a-model');
   assert.ok('error' in view && view.status === 404, 'unknown id is a 404, not a crash');
 });
 
 test('a valid override persists and shows up in the effective spec', () => {
-  const ui = new WebUIServer(undefined, [], 'real', TEST_SETTINGS_ROOT);
-  assert.deepEqual(ui.trySetModelOverride(TUNED_MODEL, { image: { rotate: 180 } }), {
+  const ui = new WebUIServer(undefined, [], 'real', new PersistedSettings(TEST_SETTINGS_ROOT));
+  assert.deepEqual(ui.modelOverrides.trySet(TUNED_MODEL, { image: { rotate: 180 } }), {
     kind: 'live',
   });
-  const view = ui.deviceOverridesView(TUNED_MODEL);
+  const view = ui.modelOverrides.view(TUNED_MODEL);
   assert.ok(!('error' in view));
   if (!('error' in view)) assert.equal(view.effective.image.rotate, 180);
-  const parsed = JSON.parse(ui.getSettingsJson()) as {
+  const parsed = JSON.parse(ui.settings.json()) as {
     modelOverrides?: Record<string, { image?: { rotate?: number } }>;
   };
   assert.equal(parsed.modelOverrides?.[TUNED_MODEL]?.image?.rotate, 180, 'written to settings');
 });
 
 test('an invalid override is rejected with the full error list, nothing persisted', () => {
-  const ui = new WebUIServer(undefined, [], 'real', TEST_SETTINGS_ROOT);
-  const r = ui.trySetModelOverride(TUNED_MODEL, { image: { rotate: 45, quality: 9 } });
+  const ui = new WebUIServer(undefined, [], 'real', new PersistedSettings(TEST_SETTINGS_ROOT));
+  const r = ui.modelOverrides.trySet(TUNED_MODEL, { image: { rotate: 45, quality: 9 } });
   const err = 'error' in r ? r : null;
   assert.ok(err !== null, 'rejected');
   assert.equal(err?.status, 400);
   assert.ok(err?.error.includes('image.rotate'), err?.error);
   assert.ok(err?.error.includes('image.quality'), 'every bad field is reported at once');
-  assert.equal(ui.modelOverrideFor(TUNED_MODEL), undefined, 'nothing stored');
+  assert.equal(ui.settings.overrideFor(TUNED_MODEL), undefined, 'nothing stored');
 });
 
 test('reset clears the override', () => {
-  const ui = new WebUIServer(undefined, [], 'real', TEST_SETTINGS_ROOT);
-  ui.trySetModelOverride(TUNED_MODEL, { image: { rotate: 90 } });
-  assert.ok(ui.modelOverrideFor(TUNED_MODEL) !== undefined, 'precondition: tuned');
-  assert.deepEqual(ui.tryResetModelOverride(TUNED_MODEL), { kind: 'live' });
-  assert.equal(ui.modelOverrideFor(TUNED_MODEL), undefined);
+  const ui = new WebUIServer(undefined, [], 'real', new PersistedSettings(TEST_SETTINGS_ROOT));
+  ui.modelOverrides.trySet(TUNED_MODEL, { image: { rotate: 90 } });
+  assert.ok(ui.settings.overrideFor(TUNED_MODEL) !== undefined, 'precondition: tuned');
+  assert.deepEqual(ui.modelOverrides.tryReset(TUNED_MODEL), { kind: 'live' });
+  assert.equal(ui.settings.overrideFor(TUNED_MODEL), undefined);
 });
 
 test('applySettingsJson imports modelOverrides and drops invalid entries', () => {
-  const ui = new WebUIServer(undefined, [], 'real', TEST_SETTINGS_ROOT);
-  ui.applySettingsJson(
+  const ui = new WebUIServer(undefined, [], 'real', new PersistedSettings(TEST_SETTINGS_ROOT));
+  ui.settingsFile.applyJson(
     JSON.stringify({
       modelOverrides: {
         [TUNED_MODEL]: { image: { rotate: 270 } },
@@ -1285,23 +1310,23 @@ test('applySettingsJson imports modelOverrides and drops invalid entries', () =>
       },
     }),
   );
-  assert.equal(ui.modelOverrideFor(TUNED_MODEL)?.image?.rotate, 270, 'valid entry kept');
-  assert.equal(ui.modelOverrideFor('not-a-model'), undefined, 'unknown model dropped');
-  assert.equal(ui.modelOverrideFor('mirabox-293s'), undefined, 'invalid override dropped');
+  assert.equal(ui.settings.overrideFor(TUNED_MODEL)?.image?.rotate, 270, 'valid entry kept');
+  assert.equal(ui.settings.overrideFor('not-a-model'), undefined, 'unknown model dropped');
+  assert.equal(ui.settings.overrideFor('mirabox-293s'), undefined, 'invalid override dropped');
 });
 
 test('safe mode reports the registry defaults as effective, but keeps the override', () => {
   // The one time a user opens this panel is when a bad override made the device
   // look dead — a view that disagreed with the hardware would mislead them. The
   // stored value stays so Reset still works.
-  const ui = new WebUIServer(undefined, [], 'real', TEST_SETTINGS_ROOT);
-  ui.trySetModelOverride(TUNED_MODEL, { image: { rotate: 180 } });
-  const before = ui.deviceOverridesView(TUNED_MODEL);
+  const ui = new WebUIServer(undefined, [], 'real', new PersistedSettings(TEST_SETTINGS_ROOT));
+  ui.modelOverrides.trySet(TUNED_MODEL, { image: { rotate: 180 } });
+  const before = ui.modelOverrides.view(TUNED_MODEL);
   assert.ok(!('error' in before) && before.effective.image.rotate === 180, 'precondition');
 
   tjs.env.DECKBRIDGE_NO_OVERRIDES = '1';
   try {
-    const view = ui.deviceOverridesView(TUNED_MODEL);
+    const view = ui.modelOverrides.view(TUNED_MODEL);
     assert.ok(!('error' in view));
     if (!('error' in view)) {
       assert.equal(view.safeMode, true, 'the UI can say so');
@@ -1311,30 +1336,30 @@ test('safe mode reports the registry defaults as effective, but keeps the overri
   } finally {
     delete tjs.env.DECKBRIDGE_NO_OVERRIDES;
   }
-  ui.tryResetModelOverride(TUNED_MODEL);
+  ui.modelOverrides.tryReset(TUNED_MODEL);
 });
 
 test('trySetLogLevel validates and persists', () => {
-  const ui = new WebUIServer(undefined, [], 'real', TEST_SETTINGS_ROOT);
-  assert.equal(ui.trySetLogLevel('debug'), null);
-  assert.equal(ui.logLevel(), 'debug', 'applied to the main thread');
-  const parsed = JSON.parse(ui.getSettingsJson()) as { logLevel?: string };
+  const ui = new WebUIServer(undefined, [], 'real', new PersistedSettings(TEST_SETTINGS_ROOT));
+  assert.equal(ui.logging.trySetLevel('debug'), null);
+  assert.equal(ui.logging.level(), 'debug', 'applied to the main thread');
+  const parsed = JSON.parse(ui.settings.json()) as { logLevel?: string };
   assert.equal(parsed.logLevel, 'debug', 'written to settings');
-  const err = ui.trySetLogLevel('loud');
+  const err = ui.logging.trySetLevel('loud');
   assert.equal(err?.status, 400);
-  assert.equal(ui.logLevel(), 'debug', 'a rejected level does not change anything');
-  ui.trySetLogLevel('warn'); // restore: setLogLevel is process-wide
+  assert.equal(ui.logging.level(), 'debug', 'a rejected level does not change anything');
+  ui.logging.trySetLevel('warn'); // restore: setLogLevel is process-wide
 });
 
 test('fullState exposes the log level and log path for the Settings page', () => {
-  const ui = new WebUIServer(undefined, [], 'real', TEST_SETTINGS_ROOT);
+  const ui = new WebUIServer(undefined, [], 'real', new PersistedSettings(TEST_SETTINGS_ROOT));
   const state = ui.fullState();
   assert.equal(typeof state.logLevel, 'string');
   assert.ok(state.logFilePath.endsWith('deckbridge.log'), state.logFilePath);
 });
 
 test('fullState omits logs/commLogs in simple-only builds (the test build default)', () => {
-  const ui = new WebUIServer(undefined, [], 'real', TEST_SETTINGS_ROOT);
+  const ui = new WebUIServer(undefined, [], 'real', new PersistedSettings(TEST_SETTINGS_ROOT));
   const state = ui.fullState();
   assert.equal(state.logs, undefined, 'no log panel to receive it in a simple-only build');
   assert.equal(state.commLogs, undefined, 'no comm panel to receive it in a simple-only build');
@@ -1357,10 +1382,9 @@ await runWebTest(
       } as never,
       root,
     );
-    const ui = new WebUIServer(undefined, [], 'real', root);
-    await ui.start(false); // load settings without binding a port
-    assert.equal(ui.modelOverrideFor(TUNED_MODEL)?.image?.rotate, 180, 'valid entry survives');
-    assert.equal(ui.modelOverrideFor('mirabox-293s'), undefined, 'invalid entry dropped');
+    const ui = await webUIAt(root);
+    assert.equal(ui.settings.overrideFor(TUNED_MODEL)?.image?.rotate, 180, 'valid entry survives');
+    assert.equal(ui.settings.overrideFor('mirabox-293s'), undefined, 'invalid entry dropped');
     await tjs.remove(root, { recursive: true }).catch(() => undefined);
   },
 );
@@ -1381,18 +1405,28 @@ await runWebTest(
       } as never,
       root,
     );
-    const ui = new WebUIServer(undefined, [], 'real', root);
-    await ui.start(false);
-    const prefs = ui.devicePrefs;
-    assert.deepEqual(prefs.tapFeedbackFor('usb:A'), { flash: true, placeholder: false }, 'absent');
-    assert.deepEqual(prefs.tapFeedbackFor('usb:B'), { flash: true, placeholder: true }, 'partial');
+    const ui = await webUIAt(root);
     assert.deepEqual(
-      prefs.tapFeedbackFor('usb:C'),
+      ui.settings.for('usb:A').tapFeedback(),
+      { flash: true, placeholder: false },
+      'absent',
+    );
+    assert.deepEqual(
+      ui.settings.for('usb:B').tapFeedback(),
+      { flash: true, placeholder: true },
+      'partial',
+    );
+    assert.deepEqual(
+      ui.settings.for('usb:C').tapFeedback(),
       { flash: true, placeholder: false },
       'bad flag',
     );
-    assert.deepEqual(prefs.tapFeedbackFor('usb:D'), { flash: true, placeholder: false }, 'array');
-    const devices = (JSON.parse(ui.getSettingsJson()) as { devices: Record<string, unknown>[] })
+    assert.deepEqual(
+      ui.settings.for('usb:D').tapFeedback(),
+      { flash: true, placeholder: false },
+      'array',
+    );
+    const devices = (JSON.parse(ui.settings.json()) as { devices: Record<string, unknown>[] })
       .devices;
     assert.equal(devices.length, 4, 'a bad tapFeedback never drops the identity entry');
     assert.equal(devices[2]!.tapFeedback, undefined, 'invalid field stripped');
