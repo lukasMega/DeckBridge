@@ -793,11 +793,95 @@ try {
     },
   );
 
+  await runWebTest('POST /api/mock/* → 404 with a real driver', async () => {
+    assert.equal((await post('/api/mock/extra-key/15', {})).status, 404);
+    assert.equal(
+      (await post('/api/mock/dial', { index: 0, kind: 'rotate', delta: 1 })).status,
+      404,
+    );
+    assert.equal((await post('/api/mock/touch', { type: 'tap', x: 0, y: 0 })).status, 404);
+  });
+
   await runWebTest('POST /api/touch-strip (removed) → 404', async () => {
     assert.equal((await post('/api/touch-strip', { disabled: true })).status, 404);
   });
 } finally {
   await routesUi.stop().catch(() => undefined);
+}
+
+// WebUIServer: mock input simulation (POST /api/mock/*)
+
+console.log('\nwebui: mock input simulation');
+
+const MOCK_INPUT_TEST_PORT = 13005;
+const mockUi = new WebUIServer(
+  MOCK_INPUT_TEST_PORT,
+  [],
+  'mock',
+  new PersistedSettings(TEST_SETTINGS_ROOT),
+);
+await mockUi.start();
+
+try {
+  const base = `http://127.0.0.1:${mockUi.port}`;
+  const post = (path: string, body: unknown): Promise<Response> =>
+    fetch(`${base}${path}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: typeof body === 'string' ? body : JSON.stringify(body),
+    });
+  const emitted: unknown[] = [];
+  mockUi.on('mockInput', (input: unknown) => emitted.push(input));
+
+  await runWebTest('plain MK.2: no pressable extra key, knobs or strip → 400', async () => {
+    mockUi.notifyDocks([fakeDockStatus(0)]);
+    assert.equal((await post('/api/mock/extra-key/15', {})).status, 400);
+    assert.equal(
+      (await post('/api/mock/dial', { index: 0, kind: 'rotate', delta: 1 })).status,
+      400,
+    );
+    assert.equal((await post('/api/mock/touch', { type: 'tap', x: 0, y: 0 })).status, 400);
+    assert.equal(emitted.length, 0);
+  });
+
+  await runWebTest('AKP05E-like dock: valid input → 204 + mockInput emitted', async () => {
+    mockUi.notifyDocks([
+      { ...fakeDockStatus(0), extraKeys: [15, 10], pressableExtraKeys: [15, 10], encoderCount: 4 },
+    ]);
+    assert.equal((await post('/api/mock/extra-key/10', {})).status, 204);
+    assert.equal(
+      (await post('/api/mock/dial', { index: 3, kind: 'press', state: 'down' })).status,
+      204,
+    );
+    const swipe = { type: 'swipe', x: 0, y: 50, endX: 799, endY: 50 };
+    assert.equal((await post('/api/mock/touch', swipe)).status, 204);
+    assert.deepEqual(emitted, [
+      { kind: 'extraKey', wireId: 10 },
+      { kind: 'dial', event: { index: 3, kind: 'press', state: 'down' } },
+      { kind: 'touch', event: swipe },
+    ]);
+  });
+
+  await runWebTest('AKP05E-like dock: out-of-range or malformed input → 400', async () => {
+    emitted.length = 0;
+    const cases: Array<[string, unknown]> = [
+      ['/api/mock/extra-key/16', {}],
+      ['/api/mock/extra-key/-1', {}],
+      ['/api/mock/dial', { index: 4, kind: 'rotate', delta: 1 }],
+      ['/api/mock/dial', { index: 0, kind: 'rotate', delta: 0 }],
+      ['/api/mock/dial', { index: 0, kind: 'press', state: 'held' }],
+      ['/api/mock/dial', 'not json'],
+      ['/api/mock/touch', { type: 'tap', x: 800, y: 0 }],
+      ['/api/mock/touch', { type: 'poke', x: 0, y: 0 }],
+      ['/api/mock/touch', { type: 'swipe', x: 0, y: 0 }],
+    ];
+    for (const [path, body] of cases) {
+      assert.equal((await post(path, body)).status, 400, `${path} ${JSON.stringify(body)}`);
+    }
+    assert.equal(emitted.length, 0, 'nothing reaches the driver');
+  });
+} finally {
+  await mockUi.stop().catch(() => undefined);
 }
 
 // WebUIServer settings persistence

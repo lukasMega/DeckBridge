@@ -7,7 +7,7 @@ import { WebUIServer } from '../web/server/index.js';
 import type { MockDeviceConfig } from '../web/server/index.js';
 import { MockDriver } from '../devices/mock.js';
 import type { ClientApp, CommEntry, LogObject } from '../shared/types.js';
-import type { TouchStripMode } from '../shared/types.js';
+import type { MockInput, TouchStripMode } from '../shared/types.js';
 import {
   DEFAULT_BRIGHTNESS,
   ELGATO_CHILD_PORT,
@@ -250,6 +250,11 @@ webui.on('keyPress', (mk2Index: number) => {
   if (driverManager.getDriverMode() === 'mock' && d instanceof MockDriver) {
     d.simulateKeyPress(mk2Index);
   }
+});
+
+webui.on('mockInput', (input: MockInput) => {
+  const d = driverManager.getCurrentDriver();
+  if (driverManager.getDriverMode() === 'mock' && d instanceof MockDriver) d.simulate(input);
 });
 
 webui.on('setModel', (modelId: string) => {

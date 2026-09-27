@@ -2,7 +2,8 @@ import { assets } from './assets.js';
 import { checkRequirements } from './requirements.js';
 import { get, post, postJson } from './router.js';
 import type { Route, RouteContext } from './router.js';
-import { badRequest, css, html, js, json, noContent, text } from './http.js';
+import { badRequest, css, html, js, json, noContent, readJson, text } from './http.js';
+import type { RawMockInput } from './mock-input.js';
 import { isNonNegInt, nonNegIntMessage } from './types.js';
 import type { MockDeviceConfig } from './types.js';
 import {
@@ -45,6 +46,16 @@ export const routes: Route[] = [
     const err = ui.trySimulateKey(Number(params.n));
     return err ? json({ error: err.error }, err.status) : noContent();
   }),
+  // Mock-only input simulation (browser e2e); 404 with a real device.
+  post('/api/mock/extra-key/:wireId', ({ ui, params }) =>
+    simulate(ui, { kind: 'extraKey', wireId: Number(params.wireId) }),
+  ),
+  post('/api/mock/dial', async ({ ui, req }) =>
+    simulate(ui, { kind: 'dial', event: await bodyOrUndefined(req) }),
+  ),
+  post('/api/mock/touch', async ({ ui, req }) =>
+    simulate(ui, { kind: 'touch', event: await bodyOrUndefined(req) }),
+  ),
   postJson('/api/select-dock', selectDock),
   postJson('/api/extra-key', setExtraKey),
   postJson('/api/extra-key/run', runExtraKeyNow),
@@ -303,6 +314,17 @@ function setEncoders(body: unknown, { encoders }: RouteContext): Response {
     ...(commands !== undefined ? { commands } : {}),
   });
   return err ? json({ error: err.error }, err.status) : json({ ok: true });
+}
+
+function simulate(ui: RouteContext['ui'], raw: RawMockInput): Response {
+  const err = ui.trySimulateInput(raw);
+  return err ? json({ error: err.error }, err.status) : noContent();
+}
+
+/** Malformed JSON becomes a shape error from checkMockInput, after its mock-mode 404. */
+async function bodyOrUndefined(req: Request): Promise<unknown> {
+  const parsed = await readJson<unknown>(req);
+  return 'error' in parsed ? undefined : parsed.body;
 }
 
 function selectDock({ index }: { index: unknown }, { ui }: RouteContext): Response {

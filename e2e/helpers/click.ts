@@ -77,3 +77,19 @@ export async function pressEscape(
     await new Promise((r) => setTimeout(r, 150));
   }
 }
+
+/**
+ * Pick an option in a <select>. Preact binds `onChange`, so set the value and fire the
+ * one `change` event the handler listens for; Chromium triage uses the real API.
+ */
+export async function selectValue(locator: Locator, value: string): Promise<void> {
+  if (usingChromium) {
+    await locator.selectOption(value);
+    return;
+  }
+  await locator.evaluate((el, v) => {
+    const select = el as HTMLSelectElement;
+    select.value = v;
+    select.dispatchEvent(new Event('change', { bubbles: true }));
+  }, value);
+}

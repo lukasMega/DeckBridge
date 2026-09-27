@@ -524,6 +524,11 @@ await test('strip zones map left→right onto taps (800 px Plus strip) and knobs
     [1, 2, 3, 4, undefined],
   );
   assert.equal(zoneForTouch(DEFAULT_MODEL, tap(10)), undefined, 'no strip');
+  // Native AKP05E (no Plus profile) advertises no strip, so taps fall back to 800 px.
+  assert.deepEqual(
+    [0, 199, 200, 450, 799].map((x) => zoneForTouch(AJAZZ_AKP05E_MODEL, tap(x))),
+    [1, 1, 2, 3, 4],
+  );
 });
 
 await test('a tap on a zone showing a widget refreshes it; other gestures and zones reach the app', async () => {

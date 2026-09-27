@@ -90,6 +90,75 @@ their ground and must not be duplicated:
   one-`h1`-per-page, navbar/footer presence, mermaid prerendering, feeds.
 - `ts/scripts/test-client.mjs` — Preact store/clipboard component regressions.
 
-Not covered by design: the app's "Everything's working" stage, lit key images and the
-side-keys panel. All three need a real CORA TCP client (or a real device); mock mode
-reaches `driverConnected` but never `elgatoConnected`.
+### Arranging state
+
+`fixtures/app.ts` re-exports the helpers specs use to set up state without the UI:
+
+- `api(request, baseURL, path, body?)` → `{ status, json }` (GET, or POST JSON), plus
+  `getState` / `waitForState(predicate)` / `waitForDriver` over `GET /api/state`. All go
+  through Playwright's `request` context, never an in-page `fetch` — a long run of
+  page-side fetches wedges a later Lightpanda navigation.
+- `useDevice(request, baseURL, modelId)` switches the mock device in place
+  (`POST /api/device-model`) and waits for the new model. One app serves every device.
+- `connectElgato(request, baseURL)` opens a fake Elgato app connection on the child CORA
+  port (5344), which is what moves the UI to the "Everything's working" stage. A silent
+  client is enough: the server never times out an unresponsive client. `close()` waits
+  for `elgatoConnected: false`, so the next spec starts unpaired.
+- `restoreSettings(request, baseURL, snapshot)` puts settings.json back to a
+  `getSettings()` snapshot taken in `beforeAll`: per-device config (`extraKeys`, strip
+  mode, knobs, brightness) and `multiDeck`, and device tuning only when it changed —
+  every `modelOverrides` import reopens the session. Identities created since stay,
+  stripped to their identity fields. (`POST /api/settings {}` resets nothing: an import
+  only assigns the fields it carries.) `setOverride` / `resetOverride` apply device
+  tuning and wait for the reopened mock to show it.
+- `workerRequest` is a worker-scoped request context for `beforeAll`/`afterAll` hooks
+  (`request` is test-scoped). Every describe block ends on MK.2 with its settings
+  restored, so spec order does not matter.
+- `nextFrame(baseURL, match, trigger)` reads `/api/ws` from Node — WS round-trips need
+  no page load. `Marker` gives a shell command that appends a line to a temp file, so a
+  spec can count how often a press/knob command or command widget ran.
+- The mock driver takes simulated input the real drivers would emit:
+  `POST /api/key/:n` (grid key), `/api/mock/extra-key/:wireId` (side key with a switch),
+  `/api/mock/dial` and `/api/mock/touch`. All are mock-only (404 in real mode) and 400
+  on input the current device cannot produce.
+
+### Device matrix
+
+`helpers/devices.ts` lists every mocked device with what it must report — geometry,
+side keys, knobs, strip zones, CORA profile, whether its wire sizes are tunable. The
+values are copied from `ts/src/devices/**`, not imported: the table is the independent
+check. Each mocked device gets a `mock:<modelId>` identity, so its per-device settings
+persist like a real one's.
+
+| Device | Model id | Grid | Side keys | Strip / knobs | Specs |
+|---|---|---|---|---|---|
+| Ajazz AKP05E | `ajazz-akp05e` | 5×2 (8/4×2 as a Stream Deck +) | 15/10, Plus profile only, with switches | 4 zones, 4 knobs | matrix, ready, side-keys, touch-strip-knobs |
+| Ajazz AKP153 rev. 1 | `ajazz-akp153` | 5×3 | 16/17/18, display-only | — | matrix, ready, side-keys |
+| Ajazz AKP153 rev. 2 | `ajazz-akp153e-rev2` | 5×3 | — | — | matrix, ready |
+| Mirabox 293S | `mirabox-293s` | 5×3 | 16/17/18, display-only | — | matrix, ready, side-keys |
+| Mirabox 293V3 | `mirabox-293` | 5×3 | — | — | matrix, ready |
+| Fifine D6 | `fifine-d6` | 5×3 | — | — | matrix, ready |
+| Stream Deck Mini | `mini` | 3×2 | — | — | matrix, ready |
+| Stream Deck MK.2 | `mk2` | 5×3 | — | — | matrix, ready, everything else |
+
+- `device-matrix.spec.ts` — all devices: status + first WS snapshot, last-key round-trip,
+  out-of-range key, capability presence/absence, device-tuning fields, and the key-grid
+  preview across all devices in one page load.
+- `ready-stage.spec.ts` — paired (fake CORA client): brightness, and which panels render
+  per device (plain boards must show none).
+- `side-keys.spec.ts` — 293S / AKP153 rev. 1 display-only column; AKP05E pressable keys.
+- `touch-strip-knobs.spec.ts` — AKP05E strip modes, zones, knobs, Plus emulation, and
+  simulated knob/strip input.
+- `settings-panels.spec.ts` — device-independent Settings page on MK.2: mDNS rename,
+  multi-deck, updates (never contacts GitHub; the page must not request
+  `/api/update/check`), diagnostics redaction, settings import, log level, `/requirements`.
+
+**Adding a device:**
+
+1. Add a `DeviceCase` to `DEVICES` in `helpers/devices.ts`, with values read from its
+   `DeviceModel` (and `advertiseAs` / `cora.emulations` for the profile fields). The
+   matrix spec and the ready-stage panel checks pick it up; a device with no side keys,
+   strip or knobs joins `PLAIN_DEVICES` on its own.
+2. If it has side keys, a strip or knobs, add it to the matching spec — the matrix only
+   checks that they are reported, not that they work.
+3. Add a row to the table above.

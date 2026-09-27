@@ -12,6 +12,8 @@ import { DockRegistry } from './dock-registry.js';
 import { isAllowedWebRequest, resolveListenPort } from './web-request-guard.js';
 import { ActivityBuffers } from './activity-buffers.js';
 import { defaultMockConfig, mergeMockConfig, validateSimulatedKey } from './mock-config.js';
+import { checkMockInput } from './mock-input.js';
+import type { RawMockInput } from './mock-input.js';
 import { PersistedSettings } from '../../infra/settings.js';
 import type {
   ControllerHost,
@@ -324,6 +326,13 @@ export class WebUIServer extends EventEmitter implements WebUIController, WebUIC
     const invalid = validateSimulatedKey(n, this.status.keyCount, this.status.driverMode);
     if (invalid) return invalid;
     this.emit('keyPress', n);
+    return null;
+  }
+
+  trySimulateInput(raw: RawMockInput): ReqError | null {
+    const checked = checkMockInput(raw, this.dockRegistry.selectedStatus(), this.status.driverMode);
+    if ('error' in checked) return checked;
+    this.emit('mockInput', checked.input);
     return null;
   }
 }

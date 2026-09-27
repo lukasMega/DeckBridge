@@ -58,15 +58,17 @@ export function buildStateResponse(input: StateResponseInputs): StateResponse {
 }
 
 /** Identifiers sent to the Elgato app for the SELECTED dock (Settings, read-only):
- *  mockConfig in mock mode (mock is only ever dock 0, no deviceKey → WebUI hides the
- *  rename control), else the selected dock's identity, else fixed defaults before
- *  the first notifyDocks. */
+ *  the selected dock's identity — a mock dock has one too (`mock:<modelId>`) — else
+ *  mockConfig in mock mode before the mock connects, else fixed defaults before the
+ *  first notifyDocks. */
 export function selectedDeviceIdentity(
   driverMode: DriverMode,
   mockConfig: MockDeviceConfig,
   dock: DockStatus | undefined,
 ): DeviceIdentity {
-  if (driverMode === 'mock') return { ...mockConfig, mdnsServiceName: MDNS_SERVICE_NAME };
+  if (driverMode === 'mock' && !dock?.deviceKey) {
+    return { ...mockConfig, mdnsServiceName: MDNS_SERVICE_NAME };
+  }
   if (!dock) return { ...defaultMockConfig(), mdnsServiceName: MDNS_SERVICE_NAME };
   return {
     dockFirmwareVersion: dock.dockFirmwareVersion,

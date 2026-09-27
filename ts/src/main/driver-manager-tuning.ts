@@ -55,7 +55,9 @@ export async function applyTuningChange(
     return;
   }
   if (ctx.driverMode === 'mock') {
-    if (ctx.currentDriver) await ctx.connectMock(ctx.currentDriver.model);
+    // Registry entry, same reason as applyLive: connectMock re-merges the override.
+    const model = ctx.currentDriver && findModelById(ctx.currentDriver.model.id);
+    if (model) await ctx.connectMock(model);
     return;
   }
   await ctx.extras.reloadDeviceTuning(modelId);

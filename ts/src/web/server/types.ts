@@ -14,6 +14,7 @@ import type { ExtraKeysController } from './extra-keys-controller.js';
 import type { ModelOverridesController } from './model-overrides-controller.js';
 import type { LoggingController } from './logging-controller.js';
 import type { SettingsFileController } from './settings-file-controller.js';
+import type { RawMockInput } from './mock-input.js';
 // Canonical LogLevel lives in logger.ts (derived from cli.ts's LOG_LEVELS);
 // re-exported below so existing web-server call sites keep importing from types.js.
 import type { LogLevel } from '../../shared/logger.js';
@@ -110,5 +111,6 @@ export interface WebUIController {
   notifyBrightness(level: number): void;
   applyMockConfig(parsed: Partial<MockDeviceConfig>): MockDeviceConfig;
   trySimulateKey(n: number): ReqError | null;
+  trySimulateInput(raw: RawMockInput): ReqError | null;
   trySelectDock(index: unknown): ReqError | null;
 }
