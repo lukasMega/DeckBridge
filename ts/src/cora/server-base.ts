@@ -176,6 +176,10 @@ export abstract class CoraServerBase extends EventEmitter {
     this.emit('clientConnected', socket.remoteAddress);
 
     this.onClientConnected(socket);
+    // Every CORA client (primary and child alike) gets its first keepalive right
+    // after connect — moved here (was duplicated in each onClientConnected) so a
+    // CoraDock composing the pair only has this one place to reason about.
+    this.sendKeepalive();
 
     this.keepaliveTimer = setInterval(() => {
       // A synchronous throw here would kill the process (no global hook for

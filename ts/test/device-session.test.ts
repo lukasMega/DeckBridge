@@ -6,7 +6,9 @@ import {
   wireCommonDriverEvents,
 } from '../src/main/device-session.js';
 import { zoneForKnob, zoneForTouch } from '../src/main/device-session-status.js';
-import type { SessionServers } from '../src/main/device-session.js';
+import { CoraDock } from '../src/main/cora-dock.js';
+import type { ElgatoServer } from '../src/cora/primary-server.js';
+import type { ElgatoChildServer } from '../src/cora/child-server.js';
 import { generateDeviceIdentity } from '../src/infra/device-identity.js';
 import { DEFAULT_MODEL } from '../src/devices/registry.js';
 import { MIRABOX_293S_MODEL } from '../src/devices/mirabox/mirabox-293s.js';
@@ -39,7 +41,9 @@ import { testAsync as test, summaryExit } from './helpers/harness.js';
 
 // Fakes
 
-class FakeServer {
+// Extends EventEmitter so CoraDock's constructor (watchPairing) can attach its
+// 'clientDisconnected' listener; these tests never emit on it.
+class FakeServer extends EventEmitter {
   startCalls = 0;
   stopCalls = 0;
   setDeviceConfigCalls: Partial<DeviceConfig>[] = [];
@@ -135,6 +139,16 @@ class FakeDriver extends EventEmitter {
   renderTouchImage(): void {}
 }
 
+/** A real CoraDock (pairing watchdog, applyModel, startWithRetry, stop) over a
+ *  fake server pair — exercises the production wiring instead of re-mocking it. */
+function makeDock(server: FakeServer, childServer: FakeChildServer): CoraDock {
+  return new CoraDock(
+    server as unknown as ElgatoServer,
+    childServer as unknown as ElgatoChildServer,
+    'test dock',
+  );
+}
+
 function testIdentity(model: DeviceModel, deviceKey = 'test-device-key') {
   return generateDeviceIdentity(deviceKey, `${MDNS_SERVICE_NAME} (${model.name})`);
 }
@@ -162,7 +176,7 @@ function makeSession(model: DeviceModel = DEFAULT_MODEL, encoderOverride?: Encod
   const imageCalls: { keyIndex: number; format: string }[] = [];
   const session = new DeviceSession({
     identity: sessionIdentity(1, testIdentity(model)),
-    servers: { server, childServer } as unknown as SessionServers,
+    dock: makeDock(server, childServer),
     driver: driver as unknown as WorkerHidDriver,
     model,
     deviceInfo: { serial: driver.deviceSerial, firmware: driver.deviceFirmware },
@@ -205,7 +219,7 @@ function makeStripSession(
   const driver = new FakeDriver(model);
   const session = new DeviceSession({
     identity: sessionIdentity(1, testIdentity(model)),
-    servers: { server, childServer } as unknown as SessionServers,
+    dock: makeDock(server, childServer),
     driver: driver as unknown as WorkerHidDriver,
     model,
     onDisconnect: () => undefined,
@@ -495,10 +509,7 @@ await test('a driver stripWrite reaches the session onStripWrite', async () => {
   const writes: Array<[number, Uint8Array, boolean]> = [];
   const session = new DeviceSession({
     identity: sessionIdentity(1, testIdentity(model)),
-    servers: {
-      server: new FakeServer(),
-      childServer: new FakeChildServer(),
-    } as unknown as SessionServers,
+    dock: makeDock(new FakeServer(), new FakeChildServer()),
     driver: driver as unknown as WorkerHidDriver,
     model,
     onDisconnect: () => undefined,

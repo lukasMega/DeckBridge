@@ -10,7 +10,6 @@ import type { DockStatus, TouchStripMode, TouchWindowRegion } from '../shared/ty
 import { DEVICE_MODELS, findModelById } from '../devices/registry.js';
 import { DeviceSession, sessionIdentity } from './device-session.js';
 import { deviceKeyFor, sharedSerialModelId } from '../infra/device-identity.js';
-import { coraPortConflict } from './cora-startup.js';
 import type { DockPrefs } from '../infra/dock-prefs.js';
 import { touchStripOptionsOf } from '../infra/settings-store.js';
 import type { ExtraDockCoordinatorDeps } from './driver-manager-extras-deps.js';
@@ -217,8 +216,8 @@ export class ExtraDockCoordinator {
     const stripOptions = touchStripOptionsOf(deviceIdentity);
     if (stripOptions) driver.setTouchStripOptions(stripOptions);
     const identity = sessionIdentity(index, deviceIdentity);
-    const servers = factory(identity);
-    servers.childServer.on(
+    const dock = factory(identity);
+    dock.childServer.on(
       'touchImage',
       ({ data, region }: { data: Uint8Array; region?: TouchWindowRegion }) =>
         this.deps.onTouchImage?.(index, data, region),
@@ -226,7 +225,7 @@ export class ExtraDockCoordinator {
     const prefs = this.deps.settings.for(deviceKey);
     const session = new DeviceSession({
       identity,
-      servers,
+      dock,
       driver,
       model,
       deviceInfo: {
@@ -244,7 +243,7 @@ export class ExtraDockCoordinator {
       prefs,
     });
     this.extraSessions.set(hidPath, session);
-    servers.childServer.on('clientConnected', () => {
+    dock.childServer.on('clientConnected', () => {
       this.deps.settings.markPaired(deviceKey);
       this.deps.onElgatoAttached?.(index);
       this.scheduleBrightnessResend(hidPath, session, prefs);
@@ -261,10 +260,15 @@ export class ExtraDockCoordinator {
       this.deps.onDockConnected?.(index, deviceKey);
     } catch (e) {
       // Almost always a bind error — another DeckBridge / Elgato dock owns the
-      // port. Stop the session (closes this freshly-opened worker — fine, it's
-      // not the churny unopenable-device case) and free the index for a retry.
-      const { primaryPort, childPort } = identity;
-      log('error', 'coord', coraPortConflict(primaryPort, childPort, (e as Error).message));
+      // port (already logged with the port numbers by CoraDock.startWithRetry,
+      // via session.start()'s single-attempt call). Stop the session (closes
+      // this freshly-opened worker — fine, it's not the churny
+      // unopenable-device case) and free the index for a retry.
+      log(
+        'error',
+        'coord',
+        `extra dock ${model.id} idx=${index} start failed: ${(e as Error).message}`,
+      );
       this.extraSessions.delete(hidPath);
       await session.stop();
       this.releaseIndex(index);

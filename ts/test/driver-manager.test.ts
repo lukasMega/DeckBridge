@@ -8,7 +8,8 @@ import { MIRABOX_293S_MODEL } from '../src/devices/mirabox/mirabox-293s.js';
 import { MIRABOX_K1PRO_MODEL } from '../src/devices/mirabox/mirabox-k1pro.js';
 import { AJAZZ_AKP05E_MODEL } from '../src/devices/ajazz/akp05e.js';
 import { MockDriver } from '../src/devices/mock.js';
-import type { SessionIdentity, SessionServers } from '../src/main/device-session.js';
+import type { SessionIdentity } from '../src/main/device-session.js';
+import { CoraDock } from '../src/main/cora-dock.js';
 import type { DeviceModel, DeviceModelOverride } from '../src/devices/driver.js';
 import type { CommEntry, DialEvent, KeyState, TouchInputEvent } from '../src/shared/types.js';
 import {
@@ -778,7 +779,9 @@ class CoordFakeDriver extends EventEmitter {
   }
 }
 
-class FactoryServer {
+// Extends EventEmitter so CoraDock's constructor (watchPairing) can attach its
+// 'clientDisconnected' listener; these tests never emit on it.
+class FactoryServer extends EventEmitter {
   startCalls = 0;
   stopCalls = 0;
   start(): Promise<void> {
@@ -848,15 +851,16 @@ function setupCoord(maxDocks: number = MAX_MULTI_DECK_SESSIONS) {
     },
     discovery: usb.discovery,
     pool: usb.pool,
-    sessionServersFactory: (identity: SessionIdentity): SessionServers => {
+    sessionServersFactory: (identity: SessionIdentity): CoraDock => {
       identities.push(identity);
       const s = new FactoryServer();
       const c = new FactoryChildServer();
       serversByIndex.set(identity.index, { server: s, childServer: c });
-      return {
-        server: s as unknown as ElgatoServer,
-        childServer: c as unknown as ElgatoChildServer,
-      };
+      return new CoraDock(
+        s as unknown as ElgatoServer,
+        c as unknown as ElgatoChildServer,
+        `test dock ${identity.index}`,
+      );
     },
   });
   usb.discovery.present = (m) => present.has(m.id);

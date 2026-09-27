@@ -17,9 +17,8 @@ import type { WidgetPaint } from '../shared/widget-layout.js';
 import { EncoderActions } from './encoders.js';
 import { ExtraKeyActions } from './command-actions.js';
 import type { DeviceModel, DeviceModelOverride } from '../devices/driver.js';
-import type { ElgatoServer } from '../cora/primary-server.js';
-import type { ElgatoChildServer } from '../cora/child-server.js';
 import type { WorkerHidDriver } from '../worker/hid-worker-host.js';
+import type { CoraDock } from './cora-dock.js';
 import {
   sessionIdentity,
   buildDockStatus,
@@ -29,13 +28,7 @@ import {
   knobRefresh,
   tapRefresh,
 } from './device-session-status.js';
-import type {
-  DeviceInfo,
-  SessionIdentity,
-  DockFrames,
-  SessionServers,
-  SessionServersFactory,
-} from './device-session-status.js';
+import type { DeviceInfo, SessionIdentity, DockFrames } from './device-session-status.js';
 
 export {
   sessionIdentity,
@@ -44,11 +37,16 @@ export {
   wireCommonDriverEvents,
   applyModelToServers,
 };
-export type { DeviceInfo, SessionIdentity, DockFrames, SessionServers, SessionServersFactory };
+export type { DeviceInfo, SessionIdentity, DockFrames };
+
+/** Builds this dock's CORA server pair (already wrapped as a CoraDock — see
+ *  cora-dock.ts) for the given identity; the factory (wired in app.ts) is what
+ *  constructs the servers with the identity's ports/serials. */
+export type SessionServersFactory = (identity: SessionIdentity) => CoraDock;
 
 export interface DeviceSessionOptions {
   identity: SessionIdentity;
-  servers: SessionServers;
+  dock: CoraDock;
   driver: WorkerHidDriver; // already successfully opened by the coordinator
   model: DeviceModel;
   deviceInfo?: DeviceInfo;
@@ -75,8 +73,7 @@ export interface DeviceSessionOptions {
 
 export class DeviceSession {
   readonly identity: SessionIdentity;
-  private readonly server: ElgatoServer;
-  private readonly childServer: ElgatoChildServer;
+  private readonly dock: CoraDock;
   private readonly driver: WorkerHidDriver;
   /** Effective model. Replaced by applyLiveTuning on an image-only device-tuning
    *  change; CORA geometry/input mapping are unaffected by that section. */
@@ -97,8 +94,7 @@ export class DeviceSession {
 
   constructor(opts: DeviceSessionOptions) {
     this.identity = opts.identity;
-    this.server = opts.servers.server;
-    this.childServer = opts.servers.childServer;
+    this.dock = opts.dock;
     this.driver = opts.driver;
     this.model = opts.model;
     this.deviceInfo = opts.deviceInfo;
@@ -145,8 +141,8 @@ export class DeviceSession {
       primaryPort: this.identity.primaryPort,
       identity: this.identity,
       brightness: this.brightness,
-      primaryConnected: this.server.hasClient,
-      elgatoConnected: this.childServer.hasClient,
+      primaryConnected: this.dock.hasClient,
+      elgatoConnected: this.dock.childHasClient,
       // `?? {}`: an extra dock always reports realDeviceIdentity, even before the
       // driver knows the serial/firmware.
       deviceInfo: this.deviceInfo ?? {},
@@ -171,7 +167,7 @@ export class DeviceSession {
    *  ElgatoServer.setMdnsServiceName for why this respawns the mDNS process. */
   updateMdnsServiceName(name: string): void {
     this.identity.mdnsServiceName = name;
-    this.server.setMdnsServiceName(name);
+    this.dock.setMdnsServiceName(name);
     this.notifyStatusChange();
   }
 
@@ -186,13 +182,17 @@ export class DeviceSession {
     this.onStatusChange?.();
   }
 
-  /** Bring the dock up. Single attempt: a bind error (port conflict) throws to
-   *  the coordinator, which logs it and retries on a later scan tick — no
-   *  infinite retry loop here. */
+  /** Bring the dock up. Single attempt (maxAttempts: 1): a bind error (port
+   *  conflict) throws to the coordinator, which logs it and retries on a later
+   *  scan tick — no infinite retry loop here. */
   async start(): Promise<void> {
-    await this.server.start();
-    await this.childServer.start();
-    applyModelToServers(this.server, this.childServer, this.model, this.deviceInfo);
+    await this.dock.startWithRetry({
+      log,
+      primaryPort: this.identity.primaryPort,
+      childPort: this.identity.childPort,
+      maxAttempts: 1,
+    });
+    this.dock.applyModel(this.model, this.deviceInfo);
     this.wireListeners();
     // Seed this dock's persisted per-device settings before the splash so it boots at
     // the user's saved brightness. Only push when actually persisted — an
@@ -228,13 +228,13 @@ export class DeviceSession {
   private wireListeners(): void {
     wireCommonDriverEvents(this.driver, this.model, {
       onAction: this.onAction,
-      onKey: (index, state) => this.childServer.sendKeyEvent(index, state),
+      onKey: (index, state) => this.dock.childServer.sendKeyEvent(index, state),
       onExtraKey: (wireId, state) => this.extraKeyActions.handleKey(wireId, state),
       onDial: (event) => {
-        if (!this.encoders.handleDial(event)) this.childServer.sendDial(event);
+        if (!this.encoders.handleDial(event)) this.dock.childServer.sendDial(event);
       },
       onTouch: (event) => {
-        if (!this.handleTouch(event)) this.childServer.sendTouch(event);
+        if (!this.handleTouch(event)) this.dock.childServer.sendTouch(event);
       },
       onReinit: () => this.repaintExtraKeys(),
       onStripWrite: this.onStripWrite,
@@ -246,18 +246,18 @@ export class DeviceSession {
     // Raw CORA image → worker: transform + write off the main thread. The onImage
     // mirror runs after the driver call and costs one callback — the WebUI only
     // encodes/broadcasts when this dock is the selected preview.
-    this.childServer.on('image', ({ keyIndex, data, format }: ImageEvent) => {
+    this.dock.childServer.on('image', ({ keyIndex, data, format }: ImageEvent) => {
       this.driver.renderCoraImage(keyIndex, data, format);
       this.onImage?.(keyIndex, data, format);
     });
-    this.childServer.on(
+    this.dock.childServer.on(
       'touchImage',
       ({ data, region }: { data: Uint8Array; region?: TouchWindowRegion }) => {
         this.driver.renderTouchImage(data, region);
         this.extraKeys.noteTouchFrame(region);
       },
     );
-    this.childServer.on('brightness', (level: number) => {
+    this.dock.childServer.on('brightness', (level: number) => {
       if (this.prefs.brightnessOverride()) {
         log('debug', this.model.id, `brightness ${level} from Elgato ignored (override on)`);
         return;
@@ -267,20 +267,20 @@ export class DeviceSession {
     });
     // Status-only events for the WebUI — connect/disconnect are rare, no comm/
     // image/key mirror for extras (see file header).
-    this.childServer.on('clientConnected', () => this.notifyStatusChange());
-    this.childServer.on('clientDisconnected', () => this.notifyStatusChange());
+    this.dock.childServer.on('clientConnected', () => this.notifyStatusChange());
+    this.dock.childServer.on('clientDisconnected', () => this.notifyStatusChange());
   }
 
-  /** Idempotent teardown: drop driver listeners, close the worker, stop both
-   *  servers (server.stop() also stops mDNS). */
+  /** Idempotent teardown: drop driver listeners, close the worker, stop the
+   *  CORA dock (cancels the pairing watchdog, stops both servers — server.stop()
+   *  also stops mDNS). */
   async stop(): Promise<void> {
     if (this.stopped) return;
     this.stopped = true;
     this.extraKeys.stop();
     this.driver.removeAllListeners();
     await this.driver.close().catch(() => undefined);
-    await this.server.stop().catch(() => undefined);
-    await this.childServer.stop().catch(() => undefined);
+    await this.dock.stop();
     this.notifyStatusChange();
   }
 }

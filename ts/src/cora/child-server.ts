@@ -349,7 +349,6 @@ export class ElgatoChildServer extends CoraServerBase {
     this.touchStrip.reset();
     this.encoderPressMask = 0;
     this.warnedOobKeys.clear();
-    this.sendKeepalive();
   }
 
   protected override sendFrame(
