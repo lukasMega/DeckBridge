@@ -13,7 +13,7 @@ import type {
   ExtraKeyWrap,
 } from '../ui-types.js';
 import { postJson } from '../ui-api.js';
-import { useDismiss } from '../ui-hooks.js';
+import { useDismiss, useKeepInApp } from '../ui-hooks.js';
 import { postExtraKey } from './extra-keys-popovers.js';
 import { TextStyleButton } from './text-style-popover.js';
 
@@ -55,7 +55,9 @@ function SizePicker({
   onClose: () => void;
 }>): preact.JSX.Element {
   useDismiss(onClose, anchorRef);
+  const popRef = useRef<HTMLDivElement | null>(null);
   const [previews, setPreviews] = useState<ExtraKeyPreview[] | null | 'loading'>('loading');
+  useKeepInApp(popRef, previews);
   // Refetch when the config or the painted content changes while open.
   const cfgKey = JSON.stringify(cfg);
   const image = useStore((s) => s.extraKeyImages[String(wireId)]);
@@ -84,6 +86,7 @@ function SizePicker({
 
   return (
     <div
+      ref={popRef}
       class="xkey-popover xkey-size-picker floating-surface"
       role="dialog"
       aria-label={`${label} text sizes`}

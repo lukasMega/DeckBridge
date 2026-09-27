@@ -20,6 +20,7 @@ import { showDeviceAction } from '../src/web/client/device-test-mode.js';
 import { ExtraKeysPanel } from '../src/web/client/simple/extra-keys-panel.js';
 import { ChipRadioGroup } from '../src/web/client/components/ChipRadioGroup.js';
 import { updateBadgeVersion } from '../src/web/client/ui-helpers.js';
+import { popoverShift } from '../src/web/client/ui-hooks.js';
 import { KeyGridPreview } from '../src/web/client/components/KeyGridPreview.js';
 import { applyImage, clearImageStore } from '../src/web/client/key-preview.js';
 import { applyTouchImage, resetTouchStrip } from '../src/web/client/touch-strip-preview.js';
@@ -1422,7 +1423,41 @@ async function checkWrapSelect(stub: Stub, card: Element): Promise<void> {
   await act(() => patch({ extraKeys: { '10': { widget: 'command', param: 'date' } } }));
 }
 
+function checkPopoverShift(): void {
+  const app = { left: 0, right: 500, top: 0, bottom: 800 };
+  const box = (left: number, top: number, w: number, h: number) => ({
+    left,
+    top,
+    right: left + w,
+    bottom: top + h,
+  });
+  const anchor = box(20, 600, 40, 30);
+  check(
+    JSON.stringify(popoverShift(box(-210, 100, 270, 494), anchor, app)) ===
+      JSON.stringify({ dx: 218, down: false }),
+    "A popover cut at the app's left edge shifts right, 8 px in",
+  );
+  check(
+    popoverShift(box(100, 100, 270, 494), anchor, app).dx === 0,
+    'A popover inside the app stays put',
+  );
+  check(
+    popoverShift(box(300, 100, 270, 494), anchor, app).dx === -78,
+    'A popover cut at the right edge shifts left',
+  );
+  const high = box(20, 40, 40, 30);
+  check(
+    popoverShift(box(0, -460, 270, 494), high, app).down,
+    'A popover cut at the top opens below when there is more room there',
+  );
+  check(
+    !popoverShift(box(100, 4, 270, 494), box(20, 504, 40, 30), app).down,
+    'It stays above when the room above is larger',
+  );
+}
+
 async function checkTextStyle(stub: Stub, card: Element): Promise<void> {
+  checkPopoverShift();
   const base = { widget: 'command' as const, param: 'date' };
   await act(() =>
     patch({ extraKeys: { '10': { ...base, style: { textSize: 1, wrap: 'words' } } } }),
