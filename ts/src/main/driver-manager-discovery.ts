@@ -2,26 +2,6 @@ import type { DeviceModel } from '../devices/driver.js';
 import { DEVICE_MODELS } from '../devices/registry.js';
 import { cachedDiscoveryPaths, cachedDiscoverySerial } from '../ffi/hid-discovery.js';
 import { deviceKeyFor, sharedSerialModelId } from '../infra/device-identity.js';
-import type { ElgatoServer } from '../cora/primary-server.js';
-import type { ElgatoChildServer } from '../cora/child-server.js';
-import type { SessionServersFactory } from './device-session.js';
-import type { WebUIServer } from '../web/server/index.js';
-
-export type DriverMode = 'real' | 'mock';
-
-export interface DriverManagerDeps {
-  webui: WebUIServer;
-  server: ElgatoServer;
-  childServer: ElgatoChildServer;
-  onTrayChange: () => void;
-  getShuttingDown: () => boolean;
-  sessionServersFactory?: SessionServersFactory;
-  onDocksChanged?: () => void;
-}
-
-export function getInitialDriverMode(): DriverMode {
-  return tjs.env['DECKBRIDGE_MOCK'] === '1' ? 'mock' : 'real';
-}
 
 export function defaultPresenceCheck(model: DeviceModel): boolean {
   return cachedDiscoveryPaths(model.usbVendorId, model.usbProductIds).length > 0;

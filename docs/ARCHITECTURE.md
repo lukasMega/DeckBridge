@@ -645,7 +645,7 @@ shallow-memo `useStore` selector in `ts/src/web/client/store.ts`, plus the clipb
 | CORA framing | `packets` (Mirabox builders + framing), `cora-frame` (resync/overflow/oversized-`payloadLength` E10), `assembler`, `elgato-child-image-bounds` (out-of-range `keyIndex` drop, L4) |
 | Image pipeline | `translator` (key-map incl. `-1` E2 + Rust transform), `image-cache` (full-buffer FNV-1a incl. icon-on-black regression, LRU), `image-pipeline`, `image-render` (worker transform/cache/remap/passthrough), `hash-bench` |
 | Drivers & models | `device-models` (probe order, keyMap perms, 293S 6th-col drop, caps geometry), `driver-manager` (connect/reconnect, mode-switch, E1), `device-session` (per-index ports, splash on start, key/image event wiring, mDNS rename), `hid-worker-host` (failed-`open` reuse — SIGBUS-safe), `mirabox-parse` (0x04 vs 0x00), `k1pro-chunk-pad` |
-| Servers | `server` (primary+child over real TCP; L6/E3/E4/H3 + WebUI brightness), `pairing` (full MK.2 handshake), `feature-response` (report-id branches + MAC guard) |
+| Servers | `server` (primary+child over real TCP; L6/E3/E4/H3 + WebUI brightness), `pairing` (full MK.2 handshake), `feature-response` (cora/responses.ts report-id branches + MAC guard) |
 | Web & infra | `web-ui-server` (MAC/port/Broadcaster, NaN-PID V4, `resetImages` L3), `ui-helpers-docks` (dock list vs legacy-field synthesis), `key-preview`, `tray` (path helpers + `SIGTERM` L1), `mdns-advertiser` (per-platform `buildArgs`, E9), `native-libs` (extract/gunzip/cleanup), `buffer-shim` |
 | Settings & identity | `settings-store` (atomic write, corrupt/missing/array-shaped JSON → `{}`, concurrent-save safety), `device-identity` (stable `usb:<serial>` key vs unstable path fallback, deterministic MAC/serial, no-collision sampling) |
 | CLI | `cli` (flag parsing incl. `tjs run <bundle>` vs compiled-binary argv shape), `cli-devices` (device table formatting, known/unknown VID+PID rows) |
@@ -743,15 +743,13 @@ graph LR
     HIDAPI["ffi/hidapi.ts<br/>libhidapi FFI"]
 
     ELG["cora/primary-server.ts · cora/child-server.ts<br/>ElgatoServer · ElgatoChildServer<br/>setChildGeometry · restartMdns"]
-    ELG_PAYLOAD["cora/child-payload.ts<br/>report/output-report dispatch"]
-    ELG_GETREPORT["cora/child-report-handlers.ts<br/>GET_REPORT handler table"]
+    ELG_PAYLOAD["cora/child-payload.ts · child-reconnector.ts<br/>touch-strip-assembler.ts<br/>chunk tracing, outbound reconnect, Plus strip"]
     CSB["cora/server-base.ts<br/>CoraServerBase"]
     CF["cora/frame.ts<br/>CoraFrameReader<br/>encodeCoraFrame"]
 
     MDNS["mdns-advertiser.ts"]
     IMG_A["image-assembler.ts<br/>assembleImageChunk (gen2)<br/>assembleGen1ImageChunk (gen1)"]
-    CAPS["capabilities.ts<br/>ChildGeometry<br/>buildCapabilitiesPacket"]
-    FEAT["feature-response.ts"]
+    FEAT["cora/responses.ts<br/>feature responses · buildCapabilitiesPacket<br/>verbatim probes · CHILD_REPORT_SPECS"]
     DESC["cora/describe.ts"]
     TRANS["translator.ts<br/>image-cache.ts"]
     TYPES["types.ts / cora/types.ts"]
@@ -802,11 +800,9 @@ graph LR
 
     ELG --> CSB
     ELG --> ELG_PAYLOAD
-    ELG --> ELG_GETREPORT
     CSB --> CF
     CSB --> TCP
     ELG --> IMG_A
-    ELG --> CAPS
     ELG --> FEAT
     ELG --> DESC
     ELG --> MDNS
@@ -829,11 +825,12 @@ deckbridge/
 │   │          and each folder is one eslint-plugin-boundaries element)
 │   │   ├── main/         ← main-thread composition root: app.ts · driver-manager*.ts (probe/open,
 │   │   │                    adaptive backoff, multi-dock) · device-session*.ts · image-pipeline.ts
-│   │   │                    · cora-startup.ts (port retry) · extra-keys.ts · widget-refresh.ts
+│   │   │                    · cora-startup.ts (port retry) · extra-keys.ts · widget-lines.ts · widget-refresh.ts
 │   │   │                    · encoders.ts · command-actions.ts
 │   │   ├── cora/         ← CORA primary/child servers (5343/5344): primary-server.ts · child-server.ts
-│   │   │                    · child-payload.ts · child-report-handlers.ts · plus-reports.ts
-│   │   │                    · server-base.ts · frame.ts · describe.ts · feature-response.ts
+│   │   │                    · child-payload.ts · child-reconnector.ts · touch-strip-assembler.ts
+│   │   │                    · plus-reports.ts · server-base.ts · frame.ts · describe.ts
+│   │   │                    · responses.ts (every CORA reply builder)
 │   │   │                    · image-assembler.ts (gen1/gen2 assembly) · pairing-watchdog.ts · types.ts
 │   │   ├── worker/       ← USB worker (hid-worker.ts, createDriver()) + HID scan worker, their
 │   │   │                    main-side hosts (*-host.ts) and message protocols (*-protocol.ts)
@@ -849,7 +846,7 @@ deckbridge/
 │   │   │                    · daily-ping*.ts
 │   │   ├── cli/          ← devices.ts · diagnose.ts (`devices` / `diagnose` subcommands)
 │   │   ├── shared/       ← zero-FFI leaves any tier may import: types.ts · logger.ts · cli.ts (flag
-│   │   │                    parsing) · capabilities.ts · key-map.ts · splash-sender.ts · widget-*.ts …
+│   │   │                    parsing) · key-map.ts · splash-sender.ts · widget-*.ts …
 │   │   ├── dev/          ← hardware probes (mirabox-smoke, k1pro-probe, d6-capture, akp05-*) + probe-utils
 │   │   ├── ffi/          ← hidapi.ts (libhidapi) · hid-discovery.ts (timed enumeration + reset)
 │   │   │                    · image-proc.ts (libdeckbridge_native, DECKBRIDGE_NATIVE_LIB)

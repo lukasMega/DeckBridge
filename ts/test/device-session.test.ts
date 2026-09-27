@@ -29,7 +29,7 @@ import type {
   TouchStripMode,
 } from '../src/shared/types.js';
 import type { EncoderOverride } from '../src/main/encoders.js';
-import type { ChildGeometry } from '../src/shared/capabilities.js';
+import type { ChildGeometry } from '../src/devices/driver.js';
 import type { DeviceConfig } from '../src/cora/types.js';
 import type { DeviceModel } from '../src/devices/driver.js';
 import type { WorkerHidDriver } from '../src/worker/hid-worker-host.js';

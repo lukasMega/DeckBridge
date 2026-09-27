@@ -297,12 +297,6 @@ export default defineConfig([
               from: { element: { type: 'cora' } },
               allow: { to: { element: { type: ['infra', 'platform'] } } },
             },
-            // capabilities.ts (shared) needs the DeviceConfig type from cora/types.ts —
-            // type-only, defines the shared CORA child-device capability shape.
-            {
-              from: { element: { type: 'shared' } },
-              allow: { to: { element: { type: 'cora' } }, dependency: { kind: 'type' } },
-            },
             // web-server may read FFI capability candidates (path enumeration only — no device I/O),
             // and the device registry (for DEFAULT_MODEL) — never live device I/O.
             {

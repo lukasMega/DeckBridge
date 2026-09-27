@@ -4,7 +4,7 @@ import { ElgatoChildServer } from '../src/cora/child-server.js';
 import { ELGATO_VID, ELGATO_PKT_SIZE_RX, ELGATO_CHILD_PORT } from '../src/shared/types.js';
 import { CORA_FLAG_VERBATIM, CORA_FLAG_REQACK, CORA_FLAG_ACKNAK } from '../src/cora/frame.js';
 import { connect, waitForValue, closeAndWait, sendPkt, sendFrame } from './helpers/cora-framer.js';
-import { modelToChildGeometry } from '../src/shared/capabilities.js';
+import { modelToChildGeometry } from '../src/devices/registry.js';
 import { MK2_MODEL } from '../src/devices/elgato/mk2.js';
 import { testAsync as runTest, summaryExit } from './helpers/harness.js';
 

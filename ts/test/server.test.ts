@@ -3,7 +3,7 @@ import { ElgatoServer } from '../src/cora/primary-server.js';
 import { ElgatoChildServer } from '../src/cora/child-server.js';
 import { ELGATO_VID, ELGATO_PKT_SIZE_RX, NETWORK_DOCK_PID } from '../src/shared/types.js';
 import type { DockStatus } from '../src/shared/types.js';
-import { modelToChildGeometry } from '../src/shared/capabilities.js';
+import { modelToChildGeometry } from '../src/devices/registry.js';
 import { MK2_MODEL } from '../src/devices/elgato/mk2.js';
 import { MINI_MODEL } from '../src/devices/elgato/mini.js';
 import { STREAM_DECK_PLUS_MODEL } from '../src/devices/elgato/plus.js';
@@ -522,8 +522,9 @@ console.log('\nelgato child server: takeover race (E3)');
         // Give the deferred close microtask + any synchronous handlers a chance to run.
         await new Promise<void>((res) => setTimeout(res, 50));
 
-        const outboundSocket = (takeoverChildServer as unknown as { outboundSocket: unknown })
-          .outboundSocket;
+        const outboundSocket = (
+          takeoverChildServer as unknown as { reconnector: { outboundSocket: unknown } }
+        ).reconnector.outboundSocket;
         assert.equal(outboundSocket, null, 'no outbound socket should have been created');
         assert.ok(
           !logs.some((l) => l.message.includes('child outbound connect')),

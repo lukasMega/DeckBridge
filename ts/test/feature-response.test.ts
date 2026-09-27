@@ -1,5 +1,5 @@
 import assert from 'tjs:assert';
-import { fwVersionBuf, buildFeatureResponse } from '../src/cora/feature-response.js';
+import { fwVersionBuf, buildFeatureResponse } from '../src/cora/responses.js';
 import {
   FW_VERSION_FIELD_LEN,
   CORA_FW_VERSION_OFFSET,
