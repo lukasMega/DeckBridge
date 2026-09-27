@@ -1,6 +1,6 @@
 // Module-level handlers (no closure capture — hoisted out of components).
 import { deeplink, showToast } from '../ui-helpers.js';
-import { fire } from '../ui-api.js';
+import { fire } from '../lib/ui-api.js';
 
 export function openSdApp(e: MouseEvent): void {
   e.preventDefault();

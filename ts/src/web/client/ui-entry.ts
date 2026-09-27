@@ -1,7 +1,7 @@
-import { connectWS } from './ui-ws.js';
-import { mountSimple } from './simple-mount.js';
-import { mountAdvanced } from './advanced-mount.js';
-import { hydrate } from './hydrate.js';
+import { connectWS } from './lib/ui-ws.js';
+import { mountSimple } from './simple/mount.js';
+import { mountAdvanced } from './advanced/mount.js';
+import { hydrate } from './lib/hydrate.js';
 import type { StateResponse } from './ui-types.js';
 
 // Simple-only build: never reach the advanced view. Clear any persisted 'advanced'

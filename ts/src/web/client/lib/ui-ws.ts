@@ -1,12 +1,12 @@
-import type { WsEvents } from './ui-types.js';
-import { showDeviceAction } from './device-test-mode.js';
+import type { WsEvents } from '../ui-types.js';
+import { showDeviceAction } from '../device-test-mode.js';
 import { error } from './log.js';
-import { applyImage, flashKey, resetPreviews } from './key-preview.js';
-import { applyTouchImage, resetTouchStrip } from './touch-strip-preview.js';
-import { applyStripWrite, resetStripZones } from './strip-zone-preview.js';
+import { applyImage, flashKey, resetPreviews } from '../key-preview.js';
+import { applyTouchImage, resetTouchStrip } from '../touch-strip-preview.js';
+import { applyStripWrite, resetStripZones } from '../strip-zone-preview.js';
 import * as store from './store.js';
 import { hydrate } from './hydrate.js';
-import type { StateResponse } from './ui-types.js';
+import type { StateResponse } from '../ui-types.js';
 
 type Handlers = { [K in keyof WsEvents]: (d: WsEvents[K]) => void };
 

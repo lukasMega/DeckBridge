@@ -6,21 +6,21 @@
  * The ADVANCED view is untouched legacy code.
  */
 import { useEffect, useState } from 'preact/hooks';
-import { fire } from './ui-api.js';
-import { useStore } from './store.js';
-import { deriveState, isMultiDockView, updateBadgeVersion } from './ui-helpers.js';
-import { switchToAdvanced } from './simple/handlers.js';
-import { AboutPopover, SettingsPage, HelpScreen } from './simple/overlays.js';
-import { BackButton } from './simple/controls.js';
-import { ICON } from './ui-icons.js';
-import { ThemeButton } from './components/ThemeButton.js';
+import { fire } from '../lib/ui-api.js';
+import { useStore } from '../lib/store.js';
+import { deriveState, isMultiDockView, updateBadgeVersion } from '../ui-helpers.js';
+import { switchToAdvanced } from './handlers.js';
+import { AboutPopover, SettingsPage, HelpScreen } from './overlays.js';
+import { BackButton } from './controls.js';
+import { ICON } from '../components/Icon.js';
+import { ThemeButton } from '../components/ThemeButton.js';
 import {
   StageReady,
   StageDeviceNoElgato,
   StageNoDevice,
   StageConflict,
   StageMultiPairing,
-} from './simple/stages.js';
+} from './stages.js';
 
 export function SimpleApp(): preact.JSX.Element {
   const status = useStore((s) => s.status);

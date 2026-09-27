@@ -2,10 +2,10 @@
 // The SELECTED dock (click a card) gets the live KeyGridPreview — the server
 // mirrors only the selected dock's images; every other card renders a static
 // dimmed grid.
-import { useStore } from '../store.js';
+import { useStore } from '../lib/store.js';
 import type { DockUi } from '../ui-types.js';
-import { ICON } from '../ui-icons.js';
-import { fire } from '../ui-api.js';
+import { ICON } from '../components/Icon.js';
+import { fire } from '../lib/ui-api.js';
 import { ManualAddPanel, RestartNote } from './controls.js';
 import { KeyGridPreview } from '../components/KeyGridPreview.js';
 import { StatusChip } from '../components/StatusChip.js';

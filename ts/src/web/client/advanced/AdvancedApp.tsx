@@ -4,16 +4,16 @@
  * appends DOM nodes via a rAF flush, so a burst of 100 comm packets per image
  * chunk costs one layout, not 100.
  */
-import { useStore } from './store.js';
-import { AdvHeader } from './advanced-header.js';
-import { DragResizer } from './advanced-key-grid.js';
-import { MockConfigForm } from './advanced-mock-config.js';
-import { KeyEventsPanel } from './advanced-key-events.js';
-import { LogConsolePanel } from './advanced-log-panel.js';
-import { KeyGridPreview } from './components/KeyGridPreview.js';
-import { Brightness } from './simple/controls.js';
-import { fire } from './ui-api.js';
-import { selectedCoraProfile } from './ui-helpers.js';
+import { useStore } from '../lib/store.js';
+import { AdvHeader } from './header.js';
+import { DragResizer } from './key-grid.js';
+import { MockConfigForm } from './mock-config.js';
+import { KeyEventsPanel } from './key-events.js';
+import { LogConsolePanel } from './log-panel.js';
+import { KeyGridPreview } from '../components/KeyGridPreview.js';
+import { Brightness } from '../simple/controls.js';
+import { fire } from '../lib/ui-api.js';
+import { selectedCoraProfile } from '../ui-helpers.js';
 
 function postKey(index: number): void {
   fire(`/api/key/${index}`);

@@ -3,9 +3,9 @@
  *
  * Split out of AdvancedApp.tsx (file-size refactor, no behavior change).
  */
-import { useStore } from './store.js';
-import { Collapsible } from './components/Collapsible.js';
-import type { KeyEvent } from './ui-types.js';
+import { useStore } from '../lib/store.js';
+import { Collapsible } from '../components/Collapsible.js';
+import type { KeyEvent } from '../ui-types.js';
 
 export function KeyEventsPanel(): preact.JSX.Element {
   const keyEvents = useStore((s) => s.keyEvents);

@@ -3,8 +3,8 @@
 // handler always cycles from the persisted preference so two mounted
 // instances (both views mount at startup) can never diverge in behavior.
 import { useState } from 'preact/hooks';
-import { getTheme, setTheme as persistTheme, type ThemePref } from '../ui-helpers.js';
-import { ICON } from '../ui-icons.js';
+import { getTheme, setTheme as persistTheme, type ThemePref } from '../lib/theme.js';
+import { ICON } from './Icon.js';
 
 const THEME_CYCLE: readonly ThemePref[] = ['light', 'dark', 'auto'];
 const THEME_ICON: Record<ThemePref, string> = { light: ICON.sun, dark: ICON.moon, auto: ICON.auto };

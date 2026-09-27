@@ -11,9 +11,9 @@ import type {
   ExtraKeyCfg,
   TouchStripMode,
   UpdateInfo,
-} from './ui-types.js';
+} from '../ui-types.js';
 
-// LOG_MAX matches advanced-log-panel.tsx's own LOG_MAX (DOM log trimming there mirrors
+// LOG_MAX matches advanced/log-panel.tsx's own LOG_MAX (DOM log trimming there mirrors
 // the store's cap so neither trims more eagerly than the other). KE_MAX has no external
 // mirror; it only bounds this store's keyEvents array.
 const LOG_MAX = 2000;

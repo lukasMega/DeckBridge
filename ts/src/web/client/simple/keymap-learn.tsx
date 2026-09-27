@@ -6,10 +6,10 @@
 // build-per-guess loop: only the person holding the board can produce the map, and
 // the derived arrays are exactly what a registry PR needs.
 import { useEffect, useRef, useState } from 'preact/hooks';
-import { useStore } from '../store.js';
-import { copyLabel, useCopyText } from '../use-copy-text.js';
-import { postJson } from '../ui-api.js';
-import { Feedback } from '../ui-async.js';
+import { useStore } from '../lib/store.js';
+import { copyLabel, useCopyText } from '../lib/use-copy-text.js';
+import { postJson } from '../lib/ui-api.js';
+import { Feedback } from '../lib/ui-async.js';
 import type { DeviceOverridesView, KeyEvent } from '../ui-types.js';
 
 /** Grid geometry for the prompts. The server advertises rows/columns on the

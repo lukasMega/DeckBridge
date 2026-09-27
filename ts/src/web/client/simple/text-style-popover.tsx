@@ -2,7 +2,7 @@
 // bold/outline, ellipsis. Each change posts at once; the server repaints the key.
 import { useRef, useState } from 'preact/hooks';
 import type { ExtraKeyCfg, ExtraKeyTextStyle } from '../ui-types.js';
-import { useDismiss, useKeepInApp } from '../ui-hooks.js';
+import { useDismiss, useKeepInApp } from '../lib/ui-hooks.js';
 import { CheckField } from '../components/Fields.js';
 import { postExtraKey } from './extra-keys-popovers.js';
 

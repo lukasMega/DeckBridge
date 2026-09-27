@@ -10,7 +10,7 @@ import type {
 } from '../ui-types.js';
 import { ConfigButton, paramPlaceholder, postExtraKey, PARAM_MAX } from './extra-keys-popovers.js';
 import { CommandInput } from './command-input.js';
-import { fire } from '../ui-api.js';
+import { fire } from '../lib/ui-api.js';
 
 const WIDGET_OPTIONS: ReadonlyArray<{ value: ExtraKeyWidget; label: string }> = [
   { value: 'none', label: 'Empty' },

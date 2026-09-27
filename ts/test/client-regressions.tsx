@@ -7,11 +7,11 @@ import {
   patch,
   useStore,
   EMPTY_STATUS,
-} from '../src/web/client/store.js';
+} from '../src/web/client/lib/store.js';
 import { DOCK_IDENTITY } from './helpers/dock-fixture.js';
-import { hydrate } from '../src/web/client/hydrate.js';
+import { hydrate } from '../src/web/client/lib/hydrate.js';
 import { CopyChip } from '../src/web/client/simple/controls.js';
-import { LogConsolePanel } from '../src/web/client/advanced-log-panel.js';
+import { LogConsolePanel } from '../src/web/client/advanced/log-panel.js';
 import { DeviceTuningPanel } from '../src/web/client/simple/device-tuning.js';
 import { DiagnosticsPanel } from '../src/web/client/simple/diagnostics-panel.js';
 import { MultiDeckPanel } from '../src/web/client/simple/multi-deck-panel.js';
@@ -21,7 +21,7 @@ import { showDeviceAction } from '../src/web/client/device-test-mode.js';
 import { ExtraKeysPanel } from '../src/web/client/simple/extra-keys-panel.js';
 import { ChipRadioGroup } from '../src/web/client/components/ChipRadioGroup.js';
 import { updateBadgeVersion } from '../src/web/client/ui-helpers.js';
-import { popoverShift } from '../src/web/client/ui-hooks.js';
+import { popoverShift } from '../src/web/client/lib/ui-hooks.js';
 import { KeyGridPreview } from '../src/web/client/components/KeyGridPreview.js';
 import { applyImage, clearImageStore } from '../src/web/client/key-preview.js';
 import { applyTouchImage, resetTouchStrip } from '../src/web/client/touch-strip-preview.js';

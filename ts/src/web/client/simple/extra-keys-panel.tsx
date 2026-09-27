@@ -3,7 +3,7 @@
 // refreshes it, so this panel only picks the widget + its parameter — plus, for keys
 // with a switch, what a press does (refresh the widget / run a shell command / both).
 import { useEffect, useState } from 'preact/hooks';
-import { useStore } from '../store.js';
+import { useStore } from '../lib/store.js';
 import type { DockUi, PluginsInfo, WidgetDisplayInfo } from '../ui-types.js';
 import {
   EncodersSection,

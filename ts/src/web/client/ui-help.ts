@@ -1,5 +1,18 @@
-import { CORA_ADDR } from './ui-state.js';
-import type { HelpTopic } from './ui-state.js';
+export interface HelpStep {
+  you: boolean;
+  html: string;
+}
+
+export interface HelpTopic {
+  title: string;
+  lead: string;
+  svg: () => string;
+  steps: HelpStep[];
+  docs?: { href: string; label: string };
+}
+
+export const CORA_PORT = '5343';
+export const CORA_ADDR = `127.0.0.1:${CORA_PORT}`;
 
 function svgPlugIn(): string {
   let keys = '';
