@@ -546,8 +546,11 @@ shutdowns/restarts.
 | yellow (`usb_only`) | USB device open, no Elgato client |
 | gray (`disconnected`) | no USB device |
 
-The menu offers **Open Web UI**, **Check Requirements** (the `/requirements` diagnostics page), and
-**Quit**. The tray is spawned only when `DECKBRIDGE_TRAY_BIN` points at the binary (`mise run start` sets it);
+The menu offers **Open Web UI**, **Check Requirements** (the `/requirements` diagnostics page),
+**Restart Elgato App** (manual restart of the local Elgato Stream Deck app — see
+[Troubleshooting](./troubleshooting.md#restarting-the-elgato-app)), and **Quit**. Rust only emits the
+click event for the restart item; the restart itself runs on the TS side, which owns settings,
+logging and the running-process check. The tray is spawned only when `DECKBRIDGE_TRAY_BIN` points at the binary (`mise run start` sets it);
 if it is unset or the spawn fails, `startTray()` returns `null` and the app runs normally. See
 [rust/deckbridge-tray/README.md](https://github.com/lukasMega/DeckBridge/blob/main/rust/deckbridge-tray/README.md) for the full protocol.
 

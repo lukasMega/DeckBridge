@@ -21,6 +21,7 @@ import { startLogFile, stopLogFile, activeLogFilePath } from '../infra/log-file.
 import { setupNativeLibs } from '../infra/native-libs.js';
 import { setupImageHandler } from './image-pipeline.js';
 import { DriverManager } from './driver-manager.js';
+import { ElgatoAutoRestart, createElgatoAutoRestartDeps } from './elgato-auto-restart.js';
 import { getInitialDriverMode } from './driver-manager-deps.js';
 import { macToBytes } from './driver-manager-primary.js';
 import type { SessionServersFactory } from './device-session.js';
@@ -161,7 +162,17 @@ const driverManager = new DriverManager({
   getShuttingDown: () => shuttingDown,
   sessionServersFactory,
   onDocksChanged: () => webui.notifyDocks(driverManager.getDockStatuses()),
+  onDockConnected: (dockIndex, deviceKey) =>
+    elgatoAutoRestart.onDockConnected(dockIndex, deviceKey),
+  onElgatoAttached: (dockIndex) => elgatoAutoRestart.onElgatoAttached(dockIndex),
 });
+
+// Grace-period scheduler (main/elgato-auto-restart.ts, §4.3) — at most once per
+// process, restarts the Elgato app for a previously-paired dock it hasn't
+// reattached to on its own. Deps built from the singletons above.
+const elgatoAutoRestart = new ElgatoAutoRestart(
+  createElgatoAutoRestartDeps({ webui, settings, driverManager }),
+);
 
 setupImageHandler(childServer, webui, () => driverManager.getCurrentDriver());
 
@@ -178,6 +189,8 @@ server.on('clientDisconnected', () => log('info', 'elgato', 'primary disconnecte
 
 childServer.on('clientConnected', (addr: string) => {
   log('info', 'elgato', `child connected: ${addr}`);
+  settings.markPaired(driverManager.primaryPrefs().deviceKey);
+  elgatoAutoRestart.onElgatoAttached(0);
   webui.notifyElgatoStatus(true, addr);
   pushTrayState();
   webui.notifyDocks(driverManager.getDockStatuses());
@@ -310,6 +323,7 @@ async function shutdown(): Promise<void> {
   log('info', 'deckBr', 'shutting down...');
   if (updateCheckTimer) clearInterval(updateCheckTimer);
   if (dailyPingTimer) clearInterval(dailyPingTimer);
+  elgatoAutoRestart.dispose();
   driverManager.stopScan();
   await driverManager.stopAllExtraSessions().catch(() => undefined);
   const prev = driverManager.getCurrentDriver();
@@ -425,8 +439,13 @@ if (headless) {
   const trayBin = await resolveTrayBin();
   if (trayBin) {
     const spawned = await step('tray', 'tray spawn', () =>
-      startTray(trayBin, () => {
-        void shutdown().catch(() => tjs.exit(1));
+      startTray(trayBin, {
+        onQuit: () => {
+          void shutdown().catch(() => tjs.exit(1));
+        },
+        onRestartElgatoApp: () => {
+          void webui.elgatoApp.restartNow();
+        },
       }),
     );
     tray = spawned;

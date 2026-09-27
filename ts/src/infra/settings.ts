@@ -25,6 +25,20 @@ import { encoderSettingsError } from '../shared/encoder-settings.js';
 import { DockPrefs, defaultRuntimePrefs } from './dock-prefs.js';
 import type { DockPrefsStore } from './dock-prefs.js';
 
+/** Grace-period bounds for elgatoAutoRestartDelayS (see
+ *  .claude/plans/2026-09-27_auto-restart-elgato-app.md §4.2). */
+const ELGATO_AUTO_RESTART_DELAY_S_MIN = 3;
+const ELGATO_AUTO_RESTART_DELAY_S_MAX = 120;
+const ELGATO_AUTO_RESTART_DELAY_S_DEFAULT = 10;
+
+/** Clamp a persisted/incoming grace-period value into the accepted range. */
+function clampAutoRestartDelayS(delayS: number): number {
+  return Math.min(
+    ELGATO_AUTO_RESTART_DELAY_S_MAX,
+    Math.max(ELGATO_AUTO_RESTART_DELAY_S_MIN, delayS),
+  );
+}
+
 /** Shape guard for a persisted/imported extraKeys map (wire id → config). */
 function isExtraKeysRecord(v: unknown): v is Record<string, ExtraKeyConfig> {
   if (typeof v !== 'object' || v === null || Array.isArray(v)) return false;
@@ -44,6 +58,7 @@ const OPTIONAL_DEVICE_FIELDS: ReadonlyArray<{ key: string; isValid: (v: unknown)
   { key: 'touchStripUpload', isValid: (v) => isOneOf(TOUCH_STRIP_UPLOADS, v) },
   { key: 'encoders', isValid: (v) => !encoderSettingsError(v) },
   { key: 'tapFeedback', isValid: isTapFeedback },
+  { key: 'pairedAt', isValid: (v) => typeof v === 'string' },
 ];
 
 /** Strip bad optional per-device fields so they can't fail isDeviceIdentitySettings
@@ -144,6 +159,10 @@ export class PersistedSettings implements DockPrefsStore {
   /** Daily usage ping opt-out (see daily-ping.ts). undefined = enabled. */
   a7s: boolean | undefined = undefined;
   a7sDay: string | undefined = undefined;
+  /** Elgato-app auto-restart opt-out + grace delay (see elgato-auto-restart.ts).
+   *  undefined = enabled / default delay. */
+  elgatoAutoRestart: boolean | undefined = undefined;
+  elgatoAutoRestartDelayS: number | undefined = undefined;
   /** Browser's navigator.language (dailyPing's OS-locale fallback). Ephemeral —
    *  deliberately absent from current()/persist(), since the browser resends it
    *  on every load. */
@@ -173,6 +192,12 @@ export class PersistedSettings implements DockPrefsStore {
     if (saved.updateState) this.updateState = saved.updateState;
     if (typeof saved.a7s === 'boolean') this.a7s = saved.a7s;
     if (typeof saved.a7sDay === 'string') this.a7sDay = saved.a7sDay;
+    if (typeof saved.elgatoAutoRestart === 'boolean') {
+      this.elgatoAutoRestart = saved.elgatoAutoRestart;
+    }
+    if (typeof saved.elgatoAutoRestartDelayS === 'number') {
+      this.elgatoAutoRestartDelayS = clampAutoRestartDelayS(saved.elgatoAutoRestartDelayS);
+    }
     this.modelOverrides = sanitizeModelOverrides(saved.modelOverrides);
     if (Array.isArray(saved.devices)) {
       saved.devices.forEach(stripInvalidDeviceSettings);
@@ -300,6 +325,46 @@ export class PersistedSettings implements DockPrefsStore {
     this.persist();
   }
 
+  // Elgato-app auto-restart (see main/elgato-auto-restart.ts)
+
+  /** Persist the auto-restart opt-out + grace delay (WebUI "Elgato app" panel). An
+   *  omitted `delayS` leaves the current delay untouched. */
+  setElgatoAutoRestart(enabled: boolean, delayS?: number): void {
+    this.elgatoAutoRestart = enabled;
+    if (delayS !== undefined) this.elgatoAutoRestartDelayS = clampAutoRestartDelayS(delayS);
+    this.persist();
+  }
+
+  /** Whether the auto-restart feature is on. Absent setting = on. */
+  elgatoAutoRestartEnabled(): boolean {
+    return this.elgatoAutoRestart ?? true;
+  }
+
+  /** Grace-period seconds before an auto-restart fires. Absent setting = the default. */
+  elgatoAutoRestartDelaySeconds(): number {
+    return clampAutoRestartDelayS(
+      this.elgatoAutoRestartDelayS ?? ELGATO_AUTO_RESTART_DELAY_S_DEFAULT,
+    );
+  }
+
+  /** Set `pairedAt` on `deviceKey`'s entry the first time the Elgato child client
+   *  attaches to it. No-op (returns false) if the entry doesn't exist yet (mock mode,
+   *  deviceKey === '') or already has a pairedAt — only stable keys ever reach
+   *  devices[], so no isStableDeviceKey re-check is needed here (load() prunes
+   *  path-keyed entries already). */
+  markPaired(deviceKey: string): boolean {
+    const entry = this.entryFor(deviceKey);
+    if (!entry || entry.pairedAt !== undefined) return false;
+    entry.pairedAt = new Date().toISOString();
+    this.persist();
+    return true;
+  }
+
+  /** Whether `deviceKey` has ever completed an Elgato pairing (markPaired ran). */
+  wasPaired(deviceKey: string): boolean {
+    return this.entryFor(deviceKey)?.pairedAt !== undefined;
+  }
+
   // Model overrides (device tuning) — see devices/model-overrides.ts
 
   /** Every model's override, by model id. Read by DriverManager at probe time. */
@@ -338,6 +403,12 @@ export class PersistedSettings implements DockPrefsStore {
       ...(this.updateState ? { updateState: this.updateState } : {}),
       ...(this.a7s !== undefined ? { a7s: this.a7s } : {}),
       ...(this.a7sDay ? { a7sDay: this.a7sDay } : {}),
+      ...(this.elgatoAutoRestart !== undefined
+        ? { elgatoAutoRestart: this.elgatoAutoRestart }
+        : {}),
+      ...(this.elgatoAutoRestartDelayS !== undefined
+        ? { elgatoAutoRestartDelayS: this.elgatoAutoRestartDelayS }
+        : {}),
       ...(this.devices.length > 0 ? { devices: this.devices } : {}),
       ...(Object.keys(this.modelOverrides).length > 0
         ? { modelOverrides: this.modelOverrides }

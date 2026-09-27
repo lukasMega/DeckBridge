@@ -6,6 +6,7 @@ import type {
   DeviceIdentity,
   DeviceModelInfo,
   DriverMode,
+  ElgatoAutoRestartState,
   KeyEventEntry,
   LogEntry,
   MockDeviceConfig,
@@ -42,6 +43,7 @@ export interface StateResponseInputs {
   logFilePath: string;
   multiDeck: boolean;
   updateInfo: UpdateInfo;
+  elgatoAutoRestart: ElgatoAutoRestartState;
 }
 
 export function buildStateResponse(input: StateResponseInputs): StateResponse {

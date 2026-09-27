@@ -244,9 +244,11 @@ export class ExtraDockCoordinator {
       prefs,
     });
     this.extraSessions.set(hidPath, session);
-    servers.childServer.on('clientConnected', () =>
-      this.scheduleBrightnessResend(hidPath, session, prefs),
-    );
+    servers.childServer.on('clientConnected', () => {
+      this.deps.settings.markPaired(deviceKey);
+      this.deps.onElgatoAttached?.(index);
+      this.scheduleBrightnessResend(hidPath, session, prefs);
+    });
 
     try {
       await session.start();
@@ -256,6 +258,7 @@ export class ExtraDockCoordinator {
         `extra dock up: ${model.name} idx=${index} ports=${identity.primaryPort}/${identity.childPort}`,
       );
       this.deps.onSessionsChanged?.();
+      this.deps.onDockConnected?.(index, deviceKey);
     } catch (e) {
       // Almost always a bind error — another DeckBridge / Elgato dock owns the
       // port. Stop the session (closes this freshly-opened worker — fine, it's

@@ -1,0 +1,154 @@
+// Grace-period scheduler that restarts the Elgato Stream Deck desktop app, at
+// most once per process, when a dock the app has paired with before connects
+// but the app doesn't attach to it on its own before the grace period ends.
+// See .claude/plans/2026-09-27_auto-restart-elgato-app.md §4.3 for the design;
+// the quit/launch mechanics live in infra/elgato-app.ts. Pure + injected deps
+// (no timers/processes touched directly) so this is unit-testable without
+// tjs.spawn or real waits — see test/elgato-auto-restart.test.ts.
+import { log } from '../shared/logger.js';
+import type { ElgatoAppControl } from '../infra/elgato-app.js';
+import type { PersistedSettings } from '../infra/settings.js';
+import type { WebUIServer } from '../web/server/index.js';
+import type { DriverManager } from './driver-manager.js';
+
+const COMPONENT = 'auto-restart';
+
+export interface ElgatoAutoRestartDeps {
+  app: Pick<ElgatoAppControl, 'isRunning' | 'restart'>;
+  settings: {
+    enabled(): boolean;
+    delayS(): number;
+    wasPaired(deviceKey: string): boolean;
+  };
+  /** Live: is the Elgato child client attached to this dock right now? */
+  isAttached(dockIndex: number): boolean;
+  /** webui.snapshot().elgatoAppConflict — the Elgato app already holds the USB
+   *  deck, so a restart here could make it grab the hardware back mid-session. */
+  conflict(): boolean;
+  /** DECKBRIDGE_MOCK / mock driver mode — there is no real app to restart for. */
+  mock(): boolean;
+  /** Defaults to the real setTimeout/clearTimeout; overridden by tests. */
+  setTimer?: (fn: () => void, ms: number) => ReturnType<typeof setTimeout>;
+  clearTimer?: (id: ReturnType<typeof setTimeout>) => void;
+}
+
+/**
+ * Restarts the Elgato app at most once per process, after a grace period, for
+ * a previously-paired dock the app hasn't reconnected to on its own. One timer
+ * is shared across every dock that qualifies while it's pending — a multi-deck
+ * restart covers all of them, not one per dock.
+ */
+export class ElgatoAutoRestart {
+  private readonly deps: ElgatoAutoRestartDeps;
+  private readonly setTimer: (fn: () => void, ms: number) => ReturnType<typeof setTimeout>;
+  private readonly clearTimer: (id: ReturnType<typeof setTimeout>) => void;
+
+  private fired = false;
+  private timer: ReturnType<typeof setTimeout> | null = null;
+  /** Docks that passed every gating rule and are waiting for either the grace
+   *  timer to fire or the Elgato app to attach to them on its own. */
+  private readonly pendingDocks = new Set<number>();
+
+  constructor(deps: ElgatoAutoRestartDeps) {
+    this.deps = deps;
+    this.setTimer = deps.setTimer ?? ((fn, ms) => setTimeout(fn, ms));
+    this.clearTimer = deps.clearTimer ?? ((id) => clearTimeout(id));
+  }
+
+  /** A real USB dock connected. Call once per connect (primary or extra). */
+  onDockConnected(dockIndex: number, deviceKey: string): void {
+    if (this.fired) {
+      log('info', COMPONENT, `dock ${dockIndex}: skip — already restarted once this process`);
+      return;
+    }
+    if (!this.deps.settings.enabled()) {
+      log('info', COMPONENT, `dock ${dockIndex}: skip — auto-restart disabled`);
+      return;
+    }
+    if (this.deps.mock()) {
+      log('info', COMPONENT, `dock ${dockIndex}: skip — mock mode`);
+      return;
+    }
+    if (!this.deps.settings.wasPaired(deviceKey)) {
+      log('info', COMPONENT, `dock ${dockIndex}: skip — not paired before`);
+      return;
+    }
+
+    this.pendingDocks.add(dockIndex);
+    if (this.timer === null) {
+      const delayS = this.deps.settings.delayS();
+      log('info', COMPONENT, `dock ${dockIndex}: paired before — grace timer started (${delayS}s)`);
+      this.timer = this.setTimer(() => {
+        this.timer = null;
+        void this.onGraceElapsed();
+      }, delayS * 1000);
+    }
+  }
+
+  /** The Elgato child client attached to `dockIndex` — on its own, or via a
+   *  manual restart elsewhere. Cancels the pending timer once no dock is left
+   *  waiting for it. */
+  onElgatoAttached(dockIndex: number): void {
+    this.pendingDocks.delete(dockIndex);
+    if (this.pendingDocks.size === 0 && this.timer !== null) {
+      this.clearTimer(this.timer);
+      this.timer = null;
+      log('info', COMPONENT, 'grace timer cancelled — every paired dock attached on its own');
+    }
+  }
+
+  private async onGraceElapsed(): Promise<void> {
+    const stillWaiting = [...this.pendingDocks].some((dock) => !this.deps.isAttached(dock));
+    if (!stillWaiting) {
+      log('info', COMPONENT, 'skip — every paired dock attached before the grace period ended');
+      return;
+    }
+    if (this.deps.conflict()) {
+      log('info', COMPONENT, 'skip — Elgato app conflict (it already holds the USB deck)');
+      return;
+    }
+    if (!(await this.deps.app.isRunning())) {
+      log(
+        'info',
+        COMPONENT,
+        'skip — Elgato app not running here (it dials docks on its own launch)',
+      );
+      return;
+    }
+
+    this.fired = true;
+    const result = await this.deps.app.restart();
+    log('info', COMPONENT, `auto-restart: ${JSON.stringify(result)}`);
+  }
+
+  /** Cancel any pending timer (app shutdown). */
+  dispose(): void {
+    if (this.timer !== null) {
+      this.clearTimer(this.timer);
+      this.timer = null;
+    }
+  }
+}
+
+/** Builds the real (non-test) deps from app.ts's already-constructed
+ *  singletons, so the composition root only has to call `new ElgatoAutoRestart
+ *  (createElgatoAutoRestartDeps({ webui, settings, driverManager }))`. */
+export function createElgatoAutoRestartDeps(opts: {
+  webui: WebUIServer;
+  settings: PersistedSettings;
+  driverManager: DriverManager;
+}): ElgatoAutoRestartDeps {
+  const { webui, settings, driverManager } = opts;
+  return {
+    app: webui.elgatoApp.control,
+    settings: {
+      enabled: () => settings.elgatoAutoRestartEnabled(),
+      delayS: () => settings.elgatoAutoRestartDelaySeconds(),
+      wasPaired: (deviceKey) => settings.wasPaired(deviceKey),
+    },
+    isAttached: (dockIndex) =>
+      driverManager.getDockStatuses().find((d) => d.index === dockIndex)?.elgatoConnected ?? false,
+    conflict: () => webui.snapshot().elgatoAppConflict,
+    mock: () => driverManager.getDriverMode() === 'mock',
+  };
+}

@@ -115,4 +115,68 @@ await test('with an entry: reads live and persists writes', async () => {
   await settings.flush();
 });
 
+console.log('\nPersistedSettings — elgatoAutoRestart / pairing');
+
+await test('setElgatoAutoRestart persists enabled + clamped delay; getters read defaults', async () => {
+  const settings = new PersistedSettings(`${ROOT}/elgato-defaults`);
+  assert.equal(settings.elgatoAutoRestartEnabled(), true, 'absent setting = on');
+  assert.equal(settings.elgatoAutoRestartDelaySeconds(), 10, 'absent setting = default 10s');
+
+  settings.setElgatoAutoRestart(false, 500);
+  assert.equal(settings.elgatoAutoRestartEnabled(), false);
+  assert.equal(settings.elgatoAutoRestartDelaySeconds(), 120, 'clamped to the max');
+  await settings.flush();
+
+  const onDisk = await loadSettings(`${ROOT}/elgato-defaults`);
+  assert.equal(onDisk.elgatoAutoRestart, false);
+  assert.equal(onDisk.elgatoAutoRestartDelayS, 120);
+});
+
+await test('setElgatoAutoRestart clamps a too-small delay to the min', () => {
+  const settings = new PersistedSettings(`${ROOT}/elgato-clamp-min`);
+  settings.setElgatoAutoRestart(true, 0);
+  assert.equal(settings.elgatoAutoRestartDelaySeconds(), 3);
+});
+
+await test('setElgatoAutoRestart with no delayS leaves the current delay untouched', () => {
+  const settings = new PersistedSettings(`${ROOT}/elgato-keep-delay`);
+  settings.setElgatoAutoRestart(true, 20);
+  settings.setElgatoAutoRestart(false);
+  assert.equal(settings.elgatoAutoRestartDelaySeconds(), 20);
+  assert.equal(settings.elgatoAutoRestartEnabled(), false);
+});
+
+await test('load() clamps an out-of-range persisted elgatoAutoRestartDelayS', async () => {
+  const dir = `${ROOT}/elgato-load-clamp`;
+  await saveSettings({ elgatoAutoRestartDelayS: 999 }, dir);
+  const settings = new PersistedSettings(dir);
+  await settings.load();
+  assert.equal(settings.elgatoAutoRestartDelaySeconds(), 120);
+});
+
+await test('markPaired sets pairedAt once, persists, and wasPaired reflects it', async () => {
+  const settings = new PersistedSettings(`${ROOT}/mark-paired`);
+  settings.getOrCreateIdentity('usb:PAIR1', 'Dock');
+  assert.equal(settings.wasPaired('usb:PAIR1'), false);
+
+  assert.ok(settings.markPaired('usb:PAIR1'), 'first call sets pairedAt');
+  assert.equal(settings.wasPaired('usb:PAIR1'), true);
+  const firstPairedAt = settings.entryFor('usb:PAIR1')?.pairedAt;
+  assert.ok(typeof firstPairedAt === 'string' && firstPairedAt.length > 0);
+
+  assert.ok(!settings.markPaired('usb:PAIR1'), 'second call is a no-op');
+  assert.equal(settings.entryFor('usb:PAIR1')?.pairedAt, firstPairedAt, 'timestamp unchanged');
+  await settings.flush();
+
+  const onDisk = await loadSettings(`${ROOT}/mark-paired`);
+  assert.equal(onDisk.devices?.[0]?.pairedAt, firstPairedAt, 'pairedAt survives a save/load');
+});
+
+await test('markPaired on a deviceKey with no entry (mock mode) is a no-op', () => {
+  const settings = new PersistedSettings(`${ROOT}/mark-paired-no-entry`);
+  assert.equal(settings.markPaired(''), false);
+  assert.equal(settings.markPaired('usb:NEVER-CREATED'), false);
+  assert.equal(settings.wasPaired(''), false);
+});
+
 summary();

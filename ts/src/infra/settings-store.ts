@@ -53,6 +53,11 @@ export interface DeviceIdentitySettings {
   /** What a tap refresh shows on the widget; each absent flag takes its default
    *  (DEFAULT_TAP_FEEDBACK). settings.json only — no WebUI control. */
   tapFeedback?: Partial<TapFeedback>;
+  /** ISO timestamp of the first time the Elgato **child** CORA client attached to
+   *  this dock — DeckBridge's own "paired before" record (see
+   *  .claude/plans/2026-09-27_auto-restart-elgato-app.md §2). Set once by
+   *  PersistedSettings.markPaired() and never cleared. */
+  pairedAt?: string;
 }
 
 /** Tap-refresh feedback: `flash` = inverted colours for a moment on the tap;
@@ -113,6 +118,13 @@ export interface Settings {
    *  — the only dailyPing state kept, and it never leaves the machine. */
   a7s?: boolean;
   a7sDay?: string;
+  /** Restart the Elgato desktop app when a previously-paired dock connects and the
+   *  app hasn't attached to it itself within the grace period. Absent = on (see
+   *  .claude/plans/2026-09-27_auto-restart-elgato-app.md). */
+  elgatoAutoRestart?: boolean;
+  /** Grace-period seconds before the auto-restart fires. Absent = 10; clamped to
+   *  3..120 on load and on set (ELGATO_AUTO_RESTART_DELAY_S_MIN/MAX). */
+  elgatoAutoRestartDelayS?: number;
 }
 
 const SETTINGS_FILE = 'settings.json';

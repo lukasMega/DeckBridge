@@ -91,6 +91,9 @@ export const routes: Route[] = [
   postJson('/api/update/dismiss', dismissUpdate),
   postJson('/api/update-check-enabled', setUpdateCheckEnabled),
 
+  postJson('/api/elgato-auto-restart', setElgatoAutoRestart),
+  post('/api/elgato-app/restart', async ({ elgatoApp }) => json(await elgatoApp.restartNow())),
+
   // text/plain, not JSON: the report is meant to be pasted verbatim into an issue.
   get('/api/diagnostics', async ({ logging, url }) => {
     const redact = url.searchParams.get('redactCommands') === '1';
@@ -152,6 +155,22 @@ function setUpdateCheckEnabled(
   if (typeof enabled !== 'boolean') return badRequest('enabled must be a boolean');
   updates.setEnabled(enabled);
   return json({ ok: true, enabled });
+}
+
+/** WebUI "Elgato app" panel toggle + grace-delay field (settings.json
+ *  `elgatoAutoRestart`/`elgatoAutoRestartDelayS`). An omitted `delayS` leaves
+ *  the persisted delay untouched — see PersistedSettings.setElgatoAutoRestart. */
+function setElgatoAutoRestart(
+  { enabled, delayS }: { enabled: unknown; delayS?: unknown },
+  { elgatoApp }: RouteContext,
+): Response {
+  if (typeof enabled !== 'boolean') return badRequest('enabled must be a boolean');
+  if (delayS !== undefined && typeof delayS !== 'number') {
+    return badRequest('delayS must be a number');
+  }
+  elgatoApp.set(enabled, delayS);
+  const state = elgatoApp.state();
+  return json({ ok: true, enabled: state.enabled, delayS: state.delayS });
 }
 
 /** WebUI "Debug logging" toggle. Levels are validated against cli.ts's LOG_LEVELS

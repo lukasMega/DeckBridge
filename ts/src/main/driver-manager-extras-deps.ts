@@ -28,10 +28,16 @@ export interface ExtraDockCoordinatorDeps {
     override?: DeviceModelOverride;
   };
   /** Per-device identity (getOrCreateIdentity) and live prefs (for) by deviceKey. */
-  settings: Pick<PersistedSettings, 'for' | 'getOrCreateIdentity'>;
+  settings: Pick<PersistedSettings, 'for' | 'getOrCreateIdentity' | 'markPaired'>;
   /** A dock was created/torn down or its child CORA client (dis)connected;
    *  DriverManager notifies the WebUI. */
   onSessionsChanged?: () => void;
+  /** An extra dock finished connecting (session.start() succeeded) — once per
+   *  connect, for main/elgato-auto-restart.ts. */
+  onDockConnected?: (dockIndex: number, deviceKey: string) => void;
+  /** The Elgato child client attached to this extra dock — for
+   *  main/elgato-auto-restart.ts's early-cancel path. */
+  onElgatoAttached?: (dockIndex: number) => void;
   onAction?: (dockIndex: number, message: string) => void;
   /** Per-dock mirror of raw CORA key images (WebUI selected-dock preview). */
   onImage?: (dockIndex: number, keyIndex: number, data: Buffer, format: 'jpeg' | 'bmp') => void;
