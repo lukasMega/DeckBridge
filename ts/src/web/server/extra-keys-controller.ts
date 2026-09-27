@@ -6,7 +6,7 @@ import { listPluginFiles, pluginKeyStatus } from '../../plugin-host.js';
 import type { PluginStatus } from '../../plugin-host.js';
 import type { Broadcaster } from './broadcaster.js';
 import type { ExtraKeyConfig } from '../../types.js';
-import type { WidgetPaint } from '../../widget-render.js';
+import type { WidgetPaint } from '../../widget-layout.js';
 import type { ExtraKeyPreviewResponse } from '../contract.js';
 import { widgetPreviews } from './widget-preview.js';
 import type {

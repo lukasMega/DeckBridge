@@ -9,8 +9,6 @@ import {
   EXTRA_KEY_WIDGETS,
   EXTRA_KEY_PARAM_MAX,
   EXTRA_KEY_PRESS_ACTIONS,
-  EXTRA_KEY_TEXT_SIZES,
-  EXTRA_KEY_WRAPS,
   COMMAND_INTERVAL_MIN_MS,
   COMMAND_INTERVAL_MAX_MS,
   COMMAND_TIMEOUT_MIN_MS,
@@ -19,15 +17,16 @@ import {
   TOUCH_STRIP_MODES,
   TOUCH_STRIP_REPAINT_MIN_MS,
   TOUCH_STRIP_REPAINT_MAX_MS,
+  compactTextStyle,
   isTouchStripRepaintMs,
+  textStyleError,
 } from '../../types.js';
 import type {
   EncoderSettings,
   ExtraKeyConfig,
   ExtraKeyPressAction,
-  ExtraKeyTextSize,
+  ExtraKeyTextStyle,
   ExtraKeyWidget,
-  ExtraKeyWrap,
   TouchStripMode,
 } from '../../types.js';
 import { encoderSettingsError } from './encoders-controller.js';
@@ -202,8 +201,7 @@ interface ExtraKeyBody {
   intervalMs?: unknown;
   timeoutMs?: unknown;
   pluginArg?: unknown;
-  textSize?: unknown;
-  wrap?: unknown;
+  style?: unknown;
 }
 
 /** null when `v` is undefined or a number within [min, max]; else an error message. */
@@ -215,12 +213,6 @@ function validateOptionalMs(v: unknown, field: string, min: number, max: number)
   return null;
 }
 
-/** null when `v` is undefined or one of `allowed`; else an error message. */
-function validateOneOf(v: unknown, field: string, allowed: readonly unknown[]): string | null {
-  if (v === undefined || allowed.includes(v)) return null;
-  return `${field} must be one of: ${allowed.join(', ')}`;
-}
-
 /** Field validation for POST /api/extra-key; returns an error message or null. */
 function validateExtraKeyBody({
   wireId,
@@ -229,8 +221,7 @@ function validateExtraKeyBody({
   intervalMs,
   timeoutMs,
   pluginArg,
-  textSize,
-  wrap,
+  style,
 }: ExtraKeyBody): string | null {
   if (!isNonNegInt(wireId)) return nonNegIntMessage('wireId');
   if (typeof widget !== 'string' || !(EXTRA_KEY_WIDGETS as readonly string[]).includes(widget)) {
@@ -246,8 +237,7 @@ function validateExtraKeyBody({
     return `pluginArg must be a string ≤ ${EXTRA_KEY_PARAM_MAX} chars`;
   }
   return (
-    validateOneOf(textSize, 'textSize', EXTRA_KEY_TEXT_SIZES) ??
-    validateOneOf(wrap, 'wrap', EXTRA_KEY_WRAPS) ??
+    (style === undefined ? null : textStyleError(style)) ??
     validateOptionalMs(
       intervalMs,
       'intervalMs',
@@ -263,15 +253,15 @@ function validateExtraKeyBody({
 function setExtraKey(body: ExtraKeyBody, { ui }: RouteContext): Response {
   const invalid = validateExtraKeyBody(body);
   if (invalid) return badRequest(invalid);
-  const { wireId, widget, param, intervalMs, timeoutMs, pluginArg, textSize, wrap } = body;
+  const { wireId, widget, param, intervalMs, timeoutMs, pluginArg } = body;
+  const style = body.style === undefined ? {} : compactTextStyle(body.style as ExtraKeyTextStyle);
   const cfg: ExtraKeyConfig = {
     widget: widget as ExtraKeyWidget,
     ...(typeof param === 'string' && param ? { param } : {}),
     ...(typeof intervalMs === 'number' ? { intervalMs } : {}),
     ...(typeof timeoutMs === 'number' ? { timeoutMs } : {}),
     ...(typeof pluginArg === 'string' && pluginArg ? { pluginArg } : {}),
-    ...(textSize !== undefined && textSize !== 0 ? { textSize: textSize as ExtraKeyTextSize } : {}),
-    ...(wrap !== undefined ? { wrap: wrap as ExtraKeyWrap } : {}),
+    ...(Object.keys(style).length > 0 ? { style } : {}),
   };
   const err = ui.trySetExtraKey(wireId as number, cfg);
   return err ? json({ error: err.error }, err.status) : json({ ok: true, wireId, widget });

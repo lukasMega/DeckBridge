@@ -48,6 +48,28 @@ The side-key tile updates as soon as the key repaints. When text does not fit at
 chosen size, the tile (or the strip zone's label) shows a **clipped** badge — pick a
 smaller size or **Fit**.
 
+### Text style
+
+The **Aa** button beside the size control opens the key's **Text style** popover. Every
+change applies at once, and the size picker's thumbnails use the current style.
+
+| Option | Default | What it does |
+|---|---|---|
+| Font | Regular | **Regular** is Spleen (monospace). **Narrow** is X11 Helvetica (proportional): about 20–40 % more characters per line. Size steps, **Fit** and **Wrap** work within the chosen font. |
+| Text colour / Background | light grey on near-black | Eight swatches or any custom colour. |
+| Align / Vertical | center / middle | Where the rows sit horizontally and where the block of rows sits vertically. |
+| Padding | 0 px | Empty border on every side (0–16 px); the text fits inside it. |
+| Line gap | 0 px | Extra space between rows (0–8 px). |
+| Bold | off | Draws each glyph twice, 1 px apart — 1 px wider per character. |
+| Outline | off | A 1-px ring in the chosen colour (black by default) around every glyph. Readable on any background; each row needs 2 px more width and height. |
+| Ellipsis on cut text | on | A line cut at the right edge ends with `…`. Text that fits is unchanged. |
+
+**Reset style** returns every option to its default, text size and wrap included.
+
+Both fonts cover ASCII and **Latin-1** (Western European letters such as `é`, `ü`, `ß`,
+`ç`, plus `°`, `½`, `…`). Letters outside Latin-1 — for example Czech `ř`, `ů` or Polish
+`ł` — are not drawn; they leave a blank gap.
+
 ## Touch strip modes
 
 On AKP05E the strip has two possible painters — DeckBridge widgets and the Elgato Stream
@@ -233,11 +255,16 @@ string.
 
 ## Rendering details
 
-- Values are drawn with packed **Spleen** bitmap fonts (BSD-2) in six sizes — 5×8, 6×12,
-  8×16, 12×24, 16×32 and 32×64 pixels per character, sharp with no smoothing — then
-  transformed to each display's native format like any other key image.
-- Up to **4 centered lines**, split on `\n`. Short single lines use a larger font.
-  A line too wide for the display is cut off unless wrapping is on (see [Text size](#text-size)).
+- Values are drawn with packed bitmap fonts, sharp with no smoothing, then transformed to
+  each display's native format like any other key image:
+  - **Regular** — **Spleen** (BSD-2) in six sizes: 5×8, 6×12, 8×16, 12×24, 16×32 and 32×64
+    pixels per character.
+  - **Narrow** — X11 Adobe **Helvetica** (Adobe/DEC permissive notice, shipped as
+    `LICENSE-helvetica.txt`) at 8, 10, 12, 18 and 24 pt (75 dpi); 11 to 29 px line
+    height. The largest size is 24 pt scaled ×2 (58 px).
+- Up to **4 lines**, split on `\n`. Short single lines use a larger font.
+  A line too wide for the display is cut off (with `…`) unless wrapping is on (see
+  [Text size](#text-size)).
 - The parameter is capped at **128 characters**.
 
 ## Going further

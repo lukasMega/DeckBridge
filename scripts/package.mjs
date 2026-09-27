@@ -112,9 +112,12 @@ if (includeTray) {
   console.log('Excluding system tray (INCLUDE_TRAY=0): omitting deckbridge-tray + icons');
 }
 
-// Bundle third-party licenses (hidapi is embedded in the binary — license still required)
-const licenseSrc = join(scriptDir, 'LICENSE-hidapi.txt');
-if (existsSync(licenseSrc)) copyFileSync(licenseSrc, join(distDir, 'LICENSE-hidapi.txt'));
+// Bundle third-party licenses: hidapi and the widget fonts are embedded in the binary,
+// and the Helvetica notice must travel with every copy.
+for (const name of ['LICENSE-hidapi.txt', 'LICENSE-spleen.txt', 'LICENSE-helvetica.txt']) {
+  const licenseSrc = join(scriptDir, name);
+  if (existsSync(licenseSrc)) copyFileSync(licenseSrc, join(distDir, name));
+}
 
 // Zip (primary artifact)
 // -9: maximum deflate compression (smaller download).

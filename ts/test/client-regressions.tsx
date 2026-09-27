@@ -1339,6 +1339,9 @@ type Stub = ReturnType<typeof stubFetch>;
 const lastPost = (stub: Stub, url: string): Record<string, unknown> | undefined =>
   stub.calls.findLast((c) => c.url === url)?.body as Record<string, unknown> | undefined;
 
+const postedStyle = (stub: Stub): Record<string, unknown> =>
+  (lastPost(stub, '/api/extra-key')?.style as Record<string, unknown> | undefined) ?? {};
+
 async function checkTextSize(stub: Stub): Promise<void> {
   const cards = [...root.querySelectorAll('.xkey-card')];
   const size = (label: string): HTMLButtonElement =>
@@ -1349,26 +1352,22 @@ async function checkTextSize(stub: Stub): Promise<void> {
     'Text size control shows only on keys with a widget',
   );
   await act(() =>
-    patch({ extraKeys: { '10': { widget: 'command', param: 'date', textSize: 2 } } }),
+    patch({ extraKeys: { '10': { widget: 'command', param: 'date', style: { textSize: 2 } } } }),
   );
   check(size('Larger text').disabled && !size('Smaller text').disabled, 'A+ disabled at +2');
   await act(() => size('Smaller text').click());
   check(
     JSON.stringify(lastPost(stub, '/api/extra-key')) ===
-      JSON.stringify({ wireId: 10, widget: 'command', param: 'date', textSize: 1 }),
+      JSON.stringify({ wireId: 10, widget: 'command', param: 'date', style: { textSize: 1 } }),
     'A− posts one step smaller with the rest of the widget config',
   );
   await act(() => size('Fit text').click());
-  check(lastPost(stub, '/api/extra-key')?.textSize === 'fit', 'Fit posts fit');
+  check(postedStyle(stub).textSize === 'fit', 'Fit posts fit');
   await act(() => size('Default text size').click());
-  check(
-    lastPost(stub, '/api/extra-key') !== undefined &&
-      !('textSize' in lastPost(stub, '/api/extra-key')!),
-    'A posts the default size (omitted)',
-  );
+  check(postedStyle(stub).textSize === 0, 'A posts the default size (the server drops it)');
 
   await act(() =>
-    patch({ extraKeys: { '10': { widget: 'command', param: 'date', textSize: -1 } } }),
+    patch({ extraKeys: { '10': { widget: 'command', param: 'date', style: { textSize: -1 } } } }),
   );
   await click('button[aria-label="Bottom side key command settings"]');
   const interval = root.querySelector<HTMLInputElement>('.xkey-popover input')!;
@@ -1377,18 +1376,18 @@ async function checkTextSize(stub: Stub): Promise<void> {
     interval.dispatchEvent(new Event('change'));
   });
   check(
-    lastPost(stub, '/api/extra-key')?.intervalMs === 30_000 &&
-      lastPost(stub, '/api/extra-key')?.textSize === -1,
+    lastPost(stub, '/api/extra-key')?.intervalMs === 30_000 && postedStyle(stub).textSize === -1,
     'Changing another widget setting keeps the text size',
   );
   await click('button[aria-label="Bottom side key command settings"]');
   await checkTextSizePicker(stub, cards[1]!);
   await checkWrapSelect(stub, cards[1]!);
+  await checkTextStyle(stub, cards[1]!);
 }
 
 async function checkWrapSelect(stub: Stub, card: Element): Promise<void> {
   await act(() =>
-    patch({ extraKeys: { '10': { widget: 'command', param: 'date', textSize: 1 } } }),
+    patch({ extraKeys: { '10': { widget: 'command', param: 'date', style: { textSize: 1 } } } }),
   );
   const select = card.querySelector<HTMLSelectElement>(
     'select[aria-label="Bottom line wrapping"]',
@@ -1400,22 +1399,91 @@ async function checkWrapSelect(stub: Stub, card: Element): Promise<void> {
   });
   check(
     JSON.stringify(lastPost(stub, '/api/extra-key')) ===
-      JSON.stringify({ wireId: 10, widget: 'command', param: 'date', textSize: 1, wrap: 'chars' }),
+      JSON.stringify({
+        wireId: 10,
+        widget: 'command',
+        param: 'date',
+        style: { textSize: 1, wrap: 'chars' },
+      }),
     'Wrap select posts the mode with the text size',
   );
   await act(() =>
-    patch({ extraKeys: { '10': { widget: 'command', param: 'date', wrap: 'words' } } }),
+    patch({ extraKeys: { '10': { widget: 'command', param: 'date', style: { wrap: 'words' } } } }),
   );
   await act(() =>
     card.querySelector<HTMLButtonElement>('button[aria-label="Larger text"]')!.click(),
   );
-  check(lastPost(stub, '/api/extra-key')?.wrap === 'words', 'Size buttons keep the wrap mode');
-  await act(() => patch({ extraKeys: { '10': { widget: 'clock', wrap: 'words' } } }));
+  check(postedStyle(stub).wrap === 'words', 'Size buttons keep the wrap mode');
+  await act(() => patch({ extraKeys: { '10': { widget: 'clock', style: { wrap: 'words' } } } }));
   check(
     card.querySelector('select[aria-label="Bottom line wrapping"]') === null,
     'No wrap select on clock/date/weather',
   );
   await act(() => patch({ extraKeys: { '10': { widget: 'command', param: 'date' } } }));
+}
+
+async function checkTextStyle(stub: Stub, card: Element): Promise<void> {
+  const base = { widget: 'command' as const, param: 'date' };
+  await act(() =>
+    patch({ extraKeys: { '10': { ...base, style: { textSize: 1, wrap: 'words' } } } }),
+  );
+  const pop = (): Element | null => card.querySelector('.xkey-style-popover');
+  const inPop = (sel: string): HTMLInputElement => pop()!.querySelector<HTMLInputElement>(sel)!;
+  await act(() =>
+    card.querySelector<HTMLButtonElement>('button[aria-label="Bottom text style"]')!.click(),
+  );
+  check(pop() !== null, 'Aa opens the text style popover');
+  const keeps = (want: Record<string, unknown>): boolean =>
+    JSON.stringify(lastPost(stub, '/api/extra-key')) ===
+    JSON.stringify({ wireId: 10, ...base, style: { textSize: 1, wrap: 'words', ...want } });
+
+  const cases: Array<[string, Record<string, unknown>]> = [
+    ['[aria-label="Font"] button:nth-child(2)', { font: 'narrow' }],
+    ['[aria-label="Align"] button:nth-child(1)', { align: 'left' }],
+    ['[aria-label="Vertical"] button:nth-child(3)', { valign: 'bottom' }],
+    ['button[aria-label="Text colour #ffd60a"]', { color: '#ffd60a' }],
+    ['button[aria-label="Background #000000"]', { background: '#000000' }],
+  ];
+  for (const [sel, want] of cases) {
+    await act(() => inPop(sel).click());
+    check(keeps(want), `Style control posts ${JSON.stringify(want)} and keeps the rest`);
+  }
+  const custom = inPop('input[aria-label="Text colour custom colour"]');
+  custom.value = '#ABCDEF';
+  await act(() => {
+    custom.dispatchEvent(new Event('change'));
+  });
+  check(keeps({ color: '#abcdef' }), 'Custom colour posts #rrggbb');
+  const padding = inPop('.xkey-popover-field input');
+  padding.value = '4';
+  await act(() => {
+    padding.dispatchEvent(new Event('change'));
+  });
+  check(keeps({ padding: 4 }), 'Padding posts px');
+  padding.value = '99';
+  await act(() => {
+    padding.dispatchEvent(new Event('change'));
+  });
+  check(keeps({ padding: 4 }), 'Out-of-range padding is not posted');
+  const boxes = [...pop()!.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')];
+  await act(() => boxes[0]!.click());
+  check(keeps({ bold: true }), 'Bold posts bold');
+  await act(() => boxes[1]!.click());
+  check(keeps({ outline: '#000000' }), 'Outline posts a black outline');
+  await act(() => boxes[2]!.click());
+  check(keeps({ ellipsis: false }), 'Ellipsis off posts false');
+  const reset = [...pop()!.querySelectorAll('button')].find(
+    (b) => b.textContent === 'Reset style',
+  )!;
+  await act(() => reset.click());
+  check(
+    JSON.stringify(lastPost(stub, '/api/extra-key')) === JSON.stringify({ wireId: 10, ...base }),
+    'Reset style posts no style',
+  );
+  await act(() =>
+    card.querySelector<HTMLButtonElement>('button[aria-label="Bottom text style"]')!.click(),
+  );
+  await act(() => patch({ extraKeys: { '10': base } }));
 }
 
 async function checkPressAction(stub: Stub): Promise<void> {
@@ -1468,8 +1536,7 @@ async function checkTextSizePicker(stub: Stub, card: Element): Promise<void> {
   );
   await act(() => thumbs[4]!.click());
   check(
-    lastPost(stub, '/api/extra-key')?.textSize === 1 &&
-      card.querySelector('.xkey-size-picker') === null,
+    postedStyle(stub).textSize === 1 && card.querySelector('.xkey-size-picker') === null,
     'Picking a thumbnail posts that size and closes the picker',
   );
   await act(() => patch({ extraKeys: { '10': { widget: 'command', param: 'date' } } }));
@@ -1526,8 +1593,7 @@ async function checkStripZoneTabs(stub: Stub, strip: Element): Promise<void> {
     '21': {
       widget: 'command' as const,
       param: 'uptime',
-      textSize: 1 as const,
-      wrap: 'chars' as const,
+      style: { textSize: 1 as const, wrap: 'chars' as const },
     },
   };
   check(
@@ -1574,8 +1640,12 @@ async function checkStripZoneTabs(stub: Stub, strip: Element): Promise<void> {
   });
   check(
     JSON.stringify(lastPost(stub, '/api/extra-key')) ===
-      JSON.stringify({ wireId: 21, widget: 'clock', textSize: 1, wrap: 'chars' }),
+      JSON.stringify({ wireId: 21, widget: 'clock', style: { textSize: 1, wrap: 'chars' } }),
     'The panel edits the selected zone and keeps its display prefs',
+  );
+  check(
+    panel().querySelector('button[aria-label$=" text style"]') !== null,
+    'Strip zone panels show the Aa text style button',
   );
 
   const navBefore = stub.calls.length;

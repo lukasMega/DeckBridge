@@ -13,6 +13,7 @@ import { log } from '../../logger.js';
 import {
   isExtraKeyConfig,
   isTouchStripRepaintMs,
+  normalizeExtraKeyConfig,
   TOUCH_STRIP_MODES,
   TOUCH_STRIP_UPLOADS,
   TOUCH_STRIP_ZONE_FITS,
@@ -62,6 +63,15 @@ function stripInvalidDeviceSettings(d: unknown): void {
   }
   delete r.touchStripDisabled;
   delete r.imageModeOverride;
+}
+
+/** Fold pre-`style` text fields of a valid entry's extraKeys into `style`. */
+function normalizeDeviceExtraKeys(d: DeviceIdentitySettings): DeviceIdentitySettings {
+  if (!d.extraKeys) return d;
+  const extraKeys = Object.fromEntries(
+    Object.entries(d.extraKeys).map(([wireId, cfg]) => [wireId, normalizeExtraKeyConfig(cfg)]),
+  );
+  return { ...d, extraKeys };
 }
 
 /** The optional per-device settings half of isDeviceIdentitySettings. */
@@ -171,7 +181,8 @@ export class PersistedSettings {
       saved.devices.forEach(stripInvalidDeviceSettings);
       this.devices = saved.devices
         .filter(isDeviceIdentitySettings)
-        .filter((d) => isStableDeviceKey(d.deviceKey));
+        .filter((d) => isStableDeviceKey(d.deviceKey))
+        .map(normalizeDeviceExtraKeys);
     }
   }
 
@@ -238,7 +249,7 @@ export class PersistedSettings {
    *  if malformed. */
   importDevices(devices: unknown): boolean {
     if (!Array.isArray(devices) || !devices.every(isDeviceIdentitySettings)) return false;
-    this.devices = devices;
+    this.devices = devices.map(normalizeDeviceExtraKeys);
     this.persist();
     return true;
   }

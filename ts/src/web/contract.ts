@@ -26,6 +26,28 @@ export type ExtraKeyTextSize = 'fit' | -2 | -1 | 0 | 1 | 2;
  *  over-long word is split mid-word) or at any character. Absent = no wrapping. */
 export type ExtraKeyWrap = 'words' | 'chars';
 
+/** Widget font family: Spleen (monospace) or X11 Helvetica (proportional, narrower). */
+export type ExtraKeyFont = 'regular' | 'narrow';
+export type ExtraKeyAlign = 'left' | 'center' | 'right';
+export type ExtraKeyVAlign = 'top' | 'middle' | 'bottom';
+
+/** How a widget's text is drawn. Every field optional; absent = default, and defaults
+ *  are never persisted. Bounds + guard: extra-key-config.ts (`textStyleError`). */
+export interface ExtraKeyTextStyle {
+  textSize?: ExtraKeyTextSize; // default 0
+  wrap?: ExtraKeyWrap; // default off; free-text widgets only
+  font?: ExtraKeyFont; // default 'regular'
+  color?: string; // '#rrggbb', default '#e8e8ec'
+  background?: string; // '#rrggbb', default '#101014'
+  align?: ExtraKeyAlign; // default 'center'
+  valign?: ExtraKeyVAlign; // default 'middle'
+  padding?: number; // px each side, 0..16, default 0
+  lineGap?: number; // px between rows, 0..8, default 0
+  bold?: boolean; // default false
+  outline?: string; // '#rrggbb' 1-px outline colour; absent = none
+  ellipsis?: boolean; // default true — stored only when false
+}
+
 /** Who paints the touch strip (AKP05E). `elgato` = the app only; `deckbridge-ignore`
  *  = DeckBridge widgets, Elgato strip images dropped; `deckbridge-repaint` = DeckBridge
  *  widgets on assigned zones, Elgato content on the rest. `types.ts` holds the runtime

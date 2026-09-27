@@ -13,9 +13,8 @@ export type {
   EncoderCommands,
   EncoderSettings,
   ExtraKeyPressAction,
-  ExtraKeyTextSize,
+  ExtraKeyTextStyle,
   ExtraKeyWidget,
-  ExtraKeyWrap,
   KeyState,
   RealDeviceIdentity,
   TouchStripMode,
@@ -287,7 +286,7 @@ export interface LogObject {
 
 // Extra-key widget config lives in extra-key-config.ts; re-exported for existing imports.
 export * from './extra-key-config.js';
-export type { WidgetPaint } from './widget-render.js';
+export type { WidgetPaint } from './widget-layout.js';
 
 export const TOUCH_STRIP_MODES = [
   'elgato',

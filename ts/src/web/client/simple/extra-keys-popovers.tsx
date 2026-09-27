@@ -26,12 +26,12 @@ const STATUS_LABEL: Record<PluginStatus, string> = {
 /** The widget part of a key's config; the press command posts separately. */
 export type WidgetCfg = Omit<ExtraKeyCfg, 'pressCommand' | keyof DisplayPrefs>;
 /** How the widget text is drawn — kept across widget changes. */
-export type DisplayPrefs = Pick<ExtraKeyCfg, 'textSize' | 'wrap'>;
+export type DisplayPrefs = Pick<ExtraKeyCfg, 'style'>;
 
 /** The server replaces the whole widget part, so every post carries the display prefs too. */
 export function postExtraKey(wireId: number, next: WidgetCfg, prefs: DisplayPrefs = {}): void {
   const { widget, param, intervalMs, timeoutMs, pluginArg } = next;
-  const { textSize, wrap } = prefs;
+  const { style } = prefs;
   fire('/api/extra-key', {
     wireId,
     widget,
@@ -39,8 +39,7 @@ export function postExtraKey(wireId: number, next: WidgetCfg, prefs: DisplayPref
     ...(intervalMs !== undefined ? { intervalMs } : {}),
     ...(timeoutMs !== undefined ? { timeoutMs } : {}),
     ...(pluginArg !== undefined ? { pluginArg } : {}),
-    ...(textSize !== undefined && textSize !== 0 ? { textSize } : {}),
-    ...(wrap !== undefined ? { wrap } : {}),
+    ...(style && Object.keys(style).length > 0 ? { style } : {}),
   });
 }
 

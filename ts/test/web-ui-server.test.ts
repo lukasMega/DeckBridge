@@ -539,14 +539,15 @@ test('extra-key press command: pressable keys only, widget and command replace i
   assert.deepEqual(cfg(), { widget: 'none', pressCommand: 'open -a Music' });
 });
 
-test('extra-key textSize is persisted with the widget; preview needs a paint', () => {
+test('extra-key style is persisted with the widget; preview needs a paint', () => {
   const ui = new WebUIServer(undefined, [], 'real', TEST_SETTINGS_ROOT);
   ui.getOrCreateDeviceIdentity('fake-device-0', 'Dock');
   ui.notifyDocks([{ ...fakeDockStatus(0), extraKeys: [15] }]);
   const cfg = () => ui.extraKeyConfigFor('fake-device-0', 15);
 
-  assert.equal(ui.trySetExtraKey(15, { widget: 'text', param: 'Hello', textSize: 'fit' }), null);
-  assert.deepEqual(cfg(), { widget: 'text', param: 'Hello', textSize: 'fit' });
+  const style = { textSize: 'fit' as const };
+  assert.equal(ui.trySetExtraKey(15, { widget: 'text', param: 'Hello', style }), null);
+  assert.deepEqual(cfg(), { widget: 'text', param: 'Hello', style });
 
   const none = ui.tryPreviewExtraKey(15);
   assert.ok('error' in none && none.status === 404, 'nothing painted yet');
@@ -557,6 +558,7 @@ test('extra-key textSize is persisted with the widget; preview needs a paint', (
     width: 85,
     height: 85,
     clipped: false,
+    style: {},
     zone: false,
   });
   const res = ui.tryPreviewExtraKey(15);
@@ -760,25 +762,19 @@ try {
     },
   );
 
-  await runWebTest(
-    'POST /api/extra-key: bad textSize → 400 naming the allowed values',
-    async () => {
-      for (const textSize of [3, 'big', 1.5]) {
-        const res = await post('/api/extra-key', { wireId: 15, widget: 'clock', textSize });
-        assert.equal(res.status, 400, String(textSize));
-        const { error } = (await res.json()) as { error: string };
-        assert.equal(error, 'textSize must be one of: fit, -2, -1, 0, 1, 2');
-      }
-    },
-  );
-
-  await runWebTest('POST /api/extra-key: bad wrap → 400 naming the allowed values', async () => {
-    const res = await post('/api/extra-key', { wireId: 15, widget: 'text', wrap: 'lines' });
-    assert.equal(res.status, 400);
-    assert.equal(
-      ((await res.json()) as { error: string }).error,
-      'wrap must be one of: words, chars',
-    );
+  await runWebTest('POST /api/extra-key: bad style.* → 400 naming the field', async () => {
+    const cases: Array<[unknown, string]> = [
+      [{ textSize: 3 }, 'style.textSize must be one of: fit, -2, -1, 0, 1, 2'],
+      [{ wrap: 'lines' }, 'style.wrap must be one of: words, chars'],
+      [{ padding: 17 }, 'style.padding must be an integer 0..16'],
+      [{ color: 'red' }, 'style.color must be a #rrggbb colour'],
+      ['big', 'style must be an object'],
+    ];
+    for (const [style, message] of cases) {
+      const res = await post('/api/extra-key', { wireId: 15, widget: 'text', style });
+      assert.equal(res.status, 400, message);
+      assert.equal(((await res.json()) as { error: string }).error, message);
+    }
   });
 
   await runWebTest(

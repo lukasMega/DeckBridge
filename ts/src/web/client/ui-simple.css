@@ -1013,6 +1013,45 @@ input[type='range'].range:disabled {
   border-radius: 5px;
   image-rendering: pixelated;
 }
+/* Aa text style popover */
+.xkey-style-popover {
+  display: grid;
+  gap: 10px;
+  width: 270px;
+}
+.xkey-style-popover .xkey-popover-field,
+.xkey-style-popover .settings-checkbox {
+  margin: 0;
+}
+.xkey-style-row {
+  display: grid;
+  gap: 4px;
+  font-size: 13px;
+  color: var(--fg-muted);
+}
+.xkey-swatches,
+.xkey-style-outline {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px;
+}
+.xkey-swatch {
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  cursor: pointer;
+}
+.xkey-swatch[aria-pressed='true'] {
+  outline: 2px solid var(--fg);
+  outline-offset: 1px;
+}
+.xkey-swatch-custom {
+  width: 26px;
+  background: none;
+}
 .xkey-size-note {
   font-size: 13px;
   color: var(--fg-muted);

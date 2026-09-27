@@ -1,6 +1,6 @@
 import assert from 'tjs:assert';
 import { PersistedSettings } from '../src/web/server/persisted-settings.js';
-import { settingsPath, loadSettings } from '../src/settings-store.js';
+import { settingsPath, loadSettings, saveSettings } from '../src/settings-store.js';
 import { testAsync as test, summary } from './helpers/harness.js';
 
 const ROOT = `${tjs.tmpDir}/persisted-settings-test-${tjs.pid}`;
@@ -51,6 +51,39 @@ await test('interleaved persist() calls never write an out-of-order stale value'
   const onDisk = await loadSettings(dir);
   assert.equal(onDisk.selectedDock, 9, 'newest snapshot wins regardless of write timing');
   await tjs.stat(settingsPath(dir)); // file exists and is valid (loadSettings above didn't fall back to {})
+});
+
+console.log('\nPersistedSettings extra-key migration');
+
+const legacyDevice = (key: string) => ({
+  deviceKey: key,
+  mdnsServiceName: 'Dock',
+  macAddress: '00:11:22:33:44:55',
+  dockSerial: 'A',
+  childSerial: 'B',
+  extraKeys: {
+    '16': { widget: 'text', param: 'Hi', textSize: 'fit', wrap: 'words' },
+    '17': { widget: 'clock', style: { bold: true } },
+  },
+});
+const MIGRATED = {
+  '16': { widget: 'text', param: 'Hi', style: { textSize: 'fit', wrap: 'words' } },
+  '17': { widget: 'clock', style: { bold: true } },
+};
+
+await test('load() folds top-level textSize/wrap into style', async () => {
+  const dir = `${ROOT}/migrate`;
+  await saveSettings({ devices: [legacyDevice('usb:MIGRATE1')] } as never, dir);
+  const settings = new PersistedSettings(dir);
+  await settings.load();
+  assert.deepEqual(settings.entryFor('usb:MIGRATE1')?.extraKeys, MIGRATED);
+});
+
+await test('importDevices() folds them too', async () => {
+  const settings = new PersistedSettings(`${ROOT}/import`);
+  assert.ok(settings.importDevices([legacyDevice('usb:MIGRATE2')]));
+  assert.deepEqual(settings.entryFor('usb:MIGRATE2')?.extraKeys, MIGRATED);
+  await settings.flush();
 });
 
 summary();

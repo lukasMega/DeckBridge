@@ -166,4 +166,6 @@ Technical guides:
 
 [MIT](LICENSE). The vendored [`rust/jpeg-encoder`](rust/jpeg-encoder) fork keeps its
 upstream license ((MIT OR Apache-2.0) AND IJG); third-party notices in
-[`scripts/LICENSE-hidapi.txt`](scripts/LICENSE-hidapi.txt).
+[`scripts/LICENSE-hidapi.txt`](scripts/LICENSE-hidapi.txt),
+[`scripts/LICENSE-spleen.txt`](scripts/LICENSE-spleen.txt) and
+[`scripts/LICENSE-helvetica.txt`](scripts/LICENSE-helvetica.txt) (widget fonts).

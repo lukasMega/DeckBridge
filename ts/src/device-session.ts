@@ -15,7 +15,7 @@ import { sendSplashImages } from './splash-sender.js';
 import { ExtraKeyWidgets } from './extra-keys.js';
 import { tapFeedbackFor } from './widget-refresh.js';
 import type { TapFeedback } from './settings-store.js';
-import type { WidgetPaint } from './widget-render.js';
+import type { WidgetPaint } from './widget-layout.js';
 import { EncoderActions, type EncoderOverride } from './encoders.js';
 import { ExtraKeyActions } from './command-actions.js';
 import type { DeviceModel, DeviceModelOverride } from './devices/driver.js';
