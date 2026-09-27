@@ -6,9 +6,11 @@ import { advertisedGeometry, DEFAULT_MODEL, DEVICE_MODELS } from '../src/devices
 import { MIRABOX_293_MODEL } from '../src/devices/mirabox/mirabox-293.js';
 import { MIRABOX_293S_MODEL } from '../src/devices/mirabox/mirabox-293s.js';
 import { MIRABOX_K1PRO_MODEL } from '../src/devices/mirabox/mirabox-k1pro.js';
+import { AJAZZ_AKP05E_MODEL } from '../src/devices/ajazz/akp05e.js';
+import { MockDriver } from '../src/devices/mock.js';
 import type { SessionIdentity, SessionServers } from '../src/main/device-session.js';
 import type { DeviceModel, DeviceModelOverride } from '../src/devices/driver.js';
-import type { CommEntry, KeyState } from '../src/shared/types.js';
+import type { CommEntry, DialEvent, KeyState, TouchInputEvent } from '../src/shared/types.js';
 import {
   ELGATO_TCP_PORT,
   MAX_DEVICE_SESSIONS,
@@ -70,6 +72,14 @@ function makeFakeChildServer() {
     sendKeyEvent(keyIndex: number, state: KeyState) {
       this.sendKeyEventCalls.push({ keyIndex, state });
     },
+    sendDialCalls: [] as DialEvent[],
+    sendDial(event: DialEvent) {
+      this.sendDialCalls.push(event);
+    },
+    sendTouchCalls: [] as TouchInputEvent[],
+    sendTouch(event: TouchInputEvent) {
+      this.sendTouchCalls.push(event);
+    },
   };
 }
 
@@ -103,6 +113,10 @@ function makeFakeWebUI() {
     },
     notifyDriverStatus(mode: string, connected: boolean) {
       this.notifyDriverStatusCalls.push({ mode, connected });
+    },
+    notifyDeviceActionCalls: [] as { dock: number; message: string }[],
+    notifyDeviceAction(dock: number, message: string) {
+      this.notifyDeviceActionCalls.push({ dock, message });
     },
     notifyElgatoDevicePresentCalls: [] as boolean[],
     notifyElgatoDevicePresent(present: boolean) {
@@ -400,9 +414,10 @@ await test('1. connectMock(model) -> applyDeviceModel pushes PID, geometry, WebU
   );
   assert.ok(driverManager.getCurrentDriver() != null, 'currentDriver set after connectMock');
 
-  assert.equal(server.setDeviceConfigCalls.length, 1, 'setDeviceConfig called once');
+  // Twice: the mock identity (dock serial + MAC) first, then the model's PID.
+  assert.equal(server.setDeviceConfigCalls.length, 2, 'setDeviceConfig: identity, then model');
   assert.equal(
-    server.setDeviceConfigCalls[0]?.productId,
+    server.setDeviceConfigCalls[1]?.productId,
     DEFAULT_MODEL.cora.productId,
     'PID matches model',
   );
@@ -455,6 +470,44 @@ await test("2. Mock 'key' event -> childServer.sendKeyEvent + webui.notifyKeyEve
   assert.equal(webui.notifyKeyEventCalls.length, 1, 'notifyKeyEvent called once');
   assert.equal(webui.notifyKeyEventCalls[0]?.mk2Index, 3, 'notifyKeyEvent index matches');
   assert.equal(webui.notifyKeyEventCalls[0]?.state, 'down', 'notifyKeyEvent state matches');
+});
+
+await test('2b. connectMock resolves a per-model mock identity (deviceKey mock:<modelId>)', async () => {
+  const { server, webui, driverManager } = setup();
+
+  await driverManager.connectMock(DEFAULT_MODEL);
+  assert.equal(webui.getOrCreateIdentityCalls.at(-1)?.deviceKey, `mock:${DEFAULT_MODEL.id}`);
+  assert.equal(driverManager.getDockStatuses()[0]?.deviceKey, `mock:${DEFAULT_MODEL.id}`);
+  assert.equal(server.setMdnsServiceNameCalls.length, 1, 'identity mDNS name pushed');
+
+  // Switching model is a different mock device, with its own prefs.
+  await driverManager.connectMock(AJAZZ_AKP05E_MODEL);
+  assert.equal(driverManager.getDockStatuses()[0]?.deviceKey, 'mock:ajazz-akp05e');
+  assert.equal(webui.devices.length, 2, 'one persisted identity per mocked model');
+});
+
+await test('2c. Mock extraKey/dial/touch reach the primary dock handlers and the app', async () => {
+  const { childServer, webui, driverManager } = setup();
+  await driverManager.connectMock(AJAZZ_AKP05E_MODEL);
+  const driver = driverManager.getCurrentDriver() as MockDriver;
+
+  driver.simulateExtraKey(15);
+  assert.equal(webui.notifyDeviceActionCalls.at(-1)?.message, 'Extra key 15 pressed');
+  assert.equal(childServer.sendKeyEventCalls.length, 0, 'an extra key never reaches the grid');
+
+  // Knobs default to connectToApp, so the turn is forwarded to the Elgato app.
+  driver.simulateDial({ index: 1, kind: 'rotate', delta: -1 });
+  assert.deepEqual(childServer.sendDialCalls, [{ index: 1, kind: 'rotate', delta: -1 }]);
+  assert.equal(webui.notifyDeviceActionCalls.at(-1)?.message, 'Knob 2 turned left (1)');
+
+  // No widget on the zone → the tap is the app's.
+  driver.simulateTouch({ type: 'tap', x: 10, y: 20 });
+  assert.deepEqual(childServer.sendTouchCalls, [{ type: 'tap', x: 10, y: 20 }]);
+  assert.ok(webui.notifyDeviceActionCalls.at(-1)?.message.includes('tap (10, 20)'));
+
+  // Let the extra key's release timer fire before the next test.
+  await new Promise((r) => setTimeout(r, 60));
+  assert.equal(webui.notifyDeviceActionCalls.at(-1)?.message, 'Extra key 15 released');
 });
 
 await test("3. switchMode('mock') then connectMock() again -> old mock driver closed exactly once", async () => {
@@ -1382,6 +1435,25 @@ await test('E7. an unchanged override touches neither the driver nor the session
   assert.equal(driverManager.getCurrentDriver(), driver, 'the session stayed up');
   assert.equal(driver.applyOverridesCalls.length, 0, 'nothing pushed to the worker');
   assert.deepEqual(driver.renderCalls, [], 'and nothing repainted');
+});
+
+await test('E8. mock mode: a cleared override reopens on the registry model, not the tuned one', async () => {
+  const { driverManager, webui } = setup();
+  await driverManager.switchMode('mock');
+  await driverManager.connectMock(MIRABOX_293_MODEL);
+
+  webui.modelOverrideFor = () => ({ image: { rotate: 270 } });
+  await driverManager.reloadDeviceTuning(MIRABOX_293_MODEL.id, 'reopen');
+  assert.equal(driverManager.getCurrentDriver()?.model.image.rotate, 270, 'override in force');
+
+  webui.modelOverrideFor = () => undefined;
+  await driverManager.reloadDeviceTuning(MIRABOX_293_MODEL.id, 'reopen');
+  assert.equal(
+    driverManager.getCurrentDriver()?.model.image.rotate,
+    MIRABOX_293_MODEL.image.rotate,
+    'reset really dropped the override',
+  );
+  assert.equal(driverManager.getCurrentDriver()?.model.id, MIRABOX_293_MODEL.id, 'same model');
 });
 
 // F. Probe pacing under slow HID enumeration (issue #67.2)

@@ -114,6 +114,12 @@ export interface TouchInputEvent {
   endY?: number;
 }
 
+/** A simulated non-grid input for the mock driver (POST /api/mock/*). */
+export type MockInput =
+  | { kind: 'extraKey'; wireId: number }
+  | { kind: 'dial'; event: DialEvent }
+  | { kind: 'touch'; event: TouchInputEvent };
+
 /** A rectangular region of the Stream Deck + window (800×100) the app uploaded via
  *  the partial-window command. Absent = a full-window (0x0B) image. */
 export interface TouchWindowRegion {

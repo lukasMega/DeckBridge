@@ -1,47 +1,25 @@
 import { click, usingChromium } from '../../helpers/click.js';
 import { gotoApp } from '../../helpers/goto.js';
-import { expect, test } from '../../fixtures/app.js';
+import { api, expect, test, waitForDriver } from '../../fixtures/app.js';
 
-/** Wait until the mock driver is connected again. A 'reopen' change really does
- *  drop and re-open the session (mDNS advert included), and the app server is
- *  shared with every later spec, so no test may leave it mid-reconnect. */
-async function waitForDriver(
-  request: import('@playwright/test').APIRequestContext,
-  baseURL: string,
-): Promise<void> {
-  await expect
-    .poll(
-      async () => {
-        const res = await request.get(`${baseURL}/api/state`);
-        return ((await res.json()) as { driverConnected?: boolean }).driverConnected === true;
-      },
-      { timeout: 20_000 },
-    )
-    .toBe(true);
-}
+type Request = import('@playwright/test').APIRequestContext;
 
-/** POST an override straight at the API and report how the server applied it.
- *  Driven through Playwright's own request context rather than in-page `fetch`:
- *  a long series of page-side fetches leaves the Lightpanda session unable to
- *  navigate again, which wedges whichever spec runs next. */
+/** POST an override straight at the API and report how the server applied it. */
 async function postOverride(
-  request: import('@playwright/test').APIRequestContext,
+  request: Request,
   baseURL: string,
   body: Record<string, unknown>,
   path = '/api/device-overrides',
 ): Promise<{ status: number; reconnecting?: boolean; error?: string }> {
-  const res = await request.post(`${baseURL}${path}`, { data: body });
-  const parsed = (await res.json()) as { reconnecting?: boolean; error?: string };
-  return { status: res.status(), ...parsed };
+  const res = await api<{ reconnecting?: boolean; error?: string }>(request, baseURL, path, body);
+  return { status: res.status, ...res.json };
 }
 
+type OverridesView = { modelId: string; effective: { image: { rotate: number } } };
+
 /** GET /api/device-overrides for the currently selected dock. */
-async function overridesView(
-  request: import('@playwright/test').APIRequestContext,
-  baseURL: string,
-): Promise<{ modelId: string; effective: { image: { rotate: number } } }> {
-  const res = await request.get(`${baseURL}/api/device-overrides`);
-  return (await res.json()) as { modelId: string; effective: { image: { rotate: number } } };
+async function overridesView(request: Request, baseURL: string): Promise<OverridesView> {
+  return (await api<OverridesView>(request, baseURL, '/api/device-overrides')).json;
 }
 
 test.describe('device tuning applies without a reconnect', () => {

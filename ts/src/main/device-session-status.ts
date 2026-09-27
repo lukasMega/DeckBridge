@@ -171,6 +171,26 @@ function hasInputKeyMap(model: DeviceModel): boolean {
   return model.keyMap.wireInputToCora != null || model.keyMap.inputOffset != null;
 }
 
+/** Activity-log line for a knob event (real and mock drivers alike). */
+export function dialActionText(e: DialEvent): string {
+  let action: string;
+  if (e.kind === 'press') action = e.state === 'down' ? 'pressed' : 'released';
+  else action = `turned ${e.delta > 0 ? 'right' : 'left'} (${Math.abs(e.delta)})`;
+  return `Knob ${e.index + 1} ${action}`;
+}
+
+/** Activity-log line for a touch-strip gesture (real and mock drivers alike). */
+export function touchActionText(e: TouchInputEvent, model: DeviceModel): string {
+  const { touchWidth, encoderCount } = advertisedGeometry(model);
+  const zone =
+    touchWidth && encoderCount && e.type !== 'swipe'
+      ? zoneIndex(e.x, touchWidth, encoderCount) + 1
+      : undefined;
+  const control = zone !== undefined ? `Knob ${zone} touch` : 'Touch strip';
+  const end = e.endX !== undefined ? ` → (${e.endX}, ${e.endY})` : '';
+  return `${control} ${e.type} (${e.x}, ${e.y})${end}`;
+}
+
 /** Wire the driver events shared by the primary (DriverManager) and every extra session: key
  * dispatch (wire→mk2 mapping + logging), error/log forwarding, reinit repaint. 'disconnect'
  * differs per owner and stays with the caller, as do the primary-only WebUI mirrors (comm/imageSent). */
@@ -220,21 +240,11 @@ export function wireCommonDriverEvents(
     opts.onKey(index, e.state, e.keyIndex);
   });
   driver.on('dial', (e: DialEvent) => {
-    let action: string;
-    if (e.kind === 'press') action = e.state === 'down' ? 'pressed' : 'released';
-    else action = `turned ${e.delta > 0 ? 'right' : 'left'} (${Math.abs(e.delta)})`;
-    opts.onAction?.(`Knob ${e.index + 1} ${action}`);
+    opts.onAction?.(dialActionText(e));
     opts.onDial?.(e);
   });
   driver.on('touch', (e: TouchInputEvent) => {
-    const { touchWidth, encoderCount } = advertisedGeometry(model);
-    const zone =
-      touchWidth && encoderCount && e.type !== 'swipe'
-        ? zoneIndex(e.x, touchWidth, encoderCount) + 1
-        : undefined;
-    const control = zone !== undefined ? `Knob ${zone} touch` : 'Touch strip';
-    const end = e.endX !== undefined ? ` → (${e.endX}, ${e.endY})` : '';
-    opts.onAction?.(`${control} ${e.type} (${e.x}, ${e.y})${end}`);
+    opts.onAction?.(touchActionText(e, model));
     opts.onTouch?.(e);
   });
   driver.on('inputAction', (message: string) => opts.onAction?.(message));
@@ -282,7 +292,8 @@ function zonesLeftToRight(model: DeviceModel): number[] {
 export function zoneForTouch(model: DeviceModel, e: TouchInputEvent): number | undefined {
   const zones = zonesLeftToRight(model);
   if (zones.length === 0) return undefined;
-  const width = advertisedGeometry(model).touchWidth ?? PLUS_TOUCH_WIDTH;
+  // `||`: modelToChildGeometry reports 0 (not undefined) for a model with no advertised strip.
+  const width = advertisedGeometry(model).touchWidth || PLUS_TOUCH_WIDTH;
   return zones[zoneIndex(e.x, width, zones.length)];
 }
 

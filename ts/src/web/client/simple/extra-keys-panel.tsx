@@ -72,7 +72,8 @@ function widgetSections(dock: DockUi | undefined): WidgetSection[] {
   return sections;
 }
 
-// Renders nothing unless selected dock has extra keys in real mode.
+// Renders nothing unless the selected dock has extra keys. Mock docks count too: they
+// resolve a `mock:<modelId>` identity, so their assignments persist like a real one's.
 export function ExtraKeysPanel(): preact.JSX.Element | null {
   const status = useStore((s) => s.status);
   const configs = useStore((s) => s.extraKeys);
@@ -100,7 +101,6 @@ export function ExtraKeysPanel(): preact.JSX.Element | null {
     };
   }, [hasPlugin]);
 
-  if (status.driverMode === 'mock') return null;
   const selected = status.selectedDock;
   const dock = status.docks.find((d) => d.index === selected) ?? status.docks[0];
   const sections = widgetSections(dock);

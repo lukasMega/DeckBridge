@@ -3,8 +3,9 @@ import { overridesDisabled } from '../shared/cli.js';
 import { closeDriver } from '../worker/hid-worker-host.js';
 import type { WorkerHidDriver } from '../worker/hid-worker-host.js';
 import { MockDriver } from '../devices/mock.js';
+import { wireMockDriver } from './driver-manager-mock.js';
 import { MAX_MULTI_DECK_SESSIONS } from '../shared/types.js';
-import type { KeyEvent, DockStatus, DialEvent, TouchStripMode } from '../shared/types.js';
+import type { DockStatus, DialEvent, TouchStripMode } from '../shared/types.js';
 import type { DeviceDriver, DeviceModel, DeviceModelOverride } from '../devices/driver.js';
 import { applyModelOverrides, overrideSummary } from '../devices/model-overrides.js';
 import type { OverrideChangeKind } from '../devices/model-overrides.js';
@@ -369,16 +370,23 @@ export class DriverManager {
     if (this.currentDriver && this.driverMode === 'mock') {
       const prev = this.currentDriver;
       this.currentDriver = null;
+      this.primary.stopWidgets();
       await closeDriver(prev);
     }
     const driver = new MockDriver(m);
     await driver.open();
     this.currentDriver = driver;
+    // A stable per-model key, so per-device prefs (side keys, knobs, brightness)
+    // work without hardware; settings persist under whichever --cache-dir is used.
+    this.primary.resolveIdentity(`mock:${m.id}`);
     this.applyDeviceModel(m);
-    driver.on('key', (e: KeyEvent) => {
-      this.deps.childServer.sendKeyEvent(e.keyIndex, e.state);
-      this.deps.webui.notifyKeyEvent(e.keyIndex, e.state);
+    wireMockDriver(driver, {
+      primary: this.primary,
+      childServer: this.deps.childServer,
+      webui: this.deps.webui,
     });
+    this.primary.seedFromIdentity(driver);
+    this.primary.startWidgets(driver);
     log('info', 'driverMgr', `mock driver active (${m.name})`);
     this.deps.webui.notifyDriverStatus('mock', true);
   }
