@@ -2,8 +2,8 @@ import assert from 'tjs:assert';
 import { Akp05Driver } from '../src/devices/ajazz/akp05-driver.js';
 import { AJAZZ_AKP05E_MODEL } from '../src/devices/ajazz/akp05e.js';
 import { describePacket } from '../src/devices/ajazz/akp05-protocol.js';
-import { transformImageForDevice } from '../src/translator.js';
-import type { DialEvent, KeyEvent, TouchInputEvent } from '../src/types.js';
+import { transformImageForDevice } from '../src/transform/translator.js';
+import type { DialEvent, KeyEvent, TouchInputEvent } from '../src/shared/types.js';
 import { test, summaryExit } from './helpers/harness.js';
 import { SOLID_RED_16X16_JPEG } from './helpers/fixtures.js';
 

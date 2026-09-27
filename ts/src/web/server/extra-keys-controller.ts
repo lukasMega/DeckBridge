@@ -1,12 +1,12 @@
 // Extra-key config + plugin-widget data for keys outside the emulated grid (293S 6th
 // column, AKP05E right column as a Stream Deck +) — see extra-keys.ts.
 // All methods operate on the SELECTED dock, resolved via the host callbacks passed in.
-import { pluginsDir } from '../../settings-store.js';
-import { listPluginFiles, pluginKeyStatus } from '../../plugin-host.js';
-import type { PluginStatus } from '../../plugin-host.js';
+import { pluginsDir } from '../../infra/settings-store.js';
+import { listPluginFiles, pluginKeyStatus } from '../../plugin/plugin-host.js';
+import type { PluginStatus } from '../../plugin/plugin-host.js';
 import type { Broadcaster } from './broadcaster.js';
-import type { ExtraKeyConfig } from '../../types.js';
-import type { WidgetPaint } from '../../widget-layout.js';
+import type { ExtraKeyConfig } from '../../shared/types.js';
+import type { WidgetPaint } from '../../shared/widget-layout.js';
 import type { ExtraKeyPreviewResponse } from '../contract.js';
 import { widgetPreviews } from './widget-preview.js';
 import type {

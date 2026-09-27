@@ -3,9 +3,10 @@
 // NOTE: this file is intentionally NOT named `*.test.ts` so scripts/run-tests.mjs
 // (which globs `test/*.test.ts`) never runs it as a standalone test — it is only
 // imported by the real test files and bundled in via esbuild.
-import type { ElgatoServer, ElgatoChildServer } from '../../src/elgato.js';
-import { ELGATO_PKT_SIZE_RX } from '../../src/types.js';
-import { encodeCoraFrame, tryDecodeCoraFrame, type CoraFrame } from '../../src/cora-frame.js';
+import type { ElgatoServer } from '../../src/cora/primary-server.js';
+import type { ElgatoChildServer } from '../../src/cora/child-server.js';
+import { ELGATO_PKT_SIZE_RX } from '../../src/shared/types.js';
+import { encodeCoraFrame, tryDecodeCoraFrame, type CoraFrame } from '../../src/cora/frame.js';
 
 class TjsFramer {
   private buf = Buffer.alloc(0);

@@ -129,7 +129,7 @@ Runtime then loads them through FFI.
 
 Relevant implementation:
 
-- [`native-libs.ts`](../ts/src/native-libs.ts)
+- [`native-libs.ts`](../ts/src/infra/native-libs.ts)
 - [`build.mjs`](../ts/build.mjs)
 
 Malware often uses similar patterns.

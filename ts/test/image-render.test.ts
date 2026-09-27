@@ -1,6 +1,6 @@
 import assert from 'tjs:assert';
-import { renderImage, TouchStripCanvas } from '../src/image-render.js';
-import { blitImage, canvasSliceToBmp } from '../src/translator.js';
+import { renderImage, TouchStripCanvas } from '../src/transform/image-render.js';
+import { blitImage, canvasSliceToBmp } from '../src/transform/translator.js';
 import { AJAZZ_AKP05E_MODEL } from '../src/devices/ajazz/akp05e.js';
 import { MIRABOX_293_MODEL } from '../src/devices/mirabox/mirabox-293.js';
 import { testAsync as test, summaryExit } from './helpers/harness.js';

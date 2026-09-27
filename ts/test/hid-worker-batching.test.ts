@@ -1,7 +1,7 @@
 import assert from 'tjs:assert';
-import { MiraboxDriver } from '../src/mirabox.js';
+import { MiraboxDriver } from '../src/devices/mirabox/driver.js';
 import { DEVICE_MODELS } from '../src/devices/registry.js';
-import type { MainToWorker, WorkerToMain } from '../src/hid-worker-protocol.js';
+import type { MainToWorker, WorkerToMain } from '../src/worker/hid-worker-protocol.js';
 const MIRABOX_293S = DEVICE_MODELS.find((model) => model.id === 'mirabox-293s')!;
 let passed = 0;
 let failed = 0;
@@ -59,7 +59,7 @@ MiraboxDriver.prototype.open = function (): Promise<void> {
   });
   return Promise.resolve();
 };
-await import('../src/hid-worker.js');
+await import('../src/worker/hid-worker.js');
 
 function send(msg: MainToWorker): void {
   receive!({ data: msg } as MessageEvent);

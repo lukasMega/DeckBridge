@@ -1,8 +1,9 @@
 import assert from 'tjs:assert';
-import { ElgatoServer, ElgatoChildServer } from '../src/elgato.js';
-import { ELGATO_VID, ELGATO_PKT_SIZE_RX, NETWORK_DOCK_PID } from '../src/types.js';
-import type { DockStatus } from '../src/types.js';
-import { modelToChildGeometry } from '../src/capabilities.js';
+import { ElgatoServer } from '../src/cora/primary-server.js';
+import { ElgatoChildServer } from '../src/cora/child-server.js';
+import { ELGATO_VID, ELGATO_PKT_SIZE_RX, NETWORK_DOCK_PID } from '../src/shared/types.js';
+import type { DockStatus } from '../src/shared/types.js';
+import { modelToChildGeometry } from '../src/shared/capabilities.js';
 import { MK2_MODEL } from '../src/devices/elgato/mk2.js';
 import { MINI_MODEL } from '../src/devices/elgato/mini.js';
 import { STREAM_DECK_PLUS_MODEL } from '../src/devices/elgato/plus.js';
@@ -13,7 +14,7 @@ import {
   CORA_FLAG_VERBATIM,
   CORA_FLAG_REQACK,
   type CoraFrame,
-} from '../src/cora-frame.js';
+} from '../src/cora/frame.js';
 import { connect, sendPkt, closeAndWait } from './helpers/cora-framer.js';
 import { testAsync as runTest, summaryExit } from './helpers/harness.js';
 
@@ -697,7 +698,7 @@ await runTest('shuttingDown flag set during wait stops further retries', async (
 // WebUIServer: POST /api/brightness
 
 import { WebUIServer } from '../src/web/server/index.js';
-import { startCoraWithRetry, type CoraStartable } from '../src/cora-startup.js';
+import { startCoraWithRetry, type CoraStartable } from '../src/main/cora-startup.js';
 
 const WEBUI_TEST_PORT = 13001;
 // Isolate settings.json writes from the real user cache dir — brightness

@@ -1,13 +1,13 @@
 import type { Broadcaster } from './broadcaster.js';
 import type { KeyEventEntry, LogEntry, LogLevel } from './types.js';
-import type { CommEntry, KeyState } from '../../types.js';
+import type { CommEntry, KeyState } from '../../shared/types.js';
 import {
   KEY_EVENT_BUFFER_MAX,
   COMM_BUFFER_MAX,
   COMM_BROADCAST_FLUSH_MS,
   LOG_BUFFER_MAX,
   clearRepeating,
-} from '../../types.js';
+} from '../../shared/types.js';
 
 /** Ring buffers for log / CORA-comm / key-event entries, each broadcast to WS
  *  clients. Comm AND log entries are batched on one shared timer: image bursts

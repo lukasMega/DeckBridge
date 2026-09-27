@@ -6,8 +6,8 @@ import {
   createUpdateChecker,
   UpdateCheckError,
   RATE_LIMIT_MS,
-} from '../src/update-check.js';
-import type { UpdateState, UpdateCheckerDeps } from '../src/update-check.js';
+} from '../src/infra/update-check.js';
+import type { UpdateState, UpdateCheckerDeps } from '../src/infra/update-check.js';
 import { testAsync as test, summary } from './helpers/harness.js';
 
 // parseSemver / isNewer

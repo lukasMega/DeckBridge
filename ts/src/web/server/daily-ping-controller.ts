@@ -4,10 +4,10 @@
 // Owned by UpdateController rather than by WebUIServer directly — the two are
 // one background job (one daily timer, one opt-out), and web-ui-server.ts sits
 // on the 500-line check-loc gate.
-import { createDailyPing, sendBeacon } from '../../daily-ping.js';
-import { platformName } from '../../os-utils.js';
-import type { DailyPing } from '../../daily-ping.js';
-import type { DockStatus } from '../../types.js';
+import { createDailyPing, sendBeacon } from '../../infra/daily-ping.js';
+import { platformName } from '../../infra/os-utils.js';
+import type { DailyPing } from '../../infra/daily-ping.js';
+import type { DockStatus } from '../../shared/types.js';
 import type { ControllerHost } from './types.js';
 
 export class DailyPingController {

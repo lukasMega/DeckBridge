@@ -141,8 +141,8 @@ export default defineConfig([
         customSourcePatterns: ['tjs', 'tjs:*', 'virtual:*'],
       },
       // `mode: 'full'` is deprecated in v7 (its replacement, `partialMatch`, only
-      // classifies folders), but it is the only way to keep single-file element types
-      // (worker, worker-host, app, cora globs, …). The v7-native alternative —
+      // classifies folders), but it is the only way to keep the file-glob element types
+      // that share a folder (worker/*-host.ts, worker/*-protocol.ts, plugin/ likewise). The v7-native alternative —
       // `boundaries/files` descriptors + file selectors in every policy — would mean
       // rewriting all policies below. Revisit if v8 removes `mode`.
       'boundaries/legacy-warnings': false,
@@ -155,26 +155,24 @@ export default defineConfig([
         { type: 'ffi', mode: 'full', pattern: 'src/ffi/**' },
         { type: 'platform', mode: 'full', pattern: 'src/platform/**' },
         { type: 'assets', mode: 'full', pattern: 'src/assets/**' },
-        { type: 'devices', mode: 'full', pattern: ['src/devices/**', 'src/mirabox.ts'] },
-        { type: 'worker', mode: 'full', pattern: ['src/hid-worker.ts', 'src/hid-scan-worker.ts'] },
-        { type: 'worker-host', mode: 'full', pattern: ['src/hid-worker-host.ts', 'src/hid-scan-worker-host.ts'] },
-        { type: 'worker-ipc', mode: 'full', pattern: ['src/hid-worker-protocol.ts', 'src/hid-scan-worker-protocol.ts'] },
-        { type: 'plugin-worker', mode: 'full', pattern: 'src/plugin-worker.ts' },
-        { type: 'plugin-worker-host', mode: 'full', pattern: 'src/plugin-host.ts' },
-        { type: 'plugin-worker-ipc', mode: 'full', pattern: 'src/plugin-worker-protocol.ts' },
-        { type: 'transform', mode: 'full', pattern: ['src/translator.ts', 'src/image-render.ts'] },
-        { type: 'image-main', mode: 'full', pattern: ['src/image-pipeline.ts', 'src/image-cache.ts', 'src/image-assembler.ts'] },
-        { type: 'cora', mode: 'full', pattern: ['src/cora-*.ts', 'src/elgato*.ts', 'src/feature-response.ts'] },
-        { type: 'infra', mode: 'full', pattern: ['src/native-libs.ts', 'src/mdns-advertiser.ts', 'src/tray.ts', 'src/settings-store.ts', 'src/device-identity.ts', 'src/os-utils.ts', 'src/log-file.ts', 'src/update-check.ts', 'src/daily-ping.ts', 'src/daily-ping-env.ts'] },
-        { type: 'app', mode: 'full', pattern: ['src/app.ts', 'src/driver-manager*.ts', 'src/cora-startup.ts', 'src/device-session.ts', 'src/device-session-status.ts', 'src/extra-keys.ts', 'src/widget-refresh.ts', 'src/encoders.ts', 'src/command-actions.ts'] },
-        { type: 'dev-entry', mode: 'full', pattern: ['src/mirabox-smoke.ts', 'src/k1pro-probe.ts', 'src/d6-capture.ts', 'src/akp05-capture.ts', 'src/akp05-strip-probe.ts', 'src/akp05-strip-guided-probe.ts', 'src/probe-utils.ts'] },
-        { type: 'cli', mode: 'full', pattern: ['src/cli-devices.ts', 'src/cli-diagnose.ts'] },
-        // worker-lifecycle.ts is a zero-import leaf (blob-URL spawn + deferred terminate)
-        // shared by the hid worker hosts AND plugin-host — lifecycle only, no protocol.
-        // key-map.ts + splash-sender.ts are pure (no FFI): main imports them without
-        // pulling translator.ts's ffi/image-proc onto the main thread.
-        { type: 'shared', mode: 'full', pattern: ['src/types.ts', 'src/logger.ts', 'src/capabilities.ts', 'src/comm-format.ts', 'src/cli.ts', 'src/worker-lifecycle.ts', 'src/splash-sender.ts', 'src/key-map.ts', 'src/widget-layout.ts', 'src/widget-raster.ts', 'src/extra-key-config.ts']
-        },
+        { type: 'devices', mode: 'full', pattern: 'src/devices/**' },
+        // First match wins: hosts and protocols before the worker entries they share a folder with.
+        { type: 'worker-host', mode: 'full', pattern: 'src/worker/*-host.ts' },
+        { type: 'worker-ipc', mode: 'full', pattern: 'src/worker/*-protocol.ts' },
+        { type: 'worker', mode: 'full', pattern: 'src/worker/**' },
+        { type: 'plugin-worker-host', mode: 'full', pattern: 'src/plugin/*-host.ts' },
+        { type: 'plugin-worker-ipc', mode: 'full', pattern: 'src/plugin/*-protocol.ts' },
+        { type: 'plugin-worker', mode: 'full', pattern: 'src/plugin/**' },
+        { type: 'transform', mode: 'full', pattern: 'src/transform/**' },
+        { type: 'cora', mode: 'full', pattern: 'src/cora/**' },
+        { type: 'infra', mode: 'full', pattern: 'src/infra/**' },
+        { type: 'app', mode: 'full', pattern: 'src/main/**' },
+        { type: 'dev-entry', mode: 'full', pattern: 'src/dev/**' },
+        { type: 'cli', mode: 'full', pattern: 'src/cli/**' },
+        // shared/ holds zero-FFI leaves any tier may import: worker-lifecycle.ts (spawn +
+        // deferred terminate for every worker host), key-map.ts + splash-sender.ts (pure, so
+        // main never pulls translator.ts's ffi/image-proc onto the main thread).
+        { type: 'shared', mode: 'full', pattern: 'src/shared/**' },
       ],
     },
     rules: {
@@ -259,7 +257,6 @@ export default defineConfig([
                       'cora',
                       'web-server',
                       'infra',
-                      'image-main',
                       'worker-host',
                       'devices',
                       // driver-manager*.ts read cached HID discovery results (ffi/hid-discovery.js)
@@ -268,24 +265,24 @@ export default defineConfig([
                       'assets',
                       // extra-keys.ts reads plugin-widget values via the plugin-worker host
                       'plugin-worker-host',
-                      // the `devices` subcommand (cli-devices.ts)
+                      // the `devices` subcommand (cli/devices.ts)
                       'cli',
                     ],
                   },
                 },
               },
             },
-            // cli-devices.ts (the `devices` subcommand) needs native-lib setup (infra),
+            // cli/devices.ts (the `devices` subcommand) needs native-lib setup (infra),
             // HID enumeration (ffi — enumeration only, never hid_open), and the device
             // registry to match VID/PID against known models (devices).
             {
               from: { element: { type: 'cli' } },
               allow: { to: { element: { type: ['ffi', 'devices', 'infra'] } } },
               message:
-                'cli-devices.ts may import ffi/devices/infra for enumeration-only HID listing ' +
+                'cli/devices.ts may import ffi/devices/infra for enumeration-only HID listing ' +
                 '(never hid_open) and native-lib setup — mirrors the devices tier\'s own ffi access.',
             },
-            // cli-diagnose.ts shares the diagnostics builder + the requirements probe with
+            // cli/diagnose.ts shares the diagnostics builder + the requirements probe with
             // the HTTP route, so one report shape serves both the server path and the
             // no-server path (`deckbridge diagnose`, the freeze case). Pure/read-only
             // modules only — the CLI never starts a WebUIServer.
@@ -293,14 +290,14 @@ export default defineConfig([
               from: { element: { type: 'cli' } },
               allow: { to: { element: { type: 'web-server' } } },
               message:
-                'cli-diagnose.ts may import web-server ONLY for the pure diagnostics builder ' +
+                'cli/diagnose.ts may import web-server ONLY for the pure diagnostics builder ' +
                 'and the read-only requirements probe — never to start or drive the server.',
             },
             {
               from: { element: { type: 'cora' } },
-              allow: { to: { element: { type: ['image-main', 'infra', 'platform'] } } },
+              allow: { to: { element: { type: ['infra', 'platform'] } } },
             },
-            // capabilities.ts (shared) needs the DeviceConfig type from elgato-types.ts (cora) —
+            // capabilities.ts (shared) needs the DeviceConfig type from cora/types.ts —
             // type-only, defines the shared CORA child-device capability shape.
             {
               from: { element: { type: 'shared' } },
@@ -330,14 +327,6 @@ export default defineConfig([
               message:
                 'web-server may import plugin-host ONLY for the read-only WebUI surface (listPluginFiles, pluginKeyStatus, PluginStatus type) — never to drive the plugin worker.',
             },
-            // image-main (image-pipeline.ts) takes type-only references to the cora and web-server
-            // composition surfaces it's wired into (ElgatoChildServer, WebUIServer) — orchestration
-            // typing only, no runtime dependency.
-            {
-              from: { element: { type: 'image-main' } },
-              allow: { to: { element: { type: ['cora', 'web-server'] } }, dependency: { kind: 'type' } },
-            },
-
             // ── bridge ──
             {
               from: { element: { type: 'worker-host' } },
@@ -371,23 +360,13 @@ export default defineConfig([
               from: { element: { type: 'worker' } },
               allow: { to: { element: { type: ['devices', 'transform', 'ffi'] } } },
             },
-            // The worker clears the LRU image cache on every open(): a device-tuning
-            // change alters the encoded bytes, and stale entries would make the tweak
-            // look like it did nothing. Cache only — no main-side image orchestration.
-            {
-              from: { element: { type: 'worker' } },
-              allow: { to: { element: { type: 'image-main' } } },
-              message:
-                'hid-worker.ts may import image-main ONLY for the image cache it already ' +
-                'owns through image-render.ts (invalidation on open) — never image-pipeline.',
-            },
             {
               from: { element: { type: 'devices' } },
               allow: { to: { element: { type: ['ffi', 'transform'] } } },
             },
             {
               from: { element: { type: 'transform' } },
-              allow: { to: { element: { type: ['ffi', 'image-main', 'assets'] } } },
+              allow: { to: { element: { type: ['ffi', 'assets'] } } },
             },
 
             // ── dev entries can reach worker-tier code directly ──
@@ -395,7 +374,7 @@ export default defineConfig([
               from: { element: { type: 'dev-entry' } },
               // assets: k1pro-probe.ts paints the splash checkmark when it has no input files
               allow: {
-                to: { element: { type: ['devices', 'transform', 'ffi', 'image-main', 'assets'] } },
+                to: { element: { type: ['devices', 'transform', 'ffi', 'assets'] } },
               },
             },
             // A probe bundle embeds the native libs but has no app.ts to extract them,

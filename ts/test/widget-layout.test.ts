@@ -1,7 +1,12 @@
 import assert from 'tjs:assert';
 import type { BitmapFont } from '../src/assets/font-atlas.js';
 import { FONT_LADDER, fontGlyphIndex, NARROW_LADDER } from '../src/assets/font-atlas.js';
-import { glyphAdvance, layoutWidget, textWidth, type WidgetLine } from '../src/widget-layout.js';
+import {
+  glyphAdvance,
+  layoutWidget,
+  textWidth,
+  type WidgetLine,
+} from '../src/shared/widget-layout.js';
 import type { ExtraKeyTextStyle } from '../src/web/contract.js';
 import { test, summary } from './helpers/harness.js';
 

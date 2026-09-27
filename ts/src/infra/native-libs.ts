@@ -1,0 +1,152 @@
+// Extracts bundle-embedded native libs (gzip+base64) into a cache dir named
+// native-<build hash> — so an upgrade can never reuse stale libs — then points
+// DECKBRIDGE_NATIVE_LIB / HIDAPI_LIB at them. A pre-set env var wins and skips
+// that lib entirely. Writes are <name>.tmp-<pid> + atomic rename.
+import { NATIVE_LIBS, NATIVE_LIBS_HASH } from 'virtual:native-libs';
+import type { EmbeddedNativeLib } from 'virtual:native-libs';
+import { log } from '../shared/logger.js';
+
+import { platformName } from './os-utils.ts';
+
+const ENV_BY_PREFIX: Array<[string, string]> = [
+  ['libdeckbridge_native', 'DECKBRIDGE_NATIVE_LIB'],
+  ['libhidapi', 'HIDAPI_LIB'],
+];
+
+export function envVarFor(name: string): string | undefined {
+  return ENV_BY_PREFIX.find(([prefix]) => name.startsWith(prefix))?.[1];
+}
+
+export function b64ToBytes(b64: string): Uint8Array {
+  return Buffer.from(b64, 'base64');
+}
+
+export async function gunzip(data: Uint8Array): Promise<Uint8Array> {
+  const ds = new DecompressionStream('gzip');
+  const writer = ds.writable.getWriter();
+  const writeDone = writer.write(data as BufferSource).then(() => writer.close());
+  const chunks: Uint8Array[] = [];
+  const reader = ds.readable.getReader();
+  for (;;) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    chunks.push(value);
+  }
+  await writeDone;
+  let total = 0;
+  for (const c of chunks) total += c.length;
+  const out = new Uint8Array(total);
+  let off = 0;
+  for (const c of chunks) {
+    out.set(c, off);
+    off += c.length;
+  }
+  return out;
+}
+
+// `platform` defaults to the real platformName() — tests pass it explicitly so
+// each branch is exercised deterministically regardless of the host OS running
+// the suite.
+export function defaultCacheRoot(platform: string = platformName()): string {
+  // --cache-dir / DECKBRIDGE_CACHE_DIR overrides everything below (settings.json,
+  // plugins dir, native-lib extraction — all resolve their cache root through here).
+  if (tjs.env.DECKBRIDGE_CACHE_DIR) return tjs.env.DECKBRIDGE_CACHE_DIR;
+  const home = tjs.homeDir;
+  if (platform === 'macOS') return `${home}/Library/Caches/deckbridge`;
+  if (platform === 'Windows') {
+    const localAppData = tjs.env.LOCALAPPDATA ?? `${home}/AppData/Local`;
+    return `${localAppData}/deckbridge`;
+  }
+  const xdg = tjs.env.XDG_CACHE_HOME ?? `${home}/.cache`;
+  return `${xdg}/deckbridge`;
+}
+
+async function fileHasSize(path: string, size: number): Promise<boolean> {
+  try {
+    const st = await tjs.stat(path);
+    return st.isFile && st.size === size;
+  } catch {
+    return false;
+  }
+}
+
+// Extracts the given libs into <cacheRoot>/native-<hash>/ and returns a map of
+// lib name → extracted absolute path. Exported separately so tests can drive it
+// with fixture data and a temp cache root.
+export async function extractLibs(
+  libs: EmbeddedNativeLib[],
+  hash: string,
+  cacheRoot: string,
+): Promise<Record<string, string>> {
+  const dir = `${cacheRoot}/native-${hash}`;
+  await tjs.makeDir(dir, { recursive: true });
+  const paths: Record<string, string> = {};
+  for (const lib of libs) {
+    const target = `${dir}/${lib.name}`;
+    if (!(await fileHasSize(target, lib.rawSize))) {
+      const raw = await gunzip(b64ToBytes(lib.gzB64));
+      const tmp = `${target}.tmp-${tjs.pid}`;
+      await tjs.writeFile(tmp, raw, { mode: 0o755 });
+      try {
+        await tjs.rename(tmp, target);
+      } catch {
+        // Another instance won the race; its file is identical. Drop ours.
+        try {
+          await tjs.remove(tmp);
+        } catch {}
+      }
+    }
+    paths[lib.name] = target;
+  }
+  return paths;
+}
+
+// Best-effort removal of native-<otherhash> dirs from previous versions.
+export async function cleanupOldHashDirs(cacheRoot: string, keepHash: string): Promise<void> {
+  try {
+    const dirIter = await tjs.readDir(cacheRoot);
+    for await (const item of dirIter) {
+      if (
+        item.isDirectory &&
+        item.name.startsWith('native-') &&
+        item.name !== `native-${keepHash}`
+      ) {
+        try {
+          await tjs.remove(`${cacheRoot}/${item.name}`, { recursive: true });
+        } catch {}
+      }
+    }
+  } catch {}
+}
+
+export async function setupNativeLibs(): Promise<void> {
+  if (NATIVE_LIBS.length === 0) return; // dev/test build (--no-embed): env comes from mise
+  const pending = NATIVE_LIBS.filter((lib) => {
+    const envVar = envVarFor(lib.name);
+    return envVar !== undefined && (tjs.env[envVar] ?? '') === '';
+  });
+  if (pending.length === 0) return;
+  let root = defaultCacheRoot();
+  let paths: Record<string, string>;
+  try {
+    paths = await extractLibs(pending, NATIVE_LIBS_HASH, root);
+  } catch {
+    try {
+      root = `${tjs.tmpDir}/deckbridge`;
+      paths = await extractLibs(pending, NATIVE_LIBS_HASH, root);
+    } catch (e) {
+      log('error', 'native-libs', `extraction failed: ${(e as Error).message}`);
+      return;
+    }
+  }
+  for (const lib of pending) {
+    const envVar = envVarFor(lib.name)!;
+    tjs.env[envVar] = paths[lib.name]!;
+  }
+  log(
+    'info',
+    'native-libs',
+    `extracted ${pending.length} lib(s) to ${root}/native-${NATIVE_LIBS_HASH}`,
+  );
+  void cleanupOldHashDirs(root, NATIVE_LIBS_HASH);
+}

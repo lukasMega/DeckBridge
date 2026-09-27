@@ -1,8 +1,8 @@
 import assert from 'tjs:assert';
-import { setupImageHandler } from '../src/image-pipeline.js';
+import { setupImageHandler } from '../src/main/image-pipeline.js';
 import { EventEmitter } from '../src/platform/events-shim.js';
 import type { DeviceDriver, DeviceModel } from '../src/devices/driver.js';
-import type { ElgatoChildServer } from '../src/elgato.js';
+import type { ElgatoChildServer } from '../src/cora/child-server.js';
 import type { WebUIServer } from '../src/web/server/index.js';
 import { testAsync as test, summaryExit } from './helpers/harness.js';
 import { SOLID_RED_16X16_JPEG, makePassthroughModel } from './helpers/fixtures.js';

@@ -6,17 +6,17 @@ import { buildDiagnostics, diagnosticsFileName } from './diagnostics.js';
 import type { DiagnosticsOptions, DiagnosticsSources } from './diagnostics.js';
 import { checkRequirements } from './requirements.js';
 import type { KeyEventEntry, LogEntry, StateResponse } from './types.js';
-import type { CommEntry } from '../../types.js';
+import type { CommEntry } from '../../shared/types.js';
 import type { DeviceModelOverride } from '../../devices/driver.js';
 import type { ModelOverridesController } from './model-overrides-controller.js';
-import { enumerateDevices, toDeviceRow } from '../../cli-devices.js';
+import { enumerateDevices, toDeviceRow } from '../../cli/devices.js';
 import { listAllHidDevicesTimed } from '../../ffi/hidapi.js';
-import { tailLogFile } from '../../log-file.js';
-import { defaultCacheRoot } from '../../native-libs.js';
-import { settingsPath } from '../../settings-store.js';
-import { MIN_DWELL_MS, suppressReason } from '../../daily-ping-env.js';
-import { isElgatoAppRunning, openPathInOS, platformName } from '../../os-utils.ts';
-import { versionText } from '../../cli.js';
+import { tailLogFile } from '../../infra/log-file.js';
+import { defaultCacheRoot } from '../../infra/native-libs.js';
+import { settingsPath } from '../../infra/settings-store.js';
+import { MIN_DWELL_MS, suppressReason } from '../../infra/daily-ping-env.js';
+import { isElgatoAppRunning, openPathInOS, platformName } from '../../infra/os-utils.ts';
+import { versionText } from '../../shared/cli.js';
 
 /** The fields both the resolved inputs and the raw args carry verbatim. */
 interface DiagnosticsInputsBase {

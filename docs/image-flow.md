@@ -33,7 +33,7 @@ On image arrival (`setupImageHandler` in `image-pipeline.ts`) the path splits in
 
 ### gen2 (MK.2, Mirabox)
 
-Chunks arrive in `ElgatoChildServer.handleCoraPacket` (`elgato-child-server.ts`) as `byte1 === IMG_CMD_WRITE` (`0x07`) frames:
+Chunks arrive in `ElgatoChildServer.handleCoraPacket` (`cora/child-server.ts`) as `byte1 === IMG_CMD_WRITE` (`0x07`) frames:
 
 ```
 byte 0:  0x02 (output report type)
@@ -163,7 +163,7 @@ Since P1 there is **no main-thread image queue** — the main thread only does t
 
 ### Image-cache hash
 
-`hashJpeg()` (`ts/src/image-cache.ts`) runs on the USB worker for **every** image, hit or
+`hashJpeg()` (`ts/src/transform/image-cache.ts`) runs on the USB worker for **every** image, hit or
 miss, *before* the cache lookup — so a cache hit pays it in full. Three constraints shaped
 it, and each one has already been violated once:
 
@@ -233,15 +233,15 @@ return entry.data ? `data:${mime};base64,${entry.data}` : `/api/image/${index}?v
 
 | File | Role |
 |---|---|
-| `ts/src/image-pipeline.ts` | `setupImageHandler(childServer, webui, getDriver)` (main thread) — immediate WebUI base64 push, then forwards raw CORA bytes via `getDriver()?.renderCoraImage?.(...)` |
-| `ts/src/image-render.ts` | `renderImage(driver, model, keyIndex, coraBytes, format)` (worker) — transform (deckbridge-native FFI) + LRU cache + CORA→wire remap + `sendImage` to the device |
-| `ts/src/app.ts` | Wires it up: `setupImageHandler(childServer, webui, getCurrentDriver)` |
-| `ts/src/image-assembler.ts` | `assembleImageChunk()` (gen2 JPEG) · `assembleGen1ImageChunk()` (gen1 BMP, BMP `bfSize` trim) |
-| `ts/src/elgato-child-server.ts` | `ElgatoChildServer.handleCoraPacket` — dispatches `IMG_CMD_WRITE` / `GEN1_IMG_CMD`, emits `'image'` |
-| `ts/src/image-cache.ts` | `LruCache` (`IMAGE_CACHE_SIZE` = 100) · `hashJpeg()` (full-buffer FNV-1a 32-bit) · `makeCacheKey(modelId, hash)` |
-| `ts/src/translator.ts` | `transformImageForDevice(jpeg, spec)` (resize/rotate/flip/format) · `mk2IndexToDeviceImgId()` · `deviceInputToMk2Index()` |
+| `ts/src/main/image-pipeline.ts` | `setupImageHandler(childServer, webui, getDriver)` (main thread) — immediate WebUI base64 push, then forwards raw CORA bytes via `getDriver()?.renderCoraImage?.(...)` |
+| `ts/src/transform/image-render.ts` | `renderImage(driver, model, keyIndex, coraBytes, format)` (worker) — transform (deckbridge-native FFI) + LRU cache + CORA→wire remap + `sendImage` to the device |
+| `ts/src/main/app.ts` | Wires it up: `setupImageHandler(childServer, webui, getCurrentDriver)` |
+| `ts/src/cora/image-assembler.ts` | `assembleImageChunk()` (gen2 JPEG) · `assembleGen1ImageChunk()` (gen1 BMP, BMP `bfSize` trim) |
+| `ts/src/cora/child-server.ts` | `ElgatoChildServer.handleCoraPacket` — dispatches `IMG_CMD_WRITE` / `GEN1_IMG_CMD`, emits `'image'` |
+| `ts/src/transform/image-cache.ts` | `LruCache` (`IMAGE_CACHE_SIZE` = 100) · `hashJpeg()` (full-buffer FNV-1a 32-bit) · `makeCacheKey(modelId, hash)` |
+| `ts/src/transform/translator.ts` | `transformImageForDevice(jpeg, spec)` (resize/rotate/flip/format) · `mk2IndexToDeviceImgId()` · `deviceInputToMk2Index()` |
 | `rust/deckbridge-native/src/lib.rs` | Rust deckbridge-native cdylib (`image_proc_transform` over FFI): reads EXIF, rotates/flips pixels, resizes, re-encodes JPEG (or BMP) |
-| `ts/src/hid-worker.ts` · `hid-worker-host.ts` | USB worker entry + `WorkerHidDriver` proxy — carry the `'image'` / `'imageSent'` messages across the thread boundary |
+| `ts/src/worker/hid-worker.ts` · `hid-worker-host.ts` | USB worker entry + `WorkerHidDriver` proxy — carry the `'image'` / `'imageSent'` messages across the thread boundary |
 | `ts/src/web/server/web-ui-server.ts` | `notifyImageUpdate()` · `imageState`/`imageFormat` maps (`setImageState()` retained but unused by the image path) |
 | `ts/src/web/client/key-preview.ts` | Shared `KeyPreview` grid + image store + `imageSrc()` — single render path for both views |
 | `ts/src/web/client/ui-base.css` | Per-model `.key-grid[data-model] .key-cell img` rotation (single source of truth) |

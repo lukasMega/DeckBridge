@@ -1,6 +1,6 @@
 import { getReportDescriptor } from '../ffi/hidapi.js';
 import type { HidapiSymbols } from '../ffi/hidapi.js';
-import { debug, warn } from '../logger.js';
+import { debug, warn } from '../shared/logger.js';
 
 /** Reads the device's own report descriptor to settle one question the wire cannot
  *  answer: how big a packet does this board want? Writing the wrong size is **silent** —

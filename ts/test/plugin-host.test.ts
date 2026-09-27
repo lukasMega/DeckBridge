@@ -1,7 +1,10 @@
 import assert from 'tjs:assert';
-import { PluginHost, listPluginFiles, pluginKeyStatus } from '../src/plugin-host.js';
-import type { WorkerLike } from '../src/plugin-host.js';
-import type { MainToPluginWorker, PluginWorkerToMain } from '../src/plugin-worker-protocol.js';
+import { PluginHost, listPluginFiles, pluginKeyStatus } from '../src/plugin/plugin-host.js';
+import type { WorkerLike } from '../src/plugin/plugin-host.js';
+import type {
+  MainToPluginWorker,
+  PluginWorkerToMain,
+} from '../src/plugin/plugin-worker-protocol.js';
 import { testAsync as runTest, summaryExit } from './helpers/harness.js';
 
 const macrotask = (): Promise<void> => new Promise((r) => setTimeout(r, 0));

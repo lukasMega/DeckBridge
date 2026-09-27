@@ -6,10 +6,10 @@ import type { ControllerHost, ReqError } from './types.js';
 import { buildLiveDiagnostics, saveLiveDiagnostics } from './diagnostics-sources.js';
 import type { LiveDiagnosticsInputs } from './diagnostics-sources.js';
 import type { DiagnosticsOptions } from './diagnostics.js';
-import { activeLogFilePath, logDir, logFilePath } from '../../log-file.js';
-import { currentLogLevel, setLogLevel } from '../../logger.js';
-import { isLogLevel, LOG_LEVELS } from '../../cli.js';
-import { openPathInOS } from '../../os-utils.ts';
+import { activeLogFilePath, logDir, logFilePath } from '../../infra/log-file.js';
+import { currentLogLevel, setLogLevel } from '../../shared/logger.js';
+import { isLogLevel, LOG_LEVELS } from '../../shared/cli.js';
+import { openPathInOS } from '../../infra/os-utils.ts';
 
 export class LoggingController {
   constructor(

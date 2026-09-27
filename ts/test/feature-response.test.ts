@@ -1,5 +1,5 @@
 import assert from 'tjs:assert';
-import { fwVersionBuf, buildFeatureResponse } from '../src/feature-response.js';
+import { fwVersionBuf, buildFeatureResponse } from '../src/cora/feature-response.js';
 import {
   FW_VERSION_FIELD_LEN,
   CORA_FW_VERSION_OFFSET,
@@ -13,8 +13,8 @@ import {
   FEATURE_GET_SERIAL_LEGACY,
   FEATURE_GET_MAC,
   PAYLOAD_TYPE_FEATURE,
-} from '../src/types.js';
-import type { DeviceConfig } from '../src/elgato-types.js';
+} from '../src/shared/types.js';
+import type { DeviceConfig } from '../src/cora/types.js';
 import { test, summary } from './helpers/harness.js';
 
 // fwVersionBuf

@@ -1,6 +1,6 @@
 import assert from 'tjs:assert';
-import { MIN_DWELL_MS, suppressReason } from '../src/daily-ping-env.js';
-import type { EnvSnapshot, SuppressReason } from '../src/daily-ping-env.js';
+import { MIN_DWELL_MS, suppressReason } from '../src/infra/daily-ping-env.js';
+import type { EnvSnapshot, SuppressReason } from '../src/infra/daily-ping-env.js';
 import { test, summary } from './helpers/harness.js';
 
 /** Long enough that only the env gates can be the reason. */

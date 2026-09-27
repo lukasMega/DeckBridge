@@ -15,7 +15,7 @@ import { MIRABOX_293_MODEL } from '../src/devices/mirabox/mirabox-293.js';
 import { MK2_MODEL } from '../src/devices/elgato/mk2.js';
 import { MIRABOX_K1PRO_MODEL } from '../src/devices/mirabox/mirabox-k1pro.js';
 import { AJAZZ_AKP05E_MODEL } from '../src/devices/ajazz/akp05e.js';
-import { ELGATO_MK2_PID, ELGATO_PLUS_PID } from '../src/types.js';
+import { ELGATO_MK2_PID, ELGATO_PLUS_PID } from '../src/shared/types.js';
 import { test, summary as reportSummary } from './helpers/harness.js';
 
 const MODEL: DeviceModel = MIRABOX_293_MODEL;

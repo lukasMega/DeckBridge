@@ -12,7 +12,7 @@ import {
   validateModelOverride,
 } from '../../devices/model-overrides.js';
 import type { OverrideChangeKind } from '../../devices/model-overrides.js';
-import { overridesDisabled } from '../../cli.js';
+import { overridesDisabled } from '../../shared/cli.js';
 
 /** GET /api/device-overrides payload: the registry values (`defaults`), what the
  *  user has set (`overrides`), what the device is actually running (`effective`),

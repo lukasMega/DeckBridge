@@ -21,8 +21,8 @@ import { AJAZZ_AKP05E_MODEL } from '../src/devices/ajazz/akp05e.js';
 import { AJAZZ_AKP05_MODEL } from '../src/devices/ajazz/akp05.js';
 import { FIFINE_D6_MODEL, FIFINE_D6_REV2_MODEL } from '../src/devices/fifine/fifine-d6.js';
 import { AKP153_V1_CLONE_MODELS } from '../src/devices/rebadge/akp153-v1-clones.js';
-import { deviceInputToMk2Index } from '../src/key-map.js';
-import { modelToChildGeometry, buildCapabilitiesPacket } from '../src/capabilities.js';
+import { deviceInputToMk2Index } from '../src/shared/key-map.js';
+import { modelToChildGeometry, buildCapabilitiesPacket } from '../src/shared/capabilities.js';
 import {
   ELGATO_VID,
   ELGATO_PLUS_PID,
@@ -33,8 +33,8 @@ import {
   CHILD_CAPS_VERSION,
   CHILD_CAPS_LAYOUT_TYPE,
   MANUFACTURER_STRING,
-} from '../src/types.js';
-import type { DeviceConfig } from '../src/elgato-types.js';
+} from '../src/shared/types.js';
+import type { DeviceConfig } from '../src/cora/types.js';
 import type { DeviceModel } from '../src/devices/driver.js';
 import { test, summaryExit } from './helpers/harness.js';
 

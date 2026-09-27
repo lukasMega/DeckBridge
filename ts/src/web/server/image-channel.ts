@@ -2,9 +2,9 @@
 // imageState/imageFormat mirror only the SELECTED dock; dockImages caches every dock's last
 // frame so switching is instant (the Elgato app never re-pushes unprompted).
 import type { Broadcaster } from './broadcaster.js';
-import type { TouchWindowRegion } from '../../types.js';
+import type { TouchWindowRegion } from '../../shared/types.js';
 import type { ExtraKeyImageMsg, StripWriteMsg } from '../contract.js';
-import type { WidgetPaint } from '../../widget-layout.js';
+import type { WidgetPaint } from '../../shared/widget-layout.js';
 
 export type ImageFormat = 'jpeg' | 'bmp';
 export type DockFrame = { data: Buffer; format: ImageFormat };

@@ -1,5 +1,5 @@
 import assert from 'tjs:assert';
-import { buildCrt, buildBat, buildLig, buildCle } from '../src/mirabox.js';
+import { buildCrt, buildBat, buildLig, buildCle } from '../src/devices/mirabox/driver.js';
 import {
   CORA_MAGIC,
   encodeCoraFrame,
@@ -7,7 +7,7 @@ import {
   CORA_FLAG_VERBATIM,
   CoraFrameReader,
   tryDecodeCoraFrame,
-} from '../src/cora-frame.js';
+} from '../src/cora/frame.js';
 import { gen1ParseInput } from '../src/devices/protocol/elgato-gen1.js';
 import { gen2ParseInput } from '../src/devices/protocol/elgato-gen2.js';
 import { MIRABOX_293_MODEL } from '../src/devices/mirabox/mirabox-293.js';

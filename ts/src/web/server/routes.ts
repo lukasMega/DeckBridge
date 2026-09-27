@@ -20,7 +20,7 @@ import {
   compactTextStyle,
   isTouchStripRepaintMs,
   textStyleError,
-} from '../../types.js';
+} from '../../shared/types.js';
 import type {
   EncoderSettings,
   ExtraKeyConfig,
@@ -28,7 +28,7 @@ import type {
   ExtraKeyTextStyle,
   ExtraKeyWidget,
   TouchStripMode,
-} from '../../types.js';
+} from '../../shared/types.js';
 import { encoderSettingsError } from './encoders-controller.js';
 
 // The complete HTTP surface, declarative. WebSocket upgrade (/api/ws) is handled

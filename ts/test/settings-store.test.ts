@@ -1,6 +1,6 @@
 import assert from 'tjs:assert';
-import { settingsPath, loadSettings, saveSettings } from '../src/settings-store.js';
-import type { Settings } from '../src/settings-store.js';
+import { settingsPath, loadSettings, saveSettings } from '../src/infra/settings-store.js';
+import type { Settings } from '../src/infra/settings-store.js';
 import { testAsync as test, summary } from './helpers/harness.js';
 
 const ROOT = `${tjs.tmpDir}/settings-store-test-${tjs.pid}`;

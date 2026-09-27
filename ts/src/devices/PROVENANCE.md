@@ -40,7 +40,7 @@ jasonkoon/sd-connect `IMAGE_KEY_MAP` (byte-identical to our `coraToWireImage`, a
 sd-connect verified it on hardware by painting each key with its own index). The
 wire format was audited command-by-command against companion's `streamdock.ts`:
 BAT/LIG/CLE/STP/DIS/CONNECT and the input report layout all match
-`mirabox-protocol.ts`, so no protocol code changes were needed.
+`devices/mirabox/protocol.ts`, so no protocol code changes were needed.
 
 ### "Protocol version" is not uniform
 
@@ -106,7 +106,7 @@ revisit if a genuinely detailed key is seen getting quality-crushed by the cap.
 
 ### The rev. 2 board's own self-description is checked in
 
-`mise run d6-capture` (`src/d6-capture.ts`) read the HID report descriptor off a
+`mise run d6-capture` (`src/dev/d6-capture.ts`) read the HID report descriptor off a
 real `0x0060` unit on macOS. The 54 bytes live in
 `test/fixtures/fifine-d6-rev2.report-descriptor.json` and are asserted by
 `test/hid-report-descriptor.test.ts`: one unnumbered vendor collection (usagePage

@@ -1,6 +1,6 @@
 /** Shared plumbing for this folder's tjs:ffi bindings: buffers the native side
  *  fills, and the guarded-call shape every binding wraps its symbols in. */
-import { warn } from '../logger.js';
+import { warn } from '../shared/logger.js';
 
 // A machine with several composite HID devices can enumerate well over a hundred
 // interfaces; 512 KB holds a few thousand rows before the native side truncates

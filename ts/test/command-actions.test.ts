@@ -1,11 +1,11 @@
 import assert from 'tjs:assert';
-import { ExtraKeyActions } from '../src/command-actions.js';
+import { ExtraKeyActions } from '../src/main/command-actions.js';
 import {
   COMMAND_TIMEOUT_DEFAULT_MS,
   effectivePressAction,
   isExtraKeyConfig,
-} from '../src/types.js';
-import type { ExtraKeyConfig } from '../src/types.js';
+} from '../src/shared/types.js';
+import type { ExtraKeyConfig } from '../src/shared/types.js';
 import { testAsync as test, summary } from './helpers/harness.js';
 
 /** Records each run and holds it open until the test settles it. */

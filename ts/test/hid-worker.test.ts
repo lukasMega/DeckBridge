@@ -1,6 +1,6 @@
 import assert from 'tjs:assert';
 import { Akp05Driver } from '../src/devices/ajazz/akp05-driver.js';
-import type { MainToWorker, WorkerToMain } from '../src/hid-worker-protocol.js';
+import type { MainToWorker, WorkerToMain } from '../src/worker/hid-worker-protocol.js';
 import { testAsync as test, summaryExit } from './helpers/harness.js';
 import { SOLID_RED_16X16_JPEG } from './helpers/fixtures.js';
 
@@ -31,7 +31,7 @@ Object.assign(Akp05Driver.prototype, {
   sendImage: (wireId: number, bytes: Uint8Array) => io.push({ op: 'send', wireId, bytes }),
   clearKey: (wireId: number) => io.push({ op: 'clear', wireId }),
 });
-await import('../src/hid-worker.js');
+await import('../src/worker/hid-worker.js');
 
 function send(msg: MainToWorker): void {
   receive!({ data: msg } as MessageEvent);

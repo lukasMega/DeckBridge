@@ -1,6 +1,6 @@
 import assert from 'tjs:assert';
-import { HidScanWorkerHost } from '../src/hid-scan-worker-host.js';
-import type { MainToHidScanWorker } from '../src/hid-scan-worker-protocol.js';
+import { HidScanWorkerHost } from '../src/worker/hid-scan-worker-host.js';
+import type { MainToHidScanWorker } from '../src/worker/hid-scan-worker-protocol.js';
 import { testAsync as test, summaryExit } from './helpers/harness.js';
 
 class FakeScanWorker {

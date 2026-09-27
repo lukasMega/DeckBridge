@@ -3,7 +3,7 @@ import {
   mk2IndexToDeviceImgId,
   deviceInputToMk2Index,
   deviceInputToExtraKey,
-} from '../src/key-map.js';
+} from '../src/shared/key-map.js';
 import { MIRABOX_293_MODEL } from '../src/devices/mirabox/mirabox-293.js';
 import { MIRABOX_K1PRO_MODEL } from '../src/devices/mirabox/mirabox-k1pro.js';
 import { testAsync as test, summaryExit } from './helpers/harness.js';

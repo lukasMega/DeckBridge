@@ -6,9 +6,9 @@
 // headed sections, not a zip: it pastes straight into a GitHub issue and needs no
 // archive code path.
 import type { HidDeviceInfo } from '../../ffi/hidapi.js';
-import type { DeviceRow } from '../../cli-devices.js';
+import type { DeviceRow } from '../../cli/devices.js';
 import type { RequirementResult } from './requirements.js';
-import type { CommEntry } from '../../types.js';
+import type { CommEntry } from '../../shared/types.js';
 import type { KeyEventEntry, LogEntry, StateResponse } from './types.js';
 
 export interface DiagnosticsOptions {

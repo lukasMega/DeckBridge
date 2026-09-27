@@ -2,11 +2,11 @@
 // checker to persisted settings and broadcasts a change so an open UI updates
 // without polling. Split out of web-ui-server.ts to keep that file under the
 // 500-line check-loc gate.
-import { createUpdateChecker } from '../../update-check.js';
-import type { UpdateChecker, UpdateInfo } from '../../update-check.js';
-import { fetchLatestRelease } from '../../update-check.js';
+import { createUpdateChecker } from '../../infra/update-check.js';
+import type { UpdateChecker, UpdateInfo } from '../../infra/update-check.js';
+import { fetchLatestRelease } from '../../infra/update-check.js';
 import { DailyPingController } from './daily-ping-controller.js';
-import type { DockStatus } from '../../types.js';
+import type { DockStatus } from '../../shared/types.js';
 import type { ControllerHost } from './types.js';
 
 export class UpdateController {

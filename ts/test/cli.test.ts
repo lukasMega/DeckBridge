@@ -6,8 +6,8 @@ import {
   isLogLevel,
   versionText,
   USAGE_TEXT,
-} from '../src/cli.js';
-import type { CliFlags } from '../src/cli.js';
+} from '../src/shared/cli.js';
+import type { CliFlags } from '../src/shared/cli.js';
 import { test, summary } from './helpers/harness.js';
 
 const ENV_KEYS = [

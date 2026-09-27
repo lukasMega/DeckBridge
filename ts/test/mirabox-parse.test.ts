@@ -1,6 +1,12 @@
 import assert from 'tjs:assert';
-import { parseAckReport, buildCrt, buildBat, buildLig, buildCle } from '../src/mirabox.js';
-import { CMD_STP } from '../src/devices/mirabox-protocol.js';
+import {
+  parseAckReport,
+  buildCrt,
+  buildBat,
+  buildLig,
+  buildCle,
+} from '../src/devices/mirabox/driver.js';
+import { CMD_STP } from '../src/devices/mirabox/protocol.js';
 import { testAsync as test, summaryExit } from './helpers/harness.js';
 
 console.log('\nmirabox-parse: parseAckReport');

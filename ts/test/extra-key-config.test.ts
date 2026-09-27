@@ -6,7 +6,7 @@ import {
   normalizeExtraKeyConfig,
   textStyleError,
   type ExtraKeyConfig,
-} from '../src/extra-key-config.js';
+} from '../src/shared/extra-key-config.js';
 import type { ExtraKeyTextStyle } from '../src/web/contract.js';
 import { test, summary } from './helpers/harness.js';
 

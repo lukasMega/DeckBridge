@@ -1,8 +1,8 @@
 import assert from 'tjs:assert';
 import { FONT_LADDER, NARROW_LADDER, fontGlyphIndex } from '../src/assets/font-atlas.js';
 import type { BitmapFont } from '../src/assets/font-atlas.js';
-import { composeWidgetBmp } from '../src/widget-raster.js';
-import { layoutWidget } from '../src/widget-layout.js';
+import { composeWidgetBmp } from '../src/shared/widget-raster.js';
+import { layoutWidget } from '../src/shared/widget-layout.js';
 import { test, summary } from './helpers/harness.js';
 
 console.log('\nfont atlas');

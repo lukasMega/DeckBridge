@@ -1,6 +1,6 @@
 import assert from 'tjs:assert';
-import { toDeviceRow, formatDeviceTable } from '../src/cli-devices.js';
-import type { EnumeratedDevice } from '../src/cli-devices.js';
+import { toDeviceRow, formatDeviceTable } from '../src/cli/devices.js';
+import type { EnumeratedDevice } from '../src/cli/devices.js';
 import { MK2_MODEL } from '../src/devices/elgato/mk2.js';
 import { test, summary } from './helpers/harness.js';
 

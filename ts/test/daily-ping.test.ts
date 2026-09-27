@@ -10,8 +10,8 @@ import {
   shouldPing,
   tzOffset,
   utcDay,
-} from '../src/daily-ping.js';
-import type { SuppressReason } from '../src/daily-ping-env.js';
+} from '../src/infra/daily-ping.js';
+import type { SuppressReason } from '../src/infra/daily-ping-env.js';
 import { testAsync as test, summary } from './helpers/harness.js';
 
 /** Mirrors the collector's decode: JSON.parse(decodeURIComponent(atob(v))). */

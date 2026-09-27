@@ -1,23 +1,28 @@
 import assert from 'tjs:assert';
 import { EventEmitter } from '../src/platform/events-shim.js';
-import { DriverManager } from '../src/driver-manager.js';
-import { ProbePacer, nextProbeDelayMs } from '../src/driver-manager-pacing.js';
+import { DriverManager } from '../src/main/driver-manager.js';
+import { ProbePacer, nextProbeDelayMs } from '../src/main/driver-manager-pacing.js';
 import { advertisedGeometry, DEFAULT_MODEL, DEVICE_MODELS } from '../src/devices/registry.js';
 import { MIRABOX_293_MODEL } from '../src/devices/mirabox/mirabox-293.js';
 import { MIRABOX_293S_MODEL } from '../src/devices/mirabox/mirabox-293s.js';
 import { MIRABOX_K1PRO_MODEL } from '../src/devices/mirabox/mirabox-k1pro.js';
-import type { SessionIdentity, SessionServers } from '../src/device-session.js';
+import type { SessionIdentity, SessionServers } from '../src/main/device-session.js';
 import type { DeviceModel, DeviceModelOverride } from '../src/devices/driver.js';
-import type { CommEntry, EncoderSettings, KeyState, TouchStripMode } from '../src/types.js';
-import { ELGATO_TCP_PORT, MAX_DEVICE_SESSIONS, MAX_MULTI_DECK_SESSIONS } from '../src/types.js';
-import type { ChildGeometry } from '../src/capabilities.js';
-import type { DeviceConfig } from '../src/elgato-types.js';
-import type { ElgatoServer, ElgatoChildServer } from '../src/elgato.js';
+import type { CommEntry, EncoderSettings, KeyState, TouchStripMode } from '../src/shared/types.js';
+import {
+  ELGATO_TCP_PORT,
+  MAX_DEVICE_SESSIONS,
+  MAX_MULTI_DECK_SESSIONS,
+} from '../src/shared/types.js';
+import type { ChildGeometry } from '../src/shared/capabilities.js';
+import type { DeviceConfig } from '../src/cora/types.js';
+import type { ElgatoServer } from '../src/cora/primary-server.js';
+import type { ElgatoChildServer } from '../src/cora/child-server.js';
 import type { WebUIServer } from '../src/web/server/index.js';
-import type { WorkerHidDriver } from '../src/hid-worker-host.js';
-import { generateDeviceIdentity } from '../src/device-identity.js';
-import type { DeviceIdentitySettings, TapFeedback } from '../src/settings-store.js';
-import { DEFAULT_TAP_FEEDBACK } from '../src/settings-store.js';
+import type { WorkerHidDriver } from '../src/worker/hid-worker-host.js';
+import { generateDeviceIdentity } from '../src/infra/device-identity.js';
+import type { DeviceIdentitySettings, TapFeedback } from '../src/infra/settings-store.js';
+import { DEFAULT_TAP_FEEDBACK } from '../src/infra/settings-store.js';
 import { testAsync as test, summaryExit } from './helpers/harness.js';
 
 // Fakes

@@ -1,7 +1,7 @@
 import assert from 'tjs:assert';
 import { EventEmitter } from 'node:events';
-import { ExtraKeyWidgets, FLASH_MS, renderWidgetLines } from '../src/extra-keys.js';
-import { parseLatLon, WEATHER_FORCE_MIN_MS } from '../src/widget-refresh.js';
+import { ExtraKeyWidgets, FLASH_MS, renderWidgetLines } from '../src/main/extra-keys.js';
+import { parseLatLon, WEATHER_FORCE_MIN_MS } from '../src/main/widget-refresh.js';
 import {
   TOUCH_STRIP_MODES,
   isExtraKeyConfig,
@@ -9,11 +9,11 @@ import {
   type TouchStripMode,
   type TouchStripOptions,
   type TouchStripUpload,
-} from '../src/types.js';
+} from '../src/shared/types.js';
 import { MIRABOX_293S_MODEL } from '../src/devices/mirabox/mirabox-293s.js';
 import { AJAZZ_AKP05E_MODEL } from '../src/devices/ajazz/akp05e.js';
 import type { DeviceImageSpec, DeviceModel } from '../src/devices/driver.js';
-import type { WidgetPaint } from '../src/widget-layout.js';
+import type { WidgetPaint } from '../src/shared/widget-layout.js';
 import { testAsync as test, summary } from './helpers/harness.js';
 
 // renderWidgetLines

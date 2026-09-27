@@ -1,11 +1,11 @@
 import { findHidPath, isNullPtr, IS_MACOS } from '../../ffi/hidapi.js';
 import type { HidapiSymbols } from '../../ffi/hidapi.js';
-import { HidDeviceBase } from '../hid-connection.js';
-import { debug, error, info } from '../../logger.js';
+import { HidDeviceBase } from '../hid-device-base.js';
+import { debug, error, info } from '../../shared/logger.js';
 import type { DeviceModel } from '../driver.js';
-import type { DialEvent, KeyEvent, KeyState, TouchInputEvent } from '../../types.js';
-import { DEFAULT_BRIGHTNESS } from '../../types.js';
-import { parseAckReport } from '../mirabox-protocol.js';
+import type { DialEvent, KeyEvent, KeyState, TouchInputEvent } from '../../shared/types.js';
+import { DEFAULT_BRIGHTNESS } from '../../shared/types.js';
+import { parseAckReport } from '../mirabox/protocol.js';
 import { jpegSize } from '../jpeg-size.js';
 import {
   AKP05_CLEAR_ALL,

@@ -41,11 +41,11 @@ Transforms cost roughly 2ms per page. Timing excludes cache lookup and messaging
 
 ## Concrete optimization candidates
 
-1. **Batch STP across page updates.** Current [`MiraboxDriver.sendImage`](../ts/src/mirabox.ts) always sends STP. Model flag `sendStpAfterImage: false` does not affect image transfers. It controls initialization and clear operations. Fifteen images therefore send fifteen STPs. One final STP saves fourteen reports. This sample saves 18.4% of writes. Elapsed-time savings could differ substantially.
+1. **Batch STP across page updates.** Current [`MiraboxDriver.sendImage`](../ts/src/devices/mirabox/driver.ts) always sends STP. Model flag `sendStpAfterImage: false` does not affect image transfers. It controls initialization and clear operations. Fifteen images therefore send fifteen STPs. One final STP saves fourteen reports. This sample saves 18.4% of writes. Elapsed-time savings could differ substantially.
 
    Upstream [Mirajazz flush implementation](https://github.com/4ndv/mirajazz/blob/main/src/device.rs) sends pending images together. It then sends one STP. [OpenDeck flush scheduling](https://github.com/4ndv/opendeck-akp153/blob/main/src/device.rs) uses notification-based batching. Its current quiet window is 50ms. Copying that delay would add latency. Bounded batching needs animation-aware scheduling.
 
-2. **Skip unchanged key images.** Transform cache currently saves encoding work. [`renderImage`](../ts/src/image-render.ts) still sends cached bytes. Per-key deduplication could remove entire transfers. Benefits depend on repeated image traffic. Clears, reconnects, reinitialization require invalidation. One hash collision must not suppress updates. Extra-key widgets already skip unchanged content.
+2. **Skip unchanged key images.** Transform cache currently saves encoding work. [`renderImage`](../ts/src/transform/image-render.ts) still sends cached bytes. Per-key deduplication could remove entire transfers. Benefits depend on repeated image traffic. Clears, reconnects, reinitialization require invalidation. One hash collision must not suppress updates. Extra-key widgets already skip unchanged content.
 
 3. **Coalesce superseded animation frames.** Worker currently processes FIFO messages. Backlogs retain obsolete frames per key. Latest-frame scheduling could improve responsiveness. It would intentionally drop intermediate frames. Clear, settings, splash ordering must survive.
 
@@ -53,7 +53,7 @@ Transforms cost roughly 2ms per page. Timing excludes cache lookup and messaging
 
 ## Measurement defect
 
-[`perfOnRender`](../ts/src/image-render.ts) runs before `driver.sendImage`. Thus current timing excludes final image writes. First-image transformation is also excluded. Gaps between arrivals remain included. Reported batches cannot isolate USB time.
+[`perfOnRender`](../ts/src/transform/image-render.ts) runs before `driver.sendImage`. Thus current timing excludes final image writes. First-image transformation is also excluded. Gaps between arrivals remain included. Reported batches cannot isolate USB time.
 
 Useful instrumentation separates these intervals:
 

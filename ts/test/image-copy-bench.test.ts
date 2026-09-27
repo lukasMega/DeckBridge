@@ -21,8 +21,8 @@ import {
   frameTotalLength,
   CoraFrameReader,
   type CoraFrame,
-} from '../src/cora-frame.js';
-import { ELGATO_IMAGE_HEADER_SIZE, IMAGE_CHUNK_LAST_FLAG } from '../src/types.js';
+} from '../src/cora/frame.js';
+import { ELGATO_IMAGE_HEADER_SIZE, IMAGE_CHUNK_LAST_FLAG } from '../src/shared/types.js';
 
 // Realistic key-image sizes (from the architecture-simplification plan's notes on
 // observed key JPEG sizes across models/quality settings).
@@ -84,7 +84,7 @@ function splitEveryFrame(frames: Buffer[]): Buffer[] {
   return chunks;
 }
 
-// Old CoraFrameReader: byte-for-byte the same class as ../src/cora-frame.ts
+// Old CoraFrameReader: byte-for-byte the same class as ../src/cora/frame.ts
 // (same hasMagicAtStart/resyncToMagic/drainFrames), EXCEPT append() always
 // Buffer.concats, even when `buffer` is already empty. This isolates the one
 // line the "hot-path quick win" changes — everything else (magic scan, resync,

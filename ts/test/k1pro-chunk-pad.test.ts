@@ -1,5 +1,5 @@
 import assert from 'tjs:assert';
-import { padChunkBoundaries } from '../src/mirabox.js';
+import { padChunkBoundaries } from '../src/devices/mirabox/driver.js';
 import { MIRABOX_K1PRO_MODEL } from '../src/devices/mirabox/mirabox-k1pro.js';
 import { testAsync as test, summaryExit } from './helpers/harness.js';
 

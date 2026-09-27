@@ -6,9 +6,9 @@ import {
   CORA_FLAG_RESULT,
   CORA_FLAG_VERBATIM,
   CoraFrameReader,
-} from '../src/cora-frame.js';
-import { MAX_RECEIVE_BUFFER } from '../src/types.js';
-import { setWebUILog, type LogLevel } from '../src/logger.js';
+} from '../src/cora/frame.js';
+import { MAX_RECEIVE_BUFFER } from '../src/shared/types.js';
+import { setWebUILog, type LogLevel } from '../src/shared/logger.js';
 import { test, summary } from './helpers/harness.js';
 
 // Helpers

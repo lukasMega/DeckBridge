@@ -1,5 +1,5 @@
 import type { DeviceModel } from '../driver.js';
-import { ELGATO_MK2_PID, IMAGE_JPEG_QUALITY } from '../../types.js';
+import { ELGATO_MK2_PID, IMAGE_JPEG_QUALITY } from '../../shared/types.js';
 
 export const MIRABOX_293_MODEL: DeviceModel = {
   id: 'mirabox-293',

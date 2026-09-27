@@ -3,7 +3,7 @@
 // branches on. Every mutator broadcasts; the flag setters dedupe first, because
 // the 3 s reconnect scan calls them on every tick.
 import { DEFAULT_MODEL } from '../../devices/registry.js';
-import type { ClientApp, DockStatus } from '../../types.js';
+import type { ClientApp, DockStatus } from '../../shared/types.js';
 import type { DriverMode, StatusSnapshot } from './types.js';
 
 /** The dock-list half of a snapshot, owned by DockRegistry/DevicePrefsController. */

@@ -6,7 +6,7 @@ import type {
   RealDeviceIdentity,
   ClientApp,
   TouchStripMode,
-} from '../../types.js';
+} from '../../shared/types.js';
 import type {
   DeviceIdentity,
   DeviceModelInfo,
@@ -27,7 +27,7 @@ import type { DevicePrefsController } from './device-prefs-controller.js';
 import type { ImageChannel } from './image-channel.js';
 // Canonical LogLevel lives in logger.ts (derived from cli.ts's LOG_LEVELS);
 // re-exported below so existing web-server call sites keep importing from types.js.
-import type { LogLevel } from '../../logger.js';
+import type { LogLevel } from '../../shared/logger.js';
 
 /** Result of a persisted device-tuning change: how the live session applies it
  *  (see classifyOverrideChange). */

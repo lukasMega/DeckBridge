@@ -1,7 +1,7 @@
 import assert from 'tjs:assert';
-import { hashJpeg, makeCacheKey, imageCache, specRevision } from '../src/image-cache.js';
+import { hashJpeg, makeCacheKey, imageCache, specRevision } from '../src/transform/image-cache.js';
 import type { DeviceImageSpec } from '../src/devices/driver.js';
-import { IMAGE_CACHE_SIZE } from '../src/types.js';
+import { IMAGE_CACHE_SIZE } from '../src/shared/types.js';
 import { test, summaryExit } from './helpers/harness.js';
 
 // hashJpeg

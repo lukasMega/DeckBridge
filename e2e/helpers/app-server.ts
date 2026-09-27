@@ -6,7 +6,7 @@ import { freePort, isPortFree, waitFor } from './ports.js';
 
 const REPO = resolve(import.meta.dirname, '..', '..');
 
-// Hardcoded in ts/src/types.ts and not configurable — see the plan, §3.
+// Hardcoded in ts/src/shared/types.ts and not configurable — see the plan, §3.
 const CORA_PORTS = [5343, 5344];
 
 export interface AppServer {

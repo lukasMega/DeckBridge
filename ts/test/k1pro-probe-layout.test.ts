@@ -1,6 +1,6 @@
 // Not a real test — reproduces the k1pro-probe JPEG variants byte-for-byte
 // and writes them to /tmp/k1pro-probe for offline boundary analysis.
-import { transformImageForDevice } from '../src/translator.js';
+import { transformImageForDevice } from '../src/transform/translator.js';
 import { closeImageProc } from '../src/ffi/image-proc.js';
 import { MIRABOX_K1PRO_MODEL } from '../src/devices/mirabox/mirabox-k1pro.js';
 
