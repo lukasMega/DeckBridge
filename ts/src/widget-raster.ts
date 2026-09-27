@@ -137,7 +137,7 @@ export function composeLayout(
     c.px[o + 1] = bg[1];
     c.px[o + 2] = bg[2];
   }
-  // Every outline before any foreground, so a ring never covers a neighbour's glyph.
+  // Every outline before any foreground, so a ring never covers a neighbor's glyph.
   if (style.outline) drawText(c, layout, RING, bgr(style.outline));
   drawText(c, layout, [[0, 0]], fg);
   return encodeBmp(c);

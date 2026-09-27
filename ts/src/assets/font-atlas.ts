@@ -5,7 +5,7 @@
 // Copyright 1984-1989, 1994 Adobe Systems Incorporated.
 // Copyright 1988, 1994 Digital Equipment Corporation.
 // Permission notice: see LICENSE-helvetica.txt (repo scripts/).
-// U+2026 in Spleen 5x8/6x12 is synthesised from three '.' glyphs; U+00A0 copies space.
+// U+2026 in Spleen 5x8/6x12 is synthesized from three '.' glyphs; U+00A0 copies space.
 // Packed monochrome cells for codepoints 32..126, 0xA0..0xFF, 0x2026, in that order:
 // per glyph ceil(cellWidth/8) bytes per row (MSB-first), cell height rows top→bottom,
 // cellWidth/height = width/height ÷ scale.
@@ -27,7 +27,7 @@ export interface BitmapFont {
   readonly advances?: string;
   /** Cell left edge relative to the pen, ≤ 0. Absent = 0. */
   readonly originX?: number;
-  /** Nearest-neighbour upscale of the stored bits. Absent = 1. */
+  /** Nearest-neighbor upscale of the stored bits. Absent = 1. */
   readonly scale?: number;
 }
 

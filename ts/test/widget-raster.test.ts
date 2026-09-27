@@ -172,7 +172,7 @@ test('outline rings the glyph without covering it', () => {
   }
 });
 
-test('outline of one glyph never covers its neighbour', () => {
+test('outline of one glyph never covers its neighbor', () => {
   const lines: WidgetLine[] = [{ text: 'WW', big: true }];
   const style: ExtraKeyTextStyle = { outline: '#ff0000', font: 'narrow' };
   const plain = pixelsOf(composeWidgetBmp(lines, SIZE, SIZE, { font: 'narrow' }), FG).length;

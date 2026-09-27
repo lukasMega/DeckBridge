@@ -35,7 +35,7 @@ const helv = (dpi, pt) => ({
 const CANDIDATES = [
   {
     family: 'Spleen (current, monospace reference)',
-    licence: 'BSD-2-Clause',
+    license: 'BSD-2-Clause',
     sizes: ['5x8', '6x12', '8x16', '12x24'].map((s) => ({
       label: s,
       kind: 'bdf',
@@ -44,7 +44,7 @@ const CANDIDATES = [
   },
   {
     family: 'Ark Pixel proportional (latin)',
-    licence: 'OFL-1.1 (was MIT before 2024)',
+    license: 'OFL-1.1 (was MIT before 2024)',
     sizes: [
       ['10', '2026.09.25'],
       ['12', '2026.09.25'],
@@ -58,7 +58,7 @@ const CANDIDATES = [
   },
   {
     family: 'X11 Adobe Helvetica (helvR)',
-    licence: 'Adobe/DEC permissive notice (must travel with copies)',
+    license: 'Adobe/DEC permissive notice (must travel with copies)',
     sizes: [
       ...['08', '10', '12', '14', '18', '24'].map((pt) => helv(75, pt)),
       ...['08', '10', '12', '14'].map((pt) => helv(100, pt)),
@@ -66,7 +66,7 @@ const CANDIDATES = [
   },
   {
     family: 'Pixel Operator (TTF, rasterized)',
-    licence: 'CC0-1.0',
+    license: 'CC0-1.0',
     sizes: [
       { label: '8px', kind: 'ttf', url: `${PIXOP}/PixelOperator8.ttf`, px: 8 },
       { label: '16px', kind: 'ttf', url: `${PIXOP}/PixelOperator.ttf`, px: 16 },
@@ -113,13 +113,13 @@ function inside(contours, px, py) {
  *  pixel fonts, whose outlines are axis-aligned squares on the pixel grid. */
 function ttfFont(opentype, file, px) {
   const buf = readFileSync(file);
-  const ot = opentype.parse(buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.length));
-  const scale = px / ot.unitsPerEm;
-  const ascent = Math.round(ot.ascender * scale);
-  const descent = Math.round(-ot.descender * scale);
+  const face = opentype.parse(buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.length));
+  const scale = px / face.unitsPerEm;
+  const ascent = Math.round(face.ascender * scale);
+  const descent = Math.round(-face.descender * scale);
   const glyphs = new Map();
   for (const cp of [...Array.from({ length: 95 }, (_, i) => 32 + i), ...LATIN1, 0x2026]) {
-    const g = ot.charToGlyph(String.fromCodePoint(cp));
+    const g = face.charToGlyph(String.fromCodePoint(cp));
     if (!g || g.index === 0) continue;
     const contours = [];
     let cur = [];
@@ -245,7 +245,7 @@ for (const cand of CANDIDATES) {
         `U+2026 ${s.ellipsis ? 'yes' : 'NO'}, Latin-1 missing: ${s.missing.length ? esc(s.missing.join(' ')) : 'none'}</h3>${imgs}`,
     );
   }
-  sections.push(`<h2>${esc(cand.family)} — ${esc(cand.licence)}</h2>${blocks.join('\n')}`);
+  sections.push(`<h2>${esc(cand.family)} — ${esc(cand.license)}</h2>${blocks.join('\n')}`);
 }
 
 writeFileSync(
