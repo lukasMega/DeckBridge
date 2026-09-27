@@ -154,7 +154,6 @@ class FakeDriver extends EventEmitter {
   close(): Promise<void> {
     return Promise.resolve();
   }
-  sendImage(): void {}
   setBrightness(): void {}
   clearKey(keyIndex: number): void {
     this.cleared.push(keyIndex);

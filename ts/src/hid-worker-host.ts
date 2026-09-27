@@ -104,10 +104,6 @@ export class WorkerHidDriver extends EventEmitter implements DeviceDriver {
     this.post({ type: 'image', keyIndex, bytes, format });
   }
 
-  sendImage(keyIndex: number, bytes: Uint8Array): void {
-    this.post({ type: 'sendImage', keyIndex, bytes: new Uint8Array(bytes) });
-  }
-
   /** Splash source image → worker: the worker transforms with `spec` (which
    *  may differ from model.image due to splash orientation overrides) and
    *  writes the native bytes to the device. Offloads the synchronous FFI transform

@@ -291,14 +291,11 @@ export interface DeviceDriver extends EventEmitter {
    *  path (primary probe). Ignored by MockDriver. */
   open(hidPath?: string): Promise<void>;
   close(): Promise<void>;
-  /** keyIndex: CORA logical index (0-based).
-   *  bytes: native image format for the device (JPEG for MK.2, BMP for Mini, JPEG for Mirabox). */
-  sendImage(keyIndex: number, bytes: Uint8Array): void;
   clearKey(keyIndex: number): void;
   setBrightness(level: number): void;
   /** Transform (resize/rotate/encode), cache and write a raw CORA image. Only
    *  `WorkerHidDriver` implements it, doing the transform off the main thread;
-   *  `MockDriver` and the in-worker drivers expose native-bytes `sendImage` only. */
+   *  the in-worker drivers take native bytes via their own `sendImage`. */
   renderCoraImage?(keyIndex: number, coraBytes: Uint8Array, format: 'jpeg' | 'bmp'): void;
   /** Send a splash source image, transformed with `spec` (which may differ from
    *  model.image — splash sources are upright). `WorkerHidDriver` only, keeping the

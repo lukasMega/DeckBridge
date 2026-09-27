@@ -191,9 +191,6 @@ async function handle(msg: MainToWorker, deferNotification: boolean): Promise<vo
     case 'image':
       handleImage(msg.keyIndex, msg.bytes, msg.format, deferNotification);
       break;
-    case 'sendImage':
-      driver?.sendImage(msg.keyIndex, msg.bytes);
-      break;
     case 'imageWithSpec':
       handleSplashImage(msg.keyIndex, msg.bytes, msg.spec);
       break;
@@ -255,7 +252,7 @@ scope.addEventListener('message', (ev: MessageEvent) => {
     currentModel &&
     supportsImageBatching(currentModel) &&
     currentModel.wire.batchImageTransfers === true &&
-    (msg.type === 'image' || msg.type === 'sendImage' || msg.type === 'imageWithSpec')
+    (msg.type === 'image' || msg.type === 'imageWithSpec')
   ) {
     pendingImages.push(msg);
     if (pendingImages.length === 15) enqueueImageBatch();

@@ -170,7 +170,6 @@ class ToggleRealDriver extends EventEmitter {
     return Promise.resolve();
   }
 
-  sendImage(): void {}
   clearKey(): void {}
   setBrightness(): void {}
 }
@@ -204,7 +203,6 @@ class ControllableRealDriver extends EventEmitter {
     return Promise.resolve();
   }
 
-  sendImage(): void {}
   clearKey(): void {}
   setBrightness(): void {}
 }
@@ -230,7 +228,6 @@ class RepaintFakeDriver extends EventEmitter {
   close(): Promise<void> {
     return Promise.resolve();
   }
-  sendImage(): void {}
   clearKey(): void {}
   setBrightness(): void {}
   renderCoraImage(key: number, _bytes: unknown, format: 'jpeg' | 'bmp'): void {
@@ -681,7 +678,6 @@ class CoordFakeDriver extends EventEmitter {
     this.renderCalls.push(keyIndex);
   }
   sendSplashImage(): void {}
-  sendImage(): void {}
   clearKey(): void {}
   setBrightness(level: number): void {
     this.brightnessCalls.push(level);
@@ -1202,7 +1198,6 @@ class CapturingDriver extends EventEmitter {
   }
   setBrightness(): void {}
   clearKey(): void {}
-  sendImage(): void {}
   renderCoraImage(keyIndex: number): void {
     this.renderCalls.push(keyIndex);
   }
