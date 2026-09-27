@@ -1,37 +1,20 @@
-import type {
-  Status,
-  Stats,
-  MockConfig,
-  KeyEvent,
-  ServerLog,
-  CommLog,
-  ExtraKeyImageMsg,
-  StripWriteMsg,
-  UpdateInfo,
-} from './ui-types.js';
+import type { WsEvents } from './ui-types.js';
 import { showDeviceAction } from './device-test-mode.js';
 import { error } from './log.js';
-import { applyImage, clearImage, flashKey, resetPreviews } from './key-preview.js';
-import { applyTouchImage, resetTouchStrip, type TouchFrameMsg } from './touch-strip-preview.js';
+import { applyImage, flashKey, resetPreviews } from './key-preview.js';
+import { applyTouchImage, resetTouchStrip } from './touch-strip-preview.js';
 import { applyStripWrite, resetStripZones } from './strip-zone-preview.js';
 import * as store from './store.js';
-import type { StoreState } from './store.js';
-import { hydrate, type InitialState } from './hydrate.js';
+import { hydrate } from './hydrate.js';
+import type { StateResponse } from './ui-types.js';
 
-interface ImageEvt {
-  mk2Index: number;
-  v: number;
-  data?: string;
-  format?: string;
-}
+type Handlers = { [K in keyof WsEvents]: (d: WsEvents[K]) => void };
 
-const handlers: Record<string, (d: unknown) => void> = {
-  status: (d) => {
-    const next = d as Status;
+const handlers: Handlers = {
+  status: (next) => {
     // Selected preview dock changed: blank the grids + drop cached images; the
     // server replays the new dock's frames right after this broadcast.
-    const prev = store.getSnapshot().status.selectedDock ?? 0;
-    if ((next.selectedDock ?? 0) !== prev) {
+    if (next.selectedDock !== store.getSnapshot().status.selectedDock) {
       resetPreviews();
       resetTouchStrip();
       resetStripZones();
@@ -40,18 +23,16 @@ const handlers: Record<string, (d: unknown) => void> = {
     }
     store.patch({ status: next });
   },
-  image: (d) => {
-    const e = d as ImageEvt;
-    // Imperative only: key-preview.ts paints these, no component reads them from the
-    // store. Mirroring each frame in woke every useStore subscriber for nothing.
-    applyImage(e.mk2Index, { v: e.v, data: e.data, format: e.format });
+  // Imperative only: key-preview.ts paints these, no component reads them from the
+  // store. Mirroring each frame in woke every useStore subscriber for nothing.
+  image: (e) => applyImage(e.mk2Index, { data: e.data, format: e.format }),
+  imagesReset: () => {
+    resetPreviews();
+    resetTouchStrip();
   },
-  touchImage: (d) => {
-    applyTouchImage(d as TouchFrameMsg);
-  },
-  stripWrite: (d) => applyStripWrite(d as StripWriteMsg),
-  extraKeyImage: (d) => {
-    const { wireId, data, clipped, zone } = d as ExtraKeyImageMsg;
+  touchImage: (d) => applyTouchImage(d),
+  stripWrite: (d) => applyStripWrite(d),
+  extraKeyImage: ({ wireId, data, clipped, zone }) => {
     const snap = store.getSnapshot();
     const extraKeyClipped = { ...snap.extraKeyClipped };
     if (clipped) extraKeyClipped[String(wireId)] = true;
@@ -65,55 +46,32 @@ const handlers: Record<string, (d: unknown) => void> = {
     else delete extraKeyImages[String(wireId)];
     store.patch({ extraKeyImages, extraKeyClipped });
   },
-  clear: (d) => {
-    const idx = (d as { mk2Index: number }).mk2Index;
-    clearImage(idx);
-  },
-  brightnessOverride: (d) => {
-    store.patch({ brightnessOverride: (d as { enabled: boolean }).enabled });
-  },
-  brightness: (d) => {
-    store.patch({ brightness: (d as { level: number }).level });
-  },
-  extraKeys: (d) => {
-    store.patch({ extraKeys: (d as { configs: StoreState['extraKeys'] }).configs });
-  },
-  touchStripMode: (d) => {
-    store.patch({ touchStripMode: (d as { mode: StoreState['touchStripMode'] }).mode });
-  },
-  touchStripRepaint: (d) => {
-    store.patch({ touchStripRepaintMs: (d as { ms: number }).ms });
-  },
-  encoders: (d) => {
-    store.patch({ encoders: (d as { encoders: StoreState['encoders'] }).encoders });
-  },
-  deviceAction: (d) => showDeviceAction(d as { dockIndex: number; message: string }),
-  keyEvent: (d) => {
-    const e = d as KeyEvent;
+  brightnessOverride: ({ enabled }) => store.patch({ brightnessOverride: enabled }),
+  brightness: ({ level }) => store.patch({ brightness: level }),
+  extraKeys: ({ configs }) => store.patch({ extraKeys: configs }),
+  touchStripMode: ({ mode }) => store.patch({ touchStripMode: mode }),
+  touchStripRepaint: ({ ms }) => store.patch({ touchStripRepaintMs: ms }),
+  encoders: ({ encoders }) => store.patch({ encoders }),
+  deviceAction: (d) => showDeviceAction(d),
+  keyEvent: (e) => {
     flashKey(e.mk2Index);
     store.addKeyEvent(e);
   },
-  // Reserved for a future full-grid refresh; no per-key data accompanies it.
-  repaint: () => {},
-  logBatch: (d) => {
-    for (const e of d as ServerLog[]) store.addServerLog(e);
+  logBatch: (entries) => {
+    for (const e of entries) store.addServerLog(e);
   },
-  comm: (d) => {
-    store.addCommLog(d as CommLog);
+  commBatch: (entries) => {
+    for (const e of entries) store.addCommLog(e);
   },
-  commBatch: (d) => {
-    for (const e of d as CommLog[]) store.addCommLog(e);
-  },
-  stats: (d) => {
-    store.patch({ stats: d as Stats });
-  },
-  mockConfig: (d) => {
-    store.patch({ mockConfig: d as MockConfig });
-  },
-  update: (d) => {
-    store.patch({ updateInfo: d as UpdateInfo });
-  },
+  stats: (stats) => store.patch({ stats }),
+  mockConfig: (mockConfig) => store.patch({ mockConfig }),
+  update: (updateInfo) => store.patch({ updateInfo }),
 };
+
+// Looked up by the server-sent event name: a Map has no prototype keys to hit.
+const handlerByEvent = new Map<string, (d: unknown) => void>(
+  Object.entries(handlers) as [string, (d: unknown) => void][],
+);
 
 let _wsConnected = false;
 
@@ -122,10 +80,14 @@ export function connectWS(): void {
   const ws = new WebSocket(`${proto}//${location.host}/api/ws`);
 
   ws.addEventListener('open', () => {
+    // The server sends the selected dock's frames on connect; drop what a
+    // previous connection left before they arrive.
+    resetPreviews();
+    resetTouchStrip();
     if (_wsConnected) {
       // Full re-hydrate: an app restart while disconnected changes more than images.
       void fetch('/api/state')
-        .then((r) => r.json() as Promise<InitialState>)
+        .then((r) => r.json() as Promise<StateResponse>)
         .then((st) => {
           hydrate(st);
           return undefined;
@@ -136,12 +98,9 @@ export function connectWS(): void {
 
   ws.addEventListener('message', (e: MessageEvent<string>) => {
     const { event, data } = JSON.parse(e.data) as { event: string; data: unknown };
-    if (Object.prototype.hasOwnProperty.call(handlers, event)) {
-      const handler = handlers[event];
-      if (typeof handler === 'function') {
-        handler(data);
-      }
-    }
+    // Each event arrives with its WsEvents payload; `ping` has no handler.
+    const handler = handlerByEvent.get(event);
+    if (typeof handler === 'function') handler(data);
   });
 
   ws.addEventListener('close', () => setTimeout(connectWS, 2000));

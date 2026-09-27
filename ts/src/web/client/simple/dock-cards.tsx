@@ -112,7 +112,7 @@ export function DockList({
   docks,
   onHelp,
 }: Readonly<{ docks: DockUi[]; onHelp: (id: string) => void }>): preact.JSX.Element {
-  const selected = useStore((s) => s.status.selectedDock ?? 0);
+  const selected = useStore((s) => s.status.selectedDock);
   return (
     <div class="dock-list">
       {docks.map((dock) => (

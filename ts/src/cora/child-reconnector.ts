@@ -2,7 +2,8 @@
 // session drops, dial back to its last address instead of waiting for it to
 // reconnect. Cold path — kept out of ElgatoChildServer's packet dispatch.
 import * as net from '../platform/tcp.js';
-import { ELGATO_CHILD_PORT, RECONNECT_DELAY_MS, clearTimer } from '../shared/types.js';
+import { ELGATO_CHILD_PORT, clearTimer } from '../shared/types.js';
+import { RECONNECT_DELAY_MS } from './protocol.js';
 
 type ReconnectState = 'idle' | 'in-progress' | 'scheduled';
 

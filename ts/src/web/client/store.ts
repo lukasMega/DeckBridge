@@ -44,10 +44,28 @@ export interface StoreState {
   updateInfo?: UpdateInfo;
 }
 
-export const TOUCH_STRIP_REPAINT_DEFAULT_MS = 5000; // mirrors types.ts
+/** Placeholder until the first hydrate(); ui-entry.ts mounts nothing before it. */
+export const EMPTY_STATUS: Status = {
+  driverMode: 'real',
+  driverConnected: false,
+  elgatoConnected: false,
+  elgatoRemoteAddr: null,
+  clientApp: 'unknown',
+  brightness: 0,
+  modelId: '',
+  modelName: '',
+  keyCount: 0,
+  columns: 0,
+  rows: 0,
+  elgatoAppConflict: false,
+  elgatoDevicePresent: false,
+  localIp: '',
+  docks: [],
+  selectedDock: 0,
+};
 
 let state: StoreState = {
-  status: { driverMode: 'real', driverConnected: false, elgatoConnected: false, docks: [] },
+  status: EMPTY_STATUS,
   stats: { uptimeMs: 0, elgatoRxPkts: 0, elgatoTxPkts: 0, imagesSent: 0 },
   mockConfig: undefined,
   brightness: 82,
@@ -61,7 +79,7 @@ let state: StoreState = {
   extraKeyImages: {},
   extraKeyClipped: {},
   touchStripMode: 'elgato',
-  touchStripRepaintMs: TOUCH_STRIP_REPAINT_DEFAULT_MS,
+  touchStripRepaintMs: 0,
   encoders: {},
   updateInfo: undefined,
 };

@@ -122,7 +122,7 @@ export function ManualAddPanel({
   onHelp,
   port = CORA_PORT,
 }: Readonly<{ onHelp: (id: string) => void; port?: string }>): preact.JSX.Element {
-  const ip = useStore((s) => s.status.localIp ?? '');
+  const ip = useStore((s) => s.status.localIp);
   const pending = !ip;
 
   return (

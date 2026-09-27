@@ -2,7 +2,7 @@ import { assets } from './assets.js';
 import { checkRequirements } from './requirements.js';
 import { get, post, postJson } from './router.js';
 import type { Route, RouteContext } from './router.js';
-import { badRequest, bmp, css, html, jpeg, js, json, noContent, notFound, text } from './http.js';
+import { badRequest, css, html, js, json, noContent, text } from './http.js';
 import { isNonNegInt, nonNegIntMessage } from './types.js';
 import type { MockDeviceConfig } from './types.js';
 import {
@@ -42,12 +42,6 @@ export const routes: Route[] = [
   get('/api/state', ({ ui }) => json(ui.fullState())),
   get('/api/plugins', async ({ ui }) => json(await ui.pluginsInfo())),
   get('/api/settings', ({ ui }) => json(JSON.parse(ui.getSettingsJson()))),
-  get('/api/image/:key', ({ ui, params }) => {
-    const key = Number(params.key);
-    const buf = ui.getImage(key);
-    if (!buf) return notFound();
-    return ui.imageChannel.imageFormat.get(key) === 'bmp' ? bmp(buf) : jpeg(buf);
-  }),
 
   postJson('/api/driver-mode', setDriverMode),
   postJson('/api/mock-config', setMockConfig),

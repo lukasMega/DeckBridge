@@ -20,7 +20,7 @@ import {
   FEATURE_KEEPALIVE_ACK,
   FEATURE_GET_CAPABILITIES,
   FEATURE_GET_DEVICE_INFO,
-} from '../shared/types.js';
+} from './protocol.js';
 import type { DialEvent, KeyState, TouchInputEvent } from '../shared/types.js';
 import { isLevelEnabled } from '../shared/logger.js';
 import {

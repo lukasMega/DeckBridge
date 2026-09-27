@@ -1,4 +1,4 @@
-import { MAX_RECEIVE_BUFFER } from '../shared/types.js';
+import { MAX_RECEIVE_BUFFER } from './protocol.js';
 import { warn } from '../shared/logger.js';
 
 export const CORA_MAGIC = Buffer.from([0x43, 0x93, 0x8a, 0x41]);

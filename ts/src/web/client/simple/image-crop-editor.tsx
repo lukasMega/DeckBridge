@@ -73,7 +73,7 @@ function useFrame(key: number | undefined): HTMLImageElement | null {
       const el = new Image();
       const onLoad = (): void => setImg(el);
       el.addEventListener('load', onLoad);
-      el.src = imageSrc(key, entry);
+      el.src = imageSrc(entry);
       return function dropFrame() {
         el.removeEventListener('load', onLoad);
       };
@@ -113,13 +113,11 @@ function CropDialog({
   onSaved,
   onClose,
 }: Readonly<EditorProps & { onClose: () => void }>): preact.JSX.Element {
-  const keyCount = useStore((s) => s.status.keyCount ?? 0);
+  const keyCount = useStore((s) => s.status.keyCount);
   const [keys] = useState(() => keysWithFrames(keyCount));
   const [key, setKey] = useState<number | undefined>(keys[0]);
   const img = useFrame(key);
-  const src: Size = img
-    ? { width: img.naturalWidth, height: img.naturalHeight }
-    : (view.sourceSize ?? keySize);
+  const src: Size = img ? { width: img.naturalWidth, height: img.naturalHeight } : view.sourceSize;
   const [rect, setRect] = useState(() => initialRect(image.cropRect, keySize, src));
   const [aspectLock, setAspectLock] = useState(true);
   const [tried, setTried] = useState(false);
@@ -256,7 +254,7 @@ function CropDialog({
                   aria-label={`Key ${i + 1}`}
                   onClick={() => setKey(i)}
                 >
-                  <img src={imageSrc(i, getImageEntry(i)!)} alt="" />
+                  <img src={imageSrc(getImageEntry(i)!)} alt="" />
                 </button>
               ))}
             </div>

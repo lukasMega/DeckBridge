@@ -1,5 +1,6 @@
 import { EventEmitter } from 'node:events';
 import * as net from '../platform/tcp.js';
+import { bindAddr, clearRepeating } from '../shared/types.js';
 import {
   ELGATO_KEEPALIVE_MS,
   KEEPALIVE_PAYLOAD_SIZE,
@@ -7,10 +8,8 @@ import {
   KEEPALIVE_SUBTYPE,
   PKT_EVENT,
   EVENT_SUBTYPE_KEEPALIVE,
-  bindAddr,
   CLIENT_EVICTION_GRACE_MS,
-  clearRepeating,
-} from '../shared/types.js';
+} from './protocol.js';
 import { CORA_FLAG_ACKNAK, CORA_FLAG_VERBATIM, CoraFrameReader, encodeCoraFrame } from './frame.js';
 import { formatCommHex } from '../shared/comm-format.js';
 

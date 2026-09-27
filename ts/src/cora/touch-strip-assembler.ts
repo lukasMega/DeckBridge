@@ -1,7 +1,7 @@
 // Stream Deck + touch/LCD output (0x08 LCD, 0x0B window strip, 0x0C partial window)
 // for the child CORA server. Only the strip commands have a device surface; the
 // 800×480 LCD is dropped with a trace.
-import { IMG_CMD_LCD, IMG_CMD_WINDOW_PARTIAL } from '../shared/types.js';
+import { IMG_CMD_LCD, IMG_CMD_WINDOW_PARTIAL } from './protocol.js';
 import type { TouchWindowRegion } from '../shared/types.js';
 import { isLevelEnabled } from '../shared/logger.js';
 import {

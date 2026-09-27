@@ -136,7 +136,7 @@ The Rust deckbridge-native cdylib applies rotations CW first, then flips. To re-
 
 ### Web preview orientation
 
-The browser shows the **received CORA bytes** immediately (72×72 JPEG for the 293/293S and MK.2, native 80×80 BMP for the Mini and the K1 Pro), then on reconnect re-fetches the stored bytes via `/api/image/{key}` — both are the CORA arrival image, so live and reconnect previews are consistent. Because the preview shows desktop-oriented bytes rather than device-oriented ones, the web UI corrects orientation with **per-model CSS** keyed on a `data-model` attribute (set via `KeyPreview.setModel()` from `status.modelId`):
+The browser shows the **received CORA bytes** immediately (72×72 JPEG for the 293/293S and MK.2, native 80×80 BMP for the Mini and the K1 Pro), and a newly connected WebSocket is sent the stored bytes of every key — both are the CORA arrival image, so live and reconnect previews are consistent. Because the preview shows desktop-oriented bytes rather than device-oriented ones, the web UI corrects orientation with **per-model CSS** keyed on a `data-model` attribute (set via `KeyPreview.setModel()` from `status.modelId`):
 
 ```css
 /* ui-base.css — single source of truth for BOTH views */
@@ -197,16 +197,16 @@ because it is an in-process cache key, never persisted or sent over the wire.
 Regression tests for all of the above (including the lane-3 family by name) are in
 `ts/test/image-cache.test.ts`.
 
-## State stored in WebUIServer
+## State stored in the WebUI server
 
-| Map / field | Written by | Contains |
-|---|---|---|
-| `imageState` | `notifyImageUpdate` / `setImageState` | The **CORA arrival image** bytes for each key (the same bytes base64-broadcast to the browser) |
-| `imageFormat` | `notifyImageUpdate` | Per-key wire format (`'jpeg'`/`'bmp'`) of the last CORA frame, so a later repaint uses the right MIME |
-
-`notifyImageUpdate(mk2Index, data, format = 'jpeg')` stores `data` (and `format` in `imageFormat`), bumps the per-key version, and broadcasts a WebSocket `image` event (`{ mk2Index, v, data: b64, format }`). `setImageState(mk2Index, jpeg)` (updates `imageState` + bumps the version, no WS broadcast) is retained on `WebUIServer` as a capability but is **no longer called by the live image path** (see "WebUI shows the CORA arrival image" above).
-
-On browser reconnect the browser re-fetches `/api/state` and per-key `/api/image/{key}?v=` to rehydrate previews.
+`ImageChannel` (`web/server/image-channel.ts`) caches the last CORA frame of every key
+of every dock (`{ data, format }`, `format` = the arrival format `'jpeg'`/`'bmp'`).
+`notifyDockImage(dock, mk2Index, data, format)` updates that cache and, when the dock
+is the selected one, broadcasts a WebSocket `image` event. A newly connected
+WebSocket is sent the selected dock's frames straight away (`sendSnapshot`), and
+selecting another dock replays its frames; there is no per-key HTTP route. When a
+dock's frames are dropped (model change, disconnect) the server sends `imagesReset`
+and the browser blanks its previews.
 
 ## WebSocket `image` event
 
@@ -215,19 +215,21 @@ On browser reconnect the browser re-fetches `/api/state` and per-key `/api/image
   "event": "image",
   "data": {
     "mk2Index": 3,
-    "v": 7,
     "data": "<base64>",
     "format": "jpeg"
   }
 }
 ```
 
-`format` is the CORA **arrival** format: `"jpeg"` when the desktop sent a gen2 JPEG (MK.2, 293/293S) and `"bmp"` when it sent a gen1 BMP (Mini, K1 Pro). The client `imageSrc(index, entry)` in `key-preview.ts` builds the data URI with the correct MIME type (shared by both views):
+`format` is the CORA **arrival** format: `"jpeg"` when the desktop sent a gen2 JPEG (MK.2, 293/293S) and `"bmp"` when it sent a gen1 BMP (Mini, K1 Pro). The client `imageSrc(entry)` in `key-preview.ts` builds the data URI with the correct MIME type (shared by both views):
 
 ```js
 const mime = entry.format === 'bmp' ? 'image/bmp' : 'image/jpeg';
-return entry.data ? `data:${mime};base64,${entry.data}` : `/api/image/${index}?v=${entry.v}`;
+return `data:${mime};base64,${entry.data}`;
 ```
+
+Every WS event and its payload is declared once in `WsEvents` (`web/contract.ts`);
+the server's `broadcast<K>` and the client's handler table are both typed by it.
 
 ## Key Files
 
@@ -242,7 +244,7 @@ return entry.data ? `data:${mime};base64,${entry.data}` : `/api/image/${index}?v
 | `ts/src/transform/translator.ts` | `transformImageForDevice(jpeg, spec)` (resize/rotate/flip/format) · `mk2IndexToDeviceImgId()` · `deviceInputToMk2Index()` |
 | `rust/deckbridge-native/src/lib.rs` | Rust deckbridge-native cdylib (`image_proc_transform` over FFI): reads EXIF, rotates/flips pixels, resizes, re-encodes JPEG (or BMP) |
 | `ts/src/worker/hid-worker.ts` · `hid-worker-host.ts` | USB worker entry + `WorkerHidDriver` proxy — carry the `'image'` / `'imageSent'` messages across the thread boundary |
-| `ts/src/web/server/web-ui-server.ts` | `notifyImageUpdate()` · `imageState`/`imageFormat` maps (`setImageState()` retained but unused by the image path) |
+| `ts/src/web/server/image-channel.ts` | Per-dock frame cache · `notifyDockImage()` · `sendSnapshot()` for a new WS client · `replay()` on dock select |
 | `ts/src/web/client/key-preview.ts` | Shared `KeyPreview` grid + image store + `imageSrc()` — single render path for both views |
 | `ts/src/web/client/ui-base.css` | Per-model `.key-grid[data-model] .key-cell img` rotation (single source of truth) |
 | `ts/src/web/client/advanced-key-grid.tsx` | Advanced view — Preact component owning a persistent `KeyPreview`; `rebuild/setModel/setClickable` on `status` changes |

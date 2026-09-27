@@ -22,7 +22,7 @@ import {
   PARTIAL_WINDOW_H_OFFSET,
   PARTIAL_WINDOW_LAST_OFFSET,
   PARTIAL_WINDOW_SIZE_OFFSET,
-} from '../src/shared/types.js';
+} from '../src/cora/protocol.js';
 
 import { test, summary } from './helpers/harness.js';
 

@@ -11,7 +11,7 @@ import {
   REPORT_FIRMWARE_VERSION,
   REPORT_SERIAL_NUMBER,
   REPORT_DEVICE_INFO,
-} from '../shared/types.js';
+} from './protocol.js';
 import { coraFlagString } from './frame.js';
 
 export function describeCoraPayload(

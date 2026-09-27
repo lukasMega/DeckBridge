@@ -128,7 +128,7 @@ function ModelSelect({
       class="input"
       onChange={handleModelChange}
       disabled={status.driverMode === 'real' && status.driverConnected}
-      value={status.modelId ?? ''}
+      value={status.modelId}
     >
       {deviceModels.map((m: DeviceModel) => (
         <option key={m.id} value={m.id}>

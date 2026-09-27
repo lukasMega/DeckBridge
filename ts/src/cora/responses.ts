@@ -1,6 +1,7 @@
 // Every CORA reply DeckBridge builds from the emulated device's identity: primary
 // feature responses, the child's capabilities packet, verbatim probes and GET_REPORT
 // specs. Pure builders only; the servers own dispatch and sending.
+import { FIRMWARE_REPORT_SIZE } from '../shared/types.js';
 import {
   FW_VERSION_FIELD_LEN,
   CORA_FW_VERSION_OFFSET,
@@ -21,7 +22,6 @@ import {
   SECONDARY_DETECT_RESPONSE_SIZE,
   ELGATO_VID,
   SERIAL_REPORT_SIZE,
-  FIRMWARE_REPORT_SIZE,
   DEVICE_INFO_REPORT_SIZE,
   DEVICE_INFO_VID_OFFSET,
   DEVICE_INFO_PID_OFFSET,
@@ -32,7 +32,7 @@ import {
   CHILD_CAPS_LAYOUT_TYPE,
   CHILD_CAPS_SERIAL_MAX_LEN,
   MANUFACTURER_STRING,
-} from '../shared/types.js';
+} from './protocol.js';
 import type { ChildGeometry } from '../devices/driver.js';
 import type { DeviceConfig, LogFn } from './types.js';
 

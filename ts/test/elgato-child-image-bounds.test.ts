@@ -1,14 +1,13 @@
 import assert from 'tjs:assert';
 import { ElgatoChildServer } from '../src/cora/child-server.js';
 import {
-  ELGATO_PKT_SIZE_RX,
-  IMAGE_CHUNK_KEY_OFFSET,
   DEFAULT_DOCK_FIRMWARE_VERSION,
   DEFAULT_CHILD_FIRMWARE_VERSION,
   DEFAULT_DOCK_SERIAL_NUMBER,
   DEFAULT_CHILD_SERIAL_NUMBER,
   ELGATO_MK2_PID,
 } from '../src/shared/types.js';
+import { ELGATO_PKT_SIZE_RX, IMAGE_CHUNK_KEY_OFFSET } from '../src/cora/protocol.js';
 import { modelToChildGeometry } from '../src/devices/registry.js';
 import { MINI_MODEL } from '../src/devices/elgato/mini.js';
 import { CORA_FLAG_VERBATIM, CORA_FLAG_REQACK } from '../src/cora/frame.js';

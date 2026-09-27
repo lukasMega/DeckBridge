@@ -1,30 +1,23 @@
 import type {
-  CommEntry,
   EncoderSettings,
   ExtraKeyConfig,
   DockStatus,
-  RealDeviceIdentity,
-  ClientApp,
   TouchStripMode,
 } from '../../shared/types.js';
 import type {
-  DeviceIdentity,
-  DeviceModelInfo,
   ExtraKeyPreviewResponse,
   ExtraKeyPressAction,
-  KeyEventEntry,
   MockDeviceConfig,
   PluginsInfo,
-  Stats,
-  UpdateInfo,
+  StateResponse,
+  DeviceOverridesView,
+  WsBroadcast,
 } from '../contract.js';
-import type { DeviceOverridesView } from './model-overrides-controller.js';
 import type { OverrideChangeKind } from '../../devices/model-overrides.js';
 import type { DiagnosticsOptions } from './diagnostics.js';
 import type { PersistedSettings } from './persisted-settings.js';
 import type { UpdateController } from './update-controller.js';
 import type { DevicePrefsController } from './device-prefs-controller.js';
-import type { ImageChannel } from './image-channel.js';
 // Canonical LogLevel lives in logger.ts (derived from cli.ts's LOG_LEVELS);
 // re-exported below so existing web-server call sites keep importing from types.js.
 import type { LogLevel } from '../../shared/logger.js';
@@ -70,7 +63,7 @@ export const nonNegIntError = (field: string): ReqError => ({
 export interface ControllerHost {
   readonly settings: PersistedSettings;
   emit(event: string, ...args: unknown[]): boolean;
-  broadcast(event: string, payload: unknown): void;
+  broadcast: WsBroadcast;
   selectedDeviceKey(): string;
   selectedDock(): number;
   selectedDockStatus(): DockStatus | undefined;
@@ -86,72 +79,14 @@ export type {
   KeyEventEntry,
   DeviceModelInfo,
   UpdateInfo,
+  DriverMode,
+  LogEntry,
+  StatusSnapshot,
+  StateResponse,
+  DeviceOverridesView,
 } from '../contract.js';
 
 export type { LogLevel };
-export type DriverMode = 'real' | 'mock';
-
-export interface LogEntry {
-  ts: number;
-  level: LogLevel;
-  component: string;
-  message: string;
-}
-
-export interface StatusSnapshot {
-  driverMode: DriverMode;
-  driverConnected: boolean;
-  elgatoConnected: boolean;
-  elgatoRemoteAddr: string | null;
-  clientApp: ClientApp;
-  brightness: number;
-  modelId: string;
-  modelName: string;
-  keyCount: number;
-  columns: number;
-  rows: number;
-  /** True when the Elgato desktop app is running AND we do not hold the device —
-   *  i.e. it is plausibly blocking us. NOT "the Elgato app is running": while
-   *  DeckBridge is connected this is always false, app running or not. */
-  elgatoAppConflict: boolean;
-  /** True when an Elgato-branded device (MK.2/Mini) is enumerated on USB —
-   *  independent of whether we could open it. Gates the "Elgato app is
-   *  blocking access" screen so it doesn't fire for non-Elgato hardware. */
-  elgatoDevicePresent: boolean;
-  localIp: string;
-  docks: DockStatus[];
-  selectedDock: number;
-}
-
-export interface StateResponse extends StatusSnapshot {
-  images: Record<string, number>;
-  // Omitted from the wire payload in simple-only builds — see state-response.ts.
-  logs?: LogEntry[];
-  commLogs?: CommEntry[];
-  keyEvents: KeyEventEntry[];
-  stats: Stats;
-  mockConfig: MockDeviceConfig;
-  brightnessOverride: boolean;
-  deviceModels: DeviceModelInfo[];
-  deviceIdentity: DeviceIdentity;
-  realDeviceIdentity?: RealDeviceIdentity;
-  // The SELECTED dock's extra-key assignments, keyed by device wire id.
-  extraKeys: Record<string, ExtraKeyConfig>;
-  /** The SELECTED dock's touch-strip mode + knob override (AKP05E). */
-  touchStripMode: TouchStripMode;
-  touchStripRepaintMs: number;
-  encoders: EncoderSettings;
-  /** Log level currently in effect (not merely the persisted one) + where the
-   *  log file lives — both surfaced under Settings so a reporter can turn on
-   *  debug logging and find the file. */
-  logLevel: string;
-  logFilePath: string;
-  /** Multi-deck opt-in (settings.json `multiDeck`). Read once per Settings-page
-   *  mount, like logLevel — it is not in the status snapshot. */
-  multiDeck: boolean;
-  /** GitHub-release update check (update-check.ts) — cached, no network. */
-  updateInfo: UpdateInfo;
-}
 
 /**
  * The narrow view of {@link WebUIServer} that HTTP route handlers depend on.
@@ -163,8 +98,6 @@ export interface WebUIController {
   readonly brightnessOverride: boolean;
   readonly selectedDock: number;
   fullState(): StateResponse;
-  getImage(key: number): Buffer | undefined;
-  readonly imageChannel: Pick<ImageChannel, 'imageFormat'>;
   notifyBrightness(level: number): void;
   notifyBrightnessOverride(enabled: boolean): void;
   setBrowserLocale(locale: string): void;

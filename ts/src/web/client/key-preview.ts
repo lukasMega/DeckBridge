@@ -3,9 +3,9 @@
 // No top-level DOM access — the pure helpers are unit-tested on txiki.js.
 
 export interface ImageEntry {
-  v: number;
-  data?: string;
-  format?: string;
+  /** base64 */
+  data: string;
+  format: 'jpeg' | 'bmp';
 }
 
 export interface KeyPreviewOptions {
@@ -19,13 +19,10 @@ const KEY_FLASH_MS = 200;
 const imageStore = new Map<number, ImageEntry>();
 const instances = new Set<KeyPreview>();
 
-/** data: URL (correct MIME) when bytes were pushed over WS, else versioned server URL. */
-export function imageSrc(index: number, entry: ImageEntry): string {
-  if (entry.data) {
-    const mime = entry.format === 'bmp' ? 'image/bmp' : 'image/jpeg';
-    return `data:${mime};base64,${entry.data}`;
-  }
-  return `/api/image/${index}?v=${entry.v}`;
+/** data: URL with the frame's MIME type. */
+export function imageSrc(entry: ImageEntry): string {
+  const mime = entry.format === 'bmp' ? 'image/bmp' : 'image/jpeg';
+  return `data:${mime};base64,${entry.data}`;
 }
 
 export function getImageEntry(index: number): ImageEntry | undefined {
@@ -34,11 +31,6 @@ export function getImageEntry(index: number): ImageEntry | undefined {
 
 export function applyImage(index: number, entry: ImageEntry): void {
   imageStore.set(index, entry);
-  broadcast((p) => p.refreshKey(index));
-}
-
-export function clearImage(index: number): void {
-  imageStore.delete(index);
   broadcast((p) => p.refreshKey(index));
 }
 
@@ -121,7 +113,7 @@ export class KeyPreview {
       img = document.createElement('img');
       cell.insertBefore(img, cell.firstChild);
     }
-    img.src = imageSrc(index, entry);
+    img.src = imageSrc(entry);
     cell.classList.add('lit');
   }
 

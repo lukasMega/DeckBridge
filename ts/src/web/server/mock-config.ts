@@ -6,10 +6,8 @@ import {
   DEFAULT_DOCK_SERIAL_NUMBER,
   DEFAULT_CHILD_SERIAL_NUMBER,
   DEFAULT_MAC_ADDRESS_STRING,
-  MOCK_FW_VERSION_MAX_LEN,
-  MOCK_SERIAL_MAX_LEN,
-  MOCK_PRODUCT_ID_MASK,
 } from '../../shared/types.js';
+import { MOCK_FW_VERSION_MAX_LEN, MOCK_SERIAL_MAX_LEN, MOCK_PRODUCT_ID_MASK } from './constants.js';
 import type { MockDeviceConfig, ReqError } from './types.js';
 
 /** Default identity fields, shared by the mock driver config and the identity

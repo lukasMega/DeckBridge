@@ -26,8 +26,8 @@ function AdvGridSection(): preact.JSX.Element {
   return (
     <div class="grid-section" id="grid-section">
       <KeyGridPreview
-        keyCount={status.keyCount ?? 15}
-        columns={status.columns ?? 5}
+        keyCount={status.keyCount}
+        columns={status.columns}
         dimmed={false}
         modelId={status.modelId}
         coraProfile={selectedCoraProfile(status)}

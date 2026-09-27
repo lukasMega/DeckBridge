@@ -1,4 +1,9 @@
-import { BAT_PADDING_BYTES, LIG_PADDING_BYTES, CLE_PADDING_BYTES } from '../../shared/types.js';
+// Mirabox protocol padding
+export const BAT_PADDING_BYTES = 2;
+export const LIG_PADDING_BYTES = 2;
+export const CLE_PADDING_BYTES = 3;
+export const HID_REPORT_ID_BYTE = 0x00;
+export const CLEAR_ALL_KEYS = 0xff;
 
 export const CRT = [0x43, 0x52, 0x54, 0x00, 0x00];
 export const CMD_DIS = [0x44, 0x49, 0x53];

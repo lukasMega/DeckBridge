@@ -2,6 +2,7 @@
 // persisted shape, its bounds, and the load/import guard.
 import type {
   ExtraKeyAlign,
+  ExtraKeyConfig,
   ExtraKeyFont,
   ExtraKeyPressAction,
   ExtraKeyTextSize,
@@ -10,6 +11,8 @@ import type {
   ExtraKeyWidget,
   ExtraKeyWrap,
 } from '../web/contract.js';
+
+export type { ExtraKeyConfig };
 
 // Extra keys (physical keys outside the emulated CORA grid)
 // 293S: the 6th column (wire ids 16/17/18) never maps to an MK.2 index, so
@@ -90,28 +93,6 @@ export const COMMAND_INTERVAL_MAX_MS = 60 * 60 * 1000;
 export const COMMAND_TIMEOUT_DEFAULT_MS = 5 * 1000;
 export const COMMAND_TIMEOUT_MIN_MS = 1000;
 export const COMMAND_TIMEOUT_MAX_MS = 60 * 1000;
-
-export interface ExtraKeyConfig {
-  widget: ExtraKeyWidget;
-  /** text: the content to show; weather: "lat,lon"; command: the shell command;
-   *  plugin: the plugin file name (in the plugins dir). */
-  param?: string;
-  /** command/plugin widget: how often (ms) to re-run/poll. Command default
-   *  COMMAND_INTERVAL_DEFAULT_MS; plugin default PLUGIN_INTERVAL_DEFAULT_MS. */
-  intervalMs?: number;
-  /** command widget only: kill the process after this many ms. Default COMMAND_TIMEOUT_DEFAULT_MS. */
-  timeoutMs?: number;
-  /** plugin widget only: the per-key argument passed to the plugin (ctx.param). */
-  pluginArg?: string;
-  /** How the text is drawn (size, wrap, font, colours, …); only non-defaults stored. */
-  style?: ExtraKeyTextStyle;
-  /** Shell command run on press — only extra keys with a switch
-   *  (keyMap.extraKeyInputs). Independent of the widget, so kept across widget changes. */
-  pressCommand?: string;
-  /** What a press does (pressable keys only) — see effectivePressAction. Part of the
-   *  press side like pressCommand, so also kept across widget changes. */
-  pressAction?: ExtraKeyPressAction;
-}
 
 /** A key's press action, defaulting to today's behaviour: its command when it has
  *  one, else a refresh of its widget. */

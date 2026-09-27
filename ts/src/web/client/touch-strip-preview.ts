@@ -1,10 +1,7 @@
 // Touch-strip preview: the Elgato app's strip frames painted in arrival order into
 // every mounted canvas — the browser twin of the worker's TouchStripCanvas.
 
-export interface TouchFrameMsg {
-  data: string;
-  region?: { x: number; y: number; w: number; h: number };
-}
+import type { TouchImageMsg as TouchFrameMsg } from './ui-types.js';
 
 /** Same bound + keying as the server cache (image-channel.ts). */
 const MAX_FRAMES = 32;

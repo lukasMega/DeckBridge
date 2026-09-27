@@ -22,7 +22,7 @@ import {
   CoraFrameReader,
   type CoraFrame,
 } from '../src/cora/frame.js';
-import { ELGATO_IMAGE_HEADER_SIZE, IMAGE_CHUNK_LAST_FLAG } from '../src/shared/types.js';
+import { ELGATO_IMAGE_HEADER_SIZE, IMAGE_CHUNK_LAST_FLAG } from '../src/cora/protocol.js';
 
 // Realistic key-image sizes (from the architecture-simplification plan's notes on
 // observed key JPEG sizes across models/quality settings).
