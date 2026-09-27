@@ -2,7 +2,7 @@
 // bold/outline, ellipsis. Each change posts at once; the server repaints the key.
 import { useRef, useState } from 'preact/hooks';
 import type { ExtraKeyCfg, ExtraKeyTextStyle } from '../ui-types.js';
-import { useDismiss } from '../ui-hooks.js';
+import { useDismiss, useKeepInApp } from '../ui-hooks.js';
 import { CheckField } from '../components/Fields.js';
 import { postExtraKey } from './extra-keys-popovers.js';
 
@@ -127,11 +127,14 @@ function TextStylePopover({
   onClose: () => void;
 }>): preact.JSX.Element {
   useDismiss(onClose, anchorRef);
+  const popRef = useRef<HTMLDivElement | null>(null);
+  useKeepInApp(popRef);
   const style = cfg.style ?? {};
   const update = (patch: ExtraKeyTextStyle): void =>
     postExtraKey(wireId, cfg, { style: { ...style, ...patch } });
   return (
     <div
+      ref={popRef}
       class="xkey-popover xkey-style-popover floating-surface"
       role="dialog"
       aria-label={`${label} text style`}
