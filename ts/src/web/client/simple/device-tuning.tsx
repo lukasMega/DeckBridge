@@ -127,12 +127,12 @@ function tuningFit(
 ): FitApplicability | undefined {
   const width = image.width ?? view.effective.image.width;
   const height = image.height ?? view.effective.image.height;
-  if (!view.sourceSize || !width || !height) return undefined;
+  if (!width || !height) return undefined;
   return fitApplicability(view.sourceSize, { width, height }, image);
 }
 
 function selectedModel(state: StoreState): string | undefined {
-  const selectedDock = state.status.selectedDock ?? 0;
+  const selectedDock = state.status.selectedDock;
   return (
     state.status.docks.find((dock) => dock.index === selectedDock)?.modelId ?? state.status.modelId
   );
@@ -222,7 +222,7 @@ export function DeviceTuningPanel(): preact.JSX.Element {
       if (typeof activeView.tunable.wire?.batchImageTransfers === 'boolean') {
         overrides.wire = { ...activeView.overrides.wire, batchImageTransfers };
       }
-      if (activeView.profiles?.length) {
+      if (activeView.profiles.length) {
         const profile = activeView.profiles.find((p) => p.id === coraProfile);
         if (profile) overrides.cora = { advertiseAs: profile.id, productId: profile.productId };
         else delete overrides.cora;
@@ -281,7 +281,7 @@ export function DeviceTuningPanel(): preact.JSX.Element {
         reconnect the device. Screen dark? Reset or restart with <code>--no-overrides</code>.
       </p>
 
-      {activeView.safeMode === true && (
+      {activeView.safeMode && (
         <p class="settings-error" id="tuning-safe-mode">
           Safe mode: using defaults. Restart without <code>--no-overrides</code> to restore tuning.
         </p>
@@ -384,7 +384,7 @@ export function DeviceTuningPanel(): preact.JSX.Element {
         />
       )}
 
-      {activeView.profiles && activeView.profiles.length > 0 && (
+      {activeView.profiles.length > 0 && (
         <label class="tuning-field">
           <span>Emulation profile</span>
           <select

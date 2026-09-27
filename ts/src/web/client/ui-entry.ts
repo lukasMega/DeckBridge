@@ -1,7 +1,8 @@
 import { connectWS } from './ui-ws.js';
 import { mountSimple } from './simple-mount.js';
 import { mountAdvanced } from './advanced-mount.js';
-import { hydrate, type InitialState } from './hydrate.js';
+import { hydrate } from './hydrate.js';
+import type { StateResponse } from './ui-types.js';
 
 // Simple-only build: never reach the advanced view. Clear any persisted 'advanced'
 // mode BEFORE the state fetch — ui.html's pre-paint script re-applies
@@ -14,7 +15,7 @@ if (__SIMPLE_ONLY__) {
 }
 
 void fetch('/api/state')
-  .then((r) => r.json() as Promise<InitialState>)
+  .then((r) => r.json() as Promise<StateResponse>)
   .then((st) => {
     hydrate(st);
 

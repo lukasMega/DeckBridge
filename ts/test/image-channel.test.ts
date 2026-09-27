@@ -68,8 +68,18 @@ test('new WS client gets the selected dock snapshot', () => {
   ch.notifyDockWidgetPaint(0, 10, PAINT);
   ch.notifyDockWidgetPaint(0, 10, null);
   sent.length = 0;
-  ch.sendTouchSnapshot({} as ServerWebSocket);
+  ch.sendSnapshot({} as ServerWebSocket);
   assert.deepEqual(extraKeyEvents(sent), [{ wireId: 15, data: 'Qk0=' }]);
+});
+
+test('new WS client gets the selected dock key images', () => {
+  const { ch, sent } = channel();
+  ch.notifyDockImage(0, 3, Buffer.from([1, 2]), 'bmp');
+  ch.notifyDockImage(1, 4, Buffer.from([9]), 'jpeg');
+  sent.length = 0;
+  ch.sendSnapshot({} as ServerWebSocket);
+  const images = sent.filter((s) => s.event === 'image').map((s) => s.data);
+  assert.deepEqual(images, [{ mk2Index: 3, data: 'AQI=', format: 'bmp' }]);
 });
 
 test('reset clears the cache and the live tiles of the selected dock', () => {
@@ -79,7 +89,7 @@ test('reset clears the cache and the live tiles of the selected dock', () => {
   ch.reset(0);
   assert.deepEqual(extraKeyEvents(sent), [{ wireId: 15 }]);
   sent.length = 0;
-  ch.sendTouchSnapshot({} as ServerWebSocket);
+  ch.sendSnapshot({} as ServerWebSocket);
   assert.equal(extraKeyEvents(sent).length, 0);
 });
 
@@ -92,7 +102,7 @@ test('clipped is sent with the image; a strip zone sends status only', () => {
     { wireId: 1, zone: true, clipped: true },
   ]);
   sent.length = 0;
-  ch.sendTouchSnapshot({} as ServerWebSocket);
+  ch.sendSnapshot({} as ServerWebSocket);
   assert.deepEqual(extraKeyEvents(sent), [
     { wireId: 15, data: 'Qk0=', clipped: true },
     { wireId: 1, zone: true, clipped: true },
@@ -117,7 +127,7 @@ const stripEvents = (sent: Sent[]) =>
   sent.filter((s) => s.event === 'stripWrite').map((s) => s.data);
 function snapshot(ch: ImageChannel, sent: Sent[]): Sent['data'][] {
   sent.length = 0;
-  ch.sendTouchSnapshot({} as ServerWebSocket);
+  ch.sendSnapshot({} as ServerWebSocket);
   return stripEvents(sent);
 }
 

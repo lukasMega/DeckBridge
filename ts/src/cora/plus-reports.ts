@@ -5,7 +5,7 @@ import {
   REPORT_BUTTON_STATE_INPUT,
   INPUT_SUBTYPE_TOUCH,
   INPUT_SUBTYPE_ENCODER,
-} from '../shared/types.js';
+} from './protocol.js';
 import type { TouchInputEvent } from '../shared/types.js';
 
 const ENCODER_PRESS = 0x00;

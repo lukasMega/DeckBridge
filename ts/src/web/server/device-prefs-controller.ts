@@ -6,12 +6,9 @@
 // it belongs to no physical device.
 import type { DeviceIdentitySettings, TapFeedback } from '../../infra/settings-store.js';
 import { tapFeedbackOf } from '../../infra/settings-store.js';
-import type { TouchStripMode } from '../../shared/types.js';
-import {
-  DEFAULT_BRIGHTNESS_OVERRIDE,
-  DEFAULT_TOUCH_STRIP_MODE,
-  TOUCH_STRIP_REPAINT_DEFAULT_MS,
-} from '../../shared/types.js';
+import type { ExtraKeyConfig, TouchStripMode } from '../../shared/types.js';
+import { DEFAULT_TOUCH_STRIP_MODE, TOUCH_STRIP_REPAINT_DEFAULT_MS } from '../../shared/types.js';
+import { DEFAULT_BRIGHTNESS_OVERRIDE } from './constants.js';
 import type { ControllerHost, ReqError } from './types.js';
 
 export class DevicePrefsController {
@@ -121,7 +118,7 @@ export class DevicePrefsController {
 
   /** Push the SELECTED dock's per-device values to WS clients (after a dock
    *  switch or a settings import) — none of them are in the status snapshot. */
-  broadcastSelected(extraKeyConfigs: unknown): void {
+  broadcastSelected(extraKeyConfigs: Record<string, ExtraKeyConfig>): void {
     this.host.broadcast('brightnessOverride', { enabled: this.brightnessOverride });
     this.host.broadcast('extraKeys', { configs: extraKeyConfigs });
     this.host.broadcast('touchStripMode', { mode: this.touchStripMode });

@@ -1,8 +1,6 @@
-import {
-  WS_KEEPALIVE_INTERVAL_MS,
-  STATS_BROADCAST_INTERVAL_MS,
-  clearRepeating,
-} from '../../shared/types.js';
+import { clearRepeating } from '../../shared/types.js';
+import { WS_KEEPALIVE_INTERVAL_MS, STATS_BROADCAST_INTERVAL_MS } from './constants.js';
+import type { WsEvents } from '../contract.js';
 
 function wsMsg(event: string, data: unknown): string {
   return JSON.stringify({ event, data });
@@ -62,7 +60,7 @@ export class Broadcaster {
     this.clients.clear();
   }
 
-  broadcast(event: string, data: unknown): void {
+  broadcast<K extends keyof WsEvents>(event: K, data: WsEvents[K]): void {
     // Skip the JSON.stringify, not just the send loop: with no browser open,
     // ActivityBuffers.flush() serialized up to 500 comm entries every 100 ms for
     // nothing. sendTo() is unaffected — it targets a socket that exists.
@@ -70,7 +68,7 @@ export class Broadcaster {
     this.send(wsMsg(event, data));
   }
 
-  sendTo(ws: ServerWebSocket, event: string, data: unknown): void {
+  sendTo<K extends keyof WsEvents>(ws: ServerWebSocket, event: K, data: WsEvents[K]): void {
     ws.sendText(wsMsg(event, data));
   }
 

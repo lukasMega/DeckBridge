@@ -237,7 +237,6 @@ childServer.on('brightness', (level: number) => {
   log('info', 'elgato', `brightness set to ${level}`);
   driverManager.setDockBrightness(0, level);
   webui.notifyBrightness(level);
-  webui.notifyRepaint();
 });
 
 webui.on('setBrightness', (level: number, dock?: number) => {

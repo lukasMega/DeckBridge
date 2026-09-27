@@ -9,7 +9,7 @@ import { ImageChannel } from './image-channel.js';
 import type { ImageFormat, DockFrame } from './image-channel.js';
 import { SettingsIdentityController } from './settings-identity-controller.js';
 import { ModelOverridesController } from './model-overrides-controller.js';
-import type { DeviceOverridesView } from './model-overrides-controller.js';
+import type { DeviceOverridesView } from '../contract.js';
 import type { DeviceModelOverride } from '../../devices/driver.js';
 import { DockRegistry } from './dock-registry.js';
 import { isAllowedWebRequest, resolveListenPort } from './web-request-guard.js';
@@ -67,9 +67,6 @@ export class WebUIServer extends EventEmitter implements WebUIController {
   private readonly encoders: EncodersController;
   readonly updates: UpdateController;
   readonly imageChannel = new ImageChannel(this.bus, () => this.selectedDock);
-  get imageState(): Map<number, Buffer> {
-    return this.imageChannel.imageState;
-  }
   get selectedDock(): number {
     return this.dockRegistry.selectedDock;
   }
@@ -201,7 +198,7 @@ export class WebUIServer extends EventEmitter implements WebUIController {
       fetch: (req, extra) => this.handleRequest(req, extra),
       websocket: this.bus.websocketHandlers((ws) => {
         this.bus.sendTo(ws, 'status', this.snapshot());
-        this.imageChannel.sendTouchSnapshot(ws);
+        this.imageChannel.sendSnapshot(ws);
       }),
     });
 
@@ -241,10 +238,6 @@ export class WebUIServer extends EventEmitter implements WebUIController {
     this.activity.log(level, component, message);
   }
 
-  notifyImageUpdate(mk2Index: number, data: Buffer, format: ImageFormat = 'jpeg'): void {
-    this.imageChannel.notifyImageUpdate(mk2Index, data, format);
-  }
-
   notifyDockImage(dock: number, mk2Index: number, data: Buffer, fmt: ImageFormat = 'jpeg'): void {
     this.imageChannel.notifyDockImage(dock, mk2Index, data, fmt);
   }
@@ -256,7 +249,6 @@ export class WebUIServer extends EventEmitter implements WebUIController {
   selectDock(index: number): void {
     if (index === this.selectedDock) return;
     this.dockRegistry.selectedDock = index;
-    this.imageChannel.clearLive();
     this.status.publish();
     // Per-device values aren't in the status snapshot — re-push the new dock's to keep slider/toggles in sync.
     this.devicePrefs.broadcastBrightness(this.dockRegistry.selectedBrightness());
@@ -273,14 +265,10 @@ export class WebUIServer extends EventEmitter implements WebUIController {
     return null;
   }
 
-  /** "Repaint everything" signal (e.g. after a brightness change), decoupled from the per-key image-update path. */
-  notifyRepaint(): void {
-    this.bus.broadcast('repaint', {});
-  }
-
-  /** Drop one dock's cached per-key images (model change / disconnect); clears the live channel too when selected. */
+  /** Drop one dock's cached frames (model change / disconnect); the browser clears
+   *  its previews when that dock is the one shown. */
   resetImages(dock = 0): void {
-    if (this.imageChannel.reset(dock)) this.notifyRepaint();
+    if (this.imageChannel.reset(dock)) this.bus.broadcast('imagesReset', {});
   }
 
   notifyBrightnessOverride(enabled: boolean): void {
@@ -369,8 +357,6 @@ export class WebUIServer extends EventEmitter implements WebUIController {
   fullState(): StateResponse {
     return buildStateResponse({
       snapshot: this.snapshot(),
-      imageVersions: this.imageChannel,
-      imageKeys: this.imageState.keys(),
       activity: this.activity,
       stats: { ...this.stats, uptimeMs: Date.now() - this.startTime },
       mockConfig: this.mockConfig,
@@ -424,11 +410,6 @@ export class WebUIServer extends EventEmitter implements WebUIController {
 
   updateDeviceMdnsName(deviceKey: string, name: string): boolean {
     return this.settingsIdentity.updateMdnsName(deviceKey, name);
-  }
-
-  getImage(key: number): Buffer | undefined {
-    const buf = this.imageState.get(key);
-    return buf && buf.length > 0 ? buf : undefined;
   }
 
   applyMockConfig(parsed: Partial<MockDeviceConfig>): MockDeviceConfig {

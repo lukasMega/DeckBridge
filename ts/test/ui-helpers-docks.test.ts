@@ -1,14 +1,11 @@
 import assert from 'tjs:assert';
 import { selectedCoraProfile } from '../src/web/client/ui-helpers.js';
 import type { Status } from '../src/web/client/ui-types.js';
+import { EMPTY_STATUS } from '../src/web/client/store.js';
+import { DOCK_IDENTITY } from './helpers/dock-fixture.js';
 import { test, summaryExit } from './helpers/harness.js';
 
-const baseStatus: Status = {
-  driverMode: 'real',
-  driverConnected: true,
-  elgatoConnected: true,
-  docks: [],
-};
+const baseStatus: Status = { ...EMPTY_STATUS, driverConnected: true, elgatoConnected: true };
 
 // selectedCoraProfile
 
@@ -17,6 +14,7 @@ console.log('\nselectedCoraProfile');
 test('reads the selected dock, absent when native or no docks', () => {
   const dock = {
     index: 0,
+    ...DOCK_IDENTITY,
     modelId: 'ajazz-akp05e',
     modelName: 'AJAZZ AKP05E',
     keyCount: 10,

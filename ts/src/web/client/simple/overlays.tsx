@@ -13,7 +13,7 @@ import { DeviceTuningPanel } from './device-tuning.js';
 import { postJson, useFetched } from '../ui-api.js';
 import { Feedback, useAsyncAction, type AsyncAction } from '../ui-async.js';
 import { useDismiss } from '../ui-hooks.js';
-import type { DeviceIdentity, RealDeviceIdentity, UpdateInfo } from '../ui-types.js';
+import type { DeviceIdentity, RealDeviceIdentity, StateResponse, UpdateInfo } from '../ui-types.js';
 
 /** Labels for the identifiers DeckBridge actually sends to the Elgato app,
  *  in the order they're most useful for troubleshooting/pairing. mDNS service
@@ -168,14 +168,11 @@ export function AboutPopover({ onClose }: Readonly<{ onClose: () => void }>): pr
   );
 }
 
-interface SettingsState {
-  deviceIdentity?: DeviceIdentity;
-  realDeviceIdentity?: RealDeviceIdentity;
-  logLevel?: string;
-  logFilePath?: string;
-  multiDeck?: boolean;
-  updateInfo?: UpdateInfo;
-}
+/** The slice of GET /api/state the Settings page reads once per mount. */
+type SettingsState = Pick<
+  StateResponse,
+  'deviceIdentity' | 'realDeviceIdentity' | 'logLevel' | 'logFilePath' | 'multiDeck' | 'updateInfo'
+>;
 
 /** null logLevel = state not read yet, which DiagnosticsPanel renders as unknown. */
 function diagnosticsProps(state: SettingsState | null): {
@@ -183,7 +180,7 @@ function diagnosticsProps(state: SettingsState | null): {
   logFilePath: string;
 } {
   return {
-    logLevel: state ? (state.logLevel ?? 'info') : null,
+    logLevel: state ? state.logLevel : null,
     logFilePath: state?.logFilePath ?? '',
   };
 }
@@ -348,7 +345,7 @@ export function SettingsPage({ onBack }: Readonly<{ onBack: () => void }>): prea
       <p class="help-section-label">Real device identity</p>
       <RealIdentityList realIdentity={realIdentity} />
 
-      <MultiDeckPanel enabled={state.data ? (state.data.multiDeck ?? false) : null} />
+      <MultiDeckPanel enabled={state.data ? state.data.multiDeck : null} />
       <UpdatePanel info={updateInfoFor(state.data)} />
       <DiagnosticsPanel {...diagnosticsProps(state.data)} />
       <DeviceTuningPanel />

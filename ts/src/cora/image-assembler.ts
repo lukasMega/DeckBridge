@@ -1,3 +1,4 @@
+import { PLUS_TOUCH_WIDTH, PLUS_TOUCH_HEIGHT } from '../shared/types.js';
 import {
   IMAGE_CHUNK_KEY_OFFSET,
   IMAGE_CHUNK_FLAG_OFFSET,
@@ -16,9 +17,7 @@ import {
   PARTIAL_WINDOW_H_OFFSET,
   PARTIAL_WINDOW_LAST_OFFSET,
   PARTIAL_WINDOW_SIZE_OFFSET,
-  PLUS_TOUCH_WIDTH,
-  PLUS_TOUCH_HEIGHT,
-} from '../shared/types.js';
+} from './protocol.js';
 import type { ImageEvent, TouchWindowRegion } from '../shared/types.js';
 import { warn } from '../shared/logger.js';
 

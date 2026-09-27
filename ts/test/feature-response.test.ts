@@ -13,7 +13,7 @@ import {
   FEATURE_GET_SERIAL_LEGACY,
   FEATURE_GET_MAC,
   PAYLOAD_TYPE_FEATURE,
-} from '../src/shared/types.js';
+} from '../src/cora/protocol.js';
 import type { DeviceConfig } from '../src/cora/types.js';
 import { test, summary } from './helpers/harness.js';
 

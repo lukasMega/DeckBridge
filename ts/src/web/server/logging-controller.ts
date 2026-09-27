@@ -38,7 +38,6 @@ export class LoggingController {
     this.host.settings.setLogLevel(level);
     setLogLevel(level);
     tjs.env.DECKBRIDGE_LOG_LEVEL = level;
-    this.host.broadcast('logLevel', { level });
     this.host.emit('setLogLevel', level);
     return null;
   }

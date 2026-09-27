@@ -75,8 +75,8 @@ export function KeymapLearn({
   const seenTsRef = useRef<number>(0);
   const copy = useCopyText();
 
-  const keyCount = status.keyCount ?? 0;
-  const columns = status.columns ?? keyCount;
+  const keyCount = status.keyCount;
+  const columns = status.columns;
   const { learning, position, recorded, error } = session;
   const done = learning && position >= keyCount;
 

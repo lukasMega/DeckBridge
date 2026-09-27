@@ -20,12 +20,12 @@ export function StageReady({
   docks,
   onHelp,
 }: Readonly<{ docks?: DockUi[]; onHelp?: (id: string) => void }> = {}): preact.JSX.Element {
-  const keyCount = useStore((s) => s.status.keyCount ?? 15);
-  const columns = useStore((s) => s.status.columns ?? 5);
+  const keyCount = useStore((s) => s.status.keyCount);
+  const columns = useStore((s) => s.status.columns);
   const modelId = useStore((s) => s.status.modelId);
   const coraProfile = useStore((s) => selectedCoraProfile(s.status));
   const touchStrip = useStore((s) => selectedTouchStripSize(s.status));
-  const selectedDock = useStore((s) => s.status.selectedDock ?? 0);
+  const selectedDock = useStore((s) => s.status.selectedDock);
   const appName = useStore((s) => clientAppName(s.status.clientApp));
 
   if (docks !== undefined && isMultiDockView(docks) && onHelp !== undefined) {
@@ -96,8 +96,8 @@ export function StageMultiPairing({
 export function StageDeviceNoElgato({
   onHelp,
 }: Readonly<{ onHelp: (id: string) => void }>): preact.JSX.Element {
-  const keyCount = useStore((s) => s.status.keyCount ?? 15);
-  const columns = useStore((s) => s.status.columns ?? 5);
+  const keyCount = useStore((s) => s.status.keyCount);
+  const columns = useStore((s) => s.status.columns);
   const modelId = useStore((s) => s.status.modelId);
   const coraProfile = useStore((s) => selectedCoraProfile(s.status));
   const touchStrip = useStore((s) => selectedTouchStripSize(s.status));
@@ -115,7 +115,7 @@ export function StageDeviceNoElgato({
       {/* eslint-enable @eslint-react/dom-no-dangerously-set-innerhtml */}
       <div class="checklist">
         <Step kind="done" title="Stream Deck connected">
-          {modelName !== undefined && <div class="step-sub">{modelName}</div>}
+          {modelName && <div class="step-sub">{modelName}</div>}
         </Step>
         <Step
           kind="active"

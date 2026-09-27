@@ -1,7 +1,7 @@
 import assert from 'tjs:assert';
 import { ElgatoServer } from '../src/cora/primary-server.js';
 import { ElgatoChildServer } from '../src/cora/child-server.js';
-import { ELGATO_VID, ELGATO_PKT_SIZE_RX, NETWORK_DOCK_PID } from '../src/shared/types.js';
+import { ELGATO_VID, ELGATO_PKT_SIZE_RX, NETWORK_DOCK_PID } from '../src/cora/protocol.js';
 import type { DockStatus } from '../src/shared/types.js';
 import { modelToChildGeometry } from '../src/devices/registry.js';
 import { MK2_MODEL } from '../src/devices/elgato/mk2.js';

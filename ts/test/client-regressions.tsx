@@ -6,8 +6,9 @@ import {
   getSnapshot,
   patch,
   useStore,
-  TOUCH_STRIP_REPAINT_DEFAULT_MS,
+  EMPTY_STATUS,
 } from '../src/web/client/store.js';
+import { DOCK_IDENTITY } from './helpers/dock-fixture.js';
 import { hydrate } from '../src/web/client/hydrate.js';
 import { CopyChip } from '../src/web/client/simple/controls.js';
 import { LogConsolePanel } from '../src/web/client/advanced-log-panel.js';
@@ -120,7 +121,7 @@ async function run(): Promise<void> {
   );
   // Restore the default so later cases (e.g. runSideKeysPanel) that read the
   // repaint interval without setting it first see the documented default.
-  patch({ touchStripRepaintMs: TOUCH_STRIP_REPAINT_DEFAULT_MS });
+  patch({ touchStripRepaintMs: 5000 });
   await act(() => render(null, root));
 
   for (const advanced of [false, true]) {
@@ -256,15 +257,22 @@ function runHydrateRegression(): void {
     updateInfo: undefined,
   });
   hydrate({
-    driverMode: 'real',
+    ...EMPTY_STATUS,
     driverConnected: true,
     elgatoConnected: true,
-    docks: [],
+    keyEvents: [],
     stats: { uptimeMs: 1, elgatoRxPkts: 0, elgatoTxPkts: 0, imagesSent: 0 },
-    images: {},
+    mockConfig: { ...DOCK_IDENTITY },
+    deviceModels: [],
+    deviceIdentity: { ...DOCK_IDENTITY },
     extraKeys: { '11': { widget: 'command', param: 'date' } },
     touchStripMode: 'deckbridge-repaint',
+    touchStripRepaintMs: 5000,
+    encoders: {},
     brightnessOverride: false,
+    logLevel: 'info',
+    logFilePath: '',
+    multiDeck: false,
     updateInfo: { enabled: true, current: '0.14.1', updateAvailable: true, latest: '0.15.0' },
   });
   const snap = getSnapshot();
@@ -468,6 +476,8 @@ const OVERRIDES_VIEW: DeviceOverridesView = {
     image: { rotate: 180, width: 112, height: 112, quality: 0.8, resizeMode: 'resize' },
     keyMap: { inputOffset: 1 },
   },
+  profiles: [],
+  sourceSize: { width: 72, height: 72 },
 };
 
 const SECOND_OVERRIDES_VIEW: DeviceOverridesView = {
@@ -518,7 +528,7 @@ async function settle(): Promise<void> {
 
 /** Minimum status the learn-mode grid prompts need. */
 const baseStatus = {
-  driverMode: 'real' as const,
+  ...EMPTY_STATUS,
   driverConnected: true,
   elgatoConnected: true,
   docks: [] as DockUi[],
@@ -705,7 +715,7 @@ async function checkCropEditor(): Promise<void> {
     stub.calls.filter((c) => c.method === 'POST').map((c) => c.body as never);
   try {
     await act(() => patch({ status: { ...baseStatus, keyCount: 15 } }));
-    applyImage(2, { v: 1, data: keyFrameBase64(), format: 'jpeg' });
+    applyImage(2, { data: keyFrameBase64(), format: 'jpeg' });
     await act(() => render(<DeviceTuningPanel />, root));
     await settle();
     await openCropEditor();
@@ -841,6 +851,7 @@ async function runSettingsPanels(): Promise<void> {
     const docks = [
       {
         index: 0,
+        ...DOCK_IDENTITY,
         modelId: OVERRIDES_VIEW.modelId,
         modelName: OVERRIDES_VIEW.modelName,
         keyCount: 15,
@@ -853,6 +864,7 @@ async function runSettingsPanels(): Promise<void> {
       },
       {
         index: 1,
+        ...DOCK_IDENTITY,
         modelId: SECOND_OVERRIDES_VIEW.modelId,
         modelName: SECOND_OVERRIDES_VIEW.modelName,
         keyCount: 18,
@@ -918,6 +930,7 @@ async function runSettingsPanels(): Promise<void> {
     const docks = [
       {
         index: 0,
+        ...DOCK_IDENTITY,
         modelId: OVERRIDES_VIEW.modelId,
         modelName: OVERRIDES_VIEW.modelName,
         keyCount: 15,
@@ -930,6 +943,7 @@ async function runSettingsPanels(): Promise<void> {
       },
       {
         index: 1,
+        ...DOCK_IDENTITY,
         modelId: SECOND_OVERRIDES_VIEW.modelId,
         modelName: SECOND_OVERRIDES_VIEW.modelName,
         keyCount: 18,
@@ -1130,6 +1144,7 @@ async function runKeymapAndDiagnosticsPanels(): Promise<void> {
 const DOCKS: DockUi[] = [
   {
     index: 0,
+    ...DOCK_IDENTITY,
     modelId: 'mirabox-293s',
     modelName: 'Mirabox 293S',
     keyCount: 15,
@@ -1142,6 +1157,7 @@ const DOCKS: DockUi[] = [
   },
   {
     index: 1,
+    ...DOCK_IDENTITY,
     modelId: 'fifine-d6',
     modelName: 'Fifine D6',
     keyCount: 6,
@@ -1255,6 +1271,7 @@ async function runMultiDockCards(): Promise<void> {
 // shared grid, and the strip's rows/knobs follow the selected mode.
 const AKP05E_DOCK: DockUi = {
   index: 0,
+  ...DOCK_IDENTITY,
   modelId: 'ajazz-akp05e',
   modelName: 'AJAZZ AKP05E',
   keyCount: 8,

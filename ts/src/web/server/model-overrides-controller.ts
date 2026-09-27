@@ -2,7 +2,7 @@
 // settings-identity-controller.ts: validation + persistence glue around
 // PersistedSettings, with the pure merge/validate living in devices/model-overrides.ts.
 import type { ControllerHost, ReqError } from './types.js';
-import type { DeviceModel, DeviceModelOverride } from '../../devices/driver.js';
+import type { DeviceModelOverride } from '../../devices/driver.js';
 import { advertisedModel, findModelById } from '../../devices/registry.js';
 import {
   applyModelOverrides,
@@ -13,32 +13,7 @@ import {
 } from '../../devices/model-overrides.js';
 import type { OverrideChangeKind } from '../../devices/model-overrides.js';
 import { overridesDisabled } from '../../shared/cli.js';
-
-/** GET /api/device-overrides payload: the registry values (`defaults`), what the
- *  user has set (`overrides`), what the device is actually running (`effective`),
- *  and the form seed (`tunable`). */
-export interface DeviceOverridesView {
-  modelId: string;
-  modelName: string;
-  defaults: DeviceModelOverride;
-  overrides: DeviceModelOverride;
-  /** True in safe mode (`--no-overrides`): `overrides` is still persisted (so
-   *  Reset works) but `effective` equals the registry defaults, because that is
-   *  what the device is actually running. */
-  safeMode: boolean;
-  /** The FULL effective spec — for display/diagnostics. Do NOT seed the form from this: it
-   *  carries the non-tunable protocol facts (`format`, `colorMode`, `bmpPpm`) too, and
-   *  POSTing them straight back is rejected by validateModelOverride. Seed from `tunable` instead. */
-  effective: Pick<DeviceModel, 'image' | 'keyMap' | 'wire' | 'splash' | 'cora'>;
-  /** `effective`, projected down to exactly the fields an override may set — so a
-   *  round-trip (seed the form → Apply unchanged) is always valid. */
-  tunable: DeviceModelOverride;
-  /** CORA profiles this model may re-pair as (its `cora.emulations`), with their PID. */
-  profiles: Array<{ id: string; name: string; productId: number }>;
-  /** Key image size the Elgato app sends (the advertised model's key size) — what
-   *  the transform fits into `effective.image` width×height. */
-  sourceSize: { width: number; height: number };
-}
+import type { DeviceOverridesView } from '../contract.js';
 
 export class ModelOverridesController {
   constructor(
@@ -81,7 +56,7 @@ export class ModelOverridesController {
       effective: {
         image: effective.image,
         keyMap: effective.keyMap,
-        wire: effective.wire,
+        wire: { ...effective.wire },
         ...(effective.splash ? { splash: effective.splash } : {}),
         cora: effective.cora,
       },

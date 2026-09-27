@@ -9,6 +9,7 @@ import { Broadcaster } from '../src/web/server/broadcaster.js';
 import { saveSettings } from '../src/infra/settings-store.js';
 import type { Settings } from '../src/infra/settings-store.js';
 import type { DockStatus } from '../src/shared/types.js';
+import type { StatusSnapshot } from '../src/web/contract.js';
 import { test, testAsync as runWebTest, summaryExit } from './helpers/harness.js';
 
 // Isolate settings.json writes from the real user cache dir — every mutator
@@ -232,31 +233,19 @@ test('stop() clears all clients', () => {
 
 console.log('\nWebUIServer.resetImages');
 
-test('clears imageState/imageVersion and broadcasts repaint', () => {
+test('drops the selected dock frames and broadcasts imagesReset', () => {
   const ui = new WebUIServer(undefined, [], 'real', TEST_SETTINGS_ROOT);
-  ui.notifyImageUpdate(0, Buffer.from([1, 2, 3]));
-  ui.notifyImageUpdate(1, Buffer.from([4, 5, 6]));
-  assert.equal(ui.imageState.size, 2, 'two images set');
-  assert.equal(Object.keys(ui.fullState().images).length, 2, 'fullState reports two images');
+  ui.notifyDockImage(0, 0, Buffer.from([1, 2, 3]));
+  ui.notifyDockImage(0, 1, Buffer.from([4, 5, 6]));
+  assert.equal(ui.imageChannel.selectedImages().size, 2, 'two images set');
 
-  let repaintBroadcast = false;
-  const origBroadcast = (ui as unknown as { bus: { broadcast: (...a: unknown[]) => void } }).bus
-    .broadcast;
-  (ui as unknown as { bus: { broadcast: (...a: unknown[]) => void } }).bus.broadcast = (
-    ...args: unknown[]
-  ) => {
-    if (args[0] === 'repaint') repaintBroadcast = true;
-    return origBroadcast.apply(
-      (ui as unknown as { bus: { broadcast: (...a: unknown[]) => void } }).bus,
-      args,
-    );
-  };
-
+  const { sent } = connectMockClient(ui);
+  sent.length = 0;
   ui.resetImages();
 
-  assert.equal(ui.imageState.size, 0, 'imageState cleared');
-  assert.equal(Object.keys(ui.fullState().images).length, 0, 'fullState images empty');
-  assert.ok(repaintBroadcast, 'repaint broadcast sent');
+  assert.equal(ui.imageChannel.selectedImages().size, 0, 'frames dropped');
+  const events = sent.map((m) => (JSON.parse(m) as { event: string }).event);
+  assert.ok(events.includes('imagesReset'), 'imagesReset broadcast sent');
 });
 
 // WebUIServer.notifyDocks
@@ -300,7 +289,7 @@ function connectMockClient(ui: WebUIServer): { sent: string[] } {
   // Mirrors the onOpen wiring WebUIServer.start() installs on the real server:
   // a freshly connected client gets an immediate 'status' snapshot.
   const handlers = bus.websocketHandlers((sock) => {
-    bus.sendTo(sock, 'status', (ui as unknown as { snapshot(): unknown }).snapshot());
+    bus.sendTo(sock, 'status', (ui as unknown as { snapshot(): StatusSnapshot }).snapshot());
   });
   handlers.open(ws);
   return { sent };
@@ -591,11 +580,11 @@ test('notifyDockImage broadcasts only the selected dock, caches the rest', () =>
   ui.notifyDockImage(0, 3, Buffer.from([1, 2, 3]), 'jpeg');
   assert.equal(sent.length, 1, 'selected dock (0) broadcasts an image');
   assert.equal((JSON.parse(sent[0]!) as { event: string }).event, 'image');
-  assert.ok(ui.imageState.has(3), 'selected dock feeds imageState');
+  assert.ok(ui.imageChannel.selectedImages().has(3), 'selected dock frame cached');
 
   ui.notifyDockImage(1, 5, Buffer.from([9, 9]), 'jpeg');
   assert.equal(sent.length, 1, 'unselected dock does not broadcast');
-  assert.ok(!ui.imageState.has(5), 'unselected dock does not touch imageState');
+  assert.ok(!ui.imageChannel.selectedImages().has(5), 'unselected dock frame not shown');
 });
 
 test('selectDock swaps the channel and replays the cached frames', () => {
@@ -612,10 +601,13 @@ test('selectDock swaps the channel and replays the cached frames', () => {
   const events = sent.map((m) => (JSON.parse(m) as { event: string }).event);
   assert.deepEqual(events[0], 'status', 'status broadcast first (selectedDock change)');
   assert.ok(events.includes('image'), "the new dock's cached frames are replayed");
-  assert.ok(!ui.imageState.has(0), "old dock's frames dropped from the channel");
-  assert.ok(ui.imageState.has(2), "new dock's frames now in the channel");
+  assert.ok(!ui.imageChannel.selectedImages().has(0), "old dock's frames no longer shown");
+  assert.ok(ui.imageChannel.selectedImages().has(2), "new dock's frames now shown");
   assert.equal(ui.snapshot().selectedDock, 1);
-  assert.equal(ui.imageChannel.imageFormat.get(2), 'bmp', 'replay keeps the frame format');
+  const replayed = sent
+    .map((m) => JSON.parse(m) as { event: string; data: { format?: string } })
+    .find((m) => m.event === 'image');
+  assert.equal(replayed?.data.format, 'bmp', 'replay keeps the frame format');
 });
 
 test('touch-strip frames: full resets, a window replaces its own region, snapshot in order', () => {
@@ -631,7 +623,7 @@ test('touch-strip frames: full resets, a window replaces its own region, snapsho
 
   const { sent } = connectMockClient(ui);
   sent.length = 0;
-  touch.sendTouchSnapshot(
+  touch.sendSnapshot(
     (ui as unknown as { bus: { clients: Set<ServerWebSocket> } }).bus.clients.values().next()
       .value!,
   );
@@ -790,39 +782,6 @@ try {
   });
 } finally {
   await routesUi.stop().catch(() => undefined);
-}
-
-// WebUIServer: GET /api/image/:key content type by stored format
-
-console.log('\nwebui: GET /api/image/:key content type');
-
-const IMAGE_ROUTE_TEST_PORT = 13005;
-const imageRouteUi = new WebUIServer(IMAGE_ROUTE_TEST_PORT, [], 'real', TEST_SETTINGS_ROOT);
-await imageRouteUi.start();
-
-try {
-  const base = `http://127.0.0.1:${imageRouteUi.port}`;
-
-  await runWebTest('jpeg frame → image/jpeg', async () => {
-    imageRouteUi.imageChannel.notifyImageUpdate(0, Buffer.from([1, 2, 3]), 'jpeg');
-    const r = await fetch(`${base}/api/image/0`);
-    assert.equal(r.status, 200);
-    assert.equal(r.headers.get('content-type'), 'image/jpeg');
-  });
-
-  await runWebTest('bmp frame → image/bmp', async () => {
-    imageRouteUi.imageChannel.notifyImageUpdate(1, Buffer.from([4, 5, 6]), 'bmp');
-    const r = await fetch(`${base}/api/image/1`);
-    assert.equal(r.status, 200);
-    assert.equal(r.headers.get('content-type'), 'image/bmp');
-  });
-
-  await runWebTest('missing key → 404', async () => {
-    const r = await fetch(`${base}/api/image/99`);
-    assert.equal(r.status, 404);
-  });
-} finally {
-  await imageRouteUi.stop().catch(() => undefined);
 }
 
 // WebUIServer settings persistence
@@ -1182,7 +1141,7 @@ await runWebTest(
       const saved = ui.deviceOverridesView(modelId);
       assert.ok(!('error' in saved));
       if (!('error' in saved))
-        assert.equal(saved.effective.wire.batchImageTransfers, !defaultEnabled);
+        assert.equal(saved.effective.wire?.batchImageTransfers, !defaultEnabled);
       const importRoot = `${TEST_SETTINGS_ROOT}-batch-import`;
       await saveSettings(JSON.parse(ui.getSettingsJson()) as Settings, importRoot);
       const restoredUi = new WebUIServer(undefined, [], 'real', importRoot);

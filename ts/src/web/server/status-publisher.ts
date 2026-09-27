@@ -5,6 +5,7 @@
 import { DEFAULT_MODEL } from '../../devices/registry.js';
 import type { ClientApp, DockStatus } from '../../shared/types.js';
 import type { DriverMode, StatusSnapshot } from './types.js';
+import type { WsBroadcast } from '../contract.js';
 
 /** The dock-list half of a snapshot, owned by DockRegistry/DevicePrefsController. */
 export interface SnapshotExtras {
@@ -34,7 +35,7 @@ export class StatusPublisher {
 
   constructor(
     private readonly extras: () => SnapshotExtras,
-    private readonly broadcast: (event: string, payload: unknown) => void,
+    private readonly broadcast: WsBroadcast,
     initialDriverMode: DriverMode = 'real',
   ) {
     this.status.driverMode = initialDriverMode;

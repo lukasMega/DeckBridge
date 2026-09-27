@@ -4,10 +4,14 @@ import {
   DEFAULT_CHILD_FIRMWARE_VERSION,
   DEFAULT_DOCK_SERIAL_NUMBER,
   DEFAULT_CHILD_SERIAL_NUMBER,
-  ELGATO_VID,
   ELGATO_MK2_PID,
   ELGATO_TCP_PORT,
   ELGATO_CHILD_PORT,
+  DEFAULT_MAC_ADDRESS,
+  MDNS_SERVICE_NAME,
+} from '../shared/types.js';
+import {
+  ELGATO_VID,
   ELGATO_PKT_SIZE_TX,
   ELGATO_PKT_SIZE_RX,
   NETWORK_DOCK_PID,
@@ -17,9 +21,7 @@ import {
   FEATURE_GET_DEVICE_INFO,
   FEATURE_GET_CHILD_FW,
   FEATURE_GET_QUICK_PROBE,
-  DEFAULT_MAC_ADDRESS,
-  MDNS_SERVICE_NAME,
-} from '../shared/types.js';
+} from './protocol.js';
 import { CORA_FLAG_RESULT } from './frame.js';
 import { CoraServerBase } from './server-base.js';
 import { describeCoraPayload } from './describe.js';

@@ -1,7 +1,8 @@
 import assert from 'tjs:assert';
 import { ElgatoServer } from '../src/cora/primary-server.js';
 import { ElgatoChildServer } from '../src/cora/child-server.js';
-import { ELGATO_VID, ELGATO_PKT_SIZE_RX, ELGATO_CHILD_PORT } from '../src/shared/types.js';
+import { ELGATO_CHILD_PORT } from '../src/shared/types.js';
+import { ELGATO_VID, ELGATO_PKT_SIZE_RX } from '../src/cora/protocol.js';
 import { CORA_FLAG_VERBATIM, CORA_FLAG_REQACK, CORA_FLAG_ACKNAK } from '../src/cora/frame.js';
 import { connect, waitForValue, closeAndWait, sendPkt, sendFrame } from './helpers/cora-framer.js';
 import { modelToChildGeometry } from '../src/devices/registry.js';

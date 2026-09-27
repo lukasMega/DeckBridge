@@ -40,13 +40,13 @@ export function isMultiDockView(docks: DockUi[]): boolean {
 /** The selected dock's re-paired CORA profile — the single-dock views read the
  *  top-level status, which has no per-dock fields. */
 export function selectedCoraProfile(s: Status): string | undefined {
-  const selected = s.selectedDock ?? 0;
+  const selected = s.selectedDock;
   return s.docks.find((d) => d.index === selected)?.coraProfile;
 }
 
 /** The selected dock's advertised touch strip, if its profile has one. */
 export function selectedTouchStripSize(s: Status): TouchStripSize | undefined {
-  const selected = s.selectedDock ?? 0;
+  const selected = s.selectedDock;
   return s.docks.find((d) => d.index === selected)?.touchStripSize;
 }
 

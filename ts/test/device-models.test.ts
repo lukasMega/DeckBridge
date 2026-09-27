@@ -24,9 +24,9 @@ import { AKP153_V1_CLONE_MODELS } from '../src/devices/rebadge/akp153-v1-clones.
 import { deviceInputToMk2Index } from '../src/shared/key-map.js';
 import { modelToChildGeometry } from '../src/devices/registry.js';
 import { buildCapabilitiesPacket } from '../src/cora/responses.js';
+import { ELGATO_PLUS_PID } from '../src/shared/types.js';
 import {
   ELGATO_VID,
-  ELGATO_PLUS_PID,
   CHILD_CAPS_SERIAL_MAX_LEN,
   ELGATO_PKT_SIZE_RX,
   PKT_EVENT,
@@ -34,7 +34,7 @@ import {
   CHILD_CAPS_VERSION,
   CHILD_CAPS_LAYOUT_TYPE,
   MANUFACTURER_STRING,
-} from '../src/shared/types.js';
+} from '../src/cora/protocol.js';
 import type { DeviceConfig } from '../src/cora/types.js';
 import type { DeviceModel } from '../src/devices/driver.js';
 import { test, summaryExit } from './helpers/harness.js';

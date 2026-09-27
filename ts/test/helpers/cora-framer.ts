@@ -5,7 +5,7 @@
 // imported by the real test files and bundled in via esbuild.
 import type { ElgatoServer } from '../../src/cora/primary-server.js';
 import type { ElgatoChildServer } from '../../src/cora/child-server.js';
-import { ELGATO_PKT_SIZE_RX } from '../../src/shared/types.js';
+import { ELGATO_PKT_SIZE_RX } from '../../src/cora/protocol.js';
 import { encodeCoraFrame, tryDecodeCoraFrame, type CoraFrame } from '../../src/cora/frame.js';
 
 class TjsFramer {

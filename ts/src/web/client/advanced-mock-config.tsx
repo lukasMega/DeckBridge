@@ -106,12 +106,12 @@ export function MockConfigForm(): preact.JSX.Element {
     if (!mockConfig) return;
     // eslint-disable-next-line @eslint-react/set-state-in-effect -- controlled form fields must sync from external store; no other pattern applies here
     setValues({
-      dockFw: mockConfig.dockFirmwareVersion ?? '',
-      dockSerial: mockConfig.serialNumber ?? '',
-      childFw: mockConfig.childFirmwareVersion ?? '',
-      childSerial: mockConfig.childSerialNumber ?? '',
+      dockFw: mockConfig.dockFirmwareVersion,
+      dockSerial: mockConfig.serialNumber,
+      childFw: mockConfig.childFirmwareVersion,
+      childSerial: mockConfig.childSerialNumber,
       childPid: pidToText(mockConfig.productId),
-      mac: mockConfig.macAddress ?? MAC_DEFAULT,
+      mac: mockConfig.macAddress,
     });
   }, [mockConfig]);
 
@@ -144,8 +144,7 @@ export function MockConfigForm(): preact.JSX.Element {
             {f.group === 'dock' && <strong>Dock (Network Dock)</strong>}
             {f.group === 'child' && (
               <strong>
-                Child (
-                <span id="cfg-child-model-label">{status.modelName ?? 'Stream Deck MK.2'}</span>)
+                Child (<span id="cfg-child-model-label">{status.modelName}</span>)
               </strong>
             )}
             <label>{f.label}</label>
