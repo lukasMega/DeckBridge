@@ -68,10 +68,6 @@ const handlers: Handlers = {
   update: (updateInfo) => store.patch({ updateInfo }),
 };
 
-function dispatch<K extends keyof WsEvents>(event: K, data: WsEvents[K]): void {
-  handlers[event](data);
-}
-
 let _wsConnected = false;
 
 export function connectWS(): void {
@@ -96,13 +92,11 @@ export function connectWS(): void {
   });
 
   ws.addEventListener('message', (e: MessageEvent<string>) => {
-    const { event, data } = JSON.parse(e.data) as {
-      event: keyof WsEvents | 'ping';
-      data: WsEvents[keyof WsEvents];
-    };
-    if (Object.prototype.hasOwnProperty.call(handlers, event)) {
-      dispatch(event as keyof WsEvents, data);
-    }
+    const { event, data } = JSON.parse(e.data) as { event: string; data: unknown };
+    if (!Object.prototype.hasOwnProperty.call(handlers, event)) return;
+    // The server sends each event with its WsEvents payload; `ping` has no handler.
+    const handler = handlers[event as keyof WsEvents] as ((d: unknown) => void) | undefined;
+    if (typeof handler === 'function') handler(data);
   });
 
   ws.addEventListener('close', () => setTimeout(connectWS, 2000));
