@@ -2,6 +2,7 @@ import assert from 'tjs:assert';
 import { MiraboxDriver } from '../src/mirabox.js';
 import { DEVICE_MODELS } from '../src/devices/registry.js';
 import type { MainToWorker, WorkerToMain } from '../src/hid-worker-protocol.js';
+const MIRABOX_293S = DEVICE_MODELS.find((model) => model.id === 'mirabox-293s')!;
 let passed = 0;
 let failed = 0;
 async function test(name: string, fn: () => Promise<void>): Promise<void> {
@@ -66,6 +67,9 @@ function send(msg: MainToWorker): void {
 const wait = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
 const tag = (packet: Buffer): string => packet.subarray(6, 9).toString();
 const stpCount = (): number => writes.filter((packet) => tag(packet) === 'STP').length;
+// open() tunes transform to 'passthrough', so these bytes reach the driver verbatim.
+const sendImage = (keyIndex: number, bytes: Uint8Array): void =>
+  send({ type: 'image', keyIndex, bytes, format: 'jpeg' });
 
 async function open(modelId: string, batchImageTransfers?: boolean): Promise<void> {
   send({
@@ -84,8 +88,8 @@ async function open(modelId: string, batchImageTransfers?: boolean): Promise<voi
 
 await test('293S page sends 15 BAT packets and one final STP', async () => {
   await open('mirabox-293s');
-  for (let keyIndex = 1; keyIndex <= 15; keyIndex++) {
-    send({ type: 'sendImage', keyIndex, bytes: new Uint8Array(600) });
+  for (let keyIndex = 0; keyIndex < 15; keyIndex++) {
+    sendImage(keyIndex, new Uint8Array(600));
   }
   await wait(5);
   assert.equal(writes.filter((packet) => tag(packet) === 'BAT').length, 15);
@@ -95,7 +99,7 @@ await test('293S page sends 15 BAT packets and one final STP', async () => {
 
 await test('isolated image flushes after fixed collection window', async () => {
   await open('mirabox-293s');
-  send({ type: 'sendImage', keyIndex: 13, bytes: new Uint8Array(20) });
+  sendImage(13, new Uint8Array(20));
   await wait(5);
   assert.equal(writes.length, 0);
   await wait(25);
@@ -104,14 +108,14 @@ await test('isolated image flushes after fixed collection window', async () => {
 
 await test('293S batching override disables collection and per-batch STP', async () => {
   await open('mirabox-293s', false);
-  for (let i = 0; i < 3; i++) send({ type: 'sendImage', keyIndex: 13, bytes: new Uint8Array(20) });
+  for (let i = 0; i < 3; i++) sendImage(13, new Uint8Array(20));
   await wait(5);
   assert.equal(stpCount(), 3);
 });
 
 await test('293S rebadge batching can be enabled through tuning', async () => {
   await open('ajazz-akp153', true);
-  for (let i = 0; i < 3; i++) send({ type: 'sendImage', keyIndex: 13, bytes: new Uint8Array(20) });
+  for (let i = 0; i < 3; i++) sendImage(13, new Uint8Array(20));
   await wait(5);
   assert.equal(writes.length, 0);
   await wait(25);
@@ -120,7 +124,7 @@ await test('293S rebadge batching can be enabled through tuning', async () => {
 
 await test('unsupported board ignores injected batching override', async () => {
   await open('mirabox-293', true);
-  for (let i = 0; i < 3; i++) send({ type: 'sendImage', keyIndex: 1, bytes: new Uint8Array(20) });
+  for (let i = 0; i < 3; i++) sendImage(1, new Uint8Array(20));
   await wait(5);
   assert.equal(stpCount(), 3);
 });
@@ -139,7 +143,7 @@ await test('CORA image completion notifications follow final STP', async () => {
 await test('page overflow receives another final STP', async () => {
   await open('mirabox-293s');
   for (let i = 0; i < 16; i++) {
-    send({ type: 'sendImage', keyIndex: 13, bytes: new Uint8Array(20) });
+    sendImage(13, new Uint8Array(20));
   }
   await wait(30);
   assert.equal(stpCount(), 2);
@@ -148,7 +152,7 @@ await test('page overflow receives another final STP', async () => {
 await test('continuous arrivals cannot reset flush deadline', async () => {
   await open('mirabox-293s');
   for (let i = 0; i < 5; i++) {
-    send({ type: 'sendImage', keyIndex: 13, bytes: new Uint8Array(20) });
+    sendImage(13, new Uint8Array(20));
     await wait(7);
   }
   assert.ok(stpCount() >= 1);
@@ -157,7 +161,7 @@ await test('continuous arrivals cannot reset flush deadline', async () => {
 
 await test('clear and brightness follow committed images', async () => {
   await open('mirabox-293s');
-  send({ type: 'sendImage', keyIndex: 13, bytes: new Uint8Array(20) });
+  sendImage(13, new Uint8Array(20));
   send({ type: 'clearKey', keyIndex: 13 });
   send({ type: 'setBrightness', level: 33 });
   await wait(5);
@@ -166,7 +170,7 @@ await test('clear and brightness follow committed images', async () => {
 
 await test('close commits images before disconnect sequence', async () => {
   await open('mirabox-293s');
-  send({ type: 'sendImage', keyIndex: 13, bytes: new Uint8Array(20) });
+  sendImage(13, new Uint8Array(20));
   send({ type: 'close' });
   await wait(5);
   assert.equal(tag(writes[2]!), 'STP');
@@ -176,12 +180,14 @@ await test('close commits images before disconnect sequence', async () => {
 });
 
 await test('transform failure still commits earlier images and releases queue', async () => {
-  send({ type: 'open', modelId: 'mirabox-293s' });
-  await wait(5);
-  writes.length = 0;
-  messages.length = 0;
-  send({ type: 'sendImage', keyIndex: 13, bytes: new Uint8Array(20) });
-  send({ type: 'image', keyIndex: 1, bytes: new Uint8Array([0]), format: 'jpeg' });
+  await open('mirabox-293s');
+  sendImage(13, new Uint8Array(20));
+  send({
+    type: 'imageWithSpec',
+    keyIndex: 1,
+    bytes: new Uint8Array([0]),
+    spec: MIRABOX_293S.image,
+  });
   send({ type: 'setBrightness', level: 33 });
   await wait(5);
   assert.equal(stpCount(), 1);
@@ -194,7 +200,7 @@ for (const { id: modelId } of DEVICE_MODELS.filter(
 )) {
   await test(`${modelId} retains STP after every image`, async () => {
     await open(modelId);
-    for (let i = 0; i < 3; i++) send({ type: 'sendImage', keyIndex: 1, bytes: new Uint8Array(20) });
+    for (let i = 0; i < 3; i++) sendImage(1, new Uint8Array(20));
     await wait(5);
     assert.equal(stpCount(), 3);
   });

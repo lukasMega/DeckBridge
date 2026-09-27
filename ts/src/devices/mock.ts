@@ -19,7 +19,6 @@ export class MockDriver extends EventEmitter implements DeviceDriver {
 
   async open(_hidPath?: string): Promise<void> {}
   async close(): Promise<void> {}
-  sendImage(_keyIndex: number, _bytes: Uint8Array): void {}
   clearKey(_keyIndex: number): void {}
   setBrightness(_level: number): void {}
 

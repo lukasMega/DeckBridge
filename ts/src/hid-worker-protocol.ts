@@ -27,8 +27,6 @@ export type MainToWorker =
   // then writes it to the device. Off the main thread so the FFI
   // transform never stalls the CORA ACK loop (see P1).
   | { type: 'image'; keyIndex: number; bytes: Uint8Array; format: 'jpeg' | 'bmp' }
-  // Already-native bytes (pre-encoded) — written verbatim, no transform.
-  | { type: 'sendImage'; keyIndex: number; bytes: Uint8Array }
   // Source image with an explicit transform spec (which may differ from
   // model.image — splash orientation overrides, or a widget's own geometry;
   // see splash-sender.ts and extra-keys.ts). The worker transforms with the
