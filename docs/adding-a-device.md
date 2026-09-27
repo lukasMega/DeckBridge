@@ -43,7 +43,7 @@ Every field of every model already in the registry, side by side:
 |---|---|---|
 | Device model | `devices/<brand>/<model>.ts` + `devices/registry.ts` | **The single source of truth** — geometry, VID/PID, image spec, wire framing, key map, CORA identity, splash overrides |
 | Wire protocol (only if new) | `devices/protocol/<proto>.ts` + `PROTOCOL_STRATEGY` table | Packet framing for image send + key input parsing |
-| Driver class (only if new pattern) | `devices/hid-driver-base.ts` or new file + `driverKind` | HID open/read/write loop |
+| Driver class (only if new pattern) | `devices/elgato/driver.ts` or new file + `driverKind` | HID open/read/write loop |
 
 Everything else (`translator.ts`, `image-pipeline.ts`, `splash-sender.ts`,
 `driver-manager.ts`) reads `model.keyMap` / `image` / `cora` / `splash` / `driverKind`
@@ -301,7 +301,7 @@ export function acmeResetReport(): Uint8Array {
 ```
 
 ```typescript
-// ts/src/devices/protocol/index.ts — add one entry, touch zero call-sites in hid-driver-base.ts
+// ts/src/devices/protocol/index.ts — add one entry, touch zero call-sites in devices/elgato/driver.ts
 import { acmeWriteImage, acmeParseInput, acmeBrightnessReport, acmeResetReport } from './acme-v1.js';
 
 export const PROTOCOL_STRATEGY: Partial<Record<DeviceProtocol, ProtocolStrategy>> = {
@@ -323,9 +323,9 @@ export const PROTOCOL_STRATEGY: Partial<Record<DeviceProtocol, ProtocolStrategy>
 If the device has a fundamentally different communication pattern (different handshake,
 heartbeat, multi-step init, bulk transfer instead of interrupt, etc.) write a standalone
 driver class, set `driverKind: 'custom'`, and add it to the factory in `hid-worker.ts`
-(Step 5). Reference: `MiraboxDriver` (`ts/src/mirabox.ts`), the most feature-complete
+(Step 5). Reference: `MiraboxDriver` (`ts/src/devices/mirabox/driver.ts`), the most feature-complete
 custom driver — it reads wire framing from `model.wire` instead of hardcoding it. Prefer
-**extending `HidDeviceBase`** (`ts/src/devices/hid-connection.ts`), the shared base both
+**extending `HidDeviceBase`** (`ts/src/devices/hid-device-base.ts`), the shared base both
 real drivers extend: it already owns the lib singleton, device handle, polling read loop,
 and teardown. The sample below is standalone purely to show the minimum `DeviceDriver`
 surface — for a real Path C driver, extend `HidDeviceBase` instead.
@@ -415,7 +415,7 @@ export class AcmeDriver extends EventEmitter {
 - `hid_read_timeout` with ≤5ms is safe on the single-threaded worker event loop.
 - Always emit `'error'` then `'disconnect'` on read failure so `driver-manager` can reconnect.
 - After a failed open, call `hid_exit()` but never `dlclose()` (macOS IOKit bug — see
-  `_releaseLibAfterFailedOpen` in `devices/hid-connection.ts`).
+  `_releaseLibAfterFailedOpen` in `devices/hid-device-base.ts`).
 - Load `hidapi` through a module-level `_workerHidLib` singleton (as the sample and both real drivers do) so a GC or premature `dlclose()` can't unload it mid-callback. Only clear it in `_cleanup()` after a successful open was closed.
 - If the device needs a heartbeat, use `setInterval` and cancel it in `_cleanup`.
 - Read HID sizes and byte-level behavior from `model.wire` rather than hardcoding them.
@@ -470,7 +470,7 @@ undocumented.
 changes here**; for Path C add a case:
 
 ```typescript
-// ts/src/hid-worker.ts
+// ts/src/worker/hid-worker.ts
 import { AcmeDriver } from './devices/acme/acme-driver.js';
 
 type AnyRealDriver = ElgatoHidDriver | MiraboxDriver | AcmeDriver;

@@ -6,10 +6,10 @@ import {
   generateSerial,
   generateDeviceIdentity,
   getOrCreateDeviceIdentity,
-} from '../src/device-identity.js';
-import { DEFAULT_DOCK_SERIAL_NUMBER, DEFAULT_CHILD_SERIAL_NUMBER } from '../src/types.js';
-import { loadSettings, saveSettings } from '../src/settings-store.js';
-import type { Settings, DeviceIdentitySettings } from '../src/settings-store.js';
+} from '../src/infra/device-identity.js';
+import { DEFAULT_DOCK_SERIAL_NUMBER, DEFAULT_CHILD_SERIAL_NUMBER } from '../src/shared/types.js';
+import { loadSettings, saveSettings } from '../src/infra/settings-store.js';
+import type { Settings, DeviceIdentitySettings } from '../src/infra/settings-store.js';
 import { testAsync as test, summary } from './helpers/harness.js';
 
 // deviceKeyFor

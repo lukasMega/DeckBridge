@@ -2,8 +2,8 @@
 // Elgato app, or run a shell command per press / turn. Only honored while the
 // strip is in a deckbridge-* mode — encoders.ts resolves it per dial event, so a
 // change needs no app event, just persist + broadcast.
-import { ENCODER_COMMAND_MAX } from '../../types.js';
-import type { EncoderCommands, EncoderSettings } from '../../types.js';
+import { ENCODER_COMMAND_MAX } from '../../shared/types.js';
+import type { EncoderCommands, EncoderSettings } from '../../shared/types.js';
 import type { ControllerHost, ReqError } from './types.js';
 
 const COMMAND_FIELDS = ['press', 'rotateCw', 'rotateCcw'] as const;

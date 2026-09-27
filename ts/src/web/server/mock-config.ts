@@ -9,7 +9,7 @@ import {
   MOCK_FW_VERSION_MAX_LEN,
   MOCK_SERIAL_MAX_LEN,
   MOCK_PRODUCT_ID_MASK,
-} from '../../types.js';
+} from '../../shared/types.js';
 import type { MockDeviceConfig, ReqError } from './types.js';
 
 /** Default identity fields, shared by the mock driver config and the identity

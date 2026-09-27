@@ -3,7 +3,7 @@ import { Broadcaster } from './broadcaster.js';
 import { matchRoute } from './router.js';
 import { routes } from './routes.js';
 import { forbidden, notFound } from './http.js';
-import type { DeviceIdentitySettings } from '../../settings-store.js';
+import type { DeviceIdentitySettings } from '../../infra/settings-store.js';
 import { ExtraKeysController } from './extra-keys-controller.js';
 import { ImageChannel } from './image-channel.js';
 import type { ImageFormat, DockFrame } from './image-channel.js';
@@ -39,8 +39,8 @@ import type {
   DockStatus,
   ClientApp,
   TouchStripMode,
-} from '../../types.js';
-import { WEBUI_PORT, webuiBindAddr } from '../../types.js';
+} from '../../shared/types.js';
+import { WEBUI_PORT, webuiBindAddr } from '../../shared/types.js';
 import { StatusPublisher } from './status-publisher.js';
 import { buildStateResponse } from './state-response.js';
 import { LoggingController } from './logging-controller.js';

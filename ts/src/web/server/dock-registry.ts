@@ -3,8 +3,8 @@
 import type { PersistedSettings } from './persisted-settings.js';
 import { isNonNegInt, nonNegIntError } from './types.js';
 import type { ReqError } from './types.js';
-import type { DockStatus } from '../../types.js';
-import { DEFAULT_BRIGHTNESS } from '../../types.js';
+import type { DockStatus } from '../../shared/types.js';
+import { DEFAULT_BRIGHTNESS } from '../../shared/types.js';
 
 export class DockRegistry {
   private docks: DockStatus[] = [];

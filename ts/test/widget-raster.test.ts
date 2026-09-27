@@ -1,6 +1,6 @@
 import assert from 'tjs:assert';
-import { composeLayout, composeWidgetBmp } from '../src/widget-raster.js';
-import { layoutWidget, type WidgetLine } from '../src/widget-layout.js';
+import { composeLayout, composeWidgetBmp } from '../src/shared/widget-raster.js';
+import { layoutWidget, type WidgetLine } from '../src/shared/widget-layout.js';
 import type { ExtraKeyTextStyle } from '../src/web/contract.js';
 import { test, summary } from './helpers/harness.js';
 

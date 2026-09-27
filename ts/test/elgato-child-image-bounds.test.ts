@@ -1,5 +1,5 @@
 import assert from 'tjs:assert';
-import { ElgatoChildServer } from '../src/elgato.js';
+import { ElgatoChildServer } from '../src/cora/child-server.js';
 import {
   ELGATO_PKT_SIZE_RX,
   IMAGE_CHUNK_KEY_OFFSET,
@@ -8,10 +8,10 @@ import {
   DEFAULT_DOCK_SERIAL_NUMBER,
   DEFAULT_CHILD_SERIAL_NUMBER,
   ELGATO_MK2_PID,
-} from '../src/types.js';
-import { modelToChildGeometry } from '../src/capabilities.js';
+} from '../src/shared/types.js';
+import { modelToChildGeometry } from '../src/shared/capabilities.js';
 import { MINI_MODEL } from '../src/devices/elgato/mini.js';
-import { CORA_FLAG_VERBATIM, CORA_FLAG_REQACK } from '../src/cora-frame.js';
+import { CORA_FLAG_VERBATIM, CORA_FLAG_REQACK } from '../src/cora/frame.js';
 import { connect, sendFrame } from './helpers/cora-framer.js';
 import { testAsync as runTest, summaryExit } from './helpers/harness.js';
 

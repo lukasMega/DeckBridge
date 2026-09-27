@@ -1,6 +1,6 @@
 // tjs:ffi bindings for libhidapi.
 import FFI from 'tjs:ffi';
-import { debug, info, warn } from '../logger.js';
+import { debug, info, warn } from '../shared/logger.js';
 import { decodeNulTerminated, guardedCall, LIST_BUF_BYTES, TSV_ABSENT } from './native-load.js';
 
 export const POINTER = 'pointer';
@@ -110,7 +110,7 @@ interface HidEnumSymbols {
 }
 
 // Cached deckbridge-native handle, kept open for the process lifetime: dlclose() churn
-// around HID libs causes SIGBUS on macOS (see _workerHidLib in mirabox.ts). Only
+// around HID libs causes SIGBUS on macOS (see _workerHidLib in devices/mirabox/driver.ts). Only
 // successful loads are cached, so a missing/failed DECKBRIDGE_NATIVE_LIB can be retried later.
 let _hidEnumLib: { symbols: HidEnumSymbols; close(): void } | null = null;
 

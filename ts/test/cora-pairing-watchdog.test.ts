@@ -1,7 +1,7 @@
 import assert from 'tjs:assert';
 import { EventEmitter } from 'node:events';
-import { PairingWatchdog } from '../src/cora-pairing-watchdog.js';
-import { setLogLevel } from '../src/logger.js';
+import { PairingWatchdog } from '../src/cora/pairing-watchdog.js';
+import { setLogLevel } from '../src/shared/logger.js';
 import { testAsync, summary } from './helpers/harness.js';
 
 setLogLevel('silent');

@@ -19,7 +19,7 @@ import type {
   ExtraKeyConfig,
   RealDeviceIdentity,
   TouchStripMode,
-} from '../../types.js';
+} from '../../shared/types.js';
 
 export interface StateResponseInputs {
   snapshot: StatusSnapshot;

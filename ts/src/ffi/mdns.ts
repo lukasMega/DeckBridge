@@ -5,7 +5,7 @@
 // (caught below), so callers don't need to gate on FFI.suffix themselves.
 import FFI from 'tjs:ffi';
 import { STRING, UINT16, INT } from './hidapi.ts';
-import { debug } from '../logger.js';
+import { debug } from '../shared/logger.js';
 import { guardedCall } from './native-load.js';
 
 const DECKBRIDGE_NATIVE_LIB = 'DECKBRIDGE_NATIVE_LIB';

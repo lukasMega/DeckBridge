@@ -1,7 +1,7 @@
 import FFI from 'tjs:ffi';
 import { getHidapiSystemCandidates } from '../../ffi/hidapi';
 import { isNativeMdnsAvailable } from '../../ffi/mdns';
-import { resolveTrayBin } from '../../tray.js';
+import { resolveTrayBin } from '../../infra/tray.js';
 
 export interface RequirementResult {
   name: string;

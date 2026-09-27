@@ -1,7 +1,7 @@
 import { EventEmitter } from 'node:events';
 import type { DeviceDriver, DeviceModel, DeviceModelOverride } from './driver.js';
-import type { KeyState } from '../types.js';
-import { MOCK_KEY_PRESS_DURATION_MS } from '../types.js';
+import type { KeyState } from '../shared/types.js';
+import { MOCK_KEY_PRESS_DURATION_MS } from '../shared/types.js';
 
 export class MockDriver extends EventEmitter implements DeviceDriver {
   model: DeviceModel;

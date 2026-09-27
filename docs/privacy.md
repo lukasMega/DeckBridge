@@ -77,7 +77,7 @@ of the last ping, which never leaves the machine. Turn it off with `"a7s": false
 ### When DeckBridge does not ping at all
 
 Independently of the setting above, the ping is skipped outright when any of these
-holds (`ts/src/daily-ping-env.ts` is the whole rule, in one file):
+holds (`ts/src/infra/daily-ping-env.ts` is the whole rule, in one file):
 
 - **You turned it off at the command line or in the environment** —
   `--no-daily-ping`, `DECKBRIDGE_NO_DAILY_PING=1`, or the cross-tool convention

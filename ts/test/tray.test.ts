@@ -1,5 +1,10 @@
 import assert from 'tjs:assert';
-import { parentDir, isAbsolutePath, resolveTrayBin, serializeTrayState } from '../src/tray.js';
+import {
+  parentDir,
+  isAbsolutePath,
+  resolveTrayBin,
+  serializeTrayState,
+} from '../src/infra/tray.js';
 import { test, testAsync as asyncTest, summary } from './helpers/harness.js';
 
 // parentDir

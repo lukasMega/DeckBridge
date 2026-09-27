@@ -7,7 +7,7 @@ import {
   logDir,
   logFilePath,
   tailLogFile,
-} from '../src/log-file.js';
+} from '../src/infra/log-file.js';
 import { testAsync as test, summary } from './helpers/harness.js';
 
 const ROOT = `${tjs.tmpDir}/log-file-test-${tjs.pid}`;

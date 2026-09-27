@@ -2,7 +2,7 @@ import {
   WS_KEEPALIVE_INTERVAL_MS,
   STATS_BROADCAST_INTERVAL_MS,
   clearRepeating,
-} from '../../types.js';
+} from '../../shared/types.js';
 
 function wsMsg(event: string, data: unknown): string {
   return JSON.stringify({ event, data });

@@ -1,7 +1,7 @@
 import assert from 'tjs:assert';
-import { buildArgs, MdnsAdvertiser } from '../src/mdns-advertiser.js';
-import { MDNS_SERVICE_NAME } from '../src/types.js';
-import { platformName } from '../src/os-utils.ts';
+import { buildArgs, MdnsAdvertiser } from '../src/infra/mdns-advertiser.js';
+import { MDNS_SERVICE_NAME } from '../src/shared/types.js';
+import { platformName } from '../src/infra/os-utils.ts';
 import { testAsync as test, summary } from './helpers/harness.js';
 
 // buildArgs

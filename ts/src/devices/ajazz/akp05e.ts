@@ -1,4 +1,4 @@
-import { ELGATO_MK2_PID, IMAGE_JPEG_QUALITY } from '../../types.js';
+import { ELGATO_MK2_PID, IMAGE_JPEG_QUALITY } from '../../shared/types.js';
 import type { DeviceEmulation, DeviceImageSpec, DeviceModel } from '../driver.js';
 
 const KEY_IMAGE: DeviceImageSpec = {

@@ -1,6 +1,6 @@
 import assert from 'tjs:assert';
 import { PersistedSettings } from '../src/web/server/persisted-settings.js';
-import { settingsPath, loadSettings, saveSettings } from '../src/settings-store.js';
+import { settingsPath, loadSettings, saveSettings } from '../src/infra/settings-store.js';
 import { testAsync as test, summary } from './helpers/harness.js';
 
 const ROOT = `${tjs.tmpDir}/persisted-settings-test-${tjs.pid}`;

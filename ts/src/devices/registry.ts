@@ -1,5 +1,5 @@
 import type { ChildGeometry, DeviceModel } from './driver.js';
-import { modelToChildGeometry } from '../capabilities.js';
+import { modelToChildGeometry } from '../shared/capabilities.js';
 import { MK2_MODEL } from './elgato/mk2.js';
 import { MINI_MODEL } from './elgato/mini.js';
 import { MIRABOX_293_MODEL } from './mirabox/mirabox-293.js';

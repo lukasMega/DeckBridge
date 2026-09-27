@@ -4,14 +4,14 @@
 // It falls back to a runtime-only value when there is no deviceKey yet (mock
 // mode, or before the first connect) — that fallback is never persisted, since
 // it belongs to no physical device.
-import type { DeviceIdentitySettings, TapFeedback } from '../../settings-store.js';
-import { tapFeedbackOf } from '../../settings-store.js';
-import type { TouchStripMode } from '../../types.js';
+import type { DeviceIdentitySettings, TapFeedback } from '../../infra/settings-store.js';
+import { tapFeedbackOf } from '../../infra/settings-store.js';
+import type { TouchStripMode } from '../../shared/types.js';
 import {
   DEFAULT_BRIGHTNESS_OVERRIDE,
   DEFAULT_TOUCH_STRIP_MODE,
   TOUCH_STRIP_REPAINT_DEFAULT_MS,
-} from '../../types.js';
+} from '../../shared/types.js';
 import type { ControllerHost, ReqError } from './types.js';
 
 export class DevicePrefsController {

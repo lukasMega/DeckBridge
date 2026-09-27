@@ -1,7 +1,7 @@
 import assert from 'tjs:assert';
 import { jpegSize } from '../src/devices/jpeg-size.js';
 import { AJAZZ_AKP05E_MODEL } from '../src/devices/ajazz/akp05e.js';
-import { transformImageForDevice } from '../src/translator.js';
+import { transformImageForDevice } from '../src/transform/translator.js';
 import { test, summaryExit } from './helpers/harness.js';
 import { SOLID_RED_16X16_JPEG } from './helpers/fixtures.js';
 

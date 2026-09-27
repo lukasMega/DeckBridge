@@ -14,7 +14,7 @@ import {
   type DeviceSplashSpec,
   type DeviceWireSpec,
 } from './driver.js';
-import { fnv1aHex } from '../types.js';
+import { fnv1aHex } from '../shared/types.js';
 import { findModelById } from './registry.js';
 
 export type ValidationResult =

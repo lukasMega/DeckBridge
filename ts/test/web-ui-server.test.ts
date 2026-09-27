@@ -6,9 +6,9 @@ import {
   WebUIServer,
 } from '../src/web/server/web-ui-server.js';
 import { Broadcaster } from '../src/web/server/broadcaster.js';
-import { saveSettings } from '../src/settings-store.js';
-import type { Settings } from '../src/settings-store.js';
-import type { DockStatus } from '../src/types.js';
+import { saveSettings } from '../src/infra/settings-store.js';
+import type { Settings } from '../src/infra/settings-store.js';
+import type { DockStatus } from '../src/shared/types.js';
 import { test, testAsync as runWebTest, summaryExit } from './helpers/harness.js';
 
 // Isolate settings.json writes from the real user cache dir — every mutator

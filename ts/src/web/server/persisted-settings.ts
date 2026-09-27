@@ -1,15 +1,24 @@
-import { isTapFeedback, loadSettings, saveSettings, settingsPath } from '../../settings-store.js';
-import type { Settings, DeviceIdentitySettings, PersistedLogLevel } from '../../settings-store.js';
-import { isLogLevel } from '../../cli.js';
-import { openPathInOS } from '../../os-utils.ts';
+import {
+  isTapFeedback,
+  loadSettings,
+  saveSettings,
+  settingsPath,
+} from '../../infra/settings-store.js';
+import type {
+  Settings,
+  DeviceIdentitySettings,
+  PersistedLogLevel,
+} from '../../infra/settings-store.js';
+import { isLogLevel } from '../../shared/cli.js';
+import { openPathInOS } from '../../infra/os-utils.ts';
 import {
   getOrCreateDeviceIdentity as getOrCreateDeviceIdentityPure,
   isStableDeviceKey,
-} from '../../device-identity.js';
+} from '../../infra/device-identity.js';
 import { isModelOverridesRecord, validateModelOverride } from '../../devices/model-overrides.js';
 import { findModelById } from '../../devices/registry.js';
 import type { DeviceModelOverride } from '../../devices/driver.js';
-import { log } from '../../logger.js';
+import { log } from '../../shared/logger.js';
 import {
   isExtraKeyConfig,
   isTouchStripRepaintMs,
@@ -17,9 +26,9 @@ import {
   TOUCH_STRIP_MODES,
   TOUCH_STRIP_UPLOADS,
   TOUCH_STRIP_ZONE_FITS,
-} from '../../types.js';
-import type { DockStatus, ExtraKeyConfig } from '../../types.js';
-import type { UpdateState } from '../../update-check.js';
+} from '../../shared/types.js';
+import type { DockStatus, ExtraKeyConfig } from '../../shared/types.js';
+import type { UpdateState } from '../../infra/update-check.js';
 import { encoderSettingsError } from './encoders-controller.js';
 
 /** Shape guard for a persisted/imported extraKeys map (wire id → config). */

@@ -1,14 +1,18 @@
 import assert from 'tjs:assert';
 import { EventEmitter } from '../src/platform/events-shim.js';
-import { DeviceSession, sessionIdentity, wireCommonDriverEvents } from '../src/device-session.js';
-import { zoneForKnob, zoneForTouch } from '../src/device-session-status.js';
-import type { SessionServers } from '../src/device-session.js';
-import { generateDeviceIdentity } from '../src/device-identity.js';
+import {
+  DeviceSession,
+  sessionIdentity,
+  wireCommonDriverEvents,
+} from '../src/main/device-session.js';
+import { zoneForKnob, zoneForTouch } from '../src/main/device-session-status.js';
+import type { SessionServers } from '../src/main/device-session.js';
+import { generateDeviceIdentity } from '../src/infra/device-identity.js';
 import { DEFAULT_MODEL } from '../src/devices/registry.js';
 import { MIRABOX_293S_MODEL } from '../src/devices/mirabox/mirabox-293s.js';
 import { AJAZZ_AKP05E_MODEL } from '../src/devices/ajazz/akp05e.js';
 import { applyModelOverrides } from '../src/devices/model-overrides.js';
-import { deviceInputToMk2Index } from '../src/key-map.js';
+import { deviceInputToMk2Index } from '../src/shared/key-map.js';
 import {
   ELGATO_TCP_PORT,
   ELGATO_CHILD_PORT,
@@ -16,19 +20,19 @@ import {
   MDNS_SERVICE_NAME,
   ELGATO_PLUS_PID,
   DEFAULT_CHILD_FIRMWARE_VERSION,
-} from '../src/types.js';
+} from '../src/shared/types.js';
 import type {
   DialEvent,
   ExtraKeyConfig,
   KeyState,
   TouchInputEvent,
   TouchStripMode,
-} from '../src/types.js';
-import type { EncoderOverride } from '../src/encoders.js';
-import type { ChildGeometry } from '../src/capabilities.js';
-import type { DeviceConfig } from '../src/elgato-types.js';
+} from '../src/shared/types.js';
+import type { EncoderOverride } from '../src/main/encoders.js';
+import type { ChildGeometry } from '../src/shared/capabilities.js';
+import type { DeviceConfig } from '../src/cora/types.js';
 import type { DeviceModel } from '../src/devices/driver.js';
-import type { WorkerHidDriver } from '../src/hid-worker-host.js';
+import type { WorkerHidDriver } from '../src/worker/hid-worker-host.js';
 import { testAsync as test, summaryExit } from './helpers/harness.js';
 
 // Fakes

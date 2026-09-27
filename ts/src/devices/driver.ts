@@ -1,5 +1,5 @@
 import type { EventEmitter } from 'node:events';
-import type { TouchStripOptions, TouchWindowRegion } from '../types.js';
+import type { TouchStripOptions, TouchWindowRegion } from '../shared/types.js';
 
 export type DeviceVendor =
   | 'mirabox'

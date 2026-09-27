@@ -1,7 +1,7 @@
 /** Supported-device discovery used by the dedicated scan worker. Full HID
  * inventory remains in hidapi.ts for explicit diagnostics only. */
 import FFI from 'tjs:ffi';
-import { debug, warn } from '../logger.js';
+import { debug, warn } from '../shared/logger.js';
 import {
   BUFFER,
   INT,

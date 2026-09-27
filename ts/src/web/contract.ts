@@ -3,7 +3,7 @@
 // from here. See "Architecture is lint-enforced" in CLAUDE.md.
 
 /** 'elgato'/'bitfocus' are set only once a client-specific query is observed
- *  (elgato-server.ts / elgato-child-server.ts), 'unknown' otherwise. */
+ *  (cora/primary-server.ts / cora/child-server.ts), 'unknown' otherwise. */
 export type ClientApp = 'elgato' | 'bitfocus' | 'unknown';
 
 export type KeyState = 'down' | 'up';

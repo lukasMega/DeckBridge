@@ -1,7 +1,7 @@
 import assert from 'tjs:assert';
 import { EventEmitter } from '../src/platform/events-shim.js';
-import { splashSpec, sendSplashImages } from '../src/splash-sender.js';
-import { mk2IndexToDeviceImgId } from '../src/key-map.js';
+import { splashSpec, sendSplashImages } from '../src/shared/splash-sender.js';
+import { mk2IndexToDeviceImgId } from '../src/shared/key-map.js';
 import type { DeviceDriver, DeviceImageSpec } from '../src/devices/driver.js';
 import { MIRABOX_293_MODEL } from '../src/devices/mirabox/mirabox-293.js';
 import { DEFAULT_MODEL } from '../src/devices/registry.js';

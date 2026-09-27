@@ -1,5 +1,5 @@
 import type { DeviceModel } from '../driver.js';
-import { ELGATO_PLUS_PID } from '../../types.js';
+import { ELGATO_PLUS_PID } from '../../shared/types.js';
 
 // Stream Deck + emulation profile. NOT in the USB probe list (DEVICE_MODELS) — it is
 // resolved as a `cora.advertiseAs` target only. It holds the CORA facts (geometry,

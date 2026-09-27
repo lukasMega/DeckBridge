@@ -1,5 +1,5 @@
 {
-  "_comment": "Captured off real hardware by src/d6-capture.ts (mise run d6-capture). Raw hid_get_report_descriptor bytes for the vendor (0xffa0/1) interface.",
+  "_comment": "Captured off real hardware by src/dev/d6-capture.ts (mise run d6-capture). Raw hid_get_report_descriptor bytes for the vendor (0xffa0/1) interface.",
   "deviceId": "fifine-d6-rev2",
   "usb": "0x3142:0x0060",
   "serialsSeen": ["81D0DA78…"],

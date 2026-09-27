@@ -1,6 +1,6 @@
 // Device identity resolution + the settings.json import/export surface (the write path itself
 // lives in persisted-settings.ts — this is just the WebUIServer-facing glue around it).
-import type { Settings, DeviceIdentitySettings } from '../../settings-store.js';
+import type { Settings, DeviceIdentitySettings } from '../../infra/settings-store.js';
 import { defaultMockConfig } from './mock-config.js';
 import type {
   ControllerHost,
@@ -9,7 +9,7 @@ import type {
   MockDeviceConfig,
   ReqError,
 } from './types.js';
-import { DEFAULT_TOUCH_STRIP_MODE, MDNS_SERVICE_NAME } from '../../types.js';
+import { DEFAULT_TOUCH_STRIP_MODE, MDNS_SERVICE_NAME } from '../../shared/types.js';
 
 export class SettingsIdentityController {
   constructor(

@@ -4,7 +4,7 @@ import {
   fillModeFor,
   blitImage,
   canvasSliceToBmp,
-} from '../src/translator.js';
+} from '../src/transform/translator.js';
 import type { DeviceImageSpec } from '../src/devices/driver.js';
 import { MIRABOX_293_MODEL } from '../src/devices/mirabox/mirabox-293.js';
 import { MIRABOX_K1PRO_MODEL } from '../src/devices/mirabox/mirabox-k1pro.js';

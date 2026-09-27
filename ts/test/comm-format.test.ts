@@ -1,5 +1,5 @@
 import assert from 'tjs:assert';
-import { formatCommHex } from '../src/comm-format.js';
+import { formatCommHex } from '../src/shared/comm-format.js';
 import { testAsync as test, summaryExit } from './helpers/harness.js';
 
 // The implementation formatCommHex replaced, kept so the faster lookup-table version

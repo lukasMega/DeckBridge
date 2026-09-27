@@ -71,7 +71,7 @@ class BufferClass extends Uint8Array {
   }
 
   // Accepts a single byte (number) OR a subsequence (Uint8Array/Buffer), unlike Uint8Array.indexOf
-  // which only takes a number. cora-frame.ts searches for CORA_MAGIC, a 4-byte Buffer.
+  // which only takes a number. cora/frame.ts searches for CORA_MAGIC, a 4-byte Buffer.
   override indexOf(value: number | Uint8Array, byteOffset = 0): number {
     if (typeof value === 'number') return super.indexOf(value, byteOffset);
     if (value.length === 0) return Math.min(Math.max(byteOffset, 0), this.length);

@@ -1,5 +1,5 @@
 import assert from 'tjs:assert';
-import { WorkerHidDriver } from '../src/hid-worker-host.js';
+import { WorkerHidDriver } from '../src/worker/hid-worker-host.js';
 import { DEFAULT_MODEL } from '../src/devices/registry.js';
 import type { DeviceModel } from '../src/devices/driver.js';
 import { testAsync as runTest, summaryExit } from './helpers/harness.js';

@@ -1,7 +1,7 @@
 import assert from 'tjs:assert';
-import { EncoderActions, type EncoderOverride } from '../src/encoders.js';
-import { COMMAND_TIMEOUT_DEFAULT_MS } from '../src/types.js';
-import type { DialEvent } from '../src/types.js';
+import { EncoderActions, type EncoderOverride } from '../src/main/encoders.js';
+import { COMMAND_TIMEOUT_DEFAULT_MS } from '../src/shared/types.js';
+import type { DialEvent } from '../src/shared/types.js';
 import { testAsync as test, summary } from './helpers/harness.js';
 
 /** Records each run and holds it open until the test settles it. */

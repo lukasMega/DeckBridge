@@ -6,7 +6,7 @@ import {
   cleanupOldHashDirs,
   envVarFor,
   defaultCacheRoot,
-} from '../src/native-libs.js';
+} from '../src/infra/native-libs.js';
 import type { EmbeddedNativeLib } from 'virtual:native-libs';
 import { testAsync as test, summary } from './helpers/harness.js';
 

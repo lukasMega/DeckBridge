@@ -33,7 +33,7 @@ succeed. The first that works is logged (`loadHidapi: using <path>`) and returne
 
 | Order | Source | Path(s) | When used |
 |-------|--------|---------|-----------|
-| 1 | `HIDAPI_LIB` env (bundled) | extracted lib in the per-version cache dir | Packaged releases — `ts/src/native-libs.ts` extracts the embedded lib and sets `HIDAPI_LIB` before launch. End users need no brew. |
+| 1 | `HIDAPI_LIB` env (bundled) | extracted lib in the per-version cache dir | Packaged releases — `ts/src/infra/native-libs.ts` extracts the embedded lib and sets `HIDAPI_LIB` before launch. End users need no brew. |
 | 2 | macOS system (`FFI.suffix === 'dylib'`) | `/opt/homebrew/lib/libhidapi.dylib`, `/usr/local/lib/libhidapi.dylib`, then bare `libhidapi.dylib` | Dev machines / unbundled runs — relies on `brew install hidapi`. |
 | 2 | Windows (`'dll'`) | `hidapi.dll`, `C:\Windows\System32\hidapi.dll` | — |
 | 2 | Linux (else) | `/usr/lib/x86_64-linux-gnu/libhidapi-hidraw.so.0`, `/usr/lib/libhidapi-hidraw.so.0`, then `libhidapi-hidraw.so.0` / bare `libhidapi.so` | `sudo apt install libhidapi-dev`. |
@@ -113,7 +113,7 @@ mirabox_hid_present(uint16 vid, uint16 pid)        → int  (1=found, 0=not; pre
 |------|------|
 | `ts/src/ffi/hidapi.ts` | `loadHidapi()` candidate chain · `loadHidEnum()` / `findHidPath()` · FFI signatures · `isNullPtr()` |
 | `rust/deckbridge-native/` | Rust cdylib exporting `mirabox_hid_find_path` (loaded via `DECKBRIDGE_NATIVE_LIB`), plus `image_proc_transform` |
-| `ts/src/native-libs.ts` | Extracts the embedded native libs at runtime and sets `DECKBRIDGE_NATIVE_LIB` / `HIDAPI_LIB` (no separate `run.sh` — libs are embedded in the binary) |
+| `ts/src/infra/native-libs.ts` | Extracts the embedded native libs at runtime and sets `DECKBRIDGE_NATIVE_LIB` / `HIDAPI_LIB` (no separate `run.sh` — libs are embedded in the binary) |
 | `ts/src/devices/.../*` driver | Consumes `loadHidapi()` symbols; tries path-based open then VID+PID fallback |
 
 ## Related docs

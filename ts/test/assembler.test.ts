@@ -1,4 +1,4 @@
-import type { ImageAssembly } from '../src/image-assembler.js';
+import type { ImageAssembly } from '../src/cora/image-assembler.js';
 import assert from 'tjs:assert';
 import {
   assembleImageChunk,
@@ -6,7 +6,7 @@ import {
   assemblePartialWindowChunk,
   resetMalformedWarnThrottle,
   MAX_PARTIAL_WINDOW_ASSEMBLIES,
-} from '../src/image-assembler.js';
+} from '../src/cora/image-assembler.js';
 import {
   MAX_IMAGE_ASSEMBLY_BYTES,
   MAX_IMAGE_ASSEMBLY_CHUNKS,
@@ -22,7 +22,7 @@ import {
   PARTIAL_WINDOW_H_OFFSET,
   PARTIAL_WINDOW_LAST_OFFSET,
   PARTIAL_WINDOW_SIZE_OFFSET,
-} from '../src/types.js';
+} from '../src/shared/types.js';
 
 import { test, summary } from './helpers/harness.js';
 
