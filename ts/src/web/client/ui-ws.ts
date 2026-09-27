@@ -68,6 +68,11 @@ const handlers: Handlers = {
   update: (updateInfo) => store.patch({ updateInfo }),
 };
 
+// Looked up by the server-sent event name: a Map has no prototype keys to hit.
+const handlerByEvent = new Map<string, (d: unknown) => void>(
+  Object.entries(handlers) as [string, (d: unknown) => void][],
+);
+
 let _wsConnected = false;
 
 export function connectWS(): void {
@@ -93,10 +98,8 @@ export function connectWS(): void {
 
   ws.addEventListener('message', (e: MessageEvent<string>) => {
     const { event, data } = JSON.parse(e.data) as { event: string; data: unknown };
-    if (!Object.prototype.hasOwnProperty.call(handlers, event)) return;
-    // The server sends each event with its WsEvents payload; `ping` has no handler.
-    const handler = handlers[event as keyof WsEvents] as ((d: unknown) => void) | undefined;
-    if (typeof handler === 'function') handler(data);
+    // Each event arrives with its WsEvents payload; `ping` has no handler.
+    handlerByEvent.get(event)?.(data);
   });
 
   ws.addEventListener('close', () => setTimeout(connectWS, 2000));
