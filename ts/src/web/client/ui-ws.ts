@@ -99,7 +99,8 @@ export function connectWS(): void {
   ws.addEventListener('message', (e: MessageEvent<string>) => {
     const { event, data } = JSON.parse(e.data) as { event: string; data: unknown };
     // Each event arrives with its WsEvents payload; `ping` has no handler.
-    handlerByEvent.get(event)?.(data);
+    const handler = handlerByEvent.get(event);
+    if (typeof handler === 'function') handler(data);
   });
 
   ws.addEventListener('close', () => setTimeout(connectWS, 2000));
