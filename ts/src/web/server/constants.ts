@@ -1,7 +1,5 @@
 // WebUI server tunables: WS timers, ring-buffer caps, mock-config bounds.
 
-export const DEFAULT_BRIGHTNESS_OVERRIDE = true;
-
 export const WS_KEEPALIVE_INTERVAL_MS = 30_000;
 export const STATS_BROADCAST_INTERVAL_MS = 5_000;
 export const KEY_EVENT_BUFFER_MAX = 50;

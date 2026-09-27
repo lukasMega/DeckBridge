@@ -9,7 +9,6 @@ export type {
   DockStatus,
   EncoderCommands,
   EncoderSettings,
-  ExtraKeyPressAction,
   ExtraKeyTextStyle,
   ExtraKeyWidget,
   KeyState,

@@ -4,11 +4,11 @@
 import { pluginsDir } from '../../infra/settings-store.js';
 import { listPluginFiles, pluginKeyStatus } from '../../plugin/plugin-host.js';
 import type { PluginStatus } from '../../plugin/plugin-host.js';
-import type { Broadcaster } from './broadcaster.js';
 import type { ExtraKeyConfig } from '../../shared/types.js';
 import type { WidgetPaint } from '../../shared/widget-layout.js';
 import type { ExtraKeyPreviewResponse } from '../contract.js';
 import { widgetPreviews } from './widget-preview.js';
+import type { DockPrefs } from '../../infra/dock-prefs.js';
 import type {
   ControllerHost,
   ExtraKeyPressUpdate,
@@ -46,18 +46,17 @@ function mergeExtraKey(
 export class ExtraKeysController {
   constructor(
     private readonly host: ControllerHost,
-    private readonly bus: Broadcaster,
+    /** The selected dock's last paint of a widget (image-channel.ts). */
+    private readonly selectedPaint: (wireId: number) => WidgetPaint | undefined,
   ) {}
 
-  /** Persisted extra-key config for one device wire id — read per tick by the widget schedulers
-   *  in DriverManager/DeviceSession. */
-  configFor(deviceKey: string, wireId: number): ExtraKeyConfig | undefined {
-    return this.host.settings.entryFor(deviceKey)?.extraKeys?.[String(wireId)];
+  private get prefs(): DockPrefs {
+    return this.host.settings.for(this.host.selectedDeviceKey());
   }
 
   /** The SELECTED dock's extra-key config map (WebUI panel state). */
   selectedConfigs(): Record<string, ExtraKeyConfig> {
-    return this.host.settings.entryFor(this.host.selectedDeviceKey())?.extraKeys ?? {};
+    return this.prefs.extraKeyConfigs();
   }
 
   private onSelectedDock(wireId: number): boolean {
@@ -77,40 +76,40 @@ export class ExtraKeysController {
    *  dock. The two are independent: a widget change keeps the press command and vice versa.
    *  Persists, pushes the new map to WS clients, and on a widget change emits 'extraKeyChanged'
    *  so app.ts repaints that dock's widgets (a press command resolves per press). */
-  trySet(wireId: number, update: ExtraKeyUpdate, selectedDock: number): ReqError | null {
+  trySet(wireId: number, update: ExtraKeyUpdate): ReqError | null {
     if (!this.onSelectedDock(wireId)) return this.noKeyError(wireId);
     const isWidget = 'widget' in update;
     if (!isWidget && !this.host.selectedDockStatus()?.pressableExtraKeys?.includes(wireId)) {
       return { error: `extra key ${wireId} has no switch`, status: 400 };
     }
-    const entry = this.host.settings.entryFor(this.host.selectedDeviceKey());
-    if (!entry) return { error: 'no connected device to configure', status: 409 };
-    const map = { ...entry.extraKeys };
+    const prefs = this.prefs;
+    const map = { ...prefs.extraKeyConfigs() };
     const next = mergeExtraKey(map[String(wireId)], update);
     if (next) map[String(wireId)] = next;
     else delete map[String(wireId)];
-    if (Object.keys(map).length > 0) entry.extraKeys = map;
-    else delete entry.extraKeys;
-    this.host.settings.persist();
-    this.bus.broadcast('extraKeys', { configs: this.selectedConfigs() });
-    if (isWidget) this.host.emit('extraKeyChanged', selectedDock);
+    if (!prefs.setExtraKeyConfigs(map)) {
+      return { error: 'no connected device to configure', status: 409 };
+    }
+    this.host.broadcast('extraKeys', { configs: this.selectedConfigs() });
+    if (isWidget) this.host.emit('extraKeyChanged', this.host.selectedDock());
     return null;
   }
 
   /** WebUI "Run now" — immediate re-run of a command-widget extra key, bypassing its interval. */
-  tryRunNow(wireId: number, selectedDock: number): ReqError | null {
+  tryRunNow(wireId: number): ReqError | null {
     if (!this.onSelectedDock(wireId)) return this.noKeyError(wireId);
-    const cfg = this.configFor(this.host.selectedDeviceKey(), wireId);
+    const cfg = this.prefs.extraKeyConfig(wireId);
     if (cfg?.widget !== 'command') {
       return { error: `extra key ${wireId} is not configured as a command widget`, status: 400 };
     }
-    this.host.emit('extraKeyRunNow', selectedDock, wireId);
+    this.host.emit('extraKeyRunNow', this.host.selectedDock(), wireId);
     return null;
   }
 
   /** Text-size picker thumbnails for one of the SELECTED dock's widgets, from its last paint. */
-  tryPreview(wireId: number, paint: WidgetPaint | undefined): ExtraKeyPreviewResponse | ReqError {
+  tryPreview(wireId: number): ExtraKeyPreviewResponse | ReqError {
     if (!this.onSelectedDock(wireId)) return this.noKeyError(wireId);
+    const paint = this.selectedPaint(wireId);
     if (!paint) return { error: 'nothing painted on this key yet', status: 404 };
     return { wireId, previews: widgetPreviews(paint) };
   }

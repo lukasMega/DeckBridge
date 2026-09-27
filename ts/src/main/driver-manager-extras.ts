@@ -11,7 +11,7 @@ import { DEVICE_MODELS, findModelById } from '../devices/registry.js';
 import { DeviceSession, sessionIdentity } from './device-session.js';
 import { deviceKeyFor, sharedSerialModelId } from '../infra/device-identity.js';
 import { coraPortConflict } from './cora-startup.js';
-import type { DeviceIdentitySettings } from '../infra/settings-store.js';
+import type { DockPrefs } from '../infra/dock-prefs.js';
 import { touchStripOptionsOf } from '../infra/settings-store.js';
 import type { ExtraDockCoordinatorDeps } from './driver-manager-extras-deps.js';
 
@@ -116,7 +116,7 @@ export class ExtraDockCoordinator {
     if (this.scanTarget() === null) return;
     this.scanInFlight = true;
     try {
-      const enumerateMs = await this.deps.refreshHidSnapshot();
+      const enumerateMs = await this.deps.discovery.scan();
       log('debug', 'coord', `worker enumerate took ${enumerateMs}ms`);
 
       // State can change while the worker is blocked inside native discovery.
@@ -156,7 +156,7 @@ export class ExtraDockCoordinator {
     let seen = 0;
     for (const model of DEVICE_MODELS) {
       if (model.id === skipModelId) continue;
-      for (const path of this.deps.listModelPaths(model)) {
+      for (const path of this.deps.discovery.paths(model)) {
         seen++;
         if (claimed.has(path)) continue;
         if (!pick || path < pick.hidPath) pick = { model, hidPath: path };
@@ -177,15 +177,11 @@ export class ExtraDockCoordinator {
     const { model, override } = this.deps.effectiveModelFor(registryModel);
 
     // Reuse a worker from a prior failed open (SIGBUS-safe pattern, see
-    // idleDrivers / probeAndOpen) or spawn a fresh one. Clear any stale
+    // worker-pool.ts) or spawn a fresh one. Clear any stale
     // listeners a prior owner (primary probe, or an aborted session) left on a
     // reused worker — DeviceSession.start() wires its own after a good open.
-    let driver = this.deps.takeIdleDriver(model.id);
-    if (!driver) {
-      driver = this.deps.makeRealDriver(model, override);
-    } else {
-      driver.removeAllListeners();
-    }
+    const { driver, fresh } = this.deps.pool.acquire(model, override);
+    if (!fresh) driver.removeAllListeners();
 
     try {
       await driver.open(hidPath);
@@ -193,7 +189,7 @@ export class ExtraDockCoordinator {
       // Present but unopenable — park the worker alive (do NOT terminate) and
       // let a later scan retry open() on the same instance.
       log('debug', 'coord', `${model.id} extra open failed: ${(e as Error).message}`);
-      this.deps.parkIdleDriver(model.id, driver);
+      this.deps.pool.park(model.id, driver);
       return;
     }
 
@@ -212,9 +208,9 @@ export class ExtraDockCoordinator {
     // same-model units. v1 models share a hardcoded serial across every unit (see
     // deviceKeyFor JSDoc) — append the model id so two different v1 decks don't
     // collapse into one identity.
-    const serial = this.deps.serialForPath(hidPath);
+    const serial = this.deps.discovery.serial(hidPath);
     const deviceKey = deviceKeyFor(hidPath, serial, sharedSerialModelId(model));
-    const deviceIdentity = this.deps.getOrCreateDeviceIdentity(
+    const deviceIdentity = this.deps.settings.getOrCreateIdentity(
       deviceKey,
       `${MDNS_SERVICE_NAME} (${model.name})`,
     );
@@ -227,6 +223,7 @@ export class ExtraDockCoordinator {
       ({ data, region }: { data: Uint8Array; region?: TouchWindowRegion }) =>
         this.deps.onTouchImage?.(index, data, region),
     );
+    const prefs = this.deps.settings.for(deviceKey);
     const session = new DeviceSession({
       identity,
       servers,
@@ -244,19 +241,11 @@ export class ExtraDockCoordinator {
       onWidgetPaint: (wireId, paint) => this.deps.onWidgetPaint?.(index, wireId, paint),
       onStripWrite: (...args) => this.deps.onStripWrite?.(index, ...args),
       onImage: (keyIndex, data, format) => this.deps.onImage?.(index, keyIndex, data, format),
-      ignoreElgatoBrightness: () => this.deps.isBrightnessOverride(deviceKey),
-      initialBrightness: deviceIdentity.brightness,
-      extraKeyConfigFor: (wireId) => this.deps.extraKeyConfigFor(deviceKey, wireId),
-      touchStripMode: this.deps.touchStripModeFor(deviceKey),
-      touchStripRepaintMs: () => this.deps.touchStripRepaintMsFor(deviceKey),
-      encoderOverride: () => ({
-        mode: this.deps.touchStripModeFor(deviceKey),
-        encoders: this.deps.encoderSettingsFor(deviceKey),
-      }),
+      prefs,
     });
     this.extraSessions.set(hidPath, session);
     servers.childServer.on('clientConnected', () =>
-      this.scheduleBrightnessResend(hidPath, session, deviceIdentity),
+      this.scheduleBrightnessResend(hidPath, session, prefs),
     );
 
     try {
@@ -280,18 +269,17 @@ export class ExtraDockCoordinator {
   }
 
   /** Re-push the saved brightness ~1s after pairing, as app.ts does for the
-   *  primary: the app's default-brightness handshake would stomp it.
-   *  `deviceIdentity` is the live settings entry, so this reads the current value. */
+   *  primary: the app's default-brightness handshake would stomp it. */
   private scheduleBrightnessResend(
     hidPath: string,
     session: DeviceSession,
-    deviceIdentity: DeviceIdentitySettings,
+    prefs: DockPrefs,
   ): void {
     this.clearBrightnessResendTimer(hidPath);
     const timer = setTimeout(() => {
       this.brightnessResendTimers.delete(hidPath);
       if (this.extraSessions.get(hidPath) === session)
-        session.setBrightness(deviceIdentity.brightness ?? session.status().brightness);
+        session.setBrightness(prefs.brightness() ?? session.status().brightness);
     }, 1000);
     this.brightnessResendTimers.set(hidPath, timer);
   }

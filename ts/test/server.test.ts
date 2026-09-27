@@ -700,12 +700,20 @@ await runTest('shuttingDown flag set during wait stops further retries', async (
 
 import { WebUIServer } from '../src/web/server/index.js';
 import { startCoraWithRetry, type CoraStartable } from '../src/main/cora-startup.js';
+import { PersistedSettings } from '../src/infra/settings.js';
+
+/** WebUIServer over settings loaded from `root`, as app.ts loads them before construction. */
+async function webUIAt(root: string, port?: number): Promise<WebUIServer> {
+  const settings = new PersistedSettings(root);
+  await settings.load();
+  return new WebUIServer(port, [], 'real', settings);
+}
 
 const WEBUI_TEST_PORT = 13001;
 // Isolate settings.json writes from the real user cache dir — brightness
 // mutations now auto-save to disk (see settings-store.ts).
 const WEBUI_TEST_SETTINGS_ROOT = `${tjs.tmpDir}/server-test-settings-${tjs.pid}`;
-const webui = new WebUIServer(WEBUI_TEST_PORT, [], 'real', WEBUI_TEST_SETTINGS_ROOT);
+const webui = await webUIAt(WEBUI_TEST_SETTINGS_ROOT, WEBUI_TEST_PORT);
 await webui.start();
 
 function fakeMultiDockStatus(index: number): DockStatus {

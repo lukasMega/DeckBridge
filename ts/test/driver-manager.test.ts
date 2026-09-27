@@ -8,7 +8,7 @@ import { MIRABOX_293S_MODEL } from '../src/devices/mirabox/mirabox-293s.js';
 import { MIRABOX_K1PRO_MODEL } from '../src/devices/mirabox/mirabox-k1pro.js';
 import type { SessionIdentity, SessionServers } from '../src/main/device-session.js';
 import type { DeviceModel, DeviceModelOverride } from '../src/devices/driver.js';
-import type { CommEntry, EncoderSettings, KeyState, TouchStripMode } from '../src/shared/types.js';
+import type { CommEntry, KeyState } from '../src/shared/types.js';
 import {
   ELGATO_TCP_PORT,
   MAX_DEVICE_SESSIONS,
@@ -19,10 +19,14 @@ import type { DeviceConfig } from '../src/cora/types.js';
 import type { ElgatoServer } from '../src/cora/primary-server.js';
 import type { ElgatoChildServer } from '../src/cora/child-server.js';
 import type { WebUIServer } from '../src/web/server/index.js';
-import type { WorkerHidDriver } from '../src/worker/hid-worker-host.js';
+import { WorkerHidDriver } from '../src/worker/hid-worker-host.js';
+import { WorkerPool } from '../src/main/worker-pool.js';
+import type { WorkerFactory } from '../src/main/worker-pool.js';
+import type { HidDiscovery } from '../src/main/driver-manager-discovery.js';
 import { generateDeviceIdentity } from '../src/infra/device-identity.js';
-import type { DeviceIdentitySettings, TapFeedback } from '../src/infra/settings-store.js';
-import { DEFAULT_TAP_FEEDBACK } from '../src/infra/settings-store.js';
+import type { DeviceIdentitySettings } from '../src/infra/settings-store.js';
+import type { PersistedSettings } from '../src/infra/settings.js';
+import { DockPrefs, defaultRuntimePrefs } from '../src/infra/dock-prefs.js';
 import { testAsync as test, summaryExit } from './helpers/harness.js';
 
 // Fakes
@@ -107,31 +111,28 @@ function makeFakeWebUI() {
     notifyComm(entry: Omit<CommEntry, 'ts'>) {
       this.notifyCommCalls.push(entry);
     },
+    // Doubles as the PersistedSettings dep (setup() passes it as `settings`).
     devices: [] as DeviceIdentitySettings[],
-    // Per-device brightness override, resolved by the coordinator per dock. No
-    // dock has a persisted override in these tests → default.
-    isBrightnessOverride(_deviceKey: string): boolean {
-      return false;
+    runtime: defaultRuntimePrefs(),
+    entryFor(deviceKey: string): DeviceIdentitySettings | undefined {
+      return this.devices.find((d) => d.deviceKey === deviceKey);
     },
-    // Touch-strip mode + encoder override: none persisted → strip and knobs belong to the app.
-    touchStripModeFor(_deviceKey: string): TouchStripMode {
-      return 'elgato';
+    persist(): void {},
+    for(deviceKey: string): DockPrefs {
+      return new DockPrefs(this, deviceKey);
     },
-    devicePrefs: {
-      touchStripRepaintMsFor: (_deviceKey: string): number => 5000,
-      tapFeedbackFor: (_deviceKey: string): TapFeedback => DEFAULT_TAP_FEEDBACK,
-    },
-    encoderSettingsFor(_deviceKey: string): EncoderSettings | undefined {
-      return undefined;
-    },
-    getOrCreateDeviceIdentityCalls: [] as { deviceKey: string; defaultMdnsName: string }[],
-    // Mirrors WebUIServer.getOrCreateDeviceIdentity: lookup-or-generate + memoize,
+    getOrCreateIdentityCalls: [] as { deviceKey: string; defaultMdnsName: string }[],
+    // Mirrors PersistedSettings.getOrCreateIdentity: lookup-or-generate + memoize,
     // so tests exercising a reconnect/rescan see a stable identity like production.
-    getOrCreateDeviceIdentity(deviceKey: string, defaultMdnsName: string): DeviceIdentitySettings {
-      this.getOrCreateDeviceIdentityCalls.push({ deviceKey, defaultMdnsName });
-      const existing = this.devices.find((d) => d.deviceKey === deviceKey);
+    // No persisted brightness override: Elgato-app brightness reaches the device.
+    getOrCreateIdentity(deviceKey: string, defaultMdnsName: string): DeviceIdentitySettings {
+      this.getOrCreateIdentityCalls.push({ deviceKey, defaultMdnsName });
+      const existing = this.entryFor(deviceKey);
       if (existing) return existing;
-      const identity = generateDeviceIdentity(deviceKey, defaultMdnsName);
+      const identity = {
+        ...generateDeviceIdentity(deviceKey, defaultMdnsName),
+        brightnessOverride: false,
+      };
       this.devices.push(identity);
       return identity;
     },
@@ -149,6 +150,9 @@ function makeFakeWebUI() {
     // persisted"; the tuning tests below replace this per instance.
     modelOverrideFor(_modelId: string): DeviceModelOverride | undefined {
       return undefined;
+    },
+    overrideFor(modelId: string): DeviceModelOverride | undefined {
+      return this.modelOverrideFor(modelId);
     },
   };
 }
@@ -243,22 +247,45 @@ class RepaintFakeDriver extends EventEmitter {
   }
 }
 
+/** Injected discovery + worker pool: no FFI, every model present (no targeted
+ *  path needed), and a per-test swappable driver factory. The real presence
+ *  check (deckbridge-native enumeration) is covered at runtime, not here. */
+const realWorker: WorkerFactory = (model, ov) => new WorkerHidDriver(model, ov);
+
+function fakeUsb() {
+  const discovery: HidDiscovery = {
+    scan: () => Promise.resolve(0),
+    present: () => true,
+    paths: () => [],
+    serial: () => null,
+    requestReset: () => {},
+    requireTargetedPath: false,
+  };
+  const factory = {
+    make: realWorker,
+    reset(): void {
+      this.make = realWorker;
+    },
+  };
+  return { discovery, factory, pool: new WorkerPool((model, ov) => factory.make(model, ov)) };
+}
+
 function setup() {
+  const usb = fakeUsb();
   const server = makeFakeServer();
   const childServer = makeFakeChildServer();
   const webui = makeFakeWebUI();
   const driverManager = new DriverManager({
     webui: webui as unknown as WebUIServer,
+    settings: webui as unknown as PersistedSettings,
     server: server as unknown as ElgatoServer,
     childServer: childServer as unknown as ElgatoChildServer,
     onTrayChange: () => {},
     getShuttingDown: () => false,
+    discovery: usb.discovery,
+    pool: usb.pool,
   });
-  // No real FFI/hardware in tests: treat every model as present so probeAndOpen()
-  // still exercises the injected fake-driver open() path. The real presence check
-  // (deckbridge-native enumeration) is covered at runtime, not here.
-  driverManager.__setPresenceCheck(() => true);
-  return { server, childServer, webui, driverManager };
+  return { server, childServer, webui, driverManager, usb };
 }
 
 // Tests
@@ -267,7 +294,7 @@ function setup() {
 // driverMode always starts at its default ('real' unless DECKBRIDGE_MOCK=1) —
 // tryRealConnect() is a no-op unless driverMode === 'real'.
 await test('6. getReconnectAttemptCount increments across failed tryRealConnect, resets on success', async () => {
-  const { driverManager } = setup();
+  const { driverManager, usb } = setup();
   assert.equal(
     driverManager.getDriverMode(),
     'real',
@@ -275,9 +302,7 @@ await test('6. getReconnectAttemptCount increments across failed tryRealConnect,
   );
 
   toggleFailOpen = true;
-  driverManager.__setRealDriverFactory(
-    (model) => new ToggleRealDriver(model) as unknown as WorkerHidDriver,
-  );
+  usb.factory.make = (model) => new ToggleRealDriver(model) as unknown as WorkerHidDriver;
   try {
     assert.equal(driverManager.getReconnectAttemptCount(), 0, 'starts at 0');
 
@@ -309,18 +334,18 @@ await test('6. getReconnectAttemptCount increments across failed tryRealConnect,
       'attempt count resets to 0 on successful connect',
     );
   } finally {
-    driverManager.__resetRealDriverFactory();
+    usb.factory.reset();
   }
 });
 
 await test("7. replug repaints the deck from the app's last CORA frames (over the splash)", async () => {
-  const { webui, driverManager } = setup();
+  const { webui, driverManager, usb } = setup();
   const created: RepaintFakeDriver[] = [];
-  driverManager.__setRealDriverFactory((model) => {
+  usb.factory.make = (model) => {
     const d = new RepaintFakeDriver(model);
     created.push(d);
     return d as unknown as WorkerHidDriver;
-  });
+  };
   try {
     // First connect: no frames captured yet, so nothing is replayed.
     await driverManager.tryRealConnect();
@@ -359,7 +384,7 @@ await test("7. replug repaints the deck from the app's last CORA frames (over th
       'the WebUI preview is restored on replug',
     );
   } finally {
-    driverManager.__resetRealDriverFactory();
+    usb.factory.reset();
   }
 });
 
@@ -567,15 +592,15 @@ await test('7. constructor wires deps — applyDeviceModel reaches the injected 
 });
 
 await test('8. E1-a: stale-after-probe — switchMode(mock) during a probe discards the found driver', async () => {
-  const { webui, driverManager } = setup();
+  const { webui, driverManager, usb } = setup();
   assert.equal(driverManager.getDriverMode(), 'real', 'driver mode is real by default');
 
   let created: ControllableRealDriver | null = null;
-  driverManager.__setRealDriverFactory((model) => {
+  usb.factory.make = (model) => {
     const d = new ControllableRealDriver(model);
     created = d;
     return d as unknown as WorkerHidDriver;
-  });
+  };
 
   try {
     // Start a probe but don't await — probeAndOpen() awaits the first
@@ -603,22 +628,22 @@ await test('8. E1-a: stale-after-probe — switchMode(mock) during a probe disca
       'no {mode:"real", connected:true} notification from the stale probe',
     );
   } finally {
-    driverManager.__resetRealDriverFactory();
+    usb.factory.reset();
   }
 });
 
 await test('9. E1-b: in-flight guard — a second tryRealConnect() during a probe is a no-op', async () => {
-  const { driverManager } = setup();
+  const { driverManager, usb } = setup();
   assert.equal(driverManager.getDriverMode(), 'real', 'driver mode is real by default');
 
   let instantiations = 0;
   let firstDriver: ControllableRealDriver | null = null;
-  driverManager.__setRealDriverFactory((model) => {
+  usb.factory.make = (model) => {
     instantiations++;
     const d = new ControllableRealDriver(model);
     if (!firstDriver) firstDriver = d;
     return d as unknown as WorkerHidDriver;
-  });
+  };
 
   try {
     const first = driverManager.tryRealConnect();
@@ -643,7 +668,7 @@ await test('9. E1-b: in-flight guard — a second tryRealConnect() during a prob
       'real driver connected',
     );
   } finally {
-    driverManager.__resetRealDriverFactory();
+    usb.factory.reset();
   }
 });
 
@@ -727,6 +752,7 @@ class FactoryChildServer extends EventEmitter {
  *  identities + servers), a presence set the test can mutate, and a driver
  *  factory that records every driver made (so tests can emit 'disconnect'). */
 function setupCoord(maxDocks: number = MAX_MULTI_DECK_SESSIONS) {
+  const usb = fakeUsb();
   const server = makeFakeServer();
   const childServer = makeFakeChildServer();
   const webui = makeFakeWebUI();
@@ -748,6 +774,7 @@ function setupCoord(maxDocks: number = MAX_MULTI_DECK_SESSIONS) {
 
   const driverManager = new DriverManager({
     webui: webui as unknown as WebUIServer,
+    settings: webui as unknown as PersistedSettings,
     server: server as unknown as ElgatoServer,
     childServer: childServer as unknown as ElgatoChildServer,
     onTrayChange: () => {},
@@ -755,6 +782,8 @@ function setupCoord(maxDocks: number = MAX_MULTI_DECK_SESSIONS) {
     onDocksChanged: () => {
       docksChangedCalls++;
     },
+    discovery: usb.discovery,
+    pool: usb.pool,
     sessionServersFactory: (identity: SessionIdentity): SessionServers => {
       identities.push(identity);
       const s = new FactoryServer();
@@ -766,13 +795,13 @@ function setupCoord(maxDocks: number = MAX_MULTI_DECK_SESSIONS) {
       };
     },
   });
-  driverManager.__setPresenceCheck((m) => present.has(m.id));
-  driverManager.__setListModelPaths(resolvePaths);
+  usb.discovery.present = (m) => present.has(m.id);
+  usb.discovery.paths = resolvePaths;
   // Multi-deck is opt-in and off by default; these tests exercise the enabled
   // path. Raising the cap takes effect synchronously (only LOWERING it awaits a
   // session teardown), so the returned promise needs no await here.
   void driverManager.setMultiDeck(maxDocks > 1, maxDocks);
-  driverManager.__setRealDriverFactory((m) => {
+  usb.factory.make = (m) => {
     const d = new CoordFakeDriver(m);
     // Mirror the real driver: the primary probe opens with no explicit path and
     // adopts the first enumerated one; an extra is opened at a targeted path.
@@ -783,10 +812,11 @@ function setupCoord(maxDocks: number = MAX_MULTI_DECK_SESSIONS) {
     };
     drivers.set(m.id, d);
     return d as unknown as WorkerHidDriver;
-  });
+  };
 
   return {
     driverManager,
+    usb,
     identities,
     serversByIndex,
     drivers,
@@ -1128,16 +1158,16 @@ await test('M1. multi-deck OFF (default): a second device is never docked', asyn
 });
 
 await test('M2. multi-deck OFF: startScan() installs no timer, so nothing enumerates', async () => {
-  const { driverManager, present } = setupCoord(1);
+  const { driverManager, present, usb } = setupCoord(1);
   present.add(DEFAULT_MODEL.id);
   present.add(MIRABOX_293_MODEL.id);
   await driverManager.tryRealConnect();
 
   let enumerations = 0;
-  driverManager.__setListModelPaths((m) => {
+  usb.discovery.paths = (m) => {
     enumerations++;
     return present.has(m.id) ? [`hid:${m.id}`] : [];
-  });
+  };
 
   driverManager.startScan();
   await new Promise<void>((r) => setTimeout(r, 30));
@@ -1217,17 +1247,17 @@ class CapturingDriver extends EventEmitter {
 }
 
 await test('E1. probe hands the worker the EFFECTIVE model plus the raw override', async () => {
-  const { webui, driverManager } = setup();
+  const { webui, driverManager, usb } = setup();
   const firstModel = DEVICE_MODELS[0]!;
   const override: DeviceModelOverride = { image: { rotate: 180 }, keyMap: { inputOffset: 4 } };
   webui.modelOverrideFor = (modelId: string) => (modelId === firstModel.id ? override : undefined);
 
   const created: CapturingDriver[] = [];
-  driverManager.__setRealDriverFactory((model, ov) => {
+  usb.factory.make = (model, ov) => {
     created.push(new CapturingDriver(model, ov));
     return created[0] as unknown as WorkerHidDriver;
-  });
-  driverManager.__setPresenceCheck((m) => m.id === firstModel.id);
+  };
+  usb.discovery.present = (m) => m.id === firstModel.id;
 
   await driverManager.tryRealConnect();
 
@@ -1243,13 +1273,11 @@ await test('E1. probe hands the worker the EFFECTIVE model plus the raw override
 });
 
 await test('E2. the tuned geometry/identity reaches the CORA servers and the WebUI', async () => {
-  const { webui, driverManager } = setup();
+  const { webui, driverManager, usb } = setup();
   const firstModel = DEVICE_MODELS[0]!;
   webui.modelOverrideFor = () => ({ image: { rotate: 90 } });
-  driverManager.__setRealDriverFactory(
-    (model, ov) => new CapturingDriver(model, ov) as unknown as WorkerHidDriver,
-  );
-  driverManager.__setPresenceCheck((m) => m.id === firstModel.id);
+  usb.factory.make = (model, ov) => new CapturingDriver(model, ov) as unknown as WorkerHidDriver;
+  usb.discovery.present = (m) => m.id === firstModel.id;
 
   await driverManager.tryRealConnect();
   const notified = webui.notifyDeviceModelCalls.at(-1);
@@ -1262,29 +1290,27 @@ await test('E2. the tuned geometry/identity reaches the CORA servers and the Web
 });
 
 await test('E3. the registry model is never mutated by an override', async () => {
-  const { webui, driverManager } = setup();
+  const { webui, driverManager, usb } = setup();
   const firstModel = DEVICE_MODELS[0]!;
   const before = JSON.stringify(firstModel);
   webui.modelOverrideFor = () => ({ image: { rotate: 270, quality: 0.1 } });
-  driverManager.__setRealDriverFactory(
-    (model, ov) => new CapturingDriver(model, ov) as unknown as WorkerHidDriver,
-  );
-  driverManager.__setPresenceCheck((m) => m.id === firstModel.id);
+  usb.factory.make = (model, ov) => new CapturingDriver(model, ov) as unknown as WorkerHidDriver;
+  usb.discovery.present = (m) => m.id === firstModel.id;
 
   await driverManager.tryRealConnect();
   assert.equal(JSON.stringify(firstModel), before, 'the registry stays ground truth');
 });
 
 await test('E4. no override → the registry model reaches the driver unchanged', async () => {
-  const { webui, driverManager } = setup();
+  const { webui, driverManager, usb } = setup();
   const firstModel = DEVICE_MODELS[0]!;
   webui.modelOverrideFor = () => undefined;
   const created: CapturingDriver[] = [];
-  driverManager.__setRealDriverFactory((model, ov) => {
+  usb.factory.make = (model, ov) => {
     created.push(new CapturingDriver(model, ov));
     return created[0] as unknown as WorkerHidDriver;
-  });
-  driverManager.__setPresenceCheck((m) => m.id === firstModel.id);
+  };
+  usb.discovery.present = (m) => m.id === firstModel.id;
 
   await driverManager.tryRealConnect();
   assert.ok(created[0]?.model === firstModel, 'same object, not a copy');
@@ -1292,25 +1318,27 @@ await test('E4. no override → the registry model reaches the driver unchanged'
 });
 
 /** Connect a CapturingDriver for the first registry model and return it. */
-async function connectCapturing(
-  driverManager: ReturnType<typeof setup>['driverManager'],
-): Promise<CapturingDriver> {
+async function connectCapturing({
+  driverManager,
+  usb,
+}: ReturnType<typeof setup>): Promise<CapturingDriver> {
   const firstModel = DEVICE_MODELS[0]!;
   const created: CapturingDriver[] = [];
-  driverManager.__setRealDriverFactory((model, ov) => {
+  usb.factory.make = (model, ov) => {
     const d = new CapturingDriver(model, ov);
     created.push(d);
     return d as unknown as WorkerHidDriver;
-  });
-  driverManager.__setPresenceCheck((m) => m.id === firstModel.id);
+  };
+  usb.discovery.present = (m) => m.id === firstModel.id;
   await driverManager.tryRealConnect();
   return created[0]!;
 }
 
 await test('E5. an image-only tuning change is applied live — no close, no reconnect', async () => {
-  const { webui, driverManager } = setup();
+  const env = setup();
+  const { webui, driverManager } = env;
   const firstModel = DEVICE_MODELS[0]!;
-  const driver = await connectCapturing(driverManager);
+  const driver = await connectCapturing(env);
   // Two frames the Elgato app already pushed: the live swap must repaint them,
   // or the panel keeps images encoded under the old spec.
   webui.dockFrames.set(
@@ -1332,9 +1360,10 @@ await test('E5. an image-only tuning change is applied live — no close, no rec
 });
 
 await test('E6. a wire/keyMap change still closes the session and reconnects', async () => {
-  const { driverManager } = setup();
+  const env = setup();
+  const { driverManager } = env;
   const firstModel = DEVICE_MODELS[0]!;
-  const driver = await connectCapturing(driverManager);
+  const driver = await connectCapturing(env);
 
   await driverManager.reloadDeviceTuning(firstModel.id, 'reopen');
 
@@ -1343,9 +1372,10 @@ await test('E6. a wire/keyMap change still closes the session and reconnects', a
 });
 
 await test('E7. an unchanged override touches neither the driver nor the session', async () => {
-  const { driverManager } = setup();
+  const env = setup();
+  const { driverManager } = env;
   const firstModel = DEVICE_MODELS[0]!;
-  const driver = await connectCapturing(driverManager);
+  const driver = await connectCapturing(env);
 
   await driverManager.reloadDeviceTuning(firstModel.id, 'none');
 

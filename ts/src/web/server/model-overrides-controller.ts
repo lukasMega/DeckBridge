@@ -1,7 +1,7 @@
 // The device-tuning (model override) HTTP surface. Mirrors
 // settings-identity-controller.ts: validation + persistence glue around
 // PersistedSettings, with the pure merge/validate living in devices/model-overrides.ts.
-import type { ControllerHost, ReqError } from './types.js';
+import type { ControllerHost, OverrideChange, ReqError } from './types.js';
 import type { DeviceModelOverride } from '../../devices/driver.js';
 import { advertisedModel, findModelById } from '../../devices/registry.js';
 import {
@@ -22,10 +22,6 @@ export class ModelOverridesController {
      *  request omits `modelId`. */
     private readonly selectedModelId: () => string,
   ) {}
-
-  overrideFor(modelId: string): DeviceModelOverride | undefined {
-    return this.host.settings.overrideFor(modelId);
-  }
 
   all(): Record<string, DeviceModelOverride> {
     return this.host.settings.allModelOverrides();
@@ -73,7 +69,7 @@ export class ModelOverridesController {
   /** Validate + persist one model's override, then tell the device layer how to
    *  apply it: an image-only change swaps live, anything else (keyMap/wire/
    *  splash) must be in force from the next open(), so the session reopens. */
-  trySet(modelId: unknown, overrides: unknown): ReqError | { kind: OverrideChangeKind } {
+  trySet(modelId: unknown, overrides: unknown): ReqError | OverrideChange {
     if (typeof modelId !== 'string' || !modelId) {
       return { error: 'modelId must be a non-empty string', status: 400 };
     }
@@ -90,7 +86,7 @@ export class ModelOverridesController {
   /** Back to registry defaults for this model. Reachable without a working
    *  device — a bad keyMap can make the panel look dead, and this is the way
    *  back short of `--no-overrides`. */
-  tryReset(modelId: unknown): ReqError | { kind: OverrideChangeKind } {
+  tryReset(modelId: unknown): ReqError | OverrideChange {
     if (typeof modelId !== 'string' || !modelId) {
       return { error: 'modelId must be a non-empty string', status: 400 };
     }

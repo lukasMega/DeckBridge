@@ -1,5 +1,6 @@
 import { warn } from '../shared/logger.js';
 import { platformName } from './os-utils.ts';
+import type { UpdateInfo } from './update-check.js';
 
 export interface TrayState {
   icon: 'full' | 'usb_only' | 'disconnected';
@@ -13,6 +14,48 @@ export interface TrayState {
 export interface TrayHandle {
   push(state: TrayState): void;
   close(): void;
+}
+
+/** What the tray shows, from the live state app.ts gathers. `deviceName` is
+ *  whatever model is open (Mirabox or Elgato hardware); "Elgato" in the strings
+ *  means the Stream Deck app on the other end of CORA. */
+export function buildTrayState(input: {
+  deviceName: string | undefined;
+  driverConnected: boolean;
+  elgatoConnected: boolean;
+  reconnectAttempts: number;
+  update: UpdateInfo;
+}): TrayState {
+  const { driverConnected, elgatoConnected, reconnectAttempts: attempts, update } = input;
+  const deviceName = input.deviceName ?? 'Device';
+  let icon: TrayState['icon'];
+  let status: string;
+  if (driverConnected && elgatoConnected) {
+    icon = 'full';
+    status = `${deviceName} + Elgato app connected`;
+  } else if (driverConnected) {
+    icon = 'usb_only';
+    status = `${deviceName} connected (Elgato app not paired)`;
+  } else {
+    icon = 'disconnected';
+    status = attempts > 0 ? `No device (attempt ${attempts})` : 'No device';
+  }
+  let updateText = 'Using latest version';
+  if (!update.enabled) {
+    updateText = 'Update checks disabled';
+  } else if (update.updateAvailable) {
+    updateText = `Update available: v${update.latest ?? '?'}`;
+  } else if (update.lastCheckedAt === undefined) {
+    updateText = 'Checking for updates…';
+  }
+  return {
+    icon,
+    status,
+    reconnectAttempts: attempts,
+    updateAvailable: update.updateAvailable && update.latest !== update.dismissedVersion,
+    updateText,
+    version: __VERSION__,
+  };
 }
 
 const enc = new TextEncoder();

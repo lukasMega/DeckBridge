@@ -3,92 +3,61 @@ import { Broadcaster } from './broadcaster.js';
 import { matchRoute } from './router.js';
 import { routes } from './routes.js';
 import { forbidden, notFound } from './http.js';
-import type { DeviceIdentitySettings } from '../../infra/settings-store.js';
 import { ExtraKeysController } from './extra-keys-controller.js';
 import { ImageChannel } from './image-channel.js';
 import type { ImageFormat, DockFrame } from './image-channel.js';
-import { SettingsIdentityController } from './settings-identity-controller.js';
+import { SettingsFileController } from './settings-file-controller.js';
 import { ModelOverridesController } from './model-overrides-controller.js';
-import type { DeviceOverridesView } from '../contract.js';
-import type { DeviceModelOverride } from '../../devices/driver.js';
 import { DockRegistry } from './dock-registry.js';
 import { isAllowedWebRequest, resolveListenPort } from './web-request-guard.js';
 import { ActivityBuffers } from './activity-buffers.js';
 import { defaultMockConfig, mergeMockConfig, validateSimulatedKey } from './mock-config.js';
-import { PersistedSettings } from './persisted-settings.js';
+import { PersistedSettings } from '../../infra/settings.js';
 import type {
   ControllerHost,
   DeviceModelInfo,
   DriverMode,
-  ExtraKeyUpdate,
   LogLevel,
   MockDeviceConfig,
-  OverrideChange,
-  PluginsInfo,
   ReqError,
   StateResponse,
   Stats,
   StatusSnapshot,
   WebUIController,
+  WebUIControllers,
 } from './types.js';
-import type {
-  KeyState,
-  CommEntry,
-  EncoderSettings,
-  ExtraKeyConfig,
-  DockStatus,
-  ClientApp,
-  TouchStripMode,
-} from '../../shared/types.js';
+import type { KeyState, CommEntry, DockStatus, ClientApp } from '../../shared/types.js';
 import { WEBUI_PORT, webuiBindAddr } from '../../shared/types.js';
 import { StatusPublisher } from './status-publisher.js';
-import { buildStateResponse } from './state-response.js';
+import { buildStateResponse, selectedDeviceIdentity } from './state-response.js';
 import { LoggingController } from './logging-controller.js';
 import { DevicePrefsController } from './device-prefs-controller.js';
 import { EncodersController } from './encoders-controller.js';
 import { liveDiagnosticsInputs } from './diagnostics-sources.js';
-import type { DiagnosticsOptions } from './diagnostics.js';
-import type { ExtraKeyPreviewResponse } from '../contract.js';
 import { UpdateController } from './update-controller.js';
 
 export { isAllowedWebRequest, isValidMacAddress, pickFallbackPort } from './web-request-guard.js';
 
-export class WebUIServer extends EventEmitter implements WebUIController {
+/** HTTP/WS server of the WebUI. Routes reach the per-concern controllers directly
+ *  (RouteContext); this class keeps the cross-controller state and the notify*
+ *  surface the core pushes into. */
+export class WebUIServer extends EventEmitter implements WebUIController, WebUIControllers {
   private server: TjsServeServer | null = null;
   private readonly bus = new Broadcaster();
   private readonly activity = new ActivityBuffers(this.bus);
-  private readonly settings: PersistedSettings;
+  readonly settings: PersistedSettings;
   private readonly dockRegistry: DockRegistry;
-  private readonly extraKeys: ExtraKeysController;
-  private readonly settingsIdentity: SettingsIdentityController;
-  private readonly modelOverrides: ModelOverridesController;
-  private readonly logging: LoggingController;
   readonly devicePrefs: DevicePrefsController;
-  private readonly encoders: EncodersController;
+  readonly encoders: EncodersController;
+  readonly extraKeys: ExtraKeysController;
+  readonly modelOverrides: ModelOverridesController;
+  readonly logging: LoggingController;
   readonly updates: UpdateController;
+  readonly settingsFile: SettingsFileController;
+  private readonly controllers: WebUIControllers;
   readonly imageChannel = new ImageChannel(this.bus, () => this.selectedDock);
   get selectedDock(): number {
     return this.dockRegistry.selectedDock;
-  }
-  setBrowserLocale(locale: string): void {
-    this.settings.browserLocale = locale;
-  }
-
-  // brightness/brightnessOverride live per-device in settings.devices[] — see device-prefs-controller.ts.
-  get brightnessOverride(): boolean {
-    return this.devicePrefs.brightnessOverride;
-  }
-  isBrightnessOverride(deviceKey: string): boolean {
-    return this.devicePrefs.isBrightnessOverride(deviceKey);
-  }
-  isBrightnessOverrideForDock(index: number): boolean {
-    return this.devicePrefs.isBrightnessOverride(this.dockRegistry.deviceKeyFor(index));
-  }
-  touchStripModeFor(deviceKey: string): TouchStripMode {
-    return this.devicePrefs.touchStripModeFor(deviceKey);
-  }
-  encoderSettingsFor(deviceKey: string): EncoderSettings | undefined {
-    return this.encoders.settingsFor(deviceKey);
   }
   private readonly status: StatusPublisher;
   private readonly stats: Stats = { uptimeMs: 0, elgatoRxPkts: 0, elgatoTxPkts: 0, imagesSent: 0 };
@@ -107,12 +76,12 @@ export class WebUIServer extends EventEmitter implements WebUIController {
     port = WEBUI_PORT,
     deviceModels: DeviceModelInfo[] = [],
     initialDriverMode: DriverMode = 'real',
-    private readonly settingsCacheRoot?: string,
+    settings: PersistedSettings = new PersistedSettings(),
   ) {
     super();
     this._port = port;
     this.deviceModels = deviceModels;
-    this.settings = new PersistedSettings(settingsCacheRoot);
+    this.settings = settings;
     this.dockRegistry = new DockRegistry(this.settings);
     this.status = new StatusPublisher(
       () => ({
@@ -130,67 +99,48 @@ export class WebUIServer extends EventEmitter implements WebUIController {
       selectedDeviceKey: () => this.dockRegistry.selectedDeviceKey(),
       selectedDock: () => this.selectedDock,
       selectedDockStatus: () => this.dockRegistry.selectedStatus(),
+      trySelectDock: (index) => this.trySelectDock(index),
+      broadcastSelected: () => this.broadcastSelectedDeviceState(),
     };
     this.devicePrefs = new DevicePrefsController(host, () =>
       this.dockRegistry.selectedBrightness(),
     );
-    this.extraKeys = new ExtraKeysController(host, this.bus);
-    this.encoders = new EncodersController(host);
-    this.settingsIdentity = new SettingsIdentityController(
-      host,
-      (level) => this.trySetLogLevel(level),
-      () => this.status.driverMode,
-      () => this.mockConfig,
-      (index) => this.trySelectDock(index),
-      () => this.broadcastSelectedDeviceState(),
+    this.extraKeys = new ExtraKeysController(host, (wireId) =>
+      this.imageChannel.selectedWidgetPaint(wireId),
     );
+    this.encoders = new EncodersController(host);
     this.modelOverrides = new ModelOverridesController(
       host,
       () => this.dockRegistry.selectedStatus()?.modelId ?? this.status.modelId,
     );
     this.logging = new LoggingController(host, () =>
       liveDiagnosticsInputs({
-        cacheRoot: this.settingsCacheRoot,
-        logPath: this.logFilePath(),
-        logLevel: this.logLevel(),
+        cacheRoot: this.settings.cacheRoot,
+        logPath: this.logging.path(),
+        logLevel: this.logging.level(),
         uptimeMs: Date.now() - this.startTime,
         overrides: this.modelOverrides,
         state: this.fullState(),
         activity: this.activity,
-        settingsJson: this.getSettingsJson(),
+        settingsJson: this.settings.json(),
       }),
     );
-    this.updates = new UpdateController(host, __VERSION__, () => this.dockRegistry.list());
+    this.updates = new UpdateController(host, __VERSION__);
+    this.settingsFile = new SettingsFileController(host, this.logging);
+    this.controllers = {
+      settings: this.settings,
+      devicePrefs: this.devicePrefs,
+      encoders: this.encoders,
+      extraKeys: this.extraKeys,
+      modelOverrides: this.modelOverrides,
+      logging: this.logging,
+      updates: this.updates,
+      settingsFile: this.settingsFile,
+    };
   }
 
-  /** Device tuning (model overrides) — undefined = registry defaults. See devices/model-overrides.ts. */
-  modelOverrideFor(modelId: string): DeviceModelOverride | undefined {
-    return this.modelOverrides.overrideFor(modelId);
-  }
-
-  /** Every persisted override, for the diagnostics bundle's loud section. */
-  allModelOverrides(): Record<string, DeviceModelOverride> {
-    return this.modelOverrides.all();
-  }
-
-  deviceOverridesView(modelId?: unknown): DeviceOverridesView | ReqError {
-    return this.modelOverrides.view(modelId);
-  }
-
-  trySetModelOverride(modelId: unknown, overrides: unknown): ReqError | OverrideChange {
-    return this.modelOverrides.trySet(modelId, overrides);
-  }
-
-  tryResetModelOverride(modelId: unknown): ReqError | OverrideChange {
-    return this.modelOverrides.tryReset(modelId);
-  }
-
-  // listen=false (--no-webui): settings still load, but the HTTP/WS listener + broadcast timers never start.
-  async start(listen = true): Promise<void> {
-    await this.settings.load(); // direct load — no broadcasts/hardware events fire before anything listens
-    // app.ts already applied the persisted level before startup (it re-reads settings.json to
-    // get it in force from the first log line); this only mirrors the resolved value for /api/state.
-    if (!listen) return;
+  // Settings are loaded by app.ts before construction.
+  async start(): Promise<void> {
     this._port = await resolveListenPort(this._port);
     this.server = tjs.serve({
       port: this._port,
@@ -271,18 +221,6 @@ export class WebUIServer extends EventEmitter implements WebUIController {
     if (this.imageChannel.reset(dock)) this.bus.broadcast('imagesReset', {});
   }
 
-  notifyBrightnessOverride(enabled: boolean): void {
-    this.devicePrefs.setBrightnessOverride(enabled);
-  }
-
-  trySetTouchStripMode(mode: TouchStripMode): ReqError | null {
-    return this.devicePrefs.trySetTouchStripMode(mode);
-  }
-
-  trySetEncoders(settings: EncoderSettings): ReqError | null {
-    return this.encoders.trySet(settings);
-  }
-
   notifyBrightness(level: number): void {
     this.devicePrefs.broadcastBrightness(level);
   }
@@ -350,66 +288,29 @@ export class WebUIServer extends EventEmitter implements WebUIController {
       return;
     }
     const matched = matchRoute(routes, req.method, url.pathname);
-    return matched ? matched.handler({ req, url, params: matched.params, ui: this }) : notFound();
+    if (!matched) return notFound();
+    return matched.handler({ ...this.controllers, req, url, params: matched.params, ui: this });
   }
 
-  // WebUIController surface consumed by the route handlers
   fullState(): StateResponse {
+    const selected = this.dockRegistry.selectedStatus();
     return buildStateResponse({
       snapshot: this.snapshot(),
       activity: this.activity,
       stats: { ...this.stats, uptimeMs: Date.now() - this.startTime },
       mockConfig: this.mockConfig,
-      brightnessOverride: this.brightnessOverride,
+      brightnessOverride: this.devicePrefs.brightnessOverride,
       deviceModels: this.deviceModels,
-      deviceIdentity: this.settingsIdentity.identity(),
-      realDeviceIdentity: this.dockRegistry.selectedStatus()?.realDeviceIdentity,
+      deviceIdentity: selectedDeviceIdentity(this.status.driverMode, this.mockConfig, selected),
+      realDeviceIdentity: selected?.realDeviceIdentity,
       extraKeys: this.extraKeys.selectedConfigs(),
       ...this.devicePrefs.touchStripState(),
       encoders: this.encoders.selected(),
-      logLevel: this.logLevel(),
-      logFilePath: this.logFilePath(),
+      logLevel: this.logging.level(),
+      logFilePath: this.logging.path(),
       multiDeck: this.settings.multiDeck,
       updateInfo: this.updates.info(),
     });
-  }
-
-  /** Persist the multi-deck opt-in and let app.ts push the new cap to DriverManager ('setMultiDeck'). Validated by the route. */
-  setMultiDeck(enabled: boolean): void {
-    this.settings.setMultiDeck(enabled);
-    this.emit('setMultiDeck', enabled);
-  }
-
-  multiDeckEnabled(): boolean {
-    return this.settings.multiDeck;
-  }
-
-  extraKeyConfigFor(deviceKey: string, wireId: number): ExtraKeyConfig | undefined {
-    return this.extraKeys.configFor(deviceKey, wireId);
-  }
-
-  trySetExtraKey(wireId: number, update: ExtraKeyUpdate): ReqError | null {
-    return this.extraKeys.trySet(wireId, update, this.selectedDock);
-  }
-
-  tryRunExtraKeyNow(wireId: number): ReqError | null {
-    return this.extraKeys.tryRunNow(wireId, this.selectedDock);
-  }
-
-  tryPreviewExtraKey(wireId: number): ExtraKeyPreviewResponse | ReqError {
-    return this.extraKeys.tryPreview(wireId, this.imageChannel.selectedWidgetPaint(wireId));
-  }
-
-  pluginsInfo(): Promise<PluginsInfo> {
-    return this.extraKeys.pluginsInfo();
-  }
-
-  getOrCreateDeviceIdentity(deviceKey: string, defaultMdnsName: string): DeviceIdentitySettings {
-    return this.settingsIdentity.getOrCreateIdentity(deviceKey, defaultMdnsName);
-  }
-
-  updateDeviceMdnsName(deviceKey: string, name: string): boolean {
-    return this.settingsIdentity.updateMdnsName(deviceKey, name);
   }
 
   applyMockConfig(parsed: Partial<MockDeviceConfig>): MockDeviceConfig {
@@ -424,48 +325,5 @@ export class WebUIServer extends EventEmitter implements WebUIController {
     if (invalid) return invalid;
     this.emit('keyPress', n);
     return null;
-  }
-
-  /** Persisted brightness for the dock at `index` — re-pushed after Elgato pairing (app.ts) so a device boots at its saved level. */
-  brightnessForDock(index: number): number {
-    return this.dockRegistry.brightnessFor(index);
-  }
-
-  getSettingsJson(): string {
-    return this.settingsIdentity.json();
-  }
-
-  openSettingsFile(): Promise<void> {
-    return this.settingsIdentity.openFile();
-  }
-
-  applySettingsJson(raw: string): void {
-    this.settingsIdentity.applyJson(raw);
-  }
-
-  trySetLogLevel(level: unknown): ReqError | null {
-    return this.logging.trySetLevel(level);
-  }
-
-  logLevel(): string {
-    return this.logging.level();
-  }
-
-  logFilePath(): string {
-    return this.logging.path();
-  }
-
-  openLogsFolder(): Promise<void> {
-    return this.logging.openFolder();
-  }
-
-  buildDiagnosticsReport(opt: DiagnosticsOptions = {}): Promise<string> {
-    return this.logging.buildReport(opt);
-  }
-
-  async saveDiagnosticsReport(opt: DiagnosticsOptions = {}): Promise<string | null> {
-    const path = await this.logging.saveReport(opt);
-    if (path === null) this.log('error', 'webui', 'diagnostics save failed');
-    return path;
   }
 }

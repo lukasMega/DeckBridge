@@ -1,23 +1,19 @@
+import type { ExtraKeyConfig, DockStatus } from '../../shared/types.js';
 import type {
-  EncoderSettings,
-  ExtraKeyConfig,
-  DockStatus,
-  TouchStripMode,
-} from '../../shared/types.js';
-import type {
-  ExtraKeyPreviewResponse,
   ExtraKeyPressAction,
   MockDeviceConfig,
-  PluginsInfo,
   StateResponse,
-  DeviceOverridesView,
   WsBroadcast,
 } from '../contract.js';
 import type { OverrideChangeKind } from '../../devices/model-overrides.js';
-import type { DiagnosticsOptions } from './diagnostics.js';
-import type { PersistedSettings } from './persisted-settings.js';
+import type { PersistedSettings } from '../../infra/settings.js';
 import type { UpdateController } from './update-controller.js';
 import type { DevicePrefsController } from './device-prefs-controller.js';
+import type { EncodersController } from './encoders-controller.js';
+import type { ExtraKeysController } from './extra-keys-controller.js';
+import type { ModelOverridesController } from './model-overrides-controller.js';
+import type { LoggingController } from './logging-controller.js';
+import type { SettingsFileController } from './settings-file-controller.js';
 // Canonical LogLevel lives in logger.ts (derived from cli.ts's LOG_LEVELS);
 // re-exported below so existing web-server call sites keep importing from types.js.
 import type { LogLevel } from '../../shared/logger.js';
@@ -67,6 +63,9 @@ export interface ControllerHost {
   selectedDeviceKey(): string;
   selectedDock(): number;
   selectedDockStatus(): DockStatus | undefined;
+  trySelectDock(index: unknown): ReqError | null;
+  /** Re-push the selected dock's per-device values (none are in the status snapshot). */
+  broadcastSelected(): void;
 }
 
 // Wire DTOs shared with the browser live in the `web-contract` leaf
@@ -83,44 +82,33 @@ export type {
   LogEntry,
   StatusSnapshot,
   StateResponse,
-  DeviceOverridesView,
 } from '../contract.js';
 
 export type { LogLevel };
 
+/** The per-concern WebUI controllers; route handlers get them on RouteContext. */
+export interface WebUIControllers {
+  readonly settings: PersistedSettings;
+  readonly devicePrefs: DevicePrefsController;
+  readonly encoders: EncodersController;
+  readonly extraKeys: ExtraKeysController;
+  readonly modelOverrides: ModelOverridesController;
+  readonly logging: LoggingController;
+  readonly updates: UpdateController;
+  readonly settingsFile: SettingsFileController;
+}
+
 /**
- * The narrow view of {@link WebUIServer} that HTTP route handlers depend on.
- * Handlers import this interface — never the concrete class — so routing stays
- * decoupled from server internals and there is no runtime import cycle.
+ * What route handlers need from {@link WebUIServer} itself: state that spans
+ * controllers (full state, dock selection, mock device). Handlers import this
+ * interface — never the concrete class — so there is no runtime import cycle.
  */
 export interface WebUIController {
   emit(event: string, ...args: unknown[]): boolean;
-  readonly brightnessOverride: boolean;
   readonly selectedDock: number;
   fullState(): StateResponse;
   notifyBrightness(level: number): void;
-  notifyBrightnessOverride(enabled: boolean): void;
-  setBrowserLocale(locale: string): void;
   applyMockConfig(parsed: Partial<MockDeviceConfig>): MockDeviceConfig;
   trySimulateKey(n: number): ReqError | null;
   trySelectDock(index: unknown): ReqError | null;
-  trySetExtraKey(wireId: number, update: ExtraKeyUpdate): ReqError | null;
-  tryRunExtraKeyNow(wireId: number): ReqError | null;
-  tryPreviewExtraKey(wireId: number): ExtraKeyPreviewResponse | ReqError;
-  pluginsInfo(): Promise<PluginsInfo>;
-  trySetTouchStripMode(mode: TouchStripMode): ReqError | null;
-  trySetEncoders(settings: EncoderSettings): ReqError | null;
-  getSettingsJson(): string;
-  applySettingsJson(raw: string): void;
-  openSettingsFile(): Promise<void>;
-  trySetLogLevel(level: unknown): ReqError | null;
-  setMultiDeck(enabled: boolean): void;
-  openLogsFolder(): Promise<void>;
-  deviceOverridesView(modelId?: unknown): DeviceOverridesView | ReqError;
-  trySetModelOverride(modelId: unknown, overrides: unknown): ReqError | OverrideChange;
-  tryResetModelOverride(modelId: unknown): ReqError | OverrideChange;
-  buildDiagnosticsReport(opt?: DiagnosticsOptions): Promise<string>;
-  saveDiagnosticsReport(opt?: DiagnosticsOptions): Promise<string | null>;
-  readonly updates: UpdateController;
-  readonly devicePrefs: DevicePrefsController;
 }

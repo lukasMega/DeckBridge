@@ -1,48 +1,35 @@
-import {
-  isTapFeedback,
-  loadSettings,
-  saveSettings,
-  settingsPath,
-} from '../../infra/settings-store.js';
-import type {
-  Settings,
-  DeviceIdentitySettings,
-  PersistedLogLevel,
-} from '../../infra/settings-store.js';
-import { isLogLevel } from '../../shared/cli.js';
-import { openPathInOS } from '../../infra/os-utils.ts';
+import { isTapFeedback, loadSettings, saveSettings, settingsPath } from './settings-store.js';
+import type { Settings, DeviceIdentitySettings, PersistedLogLevel } from './settings-store.js';
+import { isLogLevel } from '../shared/cli.js';
+import { openPathInOS } from './os-utils.ts';
 import {
   getOrCreateDeviceIdentity as getOrCreateDeviceIdentityPure,
   isStableDeviceKey,
-} from '../../infra/device-identity.js';
-import { isModelOverridesRecord, validateModelOverride } from '../../devices/model-overrides.js';
-import { findModelById } from '../../devices/registry.js';
-import type { DeviceModelOverride } from '../../devices/driver.js';
-import { log } from '../../shared/logger.js';
+} from './device-identity.js';
+import { isModelOverridesRecord, validateModelOverride } from '../devices/model-overrides.js';
+import { findModelById } from '../devices/registry.js';
+import type { DeviceModelOverride } from '../devices/driver.js';
+import { log } from '../shared/logger.js';
 import {
   isExtraKeyConfig,
+  isOneOf,
   isTouchStripRepaintMs,
   normalizeExtraKeyConfig,
   TOUCH_STRIP_MODES,
   TOUCH_STRIP_UPLOADS,
   TOUCH_STRIP_ZONE_FITS,
-} from '../../shared/types.js';
-import type { DockStatus, ExtraKeyConfig } from '../../shared/types.js';
-import type { UpdateState } from '../../infra/update-check.js';
-import { encoderSettingsError } from './encoders-controller.js';
+} from '../shared/types.js';
+import type { DockStatus, ExtraKeyConfig } from '../shared/types.js';
+import type { UpdateState } from './update-check.js';
+import { encoderSettingsError } from '../shared/encoder-settings.js';
+import { DockPrefs, defaultRuntimePrefs } from './dock-prefs.js';
+import type { DockPrefsStore } from './dock-prefs.js';
 
 /** Shape guard for a persisted/imported extraKeys map (wire id → config). */
 function isExtraKeysRecord(v: unknown): v is Record<string, ExtraKeyConfig> {
   if (typeof v !== 'object' || v === null || Array.isArray(v)) return false;
   return Object.values(v).every(isExtraKeyConfig);
 }
-
-const isTouchStripMode = (v: unknown): boolean =>
-  (TOUCH_STRIP_MODES as readonly unknown[]).includes(v);
-const isTouchStripZoneFit = (v: unknown): boolean =>
-  (TOUCH_STRIP_ZONE_FITS as readonly unknown[]).includes(v);
-const isTouchStripUpload = (v: unknown): boolean =>
-  (TOUCH_STRIP_UPLOADS as readonly unknown[]).includes(v);
 
 /** Optional per-device fields shared by stripInvalidDeviceSettings and
  *  hasValidDeviceSettings — one table so both stay in sync and neither trips
@@ -51,10 +38,10 @@ const OPTIONAL_DEVICE_FIELDS: ReadonlyArray<{ key: string; isValid: (v: unknown)
   { key: 'brightness', isValid: (v) => typeof v === 'number' },
   { key: 'brightnessOverride', isValid: (v) => typeof v === 'boolean' },
   { key: 'extraKeys', isValid: isExtraKeysRecord },
-  { key: 'touchStripMode', isValid: isTouchStripMode },
+  { key: 'touchStripMode', isValid: (v) => isOneOf(TOUCH_STRIP_MODES, v) },
   { key: 'touchStripRepaintMs', isValid: isTouchStripRepaintMs },
-  { key: 'touchStripZoneFit', isValid: isTouchStripZoneFit },
-  { key: 'touchStripUpload', isValid: isTouchStripUpload },
+  { key: 'touchStripZoneFit', isValid: (v) => isOneOf(TOUCH_STRIP_ZONE_FITS, v) },
+  { key: 'touchStripUpload', isValid: (v) => isOneOf(TOUCH_STRIP_UPLOADS, v) },
   { key: 'encoders', isValid: (v) => !encoderSettingsError(v) },
   { key: 'tapFeedback', isValid: isTapFeedback },
 ];
@@ -139,12 +126,11 @@ export function sanitizeModelOverrides(raw: unknown): Record<string, DeviceModel
   return out;
 }
 
-/** The settings.json slice owned by the WebUI server: the selected dock and the
- *  per-physical-device entries (identity + brightness/override/
- *  extraKeys), keyed by device-identity.ts's deviceKeyFor(). This class is the
- *  sole settings.json writer — DriverManager/DeviceSession resolve identities
- *  through getOrCreateIdentity() rather than touching disk themselves. */
-export class PersistedSettings {
+/** settings.json in memory: process-wide prefs and the per-physical-device
+ *  entries (identity + brightness/override/extraKeys/…), keyed by
+ *  device-identity.ts's deviceKeyFor(). Loaded once by app.ts before anything
+ *  else reads it; this class is the sole settings.json writer. */
+export class PersistedSettings implements DockPrefsStore {
   selectedDock = 0;
   /** undefined = not persisted; the level then comes from the CLI flag / env /
    *  the build-time default (see PersistedLogLevel). */
@@ -162,6 +148,8 @@ export class PersistedSettings {
    *  deliberately absent from current()/persist(), since the browser resends it
    *  on every load. */
   browserLocale: string | undefined = undefined;
+  /** Prefs of a dock with no settings.json entry (mock mode, pre-connect). Never persisted. */
+  readonly runtime = defaultRuntimePrefs();
   private devices: DeviceIdentitySettings[] = [];
   private modelOverrides: Record<string, DeviceModelOverride> = {};
   /** Serializes writes: overlapping write+rename pairs could land out of order. */
@@ -170,7 +158,7 @@ export class PersistedSettings {
 
   /** `cacheRoot` is overridable so tests never touch the real user cache dir;
    *  production passes undefined and settings-store.ts picks the default. */
-  constructor(private readonly cacheRoot?: string) {}
+  constructor(readonly cacheRoot?: string) {}
 
   /** Apply settings.json (if present) over the defaults. Malformed device
    *  entries are dropped (same guard as import). Legacy path-keyed entries are
@@ -228,6 +216,11 @@ export class PersistedSettings {
   async openFile(): Promise<void> {
     await this.queueSave(this.current());
     await openPathInOS(settingsPath(this.cacheRoot));
+  }
+
+  /** Live per-device prefs of the dock with `deviceKey` ('' = no entry → runtime fallback). */
+  for(deviceKey: string): DockPrefs {
+    return new DockPrefs(this, deviceKey);
   }
 
   entryFor(deviceKey: string): DeviceIdentitySettings | undefined {

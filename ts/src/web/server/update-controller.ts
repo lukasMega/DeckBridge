@@ -5,21 +5,16 @@
 import { createUpdateChecker } from '../../infra/update-check.js';
 import type { UpdateChecker, UpdateInfo } from '../../infra/update-check.js';
 import { fetchLatestRelease } from '../../infra/update-check.js';
-import { DailyPingController } from './daily-ping-controller.js';
-import type { DockStatus } from '../../shared/types.js';
 import type { ControllerHost } from './types.js';
 
 export class UpdateController {
   private readonly checker: UpdateChecker;
-  private readonly dailyPing: DailyPingController;
   private onChange?: (info: UpdateInfo) => void;
 
   constructor(
     private readonly host: ControllerHost,
     currentVersion: string,
-    docks: () => DockStatus[],
   ) {
-    this.dailyPing = new DailyPingController(host, currentVersion, docks);
     this.checker = createUpdateChecker({
       currentVersion,
       isEnabled: () => this.host.settings.updateCheck ?? true,
@@ -40,13 +35,6 @@ export class UpdateController {
   private notify(info: UpdateInfo): void {
     this.host.broadcast('update', info);
     this.onChange?.(info);
-  }
-
-  /** Daily usage ping, on its own timer (app.ts): the dwell gate rejects a
-   *  session's first minutes, which on the shared 24 h interval cost a whole
-   *  day. Never throws — dailyPing must not break anything. */
-  async ping(): Promise<void> {
-    await this.dailyPing.ping();
   }
 
   /** Runs the (possibly cached) check and broadcasts the result. */

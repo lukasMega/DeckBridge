@@ -29,6 +29,8 @@ import type {
   TouchStripMode,
 } from '../src/shared/types.js';
 import type { EncoderOverride } from '../src/main/encoders.js';
+import { DockPrefs, defaultRuntimePrefs } from '../src/infra/dock-prefs.js';
+import type { DeviceIdentitySettings } from '../src/infra/settings-store.js';
 import type { ChildGeometry } from '../src/devices/driver.js';
 import type { DeviceConfig } from '../src/cora/types.js';
 import type { DeviceModel } from '../src/devices/driver.js';
@@ -137,13 +139,26 @@ function testIdentity(model: DeviceModel, deviceKey = 'test-device-key') {
   return generateDeviceIdentity(deviceKey, `${MDNS_SERVICE_NAME} (${model.name})`);
 }
 
+/** Real DockPrefs over one in-memory settings entry. */
+function prefsWith(fields: Partial<DeviceIdentitySettings>) {
+  const entry: DeviceIdentitySettings = { ...testIdentity(DEFAULT_MODEL), ...fields };
+  const store = { entryFor: () => entry, persist: () => undefined, runtime: defaultRuntimePrefs() };
+  return { entry, prefs: new DockPrefs(store, entry.deviceKey) };
+}
+
+const encoderFields = (o?: EncoderOverride): Partial<DeviceIdentitySettings> =>
+  o ? { touchStripMode: o.mode, encoders: o.encoders } : {};
+
 function makeSession(model: DeviceModel = DEFAULT_MODEL, encoderOverride?: EncoderOverride) {
   const server = new FakeServer();
   const childServer = new FakeChildServer();
   const driver = new FakeDriver(model);
   let disconnects = 0;
   let statusChanges = 0;
-  let ignoreElgato = false;
+  const { entry, prefs } = prefsWith({
+    brightnessOverride: false,
+    ...encoderFields(encoderOverride),
+  });
   const imageCalls: { keyIndex: number; format: string }[] = [];
   const session = new DeviceSession({
     identity: sessionIdentity(1, testIdentity(model)),
@@ -160,8 +175,7 @@ function makeSession(model: DeviceModel = DEFAULT_MODEL, encoderOverride?: Encod
     onImage: (keyIndex, _data, format) => {
       imageCalls.push({ keyIndex, format });
     },
-    ignoreElgatoBrightness: () => ignoreElgato,
-    encoderOverride: () => encoderOverride,
+    prefs,
   });
   return {
     server,
@@ -172,7 +186,7 @@ function makeSession(model: DeviceModel = DEFAULT_MODEL, encoderOverride?: Encod
     getDisconnects: () => disconnects,
     getStatusChanges: () => statusChanges,
     setIgnoreElgato: (v: boolean) => {
-      ignoreElgato = v;
+      entry.brightnessOverride = v;
     },
   };
 }
@@ -195,10 +209,11 @@ function makeStripSession(
     driver: driver as unknown as WorkerHidDriver,
     model,
     onDisconnect: () => undefined,
-    extraKeyConfigFor: (wireId) => configs[wireId],
-    touchStripMode: mode,
-    encoderOverride: () => encoderOverride,
-    tapFeedback: () => ({ flash: true, placeholder: false }),
+    prefs: prefsWith({
+      touchStripMode: mode,
+      extraKeys: configs,
+      ...encoderFields(encoderOverride),
+    }).prefs,
   });
   return { session, driver, childServer };
 }
@@ -488,6 +503,7 @@ await test('a driver stripWrite reaches the session onStripWrite', async () => {
     model,
     onDisconnect: () => undefined,
     onStripWrite: (wireId, jpeg, full) => writes.push([wireId, jpeg, full]),
+    prefs: prefsWith({}).prefs,
   });
   await session.start();
   const bytes = new Uint8Array([0xff, 0xd8]);

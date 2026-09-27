@@ -218,7 +218,7 @@ notice is the report's first line. `--out <path>` overrides the default cache-di
 
 ## HID device detection
 
-At startup `app.ts` constructs a `DriverManager` ([driver-manager.ts](../ts/src/main/driver-manager.ts)); its `probeAndOpen()` iterates `DEVICE_MODELS` in priority order and returns the first device that opens. `driver-manager.ts` delegates two concerns: `driver-manager-discovery.ts` resolves mode/deps and runs the default presence check, and `driver-manager-pacing.ts` decides when to retry.
+At startup `app.ts` constructs a `DriverManager` ([driver-manager.ts](../ts/src/main/driver-manager.ts)); its `probeAndOpen()` iterates `DEVICE_MODELS` in priority order and returns the first device that opens. `driver-manager.ts` delegates three concerns: `driver-manager-discovery.ts` (`HidDiscovery`) scans on the scan worker and answers presence/path/serial queries from that snapshot, `worker-pool.ts` (`WorkerPool`) keeps the parked worker of a failed open for reuse (shared with the extras), and `driver-manager-pacing.ts` decides when to retry. Tests inject fakes of the first two through `DriverManagerDeps`.
 
 The retry interval is **adaptive, not fixed**. `ProbePacer` starts at `HID_POLL_INTERVAL_MS` (3 s) and keeps it while the scan stays fast; once a scan takes `SLOW_ENUMERATE_MS` (250 ms) or longer, `pacer.note()` doubles the delay on each subsequent slow scan, capped at `RECONNECT_BACKOFF_MAX_MS` (30 s). The enumeration timing comes from the HID scan worker, so a machine where `hid_enumerate` is pathologically slow backs off instead of spending its main thread on a scan every 3 s.
 
@@ -417,17 +417,21 @@ reconnect) persist to `<cacheRoot>/settings.json` (same cache root as the extrac
   per-unit bit available). `settings-store.ts` migrates a pre-fix bare `usb:355499441494` entry to the
   293S-suffixed key on load, once, only when unambiguous (exactly one bare entry, no suffixed entry
   yet) — so an existing 293S user's identity survives the fix instead of forcing an Elgato re-pair.
-- [web/server/persisted-settings.ts](../ts/src/web/server/persisted-settings.ts) — `PersistedSettings`
-  is the sole `settings.json` writer: shape-guards on load and on JSON import (a corrupt `extraKeys`
-  map is stripped rather than dropping the whole identity entry, which would otherwise force an
-  Elgato re-pair), `getOrCreateIdentity()`, `importDevices()`, `syncDockBrightness()`.
-- [web/server/settings-identity-controller.ts](../ts/src/web/server/settings-identity-controller.ts)
-  — the `WebUIServer`-facing glue: identity for the Elgato-app-facing fields, settings-import, and
-  pushing an imported brightness/override/extra-key change live to the running driver + WS clients.
+- [settings.ts](../ts/src/infra/settings.ts) — `PersistedSettings` is the sole `settings.json`
+  writer, loaded once by `app.ts` before the WebUI (also under `--no-webui`): shape-guards on load
+  and on JSON import (a corrupt `extraKeys` map is stripped rather than dropping the whole identity
+  entry, which would otherwise force an Elgato re-pair), `getOrCreateIdentity()`, `importDevices()`,
+  `syncDockBrightness()`.
+- [dock-prefs.ts](../ts/src/infra/dock-prefs.ts) — `settings.for(deviceKey)` returns a `DockPrefs`:
+  one dock's brightness override, extra keys, strip mode, knobs and tap feedback, read and written
+  live. A dock with no entry (mock mode, pre-connect) gets a runtime-only fallback, never persisted.
+- [web/server/settings-file-controller.ts](../ts/src/web/server/settings-file-controller.ts) — the
+  WebUI's file surface: export, open in the OS, and settings import, pushing an imported
+  brightness/override/extra-key change live to the running driver + WS clients.
 
-Nothing outside these four files touches `settings.json` directly — `DriverManager`/
-`ExtraDockCoordinator`/`DeviceSession` go through `webui.getOrCreateDeviceIdentity()` /
-`webui.extraKeyConfigFor()`.
+Nothing outside these files touches `settings.json` directly — `DriverManager`/`PrimaryDock`/
+`ExtraDockCoordinator`/`DeviceSession` get the `PersistedSettings` instance from `app.ts` and read
+per-device values through `DockPrefs`.
 
 ## WebUI (`http://localhost:3000`)
 
@@ -452,15 +456,17 @@ A `<select id="model-select">` dropdown switches the advertised model in **mock 
 
 ### `WebUIServer` collaborators
 
-`web-ui-server.ts` composes several focused collaborators rather than doing everything itself:
+`web-ui-server.ts` composes several focused collaborators rather than doing everything itself.
+Route handlers get the per-concern controllers on `RouteContext` directly; `WebUIController` is only
+the state that spans them (full state, dock selection, mock device):
 
 | Class | File | Owns |
 |---|---|---|
 | `ActivityBuffers` | `web/server/activity-buffers.ts` | ring buffers for logs/CORA-comm/key-events; batches comm entries on the `COMM_BROADCAST_FLUSH_MS` timer (see [Concurrency model](#concurrency-model)); broadcast skipped in `__SIMPLE_ONLY__` builds, ring buffers still fill |
 | `DockRegistry` | `web/server/dock-registry.ts` | the live per-dock `DockStatus[]` list + which dock is selected |
 | `ImageChannel` | `web/server/image-channel.ts` | per-dock CORA image cache + the single live WS image channel (mirrors only the selected dock; instant dock-switch without an Elgato re-push) |
-| `PersistedSettings` | `web/server/persisted-settings.ts` | `settings.json` — see [Settings persistence](#settings-persistence) |
-| `SettingsIdentityController` | `web/server/settings-identity-controller.ts` | identity/import glue over `PersistedSettings` |
+| `PersistedSettings` | `infra/settings.ts` (passed in by `app.ts`) | `settings.json` — see [Settings persistence](#settings-persistence) |
+| `SettingsFileController` | `web/server/settings-file-controller.ts` | settings export/import + the multi-deck toggle |
 | `ExtraKeysController` | `web/server/extra-keys-controller.ts` | extra-key widget config — see [Plugins and extra-key widgets](#plugins-and-extra-key-widgets) |
 | `MockConfig` (`defaultMockConfig`/`mergeMockConfig`) | `web/server/mock-config.ts` | the mock driver's spoofed identity fields, validated for the WebUI's mock-config editor |
 | `WebRequestGuard` (`isAllowedWebRequest`) | `web/server/web-request-guard.ts` | Host/Origin check against `localhost`/`127.0.0.1`/`[::1]` (+ this machine's own interface IPs when `--bind 0.0.0.0`) — DNS-rebinding/CSRF hardening for the WebUI, independent of the CORA ports' lack of auth (see [Network exposure](#network-exposure)) |
@@ -712,7 +718,8 @@ graph LR
     DM["driver-manager.ts<br/>coordinator · probe · mode switch"]
     DM_P["driver-manager-primary.ts<br/>PrimaryDock (identity, brightness,<br/>saved-frame replay)"]
     DM_E["driver-manager-extras.ts<br/>ExtraDockCoordinator (scan · claim HID paths)"]
-    DM_D["driver-manager-discovery.ts<br/>mode/deps resolve · presence check"]
+    DM_D["driver-manager-discovery.ts<br/>HidDiscovery (scan · present · paths · serial)"]
+    DM_POOL["worker-pool.ts<br/>WorkerPool (parked workers of failed opens)"]
     DM_PACE["driver-manager-pacing.ts<br/>ProbePacer (adaptive retry backoff)"]
     DS["device-session.ts<br/>DeviceSession · applyModelToServers<br/>wireCommonDriverEvents"]
     DID["device-identity.ts<br/>deviceKeyFor · generateMacAddress/Serial (pure)"]
@@ -766,8 +773,9 @@ graph LR
     DM --> DM_P
     DM --> DM_E
     DM --> DM_D
+    DM --> DM_POOL
     DM --> DM_PACE
-    DM --> HOST_SCAN
+    DM_D --> HOST_SCAN
     HOST_SCAN -.->|"postMessage (thread boundary)"| WRK_SCAN
     HOST_SCAN --> PROTO_SCAN
     WRK_SCAN --> PROTO_SCAN
@@ -853,7 +861,7 @@ deckbridge/
 │   │   ├── platform/     ← tcp.ts · buffer-shim.ts · events-shim.ts (shims over txiki globals)
 │   │   ├── assets/       ← generated splash JPEGs + font atlas
 │   │   └── web/          ← contract.ts (wire DTOs) · server/ (WebUIServer + activity-buffers/
-│   │                          dock-registry/image-channel/persisted-settings/…) · client/ (browser UI)
+│   │                          dock-registry/image-channel/*-controller/…) · client/ (browser UI)
 │   └── dist/             ← bundle.js (~560 kB, workers + native dylibs inlined)
 │                            · hid-worker.js · hid-scan-worker.js · plugin-worker.js (debug copies)
 ├── rust/

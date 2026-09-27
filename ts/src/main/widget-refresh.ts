@@ -2,7 +2,6 @@
 // across keys and docks, and the forced refresh a device tap asks for.
 import { runCommand } from '../infra/os-utils.js';
 import { log } from '../shared/logger.js';
-import { DEFAULT_TAP_FEEDBACK, type TapFeedback } from '../infra/settings-store.js';
 
 /** Runs a shell command, resolving its stdout (os-utils runCommand; injectable for tests). */
 export type WidgetCommandRunner = (cmd: string, timeoutMs: number) => Promise<string>;
@@ -200,19 +199,4 @@ export function refreshCommand(
   const run = (): Promise<string> => seams.run(cmd, timeoutMs);
   forceFetch(commandCache, cmd, run, onUpdate, onSettled, seams.now);
   return true;
-}
-
-// Tap feedback source for extra docks. DeviceSession's coordinator
-// (driver-manager-extras.ts) is at its line cap, so app.ts registers the
-// settings lookup here instead of threading one more dep through it.
-
-let tapFeedbackSource = (_deviceKey: string): TapFeedback => DEFAULT_TAP_FEEDBACK;
-
-export function setTapFeedbackSource(source: (deviceKey: string) => TapFeedback): void {
-  tapFeedbackSource = source;
-}
-
-/** A dock's tap-refresh feedback flags (settings.json `tapFeedback`), read live. */
-export function tapFeedbackFor(deviceKey: string): TapFeedback {
-  return tapFeedbackSource(deviceKey);
 }

@@ -4,7 +4,6 @@
 import { log } from '../shared/logger.js';
 import { DEFAULT_BRIGHTNESS } from '../shared/types.js';
 import type {
-  ExtraKeyConfig,
   ImageEvent,
   DockStatus,
   TouchInputEvent,
@@ -13,10 +12,9 @@ import type {
 } from '../shared/types.js';
 import { sendSplashImages } from '../shared/splash-sender.js';
 import { ExtraKeyWidgets } from './extra-keys.js';
-import { tapFeedbackFor } from './widget-refresh.js';
-import type { TapFeedback } from '../infra/settings-store.js';
+import type { DockPrefs } from '../infra/dock-prefs.js';
 import type { WidgetPaint } from '../shared/widget-layout.js';
-import { EncoderActions, type EncoderOverride } from './encoders.js';
+import { EncoderActions } from './encoders.js';
 import { ExtraKeyActions } from './command-actions.js';
 import type { DeviceModel, DeviceModelOverride } from '../devices/driver.js';
 import type { ElgatoServer } from '../cora/primary-server.js';
@@ -66,30 +64,13 @@ export interface DeviceSessionOptions {
    *  queued (USB first). Opaque: the coordinator routes it to the WebUI's
    *  selected-dock preview. */
   onImage?: (keyIndex: number, data: Buffer, format: 'jpeg' | 'bmp') => void;
-  /** True while this dock's "ignore brightness from Elgato app" override is
-   *  on — the Elgato-app brightness for this dock is dropped then. Resolved per
-   *  dock (by deviceKey) by the coordinator, not a global flag. */
-  ignoreElgatoBrightness?: () => boolean;
-  /** This dock's persisted brightness (from settings.json via
-   *  getOrCreateDeviceIdentity) — seeded onto the driver in start(). */
-  initialBrightness?: number;
-  /** This dock's persisted extra-key config (by device wire id), resolved per
-   *  press by the coordinator (deviceKey captured there) — see extra-keys.ts. */
-  extraKeyConfigFor?: (wireId: number) => ExtraKeyConfig | undefined;
-  /** This dock's persisted touch-strip mode. Default DEFAULT_TOUCH_STRIP_MODE. */
-  touchStripMode?: TouchStripMode;
-  /** This dock's 'deckbridge-repaint' interval, read live each widget tick. */
-  touchStripRepaintMs?: () => number;
+  /** This dock's per-device settings, read live (brightness override, extra keys,
+   *  strip mode, knobs, tap feedback). */
+  prefs: DockPrefs;
   /** WebUI mirror of each widget paint (null = cleared). */
   onWidgetPaint?: (wireId: number, paint: WidgetPaint | null) => void;
   /** WebUI mirror of each touch-strip upload that reached the device. */
   onStripWrite?: (wireId: number, jpeg: Uint8Array, full: boolean) => void;
-  /** This dock's strip mode + encoder settings, resolved per dial event (deviceKey
-   *  captured by the coordinator). Absent = knobs always reach the Elgato app. */
-  encoderOverride?: () => EncoderOverride | undefined;
-  /** This dock's tap-refresh feedback flags, read per tap. Default: the settings
-   *  lookup app.ts registered (widget-refresh.ts setTapFeedbackSource). */
-  tapFeedback?: () => TapFeedback;
 }
 
 export class DeviceSession {
@@ -106,9 +87,8 @@ export class DeviceSession {
   private readonly onAction?: (message: string) => void;
   private readonly onStripWrite?: (wireId: number, jpeg: Uint8Array, full: boolean) => void;
   private readonly onImage?: (keyIndex: number, data: Buffer, format: 'jpeg' | 'bmp') => void;
-  private readonly ignoreElgatoBrightness?: () => boolean;
+  private readonly prefs: DockPrefs;
   private readonly initialBrightness?: number;
-  private readonly extraKeyConfigFor?: (wireId: number) => ExtraKeyConfig | undefined;
   private readonly extraKeys: ExtraKeyWidgets;
   private readonly encoders: EncoderActions;
   private readonly extraKeyActions: ExtraKeyActions;
@@ -127,25 +107,25 @@ export class DeviceSession {
     this.onAction = opts.onAction;
     this.onStripWrite = opts.onStripWrite;
     this.onImage = opts.onImage;
-    this.ignoreElgatoBrightness = opts.ignoreElgatoBrightness;
-    this.initialBrightness = opts.initialBrightness;
-    this.brightness = opts.initialBrightness ?? DEFAULT_BRIGHTNESS;
-    this.extraKeyConfigFor = opts.extraKeyConfigFor;
+    const prefs = opts.prefs;
+    this.prefs = prefs;
+    this.initialBrightness = prefs.brightness();
+    this.brightness = this.initialBrightness ?? DEFAULT_BRIGHTNESS;
     this.extraKeys = new ExtraKeyWidgets(
       this.driver,
-      (wireId) => this.extraKeyConfigFor?.(wireId),
-      opts.touchStripMode,
-      opts.touchStripRepaintMs,
+      (wireId) => prefs.extraKeyConfig(wireId),
+      prefs.stripMode(),
+      () => prefs.repaintMs(),
       opts.onWidgetPaint,
-      { tapFeedback: opts.tapFeedback ?? (() => tapFeedbackFor(opts.identity.deviceKey)) },
+      { tapFeedback: () => prefs.tapFeedback() },
     );
     this.encoders = new EncoderActions(
-      () => opts.encoderOverride?.(),
+      () => ({ mode: prefs.stripMode(), encoders: prefs.encoders() }),
       undefined,
       (index) => knobRefresh(this.extraKeys, this.model, index),
     );
     this.extraKeyActions = new ExtraKeyActions(
-      (wireId) => this.extraKeyConfigFor?.(wireId),
+      (wireId) => prefs.extraKeyConfig(wireId),
       undefined,
       (wireId) => this.extraKeys.refresh(wireId),
     );
@@ -278,7 +258,7 @@ export class DeviceSession {
       },
     );
     this.childServer.on('brightness', (level: number) => {
-      if (this.ignoreElgatoBrightness?.()) {
+      if (this.prefs.brightnessOverride()) {
         log('debug', this.model.id, `brightness ${level} from Elgato ignored (override on)`);
         return;
       }
