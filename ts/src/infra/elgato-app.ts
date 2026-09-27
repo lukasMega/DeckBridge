@@ -126,7 +126,7 @@ async function quit(
 }
 
 /** Each attempt either starts a process/opens a URL (may throw — missing
- *  binary, no permission) or is skipped in favour of the next one. */
+ *  binary, no permission) or is skipped in favor of the next one. */
 function launchAttempts(deps: Deps, platform: string): Array<() => Promise<void> | void> {
   if (platform === MAC_OS) {
     return [
