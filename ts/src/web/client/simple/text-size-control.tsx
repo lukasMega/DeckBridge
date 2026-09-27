@@ -8,12 +8,14 @@ import type {
   ExtraKeyPreview,
   ExtraKeyPreviewResponse,
   ExtraKeyTextSize,
+  ExtraKeyTextStyle,
   ExtraKeyWidget,
   ExtraKeyWrap,
 } from '../ui-types.js';
 import { postJson } from '../ui-api.js';
 import { useDismiss } from '../ui-hooks.js';
 import { postExtraKey } from './extra-keys-popovers.js';
+import { TextStyleButton } from './text-style-popover.js';
 
 // Mirrors EXTRA_KEY_TEXT_SIZES / WRAPPABLE_WIDGETS (extra-key-config.ts).
 const MIN_STEP = -2;
@@ -25,6 +27,11 @@ const WRAP_OPTIONS: ReadonlyArray<{ value: ExtraKeyWrap | 'off'; label: string }
   { value: 'words', label: 'Wrap: words' },
   { value: 'chars', label: 'Wrap: characters' },
 ];
+
+/** Post `cfg` with `patch` merged into its text style. */
+function postStyle(wireId: number, cfg: ExtraKeyCfg, patch: ExtraKeyTextStyle): void {
+  postExtraKey(wireId, cfg, { style: { ...cfg.style, ...patch } });
+}
 
 function sizeLabel(size: ExtraKeyTextSize): string {
   if (size === 'fit') return 'Fit';
@@ -71,7 +78,7 @@ function SizePicker({
   );
 
   const pick = (size: ExtraKeyTextSize): void => {
-    postExtraKey(wireId, cfg, { ...cfg, textSize: size });
+    postStyle(wireId, cfg, { textSize: size });
     onClose();
   };
 
@@ -115,10 +122,9 @@ export function TextSizeControl({
   const [showPicker, setShowPicker] = useState(false);
   const anchorRef = useRef<HTMLDivElement | null>(null);
   if (!cfg || cfg.widget === 'none') return null;
-  const size = cfg.textSize ?? 0;
+  const size = cfg.style?.textSize ?? 0;
   const step = size === 'fit' ? 0 : size;
-  const post = (next: ExtraKeyTextSize): void =>
-    postExtraKey(wireId, cfg, { ...cfg, textSize: next });
+  const post = (next: ExtraKeyTextSize): void => postStyle(wireId, cfg, { textSize: next });
   return (
     <div class="xkey-display">
       <div
@@ -185,6 +191,7 @@ export function TextSizeControl({
         )}
       </div>
       {WRAPPABLE.includes(cfg.widget) && <WrapSelect wireId={wireId} label={label} cfg={cfg} />}
+      <TextStyleButton wireId={wireId} label={label} cfg={cfg} />
     </div>
   );
 }
@@ -197,12 +204,12 @@ function WrapSelect({
   const handleWrap = (e: Event): void => {
     const value = (e.target as HTMLSelectElement).value;
     const wrap = value === 'off' ? undefined : (value as ExtraKeyWrap);
-    postExtraKey(wireId, cfg, { textSize: cfg.textSize, wrap });
+    postStyle(wireId, cfg, { wrap });
   };
   return (
     <select
       class="input xkey-select xkey-wrap"
-      value={cfg.wrap ?? 'off'}
+      value={cfg.style?.wrap ?? 'off'}
       aria-label={`${label} line wrapping`}
       title="Split lines too wide for the display"
       onChange={handleWrap}

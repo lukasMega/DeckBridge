@@ -1,7 +1,7 @@
 import assert from 'tjs:assert';
 import { ImageChannel } from '../src/web/server/image-channel.js';
 import type { Broadcaster } from '../src/web/server/broadcaster.js';
-import type { WidgetPaint } from '../src/widget-render.js';
+import type { WidgetPaint } from '../src/widget-layout.js';
 import { widgetPreviews } from '../src/web/server/widget-preview.js';
 import { EXTRA_KEY_TEXT_SIZES } from '../src/types.js';
 import { test, summary } from './helpers/harness.js';
@@ -38,6 +38,7 @@ const PAINT: WidgetPaint = {
   width: 85,
   height: 85,
   clipped: false,
+  style: {},
   zone: false,
 };
 const extraKeyEvents = (sent: Sent[]) =>

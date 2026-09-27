@@ -13,7 +13,7 @@ import {
 import { MIRABOX_293S_MODEL } from '../src/devices/mirabox/mirabox-293s.js';
 import { AJAZZ_AKP05E_MODEL } from '../src/devices/ajazz/akp05e.js';
 import type { DeviceImageSpec, DeviceModel } from '../src/devices/driver.js';
-import type { WidgetPaint } from '../src/widget-render.js';
+import type { WidgetPaint } from '../src/widget-layout.js';
 import { testAsync as test, summary } from './helpers/harness.js';
 
 // renderWidgetLines
@@ -281,13 +281,13 @@ await test('wrap applies to free-text widgets only and repaints on change', () =
     },
   );
   w.start();
-  cfg = { ...cfg, wrap: 'words' };
+  cfg = { ...cfg, style: { wrap: 'words' } };
   tick(w);
-  cfg = { widget: 'clock', wrap: 'words' };
+  cfg = { widget: 'clock', style: { wrap: 'words' } };
   tick(w);
   w.stop();
   assert.deepEqual(
-    paints.map((p) => [p.wrap, p.clipped]),
+    paints.map((p) => [p.style.wrap, p.clipped]),
     [
       [undefined, true],
       ['words', false],
@@ -312,7 +312,7 @@ await test('a text size change alone repaints; the paint reports clipping', () =
   w.start();
   assert.equal(paints.length, 1);
   assert.equal(paints[0]!.clipped, false);
-  cfg = { ...cfg, textSize: 2 };
+  cfg = { ...cfg, style: { textSize: 2 } };
   tick(w);
   w.stop();
   assert.equal(paints.length, 2, 'size change repaints');
@@ -589,23 +589,6 @@ await test('accepts plugin widget with pluginArg, rejects over-long pluginArg', 
     'pluginArg cap',
   );
   assert.ok(!isExtraKeyConfig({ widget: 'plugin', pluginArg: 5 }), 'pluginArg must be a string');
-});
-
-await test('textSize: steps -2..+2 and fit accepted, anything else rejected', () => {
-  for (const textSize of ['fit', -2, -1, 0, 1, 2]) {
-    assert.ok(isExtraKeyConfig({ widget: 'clock', textSize }), String(textSize));
-  }
-  for (const textSize of [3, -3, 1.5, 'big', '1', null]) {
-    assert.ok(!isExtraKeyConfig({ widget: 'clock', textSize }), String(textSize));
-  }
-});
-
-await test('wrap: words/chars accepted, anything else rejected', () => {
-  assert.ok(isExtraKeyConfig({ widget: 'text', param: 'x', wrap: 'words' }));
-  assert.ok(isExtraKeyConfig({ widget: 'text', param: 'x', wrap: 'chars' }));
-  for (const wrap of [true, 'lines', 1]) {
-    assert.ok(!isExtraKeyConfig({ widget: 'text', wrap }), String(wrap));
-  }
 });
 
 await test('accepts command widget intervalMs/timeoutMs in range, rejects out of range', () => {

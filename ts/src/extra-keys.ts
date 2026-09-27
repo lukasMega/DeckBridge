@@ -1,7 +1,8 @@
 // Display widgets for physical keys outside the emulated CORA grid
 // (model.keyMap.extraKeys — 293S 6th column, wire ids 16/17/18). Those keys have no
 // switches, so each shows a server-rendered value: clock, date, text, or weather.
-import { composeLayout, layoutWidget, type WidgetLine, type WidgetPaint } from './widget-render.js';
+import { layoutWidget, type WidgetLine, type WidgetPaint } from './widget-layout.js';
+import { composeLayout } from './widget-raster.js';
 import { DEFAULT_TAP_FEEDBACK, type TapFeedback } from './settings-store.js';
 import {
   COMMAND_INTERVAL_DEFAULT_MS,
@@ -9,10 +10,9 @@ import {
   DEFAULT_TOUCH_STRIP_MODE,
   PLUS_TOUCH_WIDTH,
   TOUCH_STRIP_REPAINT_DEFAULT_MS,
-  WRAPPABLE_WIDGETS,
+  effectiveTextStyle,
   type ExtraKeyConfig,
-  type ExtraKeyTextSize,
-  type ExtraKeyWrap,
+  type ExtraKeyTextStyle,
   type TouchStripMode,
   type TouchWindowRegion,
 } from './types.js';
@@ -143,10 +143,7 @@ export class ExtraKeyWidgets {
   /** Placeholder feedback: wire ids showing '…' until their tap refresh settles. */
   private refreshing = new Map<number, ReturnType<typeof setTimeout>>();
   /** What each key shows now — the lines a tap flash paints inverted. */
-  private shown = new Map<
-    number,
-    { lines: WidgetLine[]; textSize: ExtraKeyTextSize; wrap?: ExtraKeyWrap }
-  >();
+  private shown = new Map<number, { lines: WidgetLine[]; style: ExtraKeyTextStyle }>();
   private flashTimers = new Set<ReturnType<typeof setTimeout>>();
 
   constructor(
@@ -272,8 +269,8 @@ export class ExtraKeyWidgets {
   private flash(wireId: number): void {
     if (!this.driver.sendSplashImage) return;
     const spec = this.widgetDisplay(wireId)?.image ?? splashSpec(this.driver.model);
-    const { lines, textSize, wrap } = this.shown.get(wireId) ?? { lines: [], textSize: 0 };
-    const layout = layoutWidget(lines, spec.width, spec.height, textSize, wrap);
+    const { lines, style } = this.shown.get(wireId) ?? { lines: [], style: {} };
+    const layout = layoutWidget(lines, spec.width, spec.height, style);
     this.driver.sendSplashImage(wireId, composeLayout(layout, spec.width, spec.height, true), spec);
     const timer = setTimeout(() => {
       this.flashTimers.delete(timer);
@@ -328,12 +325,11 @@ export class ExtraKeyWidgets {
       const cfg = this.configFor(wireId);
       if (this.leftToApp(wireId, cfg, now.getTime())) continue;
       const lines = this.linesFor(wireId, cfg, now);
-      const textSize = cfg?.textSize ?? 0;
-      const wrap = cfg && WRAPPABLE_WIDGETS.includes(cfg.widget) ? cfg.wrap : undefined;
-      const sig = lines === null ? '' : JSON.stringify([textSize, wrap, lines]);
+      const style = effectiveTextStyle(cfg);
+      const sig = lines === null ? '' : JSON.stringify([style, lines]);
       if (this.lastPainted.get(wireId) === sig) continue;
       this.lastPainted.set(wireId, sig);
-      this.paint(wireId, lines, textSize, wrap);
+      this.paint(wireId, lines, style);
     }
   }
 
@@ -348,12 +344,7 @@ export class ExtraKeyWidgets {
     return true;
   }
 
-  private paint(
-    wireId: number,
-    lines: WidgetLine[] | null,
-    textSize: ExtraKeyTextSize,
-    wrap: ExtraKeyWrap | undefined,
-  ): void {
+  private paint(wireId: number, lines: WidgetLine[] | null, style: ExtraKeyTextStyle): void {
     const display = this.widgetDisplay(wireId);
     if (lines === null) {
       this.shown.delete(wireId);
@@ -362,15 +353,15 @@ export class ExtraKeyWidgets {
       return;
     }
     if (!this.driver.sendSplashImage) return;
-    this.shown.set(wireId, { lines, textSize, wrap });
+    this.shown.set(wireId, { lines, style });
     const spec = display?.image ?? splashSpec(this.driver.model);
     const { width, height } = spec;
-    const layout = layoutWidget(lines, width, height, textSize, wrap);
+    const layout = layoutWidget(lines, width, height, style);
     const bmp = composeLayout(layout, width, height);
     this.driver.sendSplashImage(wireId, bmp, spec);
     const zone = display !== undefined;
     const clipped = layout.clipped;
-    this.onWidgetPaint?.(wireId, { bmp, lines, width, height, clipped, wrap, zone });
+    this.onWidgetPaint?.(wireId, { bmp, lines, width, height, clipped, style, zone });
     if (this.mode === 'deckbridge-repaint' && display) this.widgetOnZone.add(wireId);
   }
 

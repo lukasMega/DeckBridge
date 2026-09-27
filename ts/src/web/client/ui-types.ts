@@ -4,9 +4,8 @@
 import type {
   ClientApp,
   ExtraKeyPressAction,
-  ExtraKeyTextSize,
+  ExtraKeyTextStyle,
   ExtraKeyWidget,
-  ExtraKeyWrap,
   WidgetDisplayInfo,
 } from '../contract.js';
 
@@ -19,6 +18,7 @@ export type {
   ExtraKeyPreviewResponse,
   ExtraKeyPressAction,
   ExtraKeyTextSize,
+  ExtraKeyTextStyle,
   ExtraKeyWidget,
   ExtraKeyWrap,
   PluginStatus,
@@ -66,8 +66,7 @@ export interface ExtraKeyCfg {
   intervalMs?: number; // command/plugin widget: re-run/poll interval
   timeoutMs?: number; // command widget only: kill-timeout
   pluginArg?: string; // plugin widget only: per-key argument (ctx.param)
-  textSize?: ExtraKeyTextSize; // font-ladder step or 'fit'; absent = 0
-  wrap?: ExtraKeyWrap; // text/command/plugin: split long lines; absent = off
+  style?: ExtraKeyTextStyle; // how the text is drawn; absent = every default
   pressCommand?: string; // pressable extra keys only: shell command run on press
   pressAction?: ExtraKeyPressAction; // pressable extra keys only; absent = see effectivePressAction
 }
