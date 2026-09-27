@@ -17,6 +17,6 @@
   ],
   "project": ["src/**/*.ts", "src/**/*.tsx", "test/**/*.ts", "scripts/*.mjs"],
   "ignoreBinaries": ["mise"],
-  "ignoreDependencies": ["tjs", "@typescript/native-preview"],
+  "ignoreDependencies": ["tjs"],
   "ignoreExportsUsedInFile": true
 }

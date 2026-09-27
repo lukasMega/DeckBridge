@@ -1423,14 +1423,15 @@ async function checkWrapSelect(stub: Stub, card: Element): Promise<void> {
   await act(() => patch({ extraKeys: { '10': { widget: 'command', param: 'date' } } }));
 }
 
+const box = (left: number, top: number, w: number, h: number) => ({
+  left,
+  top,
+  right: left + w,
+  bottom: top + h,
+});
+
 function checkPopoverShift(): void {
   const app = { left: 0, right: 500, top: 0, bottom: 800 };
-  const box = (left: number, top: number, w: number, h: number) => ({
-    left,
-    top,
-    right: left + w,
-    bottom: top + h,
-  });
   const anchor = box(20, 600, 40, 30);
   check(
     JSON.stringify(popoverShift(box(-210, 100, 270, 494), anchor, app)) ===
@@ -1708,6 +1709,38 @@ async function checkStripZoneTabs(stub: Stub, strip: Element): Promise<void> {
   await act(() => patch({ status, extraKeys: { '10': configs['10'] } }));
 }
 
+async function checkSideKeyCards(sideKeys: Element): Promise<void> {
+  const cards = [...sideKeys.querySelectorAll('.xkey-card')];
+  check(
+    cards.length === 2 &&
+      cards.every(
+        (card) =>
+          card.querySelector('.xkey-tile') !== null &&
+          card.querySelector('.xkey-press-label:last-of-type')?.textContent === 'On press',
+      ),
+    'Every side-key card has a preview tile and an on-press line',
+  );
+  check(
+    cards[0]!.querySelector('.xkey-value') === null &&
+      cards[1]!.querySelector('.xkey-value:not(.xkey-wide)') !== null &&
+      cards[1]!.querySelector('.xkey-config-btn') !== null,
+    'Value line shows only for widgets with a value, beside its settings button',
+  );
+  check(
+    sideKeys.querySelector('.xkey-grid-head') === null &&
+      cards.map((card) => card.querySelector('.xkey-tile-empty')?.textContent).join(',') ===
+        'Top,Bottom',
+    'Empty preview tiles show the key position',
+  );
+  await act(() => patch({ extraKeyImages: { '10': 'Qk0=' } }));
+  check(
+    cards[1]!.querySelector<HTMLImageElement>('.xkey-tile img')?.src ===
+      'data:image/bmp;base64,Qk0=' && cards[0]!.querySelector('.xkey-tile img') === null,
+    'Side-key tile shows the live widget image',
+  );
+  await act(() => patch({ extraKeyImages: {} }));
+}
+
 async function runSideKeysPanel(): Promise<void> {
   const stub = stubFetch((url) =>
     url === '/api/extra-key/preview'
@@ -1745,35 +1778,7 @@ async function runSideKeysPanel(): Promise<void> {
     await checkTextSize(stub);
     await checkPressAction(stub);
 
-    const cards = [...section('Side keys').querySelectorAll('.xkey-card')];
-    check(
-      cards.length === 2 &&
-        cards.every(
-          (card) =>
-            card.querySelector('.xkey-tile') !== null &&
-            card.querySelector('.xkey-press-label:last-of-type')?.textContent === 'On press',
-        ),
-      'Every side-key card has a preview tile and an on-press line',
-    );
-    check(
-      cards[0]!.querySelector('.xkey-value') === null &&
-        cards[1]!.querySelector('.xkey-value:not(.xkey-wide)') !== null &&
-        cards[1]!.querySelector('.xkey-config-btn') !== null,
-      'Value line shows only for widgets with a value, beside its settings button',
-    );
-    check(
-      section('Side keys').querySelector('.xkey-grid-head') === null &&
-        cards.map((card) => card.querySelector('.xkey-tile-empty')?.textContent).join(',') ===
-          'Top,Bottom',
-      'Empty preview tiles show the key position',
-    );
-    await act(() => patch({ extraKeyImages: { '10': 'Qk0=' } }));
-    check(
-      cards[1]!.querySelector<HTMLImageElement>('.xkey-tile img')?.src ===
-        'data:image/bmp;base64,Qk0=' && cards[0]!.querySelector('.xkey-tile img') === null,
-      'Side-key tile shows the live widget image',
-    );
-    await act(() => patch({ extraKeyImages: {} }));
+    await checkSideKeyCards(section('Side keys'));
     check(
       rows('Touch strip').length === 0 &&
         section('Touch strip').textContent.includes('DeckBridge widgets are off') &&
