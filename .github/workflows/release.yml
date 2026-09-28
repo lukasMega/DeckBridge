@@ -335,28 +335,53 @@ jobs:
           Remove-Item Env:DECKBRIDGE_MOCK -ErrorAction SilentlyContinue
           $proc = Start-Process -FilePath ".\$relay" -PassThru `
             -RedirectStandardOutput "smoke-stdout.log" -RedirectStandardError "smoke-stderr.log"
-          $ready = $false
+          $webuiPort = $null
+          for ($i = 0; $i -lt 60; $i++) {
+            $match = Select-String -Path "smoke-stdout.log" `
+              -Pattern 'WebUI: http://localhost:(\d+)' -AllMatches `
+              -ErrorAction SilentlyContinue | Select-Object -First 1
+            if ($match) { $webuiPort = [int]$match.Matches[0].Groups[1].Value; break }
+            if ($proc.HasExited) {
+              Write-Host "FAIL: process exited before logging WebUI port"
+              Get-Content smoke-stdout.log -ErrorAction SilentlyContinue
+              Get-Content smoke-stderr.log -ErrorAction SilentlyContinue
+              exit 1
+            }
+            Start-Sleep -Milliseconds 250
+          }
+          if (-not $webuiPort) {
+            Write-Host "FAIL: WebUI port never appeared in startup log"
+            Get-Content smoke-stdout.log -ErrorAction SilentlyContinue
+            Get-Content smoke-stderr.log -ErrorAction SilentlyContinue
+            Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
+            exit 1
+          }
+          $baseUrl = "http://localhost:$webuiPort"
+          $state = $null
           for ($i = 0; $i -lt 60; $i++) {
             try {
-              $resp = Invoke-WebRequest -Uri "http://localhost:3000" -UseBasicParsing -TimeoutSec 2
-              if ($resp.StatusCode -eq 200) { $ready = $true; break }
+              $state = Invoke-RestMethod -Uri "$baseUrl/api/state" -TimeoutSec 2
+              break
             } catch {}
             if ($proc.HasExited) {
-              Write-Host "FAIL: process exited before becoming ready"
+              Write-Host "FAIL: process exited before API became ready"
+              Get-Content smoke-stdout.log -ErrorAction SilentlyContinue
               Get-Content smoke-stderr.log -ErrorAction SilentlyContinue
               exit 1
             }
             Start-Sleep -Milliseconds 500
           }
-          if (-not $ready) {
-            Write-Host "FAIL: WebUI never responded with 200 after 30s"
+          if ($null -eq $state) {
+            Write-Host "FAIL: /api/state never responded"
+            Get-Content smoke-stdout.log -ErrorAction SilentlyContinue
             Get-Content smoke-stderr.log -ErrorAction SilentlyContinue
             Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
             exit 1
           }
-          $state = Invoke-RestMethod -Uri "http://localhost:3000/api/state" -TimeoutSec 2
           if ($state.driverMode -ne "real") { throw "release started outside real mode" }
-          $mockRoute = Invoke-WebRequest -Method Post -Uri "http://localhost:3000/api/mock/dial" `
+          $resp = Invoke-WebRequest -Uri $baseUrl -UseBasicParsing -TimeoutSec 2
+          if ($resp.StatusCode -ne 200) { throw "WebUI shell returned $($resp.StatusCode)" }
+          $mockRoute = Invoke-WebRequest -Method Post -Uri "$baseUrl/api/mock/dial" `
             -UseBasicParsing -SkipHttpErrorCheck -TimeoutSec 2
           if ($mockRoute.StatusCode -ne 404) { throw "mock route present in release" }
           Write-Host "Smoke test OK: real WebUI responded 200; mock route absent"
