@@ -110,7 +110,7 @@ test('findModel returns each supported AKP05 PID', () => {
 
 test('AKP05E has its proven 2x5 output mapping', () => {
   assert.equal(AJAZZ_AKP05E_MODEL.protocol, 'ajazz-akp05');
-  assert.equal(AJAZZ_AKP05E_MODEL.driverKind, 'custom');
+  assert.equal(AJAZZ_AKP05E_MODEL.protocol, 'ajazz-akp05');
   assert.deepEqual(modelToChildGeometry(AJAZZ_AKP05E_MODEL), {
     rows: 2,
     columns: 5,
@@ -132,7 +132,7 @@ test('AKP05E has its proven 2x5 output mapping', () => {
 
 test('AKP05 inherits AKP05E output protocol', () => {
   assert.equal(AJAZZ_AKP05_MODEL.protocol, AJAZZ_AKP05E_MODEL.protocol);
-  assert.equal(AJAZZ_AKP05_MODEL.driverKind, AJAZZ_AKP05E_MODEL.driverKind);
+  assert.equal(AJAZZ_AKP05_MODEL.protocol, AJAZZ_AKP05E_MODEL.protocol);
   assert.deepEqual(AJAZZ_AKP05_MODEL.image, AJAZZ_AKP05E_MODEL.image);
   assert.deepEqual(AJAZZ_AKP05_MODEL.keyMap, AJAZZ_AKP05E_MODEL.keyMap);
 });
@@ -186,7 +186,7 @@ test('Ajazz AKP153 rev.2 models mirror the 293V3 protocol and wire spec', () => 
   for (const model of [AJAZZ_AKP153E_REV2_MODEL, AJAZZ_AKP153R_REV2_MODEL]) {
     assert.equal(model.usbVendorId, 0x0300);
     assert.equal(model.protocol, MIRABOX_293_MODEL.protocol);
-    assert.equal(model.driverKind, MIRABOX_293_MODEL.driverKind);
+    assert.equal(model.protocol, MIRABOX_293_MODEL.protocol);
     assert.equal(model.usagePage, MIRABOX_293_MODEL.usagePage);
     assert.equal(model.usage, MIRABOX_293_MODEL.usage);
     assert.equal(model.keyCount, MIRABOX_293_MODEL.keyCount);
@@ -227,7 +227,7 @@ test('Fifine D6 models mirror the 293V3 image/keyMap/cora/splash spec', () => {
     assert.equal(model.usbVendorId, 0x3142);
     assert.equal(model.vendor, 'fifine');
     assert.equal(model.protocol, MIRABOX_293_MODEL.protocol);
-    assert.equal(model.driverKind, MIRABOX_293_MODEL.driverKind);
+    assert.equal(model.protocol, MIRABOX_293_MODEL.protocol);
     assert.equal(model.usagePage, MIRABOX_293_MODEL.usagePage);
     assert.equal(model.usage, MIRABOX_293_MODEL.usage);
     assert.equal(model.keyCount, MIRABOX_293_MODEL.keyCount);
@@ -257,7 +257,7 @@ test('Fifine D6 models share every wire field except packetSize', () => {
 test('Fifine D6 models use the v3 wire behaviour (press+release, STP after image)', () => {
   for (const model of [FIFINE_D6_MODEL, FIFINE_D6_REV2_MODEL]) {
     assert.equal(model.protocol, 'mirabox-cora');
-    assert.equal(model.driverKind, 'mirabox');
+    assert.equal(model.protocol.startsWith('mirabox-'), true);
     assert.equal(model.wire.inSize, 512);
     assert.equal(model.wire.heartbeatMs, 8000);
     assert.equal(model.wire.synthesizeKeyUp, false);
@@ -326,7 +326,7 @@ for (const { model, vid, pid, id } of V1_CLONES) {
 test('akp153-v1-clones mirror the 293S image/wire/keyMap/cora/splash spec', () => {
   for (const { model } of V1_CLONES) {
     assert.equal(model.protocol, MIRABOX_293S_MODEL.protocol);
-    assert.equal(model.driverKind, MIRABOX_293S_MODEL.driverKind);
+    assert.equal(model.protocol, MIRABOX_293S_MODEL.protocol);
     assert.equal(model.usagePage, MIRABOX_293S_MODEL.usagePage);
     assert.equal(model.usage, MIRABOX_293S_MODEL.usage);
     assert.equal(model.keyCount, MIRABOX_293S_MODEL.keyCount);
@@ -696,7 +696,7 @@ test('every model declares positive wire sizes', () => {
 // Mirabox quirks. On a mirabox model an omission is not a default but a missed decision
 // (no STP after image, or a key that never releases). The type can't tell those apart.
 test('every mirabox model states both v1/v3 wire quirks explicitly', () => {
-  for (const model of DEVICE_MODELS.filter((m) => m.driverKind === 'mirabox')) {
+  for (const model of DEVICE_MODELS.filter((m) => m.protocol.startsWith('mirabox-'))) {
     assert.equal(typeof model.wire.synthesizeKeyUp, 'boolean', `${model.id}: synthesizeKeyUp`);
     assert.equal(typeof model.wire.sendStpAfterImage, 'boolean', `${model.id}: sendStpAfterImage`);
   }

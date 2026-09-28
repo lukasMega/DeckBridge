@@ -35,5 +35,4 @@ export const MINI_MODEL: DeviceModel = {
   // Preserves today's behavior: coraProductId() falls back to usbProductIds[0] for Elgato.
   cora: { productId: 0x0063, usePhysicalIdentity: true },
   splash: { transformOverride: { rotate: 90, flipH: true } },
-  driverKind: 'elgato-hid',
 };

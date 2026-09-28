@@ -115,9 +115,10 @@ device. Two further worker types sit outside that loop (HID enumeration and plug
   `hid_read_timeout` key polling). The main thread hands over raw CORA bytes via
   `WorkerHidDriver.renderCoraImage()`; the worker transforms, caches, and writes — so neither the
   transform nor a large upload stalls the CORA ACK loop (P1). A single generic worker
-  (`hid-worker.ts`, proxied by `WorkerHidDriver`) serves every device; its `createDriver()` picks
+  (`hid-worker.ts`, proxied by `WorkerHidDriver`) serves every device; `USB_DRIVERS`
+  ([usb-drivers.ts](../ts/src/devices/usb-drivers.ts)) picks by `model.protocol`:
   `ElgatoHidDriver` (MK.2, Mini), `MiraboxDriver` (293/293S/K1 Pro), or `Akp05Driver`
-  (AJAZZ AKP05/AKP05E, `driverKind: 'custom'`).
+  (AJAZZ AKP05/AKP05E).
 
 The split makes a full profile load fast on **both** sides: the main thread pushes every image to
 the browser immediately while the device updates in parallel on the worker. USB I/O gets a whole
@@ -336,7 +337,7 @@ Full walkthrough: [docs/adding-a-device.md](adding-a-device.md). In short:
 1. Create a `DeviceModel` ([driver.ts](../ts/src/devices/driver.ts)) under `devices/elgato/` or `devices/mirabox/`; most behavior is in the nested specs (`image`, required `wire`, `keyMap`, `cora`, optional `splash`).
 2. Add to `DEVICE_MODELS` in [registry.ts](../ts/src/devices/registry.ts) — list position is probe priority.
 3. Set `usagePage`+`usage` only for a vendor-specific HID interface (all Mirabox use `0xffa0`/`1`); undefined for standard Elgato VID+PID.
-4. Set `driverKind` — `'elgato-hid'`, `'mirabox'`, or `'custom'`; `createDriver()` in [hid-worker.ts](../ts/src/worker/hid-worker.ts) is the single registration point.
+4. Pick the `protocol`: it selects the driver in `USB_DRIVERS` ([usb-drivers.ts](../ts/src/devices/usb-drivers.ts)), the single registration point, and the tunable wire keys in `TUNABLE_WIRE_KEYS` ([driver.ts](../ts/src/devices/driver.ts)).
 5. For a new wire protocol beyond the four variants, add a `DeviceProtocol` literal: Elgato variants implement pack/parse behavior under [protocol/](https://github.com/lukasMega/DeckBridge/tree/main/ts/src/devices/protocol) (in `PROTOCOL_STRATEGY`); packet and input sizes remain model-owned in `wire`. Mirabox variants are driven by `wire` fields in `devices/mirabox/driver.ts`.
 
 ## CORA device capabilities
@@ -869,7 +870,7 @@ deckbridge/
 │   │   │                    · plus-reports.ts · server-base.ts · frame.ts · describe.ts
 │   │   │                    · responses.ts (every CORA reply builder)
 │   │   │                    · image-assembler.ts (gen1/gen2 assembly) · pairing-watchdog.ts · types.ts
-│   │   ├── worker/       ← USB worker (hid-worker.ts, createDriver()) + HID scan worker, their
+│   │   ├── worker/       ← USB worker (hid-worker.ts; drivers via devices/usb-drivers.ts) + HID scan worker, their
 │   │   │                    main-side hosts (*-host.ts) and message protocols (*-protocol.ts)
 │   │   ├── plugin/       ← plugin-widget worker, its supervising host and message protocol
 │   │   ├── transform/    ← worker-side image path: translator.ts (FFI transform) · image-render.ts

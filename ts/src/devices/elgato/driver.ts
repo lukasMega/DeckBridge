@@ -19,8 +19,8 @@ export class ElgatoHidDriver extends HidDeviceBase {
   readonly model: DeviceModel;
   private readonly strategy: ProtocolStrategy;
   private lastKeyState: boolean[] = [];
-  deviceSerial: string | undefined = undefined;
-  deviceFirmware: string | undefined = undefined;
+  serial: string | undefined = undefined;
+  firmware: string | undefined = undefined;
   /** Reused output-report buffer, sized on first sendImage (see sendImage). */
   private _pktScratch: Uint8Array = new Uint8Array(0);
   /** Built on first clearKey, then kept: a gen1 blank is a ~19 KB allocation and
@@ -110,8 +110,8 @@ export class ElgatoHidDriver extends HidDeviceBase {
     const { serial, firmware } = this.strategy.infoReports;
     const buf = new Uint8Array(32);
     try {
-      this.deviceSerial = this._readInfoString(hid, buf, serial) ?? this.deviceSerial;
-      this.deviceFirmware = this._readInfoString(hid, buf, firmware) ?? this.deviceFirmware;
+      this.serial = this._readInfoString(hid, buf, serial) ?? this.serial;
+      this.firmware = this._readInfoString(hid, buf, firmware) ?? this.firmware;
     } catch {
       // Feature report read failure must not abort open()
     }

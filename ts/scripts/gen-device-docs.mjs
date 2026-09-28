@@ -139,13 +139,7 @@ const COLUMNS = {
       key: 'protocol',
       label: 'Protocol',
       description:
-        'Wire protocol family: mirabox-cora (v3, 1024-byte packets, press+release), mirabox-cora-v1 (512-byte, keydown only), elgato-gen1 (BMP, Mini), elgato-gen2 (JPEG, MK.2/XL).',
-    },
-    {
-      key: 'driverKind',
-      label: 'Driver',
-      description:
-        'Which driver the USB worker builds for this model: elgato-hid (MK.2/Mini), mirabox (293/293S/K1 Pro) or custom.',
+        'Wire protocol family: mirabox-cora (v3, 1024-byte packets, press+release), mirabox-cora-v1 (512-byte, keydown only), ajazz-akp05 (AKP05/AKP05E), elgato-gen1 (BMP, Mini), elgato-gen2 (JPEG, MK.2/XL). It also selects the USB driver.',
     },
     {
       key: 'vid',
@@ -411,7 +405,6 @@ function identityCells(m) {
     id: m.id,
     vendor: m.vendor,
     protocol: m.protocol,
-    driverKind: m.driverKind,
     vid: hex(m.usbVendorId),
     pids: m.usbProductIds.map((p) => hex(p)).join(' '),
     usagePage: m.usagePage === undefined ? DASH : hex(m.usagePage),
@@ -614,7 +607,7 @@ function devicesPage(models, notes) {
           ['**USB**', `\`${hex(m.usbVendorId)}\`:${pids}`],
           ['**Keys**', `${m.keyCount} (${m.columns}×${m.rows})${extra}`],
           ['**Panel**', `${m.image.width}×${m.image.height} ${m.image.format.toUpperCase()}`],
-          ['**Protocol**', `\`${m.protocol}\` (${m.driverKind} driver)`],
+          ['**Protocol**', `\`${m.protocol}\``],
           ['**Tested**', escapeCell(testedLabel(note))],
         ],
       ),

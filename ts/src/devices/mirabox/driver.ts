@@ -6,7 +6,6 @@ import { DEFAULT_BRIGHTNESS } from '../../shared/types.js';
 import { CLEAR_ALL_KEYS, HID_REPORT_ID_BYTE } from './protocol.js';
 import type { KeyEvent, KeyState } from '../../shared/types.js';
 import type { DeviceModel } from '../driver.js';
-import { supportsImageBatching } from '../driver.js';
 import {
   CMD_DIS,
   CMD_HAN,
@@ -36,7 +35,7 @@ export class MiraboxDriver extends HidDeviceBase {
   private _chunkScratch: Buffer = Buffer.alloc(0);
   private _writeScratch: Buffer = Buffer.alloc(0);
 
-  constructor(private readonly model: DeviceModel) {
+  constructor(readonly model: DeviceModel) {
     super();
     this.pktSize = model.wire.packetSize;
   }
@@ -168,13 +167,18 @@ export class MiraboxDriver extends HidDeviceBase {
     }
   }
 
-  /** Only enabled 293S-family models may defer per-image STP framing. */
-  beginImageBatch(): void {
-    this.imageBatch =
-      supportsImageBatching(this.model) && this.model.wire.batchImageTransfers === true;
+  /** One STP for every upload in `run`; the worker only calls this when
+   *  imageBatchingEnabled(model). */
+  async batch(run: () => Promise<void>): Promise<void> {
+    this.imageBatch = true;
+    try {
+      await run();
+    } finally {
+      this.endImageBatch();
+    }
   }
 
-  endImageBatch(): void {
+  private endImageBatch(): void {
     this.imageBatch = false;
     if (!this.pendingStp) return;
     this.pendingStp = false;

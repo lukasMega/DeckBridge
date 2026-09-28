@@ -43,10 +43,10 @@ Every field of every model already in the registry, side by side:
 |---|---|---|
 | Device model | `devices/<brand>/<model>.ts` + `devices/registry.ts` | **The single source of truth** — geometry, VID/PID, image spec, wire framing, key map, CORA identity, splash overrides |
 | Wire protocol (only if new) | `devices/protocol/<proto>.ts` + `PROTOCOL_STRATEGY` table | Packet framing for image send + key input parsing |
-| Driver class (only if new pattern) | `devices/elgato/driver.ts` or new file + `driverKind` | HID open/read/write loop |
+| Driver class (only if new pattern) | `devices/elgato/driver.ts` or new file + `USB_DRIVERS` entry | HID open/read/write loop |
 
 Everything else (`translator.ts`, `dock-frames.ts`, `splash-sender.ts`,
-`driver-manager.ts`) reads `model.keyMap` / `image` / `cora` / `splash` / `driverKind`
+`driver-manager.ts`) reads `model.keyMap` / `image` / `cora` / `splash` / `protocol`
 generically — not edited for a config-only device.
 
 ---
@@ -149,8 +149,6 @@ export const ACME_X5_MODEL: DeviceModel = {
   },
 
   // splash: { transformOverride: { rotate: 180 } },  // when splash orientation differs from live
-
-  driverKind: 'elgato-hid',   // 'elgato-hid' | 'mirabox' | 'custom' — see Step 4
 };
 ```
 
@@ -250,17 +248,20 @@ a different VID/PID — just set `protocol: 'elgato-gen2'`).
 
 ## Step 3 — implement the driver
 
-Choose one of three paths, matching the model's `driverKind` to the implementation.
+Choose one of three paths. The model's `protocol` selects the driver (`USB_DRIVERS` in
+`devices/usb-drivers.ts`) and the wire keys users may tune (`TUNABLE_WIRE_KEYS` in
+`devices/driver.ts`).
 
 ### Path A — reuse `ElgatoHidDriver` (gen1 / gen2 compatible)
 
-Set `driverKind: 'elgato-hid'` and `protocol: 'elgato-gen1'`/`'elgato-gen2'`.
+Set `protocol: 'elgato-gen1'`/`'elgato-gen2'`.
 `ElgatoHidDriver` looks up byte-framing from `PROTOCOL_STRATEGY` by `model.protocol` — no
 new driver code. Packet and input report sizes still come from `model.wire`.
 
 ### Path B — new HID packet format, same open/read/write pattern
 
-Set `driverKind: 'elgato-hid'` with a new `protocol`, write the framing functions, and
+Add a new `protocol` (mapped to `ElgatoHidDriver` in `USB_DRIVERS`, `[]` in
+`TUNABLE_WIRE_KEYS`), write the framing functions, and
 **add one `PROTOCOL_STRATEGY` entry** in `devices/protocol/index.ts`:
 
 ```typescript
@@ -322,8 +323,7 @@ export const PROTOCOL_STRATEGY: Partial<Record<DeviceProtocol, ProtocolStrategy>
 
 If the device has a fundamentally different communication pattern (different handshake,
 heartbeat, multi-step init, bulk transfer instead of interrupt, etc.) write a standalone
-driver class, set `driverKind: 'custom'`, and add it to the factory in `hid-worker.ts`
-(Step 5). Reference: `MiraboxDriver` (`ts/src/devices/mirabox/driver.ts`), the most feature-complete
+driver class, add a `protocol` for it, and register it in `USB_DRIVERS` (Step 5). Reference: `MiraboxDriver` (`ts/src/devices/mirabox/driver.ts`), the most feature-complete
 custom driver — it reads wire framing from `model.wire` instead of hardcoding it. Extend
 `HidDeviceBase` (`ts/src/devices/hid-device-base.ts`), the shared base every real driver
 extends: it owns the per-worker lib singleton, the path-only open, the device handle, the
@@ -431,30 +431,25 @@ undocumented.
 
 ---
 
-## Step 5 — wire up `hid-worker.ts` (Path C only)
+## Step 5 — register in `USB_DRIVERS` (Path C only)
 
-`createDriver()` switches on `model.driverKind`. Path A/B (`'elgato-hid'`) need **no
-changes here**; for Path C add a case:
+`USB_DRIVERS` (`devices/usb-drivers.ts`) maps each `DeviceProtocol` to a driver factory;
+the type makes a missing entry a compile error. Path A/B reuse `ElgatoHidDriver`. For
+Path C add your protocol to `DeviceProtocol`, then:
 
 ```typescript
-// ts/src/worker/hid-worker.ts
-import { AcmeDriver } from './devices/acme/acme-driver.js';
+// ts/src/devices/usb-drivers.ts
+import { AcmeDriver } from './acme/acme-driver.js';
 
-type AnyRealDriver = ElgatoHidDriver | MiraboxDriver | AcmeDriver;
-
-function createDriver(model: DeviceModel): AnyRealDriver {
-  switch (model.driverKind) {
-    case 'elgato-hid':
-      return new ElgatoHidDriver(model);
-    case 'mirabox':
-      return new MiraboxDriver(model);
-    case 'custom':
-      return new AcmeDriver(model);   // ← your driverKind: 'custom' branch
-  }
-}
+export const USB_DRIVERS: Record<DeviceProtocol, (model: DeviceModel) => UsbDriver> = {
+  // …
+  'acme-v1': (model) => new AcmeDriver(model),
+};
 ```
 
-Then set `driverKind: 'custom'` on your model.
+Also list the `wire` fields your driver reads in `TUNABLE_WIRE_KEYS`
+(`devices/driver.ts`); the rest are rejected as overrides and left out of the
+Device tuning form.
 
 ---
 
@@ -488,13 +483,13 @@ model's `DeviceModel` here — the registry is the ground truth, and runtime tun
 scaffolding on the way to it. See
 [Device tuning](./troubleshooting.md#device-tuning).
 
-Two `wire` fields are **not** tunable this way on a `driverKind: 'elgato-hid'` model:
-`packetSize` and `inSize` are fixed by the gen1/gen2 protocol, and an override naming
-either is rejected with `wire.<key>: not tunable on <name> — fixed by the <protocol>
-protocol`. A wrong `packetSize` makes the driver chunk short, which the firmware
-discards **silently** — a black panel with no error, which is exactly why this is a
-hard reject rather than a knob. Both stay tunable on Mirabox-family boards (where
-`inSize` is capped at 4096). Setting them in the `DeviceModel` literal below is still
+Only the `wire` fields a protocol's driver reads are tunable (`TUNABLE_WIRE_KEYS` in
+`devices/driver.ts`); an override naming any other is rejected with `wire.<key>: not
+tunable on <name> — fixed by the <protocol> protocol`. Elgato gen1/gen2 tune none:
+a wrong `packetSize` makes the driver chunk short, which the firmware discards
+**silently** — a black panel with no error. AKP05 tunes only `inSize`. Mirabox-family
+boards tune all of them (`inSize` capped at 4096; `batchImageTransfers` on
+`mirabox-cora-v1` only). Setting them in the `DeviceModel` literal below is still
 correct and required; the lock applies to runtime *overrides* only.
 
 :::
@@ -541,7 +536,7 @@ check the other matches.
 [ ] Driver implemented (Path A / B / C); PROTOCOL_STRATEGY entry added (Path B)
 [ ] Model registered in DEVICE_MODELS (registry.ts)
 [ ] device-notes.json entry added + mise run docs-devices re-run (generated device docs)
-[ ] hid-worker.ts createDriver() updated (Path C only)
+[ ] USB_DRIVERS + TUNABLE_WIRE_KEYS entries added (new protocol)
 [ ] mise run beforeCommit passes (format + lint + types + test + compile)
 [ ] Image orientation verified on hardware (image.rotate/flipH/flipV, splash.transformOverride)
 [ ] Key mappings verified on hardware (keyMap.coraToWireImage / wireInputToCora / offsets)

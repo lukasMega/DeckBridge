@@ -14,7 +14,7 @@ export type MainToWorker =
   // enumerates (see HidDeviceBase._openPath).
   // `overrides` is the user's device tuning for this model (settings.json
   // modelOverrides). The whole effective model is deliberately NOT sent: the
-  // worker keeps sourcing driverKind/VID/PID from its own registry, so no
+  // worker keeps sourcing protocol/VID/PID from its own registry, so no
   // override can smuggle in a different driver, and the message stays small.
   | {
       type: 'open';

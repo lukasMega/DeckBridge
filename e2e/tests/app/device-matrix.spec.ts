@@ -82,17 +82,14 @@ test.describe('device matrix', () => {
       const sideKey = d.extraKeys?.[0] ?? 16;
       expect((await api(request, base, `/api/mock/extra-key/${sideKey}`, {})).status).toBe(400);
 
-      // Device tuning lists the model; Elgato HID wire sizes are protocol-fixed.
+      // Device tuning lists the model; protocol-fixed wire sizes are never offered.
       const tuning = (await api<TuningView>(request, base, `/api/device-overrides?modelId=${d.id}`))
         .json;
       expect(tuning.modelId).toBe(d.id);
       expect(tuning.modelName).toBe(d.name);
       const wire = Object.keys(tuning.tunable.wire);
-      if (d.elgatoHid) {
-        expect(wire).not.toContain('packetSize');
-        expect(wire).not.toContain('inSize');
-      } else {
-        expect(wire).toEqual(expect.arrayContaining(['packetSize', 'inSize']));
+      for (const key of ['packetSize', 'inSize'] as const) {
+        expect(wire.includes(key), key).toBe(!d.fixedWireSizes.includes(key));
       }
       expect(tuning.profiles.map((p) => p.id)).toEqual(d.emulations ?? []);
     });

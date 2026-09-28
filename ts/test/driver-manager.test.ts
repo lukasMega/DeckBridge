@@ -1396,7 +1396,7 @@ await test('E1. probe hands the worker the EFFECTIVE model plus the raw override
   // The raw override travels alongside: the worker re-derives the effective model
   // from ITS OWN registry copy, so no override can select a different driver.
   assert.deepEqual(driver!.overrides, override, 'raw override forwarded to the worker');
-  assert.equal(driver!.model.driverKind, firstModel.driverKind, 'driverKind is registry-sourced');
+  assert.equal(driver!.model.protocol, firstModel.protocol, 'protocol is registry-sourced');
   assert.equal(driver!.model.usbVendorId, firstModel.usbVendorId, 'VID is registry-sourced');
 });
 

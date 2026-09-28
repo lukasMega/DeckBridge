@@ -91,7 +91,7 @@ Elgato's own 15-key deck. Driven natively over HID (no CORA emulation of the pan
 | **USB** | `0x0fd9`:`0x0080` `0x006d` `0x00a5` |
 | **Keys** | 15 (5×3) |
 | **Panel** | 72×72 JPEG |
-| **Protocol** | `elgato-gen2` (elgato-hid driver) |
+| **Protocol** | `elgato-gen2` |
 | **Tested** | ✓ tested (macOS, 2026-09-15) |
 
 - Hardware testing with PID 0x0080 confirmed the native 72×72 JPEG passthrough and `image.rotate: 0`. The other accepted PIDs (0x006d and 0x00a5) remain source-derived.
@@ -108,7 +108,7 @@ Elgato's 6-key deck. BMP panel, not JPEG: the app's bitmap is forwarded as-is by
 | **USB** | `0x0fd9`:`0x0063` `0x0090` `0x00b3` `0x00b8` |
 | **Keys** | 6 (3×2) |
 | **Panel** | 80×80 BMP |
-| **Protocol** | `elgato-gen1` (elgato-hid driver) |
+| **Protocol** | `elgato-gen1` |
 | **Tested** | ✓ tested (macOS) |
 
 - BGR pixel order plus a 90° CW rotation, matching the reference 6-key implementation's `rotate + yFlip`.
@@ -128,7 +128,7 @@ The reference v3 board, and the device every other v3 model in this table is der
 | **USB** | `0x6603`:`0x1005` `0x1006` `0x1010` `0x1014` |
 | **Keys** | 15 (5×3) |
 | **Panel** | 112×112 JPEG |
-| **Protocol** | `mirabox-cora` (mirabox driver) |
+| **Protocol** | `mirabox-cora` |
 | **Tested** | ✓ tested (macOS) |
 
 - Four PIDs: 0x1005 is the hardware-verified one; 0x1006 (EN variant) and 0x1010 (v2.5) come from the vendor's own PID tables; 0x1014 is the HSV293SV3 refresh. The last three are untested here.
@@ -145,7 +145,7 @@ The reference v1 board: physically 3×6 = 18 keys, of which the left 5 columns a
 | **USB** | `0x5548`:`0x6670` |
 | **Keys** | 15 (5×3) + 3 extra |
 | **Panel** | 85×85 JPEG |
-| **Protocol** | `mirabox-cora-v1` (mirabox driver) |
+| **Protocol** | `mirabox-cora-v1` |
 | **Tested** | ✓ tested (macOS) |
 
 - Keydown-only firmware — the driver synthesizes the key-up event.
@@ -165,7 +165,7 @@ The reference v1 board: physically 3×6 = 18 keys, of which the left 5 columns a
 | **USB** | `0x6603`:`0x1015` `0x1019` |
 | **Keys** | 6 (3×2) |
 | **Panel** | 64×64 JPEG |
-| **Protocol** | `mirabox-cora` (mirabox driver) |
+| **Protocol** | `mirabox-cora` |
 | **Tested** | ✓ tested (macOS) |
 
 - Report ID 0x04, not the 0x00 the rest of the family uses.
@@ -184,7 +184,7 @@ AJAZZ AKP05E (VID 0x0300, PID 0x3004): ten 112×112 LCD keys in a 2×5 grid, plu
 | **USB** | `0x0300`:`0x3004` |
 | **Keys** | 10 (5×2) |
 | **Panel** | 112×112 JPEG |
-| **Protocol** | `ajazz-akp05` (custom driver) |
+| **Protocol** | `ajazz-akp05` |
 | **Tested** | ✓ tested (macOS, 2026-09-21) |
 
 - Only PID 0x3004 is hardware-tested; the retail AKP05 (0x3006) is registered from opendeck-akp05 evidence. Do not add Pro, Mirabox, or hub siblings without their own evidence packet.
@@ -207,7 +207,7 @@ Retail AJAZZ AKP05 (VID 0x0300, PID 0x3006). It uses the AKP05 dedicated driver,
 | **USB** | `0x0300`:`0x3006` |
 | **Keys** | 10 (5×2) |
 | **Panel** | 112×112 JPEG |
-| **Protocol** | `ajazz-akp05` (custom driver) |
+| **Protocol** | `ajazz-akp05` |
 | **Tested** | — untested |
 
 - VID, PID, vendor HID collection, protocol version 3 and 112×112 JPEG format come from ambiso/opendeck-akp05; the key transform is the AKP05E's (upright keys, 180° splash). DeckBridge hardware has not tested this SKU.
@@ -225,7 +225,7 @@ The Mirabox 293V3 protocol behind VID 0x0300, with hardware-confirmed 95×95 key
 | **USB** | `0x0300`:`0x3010` |
 | **Keys** | 15 (5×3) |
 | **Panel** | 95×95 JPEG |
-| **Protocol** | `mirabox-cora` (mirabox driver) |
+| **Protocol** | `mirabox-cora` |
 | **Tested** | ✓ tested (Windows, 2026-09-15) |
 
 - Issue #67 hardware testing confirmed 95×95 images; inherited 112×112 images were clipped and became centered only after overriding both dimensions to 95.
@@ -243,7 +243,7 @@ The Mirabox 293V3 board behind VID 0x0300, PID 0x3011. Identical to the AKP153E 
 | **USB** | `0x0300`:`0x3011` |
 | **Keys** | 15 (5×3) |
 | **Panel** | 112×112 JPEG |
-| **Protocol** | `mirabox-cora` (mirabox driver) |
+| **Protocol** | `mirabox-cora` |
 | **Tested** | — untested |
 
 - Not hardware-tested; inherits the 293V3's hardware-verified tuning verbatim.
@@ -260,7 +260,7 @@ Rev. 1 of the Fifine AmpliGame D6 (PID 0x0007) — the 293V3 board behind VID 0x
 | **USB** | `0x3142`:`0x0007` |
 | **Keys** | 15 (5×3) |
 | **Panel** | 112×112 JPEG |
-| **Protocol** | `mirabox-cora` (mirabox driver) |
+| **Protocol** | `mirabox-cora` |
 | **Tested** | — untested |
 
 - Not hardware-tested. The 512-byte packet size is inferred, and its own source called it surprising ("Not sure why, but it works with it"). `packetSizeCandidates` lets the HID report descriptor overrule it at open().
@@ -280,7 +280,7 @@ Rev. 2 of the Fifine AmpliGame D6 (PID 0x0060) — the 293V3 board behind VID 0x
 | **USB** | `0x3142`:`0x0060` |
 | **Keys** | 15 (5×3) |
 | **Panel** | 112×112 JPEG |
-| **Protocol** | `mirabox-cora` (mirabox driver) |
+| **Protocol** | `mirabox-cora` |
 | **Tested** | ✓ tested (macOS, 2026-09-11) |
 
 - Hardware-verified on macOS: enumerates via the 0xffa0/1 usage path, all 15 keys render full-bleed, press and release both map correctly.
@@ -301,7 +301,7 @@ A v1 rebadge of the Mirabox 293S board (VID 0x5548, PID 0x6674). Every field is 
 | **USB** | `0x5548`:`0x6674` |
 | **Keys** | 15 (5×3) + 3 extra |
 | **Panel** | 85×85 JPEG |
-| **Protocol** | `mirabox-cora-v1` (mirabox driver) |
+| **Protocol** | `mirabox-cora-v1` |
 | **Tested** | — untested |
 
 - Not hardware-tested; see the 293S for the tuning rationale and its own caveats.
@@ -318,7 +318,7 @@ Rev. 1 of the AKP153E — a v1 rebadge of the Mirabox 293S board (VID 0x0300, PI
 | **USB** | `0x0300`:`0x1010` |
 | **Keys** | 15 (5×3) + 3 extra |
 | **Panel** | 85×85 JPEG |
-| **Protocol** | `mirabox-cora-v1` (mirabox driver) |
+| **Protocol** | `mirabox-cora-v1` |
 | **Tested** | — untested |
 
 - Not hardware-tested; inherits the 293S model verbatim.
@@ -335,7 +335,7 @@ Rev. 1 of the AKP153R — a v1 rebadge of the Mirabox 293S board (VID 0x0300, PI
 | **USB** | `0x0300`:`0x1020` |
 | **Keys** | 15 (5×3) + 3 extra |
 | **Panel** | 85×85 JPEG |
-| **Protocol** | `mirabox-cora-v1` (mirabox driver) |
+| **Protocol** | `mirabox-cora-v1` |
 | **Tested** | — untested |
 
 - Not hardware-tested; inherits the 293S model verbatim.
@@ -352,7 +352,7 @@ A v1 rebadge of the Mirabox 293S board (VID 0x0b00, PID 0x1000).
 | **USB** | `0x0b00`:`0x1000` |
 | **Keys** | 15 (5×3) + 3 extra |
 | **Panel** | 85×85 JPEG |
-| **Protocol** | `mirabox-cora-v1` (mirabox driver) |
+| **Protocol** | `mirabox-cora-v1` |
 | **Tested** | — untested |
 
 - Not hardware-tested; inherits the 293S model verbatim.
@@ -368,7 +368,7 @@ A v1 rebadge of the Mirabox 293S board (VID 0x0c00, PID 0x1000).
 | **USB** | `0x0c00`:`0x1000` |
 | **Keys** | 15 (5×3) + 3 extra |
 | **Panel** | 85×85 JPEG |
-| **Protocol** | `mirabox-cora-v1` (mirabox driver) |
+| **Protocol** | `mirabox-cora-v1` |
 | **Tested** | — untested |
 
 - Not hardware-tested; inherits the 293S model verbatim.
@@ -384,7 +384,7 @@ A v1 rebadge of the Mirabox 293S board (VID 0x0a00, PID 0x1001).
 | **USB** | `0x0a00`:`0x1001` |
 | **Keys** | 15 (5×3) + 3 extra |
 | **Panel** | 85×85 JPEG |
-| **Protocol** | `mirabox-cora-v1` (mirabox driver) |
+| **Protocol** | `mirabox-cora-v1` |
 | **Tested** | — untested |
 
 - Not hardware-tested; inherits the 293S model verbatim.
@@ -400,7 +400,7 @@ A v1 rebadge of the Mirabox 293S board (VID 0x0500, PID 0x1001).
 | **USB** | `0x0500`:`0x1001` |
 | **Keys** | 15 (5×3) + 3 extra |
 | **Panel** | 85×85 JPEG |
-| **Protocol** | `mirabox-cora-v1` (mirabox driver) |
+| **Protocol** | `mirabox-cora-v1` |
 | **Tested** | — untested |
 
 - Not hardware-tested; inherits the 293S model verbatim.

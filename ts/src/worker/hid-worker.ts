@@ -1,16 +1,14 @@
 /** Generic USB HID worker thread entry point.
- *  Instantiates the right driver (Mirabox or Elgato) based on modelId,
+ *  Instantiates the right driver for the model's protocol (USB_DRIVERS),
  *  then bridges its EventEmitter events ↔ postMessage. */
 import type { MainToWorker, WorkerToMain } from './hid-worker-protocol.js';
 import type { KeyEvent, DialEvent, TouchInputEvent } from '../shared/types.js';
 import { DEVICE_MODELS } from '../devices/registry.js';
 import type { DeviceModel, DeviceModelOverride } from '../devices/driver.js';
-import { supportsImageBatching } from '../devices/driver.js';
+import { imageBatchingEnabled } from '../devices/driver.js';
 import { applyModelOverrides, overrideSummary } from '../devices/model-overrides.js';
 import { imageCache } from '../transform/image-cache.js';
-import { ElgatoHidDriver } from '../devices/elgato/driver.js';
-import { MiraboxDriver } from '../devices/mirabox/driver.js';
-import { Akp05Driver } from '../devices/ajazz/akp05-driver.js';
+import { USB_DRIVERS, type UsbDriver } from '../devices/usb-drivers.js';
 import { renderImage, TouchStripCanvas } from '../transform/image-render.js';
 import { transformImageForDevice } from '../transform/translator.js';
 import { setWorkerPost, setLogLevel, info } from '../shared/logger.js';
@@ -24,8 +22,7 @@ setWorkerPost(scope.postMessage.bind(scope));
 
 const post = scope.postMessage.bind(scope);
 
-type AnyRealDriver = ElgatoHidDriver | MiraboxDriver | Akp05Driver;
-let driver: AnyRealDriver | null = null;
+let driver: UsbDriver | null = null;
 let currentModel: DeviceModel | null = null;
 // Registry entry behind currentModel, kept so a live tuning swap ('setOverrides')
 // re-merges from the registry instead of layering on an already-merged model.
@@ -34,20 +31,6 @@ let openRegistryModel: DeviceModel | null = null;
 // The app's whole strip plus the zones DeckBridge widgets own ('setTouchStripMask'):
 // a partial window update lands in place, and masked zones are drawn but never sent.
 const touchCanvas = new TouchStripCanvas();
-
-/** Driver factory keyed on `model.driverKind` — the single touch-point for
- *  registering a new driver implementation (Path C / 'custom' has none yet). */
-function createDriver(model: DeviceModel): AnyRealDriver {
-  switch (model.driverKind) {
-    case 'elgato-hid':
-      return new ElgatoHidDriver(model);
-    case 'mirabox':
-      return new MiraboxDriver(model);
-    case 'custom':
-      if (model.protocol === 'ajazz-akp05') return new Akp05Driver(model);
-      throw new Error(`No driver implementation for custom model: ${model.id}`);
-  }
-}
 
 async function handleOpen(
   modelId: string,
@@ -61,7 +44,7 @@ async function handleOpen(
   }
 
   // Same pure merge the main thread ran, applied on top of OUR registry lookup —
-  // driverKind/VID/PID therefore always come from the registry, never the message.
+  // protocol/VID/PID therefore always come from the registry, never the message.
   const model = applyModelOverrides(registryModel, overrides);
   // A changed image spec must not be served from entries encoded under the old
   // one. The cache key carries a spec revision too (image-render.ts); clearing
@@ -72,7 +55,7 @@ async function handleOpen(
     info('worker', `${model.id} opened with overrides: ${overrideSummary(overrides)}`);
   }
 
-  const d = createDriver(model);
+  const d = USB_DRIVERS[model.protocol](model);
   driver = d;
   currentModel = model;
   openRegistryModel = registryModel;
@@ -90,15 +73,11 @@ async function handleOpen(
 
   try {
     await d.open(hidPath);
-    const serial = d instanceof ElgatoHidDriver ? d.deviceSerial : undefined;
-    let firmware: string | undefined;
-    if (d instanceof ElgatoHidDriver) firmware = d.deviceFirmware;
-    else if (d instanceof Akp05Driver) firmware = d.firmware;
     post({
       type: 'opened',
       ok: true,
-      deviceSerial: serial,
-      deviceFirmware: firmware,
+      deviceSerial: d.serial,
+      deviceFirmware: d.firmware,
       hidPath: d.hidPath,
     });
   } catch (err) {
@@ -222,13 +201,10 @@ let batchTimer: ReturnType<typeof setTimeout> | null = null;
 
 async function handleImageBatch(images: MainToWorker[]): Promise<void> {
   const d = driver;
-  if (!(d instanceof MiraboxDriver)) return;
-  d.beginImageBatch();
-  try {
+  if (!d?.batch) return;
+  await d.batch(async () => {
     for (const msg of images) await handle(msg, true);
-  } finally {
-    d.endImageBatch();
-  }
+  });
   for (const msg of images) {
     if (msg.type === 'image') post({ type: 'imageSent', keyIndex: msg.keyIndex });
   }
@@ -250,8 +226,7 @@ scope.addEventListener('message', (ev: MessageEvent) => {
   const msg = ev.data as MainToWorker;
   if (
     currentModel &&
-    supportsImageBatching(currentModel) &&
-    currentModel.wire.batchImageTransfers === true &&
+    imageBatchingEnabled(currentModel) &&
     (msg.type === 'image' || msg.type === 'imageWithSpec')
   ) {
     pendingImages.push(msg);
