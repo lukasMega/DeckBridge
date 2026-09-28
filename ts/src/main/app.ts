@@ -2,7 +2,7 @@ import { buildTrayState, resolveTrayBin, startTray } from '../infra/tray.js';
 import type { TrayHandle } from '../infra/tray.js';
 import { ElgatoServer } from '../cora/primary-server.js';
 import { ElgatoChildServer } from '../cora/child-server.js';
-import { watchPairing } from '../cora/pairing-watchdog.js';
+import { CoraDock } from './cora-dock.js';
 import { WebUIServer } from '../web/server/index.js';
 import type { MockDeviceConfig } from '../web/server/index.js';
 import { MockDriver } from '../devices/mock.js';
@@ -25,7 +25,6 @@ import { ElgatoAutoRestart, createElgatoAutoRestartDeps } from './elgato-auto-re
 import { getInitialDriverMode } from './driver-manager-deps.js';
 import { macToBytes } from './driver-manager-primary.js';
 import type { SessionServersFactory } from './device-session.js';
-import { startCoraWithRetry } from './cora-startup.js';
 import { isElgatoAppRunning, openPathInOS, platformName } from '../infra/os-utils.ts';
 import { parseCli, userArgs, applyFlagsToEnv, versionText, USAGE_TEXT } from '../shared/cli.js';
 import { runDevicesCommand } from '../cli/devices.js';
@@ -103,7 +102,10 @@ const childServer = new ElgatoChildServer(
   server.deviceConfig,
   false,
 );
-watchPairing(server, childServer, 'dock 0');
+// Composition unit above the server pair: pairing watchdog, applyModel(),
+// startWithRetry() (see cora-dock.ts). DriverManager keeps its own `server`/
+// `childServer` deps for now (Phase 4's later Dock merge folds those in).
+const primaryDock = new CoraDock(server, childServer, 'dock 0');
 
 let shuttingDown = false;
 let tray: TrayHandle | null = null;
@@ -147,10 +149,9 @@ const sessionServersFactory: SessionServersFactory = (identity) => {
     childSerial: identity.childSerial,
   });
   const cs = new ElgatoChildServer(defaultChildGeometry, identity.childPort, s.deviceConfig, false);
-  watchPairing(s, cs, `dock ${identity.index}`);
   s.on('serverLog', ({ level, component: c, message: m }: LogObject) => log(level, c, m));
   cs.on('serverLog', ({ level, component: c, message: m }: LogObject) => log(level, c, m));
-  return { server: s, childServer: cs };
+  return new CoraDock(s, cs, `dock ${identity.index}`);
 };
 
 const driverManager = new DriverManager({
@@ -329,8 +330,7 @@ async function shutdown(): Promise<void> {
   const prev = driverManager.getCurrentDriver();
   if (prev) prev.removeAllListeners();
   await prev?.close().catch(() => undefined);
-  await server.stop().catch(() => undefined);
-  await childServer.stop().catch(() => undefined);
+  await primaryDock.stop();
   await webui.stop().catch(() => undefined);
   tray?.close();
   // Last thing before exit: drain the batched log lines so the shutdown path
@@ -467,13 +467,11 @@ const localIp =
 if (localIp) webui.setLocalIp(localIp);
 
 await step('deckBr', `cora bind :${ELGATO_TCP_PORT}/:${ELGATO_CHILD_PORT}`, () =>
-  startCoraWithRetry({
-    server,
-    childServer,
+  primaryDock.startWithRetry({
     log,
     getShuttingDown: () => shuttingDown,
-    elgatoTcpPort: ELGATO_TCP_PORT,
-    elgatoChildPort: ELGATO_CHILD_PORT,
+    primaryPort: ELGATO_TCP_PORT,
+    childPort: ELGATO_CHILD_PORT,
   }),
 );
 log('info', 'elgato', `primary (Network Dock) listening on ${localIp}:${ELGATO_TCP_PORT}`);

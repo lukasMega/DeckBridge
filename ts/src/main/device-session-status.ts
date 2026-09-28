@@ -157,15 +157,6 @@ export function repaintFrames(driver: DeviceDriver, frames: DockFrames): void {
   for (const [key, { data, format }] of frames) driver.renderCoraImage?.(key, data, format);
 }
 
-/** The CORA server pair for one dock. Built by a SessionServersFactory so this
- *  module compiles against the current ElgatoServer API — the factory (wired in
- *  app.ts) is what constructs the servers with the identity's ports/serials. */
-export interface SessionServers {
-  server: ElgatoServer;
-  childServer: ElgatoChildServer;
-}
-export type SessionServersFactory = (identity: SessionIdentity) => SessionServers;
-
 /** True when the model maps device wire input codes to CORA (MK.2) indices. */
 function hasInputKeyMap(model: DeviceModel): boolean {
   return model.keyMap.wireInputToCora != null || model.keyMap.inputOffset != null;

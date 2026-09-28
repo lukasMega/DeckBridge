@@ -154,7 +154,6 @@ export class ElgatoServer extends CoraServerBase {
     this.keepaliveAckLogWindowStartedAt = 0;
     this.keepaliveAckLogCount = 0;
     this.emitLog('info', 'primary (Network Dock) connected');
-    this.sendKeepalive();
   }
 
   private recordKeepaliveAck(): void {

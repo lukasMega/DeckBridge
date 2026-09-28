@@ -589,117 +589,11 @@ await runTest('opts.dockSerial and opts.childSerial land in deviceConfig', () =>
   assert.equal(s.deviceConfig.childSerialNumber, 'CHILD456ABCDEF');
 });
 
-// startCoraWithRetry (H3)
-
-console.log('\nstartCoraWithRetry');
-
-class FakeCoraServer implements CoraStartable {
-  failuresRemaining: number;
-  startCalls = 0;
-  stopCalls = 0;
-
-  constructor(failuresRemaining: number) {
-    this.failuresRemaining = failuresRemaining;
-  }
-
-  start(): Promise<void> {
-    this.startCalls++;
-    if (this.failuresRemaining > 0) {
-      this.failuresRemaining--;
-      throw new Error('listen EADDRINUSE');
-    }
-    return Promise.resolve();
-  }
-
-  stop(): Promise<void> {
-    this.stopCalls++;
-    return Promise.resolve();
-  }
-}
-
-await runTest('retries on bind failure, logs conflict, and eventually succeeds', async () => {
-  const server2 = new FakeCoraServer(2); // fails twice, then succeeds
-  const childServer2 = new FakeCoraServer(0);
-  const logs: { level: string; component: string; message: string }[] = [];
-
-  await startCoraWithRetry(
-    {
-      server: server2,
-      childServer: childServer2,
-      log: (level, component, message) => logs.push({ level, component, message }),
-      getShuttingDown: () => false,
-      elgatoTcpPort: 5343,
-      elgatoChildPort: 5344,
-    },
-    1, // short retry delay
-  );
-
-  // 2 failed attempts + 1 successful attempt
-  assert.equal(server2.startCalls, 3);
-  assert.equal(childServer2.startCalls, 1, 'childServer only starts after primary succeeds');
-  // stop() called for cleanup after each failed attempt
-  assert.equal(server2.stopCalls, 2);
-  assert.equal(childServer2.stopCalls, 2);
-
-  const errorLogs = logs.filter((l) => l.level === 'error');
-  assert.equal(errorLogs.length, 2, 'one error log per failed attempt');
-  assert.ok(errorLogs[0]!.message.includes('5343/5344'));
-  assert.ok(errorLogs[0]!.message.includes('attempt 1'));
-  assert.ok(errorLogs[1]!.message.includes('attempt 2'));
-});
-
-await runTest('bails immediately if shutdown is already in progress', async () => {
-  const server2 = new FakeCoraServer(5);
-  const childServer2 = new FakeCoraServer(5);
-  const logs: { level: string; component: string; message: string }[] = [];
-
-  await startCoraWithRetry(
-    {
-      server: server2,
-      childServer: childServer2,
-      log: (level, component, message) => logs.push({ level, component, message }),
-      getShuttingDown: () => true,
-      elgatoTcpPort: 5343,
-      elgatoChildPort: 5344,
-    },
-    1,
-  );
-
-  assert.equal(server2.startCalls, 0, 'should not attempt to start once shutting down');
-  assert.equal(logs.length, 0);
-});
-
-// Trigger shutdown after the first failed attempt's retry delay by racing a
-// second invocation that flips the flag once the first attempt has happened.
-await runTest('shuttingDown flag set during wait stops further retries', async () => {
-  const server2 = new FakeCoraServer(10);
-  const childServer2 = new FakeCoraServer(0);
-  let shuttingDown = false;
-
-  const p = startCoraWithRetry(
-    {
-      server: server2,
-      childServer: childServer2,
-      log: () => {},
-      getShuttingDown: () => shuttingDown,
-      elgatoTcpPort: 5343,
-      elgatoChildPort: 5344,
-    },
-    20,
-  );
-
-  // Let the first attempt fail and enter its retry wait, then signal shutdown.
-  await new Promise((r) => setTimeout(r, 5));
-  shuttingDown = true;
-  await p;
-
-  assert.ok(server2.startCalls >= 1 && server2.startCalls < 10, 'stopped retrying after shutdown');
-});
+// startCoraWithRetry (H3) moved to CoraDock.startWithRetry — see cora-dock.test.ts.
 
 // WebUIServer: POST /api/brightness
 
 import { WebUIServer } from '../src/web/server/index.js';
-import { startCoraWithRetry, type CoraStartable } from '../src/main/cora-startup.js';
 import { PersistedSettings } from '../src/infra/settings.js';
 
 /** WebUIServer over settings loaded from `root`, as app.ts loads them before construction. */

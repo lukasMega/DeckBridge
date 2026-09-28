@@ -176,10 +176,12 @@ header instead of stalling the reader.
 ### Startup & error handling
 
 The CORA ports (5343/5344) are protocol-fixed and can't fall back like the WebUI port. If either is
-in use (a second DeckBridge, a real Network Dock, or the ESP32 bridge), `startCoraWithRetry`
-([cora-startup.ts](../ts/src/main/cora-startup.ts)) logs "port in use" to the console + WebUI feed and
-retries every few seconds, keeping the already-started WebUI alive instead of crashing. A shutdown
-signal during the wait still exits cleanly.
+in use (a second DeckBridge, a real Network Dock, or the ESP32 bridge), `CoraDock.startWithRetry()`
+([cora-dock.ts](../ts/src/main/cora-dock.ts)) logs "port in use" to the console + WebUI feed and
+retries every few seconds (unbounded for the primary dock — the port can't fall back, so it keeps
+retrying), keeping the already-started WebUI alive instead of crashing. A shutdown signal during the
+wait still exits cleanly. An extra dock calls the same method with `maxAttempts: 1`: a bind failure
+there throws back to the coordinator's own scan-tick retry loop instead of looping in place.
 
 A global `unhandledrejection` handler (`app.ts`) turns an otherwise-fatal rejection into a graceful
 `shutdown()` (device disconnect handshake, socket teardown, tray kill) rather than a hard-abort with
@@ -344,9 +346,10 @@ The CORA capabilities packet (sent to the Elgato desktop on connect) advertises 
 
 `applyDeviceModel()` in [driver-manager.ts](../ts/src/main/driver-manager.ts) is the entry point for a
 primary-dock model change; it delegates its server-facing half to `applyModelToServers()`
-([device-session.ts](../ts/src/main/device-session.ts)), which is the single implementation shared with
-every extra dock. Each model's `cora`
-spec (`DeviceCoraSpec`) drives it:
+([device-session-status.ts](../ts/src/main/device-session-status.ts)), wrapped as `CoraDock.applyModel()`
+([cora-dock.ts](../ts/src/main/cora-dock.ts)) for every extra dock — one call replacing the
+config/geometry/mDNS/capabilities push sequence below, shared by the primary and every extra. Each
+model's `cora` spec (`DeviceCoraSpec`) drives it:
 
 1. **PID** — `model.cora.productId`. Elgato models use their real USB PID; Mirabox 293/293S advertise `ELGATO_MK2_PID`; K1 Pro advertises the Mini PID (`0x0063`).
 2. **Geometry** — `advertisedGeometry(model)` resolves `model.cora.advertiseAs` through the registry, then derives geometry from that canonical model. Mirabox 293/293S reference `mk2`; K1 Pro references `mini`; Elgato models omit the reference and use their own geometry. No copied geometry constants exist.
@@ -390,12 +393,19 @@ ceiling: it sizes the session-index/CORA-port space, not the user-facing limit.
 A **`DeviceSession`** is a fully self-contained extra dock: its own CORA server pair on ports
 strided by `CORA_PORT_STRIDE` (`5343 + 2·index` / `5344 + 2·index`), its own mDNS advertisement and
 device identity, its own `WorkerHidDriver` (its own worker thread and libhidapi handle), and its own
-`ExtraKeyWidgets` scheduler. It shares `applyModelToServers()` and `wireCommonDriverEvents()` with
-the primary dock so the CORA identity/geometry push and key-dispatch wiring have one implementation
-each. Extras have no WebUI grid/tray/saved-frame-replay in v1 — that stays primary-only.
+`ExtraKeyWidgets` scheduler. The server pair is a **`CoraDock`** ([cora-dock.ts](../ts/src/main/cora-dock.ts))
+— the composition unit above `ElgatoServer`/`ElgatoChildServer` that owns the pairing watchdog between
+them, `applyModel()` (the config/geometry/mDNS/capabilities push, shared with the primary dock via
+`applyModelToServers()`), and `startWithRetry()` (a single bind-conflict-retry loop; the primary
+retries unboundedly, an extra dock passes `maxAttempts: 1` — its own scan-tick loop is the retry
+mechanism). It shares `wireCommonDriverEvents()` with the primary dock too, so key-dispatch wiring has
+one implementation. Extras have no WebUI grid/tray/saved-frame-replay in v1 — that stays primary-only.
 
-`app.ts` wires a `sessionServersFactory`, calls `driverManager.startScan()` on startup, and
-`stopAllExtraSessions()` on shutdown.
+`app.ts` wires a `sessionServersFactory` that returns a `CoraDock` per identity, calls
+`driverManager.startScan()` on startup, and `stopAllExtraSessions()` on shutdown. The primary dock's
+own CORA pair is wrapped in a `CoraDock` the same way — app.ts's construction + `startWithRetry()`
+call is the one place that composes them; `DriverManager` still takes the raw `server`/`childServer`
+as deps for now (a later step folds that in too, see the ts-architecture-simplification plan).
 
 ## Settings persistence
 
@@ -724,11 +734,11 @@ graph LR
     DM_D["driver-manager-discovery.ts<br/>HidDiscovery (scan · present · paths · serial)"]
     DM_POOL["worker-pool.ts<br/>WorkerPool (parked workers of failed opens)"]
     DM_PACE["driver-manager-pacing.ts<br/>ProbePacer (adaptive retry backoff)"]
-    DS["device-session.ts<br/>DeviceSession · applyModelToServers<br/>wireCommonDriverEvents"]
+    DS["device-session.ts<br/>DeviceSession · wireCommonDriverEvents"]
     DID["device-identity.ts<br/>deviceKeyFor · generateMacAddress/Serial (pure)"]
     IP["image-pipeline.ts<br/>setupImageHandler"]
     SPLASH["splash-sender.ts<br/>on-connect splash images"]
-    CORA_START["cora-startup.ts<br/>startCoraWithRetry (port-conflict retry)"]
+    CORA_DOCK["cora-dock.ts<br/>CoraDock · applyModel · startWithRetry"]
     EK["extra-keys.ts<br/>ExtraKeyWidgets · widget rendering"]
 
     HOST_HID["hid-worker-host.ts<br/>WorkerHidDriver (proxy)"]
@@ -771,8 +781,9 @@ graph LR
     APP --> IP
     APP --> ELG
     APP --> TRAY_N
-    APP --> CORA_START
-    CORA_START --> ELG
+    APP --> CORA_DOCK
+    CORA_DOCK --> ELG
+    DS --> CORA_DOCK
     DM --> DM_P
     DM --> DM_E
     DM --> DM_D
@@ -836,7 +847,8 @@ deckbridge/
 │   │          and each folder is one eslint-plugin-boundaries element)
 │   │   ├── main/         ← main-thread composition root: app.ts · driver-manager*.ts (probe/open,
 │   │   │                    adaptive backoff, multi-dock) · device-session*.ts · image-pipeline.ts
-│   │   │                    · cora-startup.ts (port retry) · extra-keys.ts · widget-lines.ts · widget-refresh.ts
+│   │   │                    · cora-dock.ts (server pair, watchdog, applyModel, startWithRetry)
+│   │   │                    · extra-keys.ts · widget-lines.ts · widget-refresh.ts
 │   │   │                    · encoders.ts · command-actions.ts
 │   │   ├── cora/         ← CORA primary/child servers (5343/5344): primary-server.ts · child-server.ts
 │   │   │                    · child-payload.ts · child-reconnector.ts · touch-strip-assembler.ts
