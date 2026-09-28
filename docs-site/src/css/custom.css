@@ -326,6 +326,22 @@ html[data-theme='dark'] img[alt$='light theme'] {
   display: none;
 }
 
+.db-dock-compare {
+  margin: 0.25rem 0 0.75rem;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.db-dock-compare > summary {
+  width: fit-content;
+  color: var(--ifm-link-color);
+  cursor: pointer;
+  font-size: 0.875rem;
+  text-decoration: underline;
+}
+
 /* ---- Interactive pairing stepper (docs/features.md) ----
    Pure-CSS, no JS: 4 hidden radios drive the SVG layers + controls through
    `#db-sN:checked ~` sibling selectors. Prev/Next are <label>s pointing at the

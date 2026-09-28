@@ -50,6 +50,11 @@ quiet = true
 depends = ["build-advanced"]
 run = "$TJS run ts/dist/bundle.js"
 
+[tasks.mock-akp05]
+description = "Build and run mock AKP05 paired as Stream Deck + at http://127.0.0.1:3000"
+depends = ["build"]
+run = "node scripts/mock-akp05.mjs"
+
 [tasks.d]
 description = "Rebuild at debug log level and run"
 run = "LOG_LEVEL=debug mise run build && $TJS run ts/dist/bundle.js"

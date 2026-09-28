@@ -17,7 +17,7 @@ import {
   AJAZZ_AKP153E_REV2_MODEL,
   AJAZZ_AKP153R_REV2_MODEL,
 } from '../src/devices/ajazz/akp153-rev2.js';
-import { AJAZZ_AKP05E_MODEL } from '../src/devices/ajazz/akp05e.js';
+import { AJAZZ_AKP05E_MODEL, STREAM_DECK_PLUS_EMULATION } from '../src/devices/ajazz/akp05e.js';
 import { AJAZZ_AKP05_MODEL } from '../src/devices/ajazz/akp05.js';
 import { FIFINE_D6_MODEL, FIFINE_D6_REV2_MODEL } from '../src/devices/fifine/fifine-d6.js';
 import { AKP153_V1_CLONE_MODELS } from '../src/devices/rebadge/akp153-v1-clones.js';
@@ -132,9 +132,19 @@ test('AKP05E has its proven 2x5 output mapping', () => {
 
 test('AKP05 inherits AKP05E output protocol', () => {
   assert.equal(AJAZZ_AKP05_MODEL.protocol, AJAZZ_AKP05E_MODEL.protocol);
-  assert.equal(AJAZZ_AKP05_MODEL.protocol, AJAZZ_AKP05E_MODEL.protocol);
-  assert.deepEqual(AJAZZ_AKP05_MODEL.image, AJAZZ_AKP05E_MODEL.image);
-  assert.deepEqual(AJAZZ_AKP05_MODEL.keyMap, AJAZZ_AKP05E_MODEL.keyMap);
+  assert.equal(AJAZZ_AKP05_MODEL.wire, AJAZZ_AKP05E_MODEL.wire);
+});
+
+test('AKP05 pairs as Stream Deck + by default', () => {
+  assert.equal(AJAZZ_AKP05_MODEL.cora.advertiseAs, 'stream-deck-plus');
+  assert.equal(AJAZZ_AKP05_MODEL.cora.productId, ELGATO_PLUS_PID);
+  assert.deepEqual(
+    advertisedGeometry(AJAZZ_AKP05_MODEL),
+    modelToChildGeometry(STREAM_DECK_PLUS_MODEL),
+  );
+  assert.deepEqual(AJAZZ_AKP05_MODEL.image, STREAM_DECK_PLUS_EMULATION.image);
+  assert.deepEqual(AJAZZ_AKP05_MODEL.keyMap, STREAM_DECK_PLUS_EMULATION.keyMap);
+  assert.equal(AJAZZ_AKP05E_MODEL.cora.advertiseAs, undefined);
 });
 
 // Stream Deck + emulation profile

@@ -628,21 +628,26 @@ function devicesPage(models, notes) {
 
 // page 2: specs
 
-/** ASCII map of mk2 key index → device wire image id, so a wrong map is visible. */
+/** ASCII map of CORA key index → device wire image id, so a wrong map is visible. */
 function gridDiagram(m) {
+  const keyCount = m.keyMap.coraToWireImage?.length ?? m.keyCount;
+  const columns = keyCount === m.keyCount ? m.columns : keyCount / m.rows;
   const map = (i) =>
     m.keyMap.coraToWireImage?.[i] ?? (m.keyMap.imageOffset != null ? i + m.keyMap.imageOffset : i);
   const width = Math.max(
-    ...Array.from({ length: m.keyCount }, (_, i) => String(map(i)).length),
-    String(m.keyCount - 1).length,
+    ...Array.from({ length: keyCount }, (_, i) => String(map(i)).length),
+    String(keyCount - 1).length,
   );
-  const lines = [`mk2 index → wire image id  (${m.columns}×${m.rows}, row-major)`, ''];
+  const lines = [
+    `${m.cora.advertiseAs ?? 'mk2'} index → wire image id  (${columns}×${m.rows}, row-major)`,
+    '',
+  ];
   for (let r = 0; r < m.rows; r++) {
     const idx = [];
     const wire = [];
-    for (let c = 0; c < m.columns; c++) {
-      const i = r * m.columns + c;
-      if (i >= m.keyCount) continue;
+    for (let c = 0; c < columns; c++) {
+      const i = r * columns + c;
+      if (i >= keyCount) continue;
       idx.push(String(i).padStart(width));
       wire.push(String(map(i)).padStart(width));
     }

@@ -121,6 +121,13 @@ Web UI always shows current setup state. No guessing required.
 | **Ready to pair** | **Connected and working** |
 | ![DeckBridge showing the address needed to pair a connected Stream Deck, light theme](./img/webui-state-pairing.png) ![DeckBridge showing the address needed to pair a connected Stream Deck, dark theme](./img/webui-state-pairing-dark.png) | ![DeckBridge showing a connected and working Stream Deck with its live preview, light theme](./img/webui-state-ready.png) ![DeckBridge showing a connected and working Stream Deck with its live preview, dark theme](./img/webui-state-ready-dark.png) |
 
+### AKP05 as Elgato Stream Deck +
+
+This mock pairing shows the AKP05's eight app keys, touch strip, side keys, and knob
+controls with **Stream Deck +** emulation.
+
+![Paired AJAZZ AKP05 in Stream Deck Plus emulation showing touch strip and knobs, light theme](./img/webui-akp05-plus.png) ![Paired AJAZZ AKP05 in Stream Deck Plus emulation showing touch strip and knobs, dark theme](./img/webui-akp05-plus-dark.png)
+
 ## Use cases
 
 ```mermaid
@@ -136,8 +143,21 @@ flowchart LR
 
 - **Put the deck on another computer** — plug the deck into a laptop or mini-PC, run
   DeckBridge there, and control the Elgato app on your streaming PC across the LAN.
-- **Skip the Network Dock** — network-dock behaviour for hobby setups without buying
-  the hardware.
+- **Skip the Network Dock** — use a computer you already own and avoid buying the
+  [Elgato Network Dock](https://www.elgato.com/us/en/p/network-dock-stream-deck), listed at
+  **$79.99 USD** in September 2026.
+
+  <details class="db-dock-compare">
+  <summary>Compare DeckBridge with Network Dock</summary>
+
+  | | DeckBridge | Elgato Network Dock |
+  |---|---|---|
+  | **Cost** | Free software; needs a running computer. | $79.99 USD hardware (September 2026). |
+  | **Connection** | USB deck plugged into that computer; the computer can use WiFi or wired LAN. | [Ethernet and PoE](https://www.elgato.com/us/en/p/network-dock-stream-deck), or Ethernet with separate USB-C power. No computer needed beside the deck. |
+  | **Decks** | [Supported Elgato and non-Elgato models](./introduction.mdx#supported-devices); limited device selection. | [Supported Stream Deck models](https://www.elgato.com/uk/en/explorer/products/stream-deck/stream-deck-network-dock-overview/), including XL and +; some older models are excluded. |
+  | **Use** | Hobby project with setup flexibility; host computer must stay on. | Dedicated, officially supported hardware for fixed installations; requires purchase and wired network. |
+
+  </details>
 - **Use a real Stream Deck wirelessly** — a Stream Deck Mini or MK.2 works the same way,
   over WiFi instead of a cable.
 - **Bitfocus Companion** — Companion also speaks the dock protocol and discovers
