@@ -9,7 +9,7 @@ import {
   tunableDefaults,
   validateModelOverride,
 } from '../src/devices/model-overrides.js';
-import type { DeviceModel } from '../src/devices/driver.js';
+import { isElgatoHid, type DeviceModel } from '../src/devices/driver.js';
 import { DEVICE_MODELS } from '../src/devices/registry.js';
 import { MIRABOX_293_MODEL } from '../src/devices/mirabox/mirabox-293.js';
 import { MK2_MODEL } from '../src/devices/elgato/mk2.js';
@@ -289,7 +289,7 @@ test('undefined never overwrites a model default', () => {
 test('identity fields are carried through untouched', () => {
   const eff = applyModelOverrides(MODEL, { image: { rotate: 90 } });
   assert.equal(eff.id, MODEL.id);
-  assert.equal(eff.driverKind, MODEL.driverKind);
+  assert.equal(eff.protocol, MODEL.protocol);
   assert.equal(eff.usbVendorId, MODEL.usbVendorId);
   assert.deepEqual(eff.usbProductIds, MODEL.usbProductIds);
   assert.equal(eff.keyCount, MODEL.keyCount);
@@ -366,7 +366,7 @@ test('the seed carries no non-tunable protocol fields', () => {
 });
 
 test('the seed omits the sizes elgato-hid models cannot tune', () => {
-  for (const model of DEVICE_MODELS.filter((m) => m.driverKind === 'elgato-hid')) {
+  for (const model of DEVICE_MODELS.filter(isElgatoHid)) {
     const wire = tunableDefaults(model).wire ?? {};
     assert.ok(!('packetSize' in wire), `${model.id}: wire.packetSize leaked into the seed`);
     assert.ok(!('inSize' in wire), `${model.id}: wire.inSize leaked into the seed`);
@@ -391,6 +391,30 @@ test('elgato-hid models reject packetSize/inSize overrides', () => {
       `wire.${key}: expected a "not tunable" error, got ${result.ok ? '' : result.errors.join('; ')}`,
     );
   }
+});
+
+// A field the driver never reads would save and do nothing.
+test('wire keys a driver ignores are rejected and left out of the seed', () => {
+  const cases = [
+    { model: MK2_MODEL, ignored: ['heartbeatMs', 'reportId', 'chunkPadByte'] },
+    { model: AJAZZ_AKP05E_MODEL, ignored: ['packetSize', 'reportId', 'heartbeatMs'] },
+  ] as const;
+  const values: Record<string, unknown> = { chunkPadByte: true, packetSize: 512 };
+  for (const { model, ignored } of cases) {
+    for (const key of ignored) {
+      const value = values[key] ?? 1;
+      const result = validateModelOverride({ wire: { [key]: value } }, model);
+      assert.ok(
+        !result.ok && result.errors.some((e) => e.startsWith(`wire.${key}: not tunable`)),
+        `${model.id}: wire.${key} must be rejected`,
+      );
+      assert.ok(!(key in (tunableDefaults(model).wire ?? {})), `${model.id}: ${key} in seed`);
+    }
+  }
+  assert.ok(validateModelOverride({ wire: { inSize: 1024 } }, AJAZZ_AKP05E_MODEL).ok);
+  assert.deepEqual(tunableDefaults(AJAZZ_AKP05E_MODEL).wire, {
+    inSize: AJAZZ_AKP05E_MODEL.wire.inSize,
+  });
 });
 
 test('mirabox models still accept a packetSize override', () => {

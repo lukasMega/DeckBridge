@@ -59,7 +59,7 @@ export async function openProbeDevice(model: DeviceModel, prefix: string): Promi
 
   const driver = new MiraboxDriver(model);
   try {
-    await driver.open(paths[0]);
+    await driver.open(paths[0]!);
   } catch (e) {
     fail(prefix, `open failed: ${(e as Error).message}`, ...OPEN_REFUSED_HINTS);
   }

@@ -3,7 +3,7 @@ import { hidPathsMatching, matchesHidQuery, type HidDeviceInfo } from '../src/ff
 import { cachedDiscoveryPaths, installDiscoverySnapshot } from '../src/ffi/hid-discovery.js';
 import { test, summary } from './helpers/harness.js';
 
-// Pure matcher shared by findHidPath/listHidPaths/hidDevicePresent (ffi/hidapi.ts) and
+// Pure matcher shared by listHidPaths/hidDevicePresent (ffi/hidapi.ts) and
 // cachedDiscoveryPaths (ffi/hid-discovery.ts) — no FFI, no hardware, just field
 // comparisons against fake enumeration rows.
 

@@ -11,7 +11,7 @@ const unknownModel: DeviceModel = { ...DEFAULT_MODEL, id: 'no-such-model' };
 async function expectUnknownModelRejection(driver: WorkerHidDriver): Promise<void> {
   let err: Error | null = null;
   try {
-    await driver.open();
+    await driver.open('fake');
   } catch (e) {
     err = e as Error;
   }
@@ -68,9 +68,9 @@ await runTest('applyOverrides posts the overrides and swaps the effective model'
 
   // A later reopen must carry the NEW override, not the constructor's.
   posted.length = 0;
-  void driver.open();
+  void driver.open('fake');
   assert.deepEqual(posted, [
-    { type: 'open', modelId: unknownModel.id, hidPath: undefined, overrides },
+    { type: 'open', modelId: unknownModel.id, hidPath: 'fake', overrides },
   ]);
 });
 

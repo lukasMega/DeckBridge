@@ -75,6 +75,7 @@ async function open(modelId: string, batchImageTransfers?: boolean): Promise<voi
   send({
     type: 'open',
     modelId,
+    hidPath: 'fake',
     overrides: {
       image: { transform: 'passthrough' },
       ...(batchImageTransfers === undefined ? {} : { wire: { batchImageTransfers } }),
@@ -196,7 +197,7 @@ await test('transform failure still commits earlier images and releases queue', 
 });
 
 for (const { id: modelId } of DEVICE_MODELS.filter(
-  (model) => model.driverKind === 'mirabox' && model.id !== 'mirabox-293s',
+  (model) => model.protocol.startsWith('mirabox-') && model.id !== 'mirabox-293s',
 )) {
   await test(`${modelId} retains STP after every image`, async () => {
     await open(modelId);

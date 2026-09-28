@@ -60,5 +60,4 @@ export const MIRABOX_K1PRO_MODEL: DeviceModel = {
   // Splash sources are upright (not Mini-oriented), so they keep the original
   // rotate 90 / no flip — pin flipH explicitly so it doesn't inherit image.flipH.
   splash: { transformOverride: { rotate: 90, flipH: false } },
-  driverKind: 'mirabox',
 };

@@ -85,6 +85,5 @@ export function makePassthroughModel(): DeviceModel {
       productId: 0x00a5,
       usePhysicalIdentity: true,
     },
-    driverKind: 'elgato-hid',
   };
 }

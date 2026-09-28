@@ -4,8 +4,8 @@
 import {
   CORA_OVERRIDE_KEYS,
   IMAGE_OVERRIDE_KEYS,
+  TUNABLE_WIRE_KEYS,
   WIRE_OVERRIDE_KEYS,
-  supportsImageBatching,
   type DeviceCoraSpec,
   type DeviceImageSpec,
   type DeviceKeyMap,
@@ -38,11 +38,6 @@ const KEYMAP_KEYS = [
 const SECTION_KEYS = ['image', 'keyMap', 'wire', 'splash', 'cora'] as const;
 
 type WireOverrideKey = (typeof WIRE_OVERRIDE_KEYS)[number];
-
-/** Protocol facts on elgato-hid, not preferences: an unexpected `packetSize` makes
- *  gen1/gen2 chunk short, silently discarded by the firmware for a black panel with
- *  no error. MiraboxDriver genuinely tunes both. */
-const ELGATO_FIXED_WIRE_KEYS = ['packetSize', 'inSize'] as const;
 
 /** Bounds chosen to keep a typo from producing a device-bricking spec while
  *  still covering every panel we know of (64×64 K1 Pro … 112×112 293V3). */
@@ -280,14 +275,9 @@ function validateImage(raw: unknown, model: DeviceModel, errors: Errors): void {
 
 function validateWire(raw: unknown, model: DeviceModel, errors: Errors): void {
   if (!validateSection(raw, WIRE_FIELDS, 'wire', model, errors)) return;
-  if (raw.batchImageTransfers !== undefined && !supportsImageBatching(model)) {
-    errors.push(
-      `wire.batchImageTransfers: not tunable on ${model.name} — requires a 293S-family board`,
-    );
-  }
-  if (model.driverKind !== 'elgato-hid') return;
-  for (const key of ELGATO_FIXED_WIRE_KEYS) {
-    if (raw[key] !== undefined) {
+  const tunable = TUNABLE_WIRE_KEYS[model.protocol];
+  for (const key of WIRE_OVERRIDE_KEYS) {
+    if (raw[key] !== undefined && !tunable.includes(key)) {
       errors.push(
         `wire.${key}: not tunable on ${model.name} — fixed by the ${model.protocol} protocol`,
       );
@@ -446,16 +436,6 @@ function project<T extends object, K extends keyof T>(
   return out;
 }
 
-/** The wire fields this model actually accepts as an override — everything for a Mirabox
- *  board, minus the protocol-fixed sizes for an elgato-hid one (ELGATO_FIXED_WIRE_KEYS). */
-function tunableWireKeys(model: DeviceModel): readonly WireOverrideKey[] {
-  return WIRE_OVERRIDE_KEYS.filter(
-    (key) =>
-      (key !== 'batchImageTransfers' || supportsImageBatching(model)) &&
-      (model.driverKind !== 'elgato-hid' || !ELGATO_FIXED_WIRE_KEYS.includes(key as never)),
-  );
-}
-
 /** Tunable fields at their current (post-override) values — seeds the Device tuning
  *  form so every control starts at what the device actually uses. */
 export function tunableDefaults(model: DeviceModel): DeviceModelOverride {
@@ -463,7 +443,7 @@ export function tunableDefaults(model: DeviceModel): DeviceModelOverride {
   return {
     image: project(image, IMAGE_OVERRIDE_KEYS),
     keyMap: project(keyMap, KEYMAP_KEYS),
-    wire: project(wire, tunableWireKeys(model)),
+    wire: project(wire, TUNABLE_WIRE_KEYS[model.protocol]),
     ...(splash ? { splash } : {}),
     cora: project(cora, CORA_OVERRIDE_KEYS),
   };

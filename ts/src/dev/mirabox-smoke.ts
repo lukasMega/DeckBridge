@@ -1,6 +1,5 @@
-import { MiraboxDriver } from '../devices/mirabox/driver.js';
 import { transformImageForDevice } from '../transform/translator.js';
-import { exitOnSigint, logKeyEvents } from './probe-utils.js';
+import { exitOnSigint, initProbeLibs, logKeyEvents, openProbeDevice } from './probe-utils.js';
 import { MIRABOX_293_MODEL } from '../devices/mirabox/mirabox-293.js';
 
 // 1×1 red pixel BMP (58 bytes). The image-proc sidecar's load_from_memory
@@ -10,8 +9,8 @@ const RED_BMP = Buffer.from(
   'hex',
 );
 
-const mirabox = new MiraboxDriver(MIRABOX_293_MODEL);
-await mirabox.open();
+await initProbeLibs();
+const mirabox = await openProbeDevice(MIRABOX_293_MODEL, '[mirabox]');
 console.log('[mirabox] connected');
 
 const jpeg = transformImageForDevice(RED_BMP, MIRABOX_293_MODEL.image);

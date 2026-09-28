@@ -1,4 +1,3 @@
-import { findHidPath, isNullPtr, IS_MACOS } from '../../ffi/hidapi.js';
 import type { HidapiSymbols } from '../../ffi/hidapi.js';
 import { HidDeviceBase } from '../hid-device-base.js';
 import { debug, error, info } from '../../shared/logger.js';
@@ -81,7 +80,6 @@ function encoderRotateDelta(code: number): { index: number; delta: number } | nu
 }
 
 export class Akp05Driver extends HidDeviceBase {
-  hidPath: string | undefined;
   firmware: string | undefined;
   private writeScratch = Buffer.alloc(1025);
   private keepAliveTimer: ReturnType<typeof setInterval> | null = null;
@@ -91,29 +89,8 @@ export class Akp05Driver extends HidDeviceBase {
     super();
   }
 
-  async open(hidPath?: string): Promise<void> {
-    const hid = this._acquireLib();
-    const path = hidPath ?? this.findDevicePath();
-    let device: unknown = null;
-    if (path) {
-      device = hid.hid_open_path(path);
-      if (!isNullPtr(device)) this.hidPath = path;
-      else if (IS_MACOS) {
-        this._releaseLibAfterFailedOpen();
-        throw new Error(`device present but hid_open_path failed (path=${path})`);
-      }
-    }
-    if (isNullPtr(device) && !IS_MACOS && hidPath === undefined) {
-      device = hid.hid_open(this.model.usbVendorId, this.model.usbProductIds[0]!, null);
-    }
-    if (isNullPtr(device)) {
-      this._releaseLibAfterFailedOpen();
-      throw new Error(
-        `${this.model.name} not found (VID=0x${this.model.usbVendorId.toString(16)} PIDs=${this.model.usbProductIds.map((p) => '0x' + p.toString(16)).join(',')})`,
-      );
-    }
-
-    this.device = device;
+  async open(hidPath: string): Promise<void> {
+    const hid = this._openPath(hidPath);
     this.firmware = this.readFirmware(hid);
     this._startReadLoop(hid, this.model.wire.inSize, 5, (data, n) =>
       this.parseInput(Buffer.from(data.subarray(0, n))),
@@ -260,19 +237,6 @@ export class Akp05Driver extends HidDeviceBase {
   setBrightness(level: number): void {
     this.brightness = level;
     this.write(buildLig(level));
-  }
-
-  private findDevicePath(): string | null {
-    for (const productId of this.model.usbProductIds) {
-      const path = findHidPath(
-        this.model.usbVendorId,
-        this.model.usagePage!,
-        this.model.usage!,
-        productId,
-      );
-      if (path) return path;
-    }
-    return null;
   }
 
   private write(packet: Buffer): void {

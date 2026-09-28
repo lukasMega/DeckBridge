@@ -32,5 +32,4 @@ export const MK2_MODEL: DeviceModel = {
   // Splash/extra-key sources are upright, so they need the 180° the CORA path
   // already has baked in.
   splash: { transformOverride: { rotate: 180 } },
-  driverKind: 'elgato-hid',
 };

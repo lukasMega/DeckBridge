@@ -25,8 +25,8 @@ export interface DeviceCase {
   coraProfile?: string;
   /** CORA emulation profiles device tuning may pick (`cora.emulations`). */
   emulations?: readonly string[];
-  /** Elgato HID models: `wire.packetSize`/`inSize` are protocol-fixed, never tunable. */
-  elgatoHid: boolean;
+  /** Wire sizes the protocol fixes (TUNABLE_WIRE_KEYS): never offered for tuning. */
+  fixedWireSizes: readonly ('packetSize' | 'inSize')[];
 }
 
 export const DEVICES: readonly DeviceCase[] = [
@@ -40,7 +40,7 @@ export const DEVICES: readonly DeviceCase[] = [
     encoderCount: 4,
     stripZones: [1, 2, 3, 4],
     emulations: ['stream-deck-plus'],
-    elgatoHid: false,
+    fixedWireSizes: ['packetSize'],
   },
   {
     label: 'Ajazz AKP153 rev. 1',
@@ -51,7 +51,7 @@ export const DEVICES: readonly DeviceCase[] = [
     rows: 3,
     extraKeys: [16, 17, 18],
     coraProfile: 'mk2',
-    elgatoHid: false,
+    fixedWireSizes: [],
   },
   {
     label: 'Ajazz AKP153 rev. 2',
@@ -61,7 +61,7 @@ export const DEVICES: readonly DeviceCase[] = [
     columns: 5,
     rows: 3,
     coraProfile: 'mk2',
-    elgatoHid: false,
+    fixedWireSizes: [],
   },
   {
     label: 'Mirabox 293S',
@@ -72,7 +72,7 @@ export const DEVICES: readonly DeviceCase[] = [
     rows: 3,
     extraKeys: [16, 17, 18],
     coraProfile: 'mk2',
-    elgatoHid: false,
+    fixedWireSizes: [],
   },
   {
     label: 'Mirabox 293V3',
@@ -82,7 +82,7 @@ export const DEVICES: readonly DeviceCase[] = [
     columns: 5,
     rows: 3,
     coraProfile: 'mk2',
-    elgatoHid: false,
+    fixedWireSizes: [],
   },
   {
     label: 'Fifine D6',
@@ -92,7 +92,7 @@ export const DEVICES: readonly DeviceCase[] = [
     columns: 5,
     rows: 3,
     coraProfile: 'mk2',
-    elgatoHid: false,
+    fixedWireSizes: [],
   },
   {
     label: 'Stream Deck Mini',
@@ -101,7 +101,7 @@ export const DEVICES: readonly DeviceCase[] = [
     keyCount: 6,
     columns: 3,
     rows: 2,
-    elgatoHid: true,
+    fixedWireSizes: ['packetSize', 'inSize'],
   },
   {
     label: 'Stream Deck MK.2',
@@ -110,7 +110,7 @@ export const DEVICES: readonly DeviceCase[] = [
     keyCount: 15,
     columns: 5,
     rows: 3,
-    elgatoHid: true,
+    fixedWireSizes: ['packetSize', 'inSize'],
   },
 ];
 

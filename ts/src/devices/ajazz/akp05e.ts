@@ -87,5 +87,4 @@ export const AJAZZ_AKP05E_MODEL: DeviceModel = {
     usePhysicalIdentity: false,
     emulations: { 'stream-deck-plus': STREAM_DECK_PLUS_EMULATION },
   },
-  driverKind: 'custom',
 };

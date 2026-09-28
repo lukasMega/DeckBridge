@@ -65,35 +65,23 @@ flowchart TD
 
 ### Call path in TypeScript
 
+The TypeScript side no longer calls `mirabox_hid_find_path`: it takes one
+`mirabox_hid_list_all()` snapshot per scan and filters it in TS.
+
 ```
-mirabox.ts  MiraboxDriver.open()
-  └─ ffi/hidapi.ts  findHidPath(MIRABOX_VID, MIRABOX_USAGE_PAGE, MIRABOX_USAGE)
-       └─ loadHidEnum()           ← dlopen($DECKBRIDGE_NATIVE_LIB) via tjs:ffi
-       └─ mirabox_hid_find_path() ← FFI call into libdeckbridge_native.dylib
-            └─ hidapi::HidApi::new().device_list()
-                 iterate → match vid + (pid==0 or pid) + usage_page + usage → return path
-  └─ hid_open_path(path)          ← opens the correct interface
+hid-scan-worker.ts  (process-lifetime scan worker, never the main thread)
+  └─ ffi/hidapi.ts  listAllHidDevices() → mirabox_hid_list_all()
+main thread
+  └─ HidDiscovery.paths(model)   ← filter snapshot by vid + pids (+ usage_page/usage)
+  └─ WorkerHidDriver.open(hidPath)
+USB worker (hid-worker.ts)
+  └─ HidDeviceBase._openPath(hidPath)
+       └─ hid_open_path(path)    ← opens the correct interface; never hid_open(VID, PID)
 ```
 
-If `DECKBRIDGE_NATIVE_LIB` is unset or the dylib fails to load, `findHidPath` returns `null` and `MiraboxDriver` falls back to `hid_open(VID, PID)` — one attempt per PID, off macOS only (see below).
-
-> Since the worker-thread refactor, `MiraboxDriver` — and therefore this whole `findHidPath` → `hid_open_path` call path, plus the read/write loops — runs inside the **USB worker thread** (`hid-worker.ts`), not on the main thread. The dylib is `dlopen`ed from within the worker, which has its own `tjs.env` access.
-
-### Fallback behaviour
-
-```mermaid
-flowchart TD
-    A[MiraboxDriver.open] --> B{DECKBRIDGE_NATIVE_LIB set<br/>and loadable?}
-    B -->|yes| C[mirabox_hid_find_path<br/>filter by usage_page+usage]
-    C --> D{path found?}
-    D -->|yes| E[hid_open_path]
-    B -->|no| F{macOS?}
-    D -->|no| F
-    F -->|no| H[hid_open VID+PID<br/>one attempt per PID]
-    F -->|yes, skip fallback| I[fail — scheduleReconnect<br/>retries on a fresh worker every 2s]
-    E --> G[device handle]
-    H --> G
-```
+If `DECKBRIDGE_NATIVE_LIB` is unset or the dylib fails to load, the snapshot is empty and
+no device opens. There is no `hid_open(VID, PID)` fallback: on macOS it opens the first
+IOKit interface and a denied open SIGBUSes; elsewhere it can grab the wrong unit.
 
 ---
 

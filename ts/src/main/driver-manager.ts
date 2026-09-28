@@ -227,7 +227,7 @@ export class DriverManager extends EventEmitter {
       const override = this.overrideFor(model.id);
       const effective = applyModelOverrides(model, override);
       const hidPath = this.discovery.paths(effective)[0];
-      if (!hidPath && this.discovery.requireTargetedPath) {
+      if (!hidPath) {
         log('warn', 'hid', `${model.id} has no usage-matched HID path`);
         continue;
       }

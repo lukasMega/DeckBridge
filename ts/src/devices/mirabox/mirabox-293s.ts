@@ -68,5 +68,4 @@ export const MIRABOX_293S_MODEL: DeviceModel = {
     usePhysicalIdentity: false,
   },
   splash: { transformOverride: { rotate: 270 } },
-  driverKind: 'mirabox',
 };

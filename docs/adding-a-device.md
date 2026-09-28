@@ -43,10 +43,10 @@ Every field of every model already in the registry, side by side:
 |---|---|---|
 | Device model | `devices/<brand>/<model>.ts` + `devices/registry.ts` | **The single source of truth** — geometry, VID/PID, image spec, wire framing, key map, CORA identity, splash overrides |
 | Wire protocol (only if new) | `devices/protocol/<proto>.ts` + `PROTOCOL_STRATEGY` table | Packet framing for image send + key input parsing |
-| Driver class (only if new pattern) | `devices/elgato/driver.ts` or new file + `driverKind` | HID open/read/write loop |
+| Driver class (only if new pattern) | `devices/elgato/driver.ts` or new file + `USB_DRIVERS` entry | HID open/read/write loop |
 
 Everything else (`translator.ts`, `dock-frames.ts`, `splash-sender.ts`,
-`driver-manager.ts`) reads `model.keyMap` / `image` / `cora` / `splash` / `driverKind`
+`driver-manager.ts`) reads `model.keyMap` / `image` / `cora` / `splash` / `protocol`
 generically — not edited for a config-only device.
 
 ---
@@ -149,8 +149,6 @@ export const ACME_X5_MODEL: DeviceModel = {
   },
 
   // splash: { transformOverride: { rotate: 180 } },  // when splash orientation differs from live
-
-  driverKind: 'elgato-hid',   // 'elgato-hid' | 'mirabox' | 'custom' — see Step 4
 };
 ```
 
@@ -250,17 +248,20 @@ a different VID/PID — just set `protocol: 'elgato-gen2'`).
 
 ## Step 3 — implement the driver
 
-Choose one of three paths, matching the model's `driverKind` to the implementation.
+Choose one of three paths. The model's `protocol` selects the driver (`USB_DRIVERS` in
+`devices/usb-drivers.ts`) and the wire keys users may tune (`TUNABLE_WIRE_KEYS` in
+`devices/driver.ts`).
 
 ### Path A — reuse `ElgatoHidDriver` (gen1 / gen2 compatible)
 
-Set `driverKind: 'elgato-hid'` and `protocol: 'elgato-gen1'`/`'elgato-gen2'`.
+Set `protocol: 'elgato-gen1'`/`'elgato-gen2'`.
 `ElgatoHidDriver` looks up byte-framing from `PROTOCOL_STRATEGY` by `model.protocol` — no
 new driver code. Packet and input report sizes still come from `model.wire`.
 
 ### Path B — new HID packet format, same open/read/write pattern
 
-Set `driverKind: 'elgato-hid'` with a new `protocol`, write the framing functions, and
+Add a new `protocol` (mapped to `ElgatoHidDriver` in `USB_DRIVERS`, `[]` in
+`TUNABLE_WIRE_KEYS`), write the framing functions, and
 **add one `PROTOCOL_STRATEGY` entry** in `devices/protocol/index.ts`:
 
 ```typescript
@@ -322,65 +323,31 @@ export const PROTOCOL_STRATEGY: Partial<Record<DeviceProtocol, ProtocolStrategy>
 
 If the device has a fundamentally different communication pattern (different handshake,
 heartbeat, multi-step init, bulk transfer instead of interrupt, etc.) write a standalone
-driver class, set `driverKind: 'custom'`, and add it to the factory in `hid-worker.ts`
-(Step 5). Reference: `MiraboxDriver` (`ts/src/devices/mirabox/driver.ts`), the most feature-complete
-custom driver — it reads wire framing from `model.wire` instead of hardcoding it. Prefer
-**extending `HidDeviceBase`** (`ts/src/devices/hid-device-base.ts`), the shared base both
-real drivers extend: it already owns the lib singleton, device handle, polling read loop,
-and teardown. The sample below is standalone purely to show the minimum `DeviceDriver`
-surface — for a real Path C driver, extend `HidDeviceBase` instead.
+driver class, add a `protocol` for it, and register it in `USB_DRIVERS` (Step 5). Reference: `MiraboxDriver` (`ts/src/devices/mirabox/driver.ts`), the most feature-complete
+custom driver — it reads wire framing from `model.wire` instead of hardcoding it. Extend
+`HidDeviceBase` (`ts/src/devices/hid-device-base.ts`), the shared base every real driver
+extends: it owns the per-worker lib singleton, the path-only open, the device handle, the
+polling read loop, and the SIGBUS-safe teardown described in the rules below.
 
-Minimum `DeviceDriver` surface (see `devices/driver.ts`). The sample below is standalone
-for clarity, but a real Path C driver should **extend `HidDeviceBase`** — it already owns
-the lib singleton, device handle, poll loop, and SIGBUS-safe teardown described in the
-rules below.
+Minimum `DeviceDriver` surface (see `devices/driver.ts`) on top of `HidDeviceBase`:
 
 ```typescript
 // ts/src/devices/acme/acme-driver.ts
-import { EventEmitter } from 'node:events';
-import { loadHidapi, findHidPath, isNullPtr } from '../../ffi/hidapi.js';
+import { HidDeviceBase } from '../hid-device-base.js';
 import type { DeviceModel } from '../driver.js';
 
-let _workerHidLib: ReturnType<typeof loadHidapi> | null = null; // per-worker singleton
-
-export class AcmeDriver extends EventEmitter {
-  private device: unknown = null;
-  private hidLib: ReturnType<typeof loadHidapi> | null = null;
-  private readTimer: ReturnType<typeof setInterval> | null = null;
+export class AcmeDriver extends HidDeviceBase {
   constructor(readonly model: DeviceModel) { super(); }
 
-  async open(): Promise<void> {
-    if (!_workerHidLib) _workerHidLib = loadHidapi();
-    this.hidLib = _workerHidLib;
-    const hid = this.hidLib.symbols;
-
-    // Path-based open first (macOS-safe), then hid_open(VID, PID) per PID.
-    let dev: unknown = null;
-    if (this.model.usagePage !== undefined) {
-      const path = findHidPath(this.model.usbVendorId, this.model.usagePage, this.model.usage!);
-      if (path) dev = hid.hid_open_path(path);
-    }
-    if (!dev || isNullPtr(dev))
-      for (const pid of this.model.usbProductIds) {
-        dev = hid.hid_open(this.model.usbVendorId, pid, null);
-        if (!isNullPtr(dev)) break;
-      }
-    if (!dev || isNullPtr(dev)) {
-      try { hid.hid_exit(); } catch {}     // release after FAILED open — never dlclose() (macOS SIGBUS)
-      this.hidLib = _workerHidLib = null;
-      throw new Error(`${this.model.name}: device not found`);
-    }
-
-    this.device = dev;
+  // `hidPath` is the usage-matched interface discovery found. _openPath never falls
+  // back to hid_open(VID, PID); a refused open releases hidapi and throws.
+  async open(hidPath: string): Promise<void> {
+    const hid = this._openPath(hidPath);
     this._sendInit();                       // handshake / brightness / clear / heartbeat
-    // 5ms poll — hid_read_timeout blocks ≤5ms; emit 'error'+'disconnect' on failure.
-    const buf = new Uint8Array(512);
-    this.readTimer = setInterval(() => {
-      if (!this.device) return;
-      const n = hid.hid_read_timeout(this.device, buf, 512, 5) as number;
-      if (n < 0) { const e = hidErrorString(hid, this.device); this._cleanup(); this.emit('error', new Error(e)); this.emit('disconnect'); return; }
-      if (n > 0) this._parseInput(buf.subarray(0, n));
-    }, 5);
+    // hid_read_timeout blocks ≤5ms; the base emits 'error'+'disconnect' on a failed read.
+    this._startReadLoop(hid, this.model.wire.inSize, 5, (buf, n) =>
+      this._parseInput(buf.subarray(0, n)),
+    );
   }
 
   async close(): Promise<void> { this._cleanup(); }
@@ -389,23 +356,22 @@ export class AcmeDriver extends EventEmitter {
     for (const pkt of acmePackImage(keyIndex, bytes)) this._write(pkt);
   }
   clearKey(_k: number): void { /* device clear cmd or a real black JPEG — never an all-zero buffer */ }
-  setBrightness(level: number): void {
-    if (this.device) this.hidLib!.symbols.hid_send_feature_report(this.device, acmeBrightnessReport(level), 32);
-  }
+  setBrightness(level: number): void { this._write(acmeBrightnessPacket(level)); }
 
   private _sendInit(): void { /* protocol-specific handshake */ }
   private _write(buf: Uint8Array): void {                  // hid_write needs report-ID byte at index 0
     const arr = new Uint8Array(buf.length + 1); arr.set(buf, 1);
-    if (this.device) this.hidLib!.symbols.hid_write(this.device, arr, arr.length);
+    this._writeRaw(arr, 'acme', (n, err) => `hid_write → ${n}: ${err}`);
   }
   private _parseInput(data: Uint8Array): void {
     for (const { keyIndex, pressed } of acmeParseInput(data, this.model.keyCount) ?? [])
       this.emit('key', { keyIndex, state: pressed ? 'down' : 'up' });
   }
-  private _cleanup(): void {
-    if (this.readTimer) { clearInterval(this.readTimer); this.readTimer = null; }
-    if (this.device) { this.hidLib!.symbols.hid_close(this.device); this.device = null; }
-    if (this.hidLib) { this.hidLib.symbols.hid_exit(); this.hidLib.close(); this.hidLib = _workerHidLib = null; }
+  protected onBeforeClose(): void { /* shutdown write while the handle is still open */ }
+  protected _cleanup(): void {
+    this._stopReadTimer();
+    this._closeDevice();
+    this._teardownLib();
   }
 }
 ```
@@ -416,7 +382,8 @@ export class AcmeDriver extends EventEmitter {
 - Always emit `'error'` then `'disconnect'` on read failure so `driver-manager` can reconnect.
 - After a failed open, call `hid_exit()` but never `dlclose()` (macOS IOKit bug — see
   `_releaseLibAfterFailedOpen` in `devices/hid-device-base.ts`).
-- Load `hidapi` through a module-level `_workerHidLib` singleton (as the sample and both real drivers do) so a GC or premature `dlclose()` can't unload it mid-callback. Only clear it in `_cleanup()` after a successful open was closed.
+- Load `hidapi` only through `HidDeviceBase` (`_openPath`), which keeps the module-level `_workerHidLib` singleton so a GC or premature `dlclose()` can't unload it mid-callback. Only clear it in `_cleanup()` after a successful open was closed.
+- Open by path only. Never call `hid_open(VID, PID)`: on macOS it opens the first IOKit interface and a denied open SIGBUSes.
 - If the device needs a heartbeat, use `setInterval` and cancel it in `_cleanup`.
 - Read HID sizes and byte-level behavior from `model.wire` rather than hardcoding them.
   Protocol strategies own framing algorithms only.
@@ -464,30 +431,25 @@ undocumented.
 
 ---
 
-## Step 5 — wire up `hid-worker.ts` (Path C only)
+## Step 5 — register in `USB_DRIVERS` (Path C only)
 
-`createDriver()` switches on `model.driverKind`. Path A/B (`'elgato-hid'`) need **no
-changes here**; for Path C add a case:
+`USB_DRIVERS` (`devices/usb-drivers.ts`) maps each `DeviceProtocol` to a driver factory;
+the type makes a missing entry a compile error. Path A/B reuse `ElgatoHidDriver`. For
+Path C add your protocol to `DeviceProtocol`, then:
 
 ```typescript
-// ts/src/worker/hid-worker.ts
-import { AcmeDriver } from './devices/acme/acme-driver.js';
+// ts/src/devices/usb-drivers.ts
+import { AcmeDriver } from './acme/acme-driver.js';
 
-type AnyRealDriver = ElgatoHidDriver | MiraboxDriver | AcmeDriver;
-
-function createDriver(model: DeviceModel): AnyRealDriver {
-  switch (model.driverKind) {
-    case 'elgato-hid':
-      return new ElgatoHidDriver(model);
-    case 'mirabox':
-      return new MiraboxDriver(model);
-    case 'custom':
-      return new AcmeDriver(model);   // ← your driverKind: 'custom' branch
-  }
-}
+export const USB_DRIVERS: Record<DeviceProtocol, (model: DeviceModel) => UsbDriver> = {
+  // …
+  'acme-v1': (model) => new AcmeDriver(model),
+};
 ```
 
-Then set `driverKind: 'custom'` on your model.
+Also list the `wire` fields your driver reads in `TUNABLE_WIRE_KEYS`
+(`devices/driver.ts`); the rest are rejected as overrides and left out of the
+Device tuning form.
 
 ---
 
@@ -521,13 +483,13 @@ model's `DeviceModel` here — the registry is the ground truth, and runtime tun
 scaffolding on the way to it. See
 [Device tuning](./troubleshooting.md#device-tuning).
 
-Two `wire` fields are **not** tunable this way on a `driverKind: 'elgato-hid'` model:
-`packetSize` and `inSize` are fixed by the gen1/gen2 protocol, and an override naming
-either is rejected with `wire.<key>: not tunable on <name> — fixed by the <protocol>
-protocol`. A wrong `packetSize` makes the driver chunk short, which the firmware
-discards **silently** — a black panel with no error, which is exactly why this is a
-hard reject rather than a knob. Both stay tunable on Mirabox-family boards (where
-`inSize` is capped at 4096). Setting them in the `DeviceModel` literal below is still
+Only the `wire` fields a protocol's driver reads are tunable (`TUNABLE_WIRE_KEYS` in
+`devices/driver.ts`); an override naming any other is rejected with `wire.<key>: not
+tunable on <name> — fixed by the <protocol> protocol`. Elgato gen1/gen2 tune none:
+a wrong `packetSize` makes the driver chunk short, which the firmware discards
+**silently** — a black panel with no error. AKP05 tunes only `inSize`. Mirabox-family
+boards tune all of them (`inSize` capped at 4096; `batchImageTransfers` on
+`mirabox-cora-v1` only). Setting them in the `DeviceModel` literal below is still
 correct and required; the lock applies to runtime *overrides* only.
 
 :::
@@ -574,7 +536,7 @@ check the other matches.
 [ ] Driver implemented (Path A / B / C); PROTOCOL_STRATEGY entry added (Path B)
 [ ] Model registered in DEVICE_MODELS (registry.ts)
 [ ] device-notes.json entry added + mise run docs-devices re-run (generated device docs)
-[ ] hid-worker.ts createDriver() updated (Path C only)
+[ ] USB_DRIVERS + TUNABLE_WIRE_KEYS entries added (new protocol)
 [ ] mise run beforeCommit passes (format + lint + types + test + compile)
 [ ] Image orientation verified on hardware (image.rotate/flipH/flipV, splash.transformOverride)
 [ ] Key mappings verified on hardware (keyMap.coraToWireImage / wireInputToCora / offsets)
@@ -588,7 +550,7 @@ check the other matches.
 ## Common pitfalls
 
 **hid_open succeeds but reads are all zeros / wrong data** → wrong HID interface. Set
-`usagePage`/`usage` and confirm `findHidPath` resolves the correct path.
+`usagePage`/`usage` and confirm `deckbridge devices` lists the correct path.
 
 **Wrong colors (red/blue swapped)** → `colorMode` does **not** fix this; see
 [Color order is not implemented](#color-order-is-not-implemented-known-limitation).

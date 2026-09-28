@@ -172,8 +172,6 @@ export interface DeviceTouchStripDisplay {
   image: DeviceImageSpec;
 }
 
-export type DriverKind = 'elgato-hid' | 'mirabox' | 'custom';
-
 /** Child geometry advertised to the Elgato desktop over CORA capabilities. The
  *  optional fields describe a Stream Deck + (encoders + touch strip); non-Plus
  *  models omit them (undefined → 0 → "no encoders / no touch" in the packet). */
@@ -217,12 +215,11 @@ export interface DeviceModel {
   splash?: DeviceSplashSpec;
   widgetDisplays?: readonly DeviceWidgetDisplay[];
   touchStripDisplay?: DeviceTouchStripDisplay;
-  driverKind: DriverKind;
 }
 
-/** Only the 512-byte, keydown-only 293S board family supports this tuning. */
-export function supportsImageBatching(model: DeviceModel): boolean {
-  return model.driverKind === 'mirabox' && model.protocol === 'mirabox-cora-v1';
+/** Elgato's own HID protocol (MK.2/Mini/…), as opposed to a Mirabox-family board. */
+export function isElgatoHid(model: DeviceModel): boolean {
+  return model.protocol === 'elgato-gen1' || model.protocol === 'elgato-gen2';
 }
 
 // The tunable field names, listed once: they type DeviceModelOverride below and drive
@@ -257,6 +254,41 @@ export const WIRE_OVERRIDE_KEYS = [
   'batchImageTransfers',
 ] as const;
 
+type WireOverrideKey = (typeof WIRE_OVERRIDE_KEYS)[number];
+
+const MIRABOX_WIRE_KEYS = [
+  'packetSize',
+  'inSize',
+  'heartbeatMs',
+  'reportId',
+  'chunkDelayMs',
+  'chunkPadByte',
+  'synthesizeKeyUp',
+  'sendStpAfterImage',
+] as const satisfies readonly WireOverrideKey[];
+
+/** The wire fields each protocol's driver actually reads, so the only ones a user
+ *  may tune. Kept here, not beside USB_DRIVERS (usb-drivers.ts), because the main
+ *  thread validates overrides and must not import the FFI drivers. Elgato sizes are
+ *  protocol facts: a wrong packetSize makes gen1/gen2 chunk short and the firmware
+ *  drops it silently. AKP05 hardcodes its 1024-byte framing and report id 0. */
+export const TUNABLE_WIRE_KEYS: Record<DeviceProtocol, readonly WireOverrideKey[]> = {
+  'elgato-gen1': [],
+  'elgato-gen2': [],
+  'mirabox-cora': MIRABOX_WIRE_KEYS,
+  // Only the 512-byte, keydown-only 293S board family batches image uploads.
+  'mirabox-cora-v1': [...MIRABOX_WIRE_KEYS, 'batchImageTransfers'],
+  'ajazz-akp05': ['inSize'],
+};
+
+/** One STP per image batch: decided here once for the worker queue and the driver. */
+export function imageBatchingEnabled(model: DeviceModel): boolean {
+  return (
+    TUNABLE_WIRE_KEYS[model.protocol].includes('batchImageTransfers') &&
+    model.wire.batchImageTransfers === true
+  );
+}
+
 /** The CORA-emulation fields a user may change to re-pair a device as a different
  *  Elgato deck (e.g. AKP05E → Stream Deck +). `advertiseAs` must name one of the
  *  model's `cora.emulations` (or its own advertiseAs); `productId` must match that
@@ -266,7 +298,7 @@ export const CORA_OVERRIDE_KEYS = ['advertiseAs', 'productId'] as const;
 
 /** User-tunable subset of a DeviceModel, persisted per model id under settings.json's
  *  `modelOverrides` (devices/model-overrides.ts). Deep-partial per section, arrays
- *  replace wholesale. Omissions are deliberate: VID/PID/protocol/driverKind would
+ *  replace wholesale. Omissions are deliberate: VID/PID/protocol would
  *  impersonate a different device, keyCount/rows/columns force a CORA re-pair,
  *  image.format is a protocol fact, and packetSize/inSize are Mirabox-only.
  *  The `cora` section is the sanctioned exception: `advertiseAs`/`productId` are
@@ -286,10 +318,9 @@ export interface DeviceDriver extends EventEmitter {
    *  `applyOverrides` for a live (image-only) device-tuning change, so callers
    *  must read it per use rather than caching `driver.model.image`. */
   readonly model: DeviceModel;
-  /** `hidPath` (optional) opens a SPECIFIC HID interface — used to drive a second
-   *  unit of the same model. Omitted → enumerate + open the first usage-matched
-   *  path (primary probe). Ignored by MockDriver. */
-  open(hidPath?: string): Promise<void>;
+  /** Opens exactly `hidPath`, a usage-matched interface from discovery (one per
+   *  physical unit). Ignored by MockDriver. */
+  open(hidPath: string): Promise<void>;
   close(): Promise<void>;
   clearKey(keyIndex: number): void;
   setBrightness(level: number): void;

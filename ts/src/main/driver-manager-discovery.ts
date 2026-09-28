@@ -1,6 +1,6 @@
 // USB discovery for DriverManager: one worker-side scan per sweep installs a
 // snapshot, then every per-model query reads it (never enumerates itself).
-import type { DeviceModel } from '../devices/driver.js';
+import { isElgatoHid, type DeviceModel } from '../devices/driver.js';
 import { DEVICE_MODELS } from '../devices/registry.js';
 import {
   cachedDiscoveryPaths,
@@ -21,8 +21,6 @@ export interface HidDiscovery {
   serial(hidPath: string): string | null;
   /** Re-init the native HID stack before the next scan (after a disconnect). */
   requestReset(): void;
-  /** Skip a model with no usage-matched path instead of opening by VID/PID. */
-  readonly requireTargetedPath: boolean;
 }
 
 /** Production discovery: the process-lifetime scan worker, so a stalled Windows
@@ -46,13 +44,12 @@ export function nativeHidDiscovery(): HidDiscovery {
       cachedDiscoveryPaths(model.usbVendorId, model.usbProductIds, model.usagePage, model.usage),
     serial: cachedDiscoverySerial,
     requestReset: () => scanner.requestReset(),
-    requireTargetedPath: true,
   };
 }
 
 /** Identity of a just-opened primary device: stable USB-serial key, else the
- *  (volatile) hidPath, else a per-model key (VID/PID-fallback open, no
- *  usage-matched path) — same rule as the scanned-dock path. */
+ *  (volatile) hidPath, else a per-model key (no path reported by the
+ *  driver) — same rule as the scanned-dock path. */
 export function resolveRealDeviceIdentity(
   discovery: HidDiscovery,
   hidPath: string | undefined,
@@ -68,7 +65,5 @@ export function resolveRealDeviceIdentity(
 /** Any Elgato-branded model enumerated on USB — gates the "Elgato app is blocking
  *  access" screen so it can't fire without Elgato hardware present. */
 export function elgatoHardwarePresent(discovery: HidDiscovery): boolean {
-  return DEVICE_MODELS.some(
-    (model) => model.driverKind === 'elgato-hid' && discovery.present(model),
-  );
+  return DEVICE_MODELS.some((model) => isElgatoHid(model) && discovery.present(model));
 }

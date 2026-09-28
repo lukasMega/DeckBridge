@@ -44,5 +44,4 @@ export const STREAM_DECK_PLUS_MODEL: DeviceModel = {
     usePhysicalIdentity: false,
     childFirmwareVersion: '2.00.026',
   },
-  driverKind: 'elgato-hid',
 };
