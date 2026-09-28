@@ -71,7 +71,7 @@ flowchart TD
     subgraph "main thread(1 libuv loop)"
         EL_SERVER["ElgatoServer 5343<br/>CORA primary + mDNS<br/>model-driven caps"]
         EL_CHILD["ElgatoChildServer 5344<br/>CORA child<br/>gen1 BMP + gen2 JPEG"]
-        APP["app.ts · driver-manager.ts · image-pipeline.ts<br/>applyDeviceModel / setupImageHandler<br/>(forwards raw CORA image to the worker)"]
+        APP["app.ts · driver-manager.ts · dock-frames.ts<br/>applyDeviceModel / wireDockImages<br/>(forwards raw CORA image to the worker)"]
         WEB["WebUIServer 3000<br/>WebSocket / REST<br/>dynamic grid + model selector"]
         HOST["USB Driver proxy<br/>WorkerHidDriver"]
     end
@@ -180,8 +180,8 @@ in use (a second DeckBridge, a real Network Dock, or the ESP32 bridge), `CoraDoc
 ([cora-dock.ts](../ts/src/main/cora-dock.ts)) logs "port in use" to the console + WebUI feed and
 retries every few seconds (unbounded for the primary dock — the port can't fall back, so it keeps
 retrying), keeping the already-started WebUI alive instead of crashing. A shutdown signal during the
-wait still exits cleanly. An extra dock calls the same method with `maxAttempts: 1`: a bind failure
-there throws back to the coordinator's own scan-tick retry loop instead of looping in place.
+wait still exits cleanly. A scanned dock calls the same method with `maxAttempts: 1`: a bind failure
+there throws back to the `DockScanner`'s own scan-tick retry loop instead of looping in place.
 
 A global `unhandledrejection` handler (`app.ts`) turns an otherwise-fatal rejection into a graceful
 `shutdown()` (device disconnect handshake, socket teardown, tray kill) rather than a hard-abort with
@@ -220,7 +220,7 @@ notice is the report's first line. `--out <path>` overrides the default cache-di
 
 ## HID device detection
 
-At startup `app.ts` constructs a `DriverManager` ([driver-manager.ts](../ts/src/main/driver-manager.ts)); its `probeAndOpen()` iterates `DEVICE_MODELS` in priority order and returns the first device that opens. `driver-manager.ts` delegates three concerns: `driver-manager-discovery.ts` (`HidDiscovery`) scans on the scan worker and answers presence/path/serial queries from that snapshot, `worker-pool.ts` (`WorkerPool`) keeps the parked worker of a failed open for reuse (shared with the extras), and `driver-manager-pacing.ts` decides when to retry. Tests inject fakes of the first two through `DriverManagerDeps`.
+At startup `app.ts` constructs a `DriverManager` ([driver-manager.ts](../ts/src/main/driver-manager.ts)); its `probeAndOpen()` iterates `DEVICE_MODELS` in priority order and returns the first device that opens. `driver-manager.ts` delegates three concerns: `driver-manager-discovery.ts` (`HidDiscovery`) scans on the scan worker and answers presence/path/serial queries from that snapshot, `worker-pool.ts` (`WorkerPool`) keeps the parked worker of a failed open for reuse (shared with the dock scan), and `driver-manager-pacing.ts` (`ProbePacer`) owns the reconnect state — the one pending retry timer, the failed-attempt count the tray shows, and the probe-in-flight flag. `DriverManager` itself holds only the mode (`'real'`/`'mock'`); the driver is dock 0's (`Dock.driver`). Tests inject fakes of the first two through `DriverManagerDeps`.
 
 The retry interval is **adaptive, not fixed**. `ProbePacer` starts at `HID_POLL_INTERVAL_MS` (3 s) and keeps it while the scan stays fast; once a scan takes `SLOW_ENUMERATE_MS` (250 ms) or longer, `pacer.note()` doubles the delay on each subsequent slow scan, capped at `RECONNECT_BACKOFF_MAX_MS` (30 s). The enumeration timing comes from the HID scan worker, so a machine where `hid_enumerate` is pathologically slow backs off instead of spending its main thread on a scan every 3 s.
 
@@ -346,9 +346,9 @@ The CORA capabilities packet (sent to the Elgato desktop on connect) advertises 
 
 `applyDeviceModel()` in [driver-manager.ts](../ts/src/main/driver-manager.ts) is the entry point for a
 primary-dock model change; it delegates its server-facing half to `applyModelToServers()`
-([device-session-status.ts](../ts/src/main/device-session-status.ts)), wrapped as `CoraDock.applyModel()`
-([cora-dock.ts](../ts/src/main/cora-dock.ts)) for every extra dock — one call replacing the
-config/geometry/mDNS/capabilities push sequence below, shared by the primary and every extra. Each
+([dock-status.ts](../ts/src/main/dock-status.ts)), wrapped as `CoraDock.applyModel()`
+([cora-dock.ts](../ts/src/main/cora-dock.ts)) for every dock (`Dock.setModel()`/`Dock.start()`) — one call replacing the
+config/geometry/mDNS/capabilities push sequence below. Each
 model's `cora` spec (`DeviceCoraSpec`) drives it:
 
 1. **PID** — `model.cora.productId`. Elgato models use their real USB PID; Mirabox 293/293S advertise `ELGATO_MK2_PID`; K1 Pro advertises the Mini PID (`0x0063`).
@@ -368,44 +368,60 @@ It then applies the change to both CORA servers and the WebUI:
 Called on real connect (with worker serial/firmware), disconnect (resets to `DEFAULT_MODEL` = MK.2),
 mock-mode startup, and a WebUI model-selector change.
 
-## Multi-device: extra docks
+## Multi-device: scanned docks
 
 DeckBridge runs **one** dock by default: once the primary device is connected it stops scanning USB
-altogether, and no extra dock is created. Setting `"multiDeck": true` in settings.json (the
-Settings → *Multiple decks* toggle in the web UI) raises the cap to `MAX_MULTI_DECK_SESSIONS` (= 2)
-docks — one **primary** (the only one with WebUI/tray coupling) plus one **extra**, headless dock.
-Turning it back off tears the extra dock down. `MAX_DEVICE_SESSIONS` (= 4) remains the structural
-ceiling: it sizes the session-index/CORA-port space, not the user-facing limit.
+altogether, and no second dock is created. Setting `"multiDeck": true` in settings.json (the
+Settings → *Multiple decks* toggle in the web UI) raises the cap to `MAX_MULTI_DECK_DOCKS` (= 2)
+docks — dock 0 (the primary, the only one with tray/key-activity coupling) plus one **scanned**
+dock. Turning it back off tears the scanned dock down. `MAX_DOCKS` (= 4) remains the structural
+ceiling: it sizes the dock-index/CORA-port space, not the user-facing limit.
 
-`driver-manager.ts` is a thin coordinator over two extracted pieces:
+Every dock — dock 0 and each scanned dock — is one **`Dock`** ([dock.ts](../ts/src/main/dock.ts)): a
+**`CoraDock`** server pair ([cora-dock.ts](../ts/src/main/cora-dock.ts) — the composition unit above
+`ElgatoServer`/`ElgatoChildServer` that owns the pairing watchdog, `applyModel()` and
+`startWithRetry()`), whichever driver is attached (`attach()`/`detach()` — a `DockDriver`
+([devices/driver.ts](../ts/src/devices/driver.ts)): the `WorkerHidDriver` proxy, or `MockDriver`
+whose worker-only calls are no-ops, so no call site needs `?.`), the per-device identity and
+`DockPrefs`, the `ExtraKeyWidgets` scheduler, knob (`EncoderActions`) and side-key
+(`ExtraKeyActions`) overrides, and its own last-frame store (`LastFrames`,
+[dock-frames.ts](../ts/src/main/dock-frames.ts)). The Dock handles the CORA side itself: images
+(`wireDockImages()`: driver first, then the frame store, then the WebUI mirror), Elgato-app brightness
+(unless the per-device override is on), and pairing (`markPaired`, auto-restart notice, the ~1 s
+brightness re-push). Everything a Dock reports out goes through optional `DockHooks` (status changed,
+disconnect, key activity, WebUI image/strip/widget mirrors, …), so the WebUI mirror is just the hook
+set the caller passes.
 
-- **`PrimaryDock`** ([driver-manager-primary.ts](../ts/src/main/driver-manager-primary.ts)) — the
-  index-0 dock's presentation state: identity resolution, brightness, extra-key widgets, and
-  replaying saved per-key frames across a USB replug so the Elgato desktop doesn't see a blank grid.
-- **`ExtraDockCoordinator`** ([driver-manager-extras.ts](../ts/src/main/driver-manager-extras.ts)) — runs
+`DriverManager` emits one `'changed'` event for any dock/probe state change (a dock attached or
+stopped, brightness, pairing, rename, a failed probe); app.ts refreshes the WebUI dock list and the tray
+from that one listener. It keeps every live dock in one `Map<index, Dock>`: WebUI per-dock actions go to
+`driverManager.dock(i)` (or `dockForDevice(deviceKey)` for an identity edit), `getDockStatuses()`
+lists every dock with a driver attached, and an image-only tuning change loops the map
+(`Dock.applyTuning()` re-derives the effective model from the registry entry). Dock 0 is the one whose
+servers live for the process: `DriverManager` attaches each newly probed driver to it, detaches it on
+unplug, and `attach()` replays the app's last frames over the splash when the same model comes back
+(the Elgato app keeps its pairing and never re-pushes).
+
+- **`DockScanner`** ([dock-scanner.ts](../ts/src/main/dock-scanner.ts)) — runs
   its own scan timer (every `HID_POLL_INTERVAL_MS`) over HID paths not already claimed by the primary
-  or another extra dock, and spins up a [`DeviceSession`](../ts/src/main/device-session.ts) per newly
-  found physical unit (`createExtraSession()`), keyed by HID path with a pool of free session
-  indices (1..cap-1, lowest wins). With multi-deck off the pool is **empty and the timer never
-  runs** — that is what makes a single connected deck the end of all USB enumeration, rather than a
-  3 s tick for the life of the process.
+  or another scanned dock, and builds a `Dock` per newly found physical unit (`createDock()`)
+  into that same map, claiming its HID path and drawing its index from a pool of free indices
+  (1..cap-1, lowest wins). With multi-deck off
+  the pool is **empty and the timer never runs** — that is what makes a single connected deck the end
+  of all USB enumeration, rather than a 3 s tick for the life of the process.
 
-A **`DeviceSession`** is a fully self-contained extra dock: its own CORA server pair on ports
-strided by `CORA_PORT_STRIDE` (`5343 + 2·index` / `5344 + 2·index`), its own mDNS advertisement and
-device identity, its own `WorkerHidDriver` (its own worker thread and libhidapi handle), and its own
-`ExtraKeyWidgets` scheduler. The server pair is a **`CoraDock`** ([cora-dock.ts](../ts/src/main/cora-dock.ts))
-— the composition unit above `ElgatoServer`/`ElgatoChildServer` that owns the pairing watchdog between
-them, `applyModel()` (the config/geometry/mDNS/capabilities push, shared with the primary dock via
-`applyModelToServers()`), and `startWithRetry()` (a single bind-conflict-retry loop; the primary
-retries unboundedly, an extra dock passes `maxAttempts: 1` — its own scan-tick loop is the retry
-mechanism). It shares `wireCommonDriverEvents()` with the primary dock too, so key-dispatch wiring has
-one implementation. Extras have no WebUI grid/tray/saved-frame-replay in v1 — that stays primary-only.
+A scanned dock is self-contained: its own CORA server pair on ports strided by `CORA_PORT_STRIDE`
+(`5343 + 2·index` / `5344 + 2·index`), its own mDNS advertisement and device identity, its own
+`WorkerHidDriver` (its own worker thread and libhidapi handle). `Dock.start()` binds with
+`maxAttempts: 1` (the primary's `startWithRetry()` in app.ts retries unboundedly — its ports are
+protocol-fixed); the scanner's tick is its retry. A scanned dock has no tray, no
+key-activity feed, and no replug replay: its Dock stops with its USB unit, and a replugged unit is a
+new dock.
 
-`app.ts` wires a `sessionServersFactory` that returns a `CoraDock` per identity, calls
-`driverManager.startScan()` on startup, and `stopAllExtraSessions()` on shutdown. The primary dock's
-own CORA pair is wrapped in a `CoraDock` the same way — app.ts's construction + `startWithRetry()`
-call is the one place that composes them; `DriverManager` still takes the raw `server`/`childServer`
-as deps for now (a later step folds that in too, see the ts-architecture-simplification plan).
+`app.ts` wires a `coraDockFactory` that returns a `CoraDock` per identity, calls
+`driverManager.startScan()` on startup, and `stopScannedDocks()` on shutdown. The primary dock's
+own CORA pair is wrapped in a `CoraDock` the same way; app.ts constructs and starts it and hands it to
+`DriverManager` (`cora` dep), which wraps it as dock 0.
 
 ## Settings persistence
 
@@ -439,8 +455,8 @@ reconnect) persist to `<cacheRoot>/settings.json` (same cache root as the extrac
   WebUI's file surface: export, open in the OS, and settings import, pushing an imported
   brightness/override/extra-key change live to the running driver + WS clients.
 
-Nothing outside these files touches `settings.json` directly — `DriverManager`/`PrimaryDock`/
-`ExtraDockCoordinator`/`DeviceSession` get the `PersistedSettings` instance from `app.ts` and read
+Nothing outside these files touches `settings.json` directly — `DriverManager`/`Dock`/
+`DockScanner` get the `PersistedSettings` instance from `app.ts` and read
 per-device values through `DockPrefs`.
 
 ## WebUI (`http://localhost:3000`)
@@ -499,7 +515,7 @@ FFI JPEG encode. Each paint (bitmap, lines, style, clipped flag) is mirrored to 
 `POST /api/extra-key/preview` re-lays the last painted lines at every size in that style for the size
 picker, which is exact because the lines don't depend on the size. Both atlases hold ASCII, Latin-1
 and `…`; `scripts/gen-font-atlas.mjs` regenerates them from the upstream BDFs. A per-dock `ExtraKeyWidgets` scheduler
-(one instance per connected dock: the primary's own, and one per `DeviceSession`) ticks every second
+(one instance per `Dock` with a driver attached) ticks every second
 and repaints a key only when its content changed.
 
 Extra keys *with* a switch exist too: the AJAZZ AKP05E re-paired as a Stream Deck + drops its right
@@ -662,8 +678,8 @@ shallow-memo `useStore` selector in `ts/src/web/client/lib/store.ts`, plus the c
 | Area | Test files · notable coverage |
 |---|---|
 | CORA framing | `packets` (Mirabox builders + framing), `cora-frame` (resync/overflow/oversized-`payloadLength` E10), `assembler`, `elgato-child-image-bounds` (out-of-range `keyIndex` drop, L4) |
-| Image pipeline | `translator` (key-map incl. `-1` E2 + Rust transform), `image-cache` (full-buffer FNV-1a incl. icon-on-black regression, LRU), `image-pipeline`, `image-render` (worker transform/cache/remap/passthrough), `hash-bench` |
-| Drivers & models | `device-models` (probe order, keyMap perms, 293S 6th-col drop, caps geometry), `driver-manager` (connect/reconnect, mode-switch, E1), `device-session` (per-index ports, splash on start, key/image event wiring, mDNS rename), `hid-worker-host` (failed-`open` reuse — SIGBUS-safe), `mirabox-parse` (0x04 vs 0x00), `k1pro-chunk-pad` |
+| Image pipeline | `translator` (key-map incl. `-1` E2 + Rust transform), `image-cache` (full-buffer FNV-1a incl. icon-on-black regression, LRU), `dock-frames` (driver-before-WebUI order, record-while-attached, same-model replay), `image-render` (worker transform/cache/remap/passthrough), `hash-bench` |
+| Drivers & models | `device-models` (probe order, keyMap perms, 293S 6th-col drop, caps geometry), `driver-manager` (connect/reconnect, mode-switch, E1), `dock` (per-index ports, splash on start, key/image event wiring, Elgato brightness/override, mDNS rename), `hid-worker-host` (failed-`open` reuse — SIGBUS-safe), `mirabox-parse` (0x04 vs 0x00), `k1pro-chunk-pad` |
 | Servers | `server` (primary+child over real TCP; L6/E3/E4/H3 + WebUI brightness), `pairing` (full MK.2 handshake), `feature-response` (cora/responses.ts report-id branches + MAC guard) |
 | Web & infra | `web-ui-server` (MAC/port/Broadcaster, NaN-PID V4, `resetImages` L3), `ui-helpers-docks` (dock list vs legacy-field synthesis), `key-preview`, `tray` (path helpers + `SIGTERM` L1), `mdns-advertiser` (per-platform `buildArgs`, E9), `native-libs` (extract/gunzip/cleanup), `buffer-shim` |
 | Settings & identity | `settings-store` (atomic write, corrupt/missing/array-shaped JSON → `{}`, concurrent-save safety), `device-identity` (stable `usb:<serial>` key vs unstable path fallback, deterministic MAC/serial, no-collision sampling) |
@@ -729,14 +745,14 @@ graph LR
     APP["app.ts<br/>entry point + event wiring"]
 
     DM["driver-manager.ts<br/>coordinator · probe · mode switch"]
-    DM_P["driver-manager-primary.ts<br/>PrimaryDock (identity, brightness,<br/>saved-frame replay)"]
-    DM_E["driver-manager-extras.ts<br/>ExtraDockCoordinator (scan · claim HID paths)"]
+    DM_E["dock-scanner.ts<br/>DockScanner (scan · claim HID paths)"]
     DM_D["driver-manager-discovery.ts<br/>HidDiscovery (scan · present · paths · serial)"]
     DM_POOL["worker-pool.ts<br/>WorkerPool (parked workers of failed opens)"]
-    DM_PACE["driver-manager-pacing.ts<br/>ProbePacer (adaptive retry backoff)"]
-    DS["device-session.ts<br/>DeviceSession · wireCommonDriverEvents"]
+    DM_PACE["driver-manager-pacing.ts<br/>ProbePacer (adaptive backoff,<br/>pending retry, attempts, in-flight)"]
+    DS["dock.ts<br/>Dock (CoraDock + driver attach/detach,<br/>prefs, widgets, last frames)"]
+    DSS["dock-status.ts<br/>buildDockStatus · wireCommonDriverEvents"]
     DID["device-identity.ts<br/>deviceKeyFor · generateMacAddress/Serial (pure)"]
-    IP["image-pipeline.ts<br/>setupImageHandler"]
+    IP["dock-frames.ts<br/>wireDockImages · LastFrames"]
     SPLASH["splash-sender.ts<br/>on-connect splash images"]
     CORA_DOCK["cora-dock.ts<br/>CoraDock · applyModel · startWithRetry"]
     EK["extra-keys.ts<br/>ExtraKeyWidgets · widget rendering"]
@@ -778,13 +794,13 @@ graph LR
 
     CLI --> APP
     APP --> DM
-    APP --> IP
+    DS --> IP
     APP --> ELG
     APP --> TRAY_N
     APP --> CORA_DOCK
     CORA_DOCK --> ELG
     DS --> CORA_DOCK
-    DM --> DM_P
+    DM --> DS
     DM --> DM_E
     DM --> DM_D
     DM --> DM_POOL
@@ -794,15 +810,13 @@ graph LR
     HOST_SCAN --> PROTO_SCAN
     WRK_SCAN --> PROTO_SCAN
     WRK_SCAN --> HID_DISC
-    DM_P --> DS
     DM_E --> DS
+    DS --> DSS
     DS --> HOST_HID
     DS --> ELG
-    DM_P --> DID
     DM_E --> DID
-    DM --> SPLASH
+    DS --> SPLASH
     SPLASH --> TRANS
-    DM_P --> EK
     DS --> EK
     EK -.->|"postMessage (thread boundary)"| HOST_PLG
     HOST_PLG -.->|"postMessage (thread boundary)"| WRK_PLG
@@ -846,7 +860,8 @@ deckbridge/
 │   ├── src/   (see the Module map above for relationships; one folder per runtime tier,
 │   │          and each folder is one eslint-plugin-boundaries element)
 │   │   ├── main/         ← main-thread composition root: app.ts · driver-manager*.ts (probe/open,
-│   │   │                    adaptive backoff, multi-dock) · device-session*.ts · image-pipeline.ts
+│   │   │                    adaptive backoff) · dock.ts · dock-status.ts · dock-frames.ts
+│   │   │                    · dock-scanner*.ts (docks 1..N) · image-perf.ts
 │   │   │                    · cora-dock.ts (server pair, watchdog, applyModel, startWithRetry)
 │   │   │                    · extra-keys.ts · widget-lines.ts · widget-refresh.ts
 │   │   │                    · encoders.ts · command-actions.ts

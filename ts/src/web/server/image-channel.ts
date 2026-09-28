@@ -139,11 +139,6 @@ export class ImageChannel {
     this.bus.broadcast('touchImage', touchPayload(frame));
   }
 
-  /** Snapshot of a dock's cached raw CORA frames (repaint-on-replug). Fresh map; buffers shared/immutable. */
-  dockFramesSnapshot(dock: number): Map<number, DockFrame> {
-    return new Map(this.dockImages.get(dock) ?? []);
-  }
-
   /** Replay a dock's cached frames onto the live channel (dock-select / settings import). */
   replay(dock: number): void {
     for (const [key, frame] of this.dockImages.get(dock) ?? []) this.broadcastImage(key, frame);

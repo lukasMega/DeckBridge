@@ -4,7 +4,7 @@
 // one call (applyModel, was the 5-call applyModelToServers sequence repeated at
 // every call site), and one startWithRetry shared by the primary (app.ts wiring,
 // unbounded retries — the ports are protocol-fixed and can't fall back) and
-// every extra dock (device-session.ts, one attempt — its own scan-tick loop is
+// every scanned dock (Dock.start in dock.ts, one attempt — its own scan-tick loop is
 // the retry mechanism).
 import type { LogLevel } from '../shared/logger.js';
 import { watchPairing } from '../cora/pairing-watchdog.js';
@@ -12,8 +12,8 @@ import type { PairingWatchdog } from '../cora/pairing-watchdog.js';
 import type { ElgatoServer } from '../cora/primary-server.js';
 import type { ElgatoChildServer } from '../cora/child-server.js';
 import type { DeviceModel } from '../devices/driver.js';
-import { applyModelToServers } from './device-session-status.js';
-import type { DeviceInfo } from './device-session-status.js';
+import { applyModelToServers } from './dock-status.js';
+import type { DeviceInfo } from './dock-status.js';
 import { coraPortConflict } from './cora-startup.js';
 
 export interface CoraDockStartOptions {
@@ -24,8 +24,8 @@ export interface CoraDockStartOptions {
   /** CORA child TCP port, included in the bind-conflict message. */
   childPort: number;
   /** Default Infinity (the primary dock: the port is protocol-fixed and can't
-   *  fall back, so keep retrying). Extras pass 1 — a bind failure there frees
-   *  the session index and a later scan tick retries against a possibly
+   *  fall back, so keep retrying). Scanned docks pass 1 — a bind failure there frees
+   *  the dock index and a later scan tick retries against a possibly
    *  different physical unit; looping here would just hold the index hostage. */
   maxAttempts?: number;
   delayMs?: number;

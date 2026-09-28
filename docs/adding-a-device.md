@@ -22,9 +22,9 @@ USB device
             ├─ receives sendImage(deviceKeyIndex, nativeBytes) → hid_write
             └─ receives setBrightness / clearKey
 
-image-pipeline.ts (main thread) — on each CORA image:
-  ├─ pushes the CORA bytes to the WebUI (base64 over WebSocket), immediately
-  └─ WorkerHidDriver.renderCoraImage(keyIndex, data, format) → postMessage → worker
+dock-frames.ts (main thread) — on each CORA image:
+  ├─ WorkerHidDriver.renderCoraImage(keyIndex, data, format) → postMessage → worker
+  └─ pushes the CORA bytes to the WebUI (base64 over WebSocket)
 
 image-render.ts (worker thread) — on each forwarded image:
   ├─ transforms via deckbridge-native cdylib (FFI: resize/rotate/flip) + LRU cache
@@ -45,7 +45,7 @@ Every field of every model already in the registry, side by side:
 | Wire protocol (only if new) | `devices/protocol/<proto>.ts` + `PROTOCOL_STRATEGY` table | Packet framing for image send + key input parsing |
 | Driver class (only if new pattern) | `devices/elgato/driver.ts` or new file + `driverKind` | HID open/read/write loop |
 
-Everything else (`translator.ts`, `image-pipeline.ts`, `splash-sender.ts`,
+Everything else (`translator.ts`, `dock-frames.ts`, `splash-sender.ts`,
 `driver-manager.ts`) reads `model.keyMap` / `image` / `cora` / `splash` / `driverKind`
 generically — not edited for a config-only device.
 

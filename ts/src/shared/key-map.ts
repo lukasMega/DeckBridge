@@ -1,7 +1,7 @@
 import type { DeviceModel } from '../devices/driver.js';
 
 // Pure model.keyMap lookups, split out of translator.ts so main-thread code
-// (splash-sender.ts, device-session.ts) and worker code (image-render.ts) can use
+// (splash-sender.ts, dock-status.ts) and worker code (image-render.ts) can use
 // them without pulling in translator.ts's ffi/image-proc.js dependency.
 
 /** mk2 key index → device wire image id, driven by model.keyMap.

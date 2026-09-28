@@ -25,16 +25,16 @@ export const PLUS_TOUCH_WIDTH = 800;
 export const PLUS_TOUCH_HEIGHT = 100;
 export const ELGATO_TCP_PORT = 5343;
 export const ELGATO_CHILD_PORT = 5344;
-// Multi-device: extra docks use a fixed port stride off the primary pair, so
-// session i listens on primary ELGATO_TCP_PORT+2i and child ELGATO_CHILD_PORT+2i.
+// Multi-device: scanned docks use a fixed port stride off the primary pair, so
+// dock i listens on primary ELGATO_TCP_PORT+2i and child ELGATO_CHILD_PORT+2i.
 export const CORA_PORT_STRIDE = 2;
-// Structural ceiling on session indices (and therefore CORA port pairs):
-// session 0 (primary singleton) + up to 3 extra docks.
-export const MAX_DEVICE_SESSIONS = 4;
+// Structural ceiling on dock indices (and therefore CORA port pairs):
+// dock 0 (process-lifetime) + up to 3 scanned docks.
+export const MAX_DOCKS = 4;
 // How many docks the opt-in "multiple decks" setting actually allows (primary +
-// one extra). Without it DeckBridge runs a single dock and stops scanning USB
-// once that dock is up — see driver-manager-extras.ts.
-export const MAX_MULTI_DECK_SESSIONS = 2;
+// one scanned dock). Without it DeckBridge runs a single dock and stops scanning USB
+// once that dock is up — see dock-scanner.ts.
+export const MAX_MULTI_DECK_DOCKS = 2;
 
 // Default device identity strings
 export const DEFAULT_DOCK_FIRMWARE_VERSION = '1.01.016';
@@ -146,7 +146,6 @@ export interface LogObject {
 
 // Extra-key widget config lives in extra-key-config.ts; re-exported for existing imports.
 export * from './extra-key-config.js';
-export type { WidgetPaint } from './widget-layout.js';
 
 export const TOUCH_STRIP_MODES = [
   'elgato',

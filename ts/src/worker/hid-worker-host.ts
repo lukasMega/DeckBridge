@@ -1,12 +1,12 @@
 /** Main-thread proxy for the generic USB HID worker.
- *  Presents a DeviceDriver-shaped surface; forwards to the worker thread
+ *  Presents a DockDriver-shaped surface; forwards to the worker thread
  *  so blocking hid_write never stalls the CORA/WebUI event loop. */
 import { EventEmitter } from 'node:events';
 import workerSource from 'virtual:hid-worker';
 import { revokeBlobUrl, spawnWorker, terminateDeferred } from '../shared/worker-lifecycle.js';
 import type { MainToWorker, WorkerToMain } from './hid-worker-protocol.js';
 import type {
-  DeviceDriver,
+  DockDriver,
   DeviceImageSpec,
   DeviceModel,
   DeviceModelOverride,
@@ -19,6 +19,7 @@ import type {
   TouchWindowRegion,
 } from '../shared/types.js';
 import { DEFAULT_TOUCH_STRIP_OPTIONS } from '../shared/types.js';
+import { log } from '../shared/logger.js';
 
 const OPEN_TIMEOUT_MS = 10_000;
 const CLOSE_GRACE_MS = 1_000;
@@ -32,7 +33,7 @@ export async function closeDriver(d: {
   await d.close().catch(() => undefined);
 }
 
-export class WorkerHidDriver extends EventEmitter implements DeviceDriver {
+export class WorkerHidDriver extends EventEmitter implements DockDriver {
   /** The EFFECTIVE model (registry entry with the user's device tuning already
    *  applied — see devices/model-overrides.ts). `overrides` is forwarded to the
    *  worker so it can re-derive the same thing from its own registry copy. */
@@ -78,7 +79,7 @@ export class WorkerHidDriver extends EventEmitter implements DeviceDriver {
           this.settleOpen(null, new Error(message));
           this.cleanupWorker();
         } else {
-          this.emit('error', new Error(message));
+          this.reportError(message);
         }
       });
     }
@@ -213,11 +214,12 @@ export class WorkerHidDriver extends EventEmitter implements DeviceDriver {
       case 'stripWrite':
         this.emit('stripWrite', msg.wireId, msg.bytes, msg.full);
         break;
+      // Logged here, not re-emitted: a worker logs from open() on, before any dock listens.
       case 'log':
-        this.emit('log', { level: msg.level, component: msg.component, message: msg.message });
+        log(msg.level, msg.component, msg.message);
         break;
       case 'error':
-        this.emit('error', new Error(msg.message));
+        this.reportError(msg.message);
         break;
       case 'disconnect':
         this.emit('disconnect');
@@ -234,6 +236,11 @@ export class WorkerHidDriver extends EventEmitter implements DeviceDriver {
         break;
       }
     }
+  }
+
+  private reportError(message: string): void {
+    log('error', this.model.id, message);
+    this.emit('error', new Error(message));
   }
 
   private settleOpen(resolve: (() => void) | null, err: Error | null): void {

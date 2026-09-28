@@ -24,7 +24,7 @@ the generated [Device specs](./device-specs.mdx).
 
 Each **Mirabox/Ajazz/Fifine** model advertises as an Elgato device the desktop already knows (MK.2 for the 293V3/293S, the AKP153 rev. 2 clones, the Fifine D6, and the 7 v1 rebadges, Mini for the K1 Pro), and the sidecar resizes/rotates to the device's native key size per `model.image` (K1 Pro also re-encodes BMP→JPEG). **Elgato devices** advertise their real geometry and forward device-native data with no transform — the desktop pre-applies all orientation/color work itself.
 
-On image arrival (`setupImageHandler` in `image-pipeline.ts`) the path splits into two tracks on **different threads**:
+On image arrival (`wireDockImages` in `dock-frames.ts`, one per dock) the path splits into two tracks on **different threads**:
 
 - **WebUI path (main thread)** — fires immediately: the CORA bytes are pushed **inline (base64) over WebSocket**, so the browser renders at arrival with no follow-up request.
 - **Transform + USB path (USB worker thread)** — the main thread forwards raw CORA bytes via `WorkerHidDriver.renderCoraImage()`; the worker (`image-render.ts`) transforms through the Rust deckbridge-native cdylib (LRU-cached), then writes to the device. Running on the worker keeps the transform — and, dominantly, the burst of blocking `hid_write` chunk uploads that follows it — off the CORA ACK loop (P1).
@@ -71,7 +71,7 @@ The Elgato desktop pre-applies the Mini's 90° CW rotation and BGR colour transf
 sequenceDiagram
     participant EL as Elgato Software
     participant CS as ElgatoChildServer
-    participant PIPE as setupImageHandler
+    participant PIPE as wireDockImages
     participant WEB as WebUIServer
     participant BR as Browser
     participant HOST as WorkerHidDriver
@@ -104,7 +104,7 @@ sequenceDiagram
     HOST-->>WEB: notifyStats({ imagesSent }) via driver-manager
 ```
 
-Key behaviours (the format/cache/remap logic now lives in `renderImage` in `image-render.ts`, on the worker; `setupImageHandler` on the main thread only broadcasts to the WebUI and calls `renderCoraImage`):
+Key behaviours (the format/cache/remap logic now lives in `renderImage` in `image-render.ts`, on the worker; `wireDockImages` on the main thread only calls `renderCoraImage`, records the dock's last frame, and broadcasts to the WebUI):
 
 - **No per-brand branching.** The native format is chosen purely from `format` and the effective image spec: BMP input whose device format is also BMP (true gen1 Mini) → forward as-is; `transform === 'passthrough'` → forward the CORA JPEG as-is; otherwise (`transform === 'sidecar'`) → `transformImageForDevice(data, model.image)` (resize/pad + `rotate`/`flipH`/`flipV`, re-encode). The K1 Pro takes the sidecar path even though its input is BMP, because its device format is JPEG (BMP→JPEG).
 - **Image fit is device tuning, not a runtime WebUI toggle.** `model.image.resizeMode`/`padFill` come from the model default merged with the user's per-model device tuning (Settings → Device tuning, `POST /api/device-overrides`); the effective spec is fixed for the life of the open driver (or swapped in place by a live tuning change, `'setOverrides'`) — `renderImage` never overlays a separate runtime override.
@@ -235,9 +235,8 @@ the server's `broadcast<K>` and the client's handler table are both typed by it.
 
 | File | Role |
 |---|---|
-| `ts/src/main/image-pipeline.ts` | `setupImageHandler(childServer, webui, getDriver)` (main thread) — immediate WebUI base64 push, then forwards raw CORA bytes via `getDriver()?.renderCoraImage?.(...)` |
+| `ts/src/main/dock-frames.ts` | `wireDockImages(childServer, sink)` (main thread, one per dock) — forwards raw CORA bytes via `driver()?.renderCoraImage(...)` (a no-op on the mock), records the dock's `LastFrames` (replug replay, live-tuning repaint), then the WebUI base64 push |
 | `ts/src/transform/image-render.ts` | `renderImage(driver, model, keyIndex, coraBytes, format)` (worker) — transform (deckbridge-native FFI) + LRU cache + CORA→wire remap + `sendImage` to the device |
-| `ts/src/main/app.ts` | Wires it up: `setupImageHandler(childServer, webui, getCurrentDriver)` |
 | `ts/src/cora/image-assembler.ts` | `assembleImageChunk()` (gen2 JPEG) · `assembleGen1ImageChunk()` (gen1 BMP, BMP `bfSize` trim) |
 | `ts/src/cora/child-server.ts` | `ElgatoChildServer.handleCoraPacket` — dispatches `IMG_CMD_WRITE` / `GEN1_IMG_CMD`, emits `'image'` |
 | `ts/src/transform/image-cache.ts` | `LruCache` (`IMAGE_CACHE_SIZE` = 100) · `hashJpeg()` (full-buffer FNV-1a 32-bit) · `makeCacheKey(modelId, hash)` |

@@ -1,6 +1,6 @@
 // Deterministic per-physical-device identity: MAC address + dock/child serial
 // suffix, keyed by a stable device key so the SAME physical unit gets the SAME
-// identity across restarts/replugs instead of whatever session slot it lands in.
+// identity across restarts/replugs instead of whatever dock slot it lands in.
 // Pure — WebUIServer owns settings.json persistence and calls getOrCreateDeviceIdentity()
 // as a reducer over its in-memory devices array.
 import { DEFAULT_DOCK_SERIAL_NUMBER, DEFAULT_CHILD_SERIAL_NUMBER, fnv1a } from '../shared/types.js';
@@ -55,9 +55,9 @@ export function generateMacAddress(deviceKey: string): string {
   return ['02', ...bytes.map((b) => b.toString(16).padStart(2, '0'))].join(':');
 }
 
-/** Same substitution point as the old session-index scheme (chars 10-11 of the default
+/** Same substitution point as the old slot-index scheme (chars 10-11 of the default
  *  serial) — MUST stay inside the first 12 chars: the Elgato app keys devices by
- *  serial.substring(0,12) (see device-session.ts). */
+ *  serial.substring(0,12) (see dock-status.ts dockSlot). */
 export function generateSerial(template: string, deviceKey: string): string {
   const suffix = (fnv1a(deviceKey) % 1296).toString(36).padStart(2, '0');
   return `${template.slice(0, 10)}${suffix}${template.slice(12)}`;

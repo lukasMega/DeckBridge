@@ -52,7 +52,7 @@ export function nativeHidDiscovery(): HidDiscovery {
 
 /** Identity of a just-opened primary device: stable USB-serial key, else the
  *  (volatile) hidPath, else a per-model key (VID/PID-fallback open, no
- *  usage-matched path) — same rule as the extra-session path. */
+ *  usage-matched path) — same rule as the scanned-dock path. */
 export function resolveRealDeviceIdentity(
   discovery: HidDiscovery,
   hidPath: string | undefined,

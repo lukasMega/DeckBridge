@@ -1,12 +1,15 @@
 import assert from 'tjs:assert';
 import { EventEmitter } from '../src/platform/events-shim.js';
 import {
-  DeviceSession,
-  sessionIdentity,
+  dockSlot,
   wireCommonDriverEvents,
-} from '../src/main/device-session.js';
-import { zoneForKnob, zoneForTouch } from '../src/main/device-session-status.js';
+  zoneForKnob,
+  zoneForTouch,
+} from '../src/main/dock-status.js';
+import type { DockSlot } from '../src/main/dock-status.js';
 import { CoraDock } from '../src/main/cora-dock.js';
+import { Dock } from '../src/main/dock.js';
+import type { DockHooks, DockSettings } from '../src/main/dock.js';
 import type { ElgatoServer } from '../src/cora/primary-server.js';
 import type { ElgatoChildServer } from '../src/cora/child-server.js';
 import { generateDeviceIdentity } from '../src/infra/device-identity.js';
@@ -38,6 +41,7 @@ import type { DeviceConfig } from '../src/cora/types.js';
 import type { DeviceModel } from '../src/devices/driver.js';
 import type { WorkerHidDriver } from '../src/worker/hid-worker-host.js';
 import { testAsync as test, summaryExit } from './helpers/harness.js';
+import { StubDockDriver } from './helpers/stub-dock-driver.js';
 
 // Fakes
 
@@ -106,37 +110,31 @@ class FakeChildServer extends EventEmitter {
   }
 }
 
-class FakeDriver extends EventEmitter {
-  readonly model: DeviceModel;
+class FakeDriver extends StubDockDriver {
   deviceSerial: string | undefined = 'SN123';
   deviceFirmware: string | undefined = '1.0';
   closeCalls = 0;
   renderCalls: { keyIndex: number; format: string }[] = [];
   splashCalls: number[] = [];
   brightnessCalls: number[] = [];
-  constructor(model: DeviceModel) {
-    super();
-    this.model = model;
-  }
-  close(): Promise<void> {
+  override close(): Promise<void> {
     this.closeCalls++;
     return Promise.resolve();
   }
-  renderCoraImage(keyIndex: number, _bytes: Uint8Array, format: 'jpeg' | 'bmp'): void {
+  override renderCoraImage(keyIndex: number, _bytes: Uint8Array, format: 'jpeg' | 'bmp'): void {
     this.renderCalls.push({ keyIndex, format });
   }
-  sendSplashImage(keyIndex: number): void {
+  override sendSplashImage(keyIndex: number): void {
     this.splashCalls.push(keyIndex);
   }
-  setBrightness(level: number): void {
+  override setBrightness(level: number): void {
     this.brightnessCalls.push(level);
   }
   // start() clears unconfigured extra keys (paintExtraKeys — 293S 6th column).
   clearKeyCalls: number[] = [];
-  clearKey(keyIndex: number): void {
+  override clearKey(keyIndex: number): void {
     this.clearKeyCalls.push(keyIndex);
   }
-  renderTouchImage(): void {}
 }
 
 /** A real CoraDock (pairing watchdog, applyModel, startWithRetry, stop) over a
@@ -160,10 +158,38 @@ function prefsWith(fields: Partial<DeviceIdentitySettings>) {
   return { entry, prefs: new DockPrefs(store, entry.deviceKey) };
 }
 
+/** An extra-style dock (index from `identity`) over a fake CORA pair and `prefs`. */
+function makeTestDock(opts: {
+  identity: DockSlot;
+  cora: CoraDock;
+  model: DeviceModel;
+  prefs: DockPrefs;
+  deviceInfo?: { serial?: string; firmware?: string };
+  hooks?: DockHooks;
+}): Dock {
+  const settings = {
+    for: () => opts.prefs,
+    getOrCreateIdentity: () => {
+      throw new Error('identity is given up front');
+    },
+    markPaired: () => false,
+  } as unknown as DockSettings;
+  return new Dock({
+    index: opts.identity.index,
+    cora: opts.cora,
+    ports: { primary: opts.identity.primaryPort, child: opts.identity.childPort },
+    settings,
+    identity: opts.identity,
+    model: opts.model,
+    deviceInfo: opts.deviceInfo,
+    hooks: opts.hooks,
+  });
+}
+
 const encoderFields = (o?: EncoderOverride): Partial<DeviceIdentitySettings> =>
   o ? { touchStripMode: o.mode, encoders: o.encoders } : {};
 
-function makeSession(model: DeviceModel = DEFAULT_MODEL, encoderOverride?: EncoderOverride) {
+function makeTestSetup(model: DeviceModel = DEFAULT_MODEL, encoderOverride?: EncoderOverride) {
   const server = new FakeServer();
   const childServer = new FakeChildServer();
   const driver = new FakeDriver(model);
@@ -174,20 +200,21 @@ function makeSession(model: DeviceModel = DEFAULT_MODEL, encoderOverride?: Encod
     ...encoderFields(encoderOverride),
   });
   const imageCalls: { keyIndex: number; format: string }[] = [];
-  const session = new DeviceSession({
-    identity: sessionIdentity(1, testIdentity(model)),
-    dock: makeDock(server, childServer),
-    driver: driver as unknown as WorkerHidDriver,
+  const dock = makeTestDock({
+    identity: dockSlot(1, testIdentity(model)),
+    cora: makeDock(server, childServer),
     model,
     deviceInfo: { serial: driver.deviceSerial, firmware: driver.deviceFirmware },
-    onDisconnect: () => {
-      disconnects++;
-    },
-    onStatusChange: () => {
-      statusChanges++;
-    },
-    onImage: (keyIndex, _data, format) => {
-      imageCalls.push({ keyIndex, format });
+    hooks: {
+      disconnect: () => {
+        disconnects++;
+      },
+      changed: () => {
+        statusChanges++;
+      },
+      image: (keyIndex, _data, format) => {
+        imageCalls.push({ keyIndex, format });
+      },
     },
     prefs,
   });
@@ -195,7 +222,8 @@ function makeSession(model: DeviceModel = DEFAULT_MODEL, encoderOverride?: Encod
     server,
     childServer,
     driver,
-    session,
+    dock,
+    start: () => dock.start(driver),
     imageCalls,
     getDisconnects: () => disconnects,
     getStatusChanges: () => statusChanges,
@@ -206,7 +234,7 @@ function makeSession(model: DeviceModel = DEFAULT_MODEL, encoderOverride?: Encod
 }
 
 /** An AKP05E re-paired as a Plus whose strip zones carry `configs`, in `mode`. */
-function makeStripSession(
+function makeStripSetup(
   mode: TouchStripMode,
   configs: Record<number, ExtraKeyConfig>,
   encoderOverride?: EncoderOverride,
@@ -217,33 +245,36 @@ function makeStripSession(
   const server = new FakeServer();
   const childServer = new FakeChildServer();
   const driver = new FakeDriver(model);
-  const session = new DeviceSession({
-    identity: sessionIdentity(1, testIdentity(model)),
-    dock: makeDock(server, childServer),
-    driver: driver as unknown as WorkerHidDriver,
+  const dock = makeTestDock({
+    identity: dockSlot(1, testIdentity(model)),
+    cora: makeDock(server, childServer),
     model,
-    onDisconnect: () => undefined,
     prefs: prefsWith({
       touchStripMode: mode,
       extraKeys: configs,
       ...encoderFields(encoderOverride),
     }).prefs,
   });
-  return { session, driver, childServer };
+  return {
+    dock,
+    driver,
+    childServer,
+    start: () => dock.start(driver),
+  };
 }
 
 const tap = (x: number): TouchInputEvent => ({ type: 'tap', x, y: 50 });
 
 // Tests
 
-await test('sessionIdentity computes ports from index, passes identity fields through unchanged', () => {
+await test('dockSlot computes ports from index, passes identity fields through unchanged', () => {
   const identity = testIdentity(DEFAULT_MODEL, 'dev-key-A');
   for (const index of [1, 2, 3]) {
-    const id = sessionIdentity(index, identity);
+    const id = dockSlot(index, identity);
     assert.equal(id.index, index, 'index passthrough');
     assert.equal(id.primaryPort, ELGATO_TCP_PORT + CORA_PORT_STRIDE * index, 'primary port stride');
     assert.equal(id.childPort, ELGATO_CHILD_PORT + CORA_PORT_STRIDE * index, 'child port stride');
-    // Ports vary with the (scan-order) session index, but identity fields are
+    // Ports vary with the (scan-order) dock index, but identity fields are
     // fixed per physical device — stable across a replug that lands on a
     // different free index (see .claude/plans/2026-07-14_per-device-identity.md).
     assert.equal(id.deviceKey, identity.deviceKey, 'deviceKey passthrough');
@@ -253,17 +284,17 @@ await test('sessionIdentity computes ports from index, passes identity fields th
     assert.equal(id.macAddress, identity.macAddress, 'mac passthrough');
   }
   // index 1 concretely: 5345 / 5346
-  const one = sessionIdentity(1, identity);
+  const one = dockSlot(1, identity);
   assert.equal(one.primaryPort, 5345, 'index 1 primary = 5345');
   assert.equal(one.childPort, 5346, 'index 1 child = 5346');
 });
 
-await test('sessionIdentity: distinct device keys produce distinct 12-char app ids for this pair', () => {
+await test('dockSlot: distinct device keys produce distinct 12-char app ids for this pair', () => {
   // The Elgato app keys devices by serial.substring(0, 12) (pairing challenge
   // 0x06) — regression guard that this specific pair of device keys doesn't
   // collide (device-identity.test.ts covers the hash's collision rate broadly).
-  const a = sessionIdentity(1, testIdentity(DEFAULT_MODEL, 'dev-key-A'));
-  const b = sessionIdentity(1, testIdentity(DEFAULT_MODEL, 'dev-key-B'));
+  const a = dockSlot(1, testIdentity(DEFAULT_MODEL, 'dev-key-A'));
+  const b = dockSlot(1, testIdentity(DEFAULT_MODEL, 'dev-key-B'));
   assert.notEqual(
     a.dockSerial.substring(0, 12),
     b.dockSerial.substring(0, 12),
@@ -272,8 +303,8 @@ await test('sessionIdentity: distinct device keys produce distinct 12-char app i
 });
 
 await test('start() applies model to both servers and sends splash', async () => {
-  const { server, childServer, driver, session } = makeSession();
-  await session.start();
+  const { server, childServer, driver, start } = makeTestSetup();
+  await start();
 
   assert.equal(server.startCalls, 1, 'primary server started');
   assert.equal(childServer.startCalls, 1, 'child server started');
@@ -299,8 +330,8 @@ await test('Plus emulation forwards a 2.00.x child firmware to the desktop', asy
       productId: ELGATO_PLUS_PID,
     },
   };
-  const { server, session } = makeSession(rePaired);
-  await session.start();
+  const { server, start } = makeTestSetup(rePaired);
+  await start();
   assert.equal(
     server.setDeviceConfigCalls[0]?.childFirmwareVersion,
     '2.00.026',
@@ -309,8 +340,8 @@ await test('Plus emulation forwards a 2.00.x child firmware to the desktop', asy
 });
 
 await test('a native model resets the child firmware to the default (no stale Plus line)', async () => {
-  const { server, session } = makeSession(AJAZZ_AKP05E_MODEL);
-  await session.start();
+  const { server, start } = makeTestSetup(AJAZZ_AKP05E_MODEL);
+  await start();
   assert.equal(
     server.setDeviceConfigCalls[0]?.childFirmwareVersion,
     DEFAULT_CHILD_FIRMWARE_VERSION,
@@ -318,8 +349,8 @@ await test('a native model resets the child firmware to the default (no stale Pl
 });
 
 await test('key event translates via keymap and reaches childServer.sendKeyEvent', async () => {
-  const { childServer, driver, session } = makeSession(MIRABOX_293S_MODEL);
-  await session.start();
+  const { childServer, driver, start } = makeTestSetup(MIRABOX_293S_MODEL);
+  await start();
 
   const wireInputToCora = MIRABOX_293S_MODEL.keyMap.wireInputToCora;
   assert.ok(wireInputToCora != null, '293S declares wireInputToCora');
@@ -421,8 +452,8 @@ await test('device action observer reports keys, knobs, touch and unknown inputs
 });
 
 await test('dial events reach childServer.sendDial only when the knob override leaves them', async () => {
-  const connected = makeSession(AJAZZ_AKP05E_MODEL);
-  await connected.session.start();
+  const connected = makeTestSetup(AJAZZ_AKP05E_MODEL);
+  await connected.start();
   connected.driver.emit('dial', { index: 1, kind: 'rotate', delta: 1 });
   assert.deepEqual(connected.childServer.sendDialCalls, [{ index: 1, kind: 'rotate', delta: 1 }]);
 
@@ -431,8 +462,8 @@ await test('dial events reach childServer.sendDial only when the knob override l
     mode: 'deckbridge-ignore',
     encoders: { connectToApp: false },
   };
-  const disconnected = makeSession(AJAZZ_AKP05E_MODEL, override);
-  await disconnected.session.start();
+  const disconnected = makeTestSetup(AJAZZ_AKP05E_MODEL, override);
+  await disconnected.start();
   disconnected.driver.emit('dial', { index: 1, kind: 'rotate', delta: 1 });
   disconnected.driver.emit('dial', { index: 1, kind: 'press', state: 'down' });
   disconnected.driver.emit('dial', { index: 1, kind: 'press', state: 'up' });
@@ -440,26 +471,26 @@ await test('dial events reach childServer.sendDial only when the knob override l
 });
 
 await test('status() reports the physical encoder count (AKP05E via its Plus emulation)', () => {
-  assert.equal(makeSession(AJAZZ_AKP05E_MODEL).session.status().encoderCount, 4);
-  assert.equal(makeSession(DEFAULT_MODEL).session.status().encoderCount, undefined, 'omitted');
+  assert.equal(makeTestSetup(AJAZZ_AKP05E_MODEL).dock.status().encoderCount, 4);
+  assert.equal(makeTestSetup(DEFAULT_MODEL).dock.status().encoderCount, undefined, 'omitted');
 });
 
 await test('status() reports the re-paired CORA profile only when advertising as one', () => {
   const plus = applyModelOverrides(AJAZZ_AKP05E_MODEL, {
     cora: { advertiseAs: 'stream-deck-plus' },
   });
-  assert.equal(makeSession(plus).session.status().coraProfile, 'stream-deck-plus');
-  assert.equal(makeSession(AJAZZ_AKP05E_MODEL).session.status().coraProfile, undefined, 'native');
+  assert.equal(makeTestSetup(plus).dock.status().coraProfile, 'stream-deck-plus');
+  assert.equal(makeTestSetup(AJAZZ_AKP05E_MODEL).dock.status().coraProfile, undefined, 'native');
 });
 
 await test('status() lists the AKP05E right column as pressable extra keys only as a Plus', () => {
   const plus = applyModelOverrides(AJAZZ_AKP05E_MODEL, {
     cora: { advertiseAs: 'stream-deck-plus' },
   });
-  const status = makeSession(plus).session.status();
+  const status = makeTestSetup(plus).dock.status();
   assert.deepEqual(status.extraKeys, [15, 10]);
   assert.deepEqual(status.pressableExtraKeys, [15, 10]);
-  const native = makeSession(AJAZZ_AKP05E_MODEL).session.status();
+  const native = makeTestSetup(AJAZZ_AKP05E_MODEL).dock.status();
   assert.equal(native.extraKeys, undefined, 'native 5×2 grid has no extra keys');
   assert.equal(native.pressableExtraKeys, undefined);
 });
@@ -488,7 +519,7 @@ await test('a pressable extra key reaches onExtraKey by its image wire id, not o
 });
 
 await test('status() carries each strip zone geometry for the WebUI mirror', () => {
-  const zones = makeSession(AJAZZ_AKP05E_MODEL).session.status().widgetDisplays;
+  const zones = makeTestSetup(AJAZZ_AKP05E_MODEL).dock.status().widgetDisplays;
   assert.equal(zones?.length, 4);
   assert.deepEqual(zones?.[1], {
     wireId: 2,
@@ -500,23 +531,21 @@ await test('status() carries each strip zone geometry for the WebUI mirror', () 
     flipH: false,
     flipV: false,
   });
-  assert.equal(makeSession(DEFAULT_MODEL).session.status().widgetDisplays, undefined);
+  assert.equal(makeTestSetup(DEFAULT_MODEL).dock.status().widgetDisplays, undefined);
 });
 
-await test('a driver stripWrite reaches the session onStripWrite', async () => {
+await test('a driver stripWrite reaches the stripWrite hook', async () => {
   const model = AJAZZ_AKP05E_MODEL;
   const driver = new FakeDriver(model);
   const writes: Array<[number, Uint8Array, boolean]> = [];
-  const session = new DeviceSession({
-    identity: sessionIdentity(1, testIdentity(model)),
-    dock: makeDock(new FakeServer(), new FakeChildServer()),
-    driver: driver as unknown as WorkerHidDriver,
+  const dock = makeTestDock({
+    identity: dockSlot(1, testIdentity(model)),
+    cora: makeDock(new FakeServer(), new FakeChildServer()),
     model,
-    onDisconnect: () => undefined,
-    onStripWrite: (wireId, jpeg, full) => writes.push([wireId, jpeg, full]),
+    hooks: { stripWrite: (wireId, jpeg, full) => writes.push([wireId, jpeg, full]) },
     prefs: prefsWith({}).prefs,
   });
-  await session.start();
+  await dock.start(driver);
   const bytes = new Uint8Array([0xff, 0xd8]);
   driver.emit('stripWrite', 2, bytes, false);
   assert.deepEqual(writes, [[2, bytes, false]]);
@@ -543,11 +572,11 @@ await test('strip zones map left→right onto taps (800 px Plus strip) and knobs
 });
 
 await test('a tap on a zone showing a widget refreshes it; other gestures and zones reach the app', async () => {
-  const { session, driver, childServer } = makeStripSession('deckbridge-ignore', {
+  const { dock, driver, childServer, start } = makeStripSetup('deckbridge-ignore', {
     1: { widget: 'text', param: 'Hi' },
     2: { widget: 'none' },
   });
-  await session.start();
+  await start();
   const before = driver.splashCalls.length;
   driver.emit('touch', tap(100));
   assert.equal(driver.splashCalls.length, before + 1, 'zone 1 flashed');
@@ -556,7 +585,7 @@ await test('a tap on a zone showing a widget refreshes it; other gestures and zo
   driver.emit('touch', tap(500));
   driver.emit('touch', { type: 'hold', x: 100, y: 50 });
   driver.emit('touch', { type: 'swipe', x: 100, y: 50, endX: 700, endY: 50 });
-  await session.stop();
+  await dock.stop();
   assert.deepEqual(
     childServer.sendTouchCalls.map((e) => `${e.type} ${e.x}`),
     ['tap 300', 'tap 500', 'hold 100', 'swipe 100'],
@@ -566,40 +595,40 @@ await test('a tap on a zone showing a widget refreshes it; other gestures and zo
 
 await test("taps reach the app under 'elgato' and in a repaint-mode Elgato hold-off", async () => {
   const configs = { 1: { widget: 'text', param: 'Hi' } as ExtraKeyConfig };
-  const elgato = makeStripSession('elgato', configs);
-  await elgato.session.start();
+  const elgato = makeStripSetup('elgato', configs);
+  await elgato.start();
   elgato.driver.emit('touch', tap(100));
-  await elgato.session.stop();
+  await elgato.dock.stop();
   assert.equal(elgato.childServer.sendTouchCalls.length, 1, "'elgato' strip");
 
-  const repaint = makeStripSession('deckbridge-repaint', configs);
-  await repaint.session.start();
+  const repaint = makeStripSetup('deckbridge-repaint', configs);
+  await repaint.start();
   repaint.driver.emit('touch', tap(100));
   assert.equal(repaint.childServer.sendTouchCalls.length, 0, 'widget showing → consumed');
   repaint.childServer.emit('touchImage', { data: new Uint8Array(1), region: undefined });
   repaint.driver.emit('touch', tap(100));
-  await repaint.session.stop();
+  await repaint.dock.stop();
   assert.equal(repaint.childServer.sendTouchCalls.length, 1, "hold-off: the app's image shows");
 });
 
 await test('a disconnected knob press with no command refreshes the zone above it', async () => {
-  const { session, driver, childServer } = makeStripSession(
+  const { dock, driver, childServer, start } = makeStripSetup(
     'deckbridge-ignore',
     { 2: { widget: 'text', param: 'Hi' } },
     { mode: 'deckbridge-ignore', encoders: { connectToApp: false } },
   );
-  await session.start();
+  await start();
   const before = driver.splashCalls.length;
   driver.emit('dial', { index: 1, kind: 'press', state: 'down' });
   driver.emit('dial', { index: 0, kind: 'press', state: 'down' });
-  await session.stop();
+  await dock.stop();
   assert.deepEqual(driver.splashCalls.slice(before), [2], 'knob 2 → zone 2; zone 1 has no widget');
   assert.equal(childServer.sendDialCalls.length, 0, 'consumed');
 });
 
 await test('image event reaches driver.renderCoraImage', async () => {
-  const { childServer, driver, session } = makeSession();
-  await session.start();
+  const { childServer, driver, start } = makeTestSetup();
+  await start();
 
   childServer.emit('image', { keyIndex: 4, data: new Uint8Array([1, 2, 3]), format: 'jpeg' });
   assert.equal(driver.renderCalls.length, 1, 'renderCoraImage called once');
@@ -607,9 +636,9 @@ await test('image event reaches driver.renderCoraImage', async () => {
   assert.equal(driver.renderCalls[0]?.format, 'jpeg', 'format forwarded');
 });
 
-await test('image event mirrors to onImage after the driver render', async () => {
-  const { childServer, driver, session, imageCalls } = makeSession();
-  await session.start();
+await test('image event mirrors to the image hook after the driver render', async () => {
+  const { childServer, driver, imageCalls, start } = makeTestSetup();
+  await start();
 
   childServer.emit('image', { keyIndex: 7, data: new Uint8Array([5]), format: 'bmp' });
   assert.equal(driver.renderCalls.length, 1, 'driver render still called');
@@ -619,20 +648,20 @@ await test('image event mirrors to onImage after the driver render', async () =>
 });
 
 await test('setBrightness applies to the driver and shows in status()', async () => {
-  const { driver, session, getStatusChanges } = makeSession();
-  await session.start();
+  const { driver, dock, getStatusChanges, start } = makeTestSetup();
+  await start();
   const before = getStatusChanges();
 
-  session.setBrightness(40);
+  dock.setBrightness(40);
   assert.deepEqual(driver.brightnessCalls, [40], 'driver.setBrightness called');
-  assert.equal(session.status().brightness, 40, 'status() reflects the level');
+  assert.equal(dock.status().brightness, 40, 'status() reflects the level');
   assert.equal(getStatusChanges(), before + 1, 'status change fired');
 });
 
 await test('status exposes real device identity separately', () => {
-  const { session } = makeSession();
+  const { dock } = makeTestSetup();
 
-  assert.deepEqual(session.status().realDeviceIdentity, {
+  assert.deepEqual(dock.status().realDeviceIdentity, {
     modelName: DEFAULT_MODEL.name,
     serialNumber: 'SN123',
     firmwareVersion: '1.0',
@@ -640,22 +669,22 @@ await test('status exposes real device identity separately', () => {
 });
 
 await test("child 'brightness' applies unless the Elgato override is on", async () => {
-  const { childServer, driver, session, setIgnoreElgato } = makeSession();
-  await session.start();
+  const { childServer, driver, dock, setIgnoreElgato, start } = makeTestSetup();
+  await start();
 
   childServer.emit('brightness', 55);
   assert.deepEqual(driver.brightnessCalls, [55], 'Elgato brightness applied');
-  assert.equal(session.status().brightness, 55, 'recorded in status');
+  assert.equal(dock.status().brightness, 55, 'recorded in status');
 
   setIgnoreElgato(true);
   childServer.emit('brightness', 10);
   assert.deepEqual(driver.brightnessCalls, [55], 'ignored while override on');
-  assert.equal(session.status().brightness, 55, 'status unchanged while ignored');
+  assert.equal(dock.status().brightness, 55, 'status unchanged while ignored');
 });
 
-await test("driver 'disconnect' fires onDisconnect", async () => {
-  const { driver, session, getDisconnects } = makeSession();
-  await session.start();
+await test("driver 'disconnect' fires the disconnect hook", async () => {
+  const { driver, getDisconnects, start } = makeTestSetup();
+  await start();
   assert.equal(getDisconnects(), 0, 'no disconnect yet');
   driver.emit('disconnect');
   assert.equal(getDisconnects(), 1, 'onDisconnect fired once');
@@ -663,18 +692,14 @@ await test("driver 'disconnect' fires onDisconnect", async () => {
 
 await test('status() reflects identity/model fields and elgatoConnected', async () => {
   const model = MIRABOX_293S_MODEL;
-  const { childServer, session } = makeSession(model);
-  await session.start();
+  const { childServer, dock, start } = makeTestSetup(model);
+  await start();
 
   childServer.hasClient = false;
-  let status = session.status();
+  let status = dock.status();
   const identity = testIdentity(model);
   assert.equal(status.index, 1, 'index from identity');
-  assert.equal(
-    status.primaryPort,
-    sessionIdentity(1, identity).primaryPort,
-    'primaryPort from identity',
-  );
+  assert.equal(status.primaryPort, dockSlot(1, identity).primaryPort, 'primaryPort from identity');
   assert.equal(status.modelId, model.id, 'modelId from model');
   assert.equal(status.modelName, model.name, 'modelName from model');
   assert.equal(status.keyCount, model.keyCount, 'keyCount from model');
@@ -685,52 +710,52 @@ await test('status() reflects identity/model fields and elgatoConnected', async 
   assert.equal(status.elgatoConnected, false, 'elgatoConnected false when no client');
 
   childServer.hasClient = true;
-  status = session.status();
+  status = dock.status();
   assert.equal(status.elgatoConnected, true, 'elgatoConnected true when client attached');
 });
 
-await test('onStatusChange fires on start(), stop(), and child client connect/disconnect', async () => {
-  const { childServer, session, getStatusChanges } = makeSession();
+await test('the changed hook fires on start(), stop(), and child client connect/disconnect', async () => {
+  const { childServer, dock, getStatusChanges, start } = makeTestSetup();
 
-  await session.start();
+  await start();
   assert.equal(getStatusChanges(), 1, 'fired once after start()');
 
   childServer.emit('clientConnected');
   assert.equal(getStatusChanges(), 2, 'fired on clientConnected');
-  assert.equal(session.status().elgatoConnected, false, 'fake does not auto-flip hasClient');
+  assert.equal(dock.status().elgatoConnected, false, 'fake does not auto-flip hasClient');
 
   childServer.hasClient = true;
   childServer.emit('clientConnected');
   assert.equal(getStatusChanges(), 3, 'fired again on clientConnected');
-  assert.equal(session.status().elgatoConnected, true, 'status reflects updated hasClient');
+  assert.equal(dock.status().elgatoConnected, true, 'status reflects updated hasClient');
 
   childServer.emit('clientDisconnected');
   assert.equal(getStatusChanges(), 4, 'fired on clientDisconnected');
 
-  await session.stop();
+  await dock.stop();
   assert.equal(getStatusChanges(), 5, 'fired once after stop()');
 
-  await session.stop(); // idempotent — no extra fire
+  await dock.stop(); // idempotent — no extra fire
   assert.equal(getStatusChanges(), 5, 'no additional fire on repeated stop()');
 });
 
-await test('updateMdnsServiceName renames live, notifies status, and updates status()', async () => {
-  const { server, session, getStatusChanges } = makeSession();
-  await session.start();
+await test('renameMdns renames live, notifies status, and updates status()', async () => {
+  const { server, dock, getStatusChanges, start } = makeTestSetup();
+  await start();
   const before = getStatusChanges();
 
-  session.updateMdnsServiceName('My Renamed Dock');
+  dock.renameMdns('My Renamed Dock');
   assert.deepEqual(server.setMdnsServiceNameCalls, ['My Renamed Dock'], 'server renamed');
-  assert.equal(session.status().mdnsServiceName, 'My Renamed Dock', 'status() reflects new name');
+  assert.equal(dock.status().mdnsServiceName, 'My Renamed Dock', 'status() reflects new name');
   assert.equal(getStatusChanges(), before + 1, 'status change notified');
 });
 
 await test('stop() is idempotent and closes driver + both servers', async () => {
-  const { server, childServer, driver, session } = makeSession();
-  await session.start();
+  const { server, childServer, driver, dock, start } = makeTestSetup();
+  await start();
 
-  await session.stop();
-  await session.stop(); // idempotent — no double close
+  await dock.stop();
+  await dock.stop(); // idempotent — no double close
 
   assert.equal(driver.closeCalls, 1, 'driver closed exactly once');
   assert.equal(server.stopCalls, 1, 'primary server stopped exactly once');

@@ -1,8 +1,6 @@
-// Status/identity/event-wiring helpers shared by DeviceSession and the primary
-// dock (driver-manager-primary) — split out of device-session.ts to keep that
-// file under the line-count cap.
+// Status/identity/event-wiring helpers for every Dock (dock.ts), kept apart
+// so dock.ts stays under the line-count cap.
 import { log } from '../shared/logger.js';
-import type { LogLevel } from '../shared/logger.js';
 import {
   ELGATO_TCP_PORT,
   ELGATO_CHILD_PORT,
@@ -26,11 +24,15 @@ import type { DeviceIdentitySettings } from '../infra/settings-store.js';
 import { advertisedGeometry, advertisedModel, advertisedTouchStrip } from '../devices/registry.js';
 import { deviceInputToExtraKey, deviceInputToMk2Index } from '../shared/key-map.js';
 import { emulationProfiles } from '../devices/model-overrides.js';
-import type { DeviceDriver, DeviceModel, DeviceWidgetDisplay } from '../devices/driver.js';
+import type {
+  DeviceDriver,
+  DockDriver,
+  DeviceModel,
+  DeviceWidgetDisplay,
+} from '../devices/driver.js';
 import type { ElgatoServer } from '../cora/primary-server.js';
 import type { ElgatoChildServer } from '../cora/child-server.js';
 import type { DeviceConfig } from '../cora/types.js';
-import type { WorkerHidDriver } from '../worker/hid-worker-host.js';
 import type { ExtraKeyWidgets } from './extra-keys.js';
 
 /** Physical serial/firmware forwarded when model.cora.usePhysicalIdentity. */
@@ -39,11 +41,11 @@ export interface DeviceInfo {
   firmware?: string;
 }
 
-/** Identity for an extra dock: ports from CORA_PORT_STRIDE off the primary pair (a
+/** Identity for a scanned dock: ports from CORA_PORT_STRIDE off the primary pair (a
  *  runtime resource, legitimately scan-order-dependent), everything else from
  *  getOrCreateDeviceIdentity — stable across restart/replug. */
-export interface SessionIdentity {
-  index: number; // 1..MAX_DEVICE_SESSIONS-1 (extras only) — port assignment only
+export interface DockSlot {
+  index: number; // 1..MAX_DOCKS-1 (scanned docks only) — port assignment only
   primaryPort: number; // ELGATO_TCP_PORT + CORA_PORT_STRIDE * index
   childPort: number; // ELGATO_CHILD_PORT + CORA_PORT_STRIDE * index
   deviceKey: string;
@@ -53,7 +55,7 @@ export interface SessionIdentity {
   macAddress: string;
 }
 
-export function sessionIdentity(index: number, identity: DeviceIdentitySettings): SessionIdentity {
+export function dockSlot(index: number, identity: DeviceIdentitySettings): DockSlot {
   return {
     index,
     primaryPort: ELGATO_TCP_PORT + CORA_PORT_STRIDE * index,
@@ -66,9 +68,16 @@ export function sessionIdentity(index: number, identity: DeviceIdentitySettings)
   };
 }
 
-/** The identity fields a dock reports — satisfied by both SessionIdentity (an
+/** The identity fields a dock reports — satisfied by both DockSlot (an
  *  extra) and DeviceIdentitySettings (the primary). */
-type DockIdentity = Omit<SessionIdentity, 'index' | 'primaryPort' | 'childPort'>;
+export type DockIdentity = Omit<DockSlot, 'index' | 'primaryPort' | 'childPort'>;
+
+/** "aa:bb:cc:dd:ee:ff" → the 6 bytes CORA's deviceConfig wants, else `fallback`
+ *  (a persisted identity and the mock config both feed setDeviceConfig). */
+export function macToBytes(mac: string, fallback: number[]): number[] {
+  const parts = mac.split(':');
+  return parts.length === 6 ? parts.map((p) => parseInt(p, 16)) : fallback;
+}
 
 export interface DockStatusInput {
   model: DeviceModel;
@@ -84,7 +93,7 @@ export interface DockStatusInput {
 }
 
 /** The one place a DockStatus is built: the primary dock (driver-manager-primary)
- *  and every extra session report the same fields in the same order. */
+ *  and every scanned dock report the same fields in the same order. */
 // oxlint-disable-next-line complexity -- flat fallback chain, not branching logic
 export function buildDockStatus(s: DockStatusInput): DockStatus {
   const { model, identity, deviceInfo } = s;
@@ -148,15 +157,6 @@ function pressableExtraKeys(model: DeviceModel): readonly number[] {
   return (model.keyMap.extraKeys ?? []).filter((_, i) => inputs[i] !== undefined);
 }
 
-export type DockFrames = Map<number, { data: Buffer; format: 'jpeg' | 'bmp' }>;
-
-/** Re-send a dock's cached CORA frames through its driver — the transform runs
- *  again, so this is how a live spec change reaches the panel. The frames
- *  themselves are unchanged, so the WebUI preview is left alone. */
-export function repaintFrames(driver: DeviceDriver, frames: DockFrames): void {
-  for (const [key, { data, format }] of frames) driver.renderCoraImage?.(key, data, format);
-}
-
 /** True when the model maps device wire input codes to CORA (MK.2) indices. */
 function hasInputKeyMap(model: DeviceModel): boolean {
   return model.keyMap.wireInputToCora != null || model.keyMap.inputOffset != null;
@@ -182,31 +182,33 @@ export function touchActionText(e: TouchInputEvent, model: DeviceModel): string 
   return `${control} ${e.type} (${e.x}, ${e.y})${end}`;
 }
 
-/** Wire the driver events shared by the primary (DriverManager) and every extra session: key
- * dispatch (wire→mk2 mapping + logging), error/log forwarding, reinit repaint. 'disconnect'
- * differs per owner and stays with the caller, as do the primary-only WebUI mirrors (comm/imageSent). */
+/** Where a dock routes its driver's input events. */
+export interface DriverEventSinks {
+  onAction?: (message: string) => void;
+  /** `wireId` is the raw device code the press arrived on (pre-keyMap);
+   *  undefined for identity-mapped models. Key-map learn mode needs it —
+   *  a wrong map is exactly what it is there to fix. */
+  onKey: (mk2Index: number, state: KeyEvent['state'], wireId?: number) => void;
+  /** Press on an extra key with a switch (keyMap.extraKeyInputs); `wireId` is the
+   *  extra key's image wire id, as keyed in its ExtraKeyConfig. */
+  onExtraKey?: (wireId: number, state: KeyEvent['state']) => void;
+  /** Encoder press/rotate (Stream Deck + emulation). Dropped by the child
+   *  server when the advertised geometry declares no encoders. */
+  onDial?: (event: DialEvent) => void;
+  /** Touch-strip gesture (Stream Deck + emulation). */
+  onTouch?: (event: TouchInputEvent) => void;
+  /** Sleep/wake re-init sent CLE ALL — repaint the extra-key widgets it wiped. */
+  onReinit: () => void;
+  /** A touch-strip upload reached the device (WebUI strip preview mirror). */
+  onStripWrite?: (wireId: number, jpeg: Uint8Array, full: boolean) => void;
+}
+
+/** Wire a USB driver's input events: key dispatch (wire→mk2 mapping + logging),
+ *  knobs, touch, reinit repaint. 'disconnect' differs per owner and stays with the caller. */
 export function wireCommonDriverEvents(
-  driver: WorkerHidDriver,
+  driver: Pick<DeviceDriver, 'on'>,
   model: DeviceModel,
-  opts: {
-    /** `wireId` is the raw device code the press arrived on (pre-keyMap);
-     *  undefined for identity-mapped models. Key-map learn mode needs it —
-     *  a wrong map is exactly what it is there to fix. */
-    onAction?: (message: string) => void;
-    onKey: (mk2Index: number, state: KeyEvent['state'], wireId?: number) => void;
-    /** Press on an extra key with a switch (keyMap.extraKeyInputs); `wireId` is the
-     *  extra key's image wire id, as keyed in its ExtraKeyConfig. */
-    onExtraKey?: (wireId: number, state: KeyEvent['state']) => void;
-    /** Encoder press/rotate (Stream Deck + emulation). Dropped by the child
-     *  server when the advertised geometry declares no encoders. */
-    onDial?: (event: DialEvent) => void;
-    /** Touch-strip gesture (Stream Deck + emulation). */
-    onTouch?: (event: TouchInputEvent) => void;
-    /** Sleep/wake re-init sent CLE ALL — repaint the extra-key widgets it wiped. */
-    onReinit: () => void;
-    /** A touch-strip upload reached the device (WebUI strip preview mirror). */
-    onStripWrite?: (wireId: number, jpeg: Uint8Array, full: boolean) => void;
-  },
+  opts: DriverEventSinks,
 ): void {
   driver.on('key', (e: KeyEvent) => {
     const key = hasInputKeyMap(model) ? e.keyIndex : e.keyIndex + 1;
@@ -239,16 +241,28 @@ export function wireCommonDriverEvents(
     opts.onTouch?.(e);
   });
   driver.on('inputAction', (message: string) => opts.onAction?.(message));
-  driver.on('error', (err: Error) => log('error', model.id, err.message));
   driver.on('reinit', opts.onReinit);
   driver.on('stripWrite', (wireId: number, jpeg: Uint8Array, full: boolean) =>
     opts.onStripWrite?.(wireId, jpeg, full),
   );
-  driver.on(
-    'log',
-    ({ level, component, message }: { level: LogLevel; component: string; message: string }) =>
-      log(level, component, message),
-  );
+}
+
+/** The mock's events: grid keys already arrive as mk2 indices and extra keys as
+ *  image wire ids, so no key map applies. */
+export function wireMockDriverEvents(driver: DockDriver, opts: DriverEventSinks): void {
+  driver.on('key', (e: KeyEvent) => opts.onKey(e.keyIndex, e.state));
+  driver.on('extraKey', ({ wireId, state }: { wireId: number; state: KeyEvent['state'] }) => {
+    opts.onAction?.(`Extra key ${wireId} ${state === 'down' ? 'pressed' : 'released'}`);
+    opts.onExtraKey?.(wireId, state);
+  });
+  driver.on('dial', (e: DialEvent) => {
+    opts.onAction?.(dialActionText(e));
+    opts.onDial?.(e);
+  });
+  driver.on('touch', (e: TouchInputEvent) => {
+    opts.onAction?.(touchActionText(e, driver.model));
+    opts.onTouch?.(e);
+  });
 }
 
 /** A widget display with the geometry the WebUI needs to place device strip writes. */
@@ -325,7 +339,7 @@ export function childFirmwareFor(model: DeviceModel, deviceInfo: DeviceInfo | un
 
 /** Server-facing half of DriverManager.applyDeviceModel (no WebUI): advertises the
  *  model's PID/geometry/identity to the desktop over both CORA ports. Shared by the
- *  primary and every extra session. */
+ *  primary and every scanned dock. */
 export function applyModelToServers(
   server: ElgatoServer,
   childServer: ElgatoChildServer,

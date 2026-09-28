@@ -280,7 +280,7 @@ export interface DeviceModelOverride {
   cora?: Partial<Pick<DeviceCoraSpec, (typeof CORA_OVERRIDE_KEYS)[number]>>;
 }
 
-/** Common interface satisfied by every driver (real USB and mock). */
+/** The base driver contract: model + open/close + the two direct writes. */
 export interface DeviceDriver extends EventEmitter {
   /** The effective model this driver is running. Swapped in place by
    *  `applyOverrides` for a live (image-only) device-tuning change, so callers
@@ -293,32 +293,36 @@ export interface DeviceDriver extends EventEmitter {
   close(): Promise<void>;
   clearKey(keyIndex: number): void;
   setBrightness(level: number): void;
-  /** Transform (resize/rotate/encode), cache and write a raw CORA image. Only
-   *  `WorkerHidDriver` implements it, doing the transform off the main thread;
-   *  the in-worker drivers take native bytes via their own `sendImage`. */
-  renderCoraImage?(keyIndex: number, coraBytes: Uint8Array, format: 'jpeg' | 'bmp'): void;
+}
+
+/** What a Dock drives on the main thread: `WorkerHidDriver` (the USB worker proxy)
+ *  or `MockDriver`, whose versions of the worker-only calls are no-ops. */
+export interface DockDriver extends DeviceDriver {
+  /** Transform (resize/rotate/encode), cache and write a raw CORA image, off the
+   *  main thread; the in-worker drivers take native bytes via their own `sendImage`. */
+  renderCoraImage(keyIndex: number, coraBytes: Uint8Array, format: 'jpeg' | 'bmp'): void;
   /** Send a splash source image, transformed with `spec` (which may differ from
-   *  model.image — splash sources are upright). `WorkerHidDriver` only, keeping the
-   *  FFI transform and hid_write burst off the main thread. */
-  sendSplashImage?(keyIndex: number, bytes: Uint8Array, spec: DeviceImageSpec): void;
+   *  model.image — splash sources are upright), keeping the FFI transform and
+   *  hid_write burst off the main thread. */
+  sendSplashImage(keyIndex: number, bytes: Uint8Array, spec: DeviceImageSpec): void;
   /** Render a Stream Deck + window image (800×100, or a partial-window region)
-   *  to the device's touch-segment displays. `WorkerHidDriver` only. No-op on
-   *  models without widget displays. */
-  renderTouchImage?(bytes: Uint8Array, region?: TouchWindowRegion): void;
+   *  to the device's touch-segment displays. No-op on models without widget displays. */
+  renderTouchImage(bytes: Uint8Array, region?: TouchWindowRegion): void;
   /** Touch-strip wire ids DeckBridge owns: Elgato strip images skip them, and a
-   *  zone leaving the mask gets the last Elgato image back. `WorkerHidDriver` only. */
-  setTouchStripMask?(wireIds: readonly number[]): void;
+   *  zone leaving the mask gets the last Elgato image back. */
+  setTouchStripMask(wireIds: readonly number[]): void;
   /** Put the last Elgato image back on these strip zones (cleared if the app never
-   *  drew one) — a widget leaving an unmasked zone. `WorkerHidDriver` only. */
-  restoreTouchSegments?(wireIds: readonly number[]): void;
+   *  drew one) — a widget leaving an unmasked zone. */
+  restoreTouchSegments(wireIds: readonly number[]): void;
   /** Zone fit + upload policy for a full-strip model (settings.json, per dock). The
-   *  worker resets them to the defaults on open. `WorkerHidDriver` only. */
-  setTouchStripOptions?(options: TouchStripOptions): void;
-  /** The options last set (defaults after open). `WorkerHidDriver` only. */
-  readonly touchStripOptions?: TouchStripOptions;
+   *  worker resets them to the defaults on open. */
+  setTouchStripOptions(options: TouchStripOptions): void;
+  /** The options last set (defaults after open). */
+  readonly touchStripOptions: TouchStripOptions;
   /** Live device-tuning swap — image-transform fields only, no reopen. The
    *  caller resolves `effectiveModel` (registry + overrides) and must have
-   *  classified the change as 'live' first (classifyOverrideChange). Absent
-   *  means the caller has to reopen instead. */
-  applyOverrides?(overrides: DeviceModelOverride | undefined, effectiveModel: DeviceModel): void;
+   *  classified the change as 'live' first (classifyOverrideChange). */
+  applyOverrides(overrides: DeviceModelOverride | undefined, effectiveModel: DeviceModel): void;
+  /** Runtime log-level change for the worker (new workers read DECKBRIDGE_LOG_LEVEL). */
+  setLogLevel(level: string): void;
 }

@@ -1,10 +1,18 @@
 import { EventEmitter } from 'node:events';
-import type { DeviceDriver, DeviceImageSpec, DeviceModel, DeviceModelOverride } from './driver.js';
-import type { DialEvent, KeyState, MockInput, TouchInputEvent } from '../shared/types.js';
-import { MOCK_KEY_PRESS_DURATION_MS } from '../shared/types.js';
+import type { DockDriver, DeviceImageSpec, DeviceModel, DeviceModelOverride } from './driver.js';
+import type {
+  DialEvent,
+  KeyState,
+  MockInput,
+  TouchInputEvent,
+  TouchStripOptions,
+} from '../shared/types.js';
+import { DEFAULT_TOUCH_STRIP_OPTIONS, MOCK_KEY_PRESS_DURATION_MS } from '../shared/types.js';
 
-export class MockDriver extends EventEmitter implements DeviceDriver {
+/** A virtual deck: no device to paint, so the worker-side calls are no-ops. */
+export class MockDriver extends EventEmitter implements DockDriver {
   model: DeviceModel;
+  readonly touchStripOptions: TouchStripOptions = DEFAULT_TOUCH_STRIP_OPTIONS;
 
   constructor(model: DeviceModel) {
     super();
@@ -21,8 +29,14 @@ export class MockDriver extends EventEmitter implements DeviceDriver {
   async close(): Promise<void> {}
   clearKey(_keyIndex: number): void {}
   setBrightness(_level: number): void {}
-  // Present so ExtraKeyWidgets paints (and mirrors them to the WebUI) in mock mode.
+  // ExtraKeyWidgets still paints (and mirrors the paints to the WebUI) in mock mode.
   sendSplashImage(_keyIndex: number, _bytes: Uint8Array, _spec: DeviceImageSpec): void {}
+  renderCoraImage(_keyIndex: number, _bytes: Uint8Array, _format: 'jpeg' | 'bmp'): void {}
+  renderTouchImage(): void {}
+  setTouchStripMask(): void {}
+  restoreTouchSegments(): void {}
+  setTouchStripOptions(): void {}
+  setLogLevel(): void {}
 
   simulateKeyPress(keyIndex: number): void {
     this.pressAndRelease((state) => this.emit('key', { keyIndex, state }));

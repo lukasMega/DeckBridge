@@ -1,15 +1,15 @@
 import assert from 'tjs:assert';
-import { setupImageHandler } from '../src/main/image-pipeline.js';
+import { LastFrames, wireDockImages } from '../src/main/dock-frames.js';
 import { EventEmitter } from '../src/platform/events-shim.js';
-import type { DeviceDriver, DeviceModel } from '../src/devices/driver.js';
+import type { DockDriver, DeviceModel } from '../src/devices/driver.js';
+import { MockDriver } from '../src/devices/mock.js';
+import { StubDockDriver } from './helpers/stub-dock-driver.js';
 import type { ElgatoChildServer } from '../src/cora/child-server.js';
-import type { WebUIServer } from '../src/web/server/index.js';
 import { testAsync as test, summaryExit } from './helpers/harness.js';
 import { SOLID_RED_16X16_JPEG, makePassthroughModel } from './helpers/fixtures.js';
 
-// Test harness The image pipeline was refactored (architecture-review
-// P1): the JPEG/BMP transform + LRU cache + key remap + USB write
-// moved OUT of image-pipeline.ts into the worker-side image-render.ts.
+// The JPEG/BMP transform + LRU cache + key remap + USB write live in the
+// worker-side image-render.ts; the main thread only forwards, records, mirrors.
 
 // Helpers
 
@@ -41,50 +41,37 @@ interface RenderCall {
   format: 'jpeg' | 'bmp';
 }
 
-interface FakeDriver extends EventEmitter {
-  model: DeviceModel;
-  renderCoraImageCalls: RenderCall[];
-  renderCoraImage(keyIndex: number, coraBytes: Uint8Array, format: 'jpeg' | 'bmp'): void;
-  sendImage(keyIndex: number, bytes: Uint8Array): void;
-  open(): Promise<void>;
-  close(): Promise<void>;
-  clearKey(keyIndex: number): void;
-  setBrightness(level: number): void;
+/** Records renderCoraImage (the WorkerHidDriver shape). */
+class FakeDriver extends StubDockDriver {
+  renderCoraImageCalls: RenderCall[] = [];
+  override renderCoraImage(keyIndex: number, coraBytes: Uint8Array, format: 'jpeg' | 'bmp') {
+    this.renderCoraImageCalls.push({ keyIndex, bytes: coraBytes, format });
+  }
 }
 
-/** Fake driver WITH a renderCoraImage capture (the real WorkerHidDriver shape). */
-function makeFakeDriver(model: DeviceModel): FakeDriver {
-  const ee = new EventEmitter();
-  return Object.assign(ee, {
-    model,
-    renderCoraImageCalls: [] as RenderCall[],
-    renderCoraImage(keyIndex: number, coraBytes: Uint8Array, format: 'jpeg' | 'bmp') {
-      this.renderCoraImageCalls.push({ keyIndex, bytes: coraBytes, format });
-    },
-    sendImage: (_keyIndex: number, _bytes: Uint8Array) => {},
-    open: () => Promise.resolve(),
-    close: () => Promise.resolve(),
-    clearKey: (_keyIndex: number) => {},
-    setBrightness: (_level: number) => {},
-  });
-}
+const makeFakeDriver = (model: DeviceModel): FakeDriver => new FakeDriver(model);
 
-/** Fake driver WITHOUT renderCoraImage (the MockDriver shape — virtual device). */
-function makeFakeMockDriver(model: DeviceModel): DeviceDriver {
-  const ee = new EventEmitter();
-  return Object.assign(ee, {
-    model,
-    sendImage: (_keyIndex: number, _bytes: Uint8Array) => {},
-    open: () => Promise.resolve(),
-    close: () => Promise.resolve(),
-    clearKey: (_keyIndex: number) => {},
-    setBrightness: (_level: number) => {},
-  }) as DeviceDriver;
-}
+/** The virtual deck: its renderCoraImage is a no-op. */
+const makeFakeMockDriver = (model: DeviceModel): DockDriver => new MockDriver(model);
 
 // Tests
 
-console.log('\nimage-pipeline: setupImageHandler (thin handler, P1)');
+/** wireDockImages with the WebUI mirror as the onImage sink. */
+function setupImageHandler(
+  childServer: EventEmitter,
+  webui: Pick<FakeWebUI, 'notifyDockImage'>,
+  getDriver: () => DockDriver | null,
+  frames = new LastFrames(),
+): LastFrames {
+  wireDockImages(childServer as unknown as ElgatoChildServer, {
+    driver: getDriver,
+    frames,
+    onImage: (key, data, format) => webui.notifyDockImage(0, key, data, format),
+  });
+  return frames;
+}
+
+console.log('\ndock-frames: wireDockImages (thin handler, P1)');
 
 // 1a. notifyImageUpdate fires SYNCHRONOUSLY during emit (jpeg).
 await test('notifyImageUpdate is called synchronously during emit (jpeg)', () => {
@@ -93,11 +80,7 @@ await test('notifyImageUpdate is called synchronously during emit (jpeg)', () =>
   const driver = makeFakeDriver(model);
   const webui = makeFakeWebUI();
 
-  setupImageHandler(
-    childServer as unknown as ElgatoChildServer,
-    webui as unknown as WebUIServer,
-    () => driver,
-  );
+  setupImageHandler(childServer, webui, () => driver);
 
   childServer.emit('image', {
     keyIndex: 4,
@@ -123,11 +106,7 @@ await test('notifyImageUpdate is called synchronously during emit (bmp)', () => 
   const driver = makeFakeDriver(model);
   const webui = makeFakeWebUI();
 
-  setupImageHandler(
-    childServer as unknown as ElgatoChildServer,
-    webui as unknown as WebUIServer,
-    () => driver,
-  );
+  setupImageHandler(childServer, webui, () => driver);
 
   const bmpData = Buffer.from([0x42, 0x4d, 0xaa, 0xbb, 0xcc, 0xdd]);
   childServer.emit('image', { keyIndex: 9, data: bmpData, format: 'bmp' });
@@ -149,11 +128,7 @@ await test('renderCoraImage receives keyIndex, raw bytes, and format', () => {
   const driver = makeFakeDriver(model);
   const webui = makeFakeWebUI();
 
-  setupImageHandler(
-    childServer as unknown as ElgatoChildServer,
-    webui as unknown as WebUIServer,
-    () => driver,
-  );
+  setupImageHandler(childServer, webui, () => driver);
 
   childServer.emit('image', {
     keyIndex: 6,
@@ -175,17 +150,13 @@ await test('renderCoraImage receives keyIndex, raw bytes, and format', () => {
 });
 
 // 3. Driver WITHOUT renderCoraImage (MockDriver) does NOT throw; webui still fires.
-await test('driver without renderCoraImage does not throw (MockDriver)', () => {
+await test('the mock driver (no-op renderCoraImage) does not throw', () => {
   const childServer = new EventEmitter();
   const model = makePassthroughModel();
   const mockDriver = makeFakeMockDriver(model);
   const webui = makeFakeWebUI();
 
-  setupImageHandler(
-    childServer as unknown as ElgatoChildServer,
-    webui as unknown as WebUIServer,
-    () => mockDriver,
-  );
+  setupImageHandler(childServer, webui, () => mockDriver);
 
   // Must not throw despite the driver lacking renderCoraImage.
   childServer.emit('image', {
@@ -197,7 +168,7 @@ await test('driver without renderCoraImage does not throw (MockDriver)', () => {
   assert.equal(
     webui.notifyImageUpdateCalls.length,
     1,
-    'notifyImageUpdate should still fire when driver lacks renderCoraImage',
+    'notifyImageUpdate still fires for the mock',
   );
   assert.equal(webui.notifyImageUpdateCalls[0]!.keyIndex, 2, 'keyIndex should be 2');
 });
@@ -207,11 +178,7 @@ await test('null driver does not throw and notifyImageUpdate still fires', () =>
   const childServer = new EventEmitter();
   const webui = makeFakeWebUI();
 
-  setupImageHandler(
-    childServer as unknown as ElgatoChildServer,
-    webui as unknown as WebUIServer,
-    () => null,
-  );
+  setupImageHandler(childServer, webui, () => null);
 
   // Must not throw despite a null driver.
   childServer.emit('image', {
@@ -234,17 +201,10 @@ await test('renderCoraImage fires before notifyDockImage', () => {
   const model = makePassthroughModel();
   const order: string[] = [];
 
-  const driver = Object.assign(new EventEmitter(), {
-    model,
-    renderCoraImage: (_keyIndex: number, _bytes: Uint8Array, _format: 'jpeg' | 'bmp') => {
-      order.push('worker');
-    },
-    sendImage: (_keyIndex: number, _bytes: Uint8Array) => {},
-    open: () => Promise.resolve(),
-    close: () => Promise.resolve(),
-    clearKey: (_keyIndex: number) => {},
-    setBrightness: (_level: number) => {},
-  });
+  const driver = new StubDockDriver(model);
+  driver.renderCoraImage = () => {
+    order.push('worker');
+  };
 
   const webui = {
     notifyDockImage: (_dock: number, _keyIndex: number, _data: Buffer, _format?: string) => {
@@ -252,11 +212,7 @@ await test('renderCoraImage fires before notifyDockImage', () => {
     },
   };
 
-  setupImageHandler(
-    childServer as unknown as ElgatoChildServer,
-    webui as unknown as WebUIServer,
-    () => driver,
-  );
+  setupImageHandler(childServer, webui, () => driver);
 
   childServer.emit('image', {
     keyIndex: 3,
@@ -269,6 +225,57 @@ await test('renderCoraImage fires before notifyDockImage', () => {
     ['worker', 'webui'],
     'USB worker post must happen before the WebUI mirror',
   );
+});
+
+// 6. Frames are recorded only while a driver is attached.
+await test('frames are recorded only while a driver is attached', () => {
+  const childServer = new EventEmitter();
+  const model = makePassthroughModel();
+  const driver = makeFakeDriver(model);
+  let attached: FakeDriver | null = null;
+  const frames = setupImageHandler(childServer, makeFakeWebUI(), () => attached);
+
+  childServer.emit('image', { keyIndex: 1, data: SOLID_RED_16X16_JPEG, format: 'jpeg' });
+  attached = driver;
+  frames.replay(driver); // what a dock does on attach
+  childServer.emit('image', { keyIndex: 2, data: SOLID_RED_16X16_JPEG, format: 'jpeg' });
+
+  const replayed = makeFakeDriver(model);
+  frames.replay(replayed);
+  assert.deepEqual(
+    replayed.renderCoraImageCalls.map((c) => c.keyIndex),
+    [2],
+    'only the frame painted on a device is replayable',
+  );
+});
+
+// 7. LastFrames: replay only onto the same model; repaint re-renders all.
+await test('LastFrames replays onto the same model, drops frames for a different one', () => {
+  const model = makePassthroughModel();
+  const frames = new LastFrames();
+  frames.replay(makeFakeDriver(model)); // first attach: nothing to replay, binds the model
+  frames.record(0, Buffer.from([1]), 'jpeg');
+  frames.record(3, Buffer.from([2]), 'bmp');
+
+  const again = makeFakeDriver(model);
+  const mirrored: number[] = [];
+  frames.replay(again, (key) => mirrored.push(key));
+  assert.deepEqual(
+    again.renderCoraImageCalls.map((c) => c.keyIndex),
+    [0, 3],
+    'same model: replayed',
+  );
+  assert.deepEqual(mirrored, [0, 3], 'preview restored');
+
+  const repainted = makeFakeDriver(model);
+  frames.repaint(repainted);
+  assert.equal(repainted.renderCoraImageCalls.length, 2, 'repaint re-renders every frame');
+
+  const other = makeFakeDriver({ ...model, id: 'other-model' });
+  frames.replay(other);
+  assert.equal(other.renderCoraImageCalls.length, 0, 'a different model inherits nothing');
+  frames.repaint(repainted);
+  assert.equal(repainted.renderCoraImageCalls.length, 2, 'and the frames are gone');
 });
 
 // Summary
