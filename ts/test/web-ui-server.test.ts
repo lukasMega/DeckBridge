@@ -1147,6 +1147,23 @@ try {
     });
     assert.equal(r.status, 400);
   });
+
+  await runWebTest('browser locale route keeps timezone in memory only', async () => {
+    const post = (body: Record<string, unknown>): Promise<Response> =>
+      fetch(`${base}/api/browser-locale`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+    assert.equal((await post({ locale: 'sk-SK', timeZone: 'Europe/Bratislava' })).status, 200);
+    assert.equal(settingsUi.settings.browserLocale, 'sk-SK');
+    assert.equal(settingsUi.settings.browserTimeZone, 'Europe/Bratislava');
+    assert.ok(!('browserTimeZone' in JSON.parse(settingsUi.settings.json())));
+    assert.equal((await post({ locale: 'en-GB' })).status, 200);
+    assert.equal(settingsUi.settings.browserTimeZone, undefined);
+    assert.equal((await post({ locale: 'en-GB', timeZone: 123 })).status, 400);
+    assert.equal((await post({ locale: 'en-GB', timeZone: 'x'.repeat(65) })).status, 400);
+  });
 } finally {
   await settingsUi.stop().catch(() => undefined);
 }

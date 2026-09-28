@@ -985,11 +985,20 @@ async function runSettingsPanels(): Promise<void> {
 }
 
 async function runKeymapAndDiagnosticsPanels(): Promise<void> {
-  // Key-map learn mode: the derived array IS the deliverable (it gets pasted into
-  // a registry PR), so drive it with real key events and assert the exact shape.
+  await runKeymapLearnHappyPath();
+  await runKeymapLearnNoWireId();
+  await runDiagnosticsPanel();
+  await runMultiDeckPanel();
+  await runElgatoAutoRestartPanel();
+  await runElgatoAutoRestartUnsupported();
+}
+
+// Key-map learn mode: the derived array IS the deliverable (it gets pasted into
+// a registry PR), so drive it with real key events and assert the exact shape.
+async function runKeymapLearnHappyPath(): Promise<void> {
+  // A 2x2 grid whose wire codes are mk2 index + 1 and row-flipped — the
+  // AKP153E rev. 2 shape that motivated learn mode in the first place.
   {
-    // A 2x2 grid whose wire codes are mk2 index + 1 and row-flipped — the
-    // AKP153E rev. 2 shape that motivated learn mode in the first place.
     const PRESSES = [
       { wireId: 3, position: 0 },
       { wireId: 4, position: 1 },
@@ -1054,9 +1063,11 @@ async function runKeymapAndDiagnosticsPanels(): Promise<void> {
       await act(() => render(null, root));
     }
   }
+}
 
-  // A key event with no wireId (identity-mapped model / mock) aborts rather than
-  // silently recording a map derived from mk2 indices.
+// A key event with no wireId (identity-mapped model / mock) aborts rather than
+// silently recording a map derived from mk2 indices.
+async function runKeymapLearnNoWireId(): Promise<void> {
   {
     const stub = stubFetch(() => ({ payload: { ok: true } }));
     try {
@@ -1074,8 +1085,10 @@ async function runKeymapAndDiagnosticsPanels(): Promise<void> {
       await act(() => render(null, root));
     }
   }
+}
 
-  // Diagnostics: the debug toggle reflects state and posts the opposite level.
+// Diagnostics: the debug toggle reflects state and posts the opposite level.
+async function runDiagnosticsPanel(): Promise<void> {
   {
     // DiagnosticsPanel takes logLevel/logFilePath as props — SettingsPage owns the
     // single /api/state read and drills them down, so there is no fetch to stub here.
@@ -1115,8 +1128,10 @@ async function runKeymapAndDiagnosticsPanels(): Promise<void> {
       await act(() => render(null, root));
     }
   }
+}
 
-  // Multi-deck: the opt-in toggle reflects state and posts the opposite value.
+// Multi-deck: the opt-in toggle reflects state and posts the opposite value.
+async function runMultiDeckPanel(): Promise<void> {
   {
     const stub = stubFetch(() => ({ payload: { ok: true } }));
     try {
@@ -1138,10 +1153,11 @@ async function runKeymapAndDiagnosticsPanels(): Promise<void> {
       await act(() => render(null, root));
     }
   }
+}
 
-  // Elgato-app auto-restart panel: toggle posts + reflects state, the delay
-  // field disables with the toggle, and an unsupported platform shows the note
-  // and disables every control.
+// Elgato-app auto-restart panel: toggle posts + reflects state, and the delay
+// field disables with the toggle.
+async function runElgatoAutoRestartPanel(): Promise<void> {
   {
     const state: ElgatoAutoRestartState = { enabled: true, delayS: 10, supported: true };
     const stub = stubFetch(() => ({ payload: { enabled: false, delayS: 10 } }));
@@ -1168,6 +1184,10 @@ async function runKeymapAndDiagnosticsPanels(): Promise<void> {
       await act(() => render(null, root));
     }
   }
+}
+
+// An unsupported platform shows the note and disables every control.
+async function runElgatoAutoRestartUnsupported(): Promise<void> {
   {
     const unsupported: ElgatoAutoRestartState = { enabled: true, delayS: 10, supported: false };
     try {

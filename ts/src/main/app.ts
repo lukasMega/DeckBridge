@@ -388,6 +388,7 @@ if (tjs.env.DECKBRIDGE_MOCK !== '1') {
     send: sendBeacon,
     platform: platformName,
     browserLocale: () => settings.browserLocale,
+    browserTimeZone: () => settings.browserTimeZone,
   });
   const runPing = (): void => {
     void dailyPing.ping().catch((e: unknown) => log('debug', 'dailyPing', String(e)));

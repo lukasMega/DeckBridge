@@ -6,6 +6,7 @@ import {
   encodePayload,
   normalizeOs,
   normalizeLocale,
+  normalizeTimeZone,
   parseOsVersion,
   shouldPing,
   tzOffset,
@@ -75,6 +76,30 @@ await test('a nonsense offset is "unknown", not a bogus bucket', () => {
   assert.equal(tzOffset(dateAtOffset(Number.NaN)), 'unknown');
 });
 
+await test('accepts bounded IANA-style zones and UTC', () => {
+  for (const zone of ['Europe/Bratislava', 'America/Argentina/Buenos_Aires', 'Etc/GMT+5', 'UTC']) {
+    assert.equal(normalizeTimeZone(zone), zone);
+  }
+  assert.equal(normalizeTimeZone(' Europe/Bratislava '), 'Europe/Bratislava');
+});
+
+await test('rejects malformed browser zones', () => {
+  for (const zone of [
+    '',
+    'Europe',
+    'Europe/',
+    '/Europe/Paris',
+    'Europe//Paris',
+    'Europe/Paris?x=1',
+    'Europe/Par is',
+    'Europe/Paris\nX',
+    'x'.repeat(65),
+  ]) {
+    assert.equal(normalizeTimeZone(zone), undefined);
+  }
+  assert.equal(normalizeTimeZone(undefined), undefined);
+});
+
 // parseOsVersion
 
 console.log('\nparseOsVersion');
@@ -139,6 +164,15 @@ await test('no device connected is a real answer, not an omission', () => {
     tz: 'UTC+02:00',
     country: 'pl-PL',
   });
+});
+
+await test('named timezone wins; missing or invalid zones retain offset', () => {
+  assert.equal(
+    buildPayload({ ...base, modelIds: [], timeZone: 'Europe/Bratislava' }).tz,
+    'Europe/Bratislava',
+  );
+  assert.equal(buildPayload({ ...base, modelIds: [], timeZone: 'bad zone' }).tz, 'UTC+02:00');
+  assert.equal(buildPayload({ ...base, modelIds: [] }).tz, 'UTC+02:00');
 });
 
 await test('an off-vocabulary os version is dropped, never forwarded raw', () => {
@@ -252,6 +286,7 @@ function harness(
     suppress?: SuppressReason;
     readLocale?: string;
     browserLocale?: string;
+    browserTimeZone?: string | (() => string);
   } = {},
 ): Harness {
   const sent: Sent[] = [];
@@ -275,6 +310,8 @@ function harness(
     readOsVersion: () => Promise.resolve('ID=ubuntu\nVERSION_ID="24.04"\n'),
     readLocale: () => Promise.resolve(opts.readLocale ?? 'pl_PL.UTF-8'),
     browserLocale: () => opts.browserLocale,
+    browserTimeZone: () =>
+      typeof opts.browserTimeZone === 'function' ? opts.browserTimeZone() : opts.browserTimeZone,
     suppress: () => opts.suppress ?? null,
   });
   return { sent, days, ping: () => t.ping() };
@@ -328,6 +365,22 @@ await test('a working OS locale wins over the browser fallback', async () => {
   const h = harness({ readLocale: 'pl_PL.UTF-8', browserLocale: 'en-GB' });
   await h.ping();
   assert.equal(decodePayload(h.sent[0]!.encoded).country, 'pl-PL');
+});
+
+await test('browser timezone reaches daily payload', async () => {
+  const h = harness({ browserTimeZone: 'Asia/Kathmandu' });
+  await h.ping();
+  assert.equal(decodePayload(h.sent[0]!.encoded).tz, 'Asia/Kathmandu');
+});
+
+await test('failed browser timezone lookup retains offset and still sends', async () => {
+  const h = harness({
+    browserTimeZone: () => {
+      throw new Error('Intl unavailable');
+    },
+  });
+  await h.ping();
+  assert.equal(decodePayload(h.sent[0]!.encoded).tz, 'UTC+02:00');
 });
 
 await test('no browser ever connected leaves it unknown, same as before', async () => {

@@ -67,7 +67,10 @@ below for why). One request per UTC day, carrying six things:
 - **Country locale hint** — `pl-PL` or `en-GB`, from OS language and region settings,
   falling back to the WebUI browser's own language if the OS setting can't be read.
   This is not physical location or IP geolocation; unavailable locales are `unknown`.
-- **UTC offset** — `UTC+02:00`. The offset, never the named timezone.
+- **Timezone** — browser-resolved IANA zone, such as `Europe/Bratislava`, when
+  WebUI reports one. Otherwise, UTC offset, such as `UTC+02:00`. Named zones
+  reveal more about approximate location than offsets. This remains an
+  aggregate-only counter; browser timezone is never saved in settings.
 
 The collector stores aggregate counters only: no row per install, no visitor id,
 nothing to join two days' pings together. The only local state is `a7sDay`, the UTC day

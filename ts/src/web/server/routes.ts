@@ -196,12 +196,15 @@ function setMultiDeckRoute(
  *  same reasoning as daily-ping.ts's other closed-vocabulary fields: an
  *  unbounded string is an unbounded fingerprint, not just an unbounded key. */
 function setBrowserLocaleRoute(
-  { locale }: { locale: unknown },
+  { locale, timeZone }: { locale: unknown; timeZone?: unknown },
   { settings }: RouteContext,
 ): Response {
   if (typeof locale !== 'string' || !locale || locale.length > 35)
     return badRequest('locale must be a non-empty string of at most 35 characters');
+  if (timeZone !== undefined && (typeof timeZone !== 'string' || timeZone.length > 64))
+    return badRequest('timeZone must be a string of at most 64 characters');
   settings.browserLocale = locale;
+  settings.browserTimeZone = timeZone || undefined;
   return json({ ok: true });
 }
 
