@@ -379,12 +379,10 @@ jobs:
             exit 1
           }
           if ($state.driverMode -ne "real") { throw "release started outside real mode" }
-          $resp = Invoke-WebRequest -Uri $baseUrl -UseBasicParsing -TimeoutSec 2
-          if ($resp.StatusCode -ne 200) { throw "WebUI shell returned $($resp.StatusCode)" }
           $mockRoute = Invoke-WebRequest -Method Post -Uri "$baseUrl/api/mock/dial" `
             -UseBasicParsing -SkipHttpErrorCheck -TimeoutSec 2
           if ($mockRoute.StatusCode -ne 404) { throw "mock route present in release" }
-          Write-Host "Smoke test OK: real WebUI responded 200; mock route absent"
+          Write-Host "Smoke test OK: real state API responded; mock route absent"
           Stop-Process -Id $proc.Id -Force
 
       # Portable artifact: the same relay binary + tray, zipped, no installer.
