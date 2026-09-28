@@ -1996,7 +1996,9 @@ select.input.xkey-select {
     linear-gradient(45deg, transparent 43%, currentColor 43% 57%, transparent 57%),
     linear-gradient(135deg, transparent 43%, currentColor 43% 57%, transparent 57%);
   background-size: 7px 7px;
-  background-position: calc(100% - 21px) center, calc(100% - 14px) center;
+  background-position:
+    calc(100% - 21px) center,
+    calc(100% - 14px) center;
   background-repeat: no-repeat;
 }
 
