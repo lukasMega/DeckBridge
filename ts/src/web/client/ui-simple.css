@@ -595,7 +595,7 @@ input[type='range'].range:disabled {
   margin-top: 0;
 }
 .xkeys-compact .input.xkey-select {
-  padding: 3px 7px;
+  padding: 3px 30px 3px 7px;
   min-height: 26px;
   font-size: 12px;
 }
@@ -1986,6 +1986,18 @@ input[type='range'].range:disabled {
 }
 select.input {
   cursor: pointer;
+}
+.b-mode-select,
+select.input,
+select.input.xkey-select {
+  appearance: none;
+  padding-right: 30px;
+  background-image:
+    linear-gradient(45deg, transparent 43%, currentColor 43% 57%, transparent 57%),
+    linear-gradient(135deg, transparent 43%, currentColor 43% 57%, transparent 57%);
+  background-size: 7px 7px;
+  background-position: calc(100% - 21px) center, calc(100% - 14px) center;
+  background-repeat: no-repeat;
 }
 
 /* collapsible sections (Collapsible component) */
