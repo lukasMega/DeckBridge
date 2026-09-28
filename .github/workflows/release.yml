@@ -380,7 +380,8 @@ jobs:
           }
           if ($state.driverMode -ne "real") { throw "release started outside real mode" }
           $mockRoute = Invoke-WebRequest -Method Post -Uri "$baseUrl/api/mock/dial" `
-            -UseBasicParsing -SkipHttpErrorCheck -TimeoutSec 2
+            -Body '{}' -ContentType 'application/json' `
+            -UseBasicParsing -SkipHttpErrorCheck -TimeoutSec 15
           if ($mockRoute.StatusCode -ne 404) { throw "mock route present in release" }
           Write-Host "Smoke test OK: real state API responded; mock route absent"
           Stop-Process -Id $proc.Id -Force
