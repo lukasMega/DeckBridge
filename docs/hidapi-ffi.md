@@ -76,11 +76,11 @@ path, which the driver opens with `hid_open_path()`. Opening by path avoids clai
 system-owned interfaces on macOS (the OS grants the first `hid_open(VID,PID)` caller
 exclusive access).
 
-If `DECKBRIDGE_NATIVE_LIB` is unset or fails to load, `findHidPath()` returns `null`. Off
-macOS, the driver then falls through to plain `hid_open(VID, PID)` — one attempt per PID,
-no retry loop. On macOS this fallback is skipped entirely: there, `hid_open(VID, PID)`
-opens the device's first IOKit interface, and a permission-denied open on it SIGBUSes the
-whole process; reconnect retries instead happen at a higher level, in `driver-manager`.
+If `DECKBRIDGE_NATIVE_LIB` is unset or fails to load, enumeration finds no path and no
+device opens: drivers open by path only (`HidDeviceBase._openPath`), with no
+`hid_open(VID, PID)` fallback. On macOS `hid_open(VID, PID)` opens the device's first IOKit
+interface, and a permission-denied open on it SIGBUSes the whole process; elsewhere it can
+grab the wrong unit. Reconnect retries happen at a higher level, in `driver-manager`.
 Every Mirabox/Ajazz/Fifine model sets `usagePage`/`usage` (293V3, 293S, K1 Pro, Fifine
 AmpliGame D6 rev. 2, and the untested Ajazz AKP153E/R rev. 2 — all `0xffa0`/`1`); Elgato models skip path-based open entirely.
 
@@ -111,13 +111,13 @@ mirabox_hid_present(uint16 vid, uint16 pid)        → int  (1=found, 0=not; pre
 
 | File | Role |
 |------|------|
-| `ts/src/ffi/hidapi.ts` | `loadHidapi()` candidate chain · `loadHidEnum()` / `findHidPath()` · FFI signatures · `isNullPtr()` |
+| `ts/src/ffi/hidapi.ts` | `loadHidapi()` candidate chain · `loadHidEnum()` / `listHidPaths()` · FFI signatures · `isNullPtr()` |
 | `rust/deckbridge-native/` | Rust cdylib exporting `mirabox_hid_find_path` (loaded via `DECKBRIDGE_NATIVE_LIB`), plus `image_proc_transform` |
 | `ts/src/infra/native-libs.ts` | Extracts the embedded native libs at runtime and sets `DECKBRIDGE_NATIVE_LIB` / `HIDAPI_LIB` (no separate `run.sh` — libs are embedded in the binary) |
-| `ts/src/devices/.../*` driver | Consumes `loadHidapi()` symbols; tries path-based open then VID+PID fallback |
+| `ts/src/devices/hid-device-base.ts` | Per-worker `loadHidapi()` singleton · `_openPath()` (path-only open) · read loop · teardown |
 
 ## Related docs
 
 - [ARCHITECTURE.md](./ARCHITECTURE.md) → **libhidapi loading** / **HID path enumeration** sections (the canonical reference; a deep-dive page, not listed in the sidebar).
-- `rust/README.md` → how `DECKBRIDGE_NATIVE_LIB` is wired and the open-fallback flow.
-- [Adding a Device](./adding-a-device.md) → using `loadHidapi` / `findHidPath` from a new device driver.
+- `rust/README.md` → how `DECKBRIDGE_NATIVE_LIB` is wired and the path-based open flow.
+- [Adding a Device](./adding-a-device.md) → a new device driver on `HidDeviceBase`.

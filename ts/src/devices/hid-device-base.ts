@@ -1,14 +1,14 @@
 /** Shared low-level libhidapi plumbing for the in-worker HID drivers
- *  (MiraboxDriver, ElgatoHidDriver). Owns the per-worker library singleton,
- *  the device handle, the polling read loop, write-error logging, and the
- *  cleanup teardown. Behavioral specifics (path resolution, read buffer size,
+ *  (MiraboxDriver, ElgatoHidDriver, Akp05Driver). Owns the per-worker library
+ *  singleton, the path-based open, the device handle, the polling read loop,
+ *  write-error logging, and the cleanup teardown. Behavioral specifics (read buffer size,
  *  input parsing, shutdown write, write framing) are template hooks the
  *  subclass fills in.
  *
  *  USB latency has priority: the read/write paths are synchronous — no await,
  *  setImmediate, queueMicrotask, or promises are introduced here. */
 import { EventEmitter } from 'node:events';
-import { loadHidapi } from '../ffi/hidapi.js';
+import { IS_MACOS, isNullPtr, loadHidapi } from '../ffi/hidapi.js';
 import { hidErrorString } from '../ffi/wide-string.js';
 import type { HidapiSymbols } from '../ffi/hidapi.js';
 import { error } from '../shared/logger.js';
@@ -20,19 +20,47 @@ import { error } from '../shared/logger.js';
 // causes SIGBUS on the next dlopen(). Cleared in _teardownLib() after device close.
 let _workerHidLib: { symbols: HidapiSymbols; close(): void } | null = null;
 
+const INPUT_MONITORING_HINT =
+  ' On macOS this is almost always a missing Input Monitoring permission — grant it ' +
+  'to your terminal app (or the tjs binary) under System Settings → Privacy & Security → ' +
+  'Input Monitoring, then restart that app.';
+
 export abstract class HidDeviceBase extends EventEmitter {
   protected device: unknown = null;
   protected hidLib: { symbols: HidapiSymbols; close(): void } | null = null;
   protected readTimer: ReturnType<typeof setInterval> | null = null;
+  /** HID path this instance was opened with. Used to derive a stable per-device
+   *  identity (device-identity.ts). */
+  hidPath: string | undefined = undefined;
 
   /** Acquire (or reuse) the per-worker hidapi singleton and assign it to
    *  `this.hidLib`. Returns the symbol table for use by the caller. */
-  protected _acquireLib(): HidapiSymbols {
+  private _acquireLib(): HidapiSymbols {
     if (!_workerHidLib) {
       _workerHidLib = loadHidapi();
     }
     this.hidLib = _workerHidLib;
     return this.hidLib.symbols;
+  }
+
+  /** Open exactly `path`, a usage-matched interface from discovery (the scan
+   *  worker), and set `this.device`. Never hid_open(VID/PID): on macOS it opens the
+   *  first IOKit interface and a denied open SIGBUSes; elsewhere it can grab the
+   *  wrong unit. A refused open releases hidapi so the host's worker.terminate()
+   *  stays safe, then throws; the host retries on its next scan. */
+  protected _openPath(path: string): HidapiSymbols {
+    const hid = this._acquireLib();
+    const dev = hid.hid_open_path(path);
+    if (isNullPtr(dev)) {
+      this._releaseLibAfterFailedOpen();
+      throw new Error(
+        `device present but hid_open_path failed (path=${path}).` +
+          (IS_MACOS ? INPUT_MONITORING_HINT : ''),
+      );
+    }
+    this.device = dev;
+    this.hidPath = path;
+    return hid;
   }
 
   /** Begin the polling read loop. hid_read_timeout blocks ≤ pollMs — safe on

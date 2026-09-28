@@ -324,63 +324,30 @@ If the device has a fundamentally different communication pattern (different han
 heartbeat, multi-step init, bulk transfer instead of interrupt, etc.) write a standalone
 driver class, set `driverKind: 'custom'`, and add it to the factory in `hid-worker.ts`
 (Step 5). Reference: `MiraboxDriver` (`ts/src/devices/mirabox/driver.ts`), the most feature-complete
-custom driver — it reads wire framing from `model.wire` instead of hardcoding it. Prefer
-**extending `HidDeviceBase`** (`ts/src/devices/hid-device-base.ts`), the shared base both
-real drivers extend: it already owns the lib singleton, device handle, polling read loop,
-and teardown. The sample below is standalone purely to show the minimum `DeviceDriver`
-surface — for a real Path C driver, extend `HidDeviceBase` instead.
+custom driver — it reads wire framing from `model.wire` instead of hardcoding it. Extend
+`HidDeviceBase` (`ts/src/devices/hid-device-base.ts`), the shared base every real driver
+extends: it owns the per-worker lib singleton, the path-only open, the device handle, the
+polling read loop, and the SIGBUS-safe teardown described in the rules below.
 
-Minimum `DeviceDriver` surface (see `devices/driver.ts`). The sample below is standalone
-for clarity, but a real Path C driver should **extend `HidDeviceBase`** — it already owns
-the lib singleton, device handle, poll loop, and SIGBUS-safe teardown described in the
-rules below.
+Minimum `DeviceDriver` surface (see `devices/driver.ts`) on top of `HidDeviceBase`:
 
 ```typescript
 // ts/src/devices/acme/acme-driver.ts
-import { EventEmitter } from 'node:events';
-import { loadHidapi, findHidPath, isNullPtr } from '../../ffi/hidapi.js';
+import { HidDeviceBase } from '../hid-device-base.js';
 import type { DeviceModel } from '../driver.js';
 
-let _workerHidLib: ReturnType<typeof loadHidapi> | null = null; // per-worker singleton
-
-export class AcmeDriver extends EventEmitter {
-  private device: unknown = null;
-  private hidLib: ReturnType<typeof loadHidapi> | null = null;
-  private readTimer: ReturnType<typeof setInterval> | null = null;
+export class AcmeDriver extends HidDeviceBase {
   constructor(readonly model: DeviceModel) { super(); }
 
-  async open(): Promise<void> {
-    if (!_workerHidLib) _workerHidLib = loadHidapi();
-    this.hidLib = _workerHidLib;
-    const hid = this.hidLib.symbols;
-
-    // Path-based open first (macOS-safe), then hid_open(VID, PID) per PID.
-    let dev: unknown = null;
-    if (this.model.usagePage !== undefined) {
-      const path = findHidPath(this.model.usbVendorId, this.model.usagePage, this.model.usage!);
-      if (path) dev = hid.hid_open_path(path);
-    }
-    if (!dev || isNullPtr(dev))
-      for (const pid of this.model.usbProductIds) {
-        dev = hid.hid_open(this.model.usbVendorId, pid, null);
-        if (!isNullPtr(dev)) break;
-      }
-    if (!dev || isNullPtr(dev)) {
-      try { hid.hid_exit(); } catch {}     // release after FAILED open — never dlclose() (macOS SIGBUS)
-      this.hidLib = _workerHidLib = null;
-      throw new Error(`${this.model.name}: device not found`);
-    }
-
-    this.device = dev;
+  // `hidPath` is the usage-matched interface discovery found. _openPath never falls
+  // back to hid_open(VID, PID); a refused open releases hidapi and throws.
+  async open(hidPath: string): Promise<void> {
+    const hid = this._openPath(hidPath);
     this._sendInit();                       // handshake / brightness / clear / heartbeat
-    // 5ms poll — hid_read_timeout blocks ≤5ms; emit 'error'+'disconnect' on failure.
-    const buf = new Uint8Array(512);
-    this.readTimer = setInterval(() => {
-      if (!this.device) return;
-      const n = hid.hid_read_timeout(this.device, buf, 512, 5) as number;
-      if (n < 0) { const e = hidErrorString(hid, this.device); this._cleanup(); this.emit('error', new Error(e)); this.emit('disconnect'); return; }
-      if (n > 0) this._parseInput(buf.subarray(0, n));
-    }, 5);
+    // hid_read_timeout blocks ≤5ms; the base emits 'error'+'disconnect' on a failed read.
+    this._startReadLoop(hid, this.model.wire.inSize, 5, (buf, n) =>
+      this._parseInput(buf.subarray(0, n)),
+    );
   }
 
   async close(): Promise<void> { this._cleanup(); }
@@ -389,23 +356,22 @@ export class AcmeDriver extends EventEmitter {
     for (const pkt of acmePackImage(keyIndex, bytes)) this._write(pkt);
   }
   clearKey(_k: number): void { /* device clear cmd or a real black JPEG — never an all-zero buffer */ }
-  setBrightness(level: number): void {
-    if (this.device) this.hidLib!.symbols.hid_send_feature_report(this.device, acmeBrightnessReport(level), 32);
-  }
+  setBrightness(level: number): void { this._write(acmeBrightnessPacket(level)); }
 
   private _sendInit(): void { /* protocol-specific handshake */ }
   private _write(buf: Uint8Array): void {                  // hid_write needs report-ID byte at index 0
     const arr = new Uint8Array(buf.length + 1); arr.set(buf, 1);
-    if (this.device) this.hidLib!.symbols.hid_write(this.device, arr, arr.length);
+    this._writeRaw(arr, 'acme', (n, err) => `hid_write → ${n}: ${err}`);
   }
   private _parseInput(data: Uint8Array): void {
     for (const { keyIndex, pressed } of acmeParseInput(data, this.model.keyCount) ?? [])
       this.emit('key', { keyIndex, state: pressed ? 'down' : 'up' });
   }
-  private _cleanup(): void {
-    if (this.readTimer) { clearInterval(this.readTimer); this.readTimer = null; }
-    if (this.device) { this.hidLib!.symbols.hid_close(this.device); this.device = null; }
-    if (this.hidLib) { this.hidLib.symbols.hid_exit(); this.hidLib.close(); this.hidLib = _workerHidLib = null; }
+  protected onBeforeClose(): void { /* shutdown write while the handle is still open */ }
+  protected _cleanup(): void {
+    this._stopReadTimer();
+    this._closeDevice();
+    this._teardownLib();
   }
 }
 ```
@@ -416,7 +382,8 @@ export class AcmeDriver extends EventEmitter {
 - Always emit `'error'` then `'disconnect'` on read failure so `driver-manager` can reconnect.
 - After a failed open, call `hid_exit()` but never `dlclose()` (macOS IOKit bug — see
   `_releaseLibAfterFailedOpen` in `devices/hid-device-base.ts`).
-- Load `hidapi` through a module-level `_workerHidLib` singleton (as the sample and both real drivers do) so a GC or premature `dlclose()` can't unload it mid-callback. Only clear it in `_cleanup()` after a successful open was closed.
+- Load `hidapi` only through `HidDeviceBase` (`_openPath`), which keeps the module-level `_workerHidLib` singleton so a GC or premature `dlclose()` can't unload it mid-callback. Only clear it in `_cleanup()` after a successful open was closed.
+- Open by path only. Never call `hid_open(VID, PID)`: on macOS it opens the first IOKit interface and a denied open SIGBUSes.
 - If the device needs a heartbeat, use `setInterval` and cancel it in `_cleanup`.
 - Read HID sizes and byte-level behavior from `model.wire` rather than hardcoding them.
   Protocol strategies own framing algorithms only.
@@ -588,7 +555,7 @@ check the other matches.
 ## Common pitfalls
 
 **hid_open succeeds but reads are all zeros / wrong data** → wrong HID interface. Set
-`usagePage`/`usage` and confirm `findHidPath` resolves the correct path.
+`usagePage`/`usage` and confirm `deckbridge devices` lists the correct path.
 
 **Wrong colors (red/blue swapped)** → `colorMode` does **not** fix this; see
 [Color order is not implemented](#color-order-is-not-implemented-known-limitation).

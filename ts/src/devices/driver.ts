@@ -286,10 +286,9 @@ export interface DeviceDriver extends EventEmitter {
    *  `applyOverrides` for a live (image-only) device-tuning change, so callers
    *  must read it per use rather than caching `driver.model.image`. */
   readonly model: DeviceModel;
-  /** `hidPath` (optional) opens a SPECIFIC HID interface — used to drive a second
-   *  unit of the same model. Omitted → enumerate + open the first usage-matched
-   *  path (primary probe). Ignored by MockDriver. */
-  open(hidPath?: string): Promise<void>;
+  /** Opens exactly `hidPath`, a usage-matched interface from discovery (one per
+   *  physical unit). Ignored by MockDriver. */
+  open(hidPath: string): Promise<void>;
   close(): Promise<void>;
   clearKey(keyIndex: number): void;
   setBrightness(level: number): void;

@@ -1,4 +1,3 @@
-import { findHidPath, isNullPtr, IS_MACOS } from '../../ffi/hidapi.js';
 import type { HidapiSymbols } from '../../ffi/hidapi.js';
 import { probeOutputReportSize } from '../hid-report-descriptor.js';
 import { HidDeviceBase } from '../hid-device-base.js';
@@ -25,10 +24,6 @@ import {
 export { parseAckReport, buildCrt, buildBat, padChunkBoundaries, buildLig, buildCle, buildCleDc };
 
 export class MiraboxDriver extends HidDeviceBase {
-  /** HID path this instance was opened with (path-based open only — see open()). Undefined on
-   * the VID/PID-fallback path (off-macOS only), or before open() completes. Used to derive a
-   * stable per-device identity (device-identity.ts) — NOT just for the open() call itself. */
-  hidPath: string | undefined = undefined;
   private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
   private lastHeartbeatAt = 0;
   private pktSize: number;
@@ -66,21 +61,6 @@ export class MiraboxDriver extends HidDeviceBase {
     return buildCleDc(this.pktSize);
   }
 
-  /** Find the HID path for this model, filtering by each of its PIDs in turn.
-   *  PID filtering disambiguate models that share VID+usage (e.g. K1 Pro vs 293). */
-  private findDevicePath(
-    vid: number,
-    pids: readonly number[],
-    usagePage: number,
-    usage: number,
-  ): string | null {
-    for (const pid of pids) {
-      const path = findHidPath(vid, usagePage, usage, pid);
-      if (path) return path;
-    }
-    return null;
-  }
-
   /** Replace `pktSize` (and the buffers sized from it) with the output-report size the
    *  device declares — only for models setting `wire.packetSizeCandidates`, and only
    *  when the report descriptor is unambiguous and agrees on one candidate. Mutates
@@ -111,80 +91,19 @@ export class MiraboxDriver extends HidDeviceBase {
     }
   }
 
-  async open(hidPath?: string): Promise<void> {
+  async open(hidPath: string): Promise<void> {
     this.pktSize = this.model.wire.packetSize;
     this.reportId = this.model.wire.reportId ?? HID_REPORT_ID_BYTE;
     this._chunkScratch = Buffer.alloc(this.pktSize);
     this._writeScratch = Buffer.alloc(this.pktSize + 1);
 
-    const hid = this._acquireLib();
-
-    const vid = this.model.usbVendorId;
-    const pids = this.model.usbProductIds;
-    const usagePage = this.model.usagePage!;
-    const usage = this.model.usage!;
-
-    // Prefer path-based open (filters by usage_page/usage, same as node-hid):
-    // hid_open(VID, PID) picks the first IOKit interface, which macOS may have claimed.
-    // An explicit hidPath (a specific unit) skips enumeration; absent → enumerate and
-    // open the first usage-matched path.
-    let dev: unknown = null;
-    const path = hidPath ?? this.findDevicePath(vid, pids, usagePage, usage);
-    if (path) {
-      debug('hid', `hid_open_path(${path})`);
-      dev = hid.hid_open_path(path);
-      if (!isNullPtr(dev)) {
-        debug('hid', 'hid_open_path succeeded');
-        this.hidPath = path;
-      } else if (IS_MACOS) {
-        // Present (enumeration matched) but open refused — half-seated cable, missing
-        // Input Monitoring. Do NOT fall through to hid_open(VID/PID): on macOS that
-        // opens the first IOKit interface (keyboard/consumer collection) and a denied
-        // open of it SIGBUSes. Release IOHIDManager so worker.terminate() is safe, then
-        // fail loudly and let scheduleReconnect() retry.
-        this._releaseLibAfterFailedOpen();
-        throw new Error(
-          `device present but hid_open_path failed (path=${path}). On macOS this is ` +
-            `almost always a missing Input Monitoring permission — grant it to your ` +
-            `terminal app (or the tjs binary) under System Settings → Privacy & Security → ` +
-            `Input Monitoring, then restart that app.`,
-        );
-      } else {
-        warn('hid', 'hid_open_path returned null — falling back to hid_open(VID/PID)');
-      }
-    }
-
-    // Fall back to hid_open(VID, PID), off macOS only (there it opens the first IOKit
-    // interface, often a keyboard, and segfaults on a denied/absent open; elsewhere it
-    // covers enumeration finding no usage-matched path). No-explicit-path case only —
-    // with a targeted hidPath a VID/PID open could grab the wrong unit.
-    if (isNullPtr(dev) && !IS_MACOS && hidPath === undefined) {
-      for (const pid of pids) {
-        debug('hid', `hid_open(vid=0x${vid.toString(16)}, pid=0x${pid.toString(16)})`);
-        dev = hid.hid_open(vid, pid, null);
-        if (!isNullPtr(dev)) {
-          debug('hid', `hid_open succeeded pid=0x${pid.toString(16)}`);
-          break;
-        }
-      }
-    }
-
-    if (isNullPtr(dev)) {
-      // Release the IOHIDManager that hid_init() scheduled on this worker thread (via hid_exit, no
-      // dlclose) so the host's worker.terminate() does not SIGBUS — see _releaseLibAfterFailedOpen.
-      // The worker is terminated right after this throw; scheduleReconnect() retries on a fresh worker.
-      this._releaseLibAfterFailedOpen();
-      throw new Error(
-        `Mirabox device not found (VID=0x${vid.toString(16)} PIDs=${Array.from(pids).join(',')})`,
-      );
-    }
+    const hid = this._openPath(hidPath);
     info('hid', 'device opened successfully');
-    this.device = dev;
 
     // Let the device correct our packet-size guess, for models that opted in. Must run
     // before the first write below: every CRT command is packet-size framed, and getting
     // it wrong produces no error at all — just a black panel.
-    this._adoptProbedPacketSize(hid, dev);
+    this._adoptProbedPacketSize(hid, this.device);
 
     // Polling loop: hid_read_timeout blocks ≤5ms — safe on single-threaded event loop
     // because data is available immediately or not at all in practice.

@@ -2,7 +2,6 @@
  *  Handles open, read-loop, serialized writes, feature reports, and disconnect.
  *  Runs on a worker thread; blocking hid_write never stalls the main loop. */
 import { error } from '../../shared/logger.js';
-import { findHidPath, isNullPtr, IS_MACOS } from '../../ffi/hidapi.js';
 import { hidErrorString } from '../../ffi/wide-string.js';
 import type { HidapiSymbols } from '../../ffi/hidapi.js';
 import { HidDeviceBase } from '../hid-device-base.js';
@@ -22,9 +21,6 @@ export class ElgatoHidDriver extends HidDeviceBase {
   private lastKeyState: boolean[] = [];
   deviceSerial: string | undefined = undefined;
   deviceFirmware: string | undefined = undefined;
-  /** HID path this instance was opened with (path-based open only). Used to
-   *  derive a stable per-device identity (device-identity.ts). */
-  hidPath: string | undefined = undefined;
   /** Reused output-report buffer, sized on first sendImage (see sendImage). */
   private _pktScratch: Uint8Array = new Uint8Array(0);
   /** Built on first clearKey, then kept: a gen1 blank is a ~19 KB allocation and
@@ -40,58 +36,8 @@ export class ElgatoHidDriver extends HidDeviceBase {
   }
 
   // eslint-disable-next-line @typescript-eslint/require-await
-  async open(hidPath?: string): Promise<void> {
-    const hid = this._acquireLib();
-
-    // An explicit hidPath (multi-device: a specific unit) opens that exact
-    // interface; otherwise enumerate + open the first usage-matched path.
-    const path =
-      hidPath ??
-      (this.model.usagePage !== undefined && this.model.usage !== undefined
-        ? findHidPath(this.model.usbVendorId, this.model.usagePage, this.model.usage)
-        : null);
-
-    let dev: unknown = null;
-    if (path) {
-      dev = hid.hid_open_path(path);
-      if (!isNullPtr(dev)) {
-        this.hidPath = path;
-      } else if (IS_MACOS) {
-        // Never fall through to hid_open(VID/PID) on macOS: it opens the first IOKit
-        // interface and a denied open SIGBUSes (see devices/mirabox/driver.ts).
-        this._releaseLibAfterFailedOpen();
-        throw new Error(
-          `device present but hid_open_path failed (path=${path}). On macOS this is ` +
-            `almost always a missing Input Monitoring permission — grant it to your ` +
-            `terminal app (or the tjs binary) under System Settings → Privacy & Security → ` +
-            `Input Monitoring, then restart that app.`,
-        );
-      }
-    }
-
-    // VID/PID fallback: off macOS, and only without a targeted hidPath (it could
-    // grab the WRONG unit).
-    if (isNullPtr(dev) && !IS_MACOS && hidPath === undefined) {
-      for (const pid of this.model.usbProductIds) {
-        const d = hid.hid_open(this.model.usbVendorId, pid, null);
-        if (!isNullPtr(d)) {
-          dev = d;
-          break;
-        }
-      }
-    }
-
-    if (isNullPtr(dev)) {
-      // Release the IOHIDManager (hid_exit, no dlclose) so the host's
-      // worker.terminate() after this throw does not SIGBUS on macOS — see
-      // _releaseLibAfterFailedOpen.
-      this._releaseLibAfterFailedOpen();
-      throw new Error(
-        `${this.model.name} not found (VID=0x${this.model.usbVendorId.toString(16)} PIDs=${this.model.usbProductIds.map((p) => '0x' + p.toString(16)).join(',')})`,
-      );
-    }
-
-    this.device = dev;
+  async open(hidPath: string): Promise<void> {
+    const hid = this._openPath(hidPath);
     this._readDeviceInfo();
     this.lastKeyState = Array.from({ length: this.model.keyCount }, () => false);
 

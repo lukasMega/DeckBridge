@@ -21,8 +21,6 @@ export interface HidDiscovery {
   serial(hidPath: string): string | null;
   /** Re-init the native HID stack before the next scan (after a disconnect). */
   requestReset(): void;
-  /** Skip a model with no usage-matched path instead of opening by VID/PID. */
-  readonly requireTargetedPath: boolean;
 }
 
 /** Production discovery: the process-lifetime scan worker, so a stalled Windows
@@ -46,13 +44,12 @@ export function nativeHidDiscovery(): HidDiscovery {
       cachedDiscoveryPaths(model.usbVendorId, model.usbProductIds, model.usagePage, model.usage),
     serial: cachedDiscoverySerial,
     requestReset: () => scanner.requestReset(),
-    requireTargetedPath: true,
   };
 }
 
 /** Identity of a just-opened primary device: stable USB-serial key, else the
- *  (volatile) hidPath, else a per-model key (VID/PID-fallback open, no
- *  usage-matched path) — same rule as the scanned-dock path. */
+ *  (volatile) hidPath, else a per-model key (no path reported by the
+ *  driver) — same rule as the scanned-dock path. */
 export function resolveRealDeviceIdentity(
   discovery: HidDiscovery,
   hidPath: string | undefined,

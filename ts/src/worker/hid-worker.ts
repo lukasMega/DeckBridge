@@ -51,7 +51,7 @@ function createDriver(model: DeviceModel): AnyRealDriver {
 
 async function handleOpen(
   modelId: string,
-  hidPath?: string,
+  hidPath: string,
   overrides?: DeviceModelOverride,
 ): Promise<void> {
   const registryModel = DEVICE_MODELS.find((m) => m.id === modelId);

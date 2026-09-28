@@ -40,7 +40,7 @@ const wait = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(
 const ops = (): string[] => io.map((e) => `${e.op}:${e.wireId}`);
 
 async function openAkp05e(): Promise<void> {
-  send({ type: 'open', modelId: 'ajazz-akp05e' });
+  send({ type: 'open', modelId: 'ajazz-akp05e', hidPath: 'fake' });
   await wait(5);
   io.length = 0;
   messages.length = 0;

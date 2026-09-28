@@ -139,9 +139,9 @@ export class DockScanner {
 
   /** The lowest-sorted unclaimed HID path (claimed = the primary's own interface plus
    *  every live extra's) — the next physical unit to dock. Lowest wins so scan ticks are
-   *  deterministic; exactly one dock opens per tick. If the primary opened without a
-   *  known path (off-macOS VID/PID fallback), its unit is indistinguishable from a
-   *  duplicate, so skip that whole model rather than risk double-opening it. */
+   *  deterministic; exactly one dock opens per tick. If the primary has no known path
+   *  (open still in flight), its unit is indistinguishable from a duplicate, so skip
+   *  that whole model rather than risk double-opening it. */
   private pickUnclaimedPath(
     realDriver: PrimaryUnit,
   ): { model: DeviceModel; hidPath: string } | null {

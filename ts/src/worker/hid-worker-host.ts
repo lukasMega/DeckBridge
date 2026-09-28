@@ -58,10 +58,8 @@ export class WorkerHidDriver extends EventEmitter implements DockDriver {
     this.overrides = overrides;
   }
 
-  /** `hidPath` (optional) targets a specific unclaimed HID interface — used to
-   *  open a second unit of the same model. Omitted for the primary probe, which
-   *  lets the driver enumerate + open the first usage-matched path. */
-  open(hidPath?: string): Promise<void> {
+  /** `hidPath` is the usage-matched HID interface discovery found for this unit. */
+  open(hidPath: string): Promise<void> {
     if (this.openReject) {
       return Promise.reject(new Error('open already in flight'));
     }

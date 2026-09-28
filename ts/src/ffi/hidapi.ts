@@ -11,10 +11,8 @@ export const INT = 'int';
 export const UINT16 = 'uint16';
 export const UINT32 = 'uint32';
 
-/** macOS uses the .dylib suffix. Gates the hid_open(VID/PID) fallback, which on
- *  macOS opens the device's first IOKit interface (often a keyboard/consumer
- *  collection) and SIGBUSes the whole process on a permission-denied open.
- *  See MiraboxDriver.open(). */
+/** macOS uses the .dylib suffix. Selects the Input Monitoring hint on a refused
+ *  open (HidDeviceBase._openPath). */
 export const IS_MACOS = FFI.suffix === 'dylib';
 
 export function isNullPtr(p: unknown): boolean {
@@ -29,7 +27,6 @@ export function isNullPtr(p: unknown): boolean {
 export interface HidapiSymbols {
   hid_init(): number;
   hid_exit(): number;
-  hid_open(vid: number, pid: number, serial: null): unknown;
   hid_open_path(path: string): unknown;
   hid_write(device: unknown, buf: Uint8Array, len: number): number;
   hid_read_timeout(device: unknown, buf: Uint8Array, len: number, timeoutMs: number): number;
@@ -49,7 +46,6 @@ const HID_ENUM = 'deckbridge-native';
 const HIDAPI_CORE_SYMBOLS = {
   hid_init:               { args: [],                            returns: INT     },
   hid_exit:               { args: [],                            returns: INT     },
-  hid_open:               { args: [UINT16, UINT16, POINTER],     returns: POINTER },
   hid_open_path:          { args: [STRING],                      returns: POINTER },
   hid_write:              { args: [POINTER, BUFFER, SIZE_T],     returns: INT     },
   hid_read_timeout:       { args: [POINTER, BUFFER, SIZE_T, INT],returns: INT     },
@@ -110,7 +106,7 @@ interface HidEnumSymbols {
 }
 
 // Cached deckbridge-native handle, kept open for the process lifetime: dlclose() churn
-// around HID libs causes SIGBUS on macOS (see _workerHidLib in devices/mirabox/driver.ts). Only
+// around HID libs causes SIGBUS on macOS (see _workerHidLib in devices/hid-device-base.ts). Only
 // successful loads are cached, so a missing/failed DECKBRIDGE_NATIVE_LIB can be retried later.
 let _hidEnumLib: { symbols: HidEnumSymbols; close(): void } | null = null;
 
@@ -240,23 +236,10 @@ function hidSnapshotOrFresh(): HidDeviceInfo[] {
   return snap.length > 0 ? snap : hidSnapshot(0);
 }
 
-export function findHidPath(vid: number, usagePage: number, usage: number, pid = 0): string | null {
-  debug(
-    'ffi',
-    `findHidPath: vid=0x${vid.toString(16)} pid=0x${pid.toString(16)} usagePage=0x${usagePage.toString(16)} usage=0x${usage.toString(16)}`,
-  );
-  const hit = hidSnapshotOrFresh().find((d) =>
-    matchesHidQuery(d, singlePidQuery(vid, pid, usagePage, usage)),
-  );
-  debug('ffi', hit ? `hid snapshot: found path=${hit.path}` : 'hid snapshot: no device found');
-  return hit?.path ?? null;
-}
-
 /** Every HID device path matching this VID+usagePage+usage (+optional PID),
  *  from deckbridge-native enumeration (never hid_open). Used to drive N units of
  *  the SAME model as separate docks: the coordinator opens each distinct path via
- *  hid_open_path. Returns [] when the enum lib is missing or nothing matches.
- *  Param order mirrors findHidPath. */
+ *  hid_open_path. Returns [] when the enum lib is missing or nothing matches. */
 export function listHidPaths(vid: number, usagePage: number, usage: number, pid = 0): string[] {
   return hidPathsMatching(hidSnapshotOrFresh(), singlePidQuery(vid, pid, usagePage, usage));
 }

@@ -257,8 +257,8 @@ class RepaintFakeDriver extends StubDockDriver {
   }
 }
 
-/** Injected discovery + worker pool: no FFI, every model present (no targeted
- *  path needed), and a per-test swappable driver factory. The real presence
+/** Injected discovery + worker pool: no FFI, every model present at one fake
+ *  path, and a per-test swappable driver factory. The real presence
  *  check (deckbridge-native enumeration) is covered at runtime, not here. */
 const realWorker: WorkerFactory = (model, ov) => new WorkerHidDriver(model, ov);
 
@@ -266,10 +266,9 @@ function fakeUsb() {
   const discovery: HidDiscovery = {
     scan: () => Promise.resolve(0),
     present: () => true,
-    paths: () => [],
+    paths: (model) => [`fake:${model.id}`],
     serial: () => null,
     requestReset: () => {},
-    requireTargetedPath: false,
   };
   const factory = {
     make: realWorker,
@@ -802,9 +801,7 @@ await test('9. E1-b: in-flight guard — a second tryRealConnect() during a prob
 class CoordFakeDriver extends StubDockDriver {
   deviceSerial: string | undefined = 'SN';
   deviceFirmware: string | undefined = '1.0';
-  /** Set by open(): the specific unit's path (multi-device), mirroring the real
-   *  driver. setupCoord's factory overrides open() to also default the primary's
-   *  path from the enumerated list. */
+  /** Set by open(): the specific unit's path, mirroring the real driver. */
   hidPath: string | undefined = undefined;
   closeCalls = 0;
   brightnessCalls: number[] = [];
@@ -817,7 +814,7 @@ class CoordFakeDriver extends StubDockDriver {
     this.applyOverridesCalls.push(overrides);
     this.model = effectiveModel;
   }
-  override open(hidPath?: string): Promise<void> {
+  override open(hidPath: string): Promise<void> {
     this.hidPath = hidPath;
     return Promise.resolve();
   }
@@ -923,11 +920,9 @@ function setupCoord(maxDocks: number = MAX_MULTI_DECK_DOCKS) {
   void driverManager.setMultiDeck(maxDocks > 1, maxDocks);
   usb.factory.make = (m) => {
     const d = new CoordFakeDriver(m);
-    // Mirror the real driver: the primary probe opens with no explicit path and
-    // adopts the first enumerated one; an extra is opened at a targeted path.
-    d.open = (hidPath?: string) => {
-      d.hidPath = hidPath ?? resolvePaths(m)[0];
-      if (d.hidPath) driversByPath.set(d.hidPath, d);
+    d.open = (hidPath: string) => {
+      d.hidPath = hidPath;
+      driversByPath.set(hidPath, d);
       return Promise.resolve();
     };
     drivers.set(m.id, d);

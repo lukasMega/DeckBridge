@@ -295,12 +295,11 @@ Elgato models are probed first so they take priority over Mirabox; the loop is g
 
 ### Open strategy per device
 
-`ElgatoHidDriver.open()` ([devices/elgato/driver.ts](../ts/src/devices/elgato/driver.ts)) and `MiraboxDriver.open()` ([devices/mirabox/driver.ts](../ts/src/devices/mirabox/driver.ts)) both try path-based open first, then diverge on the fallback:
+Every driver opens by path only, through `HidDeviceBase._openPath(path)` ([devices/hid-device-base.ts](../ts/src/devices/hid-device-base.ts)). The path comes from the main thread: the HID scan worker enumerates, `HidDiscovery.paths(model)` filters that snapshot by VID + PIDs (+ `usagePage`/`usage` when the model sets them), and `DriverManager`/`DockScanner` pass one path per physical unit to `open(hidPath)`. A model with no matching path is skipped, and the USB worker never enumerates.
 
-1. **Path-based open** — if the model sets `usagePage` + `usage`, calls `findHidPath()` → `deckbridge-native` → `mirabox_hid_find_path(vid, pid, usagePage, usage)` (Mirabox passes each PID in turn to disambiguate models sharing VID+usage, e.g. K1 Pro vs 293; Elgato passes `pid=0`, any product). Opening by path avoids claiming system-owned interfaces on macOS (the OS grants the first `hid_open` caller exclusive access to a VID+PID).
-2. **VID+PID fallback** — one attempt per PID, no retries. `ElgatoHidDriver` always falls back to `hid_open(VID, PID)` per PID. `MiraboxDriver` falls back **only off macOS**: on macOS a failed path-open throws immediately, because `hid_open(VID, PID)` there opens the device's first IOKit interface (often an unrelated collection) and a permission-denied open SIGBUSes the process — path-based open is the only safe route.
+There is no `hid_open(VID, PID)` fallback. On macOS it opens the device's first IOKit interface (often an unrelated collection) and a permission-denied open SIGBUSes the process; elsewhere it can grab the wrong unit when two of the same model are plugged in. A refused `hid_open_path` releases hidapi (`_releaseLibAfterFailedOpen`, so `worker.terminate()` stays safe) and throws — on macOS with the Input Monitoring hint — and the next scan retries.
 
-Only the Mirabox models set `usagePage`/`usage` (all use `0xffa0`/`1`); Elgato models skip step 1.
+The Mirabox/Ajazz/Fifine models set `usagePage`/`usage` (all `0xffa0`/`1`) to pick the data interface; Elgato models match on VID + PID alone.
 
 ### libhidapi loading
 

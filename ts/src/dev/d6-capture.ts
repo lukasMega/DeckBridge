@@ -91,12 +91,14 @@ const rnd = (): number => (Math.random() * 256) | 0;
 await initProbeLibs();
 
 let model: DeviceModel | null = null;
+let hidPath = '';
 const serials: string[] = [];
 for (const candidate of [FIFINE_D6_REV2_MODEL, FIFINE_D6_MODEL]) {
   const pid = candidate.usbProductIds[0]!;
   const paths = listHidPaths(VID, candidate.usagePage!, candidate.usage!, pid);
   if (paths.length === 0) continue;
   model = candidate;
+  hidPath = paths[0]!;
   console.log(`[s1] model:   ${candidate.id} (${candidate.name})`);
   console.log(`[s1] usb:     VID=0x${VID.toString(16)} PID=0x${pid.toString(16).padStart(4, '0')}`);
   console.log(`[s1] paths:   ${paths.length} matching usage 0xffa0/1`);
@@ -121,8 +123,8 @@ if (!model) {
 }
 
 const driver = new CaptureDriver(model);
-await driver.open();
-console.log(`[s1] opened — hidPath=${driver.hidPath ?? '(vid/pid fallback)'}`);
+await driver.open(hidPath);
+console.log(`[s1] opened — hidPath=${hidPath}`);
 
 if (want('s1')) {
   const desc = driver.captureDescriptor();
