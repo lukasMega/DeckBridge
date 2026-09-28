@@ -165,9 +165,9 @@ await test('outcome: qualifying dock, no conflict, app running — restart fires
   assert.ok(calls.includes('restart'), 'restart should run');
 });
 
-console.log('\nonElgatoAttached() early-cancel');
+console.log('\nonElgatoAttached() defers to the grace-end check');
 
-await test('onElgatoAttached cancels the timer once every pending dock is attached', () => {
+await test('onElgatoAttached does not cancel the timer', () => {
   const { deps, state, hasPendingTimer } = fakeDeps();
   state.paired.add('dock-a');
   const scheduler = new ElgatoAutoRestart(deps);
@@ -176,20 +176,50 @@ await test('onElgatoAttached cancels the timer once every pending dock is attach
 
   scheduler.onElgatoAttached(0);
 
-  assert.ok(!hasPendingTimer(), 'timer cancelled once the last pending dock attached');
+  assert.ok(hasPendingTimer(), 'timer stays armed; the grace-end check decides');
 });
 
-await test('onElgatoAttached for one dock does not cancel the timer while another is pending', () => {
-  const { deps, state, hasPendingTimer } = fakeDeps();
+await test('an attach that drops before the grace period ends still restarts', async () => {
+  const { deps, state, calls, fireTimer } = fakeDeps();
+  state.paired.add('dock-a');
+  const scheduler = new ElgatoAutoRestart(deps);
+  scheduler.onDockConnected(0, 'dock-a');
+
+  // clientConnected fires, then the socket resets (ECONNRESET) — not attached anymore.
+  state.attached.add(0);
+  scheduler.onElgatoAttached(0);
+  state.attached.delete(0);
+  await fireTimer();
+
+  assert.ok(calls.includes('restart'), 'a short-lived attach must not suppress the restart');
+});
+
+await test('an attach that lasts to the grace end skips the restart', async () => {
+  const { deps, state, calls, fireTimer } = fakeDeps();
+  state.paired.add('dock-a');
+  const scheduler = new ElgatoAutoRestart(deps);
+  scheduler.onDockConnected(0, 'dock-a');
+
+  state.attached.add(0);
+  scheduler.onElgatoAttached(0);
+  await fireTimer();
+
+  assert.ok(!calls.includes('restart'), 'restart must not run while the app stays attached');
+});
+
+await test('one dock attached, another still waiting — restart fires', async () => {
+  const { deps, state, calls, fireTimer } = fakeDeps();
   state.paired.add('dock-a');
   state.paired.add('dock-b');
   const scheduler = new ElgatoAutoRestart(deps);
   scheduler.onDockConnected(0, 'dock-a');
   scheduler.onDockConnected(1, 'dock-b');
 
+  state.attached.add(0);
   scheduler.onElgatoAttached(0);
+  await fireTimer();
 
-  assert.ok(hasPendingTimer(), 'dock-b is still pending, so the timer must stay armed');
+  assert.ok(calls.includes('restart'), 'dock-b never attached, so the restart covers it');
 });
 
 console.log('\nonce-per-process rule');
