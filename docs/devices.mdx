@@ -76,7 +76,7 @@ Dedicated 1024-byte CRT protocol: ten JPEG keys (CRT BAT uploads committed with 
 | Device | Vendor | USB VID:PID | Keys (grid) | Panel px | Image | Extra keys | Tested |
 |---|---|---|---|---|---|---|---|
 | [AJAZZ AKP05E](#ajazz-akp05e) | ajazz | `0x0300:0x3004` | 10 (5×2) | 112×112 | JPEG | — | ✓ tested (macOS, 2026-09-21) |
-| [AJAZZ AKP05](#ajazz-akp05) | ajazz | `0x0300:0x3006` | 10 (5×2) | 112×112 | JPEG | — | — untested |
+| [AJAZZ AKP05](#ajazz-akp05) | ajazz | `0x0300:0x3006` | 10 (5×2) | 112×112 | JPEG | 2 | — untested |
 
 </div>
 
@@ -205,13 +205,13 @@ Retail AJAZZ AKP05 (VID 0x0300, PID 0x3006). It uses the AKP05 dedicated driver,
 |  |  |
 |---|---|
 | **USB** | `0x0300`:`0x3006` |
-| **Keys** | 10 (5×2) |
+| **Keys** | 10 (5×2) + 2 extra |
 | **Panel** | 112×112 JPEG |
 | **Protocol** | `ajazz-akp05` |
 | **Tested** | — untested |
 
 - VID, PID, vendor HID collection, protocol version 3 and 112×112 JPEG format come from ambiso/opendeck-akp05; the key transform is the AKP05E's (upright keys, 180° splash). DeckBridge hardware has not tested this SKU.
-- Shares the AKP05E init sequence, CRT CONNECT keepalive, key map, Stream Deck + emulation, encoder, swipe and tap decoding, and the AKP05E strip geometry and 10 100 B upload cap (both untested on this SKU). See the AKP05E notes for the captured input codes.
+- Pairs as Stream Deck + by default. Shares the AKP05E init sequence, CRT CONNECT keepalive, Plus key map, encoder, swipe and tap decoding, and the AKP05E strip geometry and 10 100 B upload cap (both untested on this SKU). See the AKP05E notes for the captured input codes.
 - Close sends no disconnect command — the firmware can wedge after speculative commands. Unplug and replug if the panel wedges.
 
 [Full spec →](./device-specs.mdx#ajazz-akp05)

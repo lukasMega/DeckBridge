@@ -393,7 +393,11 @@ export function DeviceTuningPanel(): preact.JSX.Element {
             value={coraProfile}
             onChange={(e) => setCoraProfile((e.target as HTMLSelectElement).value)}
           >
-            <option value="">Native (default)</option>
+            <option value="">
+              {activeView.defaults.cora?.advertiseAs
+                ? 'Default (Stream Deck +)'
+                : 'Native (default)'}
+            </option>
             {activeView.profiles.map((p) => (
               <option key={p.id} value={p.id}>
                 {p.name}

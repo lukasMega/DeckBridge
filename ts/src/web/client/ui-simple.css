@@ -25,7 +25,7 @@
   gap: 10px;
 }
 .app-version {
-  opacity: 0.5;
+  opacity: 0.7;
   font-size: 12px;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
@@ -96,7 +96,7 @@
 .xkey-config-btn {
   color: var(--fg-muted);
   background: var(--surface);
-  border: 1px solid var(--border);
+  border: 1px solid var(--control-border);
 }
 .ghostbtn {
   font-family: var(--font);
@@ -110,7 +110,7 @@
 }
 .ghostbtn:hover {
   color: var(--fg);
-  border-color: var(--border-strong);
+  border-color: var(--accent);
 }
 .ghostbtn:active,
 .ctabtn:active,
@@ -359,9 +359,11 @@
     width: 280px;
   }
   &.dimmed {
+    width: 60%;
+  }
+  &.dimmed :is(.key-grid, .touch-strip-preview) {
     filter: saturate(0.4) brightness(0.92);
     opacity: 0.55;
-    width: 60%;
   }
   &.dimmed .live-dot {
     color: var(--fg-dim);
@@ -523,7 +525,7 @@ input[type='range'].range {
     linear-gradient(var(--accent), var(--accent)) 0 / var(--fill, 80%) 100% no-repeat,
     var(--inset);
   box-shadow: var(--inset-shadow);
-  border: 1px solid var(--border);
+  border: 1px solid var(--control-border);
 
   /* NB: keep -webkit-/-moz- thumb rules separate — a shared selector list
      is dropped whole by the engine that doesn't know the other's pseudo */
@@ -534,7 +536,7 @@ input[type='range'].range {
     height: 20px;
     border-radius: 50%;
     background: var(--surface);
-    border: 1px solid var(--border-strong);
+    border: 1px solid var(--control-border);
     box-shadow: var(--shadow-2);
     transition: transform 0.08s;
   }
@@ -546,7 +548,7 @@ input[type='range'].range {
     height: 20px;
     border-radius: 50%;
     background: var(--surface);
-    border: 1px solid var(--border-strong);
+    border: 1px solid var(--control-border);
     box-shadow: var(--shadow-2);
   }
 }
@@ -1346,7 +1348,7 @@ input[type='range'].range:disabled {
   padding: 9px 11px;
   border-radius: 8px;
   background: var(--surface);
-  border: 1px solid var(--border-strong);
+  border: 1px solid var(--control-border);
   box-shadow: var(--shadow-1);
   color: var(--fg);
   font-size: 13px;
@@ -1389,7 +1391,7 @@ input[type='range'].range:disabled {
   padding: 4px 9px;
   border-radius: 6px;
   background: transparent;
-  border: 1px solid var(--border);
+  border: 1px solid var(--control-border);
   color: var(--fg-dim);
   font-size: 12px;
 }
@@ -1974,7 +1976,7 @@ input[type='range'].range:disabled {
   font-size: 12px;
   color: var(--fg);
   background: var(--bg);
-  border: 1px solid var(--border);
+  border: 1px solid var(--control-border);
   border-radius: var(--r-sm);
   padding: 4px 8px;
 }

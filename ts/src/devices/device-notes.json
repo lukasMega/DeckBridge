@@ -91,7 +91,7 @@
       "alsoSoldAs": [],
       "quirks": [
         "VID, PID, vendor HID collection, protocol version 3 and 112×112 JPEG format come from ambiso/opendeck-akp05; the key transform is the AKP05E's (upright keys, 180° splash). DeckBridge hardware has not tested this SKU.",
-        "Shares the AKP05E init sequence, CRT CONNECT keepalive, key map, Stream Deck + emulation, encoder, swipe and tap decoding, and the AKP05E strip geometry and 10 100 B upload cap (both untested on this SKU). See the AKP05E notes for the captured input codes.",
+        "Pairs as Stream Deck + by default. Shares the AKP05E init sequence, CRT CONNECT keepalive, Plus key map, encoder, swipe and tap decoding, and the AKP05E strip geometry and 10 100 B upload cap (both untested on this SKU). See the AKP05E notes for the captured input codes.",
         "Close sends no disconnect command — the firmware can wedge after speculative commands. Unplug and replug if the panel wedges."
       ],
       "sources": [

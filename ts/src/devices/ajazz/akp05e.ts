@@ -40,7 +40,7 @@ const TOUCH_STRIP_IMAGE: DeviceImageSpec = { ...TOUCH_SLOT_IMAGE, width: 800 };
 // 5/10) becomes DeckBridge-owned extra keys (widget + press command, extra-keys.ts).
 // usePhysicalIdentity stays false — the AKP05E's own firmware (V3.AKP05E.02.007)
 // must not reach the desktop.
-const STREAM_DECK_PLUS_EMULATION: DeviceEmulation = {
+export const STREAM_DECK_PLUS_EMULATION = {
   image: { ...KEY_IMAGE, rotate: 180 },
   keyMap: {
     coraToWireImage: [11, 12, 13, 14, 6, 7, 8, 9],
@@ -48,7 +48,7 @@ const STREAM_DECK_PLUS_EMULATION: DeviceEmulation = {
     extraKeys: [15, 10],
     extraKeyInputs: [5, 10],
   },
-};
+} satisfies DeviceEmulation;
 
 /** AJAZZ AKP05E. Only PID 0x3004 has output-protocol evidence. */
 export const AJAZZ_AKP05E_MODEL: DeviceModel = {
