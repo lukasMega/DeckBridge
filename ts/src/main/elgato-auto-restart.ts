@@ -86,14 +86,17 @@ export class ElgatoAutoRestart {
   }
 
   /** The Elgato child client attached to `dockIndex` — on its own, or via a
-   *  manual restart elsewhere. Cancels the pending timer once no dock is left
-   *  waiting for it. */
+   *  manual restart elsewhere. Does NOT cancel the timer: an attach can drop
+   *  a moment later (seen on hardware: `clientConnected`, then ECONNRESET 1 ms
+   *  later), so the decision waits for `onGraceElapsed`, which re-checks the
+   *  live `isAttached()` state of every pending dock. */
   onElgatoAttached(dockIndex: number): void {
-    this.pendingDocks.delete(dockIndex);
-    if (this.pendingDocks.size === 0 && this.timer !== null) {
-      this.clearTimer(this.timer);
-      this.timer = null;
-      log('info', COMPONENT, 'grace timer cancelled — every paired dock attached on its own');
+    if (this.timer !== null && this.pendingDocks.has(dockIndex)) {
+      log(
+        'info',
+        COMPONENT,
+        `dock ${dockIndex}: Elgato attached — re-checked when the grace period ends`,
+      );
     }
   }
 
