@@ -337,7 +337,7 @@ export function SettingsPage({ onBack }: Readonly<{ onBack: () => void }>): prea
             // device changes — not on every rename, which would clobber
             // in-progress typing. See MdnsNameEditor: local state is seeded
             // from props once, on mount, by design.
-            key={identity.deviceKey ?? 'mock'}
+            key={identity.deviceKey ?? 'identity'}
             identity={identity}
             onSaved={(name) => {
               setRenamed(name);

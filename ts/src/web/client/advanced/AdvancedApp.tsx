@@ -34,8 +34,8 @@ function AdvGridSection(): preact.JSX.Element {
         label="Key grid"
         showIndex
         flash
-        onKeyClick={postKey}
-        clickable={status.driverMode === 'mock'}
+        onKeyClick={__MOCK_BUILD__ ? postKey : undefined}
+        clickable={__MOCK_BUILD__ && status.driverMode === 'mock'}
       />
     </div>
   );
@@ -54,7 +54,7 @@ export function AdvancedApp(): preact.JSX.Element {
           <div class="panel">
             <Brightness />
           </div>
-          <MockConfigForm />
+          {__MOCK_BUILD__ && <MockConfigForm />}
           <KeyEventsPanel />
           <LogConsolePanel />
         </aside>

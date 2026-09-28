@@ -5,7 +5,6 @@ import { ElgatoChildServer } from '../cora/child-server.js';
 import { CoraDock } from './cora-dock.js';
 import { WebUIServer } from '../web/server/index.js';
 import type { MockDeviceConfig } from '../web/server/index.js';
-import { MockDriver } from '../devices/mock.js';
 import type { ClientApp, CommEntry, LogObject } from '../shared/types.js';
 import type { MockInput, TouchStripMode } from '../shared/types.js';
 import { ELGATO_CHILD_PORT, ELGATO_TCP_PORT, WEBUI_PORT } from '../shared/types.js';
@@ -229,37 +228,40 @@ webui.on('modelOverridesChanged', (modelId: string, kind: OverrideChangeKind = '
   });
 });
 
-webui.on('switchMode', (mode: 'real' | 'mock') => {
-  driverManager.switchMode(mode).catch((err: unknown) => {
-    log('error', 'deckBr', `switchMode(${mode}) failed: ${(err as Error).message}`);
-    webui.notifyDriverStatus(mode, false);
-  });
-});
-
-webui.on('keyPress', (mk2Index: number) => {
-  const d = driverManager.getCurrentDriver();
-  if (driverManager.getDriverMode() === 'mock' && d instanceof MockDriver) {
-    d.simulateKeyPress(mk2Index);
-  }
-});
-
-webui.on('mockInput', (input: MockInput) => {
-  const d = driverManager.getCurrentDriver();
-  if (driverManager.getDriverMode() === 'mock' && d instanceof MockDriver) d.simulate(input);
-});
-
-webui.on('setModel', (modelId: string) => {
-  const model = DEVICE_MODELS.find((m) => m.id === modelId);
-  if (!model) return;
-  if (driverManager.getDriverMode() === 'mock') {
-    driverManager.connectMock(model).catch((err: unknown) => {
-      log('error', 'deckBr', `connectMock(${model.id}) failed: ${(err as Error).message}`);
-      webui.notifyDriverStatus('mock', false);
+if (__MOCK_BUILD__) {
+  const { MockDriver } = await import('../devices/mock.js');
+  webui.on('switchMode', (mode: 'real' | 'mock') => {
+    driverManager.switchMode(mode).catch((err: unknown) => {
+      log('error', 'deckBr', `switchMode(${mode}) failed: ${(err as Error).message}`);
+      webui.notifyDriverStatus(mode, false);
     });
-  } else {
-    driverManager.applyDeviceModel(model);
-  }
-});
+  });
+
+  webui.on('keyPress', (mk2Index: number) => {
+    const d = driverManager.getCurrentDriver();
+    if (driverManager.getDriverMode() === 'mock' && d instanceof MockDriver) {
+      d.simulateKeyPress(mk2Index);
+    }
+  });
+
+  webui.on('mockInput', (input: MockInput) => {
+    const d = driverManager.getCurrentDriver();
+    if (driverManager.getDriverMode() === 'mock' && d instanceof MockDriver) d.simulate(input);
+  });
+
+  webui.on('setModel', (modelId: string) => {
+    const model = DEVICE_MODELS.find((m) => m.id === modelId);
+    if (!model) return;
+    if (driverManager.getDriverMode() === 'mock') {
+      driverManager.connectMock(model).catch((err: unknown) => {
+        log('error', 'deckBr', `connectMock(${model.id}) failed: ${(err as Error).message}`);
+        webui.notifyDriverStatus('mock', false);
+      });
+    } else {
+      driverManager.applyDeviceModel(model);
+    }
+  });
+}
 
 // An extra-key assignment changed (WebUI) — repaint that dock's key icons.
 // Dispatch needs no re-wire: it resolves the config per press.
@@ -279,16 +281,17 @@ webui.on('mdnsNameChanged', (deviceKey: string, name: string) => {
   driverManager.dockForDevice(deviceKey)?.renameMdns(name);
 });
 
-webui.on('mockConfig', (cfg: MockDeviceConfig) => {
-  server.setDeviceConfig({ ...cfg, macAddress: macToBytes(cfg.macAddress, []) });
-  log(
-    'info',
-    'deckBr',
-    `mock config updated: dockFw=${cfg.dockFirmwareVersion} childFw=${cfg.childFirmwareVersion}` +
-      ` dockSerial=${cfg.serialNumber} childSerial=${cfg.childSerialNumber}` +
-      ` pid=0x${cfg.productId.toString(16).padStart(4, '0')} mac=${cfg.macAddress}`,
-  );
-});
+if (__MOCK_BUILD__)
+  webui.on('mockConfig', (cfg: MockDeviceConfig) => {
+    server.setDeviceConfig({ ...cfg, macAddress: macToBytes(cfg.macAddress, []) });
+    log(
+      'info',
+      'deckBr',
+      `mock config updated: dockFw=${cfg.dockFirmwareVersion} childFw=${cfg.childFirmwareVersion}` +
+        ` dockSerial=${cfg.serialNumber} childSerial=${cfg.childSerialNumber}` +
+        ` pid=0x${cfg.productId.toString(16).padStart(4, '0')} mac=${cfg.macAddress}`,
+    );
+  });
 
 async function shutdown(): Promise<void> {
   if (shuttingDown) return;
@@ -341,7 +344,9 @@ for (const [level, line] of [
   ['debug', `platform     : ${platformName() || '(unknown)'}`],
   ['info', `env DECKBRIDGE_NATIVE_LIB = ${tjs.env.DECKBRIDGE_NATIVE_LIB ?? '(not set)'}`],
   ['info', `env HIDAPI_LIB     = ${tjs.env.HIDAPI_LIB ?? '(not set)'}`],
-  ['info', `env DECKBRIDGE_MOCK      = ${tjs.env.DECKBRIDGE_MOCK ?? '(not set)'}`],
+  ...(__MOCK_BUILD__
+    ? [['info', `env DECKBRIDGE_MOCK      = ${tjs.env.DECKBRIDGE_MOCK ?? '(not set)'}`] as const]
+    : []),
   ['info', `env DECKBRIDGE_OPEN   = ${tjs.env.DECKBRIDGE_OPEN ?? '(not set)'}`],
   ['info', `env DECKBRIDGE_DUMP_DIR  = ${tjs.env.DECKBRIDGE_DUMP_DIR ?? '(not set)'}`],
   ['info', `env DECKBRIDGE_RAW_DUMP_DIR = ${tjs.env.DECKBRIDGE_RAW_DUMP_DIR ?? '(not set)'}`],
@@ -369,7 +374,7 @@ if (!headless) {
 // GitHub-release update check (update-check.ts): a delayed start keeps it off the
 // blocking startup path; mock mode never touches the network. Failures log at
 // debug — an offline user is the normal case, see update-controller.ts.
-if (tjs.env.DECKBRIDGE_MOCK !== '1') {
+if (!__MOCK_BUILD__ || tjs.env.DECKBRIDGE_MOCK !== '1') {
   const runUpdateCheck = (): void => {
     void webui.updates.check(false).catch((e: unknown) => log('debug', 'update', String(e)));
   };
@@ -455,7 +460,7 @@ await step('deckBr', `cora bind :${ELGATO_TCP_PORT}/:${ELGATO_CHILD_PORT}`, () =
 log('info', 'elgato', `primary (Network Dock) listening on ${localIp}:${ELGATO_TCP_PORT}`);
 log('info', 'elgato', `child (Stream Deck) listening on ${localIp}:${ELGATO_CHILD_PORT}`);
 
-if (driverManager.getDriverMode() === 'mock') {
+if (__MOCK_BUILD__ && driverManager.getDriverMode() === 'mock') {
   await driverManager.connectMock();
 } else {
   driverManager.tryRealConnect().catch((e: unknown) => log('error', 'hid', String(e)));

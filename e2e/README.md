@@ -14,10 +14,8 @@ release zip, `scripts/e2e-smoke.sh`.)
 
 Preconditions:
 
-- **app** — `mise run build` (the task depends on it) and **CORA ports 5343/5344 free**.
-  `app.ts` awaits its CORA listeners before connecting the mock driver, and that retry
-  loop never gives up, so an occupied port leaves the UI permanently in the "no device"
-  stage. `helpers/app-server.ts` preflights both ports and fails with a named error.
+- **app** — `mise run build` (the task depends on it). `helpers/app-server.ts` selects
+  free adjacent CORA ports for its isolated mock app.
 - **docs** — `mise run docs-build` first. The suite serves `docs-site/build/`; it never
   builds, because a build is minutes long and re-renders every mermaid diagram through
   headless Chrome.

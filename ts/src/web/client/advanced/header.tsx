@@ -46,9 +46,9 @@ interface HeaderChips {
 function deriveChips(status: Status): HeaderChips {
   let mbVariant: StatusChipVariant = 'dim';
   let mbText = 'REAL · DISCONNECTED';
-  let modeBtnText = 'Switch to Mock';
+  let modeBtnText = __MOCK_BUILD__ ? 'Switch to Mock' : '';
   let modeBtnActive = false;
-  if (status.driverMode === 'mock') {
+  if (__MOCK_BUILD__ && status.driverMode === 'mock') {
     mbVariant = 'accent';
     mbText = 'MOCK · ACTIVE';
     modeBtnText = 'Switch to Real Device';
@@ -183,10 +183,6 @@ export function AdvHeader(): preact.JSX.Element {
   const uptime = useUptime(stats.uptimeMs);
   const [animEnabled, toggleAnim] = useAnimToggle();
 
-  function toggleMode(): void {
-    fire('/api/driver-mode', { mode: status.driverMode === 'mock' ? 'real' : 'mock' });
-  }
-
   const { mbVariant, mbText, modeBtnText, modeBtnActive, elVariant, elText } = deriveChips(status);
 
   return (
@@ -201,15 +197,21 @@ export function AdvHeader(): preact.JSX.Element {
       <StatusChip id="el-pill" variant={elVariant}>
         {elText}
       </StatusChip>
-      <button
-        id="mode-toggle"
-        type="button"
-        class={modeBtnActive ? 'ghostbtn active' : 'ghostbtn'}
-        onClick={toggleMode}
-      >
-        {modeBtnText}
-      </button>
-      <ModelSelect deviceModels={deviceModels} status={status} />
+      {__MOCK_BUILD__ && (
+        <>
+          <button
+            id="mode-toggle"
+            type="button"
+            class={modeBtnActive ? 'ghostbtn active' : 'ghostbtn'}
+            onClick={() =>
+              fire('/api/driver-mode', { mode: status.driverMode === 'mock' ? 'real' : 'mock' })
+            }
+          >
+            {modeBtnText}
+          </button>
+          <ModelSelect deviceModels={deviceModels} status={status} />
+        </>
+      )}
       <button
         id="anim-toggle"
         type="button"

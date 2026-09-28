@@ -1,26 +1,12 @@
-import { DEFAULT_MODEL } from '../../devices/registry.js';
 import { isValidMacAddress } from './web-request-guard.js';
-import {
-  DEFAULT_DOCK_FIRMWARE_VERSION,
-  DEFAULT_CHILD_FIRMWARE_VERSION,
-  DEFAULT_DOCK_SERIAL_NUMBER,
-  DEFAULT_CHILD_SERIAL_NUMBER,
-  DEFAULT_MAC_ADDRESS_STRING,
-} from '../../shared/types.js';
 import { MOCK_FW_VERSION_MAX_LEN, MOCK_SERIAL_MAX_LEN, MOCK_PRODUCT_ID_MASK } from './constants.js';
+import { defaultDeviceIdentityFields } from './default-device-identity.js';
 import type { MockDeviceConfig, ReqError } from './types.js';
 
 /** Default identity fields, shared by the mock driver config and the identity
  *  fallback shown before the first notifyDocks. */
 export function defaultMockConfig(): MockDeviceConfig {
-  return {
-    dockFirmwareVersion: DEFAULT_DOCK_FIRMWARE_VERSION,
-    childFirmwareVersion: DEFAULT_CHILD_FIRMWARE_VERSION,
-    serialNumber: DEFAULT_DOCK_SERIAL_NUMBER,
-    childSerialNumber: DEFAULT_CHILD_SERIAL_NUMBER,
-    productId: DEFAULT_MODEL.cora.productId,
-    macAddress: DEFAULT_MAC_ADDRESS_STRING,
-  };
+  return defaultDeviceIdentityFields();
 }
 
 /** Merge validated fields of `parsed` into `config`: strings length-capped,

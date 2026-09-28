@@ -3,7 +3,6 @@ import { log, step } from '../shared/logger.js';
 import { overridesDisabled } from '../shared/cli.js';
 import { closeDriver } from '../worker/hid-worker-host.js';
 import type { WorkerHidDriver } from '../worker/hid-worker-host.js';
-import { MockDriver } from '../devices/mock.js';
 import { ELGATO_CHILD_PORT, ELGATO_TCP_PORT, MAX_MULTI_DECK_DOCKS } from '../shared/types.js';
 import type { DockStatus } from '../shared/types.js';
 import type { DockDriver, DeviceModel, DeviceModelOverride } from '../devices/driver.js';
@@ -60,6 +59,9 @@ export class DriverManager extends EventEmitter {
   /** Docks 1..N (multi-deck); deps are closures over this instance's state. */
   private readonly scanner: DockScanner;
 
+  declare connectMock: (model?: DeviceModel) => Promise<void>;
+  declare switchMode: (newMode: DriverMode) => Promise<void>;
+
   constructor(deps: DriverManagerDeps) {
     super();
     this.deps = deps;
@@ -101,6 +103,39 @@ export class DriverManager extends EventEmitter {
       onChanged: () => this.changed(),
       onDockConnected: (index, deviceKey) => this.deps.onDockConnected?.(index, deviceKey),
     });
+    if (__MOCK_BUILD__) {
+      this.connectMock = async (model?: DeviceModel): Promise<void> => {
+        // Effective, so device tuning is previewable without hardware.
+        const m = this.effectiveModel(model ?? DEFAULT_MODEL);
+        const prev = this.mode === 'mock' ? this.primary.detach() : null;
+        if (prev) await closeDriver(prev);
+        const { MockDriver } = await import('../devices/mock.js');
+        const driver = new MockDriver(m);
+        await driver.open();
+        this.primary.resolveIdentity(`mock:${m.id}`);
+        this.applyDeviceModel(m);
+        this.primary.attach(driver, true);
+        log('info', 'driverMgr', `mock driver active (${m.name})`);
+        this.deps.webui.notifyDriverStatus('mock', true);
+      };
+      this.switchMode = async (newMode: DriverMode): Promise<void> => {
+        if (newMode === this.mode && this.primary.driver !== null) return;
+        log('info', 'driverMgr', `switching driver → ${newMode}`);
+        this.pacer.started();
+        const prev = this.primary.detach();
+        if (prev) await closeDriver(prev);
+        await this.pool.closeAll();
+        await this.stopScannedDocks();
+        this.mode = newMode;
+        if (newMode === 'mock') {
+          await this.connectMock();
+        } else {
+          this.deps.webui.notifyDriverStatus('real', false);
+          void this.tryRealConnect();
+        }
+        this.changed();
+      };
+    }
   }
 
   private changed(): void {
@@ -316,7 +351,7 @@ export class DriverManager extends EventEmitter {
       }
       return;
     }
-    if (this.mode === 'mock') {
+    if (__MOCK_BUILD__ && this.mode === 'mock') {
       // Registry entry, not driver.model: connectMock re-merges the override, and
       // re-merging over an already merged model would keep a value just cleared.
       const model = this.primary.driver && findModelById(this.primary.driver.model.id);
@@ -333,41 +368,6 @@ export class DriverManager extends EventEmitter {
     await closeDriver(driver);
     // The disconnect handler is detached by closeDriver, so schedule explicitly.
     this.scheduleReconnect();
-    this.changed();
-  }
-
-  async connectMock(model?: DeviceModel): Promise<void> {
-    // Effective, so device tuning is previewable in mock mode without hardware.
-    const m = this.effectiveModel(model ?? DEFAULT_MODEL);
-    const prev = this.mode === 'mock' ? this.primary.detach() : null;
-    if (prev) await closeDriver(prev);
-    const driver = new MockDriver(m);
-    await driver.open();
-    // A stable per-model key, so per-device prefs (side keys, knobs, brightness)
-    // work without hardware; settings persist under whichever --cache-dir is used.
-    this.primary.resolveIdentity(`mock:${m.id}`);
-    this.applyDeviceModel(m);
-    this.primary.attach(driver);
-    log('info', 'driverMgr', `mock driver active (${m.name})`);
-    this.deps.webui.notifyDriverStatus('mock', true);
-  }
-
-  async switchMode(newMode: DriverMode): Promise<void> {
-    if (newMode === this.mode && this.primary.driver !== null) return;
-    log('info', 'driverMgr', `switching driver → ${newMode}`);
-    this.pacer.started();
-    const prev = this.primary.detach();
-    if (prev) await closeDriver(prev);
-    await this.pool.closeAll();
-    // Scanned docks are real-mode only; going to real, scanForDocks() rebuilds them.
-    await this.stopScannedDocks();
-    this.mode = newMode;
-    if (newMode === 'mock') {
-      await this.connectMock();
-    } else {
-      this.deps.webui.notifyDriverStatus('real', false);
-      void this.tryRealConnect();
-    }
     this.changed();
   }
 

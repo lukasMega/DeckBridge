@@ -11,8 +11,6 @@ import { ModelOverridesController } from './model-overrides-controller.js';
 import { DockRegistry } from './dock-registry.js';
 import { isAllowedWebRequest, resolveListenPort } from './web-request-guard.js';
 import { ActivityBuffers } from './activity-buffers.js';
-import { defaultMockConfig, mergeMockConfig, validateSimulatedKey } from './mock-config.js';
-import { checkMockInput } from './mock-input.js';
 import type { RawMockInput } from './mock-input.js';
 import { PersistedSettings } from '../../infra/settings.js';
 import type {
@@ -40,6 +38,9 @@ import { UpdateController } from './update-controller.js';
 import { ElgatoAppController } from './elgato-app-controller.js';
 
 export { isAllowedWebRequest, isValidMacAddress, pickFallbackPort } from './web-request-guard.js';
+
+const mockConfigHelpers = __MOCK_BUILD__ ? await import('./mock-config.js') : null;
+const mockInputHelpers = __MOCK_BUILD__ ? await import('./mock-input.js') : null;
 
 /** HTTP/WS server of the WebUI. Routes reach the per-concern controllers directly
  *  (RouteContext); this class keeps the cross-controller state and the notify*
@@ -74,7 +75,10 @@ export class WebUIServer extends EventEmitter implements WebUIController, WebUIC
     return this._port;
   }
   private readonly deviceModels: DeviceModelInfo[];
-  private mockConfig: MockDeviceConfig = defaultMockConfig();
+  declare private mockConfig: MockDeviceConfig | undefined;
+  declare applyMockConfig: (parsed: Partial<MockDeviceConfig>) => MockDeviceConfig;
+  declare trySimulateKey: (n: number) => ReqError | null;
+  declare trySimulateInput: (raw: RawMockInput) => ReqError | null;
 
   constructor(
     port = WEBUI_PORT,
@@ -84,6 +88,7 @@ export class WebUIServer extends EventEmitter implements WebUIController, WebUIC
   ) {
     super();
     this._port = port;
+    if (__MOCK_BUILD__) this.mockConfig = mockConfigHelpers!.defaultMockConfig();
     this.deviceModels = deviceModels;
     this.settings = settings;
     this.dockRegistry = new DockRegistry(this.settings);
@@ -143,6 +148,35 @@ export class WebUIServer extends EventEmitter implements WebUIController, WebUIC
       settingsFile: this.settingsFile,
       elgatoApp: this.elgatoApp,
     };
+    if (__MOCK_BUILD__) {
+      this.applyMockConfig = (parsed) => {
+        const config = this.mockConfig!;
+        mockConfigHelpers!.mergeMockConfig(config, parsed);
+        this.bus.broadcast('mockConfig', config);
+        this.emit('mockConfig', { ...config });
+        return config;
+      };
+      this.trySimulateKey = (n) => {
+        const invalid = mockConfigHelpers!.validateSimulatedKey(
+          n,
+          this.status.keyCount,
+          this.status.driverMode,
+        );
+        if (invalid) return invalid;
+        this.emit('keyPress', n);
+        return null;
+      };
+      this.trySimulateInput = (raw) => {
+        const checked = mockInputHelpers!.checkMockInput(
+          raw,
+          this.dockRegistry.selectedStatus(),
+          this.status.driverMode,
+        );
+        if ('error' in checked) return checked;
+        this.emit('mockInput', checked.input);
+        return null;
+      };
+    }
   }
 
   // Settings are loaded by app.ts before construction.
@@ -300,10 +334,14 @@ export class WebUIServer extends EventEmitter implements WebUIController, WebUIC
       snapshot: this.snapshot(),
       activity: this.activity,
       stats: { ...this.stats, uptimeMs: Date.now() - this.startTime },
-      mockConfig: this.mockConfig,
+      ...(__MOCK_BUILD__ ? { mockConfig: this.mockConfig } : {}),
       brightnessOverride: this.devicePrefs.brightnessOverride,
       deviceModels: this.deviceModels,
-      deviceIdentity: selectedDeviceIdentity(this.status.driverMode, this.mockConfig, selected),
+      deviceIdentity: selectedDeviceIdentity(
+        this.status.driverMode,
+        __MOCK_BUILD__ ? this.mockConfig : undefined,
+        selected,
+      ),
       realDeviceIdentity: selected?.realDeviceIdentity,
       extraKeys: this.extraKeys.selectedConfigs(),
       ...this.devicePrefs.touchStripState(),
@@ -314,26 +352,5 @@ export class WebUIServer extends EventEmitter implements WebUIController, WebUIC
       updateInfo: this.updates.info(),
       elgatoAutoRestart: this.elgatoApp.state(),
     });
-  }
-
-  applyMockConfig(parsed: Partial<MockDeviceConfig>): MockDeviceConfig {
-    mergeMockConfig(this.mockConfig, parsed);
-    this.bus.broadcast('mockConfig', this.mockConfig);
-    this.emit('mockConfig', { ...this.mockConfig });
-    return this.mockConfig;
-  }
-
-  trySimulateKey(n: number): ReqError | null {
-    const invalid = validateSimulatedKey(n, this.status.keyCount, this.status.driverMode);
-    if (invalid) return invalid;
-    this.emit('keyPress', n);
-    return null;
-  }
-
-  trySimulateInput(raw: RawMockInput): ReqError | null {
-    const checked = checkMockInput(raw, this.dockRegistry.selectedStatus(), this.status.driverMode);
-    if ('error' in checked) return checked;
-    this.emit('mockInput', checked.input);
-    return null;
   }
 }

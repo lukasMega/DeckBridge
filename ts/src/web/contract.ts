@@ -324,7 +324,7 @@ export interface StateResponse extends StatusSnapshot {
   commLogs?: CommEntry[];
   keyEvents: KeyEventEntry[];
   stats: Stats;
-  mockConfig: MockDeviceConfig;
+  mockConfig?: MockDeviceConfig;
   brightnessOverride: boolean;
   deviceModels: DeviceModelInfo[];
   deviceIdentity: DeviceIdentity;

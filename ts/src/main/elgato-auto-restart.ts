@@ -26,7 +26,7 @@ export interface ElgatoAutoRestartDeps {
    *  deck, so a restart here could make it grab the hardware back mid-session. */
   conflict(): boolean;
   /** DECKBRIDGE_MOCK / mock driver mode — there is no real app to restart for. */
-  mock(): boolean;
+  mock?(): boolean;
   /** Defaults to the real setTimeout/clearTimeout; overridden by tests. */
   setTimer?: (fn: () => void, ms: number) => ReturnType<typeof setTimeout>;
   clearTimer?: (id: ReturnType<typeof setTimeout>) => void;
@@ -65,7 +65,7 @@ export class ElgatoAutoRestart {
       log('info', COMPONENT, `dock ${dockIndex}: skip — auto-restart disabled`);
       return;
     }
-    if (this.deps.mock()) {
+    if (__MOCK_BUILD__ && this.deps.mock?.()) {
       log('info', COMPONENT, `dock ${dockIndex}: skip — mock mode`);
       return;
     }
@@ -152,6 +152,6 @@ export function createElgatoAutoRestartDeps(opts: {
     isAttached: (dockIndex) =>
       driverManager.getDockStatuses().find((d) => d.index === dockIndex)?.elgatoConnected ?? false,
     conflict: () => webui.snapshot().elgatoAppConflict,
-    mock: () => driverManager.getDriverMode() === 'mock',
+    ...(__MOCK_BUILD__ ? { mock: () => driverManager.getDriverMode() === 'mock' } : {}),
   };
 }

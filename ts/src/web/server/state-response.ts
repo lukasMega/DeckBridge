@@ -15,7 +15,7 @@ import type {
   StatusSnapshot,
   UpdateInfo,
 } from './types.js';
-import { defaultMockConfig } from './mock-config.js';
+import { defaultDeviceIdentityFields } from './default-device-identity.js';
 import { MDNS_SERVICE_NAME } from '../../shared/types.js';
 import type {
   CommEntry,
@@ -30,7 +30,7 @@ export interface StateResponseInputs {
   snapshot: StatusSnapshot;
   activity: { logs: LogEntry[]; comms: CommEntry[]; keyEvents: KeyEventEntry[] };
   stats: Stats;
-  mockConfig: MockDeviceConfig;
+  mockConfig?: MockDeviceConfig;
   brightnessOverride: boolean;
   deviceModels: DeviceModelInfo[];
   deviceIdentity: DeviceIdentity;
@@ -65,13 +65,13 @@ export function buildStateResponse(input: StateResponseInputs): StateResponse {
  *  first notifyDocks. */
 export function selectedDeviceIdentity(
   driverMode: DriverMode,
-  mockConfig: MockDeviceConfig,
+  mockConfig: MockDeviceConfig | undefined,
   dock: DockStatus | undefined,
 ): DeviceIdentity {
-  if (driverMode === 'mock' && !dock?.deviceKey) {
-    return { ...mockConfig, mdnsServiceName: MDNS_SERVICE_NAME };
+  if (__MOCK_BUILD__ && driverMode === 'mock' && !dock?.deviceKey) {
+    return { ...(mockConfig ?? defaultDeviceIdentityFields()), mdnsServiceName: MDNS_SERVICE_NAME };
   }
-  if (!dock) return { ...defaultMockConfig(), mdnsServiceName: MDNS_SERVICE_NAME };
+  if (!dock) return { ...defaultDeviceIdentityFields(), mdnsServiceName: MDNS_SERVICE_NAME };
   return {
     dockFirmwareVersion: dock.dockFirmwareVersion,
     childFirmwareVersion: dock.childFirmwareVersion,

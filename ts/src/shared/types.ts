@@ -23,8 +23,13 @@ export const ELGATO_PLUS_PID = 0x0084;
  *  into one slice per device touch segment before rendering. */
 export const PLUS_TOUCH_WIDTH = 800;
 export const PLUS_TOUCH_HEIGHT = 100;
-export const ELGATO_TCP_PORT = 5343;
-export const ELGATO_CHILD_PORT = 5344;
+const configuredCoraPort =
+  typeof tjs !== 'undefined' ? Number(tjs.env['DECKBRIDGE_CORA_PORT']) : Number.NaN;
+export const ELGATO_TCP_PORT =
+  Number.isInteger(configuredCoraPort) && configuredCoraPort > 0 && configuredCoraPort < 65_535
+    ? configuredCoraPort
+    : 5343;
+export const ELGATO_CHILD_PORT = ELGATO_TCP_PORT + 1;
 // Multi-device: scanned docks use a fixed port stride off the primary pair, so
 // dock i listens on primary ELGATO_TCP_PORT+2i and child ELGATO_CHILD_PORT+2i.
 export const CORA_PORT_STRIDE = 2;

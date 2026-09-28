@@ -29,6 +29,9 @@ declare global {
   // TRUE — `node build.mjs --advanced` is the only way to get false.
   // When true, the advanced (debug) view + its CSS are tree-shaken out of the embedded UI.
   const __SIMPLE_ONLY__: boolean;
+
+  // Explicit local/test build only. Release bundles fold mock paths away.
+  const __MOCK_BUILD__: boolean;
 }
 
 export {};

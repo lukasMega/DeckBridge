@@ -27,5 +27,5 @@ export interface DriverManagerDeps {
 }
 
 export function getInitialDriverMode(): DriverMode {
-  return tjs.env['DECKBRIDGE_MOCK'] === '1' ? 'mock' : 'real';
+  return __MOCK_BUILD__ && tjs.env['DECKBRIDGE_MOCK'] === '1' ? 'mock' : 'real';
 }

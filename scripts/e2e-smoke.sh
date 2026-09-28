@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Black-box smoke test: extract a release zip, boot the binary in mock mode,
+# Black-box smoke test: extract a release zip, boot without hardware,
 # verify it serves all ports cleanly, then confirm a clean SIGTERM shutdown.
 set -euo pipefail
 
@@ -28,10 +28,10 @@ OUT="$WORK/stdout.log"; ERR="$WORK/stderr.log"
 # must be gone (stripping DECKBRIDGE_TRAY_BIN below is not enough on its own).
 rm -f "$APPDIR/deckbridge-tray"
 
-# Boot in mock mode — no HID probe warnings, no real device required.
+# Boot in real mode — no HID device required.
 # env -u: strip dev env vars (mise [env] sets them) so the binary exercises
 # the embedded-extraction path, exactly like an end-user machine.
-( cd "$APPDIR" && exec env -u DECKBRIDGE_NATIVE_LIB -u HIDAPI_LIB -u DECKBRIDGE_TRAY_BIN DECKBRIDGE_MOCK=1 ./deckbridge ) >"$OUT" 2>"$ERR" &
+( cd "$APPDIR" && exec env -u DECKBRIDGE_NATIVE_LIB -u HIDAPI_LIB -u DECKBRIDGE_TRAY_BIN -u DECKBRIDGE_MOCK ./deckbridge ) >"$OUT" 2>"$ERR" &
 APP_PID=$!
 
 # Determine the actual WebUI port from the startup log (up to ~15 s).
@@ -64,9 +64,11 @@ if echo "$REQS" | grep -q '"name":"libhidapi"' && ! echo "$REQS" | grep -q '"nam
   echo "WARN: /api/requirements reports libhidapi not found (zip may lack bundled lib)"
 fi
 
-# Mock driver active
-curl -fsS "http://127.0.0.1:$WEBUI_PORT/api/state" | grep -q '"driverMode":"mock"' \
-  || { echo "FAIL: driverMode is not mock"; kill "$APP_PID"; exit 1; }
+# Release stays in real mode and omits simulation routes.
+curl -fsS "http://127.0.0.1:$WEBUI_PORT/api/state" | grep -q '"driverMode":"real"' \
+  || { echo "FAIL: driverMode is not real"; kill "$APP_PID"; exit 1; }
+[ "$(curl -s -o /dev/null -w '%{http_code}' -X POST "http://127.0.0.1:$WEBUI_PORT/api/mock/dial")" = 404 ] \
+  || { echo "FAIL: mock route present"; kill "$APP_PID"; exit 1; }
 
 # Embedded native libs were extracted and wired up
 grep -q 'env DECKBRIDGE_NATIVE_LIB = .*/native-' "$OUT" \

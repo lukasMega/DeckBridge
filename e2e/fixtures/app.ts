@@ -3,8 +3,7 @@ import { startAppServer, type AppServer } from '../helpers/app-server.js';
 import { test as browserTest } from './browser.js';
 
 /**
- * One DeckBridge instance per worker. The app project runs with `workers: 1` because the
- * CORA ports it binds (5343/5344) are hardcoded — two instances cannot coexist.
+ * One DeckBridge instance per worker. Each instance gets private CORA ports.
  */
 // `{}` is Playwright's own spelling for "adds no test-scoped fixtures"; Record<string, never>
 // would make every inherited fixture's type collapse to never.

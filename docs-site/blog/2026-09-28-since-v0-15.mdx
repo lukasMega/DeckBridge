@@ -1,0 +1,72 @@
+---
+slug: since-v0-15
+title: What's new since 0.15
+authors: [lukas]
+tags: [release, devices]
+date: 2026-09-28
+---
+
+import ThemedImage from '@theme/ThemedImage';
+
+DeckBridge changed considerably since 0.15.0. AJAZZ AKP05 support landed. Widget controls grew more capable. Pairing recovery became more reliable.
+
+{/* truncate */}
+
+## AJAZZ AKP05 joins supported decks
+
+AKP05E support adds ten LCD keys. Four encoders also work. Touch strip adds four zones. Stream Deck + pairing now works. Eight keys reach Elgato software. Remaining two become configurable side keys.
+
+Each side key supports widgets. Key presses can refresh widgets. Presses can also run commands. Encoders forward turns and presses. Strip taps and swipes forward too.
+
+<ThemedImage
+  sources={{
+    light: require('./webui-akp05-plus.png').default,
+    dark: require('./webui-akp05-plus-dark.png').default,
+  }}
+  alt="DeckBridge Web UI with mock AKP05 paired as Stream Deck Plus, showing side keys, touch strip, and knob controls"
+  width={454}
+/>
+
+Screenshot shows mock AKP05 pairing. AKP05E hardware received macOS testing. Retail AKP05 support remains untested. See [device details](/devices#ajazz-akp05-family).
+
+## Touch strip gets widget zones
+
+Each strip zone gets independent widgets. Zone previews double as tabs. Pick one to edit it. Three ownership modes control repainting. Elgato can own every zone. DeckBridge can override app images. Repaint mode restores widgets after feedback.
+
+<ThemedImage
+  sources={{
+    light: require('./webui-touch-strip-zones.png').default,
+    dark: require('./webui-touch-strip-zones-dark.png').default,
+  }}
+  alt="Live DeckBridge mock UI showing four touch strip zone tabs and widget controls"
+  width={454}
+/>
+
+See [touch strip modes](/side-keys#touch-strip-modes).
+
+## Widgets gain precise text controls
+
+Size controls now include Fit. Wrapping handles words or characters. Narrow font fits more text. Colours, alignment, padding, and outlines adjust. Side keys show live previews. Clipped text gets visible warnings.
+
+<ThemedImage
+  sources={{
+    light: require('./webui-widget-text-style.png').default,
+    dark: require('./webui-widget-text-style-dark.png').default,
+  }}
+  alt="Live DeckBridge mock UI showing widget text style popover with font, colour, alignment, and spacing controls"
+  width={454}
+/>
+
+Device key art also gets cropping. Users can position images before upload. See [widget controls](/side-keys#text-style).
+
+## Pairing survives more disruptions
+
+Paired decks now regain connections. DeckBridge watches lost child connections. Local Elgato software can restart automatically. Restart only follows previously paired decks. Settings expose delay and manual restart.
+
+## Tray status gets clearer
+
+Tray header now shows app version. Available updates show one indicator. Release checks still require user action.
+
+## Release status
+
+Version 0.17.0 will bring these changes together. Current `main` already contains them. Screenshots show current mock Web UI. [Compare changes since 0.15.0](https://github.com/lukasMega/DeckBridge/compare/deckbridge-v0.15.0...main).

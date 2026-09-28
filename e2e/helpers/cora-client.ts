@@ -2,9 +2,6 @@ import { connect, type Socket } from 'node:net';
 import type { APIRequestContext } from '@playwright/test';
 import { waitForState } from './api.js';
 
-/** Hardcoded child (Stream Deck) CORA port, ts/src/shared/types.ts ELGATO_CHILD_PORT. */
-const CHILD_PORT = 5344;
-
 export interface ElgatoClient {
   /** Bytes the app has sent us (keepalives, key/dial events). */
   received(): Buffer;
@@ -25,8 +22,9 @@ export interface ElgatoClient {
 export async function connectElgato(
   request: APIRequestContext,
   baseURL: string,
+  childPort: number,
 ): Promise<ElgatoClient> {
-  const sock: Socket = connect({ port: CHILD_PORT, host: '127.0.0.1' });
+  const sock: Socket = connect({ port: childPort, host: '127.0.0.1' });
   const chunks: Buffer[] = [];
   sock.on('data', (chunk: Buffer) => chunks.push(chunk));
   // An error surfaces as a failed state wait below; don't let it crash the worker.

@@ -263,6 +263,9 @@ export function wireMockDriverEvents(driver: DockDriver, opts: DriverEventSinks)
     opts.onAction?.(touchActionText(e, driver.model));
     opts.onTouch?.(e);
   });
+  driver.on('stripWrite', (wireId: number, jpeg: Uint8Array, full: boolean) =>
+    opts.onStripWrite?.(wireId, jpeg, full),
+  );
 }
 
 /** A widget display with the geometry the WebUI needs to place device strip writes. */

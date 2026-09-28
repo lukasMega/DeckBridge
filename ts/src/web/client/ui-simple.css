@@ -867,7 +867,8 @@ input[type='range'].range:disabled {
   grid-column: 3 / -1;
 }
 .xkey-mode {
-  flex: none;
+  min-width: 0;
+  max-width: calc(100% - 90px);
 }
 /* rides .input; UI font + surface bg for the widget dropdowns.
    Double class: .input is declared later in this file and would win otherwise */
