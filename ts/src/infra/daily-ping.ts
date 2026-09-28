@@ -66,9 +66,7 @@ export function utcDay(now: Date): string {
 
 const pad = (n: number): string => String(n).padStart(2, '0');
 
-/** `UTC+02:00` — the offset, never the IANA zone: no `Intl` in this build, and a
- *  zone is a far sharper fingerprint than ~38 offsets. Shifts with DST, so one
- *  install spans two buckets a year. */
+/** Fallback when no browser-resolved IANA zone is available. Shifts with DST. */
 export function tzOffset(now: Date): string {
   // Minutes *behind* UTC, i.e. UTC+2 reports -120.
   const minutes = -now.getTimezoneOffset();
@@ -76,6 +74,14 @@ export function tzOffset(now: Date): string {
   const sign = minutes < 0 ? '-' : '+';
   const abs = Math.abs(minutes);
   return `UTC${sign}${pad(Math.floor(abs / 60))}:${pad(abs % 60)}`;
+}
+
+/** Keep browser-reported zones bounded and shaped like IANA identifiers. */
+export function normalizeTimeZone(raw: string | undefined): string | undefined {
+  const zone = raw?.trim();
+  if (!zone || zone.length > 64) return undefined;
+  if (zone === 'UTC') return zone;
+  return /^[\w.+-]+(?:\/[\w.+-]+){1,3}$/.test(zone) ? zone : undefined;
 }
 
 /** Major release only (`macos-26`): a full `26.6.2` mints a KV key per patch per
@@ -134,6 +140,7 @@ export interface PayloadInput {
   osVersion: string;
   now: Date;
   locale?: string;
+  timeZone?: string;
 }
 
 /** Deduped + sorted so two docks of one model count once and the same hardware
@@ -148,7 +155,7 @@ export function buildPayload(input: PayloadInput): DailyPingPayload {
     ov: OS_VERSION.test(input.osVersion) ? input.osVersion : 'unknown',
     v: input.version,
     dv: ids.length > 0 ? ids.join(',') : 'none',
-    tz: tzOffset(input.now),
+    tz: normalizeTimeZone(input.timeZone) ?? tzOffset(input.now),
     country: normalizeLocale(input.locale ?? ''),
   };
 }
@@ -308,6 +315,7 @@ export interface DailyPingDeps {
    *  `unknown` — a headless/CLI run with no browser ever attached leaves this
    *  undefined, which is a real answer, not a failure. */
   browserLocale?: () => string | undefined;
+  browserTimeZone?: () => string | undefined;
   /** Environment veto (daily-ping-env.ts). Read fresh each ping so the dwell
    *  clock advances between ticks. Defaults to the real environment (fail
    *  closed), which also means a test that wants a ping must inject one. */
@@ -377,6 +385,12 @@ export function createDailyPing(deps: DailyPingDeps): DailyPing {
     if (normalizeLocale(locale) === 'unknown') {
       locale = deps.browserLocale?.() ?? locale;
     }
+    let timeZone: string | undefined;
+    try {
+      timeZone = deps.browserTimeZone?.();
+    } catch {
+      // Browser context is optional; keep the offset fallback.
+    }
     const payload = buildPayload({
       version: deps.currentVersion,
       platform: platform(),
@@ -384,6 +398,7 @@ export function createDailyPing(deps: DailyPingDeps): DailyPing {
       osVersion: parseOsVersion(os, rawVersion),
       now: at,
       locale,
+      timeZone,
     });
     log('debug', 'dailyPing', `payload ${JSON.stringify(payload)}`);
     await deps.send(encodePayload(payload), deps.currentVersion);

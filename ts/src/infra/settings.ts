@@ -167,6 +167,8 @@ export class PersistedSettings implements DockPrefsStore {
    *  deliberately absent from current()/persist(), since the browser resends it
    *  on every load. */
   browserLocale: string | undefined = undefined;
+  /** Browser-resolved timezone. Ephemeral like browserLocale. */
+  browserTimeZone: string | undefined = undefined;
   /** Prefs of a dock with no settings.json entry (mock mode, pre-connect). Never persisted. */
   readonly runtime = defaultRuntimePrefs();
   private devices: DeviceIdentitySettings[] = [];

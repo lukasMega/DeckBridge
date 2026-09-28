@@ -33,7 +33,11 @@ export function SimpleApp(): preact.JSX.Element {
   // DailyPing's fallback when the OS-level locale probe fails (see
   // daily-ping.ts) — best-effort, fire-and-forget like every other beacon.
   useEffect(function postBrowserLocale() {
-    if (navigator.language) fire('/api/browser-locale', { locale: navigator.language });
+    let timeZone = '';
+    try {
+      timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || '';
+    } catch {}
+    if (navigator.language) fire('/api/browser-locale', { locale: navigator.language, timeZone });
   }, []);
 
   const deviceState = deriveState(status);
