@@ -18,6 +18,15 @@ export function freePort(): Promise<number> {
   });
 }
 
+/** Ask for unused adjacent TCP ports, for CORA's primary and child listeners. */
+export async function freePortPair(): Promise<[number, number]> {
+  for (let attempt = 0; attempt < 20; attempt++) {
+    const primary = await freePort();
+    if (primary < 65_535 && (await isPortFree(primary + 1))) return [primary, primary + 1];
+  }
+  throw new Error('could not find free adjacent CORA ports');
+}
+
 /**
  * True when nothing is listening on 127.0.0.1:<port>.
  *

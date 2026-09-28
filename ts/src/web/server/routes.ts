@@ -37,25 +37,28 @@ export const routes: Route[] = [
   get('/api/plugins', async ({ extraKeys }) => json(await extraKeys.pluginsInfo())),
   get('/api/settings', ({ settings }) => json(JSON.parse(settings.json()))),
 
-  postJson('/api/driver-mode', setDriverMode),
-  postJson('/api/mock-config', setMockConfig),
-  postJson('/api/device-model', setDeviceModel, 'invalid request'),
+  ...(__MOCK_BUILD__
+    ? [
+        postJson('/api/driver-mode', setDriverMode),
+        postJson('/api/mock-config', setMockConfig),
+        postJson('/api/device-model', setDeviceModel, 'invalid request'),
+        post('/api/key/:n', ({ ui, params }) => {
+          const err = ui.trySimulateKey(Number(params.n));
+          return err ? json({ error: err.error }, err.status) : noContent();
+        }),
+        post('/api/mock/extra-key/:wireId', ({ ui, params }) =>
+          simulate(ui, { kind: 'extraKey', wireId: Number(params.wireId) }),
+        ),
+        post('/api/mock/dial', async ({ ui, req }) =>
+          simulate(ui, { kind: 'dial', event: await bodyOrUndefined(req) }),
+        ),
+        post('/api/mock/touch', async ({ ui, req }) =>
+          simulate(ui, { kind: 'touch', event: await bodyOrUndefined(req) }),
+        ),
+      ]
+    : []),
   postJson('/api/brightness', setBrightness),
   postJson('/api/brightness-override', setBrightnessOverride),
-  post('/api/key/:n', ({ ui, params }) => {
-    const err = ui.trySimulateKey(Number(params.n));
-    return err ? json({ error: err.error }, err.status) : noContent();
-  }),
-  // Mock-only input simulation (browser e2e); 404 with a real device.
-  post('/api/mock/extra-key/:wireId', ({ ui, params }) =>
-    simulate(ui, { kind: 'extraKey', wireId: Number(params.wireId) }),
-  ),
-  post('/api/mock/dial', async ({ ui, req }) =>
-    simulate(ui, { kind: 'dial', event: await bodyOrUndefined(req) }),
-  ),
-  post('/api/mock/touch', async ({ ui, req }) =>
-    simulate(ui, { kind: 'touch', event: await bodyOrUndefined(req) }),
-  ),
   postJson('/api/select-dock', selectDock),
   postJson('/api/extra-key', setExtraKey),
   postJson('/api/extra-key/run', runExtraKeyNow),

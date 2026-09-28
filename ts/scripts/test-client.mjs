@@ -69,6 +69,7 @@ try {
     platform: 'browser',
     jsx: 'automatic',
     jsxImportSource: 'preact',
+    define: { __MOCK_BUILD__: 'true' },
   });
   const html = join(temp, 'test.html');
   writeFileSync(

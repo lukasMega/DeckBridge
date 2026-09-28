@@ -10,7 +10,7 @@ export function hydrate(st: StateResponse): void {
   store.patch({
     status: st,
     stats: st.stats,
-    mockConfig: st.mockConfig,
+    ...(__MOCK_BUILD__ ? { mockConfig: st.mockConfig } : {}),
     brightness: st.brightness,
     brightnessOverride: st.brightnessOverride,
     deviceModels: st.deviceModels,

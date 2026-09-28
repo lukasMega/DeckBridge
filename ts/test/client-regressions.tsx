@@ -1870,9 +1870,9 @@ async function runSideKeysPanel(): Promise<void> {
     await checkSideKeyCards(section('Side keys'));
     check(
       rows('Touch strip').length === 0 &&
-        section('Touch strip').textContent.includes('DeckBridge widgets are off') &&
+        !section('Touch strip').textContent.includes('DeckBridge widgets are off') &&
         section('Touch strip').querySelector('.xkeys-option') === null,
-      'Elgato strip mode hides zone rows, the repaint interval, and says why',
+      'Elgato strip mode hides zone rows and the repaint interval',
     );
     checkElgatoStripZones(section('Touch strip'));
 

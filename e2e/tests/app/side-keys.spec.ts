@@ -30,7 +30,7 @@ test.describe('side keys (293S, AKP153 rev. 1, AKP05E as a Stream Deck +)', () =
 
   test.beforeAll(async ({ app, workerRequest }) => {
     snapshot = await getSettings(workerRequest, app.baseURL);
-    elgato = await connectElgato(workerRequest, app.baseURL);
+    elgato = await connectElgato(workerRequest, app.baseURL, app.childPort);
   });
 
   test.afterAll(async ({ app, workerRequest }) => {

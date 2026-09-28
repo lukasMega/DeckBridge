@@ -120,7 +120,6 @@ Commands:
   help                Print usage, then exit
 
 Flags (for run):
-  --mock                    Start with the mock driver (no hardware)
   --bind <addr>             Listen address for CORA + WebUI  [default 0.0.0.0]
   --webui-port <n>          WebUI HTTP/WS port               [default 3000]
   --no-webui                Do not start the WebUI server

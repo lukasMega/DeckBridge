@@ -699,7 +699,7 @@ console.log('\nWebUIServer.applyMockConfig productId');
 
 test('NaN productId leaves previous PID unchanged', () => {
   const ui = new WebUIServer(undefined, [], 'real', new PersistedSettings(TEST_SETTINGS_ROOT));
-  const before = ui.fullState().mockConfig.productId;
+  const before = ui.fullState().mockConfig!.productId;
   const result = ui.applyMockConfig({ productId: Number.NaN });
   assert.equal(result.productId, before, 'productId unchanged for NaN');
 });

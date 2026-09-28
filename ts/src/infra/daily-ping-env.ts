@@ -68,7 +68,7 @@ export function suppressReason(input: SuppressInput): SuppressReason {
     return 'kill-switch';
   // No real device, no real user. Looser than driver-manager-discovery.ts's
   // `=== '1'`: a suppressor errs towards silence, a feature switch does not.
-  if (isSet(env, 'DECKBRIDGE_MOCK')) return 'mock';
+  if (__MOCK_BUILD__ && isSet(env, 'DECKBRIDGE_MOCK')) return 'mock';
   if (CI_VARS.some((name) => isSet(env, name))) return 'ci';
   // The isFinite half is the fail-closed one: a NaN uptime passes every
   // comparison as false, so a bare `<` would let a broken clock through.

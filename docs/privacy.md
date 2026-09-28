@@ -85,7 +85,7 @@ holds (`ts/src/infra/daily-ping-env.ts` is the whole rule, in one file):
 - **You turned it off at the command line or in the environment** —
   `--no-daily-ping`, `DECKBRIDGE_NO_DAILY_PING=1`, or the cross-tool convention
   `DO_NOT_TRACK=1`.
-- **Mock mode** — `DECKBRIDGE_MOCK` set. No real device means no real user.
+- **Development mock mode** — `DECKBRIDGE_MOCK` set in a mock-enabled build. Release builds omit mock support.
 - **An automated environment** — `CI`, `GITHUB_ACTIONS`, `GITLAB_CI`, `JENKINS_URL`
   and a dozen similar markers. (`CI=false` and `CI=` do not count as set.)
 - **The app has been running for less than 5 minutes.** This one exists so that

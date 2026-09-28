@@ -310,7 +310,7 @@ UI is always localhost-only.
 | `DECKBRIDGE_NATIVE_LIB` | Path to the deckbridge-native cdylib |
 | `DECKBRIDGE_TRAY_BIN` | Path to the tray helper binary |
 | `DECKBRIDGE_OPEN` | Auto-open the web UI in a browser on start |
-| `DECKBRIDGE_MOCK` | Run with a mock device (no hardware) |
+| `DECKBRIDGE_MOCK` | Run with a mock device in a `DECKBRIDGE_BUILD_MOCK=1` development build only |
 | `DECKBRIDGE_DUMP_DIR` | Write each transformed device image here (debug) |
 | `DECKBRIDGE_RAW_DUMP_DIR` | Write paired raw + transformed images here (debug) |
 | `DECKBRIDGE_LOG_LEVEL` | Log verbosity: `debug`/`info`/`warn`/`error`/`silent` |

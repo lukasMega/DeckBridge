@@ -455,7 +455,7 @@ Device tuning form.
 
 ## Phase 4 — measure image orientation on hardware
 
-Run with `DECKBRIDGE_MOCK=0` and a real device connected. Push a known asymmetric image
+Run a regular build with a real device connected. Push a known asymmetric image
 (e.g. a right-pointing arrow) to key 0 from the web UI or Elgato software, then adjust
 `image.rotate` / `image.flipH` / `image.flipV` until it appears upright and un-mirrored:
 

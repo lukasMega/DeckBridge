@@ -14,7 +14,11 @@ export type DeviceState = 'no-device' | 'no-device-elgato-conflict' | 'device-no
 
 export function deriveState(s: Status): DeviceState {
   if (!s.driverConnected) {
-    if (s.driverMode !== 'mock' && s.elgatoAppConflict && s.elgatoDevicePresent)
+    if (
+      (!__MOCK_BUILD__ || s.driverMode !== 'mock') &&
+      s.elgatoAppConflict &&
+      s.elgatoDevicePresent
+    )
       return 'no-device-elgato-conflict';
     return 'no-device';
   }

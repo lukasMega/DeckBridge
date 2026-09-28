@@ -33,7 +33,7 @@ test.describe('Ready stage (paired via a fake CORA client)', () => {
 
   test.beforeAll(async ({ app, workerRequest }) => {
     await useDevice(workerRequest, app.baseURL, DEFAULT_DEVICE);
-    elgato = await connectElgato(workerRequest, app.baseURL);
+    elgato = await connectElgato(workerRequest, app.baseURL, app.childPort);
   });
 
   test.afterAll(async ({ app, workerRequest }) => {

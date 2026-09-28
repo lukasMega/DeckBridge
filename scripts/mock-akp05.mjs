@@ -8,7 +8,7 @@ const root = resolve(import.meta.dirname, '..');
 const base = 'http://127.0.0.1:3000';
 const cacheDir = mkdtempSync(join(tmpdir(), 'deckbridge-mock-akp05-'));
 const child = spawn(process.env.TJS, [
-  'run', join(root, 'ts/dist/bundle.js'), '--mock', '--headless', '--no-daily-ping',
+  'run', join(root, 'ts/dist/mock/bundle.js'), '--mock', '--headless', '--no-daily-ping',
   '--bind', '127.0.0.1', '--webui-port', '3000', '--cache-dir', cacheDir,
 ], { cwd: root, stdio: 'inherit' });
 let socket;

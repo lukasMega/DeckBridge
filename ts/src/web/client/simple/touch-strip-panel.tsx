@@ -8,22 +8,18 @@ import { fire } from '../lib/ui-api.js';
 import { CommandInput } from './command-input.js';
 import { GridHeader } from './config-section.js';
 
-const MODE_OPTIONS: ReadonlyArray<{ value: TouchStripMode; label: string; description: string }> = [
+const MODE_OPTIONS: ReadonlyArray<{ value: TouchStripMode; label: string }> = [
   {
     value: 'elgato',
-    label: 'Elgato app only',
-    description: 'The Elgato app paints the whole strip; DeckBridge widgets are off.',
+    label: 'Elgato only — app paints strip',
   },
   {
     value: 'deckbridge-ignore',
-    label: 'DeckBridge overrides (ignore)',
-    description: 'DeckBridge widgets; everything the Elgato app sends to the strip is dropped.',
+    label: 'DeckBridge ignore — widgets only',
   },
   {
     value: 'deckbridge-repaint',
-    label: 'DeckBridge overrides (repaint)',
-    description:
-      'Elgato app images always show; a widget comes back once the app stops drawing on its zone.',
+    label: 'Repaint — app images show; widgets return',
   },
 ];
 
@@ -34,10 +30,6 @@ const COMMAND_FIELDS: ReadonlyArray<{ key: keyof EncoderCommands; label: string;
 ];
 
 const KNOB_COLUMNS = [{ label: 'Knob' }, ...COMMAND_FIELDS.map(({ label }) => ({ label }))];
-
-export function touchStripModeDescription(mode: TouchStripMode): string {
-  return MODE_OPTIONS.find((o) => o.value === mode)?.description ?? '';
-}
 
 export function TouchStripModeSelect({
   mode,

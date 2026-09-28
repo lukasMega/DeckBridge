@@ -9,7 +9,6 @@ import {
   EncodersSection,
   RepaintIntervalField,
   TouchStripModeSelect,
-  touchStripModeDescription,
 } from './touch-strip-panel.js';
 import { ConfigSection } from './config-section.js';
 import { SideKeysHelp } from './side-keys-help.js';
@@ -116,7 +115,6 @@ export function ExtraKeysPanel(): preact.JSX.Element | null {
             key={section.title}
             title={section.title}
             compact={!section.touchStrip}
-            subtitle={section.touchStrip ? touchStripModeDescription(stripMode) : undefined}
             aside={
               section.touchStrip ? (
                 <TouchStripModeSelect mode={stripMode} />

@@ -53,8 +53,7 @@ Commands:
   help                Print usage, then exit
 
 Flags (for run):
-  --mock                    Start with the mock driver (no hardware)
-  --bind <addr>             Listen address for CORA + WebUI  [default 0.0.0.0]
+${__MOCK_BUILD__ ? '  --mock                    Start with the mock driver (no hardware)\n' : ''}  --bind <addr>             Listen address for CORA + WebUI  [default 0.0.0.0]
   --webui-port <n>          WebUI HTTP/WS port               [default 3000]
   --no-webui                Do not start the WebUI server
   --open                    Auto-open browser (desktop convenience)
@@ -122,7 +121,7 @@ type BooleanFlagKey = {
 
 /** Flags that take no value — just set their boolean. */
 const BOOLEAN_FLAGS: Record<string, BooleanFlagKey> = {
-  '--mock': 'mock',
+  ...(__MOCK_BUILD__ ? { '--mock': 'mock' as const } : {}),
   '--no-webui': 'noWebui',
   '--open': 'open',
   '--headless': 'headless',
@@ -174,14 +173,14 @@ type FlagsParseResult =
 
 function parseFlagArgs(args: string[], startIndex: number): FlagsParseResult {
   const flags: CliFlags = {
-    mock: false,
+    ...(__MOCK_BUILD__ ? { mock: false } : {}),
     noWebui: false,
     open: false,
     headless: false,
     redactCommands: false,
     noOverrides: false,
     noDailyPing: false,
-  };
+  } as CliFlags;
   let commandOverride: CliCommand | null = null;
 
   for (let i = startIndex; i < args.length; i++) {
@@ -236,7 +235,7 @@ export function parseCli(args: string[]): ParsedCli {
  *  a var when the flag was actually given, so precedence is CLI flag > pre-existing
  *  env var > default. */
 export function applyFlagsToEnv(flags: CliFlags): void {
-  if (flags.mock) tjs.env.DECKBRIDGE_MOCK = '1';
+  if (__MOCK_BUILD__ && flags.mock) tjs.env.DECKBRIDGE_MOCK = '1';
   if (flags.bind !== undefined) tjs.env.DECKBRIDGE_BIND = flags.bind;
   if (flags.open) tjs.env.DECKBRIDGE_OPEN = '1';
   if (flags.webuiPort !== undefined) tjs.env.DECKBRIDGE_WEBUI_PORT = String(flags.webuiPort);

@@ -324,15 +324,15 @@ jobs:
         shell: pwsh
         run: ./scripts/stamp-exe.ps1 -Target "rust/target/release/deckbridge-tray.exe" -Rcedit "rcedit.exe"
 
-      # Boot the just-compiled binary in mock mode (no HID device needed),
+      # Boot the just-compiled release binary without a HID device,
       # poll the WebUI until it responds, then kill it — mirrors the
       # boot/serve/shutdown checks in scripts/e2e-smoke.sh (bash, POSIX-only)
       # for the platform that script can't run on.
-      - name: Smoke test (mock mode, poll WebUI, then kill)
+      - name: Smoke test (real mode, poll WebUI, then kill)
         shell: pwsh
         run: |
           $relay = if (Test-Path "deckbridge.exe") { "deckbridge.exe" } else { "deckbridge" }
-          $env:DECKBRIDGE_MOCK = "1"
+          Remove-Item Env:DECKBRIDGE_MOCK -ErrorAction SilentlyContinue
           $proc = Start-Process -FilePath ".\$relay" -PassThru `
             -RedirectStandardOutput "smoke-stdout.log" -RedirectStandardError "smoke-stderr.log"
           $ready = $false
@@ -354,7 +354,12 @@ jobs:
             Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
             exit 1
           }
-          Write-Host "Smoke test OK: WebUI responded 200"
+          $state = Invoke-RestMethod -Uri "http://localhost:3000/api/state" -TimeoutSec 2
+          if ($state.driverMode -ne "real") { throw "release started outside real mode" }
+          $mockRoute = Invoke-WebRequest -Method Post -Uri "http://localhost:3000/api/mock/dial" `
+            -UseBasicParsing -SkipHttpErrorCheck -TimeoutSec 2
+          if ($mockRoute.StatusCode -ne 404) { throw "mock route present in release" }
+          Write-Host "Smoke test OK: real WebUI responded 200; mock route absent"
           Stop-Process -Id $proc.Id -Force
 
       # Portable artifact: the same relay binary + tray, zipped, no installer.

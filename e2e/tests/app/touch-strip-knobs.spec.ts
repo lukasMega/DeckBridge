@@ -38,7 +38,7 @@ test.describe('touch strip + knobs (AKP05E)', () => {
 
   test.beforeAll(async ({ app, workerRequest }) => {
     snapshot = await getSettings(workerRequest, app.baseURL);
-    elgato = await connectElgato(workerRequest, app.baseURL);
+    elgato = await connectElgato(workerRequest, app.baseURL, app.childPort);
   });
 
   // Each test starts from the snapshot's per-device settings on a native AKP05E.

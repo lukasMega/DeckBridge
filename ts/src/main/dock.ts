@@ -15,7 +15,6 @@ import type { WidgetPaint } from '../shared/widget-layout.js';
 import { sendSplashImages } from '../shared/splash-sender.js';
 import { DEFAULT_MODEL, findModelById } from '../devices/registry.js';
 import { applyModelOverrides } from '../devices/model-overrides.js';
-import { MockDriver } from '../devices/mock.js';
 import type { DockDriver, DeviceModel, DeviceModelOverride } from '../devices/driver.js';
 import type { PersistedSettings } from '../infra/settings.js';
 import type { DockPrefs } from '../infra/dock-prefs.js';
@@ -181,10 +180,10 @@ export class Dock {
 
   /** Take over an opened driver: wire it, seed the persisted prefs, splash, replay the
    *  app's last frames (same model only), start the widgets. */
-  attach(driver: DockDriver): void {
+  attach(driver: DockDriver, mock = false): void {
     if (this.driver) this.detach();
     this.driver = driver;
-    const real = !(driver instanceof MockDriver);
+    const real = !__MOCK_BUILD__ || !mock;
     this.wireDriver(driver, real);
     this.seed(driver);
     if (real) {
@@ -348,7 +347,7 @@ export class Dock {
       onReinit: () => this.widgets?.repaint(),
       onStripWrite: this.hooks.stripWrite,
     };
-    if (!real) {
+    if (__MOCK_BUILD__ && !real) {
       wireMockDriverEvents(driver, sinks);
       return;
     }

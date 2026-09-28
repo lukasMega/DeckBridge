@@ -8,8 +8,10 @@ import type {
   TouchStripOptions,
 } from '../shared/types.js';
 import { DEFAULT_TOUCH_STRIP_OPTIONS, MOCK_KEY_PRESS_DURATION_MS } from '../shared/types.js';
+import { composeWidgetBmp } from '../shared/widget-raster.js';
+import { transformImageForDevice } from '../transform/translator.js';
 
-/** A virtual deck: no device to paint, so the worker-side calls are no-ops. */
+/** A virtual deck: no USB writes, but strip widgets still feed the WebUI preview. */
 export class MockDriver extends EventEmitter implements DockDriver {
   model: DeviceModel;
   readonly touchStripOptions: TouchStripOptions = DEFAULT_TOUCH_STRIP_OPTIONS;
@@ -27,10 +29,21 @@ export class MockDriver extends EventEmitter implements DockDriver {
 
   async open(_hidPath?: string): Promise<void> {}
   async close(): Promise<void> {}
-  clearKey(_keyIndex: number): void {}
+  clearKey(keyIndex: number): void {
+    const display = this.model.widgetDisplays?.find((d) => d.wireId === keyIndex);
+    if (!display) return;
+    this.sendSplashImage(
+      keyIndex,
+      composeWidgetBmp([], display.image.width, display.image.height, { background: '#000000' }),
+      display.image,
+    );
+  }
   setBrightness(_level: number): void {}
-  // ExtraKeyWidgets still paints (and mirrors the paints to the WebUI) in mock mode.
-  sendSplashImage(_keyIndex: number, _bytes: Uint8Array, _spec: DeviceImageSpec): void {}
+  // Mirror a strip upload as the real AKP05 driver does; side keys use widgetPaint.
+  sendSplashImage(keyIndex: number, bytes: Uint8Array, spec: DeviceImageSpec): void {
+    if (!this.model.widgetDisplays?.some((d) => d.wireId === keyIndex)) return;
+    this.emit('stripWrite', keyIndex, transformImageForDevice(bytes, spec), false);
+  }
   renderCoraImage(_keyIndex: number, _bytes: Uint8Array, _format: 'jpeg' | 'bmp'): void {}
   renderTouchImage(): void {}
   setTouchStripMask(): void {}

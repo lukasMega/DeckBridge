@@ -158,6 +158,38 @@ function EmptyDeviceTuningPanel(): preact.JSX.Element {
   );
 }
 
+function ProfileField({
+  view,
+  coraProfile,
+  onChange,
+}: {
+  readonly view: DeviceOverridesView;
+  readonly coraProfile: string;
+  readonly onChange: (value: string) => void;
+}): preact.JSX.Element | null {
+  if (view.profiles.length === 0) return null;
+  return (
+    <label class="tuning-field">
+      <span>Emulation profile</span>
+      <select
+        id="tuning-emulation-profile"
+        class="input"
+        value={coraProfile}
+        onChange={(e) => onChange((e.target as HTMLSelectElement).value)}
+      >
+        <option value="">
+          {view.defaults.cora?.advertiseAs ? 'Default (Stream Deck +)' : 'Native (default)'}
+        </option>
+        {view.profiles.map((p) => (
+          <option key={p.id} value={p.id}>
+            {p.name}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
 export function DeviceTuningPanel(): preact.JSX.Element {
   const selectedModelId = useStore(selectedModel);
   const selectedModelIdRef = useRef(selectedModelId);
@@ -384,28 +416,7 @@ export function DeviceTuningPanel(): preact.JSX.Element {
         />
       )}
 
-      {activeView.profiles.length > 0 && (
-        <label class="tuning-field">
-          <span>Emulation profile</span>
-          <select
-            id="tuning-emulation-profile"
-            class="input"
-            value={coraProfile}
-            onChange={(e) => setCoraProfile((e.target as HTMLSelectElement).value)}
-          >
-            <option value="">
-              {activeView.defaults.cora?.advertiseAs
-                ? 'Default (Stream Deck +)'
-                : 'Native (default)'}
-            </option>
-            {activeView.profiles.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.name}
-              </option>
-            ))}
-          </select>
-        </label>
-      )}
+      <ProfileField view={activeView} coraProfile={coraProfile} onChange={setCoraProfile} />
 
       <Collapsible title="Advanced">
         <div class="tuning-grid">

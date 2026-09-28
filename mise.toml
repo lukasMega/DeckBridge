@@ -52,7 +52,7 @@ run = "$TJS run ts/dist/bundle.js"
 
 [tasks.mock-akp05]
 description = "Build and run mock AKP05 paired as Stream Deck + at http://127.0.0.1:3000"
-depends = ["build"]
+depends = ["build-mock"]
 run = "node scripts/mock-akp05.mjs"
 
 [tasks.d]
@@ -101,10 +101,22 @@ dir = "ts"
 depends = ["ts-install", "deckbridge-native"]
 run = "node build.mjs"
 
+[tasks.ts-mock]
+description = "Bundle TypeScript with mock driver and simulation routes"
+quiet = true
+dir = "ts"
+depends = ["ts-install", "deckbridge-native"]
+run = "DECKBRIDGE_BUILD_MOCK=1 node build.mjs"
+
 [tasks.build]
 description = "Build everything (simple-only UI)"
 quiet = true
 depends = ["tjs-setup", "deckbridge-native", "tray-rs", "ts"]
+
+[tasks.build-mock]
+description = "Build local mock variant without replacing release bundle"
+quiet = true
+depends = ["tjs-setup", "deckbridge-native", "tray-rs", "ts-mock"]
 
 [tasks.compile]
 description = "Compile to standalone binary (simple-only UI — this is what release.yml ships)"
@@ -345,9 +357,9 @@ env = { PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD = "1" }
 run = "pnpm install --silent && echo e2e pnpm install OK"
 
 [tasks.e2e-app]
-description = "Browser e2e: the DeckBridge Web UI in mock mode (needs CORA ports 5343/5344 free)"
+description = "Browser e2e: the DeckBridge Web UI in mock mode"
 dir = "e2e"
-depends = ["build", "e2e-install"]
+depends = ["build-mock", "e2e-install"]
 run = "pnpm run test:app"
 timeout = "180s"
 
@@ -377,8 +389,9 @@ run = "pnpm run types"
 description = "Run tests (TJS)"
 quiet = true
 depends = ["ts-install", "tjs-setup", "deckbridge-native"]
+env = { DECKBRIDGE_BUILD_MOCK = "1" }
 run = "node scripts/run-tests.mjs"
-timeout = "120s"
+timeout = "240s"
 
 [tasks.test-client]
 description = "Run Preact browser regression tests"
@@ -422,6 +435,7 @@ run = "pnpm run serve -- --port 3000"
 description = "Run the tjs test suite with Istanbul instrumentation and emit a merged coverage report (text/html/lcov)"
 dir = "ts"
 depends = ["deckbridge-native"]
+env = { DECKBRIDGE_BUILD_MOCK = "1" }
 run = """
   rm -rf coverage/.tmp && mkdir -p coverage/.tmp
   for f in test/*.test.ts; do

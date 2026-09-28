@@ -7,7 +7,7 @@ test.describe('paired with the Elgato app (fake CORA client)', () => {
     const stage = page.locator('#stage');
     await expect(stage).toContainText('Almost there');
 
-    const elgato = await connectElgato(request, app.baseURL);
+    const elgato = await connectElgato(request, app.baseURL, app.childPort);
     try {
       // Pushed over the WS status channel — no reload.
       await expect(stage.locator('.hero h1')).toHaveText("Everything's working");

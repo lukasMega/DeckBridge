@@ -10,7 +10,7 @@ import type { StateResponse } from '../ui-types.js';
 
 type Handlers = { [K in keyof WsEvents]: (d: WsEvents[K]) => void };
 
-const handlers: Handlers = {
+const handlers: Partial<Handlers> = {
   status: (next) => {
     // Selected preview dock changed: blank the grids + drop cached images; the
     // server replays the new dock's frames right after this broadcast.
@@ -64,7 +64,9 @@ const handlers: Handlers = {
     for (const e of entries) store.addCommLog(e);
   },
   stats: (stats) => store.patch({ stats }),
-  mockConfig: (mockConfig) => store.patch({ mockConfig }),
+  ...(__MOCK_BUILD__
+    ? { mockConfig: (mockConfig: WsEvents['mockConfig']) => store.patch({ mockConfig }) }
+    : {}),
   update: (updateInfo) => store.patch({ updateInfo }),
 };
 
