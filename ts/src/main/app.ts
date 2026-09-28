@@ -8,23 +8,17 @@ import type { MockDeviceConfig } from '../web/server/index.js';
 import { MockDriver } from '../devices/mock.js';
 import type { ClientApp, CommEntry, LogObject } from '../shared/types.js';
 import type { MockInput, TouchStripMode } from '../shared/types.js';
-import {
-  DEFAULT_BRIGHTNESS,
-  ELGATO_CHILD_PORT,
-  ELGATO_TCP_PORT,
-  WEBUI_PORT,
-} from '../shared/types.js';
+import { ELGATO_CHILD_PORT, ELGATO_TCP_PORT, WEBUI_PORT } from '../shared/types.js';
 import { advertisedGeometry, DEFAULT_MODEL, DEVICE_MODELS } from '../devices/registry.js';
 import type { OverrideChangeKind } from '../devices/model-overrides.js';
 import { log, setWebUILog, setLogLevel, step } from '../shared/logger.js';
 import { startLogFile, stopLogFile, activeLogFilePath } from '../infra/log-file.js';
 import { setupNativeLibs } from '../infra/native-libs.js';
-import { setupImageHandler } from './image-pipeline.js';
 import { DriverManager } from './driver-manager.js';
 import { ElgatoAutoRestart, createElgatoAutoRestartDeps } from './elgato-auto-restart.js';
 import { getInitialDriverMode } from './driver-manager-deps.js';
-import { macToBytes } from './driver-manager-primary.js';
-import type { SessionServersFactory } from './device-session.js';
+import { macToBytes } from './dock-status.js';
+import type { CoraDockFactory } from './dock-scanner-deps.js';
 import { isElgatoAppRunning, openPathInOS, platformName } from '../infra/os-utils.ts';
 import { parseCli, userArgs, applyFlagsToEnv, versionText, USAGE_TEXT } from '../shared/cli.js';
 import { runDevicesCommand } from '../cli/devices.js';
@@ -103,8 +97,7 @@ const childServer = new ElgatoChildServer(
   false,
 );
 // Composition unit above the server pair: pairing watchdog, applyModel(),
-// startWithRetry() (see cora-dock.ts). DriverManager keeps its own `server`/
-// `childServer` deps for now (Phase 4's later Dock merge folds those in).
+// startWithRetry() (see cora-dock.ts). DriverManager wraps it as dock 0.
 const primaryDock = new CoraDock(server, childServer, 'dock 0');
 
 let shuttingDown = false;
@@ -123,25 +116,31 @@ globalThis.addEventListener('unhandledrejection', (ev: PromiseRejectionEvent) =>
   shutdown().catch(() => tjs.exit(1));
 });
 
+// Deduped: DriverManager's 'changed' fires on every dock status change (brightness
+// drags included), and the tray only cares about a few fields.
+let lastTrayState = '';
 function pushTrayState(): void {
+  if (!tray) return;
   const driver = driverManager.getCurrentDriver();
-  tray?.push(
-    buildTrayState({
-      deviceName: driver?.model.name,
-      driverConnected: driver !== null && driverManager.getDriverMode() === 'real',
-      elgatoConnected: webui.snapshot().elgatoConnected,
-      reconnectAttempts: driverManager.getReconnectAttemptCount(),
-      update: webui.updates.info(),
-    }),
-  );
+  const state = buildTrayState({
+    deviceName: driver?.model.name,
+    driverConnected: driver !== null && driverManager.getDriverMode() === 'real',
+    elgatoConnected: primaryDock.childHasClient,
+    reconnectAttempts: driverManager.getReconnectAttemptCount(),
+    update: webui.updates.info(),
+  });
+  const json = JSON.stringify(state);
+  if (json === lastTrayState) return;
+  lastTrayState = json;
+  tray.push(state);
 }
 
 webui.updates.setOnChange(pushTrayState);
 
-// Extra-dock CORA server pair builder (multi-device). Mirrors the primary wiring
+// Scanned-dock CORA server pair builder (multi-device). Mirrors the primary wiring
 // above: the childServer shares the SAME server.deviceConfig reference, and each
 // serverLog is piped to the shared logger. No WebUI/comm mirror — WebUI stays primary-only.
-const sessionServersFactory: SessionServersFactory = (identity) => {
+const coraDockFactory: CoraDockFactory = (identity) => {
   const s = new ElgatoServer(defaultChildGeometry, identity.primaryPort, false, {
     childPort: identity.childPort,
     mdnsServiceName: identity.mdnsServiceName,
@@ -157,15 +156,19 @@ const sessionServersFactory: SessionServersFactory = (identity) => {
 const driverManager = new DriverManager({
   webui,
   settings,
-  server,
-  childServer,
-  onTrayChange: pushTrayState,
+  cora: primaryDock,
   getShuttingDown: () => shuttingDown,
-  sessionServersFactory,
-  onDocksChanged: () => webui.notifyDocks(driverManager.getDockStatuses()),
+  coraDockFactory,
   onDockConnected: (dockIndex, deviceKey) =>
     elgatoAutoRestart.onDockConnected(dockIndex, deviceKey),
   onElgatoAttached: (dockIndex) => elgatoAutoRestart.onElgatoAttached(dockIndex),
+});
+
+// One fan-out for every dock/probe state change: the WebUI dock list (deduped
+// there) and the tray.
+driverManager.on('changed', () => {
+  webui.notifyDocks(driverManager.getDockStatuses());
+  pushTrayState();
 });
 
 // Grace-period scheduler (main/elgato-auto-restart.ts, §4.3) — at most once per
@@ -175,10 +178,8 @@ const elgatoAutoRestart = new ElgatoAutoRestart(
   createElgatoAutoRestartDeps({ webui, settings, driverManager }),
 );
 
-setupImageHandler(childServer, webui, () => driverManager.getCurrentDriver());
-
-// Wiring both halves of the primary CORA pair share (extras get serverLog only —
-// see sessionServersFactory).
+// Wiring both halves of the primary CORA pair share (scanned docks get serverLog only —
+// see coraDockFactory).
 for (const s of [server, childServer]) {
   s.on('serverLog', ({ level, component: c, message: m }: LogObject) => log(level, c, m));
   s.on('comm', (entry: Omit<CommEntry, 'ts'>) => webui.notifyComm(entry));
@@ -188,44 +189,20 @@ for (const s of [server, childServer]) {
 server.on('clientConnected', (addr: string) => log('info', 'elgato', `primary connected: ${addr}`));
 server.on('clientDisconnected', () => log('info', 'elgato', 'primary disconnected'));
 
+// The WebUI's Elgato-link indicator. Pairing bookkeeping, auto-restart and the
+// brightness re-push live in the Dock; its 'changed' refreshes the dock list + tray.
 childServer.on('clientConnected', (addr: string) => {
   log('info', 'elgato', `child connected: ${addr}`);
-  settings.markPaired(driverManager.primaryPrefs().deviceKey);
-  elgatoAutoRestart.onElgatoAttached(0);
   webui.notifyElgatoStatus(true, addr);
-  pushTrayState();
-  webui.notifyDocks(driverManager.getDockStatuses());
-  // Re-push the saved brightness once the Elgato app has settled after
-  // pairing — the app's own default-brightness handshake would otherwise
-  // stomp the user's setting.
-  setTimeout(() => {
-    if (shuttingDown) return;
-    driverManager.setDockBrightness(
-      0,
-      driverManager.primaryPrefs().brightness() ?? DEFAULT_BRIGHTNESS,
-    );
-  }, 1000);
 });
 
 childServer.on('clientDisconnected', () => {
   log('info', 'elgato', 'child disconnected');
   webui.notifyElgatoStatus(false);
-  pushTrayState();
-  webui.notifyDocks(driverManager.getDockStatuses());
-});
-
-childServer.on('brightness', (level: number) => {
-  if (driverManager.primaryPrefs().brightnessOverride()) {
-    log('debug', 'elgato', `brightness ${level} from Elgato ignored (override on)`);
-    return;
-  }
-  log('info', 'elgato', `brightness set to ${level}`);
-  driverManager.setDockBrightness(0, level);
-  webui.notifyBrightness(level);
 });
 
 webui.on('setBrightness', (level: number, dock?: number) => {
-  driverManager.setDockBrightness(dock ?? 0, level);
+  driverManager.dock(dock ?? 0)?.setBrightness(level);
 });
 
 // The WebUI already applied the level to the main thread; forward it to the USB
@@ -244,7 +221,7 @@ webui.on('setMultiDeck', (enabled: boolean) => {
 });
 
 // Device tuning changed: an image-only change is swapped into the live
-// session(s) and repainted; keyMap/wire/splash reopen so the new spec is in
+// dock(s) and repainted; keyMap/wire/splash reopen so the new spec is in
 // force from the next open() and the first splash.
 webui.on('modelOverridesChanged', (modelId: string, kind: OverrideChangeKind = 'reopen') => {
   driverManager.reloadDeviceTuning(modelId, kind).catch((err: unknown) => {
@@ -287,19 +264,19 @@ webui.on('setModel', (modelId: string) => {
 // An extra-key assignment changed (WebUI) — repaint that dock's key icons.
 // Dispatch needs no re-wire: it resolves the config per press.
 webui.on('extraKeyChanged', (dock: number) => {
-  driverManager.repaintExtraKeysForDock(dock);
+  driverManager.dock(dock)?.repaintWidgets();
 });
 
 webui.on('extraKeyRunNow', (dock: number, wireId: number) => {
-  driverManager.forceRunExtraKey(dock, wireId);
+  driverManager.dock(dock)?.forceRunWidget(wireId);
 });
 
 webui.on('touchStripModeChanged', (dock: number, mode: TouchStripMode) => {
-  driverManager.setTouchStripModeForDock(dock, mode);
+  driverManager.dock(dock)?.setTouchStripMode(mode);
 });
 
 webui.on('mdnsNameChanged', (deviceKey: string, name: string) => {
-  driverManager.applyMdnsNameForDeviceKey(deviceKey, name);
+  driverManager.dockForDevice(deviceKey)?.renameMdns(name);
 });
 
 webui.on('mockConfig', (cfg: MockDeviceConfig) => {
@@ -326,7 +303,7 @@ async function shutdown(): Promise<void> {
   if (dailyPingTimer) clearInterval(dailyPingTimer);
   elgatoAutoRestart.dispose();
   driverManager.stopScan();
-  await driverManager.stopAllExtraSessions().catch(() => undefined);
+  await driverManager.stopScannedDocks().catch(() => undefined);
   const prev = driverManager.getCurrentDriver();
   if (prev) prev.removeAllListeners();
   await prev?.close().catch(() => undefined);
@@ -487,7 +464,7 @@ if (driverManager.getDriverMode() === 'mock') {
 // opt-in: with it off (the default) startScan() installs no timer at all, so a
 // connected single deck ends USB enumeration for good.
 await driverManager.setMultiDeck(settings.multiDeck);
-// Safe in mock mode: scanExtras() guards on driverMode==='real' and a connected
+// Safe in mock mode: scanForDocks() guards on driverMode==='real' and a connected
 // primary, so it's a no-op until a real primary is up.
 driverManager.startScan();
 

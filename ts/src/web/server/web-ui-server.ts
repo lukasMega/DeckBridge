@@ -5,7 +5,7 @@ import { routes } from './routes.js';
 import { forbidden, notFound } from './http.js';
 import { ExtraKeysController } from './extra-keys-controller.js';
 import { ImageChannel } from './image-channel.js';
-import type { ImageFormat, DockFrame } from './image-channel.js';
+import type { ImageFormat } from './image-channel.js';
 import { SettingsFileController } from './settings-file-controller.js';
 import { ModelOverridesController } from './model-overrides-controller.js';
 import { DockRegistry } from './dock-registry.js';
@@ -196,10 +196,6 @@ export class WebUIServer extends EventEmitter implements WebUIController, WebUIC
 
   notifyDockImage(dock: number, mk2Index: number, data: Buffer, fmt: ImageFormat = 'jpeg'): void {
     this.imageChannel.notifyDockImage(dock, mk2Index, data, fmt);
-  }
-
-  dockFramesSnapshot(dock: number): Map<number, DockFrame> {
-    return this.imageChannel.dockFramesSnapshot(dock);
   }
 
   selectDock(index: number): void {

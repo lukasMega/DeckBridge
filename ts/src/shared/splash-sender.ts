@@ -1,7 +1,6 @@
 import { SPLASH_STATES } from '../assets/splash-states.js';
 import { mk2IndexToDeviceImgId } from './key-map.js';
-import type { DeviceDriver, DeviceImageSpec } from '../devices/driver.js';
-import { log } from './logger.js';
+import type { DeviceModel, DockDriver, DeviceImageSpec } from '../devices/driver.js';
 
 // Single device-independent splash image, decoded once at module load.
 const SPLASH_CONNECTED = Buffer.from(SPLASH_STATES.connected, 'base64');
@@ -15,7 +14,7 @@ const SPLASH_KEY_COUNT_SMALL = 6;
 // Splash source images are upright (natural canvas orientation).
 // model.splash.transformOverride corrects for the orientation difference measured on hardware.
 // Exported for extra-keys.ts — extra-key icons are upright sources too.
-export function splashSpec(model: DeviceDriver['model']): DeviceImageSpec {
+export function splashSpec(model: DeviceModel): DeviceImageSpec {
   const t = model.splash?.transformOverride;
   if (!t) return model.image;
   return {
@@ -26,15 +25,9 @@ export function splashSpec(model: DeviceDriver['model']): DeviceImageSpec {
   };
 }
 
-export function sendSplashImages(driver: DeviceDriver): void {
-  // Requires sendSplashImage (WorkerHidDriver) to offload the
-  // synchronous FFI transform off the main thread (P1 / Finding 1).
-  // MockDriver has no USB device to paint, so the absence is expected.
-  if (!driver.sendSplashImage) {
-    log('debug', 'splash', 'driver has no sendSplashImage — skipping splash');
-    return;
-  }
-
+/** The worker transforms each splash image (sendSplashImage), keeping the synchronous
+ *  FFI transform off the main thread (P1 / Finding 1). */
+export function sendSplashImages(driver: DockDriver): void {
   const model = driver.model;
   const spec = splashSpec(model);
 
@@ -45,7 +38,7 @@ export function sendSplashImages(driver: DeviceDriver): void {
       : Array.from({ length: Math.min(model.keyCount, SPLASH_KEY_COUNT_SMALL) }, (_, i) => i));
 
   for (const mk2 of splashKeys) {
-    // Match the live image path (image-pipeline.ts): remap mk2 → device wire id
+    // Match the live image path (image-render.ts): remap mk2 → device wire id
     // when the model defines an image keyMap; Elgato (no keyMap) passes through.
     const deviceKeyIndex = mk2IndexToDeviceImgId(mk2, model);
     // Every key gets the same device-independent "connected" image. Source

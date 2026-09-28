@@ -24,10 +24,34 @@ export function nextProbeDelayMs(currentMs: number, enumerateMs: number): number
   return Math.min(currentMs * 2, RECONNECT_BACKOFF_MAX_MS);
 }
 
-/** Current probe interval plus the transition logging. Owns no timer — the caller
- *  reads delayMs when it schedules the next reconnect. */
+/** Reconnect state for the primary probe: the adaptive interval (+ its transition
+ *  logging), the one pending reconnect timer, the failed-attempt count the tray shows,
+ *  and the in-flight flag that keeps two probes from racing. */
 export class ProbePacer {
   delayMs: number = HID_POLL_INTERVAL_MS;
+  /** Reconnects scheduled since the last successful connect (tray). */
+  attempts = 0;
+  /** A probe (enumerate + open) is running: a second one must not start, and the dock scan waits. */
+  probing = false;
+  /** A reconnect timer is pending; cleared when a probe starts, however it was started. */
+  private scheduled = false;
+
+  /** Run `probe` after the current interval, unless one is already pending. */
+  schedule(probe: () => void): void {
+    if (this.scheduled) return;
+    this.scheduled = true;
+    this.attempts++;
+    setTimeout(probe, this.delayMs);
+  }
+
+  /** A connect attempt started (timer, startup, mode switch): a later failure may schedule again. */
+  started(): void {
+    this.scheduled = false;
+  }
+
+  connected(): void {
+    this.attempts = 0;
+  }
 
   /** The first sweep pays for dlopen + the OS's cold HID stack (~700 ms on a healthy
    *  Mac), which says nothing about how the machine will behave afterwards. */

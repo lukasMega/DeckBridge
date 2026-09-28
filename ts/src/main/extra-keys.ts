@@ -16,7 +16,7 @@ import {
   type TouchStripMode,
   type TouchWindowRegion,
 } from '../shared/types.js';
-import type { DeviceDriver } from '../devices/driver.js';
+import type { DockDriver } from '../devices/driver.js';
 import { splashSpec } from '../shared/splash-sender.js';
 import { forcePluginRefresh, pluginValueFor } from '../plugin/plugin-host.js';
 import {
@@ -83,7 +83,7 @@ export class ExtraKeyWidgets {
   private flashTimers = new Set<ReturnType<typeof setTimeout>>();
 
   constructor(
-    private readonly driver: DeviceDriver,
+    private readonly driver: DockDriver,
     private readonly configFor: (wireId: number) => ExtraKeyConfig | undefined,
     private mode: TouchStripMode = DEFAULT_TOUCH_STRIP_MODE,
     /** 'deckbridge-repaint' hold-off after an Elgato frame; read live, so a WebUI
@@ -203,7 +203,6 @@ export class ExtraKeyWidgets {
   /** Paint what the key shows with its colours swapped (not recorded in lastPainted,
    *  not mirrored to the WebUI), then repaint it normally after FLASH_MS. */
   private flash(wireId: number): void {
-    if (!this.driver.sendSplashImage) return;
     const spec = this.widgetDisplay(wireId)?.image ?? splashSpec(this.driver.model);
     const { lines, style } = this.shown.get(wireId) ?? { lines: [], style: {} };
     const layout = layoutWidget(lines, spec.width, spec.height, style);
@@ -288,7 +287,6 @@ export class ExtraKeyWidgets {
       this.onWidgetPaint?.(wireId, null);
       return;
     }
-    if (!this.driver.sendSplashImage) return;
     this.shown.set(wireId, { lines, style });
     const spec = display?.image ?? splashSpec(this.driver.model);
     const { width, height } = spec;
@@ -309,7 +307,7 @@ export class ExtraKeyWidgets {
     if (this.mode !== 'deckbridge-repaint' || ids.length === 0) return;
     const sliceWidth = Math.floor(PLUS_TOUCH_WIDTH / ids.length);
     const wholeStrip =
-      this.driver.touchStripOptions?.upload === 'always' && this.driver.model.touchStripDisplay;
+      this.driver.touchStripOptions.upload === 'always' && this.driver.model.touchStripDisplay;
     const x = wholeStrip ? 0 : (region?.x ?? 0);
     const w = wholeStrip ? PLUS_TOUCH_WIDTH : (region?.w ?? PLUS_TOUCH_WIDTH);
     const nowMs = this.seams.now();
@@ -323,7 +321,7 @@ export class ExtraKeyWidgets {
 
   private restoreZones(wireIds: number[]): void {
     for (const wireId of wireIds) this.widgetOnZone.delete(wireId);
-    if (this.active && wireIds.length > 0) this.driver.restoreTouchSegments?.(wireIds);
+    if (this.active && wireIds.length > 0) this.driver.restoreTouchSegments(wireIds);
   }
 
   private inElgatoHoldOff(wireId: number, nowMs: number): boolean {
@@ -353,7 +351,7 @@ export class ExtraKeyWidgets {
     const mask = this.stripMask();
     if (!force && sameIds(mask, this.lastMask)) return;
     this.lastMask = mask;
-    this.driver.setTouchStripMask?.(mask);
+    this.driver.setTouchStripMask(mask);
   }
 
   private widgetDisplayIds(): readonly number[] {

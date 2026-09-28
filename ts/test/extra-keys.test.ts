@@ -1,5 +1,4 @@
 import assert from 'tjs:assert';
-import { EventEmitter } from 'node:events';
 import { ExtraKeyWidgets, FLASH_MS } from '../src/main/extra-keys.js';
 import { renderWidgetLines } from '../src/main/widget-lines.js';
 import { parseLatLon, WEATHER_FORCE_MIN_MS } from '../src/main/widget-refresh.js';
@@ -8,7 +7,6 @@ import {
   isExtraKeyConfig,
   type ExtraKeyConfig,
   type TouchStripMode,
-  type TouchStripOptions,
   type TouchStripUpload,
 } from '../src/shared/types.js';
 import { MIRABOX_293S_MODEL } from '../src/devices/mirabox/mirabox-293s.js';
@@ -16,6 +14,7 @@ import { AJAZZ_AKP05E_MODEL } from '../src/devices/ajazz/akp05e.js';
 import type { DeviceImageSpec, DeviceModel } from '../src/devices/driver.js';
 import type { WidgetPaint } from '../src/shared/widget-layout.js';
 import { testAsync as test, summary } from './helpers/harness.js';
+import { StubDockDriver } from './helpers/stub-dock-driver.js';
 
 // renderWidgetLines
 
@@ -142,30 +141,24 @@ await test('garbage / out-of-range / missing → null', () => {
 
 // ExtraKeyWidgets
 
-class FakeDriver extends EventEmitter {
-  model: DeviceModel = MIRABOX_293S_MODEL;
-  touchStripOptions?: TouchStripOptions;
+class FakeDriver extends StubDockDriver {
+  constructor(model: DeviceModel = MIRABOX_293S_MODEL) {
+    super(model);
+  }
   splashed: Array<{ keyIndex: number; bytes: Uint8Array; spec: DeviceImageSpec }> = [];
   cleared: number[] = [];
   masks: number[][] = [];
   restored: number[][] = [];
-  open(): Promise<void> {
-    return Promise.resolve();
-  }
-  close(): Promise<void> {
-    return Promise.resolve();
-  }
-  setBrightness(): void {}
-  clearKey(keyIndex: number): void {
+  override clearKey(keyIndex: number): void {
     this.cleared.push(keyIndex);
   }
-  sendSplashImage(keyIndex: number, bytes: Uint8Array, spec: DeviceImageSpec): void {
+  override sendSplashImage(keyIndex: number, bytes: Uint8Array, spec: DeviceImageSpec): void {
     this.splashed.push({ keyIndex, bytes, spec });
   }
-  setTouchStripMask(wireIds: readonly number[]): void {
+  override setTouchStripMask(wireIds: readonly number[]): void {
     this.masks.push([...wireIds]);
   }
-  restoreTouchSegments(wireIds: readonly number[]): void {
+  override restoreTouchSegments(wireIds: readonly number[]): void {
     this.restored.push([...wireIds]);
   }
 }

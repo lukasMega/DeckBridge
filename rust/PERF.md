@@ -91,7 +91,7 @@ Rebuild at the committed settings afterwards so the working dylib matches the ma
 
 ## End-to-end evidence
 
-The repo instruments a 15-key batch at `info` from both sides — `ts/src/image-pipeline.ts`
+The repo instruments a 15-key batch at `info` from both sides — `ts/src/main/image-perf.ts`
 (main: first CORA arrival → last WebUI broadcast) and `ts/src/image-render.ts` (worker:
 device 15-key batch). That is the number a user feels; the microbenchmarks above only
 explain it. Capture both with a real device and a real profile load.

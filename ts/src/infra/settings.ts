@@ -150,8 +150,8 @@ export class PersistedSettings implements DockPrefsStore {
   /** undefined = not persisted; the level then comes from the CLI flag / env /
    *  the build-time default (see PersistedLogLevel). */
   logLevel: PersistedLogLevel | undefined = undefined;
-  /** Opt-in second dock; false = single dock and no extras scan (types.ts
-   *  MAX_MULTI_DECK_SESSIONS, driver-manager-extras.ts). */
+  /** Opt-in second dock; false = single dock and no dock scan (types.ts
+   *  MAX_MULTI_DECK_DOCKS, dock-scanner.ts). */
   multiDeck = false;
   /** GitHub-release update check opt-out (see update-check.ts). undefined = enabled. */
   updateCheck: boolean | undefined = undefined;

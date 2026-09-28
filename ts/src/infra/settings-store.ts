@@ -94,7 +94,7 @@ export interface Settings {
   selectedDock?: number;
   logLevel?: PersistedLogLevel;
   /** Opt-in multi-deck: dock a second supported device as its own headless CORA
-   *  dock (max MAX_MULTI_DECK_SESSIONS). Absent/false = a single dock, and no USB
+   *  dock (max MAX_MULTI_DECK_DOCKS). Absent/false = a single dock, and no USB
    *  scanning at all once it is connected. */
   multiDeck?: boolean;
   devices?: DeviceIdentitySettings[];

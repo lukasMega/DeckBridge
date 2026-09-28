@@ -25,7 +25,7 @@ export function deriveState(s: Status): DeviceState {
 /** True when `docks` must be rendered dock-aware rather than via the
  *  single-primary deriveState() wizard — either genuinely multiple docks, or
  *  a lone dock that isn't the primary (index 0): the primary disconnected
- *  while an extra dock is still live, which deriveState() can't see since it
+ *  while a scanned dock is still live, which deriveState() can't see since it
  *  only reads the primary's own status fields. */
 /** The version to show the topbar update dot for, or null to hide it —
  *  available, and not the version the user already dismissed. */
