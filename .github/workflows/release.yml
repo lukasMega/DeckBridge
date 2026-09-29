@@ -18,9 +18,7 @@ on:
 permissions:
   contents: read
 
-# Belt and braces alongside telemetry-env.ts's CI detection — this matters most
-# here, where the jobs run *packaged release binaries* (e2e, smoke) whose semver
-# would otherwise pass the ping's version gate.
+# Packaged release binaries bypass telemetry-env.ts's CI detection.
 env:
   DECKBRIDGE_NO_TELEMETRY: '1'
 
@@ -29,8 +27,6 @@ jobs:
     name: Prepare release metadata
     runs-on: ubuntu-latest
     outputs:
-      version: ${{ steps.version.outputs.version }}
-      package_version: ${{ steps.version.outputs.package_version }}
       tag: ${{ steps.version.outputs.tag }}
       should_build: ${{ steps.version.outputs.should_build }}
     steps:
@@ -49,8 +45,6 @@ jobs:
             SHOULD_BUILD=true
           fi
           {
-            echo "version=$VERSION"
-            echo "package_version=v$VERSION"
             echo "tag=$TAG"
             echo "should_build=$SHOULD_BUILD"
           } >> "$GITHUB_OUTPUT"
@@ -72,16 +66,7 @@ jobs:
             triple: x86_64-apple-darwin
             tauri: '1'
             from_source: '1'
-          # Linux re-enabled: the old blocker was mise-action blind-installing the
-          # github:lukasMega/txiki.js mise tool (no linux-arm64 asset), and mise.toml
-          # no longer declares that tool at all.
-          # See .claude/plans/2026-07-31_linux-build-support.md.
-          # Both Linux jobs run on 24.04 images on purpose: the prebuilt slim
-          # runtime is itself built on 24.04, so a 22.04 runner dies at
-          # `tjs compile` with "GLIBC_2.38 not found". Consequence: the shipped
-          # Linux binaries need glibc >= 2.38 (Ubuntu 24.04+, Debian 13+). To
-          # lower that floor, set from_source on the job and move it back to a
-          # 22.04 image — the same slim profile then links against glibc 2.35.
+          # Prebuilt Linux runtime needs glibc >= 2.38 (Ubuntu 24.04+).
           - os: ubuntu-24.04
             platform: linux-x86_64
           - os: ubuntu-24.04-arm
@@ -89,11 +74,7 @@ jobs:
 
     runs-on: ${{ matrix.os }}
 
-    # Every platform ships the SLIM txiki.js runtime (no TLS/WASM/SQLite/mimalloc,
-    # MinSizeRel + compressed bytecode + stripped) — but it is *downloaded*
-    # prebuilt, so most platforms need no C/C++ toolchain and no from-source build.
-    # Only macos-x86_64 has no published asset and sets from_source, which makes
-    # tjs-setup run scripts/tjs-build.mjs (same profile, built locally).
+    # Intel macOS builds txiki.js locally; other platforms download it.
     env:
       TJS_FROM_SOURCE: ${{ matrix.from_source }}
 
@@ -115,11 +96,7 @@ jobs:
             src-tauri -> target
           shared-key: release-${{ matrix.platform }}
 
-      # Cache the slim txiki.js runtime so it builds once per platform per build
-      # config change (the from-source build clones + compiles txiki.js, which is
-      # slow). On a hit the binary is restored to $TJS and tjs-setup skips the
-      # rebuild. Key is invalidated by the pinned version (mise.toml) or the
-      # build script itself (tjs-build.mjs, e.g. its cmake flags).
+      # Cache invalidates when runtime version or build scripts change.
       - name: Cache slim txiki.js runtime
         uses: actions/cache@v6
         with:
@@ -130,31 +107,21 @@ jobs:
         if: startsWith(matrix.os, 'macos')
         run: brew install hidapi
 
-      # Linux: libhidapi/libudev for the app, libffi for the runtime's tjs:ffi
-      # dlopen, and the GTK/appindicator/xdo trio for the deckbridge-tray crate.
-      # (cmake/build-essential stay: harmless on the download path, and needed if
-      # this job is ever flipped to from_source.)
+      # Keep toolchain packages for possible from-source builds.
       - name: Install system deps (Linux)
         if: startsWith(matrix.os, 'ubuntu')
-        # See the note on ci.yml's apt steps: the runner image's preinstalled
-        # Google Chrome source can fail `apt-get update` outright when Google's
-        # index drifts, and nothing here installs from it.
         run: |
+          # Chrome's preinstalled source sometimes breaks apt-get update.
           sudo rm -f /etc/apt/sources.list.d/google-chrome.list
           sudo apt-get update
-          sudo apt-get install -y libhidapi-dev libudev-dev libffi-dev cmake build-essential libgtk-3-dev libxdo-dev libayatana-appindicator3-dev
+          sudo apt-get install -y libhidapi-dev libudev-dev libffi-dev cmake build-essential libgtk-3-dev libxdo-dev libayatana-appindicator3-dev netcat-openbsd unzip curl
 
       - uses: jdx/mise-action@v4
 
       - name: Compile
         run: mise run compile
 
-      # Ad-hoc sign deckbridge-tray only. The relay (deckbridge) is NOT re-signed:
-      # `tjs compile` appends the bytecode payload after the Mach-O and ships a
-      # linker-signed ad-hoc signature the kernel runs leniently; `codesign
-      # --force` would replace it and fail strict validation on the trailing data
-      # ("main executable failed strict validation"). The as-compiled signature is
-      # what ships.
+      # Never re-sign relay: its bytecode payload trails the Mach-O signature.
       - name: Ad-hoc sign deckbridge-tray (macOS)
         if: startsWith(matrix.os, 'macos')
         run: |
@@ -162,14 +129,10 @@ jobs:
           codesign -dv deckbridge 2>&1 | head -3
 
       - name: Package
-        run: node scripts/package.mjs "${{ needs.prepare.outputs.package_version }}"
-
-      - name: Smoke-test deps (Linux)
-        if: startsWith(matrix.os, 'ubuntu')
-        run: sudo apt-get install -y netcat-openbsd unzip curl
+        run: node scripts/package.mjs
 
       - name: Smoke test (boots cleanly, serves, shuts down)
-        run: ./scripts/e2e-smoke.sh "$(find dist -maxdepth 1 -name '*.zip' -printf '%T@ %p\n' | sort -rn | head -1 | cut -d' ' -f2-)"
+        run: ./scripts/e2e-smoke.sh
 
       - uses: actions/upload-artifact@v7
         with:
@@ -191,9 +154,7 @@ jobs:
           chmod +x "src-tauri/binaries/deckbridge-${{ matrix.triple }}" "src-tauri/binaries/deckbridge-tray-${{ matrix.triple }}"
           codesign --force --sign - --timestamp=none "src-tauri/binaries/deckbridge-tray-${{ matrix.triple }}"
 
-      # Intel builds compile txiki.js locally. Its source tree is roughly 1 GB
-      # and is no longer needed after sidecars are staged. DMG creation needs
-      # temporary disk space, so reclaim it before hdiutil runs.
+      # Intel source tree needs removal before DMG creation (~1 GB).
       - name: Reclaim Tauri disk space
         if: matrix.tauri == '1' && matrix.from_source == '1'
         run: |
@@ -201,9 +162,7 @@ jobs:
           rm -rf vendor/txiki.js-src
           df -h .
 
-      # hdiutil intermittently returns "Resource busy" on GitHub's Intel macOS
-      # runners. Tauri's bundled create-dmg 1.2.1 does not retry image creation,
-      # so retry the incremental build twice before failing the job.
+      # Retry intermittent hdiutil "Resource busy" failures.
       - name: Build Tauri dmg
         if: matrix.tauri == '1'
         working-directory: src-tauri
@@ -226,28 +185,17 @@ jobs:
           path: src-tauri/target/release/bundle/dmg/*.dmg
           if-no-files-found: error
 
-  # Windows ships two artifacts from one job: an NSIS installer (Scoop/winget-friendly)
-  # and a portable zip. The installer wraps the binary in a Tauri v2 supervisor shell
-  # (src-tauri/); the relay binary + deckbridge-tray ride along as Tauri sidecars
-  # (externalBin), so they must be renamed to the MSVC target triple before
-  # `pnpm tauri build` (G2). The portable zip is the same binaries, unwrapped.
+  # Windows ships both portable ZIP and Tauri NSIS installer.
   build-windows:
     name: Build windows-x86_64 (NSIS + portable)
     needs: prepare
     if: needs.prepare.outputs.should_build == 'true'
     runs-on: windows-latest
-    # No TJS_FROM_SOURCE here (unlike the Unix jobs above): the from-source build
-    # (scripts/tjs-build.mjs) is unverified against MSVC-only runners. tjs-setup
-    # downloads the prebuilt `txiki-slim-ffi-windows-x86_64.zip` instead — since
-    # the switch to the slim release that download IS the slim runtime, so this
-    # job is no longer trading size for reliability.
+    # Windows downloads txiki.js; source build is unverified on MSVC.
 
     steps:
       - uses: actions/checkout@v7
 
-      # Stamps ts/package.json's version (the single source of truth) into
-      # src-tauri/Cargo.toml + tauri.conf.json so the NSIS installer version
-      # is correct without a build-time -c override.
       - name: Sync version into Cargo.toml/tauri.conf.json
         run: node scripts/sync-version.mjs
 
@@ -275,11 +223,9 @@ jobs:
           path: vendor/hidapi/hidapi.dll
           key: hidapi-0.15.0-windows-x86_64
 
-      # Windows ships no system hidapi.dll (B3). Build once, then reuse its
-      # stable output across main-scoped releases.
+      # Build hidapi.dll once, then reuse its cache.
       - name: Build hidapi.dll
         if: steps.hidapi-cache.outputs.cache-hit != 'true'
-        shell: pwsh
         run: |
           git clone --depth 1 --branch hidapi-0.15.0 https://github.com/libusb/hidapi C:\hidapi-src
           cmake -B C:\hidapi-build -S C:\hidapi-src
@@ -290,7 +236,6 @@ jobs:
           Copy-Item $dll.FullName "vendor/hidapi/hidapi.dll"
 
       - name: Configure hidapi.dll
-        shell: pwsh
         run: echo "HIDAPI_LIB=${{ github.workspace }}\vendor\hidapi\hidapi.dll" >> $env:GITHUB_ENV
 
       - uses: jdx/mise-action@v4
@@ -299,97 +244,29 @@ jobs:
         working-directory: src-tauri
         run: pnpm install --frozen-lockfile
 
-      # Fetch the runtime up front (normally a `compile` dependency) so the icon
-      # can be stamped into it before it is copied into the relay binary.
+      # Runtime needs icon stamping before relay compilation.
       - name: Set up txiki.js runtime
         run: mise run tjs-setup
 
-      # `tjs compile` copies $TJS and appends the bytecode as a PE overlay, so the
-      # icon must go into tjs.exe BEFORE compiling — rcedit on the finished binary
-      # would rewrite the PE and lose that trailing payload.
+      # Stamping compiled relay would erase its PE bytecode overlay.
       - name: Stamp icon + version info into the runtime
-        shell: pwsh
         run: |
           Invoke-WebRequest -Uri "https://github.com/electron/rcedit/releases/download/v2.0.0/rcedit-x64.exe" -OutFile rcedit.exe
           ./scripts/stamp-exe.ps1 -Target "vendor/txiki.js/build/tjs.exe" -Rcedit "rcedit.exe"
 
-      # Produces the Windows relay binary (deckbridge[.exe]) via the same build
-      # chain the other platforms use. txiki's `compile` emits a PE executable.
       - name: Compile relay binary
         run: mise run compile
 
-      # The tray binary is a plain cargo build (no overlay), so it can be stamped
-      # after the fact — unlike the relay, which inherits the runtime's icon.
+      # Tray binary has no overlay; stamp after compilation.
       - name: Stamp icon + version info into the tray binary
-        shell: pwsh
         run: ./scripts/stamp-exe.ps1 -Target "rust/target/release/deckbridge-tray.exe" -Rcedit "rcedit.exe"
 
-      # Boot the just-compiled release binary without a HID device,
-      # poll the WebUI until it responds, then kill it — mirrors the
-      # boot/serve/shutdown checks in scripts/e2e-smoke.sh (bash, POSIX-only)
-      # for the platform that script can't run on.
       - name: Smoke test (real mode, poll WebUI, then kill)
-        shell: pwsh
-        run: |
-          $relay = if (Test-Path "deckbridge.exe") { "deckbridge.exe" } else { "deckbridge" }
-          Remove-Item Env:DECKBRIDGE_MOCK -ErrorAction SilentlyContinue
-          $proc = Start-Process -FilePath ".\$relay" -PassThru `
-            -RedirectStandardOutput "smoke-stdout.log" -RedirectStandardError "smoke-stderr.log"
-          $webuiPort = $null
-          for ($i = 0; $i -lt 60; $i++) {
-            $match = Select-String -Path "smoke-stdout.log" `
-              -Pattern 'WebUI: http://localhost:(\d+)' -AllMatches `
-              -ErrorAction SilentlyContinue | Select-Object -First 1
-            if ($match) { $webuiPort = [int]$match.Matches[0].Groups[1].Value; break }
-            if ($proc.HasExited) {
-              Write-Host "FAIL: process exited before logging WebUI port"
-              Get-Content smoke-stdout.log -ErrorAction SilentlyContinue
-              Get-Content smoke-stderr.log -ErrorAction SilentlyContinue
-              exit 1
-            }
-            Start-Sleep -Milliseconds 250
-          }
-          if (-not $webuiPort) {
-            Write-Host "FAIL: WebUI port never appeared in startup log"
-            Get-Content smoke-stdout.log -ErrorAction SilentlyContinue
-            Get-Content smoke-stderr.log -ErrorAction SilentlyContinue
-            Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
-            exit 1
-          }
-          $baseUrl = "http://localhost:$webuiPort"
-          $state = $null
-          for ($i = 0; $i -lt 60; $i++) {
-            try {
-              $state = Invoke-RestMethod -Uri "$baseUrl/api/state" -TimeoutSec 2
-              break
-            } catch {}
-            if ($proc.HasExited) {
-              Write-Host "FAIL: process exited before API became ready"
-              Get-Content smoke-stdout.log -ErrorAction SilentlyContinue
-              Get-Content smoke-stderr.log -ErrorAction SilentlyContinue
-              exit 1
-            }
-            Start-Sleep -Milliseconds 500
-          }
-          if ($null -eq $state) {
-            Write-Host "FAIL: /api/state never responded"
-            Get-Content smoke-stdout.log -ErrorAction SilentlyContinue
-            Get-Content smoke-stderr.log -ErrorAction SilentlyContinue
-            Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
-            exit 1
-          }
-          if ($state.driverMode -ne "real") { throw "release started outside real mode" }
-          $mockRoute = Invoke-WebRequest -Method Post -Uri "$baseUrl/api/mock/dial" `
-            -Body '{}' -ContentType 'application/json' `
-            -UseBasicParsing -SkipHttpErrorCheck -TimeoutSec 15
-          if ($mockRoute.StatusCode -ne 404) { throw "mock route present in release" }
-          Write-Host "Smoke test OK: real state API responded; mock route absent"
-          Stop-Process -Id $proc.Id -Force
+        run: ./scripts/e2e-smoke.ps1
 
-      # Portable artifact: the same relay binary + tray, zipped, no installer.
-      # Runs before the sidecar staging so it packages the as-compiled binaries.
+      # Package portable binaries before staging Tauri sidecars.
       - name: Package portable zip
-        run: node scripts/package.mjs "${{ needs.prepare.outputs.package_version }}"
+        run: node scripts/package.mjs
 
       - uses: actions/upload-artifact@v7
         with:
@@ -397,23 +274,15 @@ jobs:
           path: dist/*.zip
           if-no-files-found: error
 
-      # Tauri's bundler only picks up the sidecar whose filename matches the
-      # build's target triple (G2), so copy both binaries into src-tauri/binaries/
-      # with the -x86_64-pc-windows-msvc.exe suffix. `mise run compile` writes
-      # either deckbridge or deckbridge.exe depending on txiki; handle both.
+      # Tauri requires sidecars named for the MSVC target triple.
       - name: Stage sidecars for Tauri (target-triple names)
-        shell: pwsh
         run: |
           $relay = if (Test-Path "deckbridge.exe") { "deckbridge.exe" } else { "deckbridge" }
           Copy-Item $relay "src-tauri/binaries/deckbridge-x86_64-pc-windows-msvc.exe" -Force
           Copy-Item "rust/target/release/deckbridge-tray.exe" "src-tauri/binaries/deckbridge-tray-x86_64-pc-windows-msvc.exe" -Force
           Get-ChildItem "src-tauri/binaries/"
 
-      # tauri.conf.json's version was already stamped from ts/package.json by
-      # the "Sync version" step above — no build-time override needed.
-      # NSIS is fetched by the bundler; WebView2 is preinstalled on the runner.
       - name: Build Tauri NSIS installer
-        shell: pwsh
         working-directory: src-tauri
         run: pnpm tauri build
 
@@ -431,7 +300,7 @@ jobs:
       contents: write
 
     steps:
-      # Needed for .github/scripts/vt-upload.sh.
+      # Needed for release scripts.
       - uses: actions/checkout@v7
         with:
           sparse-checkout: .github/scripts
@@ -442,8 +311,7 @@ jobs:
           path: artifacts
           merge-multiple: true
 
-      # Scan every packaged binary before checksumming and publishing it.
-      # freshclam updates signatures; clamscan exits 1 when malware is found.
+      # Scan before checksumming and publishing; infections fail release.
       - name: Install ClamAV and update signatures
         run: |
           sudo apt-get update
@@ -454,11 +322,8 @@ jobs:
       - name: Scan release artifacts for malware
         run: clamscan --recursive --infected artifacts
 
-      # VirusTotal may share uploads. Throttle free API requests.
-      # Own script instead of ghaction-virustotal: that action aborts the whole
-      # step on the first transient 5xx, losing the links for every later file.
+      # Per-file retries retain other links after transient failures.
       - name: Upload release artifacts to VirusTotal
-        id: virustotal
         continue-on-error: true
         env:
           VT_API_KEY: ${{ secrets.VIRUSTOTAL_API_KEY }}
@@ -478,33 +343,11 @@ jobs:
           sha256sum ./*.zip ./*-setup.exe ./*.dmg > SHA256SUMS.txt
           cat SHA256SUMS.txt
 
-      # vt-analysis.txt holds one `path/to/file=url` line per successful upload.
-      # Every published artifact gets a row; ones VirusTotal refused say so rather
-      # than silently vanishing from the table.
+      # Include every artifact, even when its VirusTotal scan failed.
       - name: Build release body
         env:
           VT_OUT: ${{ github.workspace }}/vt-analysis.txt
-        run: |
-          {
-            echo "see docs: https://lukasmega.github.io/DeckBridge/"
-            echo
-            echo "## VirusTotal scans"
-            echo
-            echo "| Artifact | Report |"
-            echo "| --- | --- |"
-            for file in artifacts/*.zip artifacts/*-setup.exe artifacts/*.dmg; do
-              [ -f "$file" ] || continue
-              url=$(grep -F "${file}=" "$VT_OUT" 2>/dev/null | head -n1 | cut -d= -f2-)
-              if [ -n "$url" ]; then
-                echo "| \`$(basename "$file")\` | [analysis]($url) |"
-              else
-                echo "| \`$(basename "$file")\` | _scan unavailable_ |"
-              fi
-            done
-            echo
-            echo "Verify downloads against \`SHA256SUMS.txt\`."
-          } > release-body.md
-          cat release-body.md
+        run: bash .github/scripts/release-body.sh
 
       - name: Create release
         if: github.event_name == 'push' || inputs.skip_release == 'false'
