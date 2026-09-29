@@ -18,6 +18,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: deckbridge-release
+  cancel-in-progress: false
+
 # Packaged release binaries bypass telemetry-env.ts's CI detection.
 env:
   DECKBRIDGE_NO_TELEMETRY: '1'
@@ -49,9 +53,19 @@ jobs:
             echo "should_build=$SHOULD_BUILD"
           } >> "$GITHUB_OUTPUT"
 
+  virustotal-poc:
+    name: Scan isolation samples
+    needs: prepare
+    if: needs.prepare.outputs.should_build == 'true'
+    uses: ./.github/workflows/virustotal-poc.yml
+    with:
+      scan: true
+    secrets:
+      VIRUSTOTAL_API_KEY: ${{ secrets.VIRUSTOTAL_API_KEY }}
+
   build:
     name: Build ${{ matrix.platform }}
-    needs: prepare
+    needs: [prepare, virustotal-poc]
     if: needs.prepare.outputs.should_build == 'true'
     strategy:
       fail-fast: false
@@ -188,7 +202,7 @@ jobs:
   # Windows ships both portable ZIP and Tauri NSIS installer.
   build-windows:
     name: Build windows-x86_64 (NSIS + portable)
-    needs: prepare
+    needs: [prepare, virustotal-poc]
     if: needs.prepare.outputs.should_build == 'true'
     runs-on: windows-latest
     # Windows downloads txiki.js; source build is unverified on MSVC.
@@ -292,9 +306,75 @@ jobs:
           path: src-tauri/target/release/bundle/nsis/*-setup.exe
           if-no-files-found: error
 
+  publish-virustotal-docs:
+    name: Publish VirusTotal comparison
+    needs: [prepare, virustotal-poc, build, build-windows]
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    outputs:
+      docs_sha: ${{ steps.commit.outputs.sha }}
+    permissions:
+      contents: write
+      actions: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: main
+          fetch-depth: 0
+      - uses: actions/download-artifact@v8
+        with:
+          name: virustotal-poc-results-windows-x64
+          path: poc-results/windows
+      - uses: actions/download-artifact@v8
+        with:
+          name: virustotal-poc-results-macos-arm64
+          path: poc-results/macos
+      - name: Generate comparison page
+        run: node .github/virustotal-poc/publish-results.mjs poc-results/windows/results-windows-x64.json poc-results/macos/results-macos-arm64.json
+      - name: Commit comparison page
+        id: commit
+        if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || inputs.skip_release == 'false')
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add docs/virustotal.md
+          if ! git diff --cached --quiet; then
+            git commit -m "docs: publish VirusTotal PoC results for ${{ needs.prepare.outputs.tag }}"
+            git push origin HEAD:main
+          fi
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+      # GITHUB_TOKEN pushes do not trigger push workflows.
+      - name: Deploy updated docs and wait
+        if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || inputs.skip_release == 'false')
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DOC_SHA: ${{ steps.commit.outputs.sha }}
+        run: |
+          gh workflow run deploy-docs.yml --ref main
+          run_id=''
+          for _ in {1..30}; do
+            run_id=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/deploy-docs.yml/runs?event=workflow_dispatch&head_sha=$DOC_SHA&per_page=1" --jq '.workflow_runs[0].id // empty')
+            [ -n "$run_id" ] && break
+            sleep 10
+          done
+          [ -n "$run_id" ] || { echo 'Docs deployment run not found'; exit 1; }
+          for _ in {1..180}; do
+            state=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$run_id" --jq '.status + ":" + (.conclusion // "")')
+            if [ "$state" = 'completed:success' ]; then
+              exit 0
+            fi
+            if [[ "$state" == completed:* ]]; then
+              echo "Docs deployment failed: $state"
+              exit 1
+            fi
+            sleep 10
+          done
+          echo 'Docs deployment timed out'
+          exit 1
+
   release:
     name: Publish GitHub Release
-    needs: [prepare, build, build-windows]
+    needs: [prepare, build, build-windows, publish-virustotal-docs]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -310,6 +390,9 @@ jobs:
         with:
           path: artifacts
           merge-multiple: true
+
+      - name: Remove PoC reports from release files
+        run: rm -f artifacts/results-*.md artifacts/results-*.json
 
       # Scan before checksumming and publishing; infections fail release.
       - name: Install ClamAV and update signatures
@@ -350,13 +433,13 @@ jobs:
         run: bash .github/scripts/release-body.sh
 
       - name: Create release
-        if: github.event_name == 'push' || inputs.skip_release == 'false'
+        if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || inputs.skip_release == 'false')
         uses: softprops/action-gh-release@v3
         with:
           generate_release_notes: true
           tag_name: "${{ needs.prepare.outputs.tag }}"
           name: "${{ needs.prepare.outputs.tag }}"
-          target_commitish: "${{ github.sha }}"
+          target_commitish: "${{ needs.publish-virustotal-docs.outputs.docs_sha }}"
           body_path: release-body.md
           files: |
             artifacts/*.zip

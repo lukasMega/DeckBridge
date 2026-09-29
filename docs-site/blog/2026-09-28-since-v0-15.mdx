@@ -69,4 +69,30 @@ Tray header now shows app version. Available updates show one indicator. Release
 
 ## Release status
 
-Version 0.17.0 will bring these changes together. Current `main` already contains them. Screenshots show current mock Web UI. [Compare changes since 0.15.0](https://github.com/lukasMega/DeckBridge/compare/deckbridge-v0.15.0...main).
+Version 0.17.0 includes these changes. Screenshots show mock Web UI. [Download 0.17.0](https://github.com/lukasMega/DeckBridge/releases/tag/deckbridge-v0.17.0).
+
+## VirusTotal results
+
+Some scanners flag 0.17.0 downloads. Findings suggest false positives. No clear malicious behavior appeared. Scans cannot prove safety. Verify downloads using [release checksums](https://github.com/lukasMega/DeckBridge/releases/download/deckbridge-v0.17.0/SHA256SUMS.txt). Keep antivirus protection enabled.
+
+<details>
+<summary>Scan results</summary>
+
+| Download | Detections |
+| --- | --- |
+| [Windows portable ZIP](https://www.virustotal.com/gui/file/0222989a41d85d10a39c31dbfa9d5d03c7bbfff254b015d8a5f5af407ed3b493) | 1/51 |
+| [Windows installer](https://www.virustotal.com/gui/file/222cdc96420cd29802f2d38699f8fe97d5e91015ca2ef33dd52d2b7b63ab3c2e) | 3/68 |
+| [macOS Intel DMG](https://www.virustotal.com/gui/file/be7bae75feb6681027644545f32d835988ba8c5f1209a5ed429f1a64bb782855) | 1/58 |
+
+Results checked September 29, 2026. Scanner results can change.
+
+</details>
+
+<details>
+<summary>Bundled components and possible causes</summary>
+
+Windows Tauri launcher scored [3/71](https://www.virustotal.com/gui/file/31240fb02bb852cc05d696eebb4ec1ca08ba763ccb61e85fec7695a8d16163cd). NSIS utility DLL scored [2/71](https://www.virustotal.com/gui/file/5ba143b5db4a87d32d6e7802e033330aae56cbceabe0d1e3ba41948385ad4709). Portable ZIP omits NSIS. Its Txiki relay still scored [2/71](https://www.virustotal.com/gui/file/88f1068edd95e380ecd58533ec5da7c7559f28f28d22368a3282227b2f0c05ca). QuickJS runs inside Txiki. Extracted native DLLs scanned clean. Packaging may trigger scanner heuristics. Exact causes remain unproven.
+
+</details>
+
+[Read complete findings](/virustotal-v0.17.0).

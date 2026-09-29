@@ -1,0 +1,9 @@
+artifacts/
+__pycache__/
+cargo-metadata.json
+results-*.md
+results-*.json
+tauri/node_modules/
+tauri/src-tauri/target/
+tauri/src-tauri/gen/
+txiki-slim-ffi-*.zip

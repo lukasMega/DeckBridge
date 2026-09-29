@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 {
   echo "see docs: https://lukasmega.github.io/DeckBridge/"
+  echo "VirusTotal component comparison: https://lukasmega.github.io/DeckBridge/virustotal"
   echo
   echo "## VirusTotal scans"
   echo
