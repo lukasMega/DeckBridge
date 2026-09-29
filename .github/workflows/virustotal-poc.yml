@@ -34,7 +34,7 @@ jobs:
         if: runner.os == 'Windows'
       - uses: dtolnay/rust-toolchain@stable
       - uses: jdx/mise-action@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: '3.12'
       - name: Require VirusTotal key
