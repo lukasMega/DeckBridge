@@ -1,0 +1,64 @@
+name: Build VirusTotal isolation samples
+
+on:
+  workflow_dispatch:
+  workflow_call:
+    inputs:
+      scan:
+        type: boolean
+        required: true
+    secrets:
+      VIRUSTOTAL_API_KEY:
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    strategy:
+      max-parallel: 1 # One API key; respect VirusTotal request limits.
+      matrix:
+        include:
+          - os: windows-latest
+            name: windows-x64
+          - os: macos-15
+            name: macos-arm64
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        working-directory: .github/virustotal-poc
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ilammy/msvc-dev-cmd@v1
+        if: runner.os == 'Windows'
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: jdx/mise-action@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Require VirusTotal key
+        if: inputs.scan
+        shell: bash
+        env:
+          VT_API_KEY: ${{ secrets.VIRUSTOTAL_API_KEY }}
+        run: test -n "$VT_API_KEY"
+      - name: Build samples
+        run: python build.py --tauri
+      - uses: actions/upload-artifact@v7
+        if: ${{ !inputs.scan }}
+        with:
+          name: virustotal-poc-${{ matrix.name }}
+          path: .github/virustotal-poc/artifacts/*
+          if-no-files-found: error
+      - name: Scan samples
+        if: inputs.scan
+        env:
+          VT_API_KEY: ${{ secrets.VIRUSTOTAL_API_KEY }}
+        run: node scan.mjs
+      - uses: actions/upload-artifact@v7
+        if: inputs.scan
+        with:
+          name: virustotal-poc-results-${{ matrix.name }}
+          path: .github/virustotal-poc/results-${{ matrix.name }}.*
+          if-no-files-found: error

@@ -20,6 +20,8 @@ const sidebars: SidebarsConfig = {
     'features',
     'headless-linux',
     'troubleshooting',
+    'virustotal',
+    'virustotal-v0.17.0',
     'privacy',
   ],
 

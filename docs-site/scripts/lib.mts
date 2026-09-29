@@ -34,6 +34,8 @@ export const DOC_ROUTES: readonly string[] = [
   'features',
   'headless-linux',
   'troubleshooting',
+  'virustotal',
+  'virustotal-v0.17.0',
   'privacy',
   'device-specs',
   'adding-a-device',
