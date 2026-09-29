@@ -6,6 +6,14 @@ updates:
       interval: weekly
     ignore:
       - dependency-name: "glib"
+  # Tauri's WebKitGTK bindings still require glib 0.18.
+  # Remove this ignore after upstream supports glib 0.20.
+  - package-ecosystem: cargo
+    directory: /.github/virustotal-poc/tauri/src-tauri
+    schedule:
+      interval: weekly
+    ignore:
+      - dependency-name: "glib"
   # Monitor GitHub Actions versions
   - package-ecosystem: "github-actions"
     directory: "/"
