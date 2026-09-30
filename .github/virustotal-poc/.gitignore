@@ -7,3 +7,4 @@ tauri/node_modules/
 tauri/src-tauri/target/
 tauri/src-tauri/gen/
 txiki-slim-ffi-*.zip
+samples-*/
