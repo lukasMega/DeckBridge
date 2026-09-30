@@ -38,6 +38,8 @@ Dispatch `Build VirusTotal isolation samples`.
 Manual dispatch uploads binaries as Actions artifacts.
 Manual dispatch never sends files to VirusTotal.
 Release workflow runs both platforms before production builds.
+Both platforms build in parallel.
+One scan job then submits all samples through one rate limiter.
 Release scans upload samples to VirusTotal publicly.
 Missing `VIRUSTOTAL_API_KEY` blocks release.
 Release results populate `docs/virustotal.md`.
@@ -45,6 +47,33 @@ Docs deployment follows publication automatically.
 Workflow uses production `mise.toml` tool versions.
 Build checks production Tauri locks and CLI.
 Txiki release tag comes from production `mise.toml`.
+
+## Release timeline
+
+Estimated minutes from release start.
+Build steps use measured v0.17.0 times.
+Scan length is estimated.
+
+```mermaid
+gantt
+    title Release workflow (x axis: minutes from start)
+    dateFormat mm:ss
+    axisFormat %M
+    section Samples
+    Build windows-x64 samples     :w, 00:00, 06:00
+    Build macos-arm64 samples     :m, 00:00, 03:30
+    section Scan (one job, 16 s limiter)
+    Upload 15 samples             :u, 06:00, 10:00
+    Poll pending round-robin      :p, 10:00, 18:00
+    section Release
+    Production builds (parallel)  :b, 18:00, 26:00
+    Publish VirusTotal docs       :d, 26:00, 28:00
+    Publish GitHub Release        :r, 28:00, 31:00
+```
+
+The scan starts after the slower sample build finishes.
+The scan fails if any file exceeds its 8-minute deadline.
+v0.17.0 ran samples serially: 43 minutes of samples, 57 minutes total.
 
 Local macOS build supports matching baselines:
 
@@ -57,6 +86,8 @@ Windows workflow downloads x64 runtime automatically.
 Pass `--tauri` for executable plus DMG.
 Set `TAURI_CLI` for existing CLI installation.
 Optional: run `node scan.mjs` with `VT_API_KEY`.
+No arguments scans `artifacts/` for this host.
+Pass `windows-x64=<dir> macos-arm64=<dir>` for explicit platforms.
 This uploads every sample to VirusTotal publicly.
 Script writes platform-specific Markdown and JSON reports.
 

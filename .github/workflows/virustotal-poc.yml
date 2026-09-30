@@ -17,7 +17,7 @@ permissions:
 jobs:
   build:
     strategy:
-      max-parallel: 1 # One API key; respect VirusTotal request limits.
+      max-parallel: 2 # Builds only; the single scan job owns the API key.
       matrix:
         include:
           - os: windows-latest
@@ -46,19 +46,40 @@ jobs:
       - name: Build samples
         run: python build.py --tauri
       - uses: actions/upload-artifact@v7
-        if: ${{ !inputs.scan }}
         with:
           name: virustotal-poc-${{ matrix.name }}
           path: .github/virustotal-poc/artifacts/*
           if-no-files-found: error
+
+  # One process, one limiter: parallel scanners would share the key's quota.
+  scan:
+    needs: build
+    if: inputs.scan
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: .github/virustotal-poc
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
+        with:
+          name: virustotal-poc-windows-x64
+          path: .github/virustotal-poc/samples-windows-x64
+      - uses: actions/download-artifact@v8
+        with:
+          name: virustotal-poc-macos-arm64
+          path: .github/virustotal-poc/samples-macos-arm64
       - name: Scan samples
-        if: inputs.scan
         env:
           VT_API_KEY: ${{ secrets.VIRUSTOTAL_API_KEY }}
-        run: node scan.mjs
+        run: node scan.mjs windows-x64=samples-windows-x64 macos-arm64=samples-macos-arm64
       - uses: actions/upload-artifact@v7
-        if: inputs.scan
         with:
-          name: virustotal-poc-results-${{ matrix.name }}
-          path: .github/virustotal-poc/results-${{ matrix.name }}.*
+          name: virustotal-poc-results-windows-x64
+          path: .github/virustotal-poc/results-windows-x64.*
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v7
+        with:
+          name: virustotal-poc-results-macos-arm64
+          path: .github/virustotal-poc/results-macos-arm64.*
           if-no-files-found: error
