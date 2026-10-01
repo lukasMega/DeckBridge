@@ -132,6 +132,24 @@ await test('gunzip(b64ToBytes(...)) roundtrips', async () => {
   assert.equal(restored.length, lib.rawSize);
 });
 
+await test('gunzip rejects malformed input and leaves nothing unhandled', async () => {
+  const bad = new TextEncoder().encode('definitely not gzip data, just text');
+  const rejects = async (data: Uint8Array): Promise<void> => {
+    let err: unknown = null;
+    try {
+      await gunzip(data);
+    } catch (e) {
+      err = e;
+    }
+    assert.ok(err, 'gunzip rejected');
+  };
+  await rejects(bad);
+  const lib = await makeFixtureLib('libdeckbridge_native.dylib', 'x'.repeat(5000));
+  // Still usable afterwards
+  const ok = await gunzip(b64ToBytes(lib.gzB64));
+  assert.equal(ok.length, lib.rawSize);
+});
+
 // extractLibs
 
 console.log('\nextractLibs');

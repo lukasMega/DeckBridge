@@ -53,4 +53,15 @@ await testAsync('closeAll terminates parked workers and empties the pool', async
   assert.equal(p.acquire(MIRABOX_293_MODEL).fresh, true);
 });
 
+await testAsync('closeAll closes every parked worker even when one fails', async () => {
+  const { pool: p, made } = pool();
+  p.park(MIRABOX_293_MODEL.id, p.acquire(MIRABOX_293_MODEL).driver);
+  p.park(MIRABOX_293S_MODEL.id, p.acquire(MIRABOX_293S_MODEL).driver);
+  made[0]!.close = () => Promise.reject(new Error('no ack'));
+  let err: unknown;
+  await p.closeAll().catch((e: unknown) => (err = e));
+  assert.ok(err instanceof Error);
+  assert.equal(made[1]!.closed, true);
+});
+
 summaryExit();

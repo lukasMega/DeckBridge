@@ -73,14 +73,16 @@ export function resetHidDiscovery(): boolean {
   return guardedCall('mirabox_hid_reset', false, () => l.symbols.mirabox_hid_reset() === 1);
 }
 
-export function scanSupportedHidDevicesTimed(
-  pairs: readonly { vendorId: number; productId: number }[],
-): { devices: HidDeviceInfo[]; tookMs: number } {
-  const t0 = Date.now();
-  lib ??= loadDiscovery();
-  const l = lib;
-  if (!l) return { devices: [], tookMs: Date.now() - t0 };
-  const filterSpec = [
+// The scan worker is serial, and parseHidRows decodes to strings before returning, so
+// one scratch buffer is safe to reuse across scans.
+let scratch: Uint8Array | null = null;
+let filterFor: readonly { vendorId: number; productId: number }[] | null = null;
+let filterSpecCache = '';
+
+function filterSpecOf(pairs: readonly { vendorId: number; productId: number }[]): string {
+  // The registry-derived pair list is stable across scans, so rebuild only on a new one.
+  if (filterFor === pairs) return filterSpecCache;
+  filterSpecCache = [
     ...new Set(
       pairs.map(
         ({ vendorId, productId }) =>
@@ -88,8 +90,21 @@ export function scanSupportedHidDevicesTimed(
       ),
     ),
   ].join(',');
+  filterFor = pairs;
+  return filterSpecCache;
+}
+
+export function scanSupportedHidDevicesTimed(
+  pairs: readonly { vendorId: number; productId: number }[],
+): { devices: HidDeviceInfo[]; tookMs: number } {
+  const t0 = Date.now();
+  lib ??= loadDiscovery();
+  const l = lib;
+  if (!l) return { devices: [], tookMs: Date.now() - t0 };
+  const filterSpec = filterSpecOf(pairs);
   const devices = guardedCall<HidDeviceInfo[]>('mirabox_hid_list_supported', [], () => {
-    const buf = new Uint8Array(LIST_BUF_BYTES);
+    const buf = (scratch ??= new Uint8Array(LIST_BUF_BYTES));
+    buf[0] = 0; // a stale previous listing must never read as this one
     const count = l.symbols.mirabox_hid_list_supported(filterSpec, buf, buf.length);
     return count <= 0 ? [] : parseHidRows(buf);
   });

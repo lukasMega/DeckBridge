@@ -27,6 +27,11 @@ export interface StoreState {
   brightnessOverride: boolean;
   serverLogs: ServerLog[];
   commLogs: CommLog[];
+  /** Total entries ever appended per log: length stops moving once the cap trims. */
+  serverLogSeq: number;
+  commLogSeq: number;
+  /** Bumped when the logs are replaced wholesale (hydrate), not appended to. */
+  logEpoch: number;
   keyEvents: KeyEvent[];
   deviceTestMode: boolean;
   deviceModels: DeviceModel[];
@@ -72,6 +77,9 @@ let state: StoreState = {
   brightnessOverride: true,
   serverLogs: [],
   commLogs: [],
+  serverLogSeq: 0,
+  commLogSeq: 0,
+  logEpoch: 0,
   keyEvents: [],
   deviceTestMode: false,
   deviceModels: [],
@@ -108,20 +116,37 @@ export function patch(partial: Partial<StoreState>): void {
   notify();
 }
 
-export function addServerLog(entry: ServerLog): void {
-  const serverLogs =
-    state.serverLogs.length >= LOG_MAX
-      ? [...state.serverLogs.slice(1), entry]
-      : [...state.serverLogs, entry];
-  patch({ serverLogs });
+/** Append `entries` keeping the newest LOG_MAX: one copy for the whole batch. */
+function appendCapped<T>(list: readonly T[], entries: readonly T[]): T[] {
+  const kept = entries.length >= LOG_MAX ? entries.slice(-LOG_MAX) : entries;
+  return [...list.slice(Math.max(0, list.length + kept.length - LOG_MAX)), ...kept];
 }
 
-export function addCommLog(entry: CommLog): void {
-  const commLogs =
-    state.commLogs.length >= LOG_MAX
-      ? [...state.commLogs.slice(1), entry]
-      : [...state.commLogs, entry];
-  patch({ commLogs });
+export function addServerLogs(entries: readonly ServerLog[]): void {
+  if (entries.length === 0) return;
+  patch({
+    serverLogs: appendCapped(state.serverLogs, entries),
+    serverLogSeq: state.serverLogSeq + entries.length,
+  });
+}
+
+export function addCommLogs(entries: readonly CommLog[]): void {
+  if (entries.length === 0) return;
+  patch({
+    commLogs: appendCapped(state.commLogs, entries),
+    commLogSeq: state.commLogSeq + entries.length,
+  });
+}
+
+/** Replace both logs (full-state hydrate); the epoch tells panes to re-render. */
+export function replaceLogs(serverLogs: ServerLog[], commLogs: CommLog[]): void {
+  patch({
+    serverLogs,
+    commLogs,
+    serverLogSeq: state.serverLogSeq + serverLogs.length,
+    commLogSeq: state.commLogSeq + commLogs.length,
+    logEpoch: state.logEpoch + 1,
+  });
 }
 
 export function addKeyEvent(entry: KeyEvent): void {

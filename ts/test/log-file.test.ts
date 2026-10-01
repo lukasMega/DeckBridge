@@ -1,6 +1,8 @@
 import assert from 'tjs:assert';
 import {
   LogFileSink,
+  LOG_PENDING_MAX_BYTES,
+  type FileHandleLike,
   LOG_FILES_KEPT,
   LOG_ROTATE_BYTES,
   formatLine,
@@ -23,6 +25,16 @@ async function exists(path: string): Promise<boolean> {
   } catch {
     return false;
   }
+}
+
+async function assertRejects(fn: () => Promise<unknown>): Promise<void> {
+  let threw = false;
+  try {
+    await fn();
+  } catch {
+    threw = true;
+  }
+  assert.ok(threw, 'expected a rejection');
 }
 
 /** One line long enough that N of them cross LOG_ROTATE_BYTES quickly. */
@@ -153,6 +165,109 @@ await test('an unwritable path disables the sink instead of throwing', async () 
   // Subsequent writes are silently dropped, and still must not throw.
   sink.write('error', 'deckBr', 'also dropped', Date.now());
   await sink.flush();
+  // write()/flush() never throw, but the final close tells the coordinator.
+  await assertRejects(() => sink.close());
+});
+
+// failure handling
+
+console.log('\nwrite failures');
+
+function fakeHandle(over: Partial<FileHandleLike> = {}): { h: FileHandleLike; log: string[] } {
+  const log: string[] = [];
+  const h: FileHandleLike = {
+    write: (d) => {
+      log.push(new TextDecoder().decode(d));
+      return Promise.resolve();
+    },
+    close: () => {
+      log.push('<close>');
+      return Promise.resolve();
+    },
+    ...over,
+  };
+  return { h, log };
+}
+
+await test('short writes are continued until every byte lands', async () => {
+  const chunks: string[] = [];
+  const { h } = fakeHandle({
+    write: (d) => {
+      const n = Math.min(5, d.length);
+      chunks.push(new TextDecoder().decode(d.subarray(0, n)));
+      return Promise.resolve(n);
+    },
+  });
+  const sink = new LogFileSink(`${ROOT}/short`, () => Promise.resolve(h));
+  sink.write('error', 'c', 'hello world', 0);
+  await sink.flush();
+  assert.ok(chunks.length > 1);
+  assert.ok(chunks.join('').endsWith('[c] hello world\n'));
+  assert.equal(sink.isDisabled, false);
+  await sink.close();
+});
+
+await test('a zero-progress write disables the sink and close() reports it', async () => {
+  const { h, log } = fakeHandle({ write: () => Promise.resolve(0) });
+  const sink = new LogFileSink(`${ROOT}/zero`, () => Promise.resolve(h));
+  sink.write('error', 'c', 'x', 0);
+  await sink.flush();
+  assert.equal(sink.isDisabled, true);
+  assert.deepEqual(log, ['<close>']);
+  await assertRejects(() => sink.close());
+});
+
+await test('a failing write closes the handle exactly once', async () => {
+  const { h, log } = fakeHandle({ write: () => Promise.reject(new Error('ENOSPC')) });
+  const sink = new LogFileSink(`${ROOT}/enospc`, () => Promise.resolve(h));
+  sink.write('error', 'c', 'x', 0);
+  await sink.flush();
+  await assertRejects(() => sink.close());
+  assert.equal(log.filter((l) => l === '<close>').length, 1);
+});
+
+await test('a handle that will not close makes close() reject', async () => {
+  const { h } = fakeHandle({ close: () => Promise.reject(new Error('EIO')) });
+  const sink = new LogFileSink(`${ROOT}/closefail`, () => Promise.resolve(h));
+  sink.write('info', 'c', 'x', 0);
+  await assertRejects(() => sink.close());
+});
+
+await test('pending lines are capped; one marker reports the drops', async () => {
+  const { h, log } = fakeHandle();
+  const sink = new LogFileSink(`${ROOT}/cap`, () => Promise.resolve(h));
+  const n = Math.ceil(LOG_PENDING_MAX_BYTES / BIG.length) + 5;
+  for (let i = 0; i < n; i++) sink.write('info', 'c', `${i}${BIG}`, 0);
+  await sink.flush();
+  const text = log.join('');
+  assert.equal(text.split('lines dropped').length, 2);
+  assert.ok(!text.includes(`] 0${BIG}`), 'oldest dropped');
+  assert.ok(text.includes(`] ${n - 1}${BIG}`), 'newest kept');
+  await sink.close();
+});
+
+await test('flush requests behind a running drain coalesce into one', async () => {
+  let release: () => void = () => {};
+  let writes = 0;
+  let entered: () => void = () => {};
+  const firstWrite = new Promise<void>((r) => (entered = r));
+  const { h } = fakeHandle({
+    write: () => {
+      writes++;
+      if (writes > 1) return Promise.resolve();
+      entered();
+      return new Promise<void>((r) => (release = r));
+    },
+  });
+  const sink = new LogFileSink(`${ROOT}/coalesce`, () => Promise.resolve(h));
+  sink.write('error', 'c', 'a', 0); // starts drain 1, blocked in write
+  await firstWrite;
+  sink.write('error', 'c', 'b', 0);
+  sink.write('error', 'c', 'c', 0);
+  sink.write('error', 'c', 'd', 0);
+  release();
+  await sink.flush();
+  assert.equal(writes, 2, 'b, c, d went out in a single follow-up write');
   await sink.close();
 });
 
@@ -175,6 +290,18 @@ await test('returns only the last N lines', async () => {
 
 await test('missing log file tails to an empty string', async () => {
   assert.equal(await tailLogFile(10, `${ROOT}/no-such-dir`), '');
+});
+
+await test('reads only the trailing byte window, dropping the cut first line', async () => {
+  const dir = `${ROOT}/tail-big`;
+  const sink = new LogFileSink(dir);
+  for (let i = 0; i < 400; i++) sink.write('info', 'deckBr', `big-${i}`, Date.now());
+  await sink.flush();
+  await sink.close();
+  const tail = await tailLogFile(Number.MAX_SAFE_INTEGER, dir, 1024);
+  assert.ok(tail.length <= 1024, `window bounded, got ${tail.length}`);
+  assert.ok(tail.includes('big-399'), 'keeps the newest line');
+  assert.ok(!tail.includes('big-0 ') && !tail.includes('big-1 '), 'oldest lines never read');
 });
 
 // Cleanup + summary

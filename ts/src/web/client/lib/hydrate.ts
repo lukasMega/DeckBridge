@@ -19,9 +19,8 @@ export function hydrate(st: StateResponse): void {
     touchStripRepaintMs: st.touchStripRepaintMs,
     encoders: st.encoders,
     updateInfo: st.updateInfo,
-    // Absent in simple-only builds (state-response.ts).
-    serverLogs: st.logs ?? [],
-    commLogs: st.commLogs ?? [],
     keyEvents: st.keyEvents,
   });
+  // Absent in simple-only builds (state-response.ts).
+  store.replaceLogs(st.logs ?? [], st.commLogs ?? []);
 }

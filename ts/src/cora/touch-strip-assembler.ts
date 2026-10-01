@@ -7,9 +7,14 @@ import { isLevelEnabled } from '../shared/logger.js';
 import {
   assembleImageChunk,
   assemblePartialWindowChunk,
+  type AssemblyBudget,
   type ImageAssembly,
 } from './image-assembler.js';
 import type { LogFn } from './types.js';
+
+/** The strip is one surface and the window id byte is unverified on real captures, so
+ *  bound distinct ids by count instead of trusting a layout. */
+const MAX_WINDOW_ASSEMBLIES = 2;
 
 export interface TouchImageEvent {
   data: Buffer;
@@ -20,6 +25,9 @@ export class TouchStripAssembler {
   private windowPages = new Map<number, ImageAssembly>();
   private partialPages = new Map<string, ImageAssembly>();
 
+  constructor(private readonly budget?: AssemblyBudget) {}
+
+  /** Callers that share a budget clear it themselves. */
   reset(): void {
     this.windowPages = new Map();
     this.partialPages = new Map();
@@ -39,7 +47,7 @@ export class TouchStripAssembler {
       return null;
     }
     if (cmd === IMG_CMD_WINDOW_PARTIAL) {
-      const region = assemblePartialWindowChunk(this.partialPages, pkt);
+      const region = assemblePartialWindowChunk(this.partialPages, pkt, this.budget);
       if (!region) return null;
       if (tracing) {
         emitLog(
@@ -56,7 +64,7 @@ export class TouchStripAssembler {
         `child rx: window-strip chunk: ${(pkt.subarray(0, 8) as Buffer).toString('hex')}`,
       );
     }
-    const assembled = assembleImageChunk(this.windowPages, pkt);
+    const assembled = assembleImageChunk(this.windowPages, pkt, this.budget, MAX_WINDOW_ASSEMBLIES);
     if (!assembled) return null;
     if (tracing) emitLog('debug', `child rx: window strip assembled ${assembled.data.length} B`);
     return { data: assembled.data };

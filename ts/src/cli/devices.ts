@@ -3,7 +3,15 @@
  *  a deckbridge-native enumeration snapshot, never hid_open (macOS SIGBUS on a
  *  bad trial-open; see driver-manager.ts's defaultPresenceCheck for the same rule). */
 import { setupNativeLibs } from '../infra/native-libs.js';
-import { hidDevicePresent, hidSerialForPath, listHidPaths } from '../ffi/hidapi.js';
+import {
+  hidDevicePresent,
+  hidPathsMatching,
+  hidSerialForPath,
+  listHidPaths,
+  matchesHidQuery,
+  type HidDeviceInfo,
+} from '../ffi/hidapi.js';
+import { TSV_ABSENT } from '../ffi/native-load.js';
 import { DEVICE_MODELS, findModel } from '../devices/registry.js';
 import { platformName } from '../infra/os-utils.js';
 
@@ -22,26 +30,55 @@ export interface DeviceRow {
   supported: string;
 }
 
-/** Every HID interface matching a known model's VID+PID, via deckbridge-native
- *  enumeration. Mirabox models (usagePage+usage set) yield one row per physical
- *  path + its serial; Elgato models have no safe path-enumeration primitive (only
- *  hid_open by VID/PID, which this command must never do) so they yield presence
- *  only — path/serial come back null. */
-export function enumerateDevices(): EnumeratedDevice[] {
+interface DeviceLookup {
+  paths(vid: number, usagePage: number, usage: number, pid: number): string[];
+  serial(path: string): string | null;
+  present(vid: number, pid: number): boolean;
+}
+
+function collectEnumerated(lookup: DeviceLookup): EnumeratedDevice[] {
   const found: EnumeratedDevice[] = [];
   for (const model of DEVICE_MODELS) {
     const { usbVendorId: vendorId, usagePage, usage } = model;
     for (const productId of model.usbProductIds) {
       if (usagePage !== undefined && usage !== undefined) {
-        for (const path of listHidPaths(vendorId, usagePage, usage, productId)) {
-          found.push({ vendorId, productId, path, serial: hidSerialForPath(path) });
+        for (const path of lookup.paths(vendorId, usagePage, usage, productId)) {
+          found.push({ vendorId, productId, path, serial: lookup.serial(path) });
         }
-      } else if (hidDevicePresent(vendorId, productId)) {
+      } else if (lookup.present(vendorId, productId)) {
         found.push({ vendorId, productId, path: null, serial: null });
       }
     }
   }
   return found;
+}
+
+/** Every HID interface matching a known model's VID+PID, via deckbridge-native
+ *  enumeration. Mirabox models (usagePage+usage set) yield one row per physical
+ *  path + its serial; Elgato models have no safe path-enumeration primitive (only
+ *  hid_open by VID/PID, which this command must never do) so they yield presence
+ *  only — path/serial come back null. Sync FFI: CLI only, never a running server. */
+export function enumerateDevices(): EnumeratedDevice[] {
+  return collectEnumerated({
+    paths: listHidPaths,
+    serial: hidSerialForPath,
+    present: hidDevicePresent,
+  });
+}
+
+/** Pure twin of `enumerateDevices` over an already-fetched inventory (the WebUI gets
+ *  one from the scan worker), so the server never calls the sync enumerators. */
+export function deviceRowsFromInventory(devices: readonly HidDeviceInfo[]): DeviceRow[] {
+  return collectEnumerated({
+    paths: (vendorId, usagePage, usage, productId) =>
+      hidPathsMatching(devices, { vendorId, productIds: [productId], usagePage, usage }),
+    serial: (path) => {
+      const hit = devices.find((d) => d.path === path);
+      return hit?.serial && hit.serial !== TSV_ABSENT ? hit.serial : null;
+    },
+    present: (vendorId, productId) =>
+      devices.some((d) => matchesHidQuery(d, { vendorId, productIds: [productId] })),
+  }).map(toDeviceRow);
 }
 
 function hex4(n: number): string {

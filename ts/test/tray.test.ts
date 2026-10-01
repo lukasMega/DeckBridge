@@ -7,6 +7,7 @@ import {
   resolveTrayBin,
   serializeTrayState,
 } from '../src/infra/tray.js';
+import { platformName } from '../src/infra/os-utils.js';
 import { test, testAsync as asyncTest, summary } from './helpers/harness.js';
 
 // parentDir
@@ -164,37 +165,101 @@ test('dismissed update is not flagged', () => {
 
 console.log('\nstartTray().close()');
 
-await asyncTest(
-  'close escalates to SIGKILL for a sidecar ignoring SIGTERM and observes its exit',
-  async () => {
-    const script = `${tjs.tmpDir}/fake-tray-${tjs.pid}.sh`;
-    const pidFile = `${script}.pid`;
+// The fixtures below are POSIX shell scripts.
+const posix = platformName() !== 'Windows';
+
+if (posix) {
+  await asyncTest('push coalesces to the newest snapshot while a write is in flight', async () => {
+    const received: string[] = [];
+    const server = await tjs.listen('tcp', '127.0.0.1', 0);
+    const info = await server.opened;
+    const port = info.localPort;
+    const accept = (async (): Promise<void> => {
+      const r = info.readable.getReader();
+      const { value: conn } = await r.read();
+      r.releaseLock();
+      const cinfo = await conn!.opened;
+      const rd = cinfo.readable.getReader();
+      let acc = '';
+      for (;;) {
+        const { value, done } = await rd.read();
+        if (done) break;
+        acc += new TextDecoder().decode(value);
+        const lines = acc.split('\n');
+        acc = lines.pop() ?? '';
+        received.push(...lines);
+      }
+    })();
+    const script = `${tjs.tmpDir}/fake-tray-co-${tjs.pid}.sh`;
     await tjs.writeFile(
       script,
-      `#!/bin/sh\necho $$ > ${pidFile}\ntrap '' TERM\nwhile :; do sleep 0.05; done\n`,
+      `#!/bin/sh\necho '{"event":"ready","port":${port}}'\nwhile :; do sleep 0.05; done\n`,
     );
     await tjs.spawn(['chmod', '+x', script]).wait();
+    let tray: ReturnType<typeof startTray> = null;
     try {
-      const tray = startTray(script, { onQuit: () => {}, onRestartElgatoApp: () => {} });
+      tray = startTray(script, { onQuit: () => {}, onRestartElgatoApp: () => {} });
       assert.ok(tray, 'spawned');
-      let pid = 0;
-      for (let i = 0; i < 40 && !pid; i++) {
-        await new Promise((r) => setTimeout(r, 25));
-        const raw = await tjs.readFile(pidFile).catch(() => new Uint8Array());
-        pid = Number(new TextDecoder().decode(raw).trim());
-      }
-      assert.ok(pid > 0, 'sidecar started');
-      const t0 = Date.now();
-      await tray!.close();
-      assert.ok(Date.now() - t0 < 1500, 'bounded');
-      const probe = await tjs.spawn(['kill', '-0', String(pid)], { stderr: 'ignore' }).wait();
-      assert.notEqual(probe.exit_status, 0, 'sidecar gone');
+      const mk = (n: number) => ({
+        ...buildTrayState({
+          deviceName: 'D',
+          driverConnected: true,
+          elgatoConnected: false,
+          reconnectAttempts: n,
+          update: { enabled: false, updateAvailable: false } as never,
+        }),
+      });
+      // Let the tray connect, then burst while the first write is in flight.
+      await new Promise((r) => setTimeout(r, 400));
+      tray!.push(mk(0));
+      for (let i = 1; i <= 50; i++) tray!.push(mk(i));
+      await new Promise((r) => setTimeout(r, 300));
+      assert.ok(received.length >= 1 && received.length <= 2, `writes: ${received.length}`);
+      assert.equal(JSON.parse(received[received.length - 1]!).reconnectAttempts, 50);
     } finally {
+      await tray?.close();
+      server.close();
+      await accept.catch(() => undefined);
       await tjs.remove(script).catch(() => undefined);
-      await tjs.remove(pidFile).catch(() => undefined);
     }
-  },
-);
+  });
+
+  await asyncTest(
+    'close escalates to SIGKILL for a sidecar ignoring SIGTERM and observes its exit',
+    async () => {
+      const script = `${tjs.tmpDir}/fake-tray-${tjs.pid}.sh`;
+      const pidFile = `${script}.pid`;
+      await tjs.writeFile(
+        script,
+        `#!/bin/sh\necho $$ > ${pidFile}\ntrap '' TERM\nwhile :; do sleep 0.05; done\n`,
+      );
+      await tjs.spawn(['chmod', '+x', script]).wait();
+      // Outside the try so a failing startup assertion still closes the sidecar.
+      let tray: ReturnType<typeof startTray> = null;
+      try {
+        tray = startTray(script, { onQuit: () => {}, onRestartElgatoApp: () => {} });
+        assert.ok(tray, 'spawned');
+        let pid = 0;
+        for (let i = 0; i < 40 && !pid; i++) {
+          await new Promise((r) => setTimeout(r, 25));
+          const raw = await tjs.readFile(pidFile).catch(() => new Uint8Array());
+          pid = Number(new TextDecoder().decode(raw).trim());
+        }
+        assert.ok(pid > 0, 'sidecar started');
+        const t0 = Date.now();
+        await tray!.close();
+        tray = null;
+        assert.ok(Date.now() - t0 < 1500, 'bounded');
+        const probe = await tjs.spawn(['kill', '-0', String(pid)], { stderr: 'ignore' }).wait();
+        assert.notEqual(probe.exit_status, 0, 'sidecar gone');
+      } finally {
+        await tray?.close();
+        await tjs.remove(script).catch(() => undefined);
+        await tjs.remove(pidFile).catch(() => undefined);
+      }
+    },
+  );
+}
 
 // Summary
 

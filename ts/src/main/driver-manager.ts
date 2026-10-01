@@ -25,11 +25,16 @@ import {
   type HidDiscovery,
 } from './driver-manager-discovery.js';
 import { WorkerPool } from './worker-pool.js';
+import { begin, settleAll } from './settle.js';
 import {
   getInitialDriverMode,
   type DriverManagerDeps,
   type DriverMode,
 } from './driver-manager-deps.js';
+
+/** Mode switch proceeds past a failed teardown; shutdown is where failures are fatal. */
+const logCleanupFailure = (e: unknown): void =>
+  log('warn', 'driverMgr', `cleanup failed: ${e instanceof Error ? e.message : String(e)}`);
 
 /** Emits one `'changed'` event whenever dock statuses, the tray state or the probe
  *  state may have changed; app.ts refreshes the WebUI dock list and the tray from it. */
@@ -128,8 +133,8 @@ export class DriverManager extends EventEmitter {
         this.pacer.started();
         const prev = this.primary.detach();
         if (prev) await closeDriver(prev);
-        await this.pool.closeAll();
-        await this.stopScannedDocks();
+        await this.pool.closeAll().catch(logCleanupFailure);
+        await this.stopScannedDocks().catch(logCleanupFailure);
         this.mode = newMode;
         if (newMode === 'mock') {
           await this.connectMock();
@@ -160,6 +165,11 @@ export class DriverManager extends EventEmitter {
       stripWrite: (...args) => webui.imageChannel.notifyDockStripWrite(index, ...args),
       elgatoAttached: () => this.deps.onElgatoAttached?.(index),
     };
+  }
+
+  /** Full HID inventory via the scan worker, for the WebUI diagnostics report. */
+  hidInventory(): ReturnType<HidDiscovery['inventory']> {
+    return this.discovery.inventory();
   }
 
   getCurrentDriver(): DockDriver | null {
@@ -279,6 +289,10 @@ export class DriverManager extends EventEmitter {
         return driver;
       } catch (e) {
         log('debug', 'hid', `${model.id} open failed: ${(e as Error).message}`);
+        if (this.shutdownTask || this.deps.getShuttingDown()) {
+          await closeDriver(driver);
+          continue;
+        }
         // Keep worker alive, listeners intact, for next retry.
         this.pool.park(model.id, driver);
       }
@@ -421,10 +435,19 @@ export class DriverManager extends EventEmitter {
     this.pacer.cancel();
     // Settles a probe/scan blocked on enumeration so its owner can see the shutdown.
     this.discovery.dispose?.();
-    await this.scanner.stopScannedDocks();
-    await this.probeTask?.catch(() => undefined);
-    await this.primary.stop();
-    await this.pool.closeAll();
+    // Every owner starts closing now; a stalled secondary open (awaited inside the
+    // scanner stop) or probe must not hold the primary dock or the parked workers.
+    await settleAll('driver manager shutdown', [
+      begin(() => this.primary.stop()),
+      begin(() => this.scanner.stopScannedDocks()),
+      begin(() => this.pool.closeAll()),
+      begin(async () => {
+        await this.probeTask?.catch(() => undefined);
+        // A probe that settled late closes its own worker (see probeAndOpen); this
+        // sweeps anything parked in the meantime.
+        await this.pool.closeAll();
+      }),
+    ]);
   }
 
   /** Status of every dock with a driver attached, sorted by index. */

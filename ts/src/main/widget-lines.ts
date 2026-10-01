@@ -21,18 +21,24 @@ export interface WidgetContext {
   pluginStatus?: PluginStatus;
 }
 
+const MAX_TEXT_LINES = 4;
 const pad2 = (n: number): string => String(n).padStart(2, '0');
 
 /** Lay a free-text blob (custom text / command stdout) onto ≤4 centered lines:
  *  blank → null (clear); a single short line uses the big font. */
 function textLines(s: string): WidgetLine[] | null {
-  const lines = s
-    .split('\n')
-    .map((l) => l.trim())
-    .filter((l) => l.length > 0);
+  // Walk lazily: command stdout can be large and this runs every tick.
+  const lines: string[] = [];
+  for (let start = 0; start <= s.length && lines.length < MAX_TEXT_LINES;) {
+    const nl = s.indexOf('\n', start);
+    const end = nl === -1 ? s.length : nl;
+    const line = s.slice(start, end).trim();
+    if (line.length > 0) lines.push(line);
+    start = end + 1;
+  }
   if (lines.length === 0) return null;
   const big = lines.length === 1 && lines[0]!.length <= 5;
-  return lines.slice(0, 4).map((text) => ({ text, big }));
+  return lines.map((text) => ({ text, big }));
 }
 
 /** The lines a widget shows right now, or null to clear the key ('none'). */

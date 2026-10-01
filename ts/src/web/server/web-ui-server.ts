@@ -2,7 +2,7 @@ import { EventEmitter } from 'node:events';
 import { Broadcaster } from './broadcaster.js';
 import { matchRoute } from './router.js';
 import { routes } from './routes.js';
-import { forbidden, notFound } from './http.js';
+import { forbidden, json, notFound } from './http.js';
 import { ExtraKeysController } from './extra-keys-controller.js';
 import { ImageChannel } from './image-channel.js';
 import type { ImageFormat } from './image-channel.js';
@@ -33,7 +33,7 @@ import { buildStateResponse, selectedDeviceIdentity } from './state-response.js'
 import { LoggingController } from './logging-controller.js';
 import { DevicePrefsController } from './device-prefs-controller.js';
 import { EncodersController } from './encoders-controller.js';
-import { liveDiagnosticsInputs } from './diagnostics-sources.js';
+import { liveDiagnosticsInputs, type HidInventoryFn } from './diagnostics-sources.js';
 import { UpdateController } from './update-controller.js';
 import { ElgatoAppController } from './elgato-app-controller.js';
 
@@ -45,8 +45,11 @@ const mockInputHelpers = __MOCK_BUILD__ ? await import('./mock-input.js') : null
 /** HTTP/WS server of the WebUI. Routes reach the per-concern controllers directly
  *  (RouteContext); this class keeps the cross-controller state and the notify*
  *  surface the core pushes into. */
+const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
+
 export class WebUIServer extends EventEmitter implements WebUIController, WebUIControllers {
   private server: TjsServeServer | null = null;
+  private shuttingDown = false;
   private readonly bus = new Broadcaster();
   private readonly activity = new ActivityBuffers(this.bus);
   readonly settings: PersistedSettings;
@@ -71,6 +74,14 @@ export class WebUIServer extends EventEmitter implements WebUIController, WebUIC
     this.status.setLocalIp(ip);
   }
   private _port: number;
+  /** Injected by app.ts once discovery exists; reports show the error until then. */
+  private hidInventory: HidInventoryFn = () =>
+    Promise.reject(new Error('HID inventory not available'));
+
+  setHidInventory(fn: HidInventoryFn): void {
+    this.hidInventory = fn;
+  }
+
   get port(): number {
     return this._port;
   }
@@ -132,6 +143,7 @@ export class WebUIServer extends EventEmitter implements WebUIController, WebUIC
         state: this.fullState(),
         activity: this.activity,
         settingsJson: this.settings.json(),
+        inventory: () => this.hidInventory(),
       }),
     );
     this.updates = new UpdateController(host, __VERSION__);
@@ -196,6 +208,11 @@ export class WebUIServer extends EventEmitter implements WebUIController, WebUIC
       this.stats.uptimeMs = Date.now() - this.startTime;
       this.bus.broadcast('stats', this.stats);
     });
+  }
+
+  /** Synchronous, from shutdown's quiesce: later mutations would race the final settings write. */
+  beginShutdown(): void {
+    this.shuttingDown = true;
   }
 
   async stop(): Promise<void> {
@@ -321,6 +338,10 @@ export class WebUIServer extends EventEmitter implements WebUIController, WebUIC
     if (req.headers.get('Upgrade') === 'websocket' && url.pathname === '/api/ws') {
       extra.server.upgrade(req);
       return;
+    }
+    // The WS is broadcast-only, so HTTP is the only mutation path.
+    if (this.shuttingDown && url.pathname.startsWith('/api/') && !SAFE_METHODS.has(req.method)) {
+      return json({ error: 'shutting down' }, 503);
     }
     const matched = matchRoute(routes, req.method, url.pathname);
     if (!matched) return notFound();

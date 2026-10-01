@@ -180,4 +180,15 @@ await runTest('stop() cancels the pairing watchdog and stops both servers', asyn
   assert.equal(childServer.stopCalls, 1);
 });
 
+await runTest('stop() attempts both servers and rejects when one fails', async () => {
+  const server = new FakeCoraServer(0);
+  const childServer = new FakeCoraServer(0);
+  server.stop = () => Promise.reject(new Error('primary stuck'));
+  const dock = makeDock(server, childServer);
+  let err: unknown;
+  await dock.stop().catch((e: unknown) => (err = e));
+  assert.ok(err instanceof Error && err.message.includes('primary stuck'));
+  assert.equal(childServer.stopCalls, 1);
+});
+
 summary();

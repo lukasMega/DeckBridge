@@ -284,6 +284,7 @@ function fakeUsb() {
     present: () => true,
     paths: (model) => [`fake:${model.id}`],
     serial: () => null,
+    inventory: () => Promise.resolve({ devices: [], tookMs: 0 }),
     requestReset: () => {},
   };
   const factory = {
@@ -1694,6 +1695,52 @@ await test('S4. shutdown cancels the pending reconnect timer', async () => {
   pacer.schedule(() => probes++);
   await new Promise((r) => setTimeout(r, 30));
   assert.equal(probes, 0);
+});
+
+await test('S5. a stalled secondary open does not hold the primary dock open (R4)', async () => {
+  const { driverManager, present, usb, driversByPath } = setupCoord();
+  present.add(DEFAULT_MODEL.id);
+  present.add(MIRABOX_293_MODEL.id);
+  await driverManager.tryRealConnect();
+  const primary = driverManager.getCurrentDriver() as unknown as CoordFakeDriver;
+  const pending = Promise.withResolvers<void>();
+  let extra: CoordFakeDriver | null = null;
+  usb.factory.make = (m) => {
+    const d = new CoordFakeDriver(m);
+    d.open = (hidPath: string) => {
+      d.hidPath = hidPath;
+      driversByPath.set(hidPath, d);
+      return pending.promise;
+    };
+    extra = d;
+    return d as unknown as WorkerHidDriver;
+  };
+  const scan = driverManager.__scanOnce();
+  await flush();
+  assert.ok(extra, 'precondition: the extra open is in flight');
+  let done = false;
+  const stopping = driverManager.shutdown().then(() => (done = true));
+  await flush();
+  assert.equal(primary.closeCalls, 1, 'primary closed while the secondary open is pending');
+  assert.equal(done, false, 'shutdown still waits for the pending creation');
+  pending.resolve();
+  await scan;
+  await stopping;
+  assert.equal(extra!.closeCalls, 1, 'late driver closed');
+});
+
+await test('S6. a primary driver that never acks close fails shutdown; parked workers still close', async () => {
+  const { driverManager, present, usb } = setupCoord();
+  present.add(DEFAULT_MODEL.id);
+  await driverManager.tryRealConnect();
+  const primary = driverManager.getCurrentDriver() as unknown as CoordFakeDriver;
+  primary.close = () => Promise.reject(new Error('no close ack'));
+  const parked = new CoordFakeDriver(MIRABOX_293_MODEL);
+  usb.pool.park(MIRABOX_293_MODEL.id, parked as unknown as WorkerHidDriver);
+  let err: unknown;
+  await driverManager.shutdown().catch((e: unknown) => (err = e));
+  assert.ok(err instanceof Error && err.message.includes('no close ack'));
+  assert.equal(parked.closeCalls, 1, 'parked worker still closed');
 });
 
 // Summary

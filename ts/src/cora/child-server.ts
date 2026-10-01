@@ -45,7 +45,7 @@ import {
   traceGen1ImageChunk,
   traceImageChunk,
 } from './child-payload.js';
-import { assembleGen1ImageChunk, assembleImageChunk } from './image-assembler.js';
+import { AssemblyBudget, assembleGen1ImageChunk, assembleImageChunk } from './image-assembler.js';
 import { ChildReconnector } from './child-reconnector.js';
 import { TouchStripAssembler } from './touch-strip-assembler.js';
 import {
@@ -57,7 +57,8 @@ import {
 export class ElgatoChildServer extends CoraServerBase {
   private imagePages: Map<number, ImageAssembly> = new Map();
   private gen1ImagePages: Map<number, ImageAssembly> = new Map();
-  private readonly touchStrip = new TouchStripAssembler();
+  private readonly assemblyBudget = new AssemblyBudget();
+  private readonly touchStrip = new TouchStripAssembler(this.assemblyBudget);
   private warnedOobKeys = new Set<number>();
   private childGeometry: ChildGeometry;
   private keyStates: Uint8Array;
@@ -107,6 +108,7 @@ export class ElgatoChildServer extends CoraServerBase {
     const duration = this.sessionStartTs ? `${Date.now() - this.sessionStartTs}ms` : 'unknown';
     this.logInfo(`child session ended (duration=${duration})`);
     this.sessionStartTs = 0;
+    this.resetAssemblies();
     this.sessionId++;
     this.reconnector.onDisconnected(this.sessionId);
   };
@@ -316,6 +318,13 @@ export class ElgatoChildServer extends CoraServerBase {
     }
   }
 
+  private resetAssemblies(): void {
+    this.imagePages = new Map();
+    this.gen1ImagePages = new Map();
+    this.touchStrip.reset();
+    this.assemblyBudget.clear();
+  }
+
   private msSinceConnect(): number {
     return this.sessionStartTs ? Date.now() - this.sessionStartTs : 0;
   }
@@ -324,7 +333,7 @@ export class ElgatoChildServer extends CoraServerBase {
     const keyCount = this.childGeometry.keyCount;
     const key = pkt[IMAGE_CHUNK_KEY_OFFSET]!;
     if (!isValidChildImageKey(key, keyCount, this.warnedOobKeys, this.emitLogFn)) return;
-    const event = assembleImageChunk(this.imagePages, pkt);
+    const event = assembleImageChunk(this.imagePages, pkt, this.assemblyBudget);
     if (event) this.emit('image', event);
   }
 
@@ -332,7 +341,7 @@ export class ElgatoChildServer extends CoraServerBase {
     const keyCount = this.childGeometry.keyCount;
     const key = pkt[GEN1_IMAGE_KEY_OFFSET]! - 1;
     if (!isValidChildImageKey(key, keyCount, this.warnedOobKeys, this.emitLogFn)) return;
-    const event = assembleGen1ImageChunk(this.gen1ImagePages, pkt);
+    const event = assembleGen1ImageChunk(this.gen1ImagePages, pkt, this.assemblyBudget);
     if (event) this.emit('image', event);
   }
 
@@ -344,9 +353,7 @@ export class ElgatoChildServer extends CoraServerBase {
 
     this.sessionStartTs = Date.now();
     this.keyStates = new Uint8Array(this.childGeometry.keyCount);
-    this.imagePages = new Map();
-    this.gen1ImagePages = new Map();
-    this.touchStrip.reset();
+    this.resetAssemblies();
     this.encoderPressMask = 0;
     this.warnedOobKeys.clear();
   }

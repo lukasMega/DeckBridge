@@ -60,8 +60,11 @@ export class WorkerHidDriver extends EventEmitter implements DockDriver {
     timer: ReturnType<typeof setTimeout>;
   } | null = null;
   private readonly queue = new HidWorkQueue((msg) => this.worker?.postMessage(msg));
-  /** Set by an overload until the Dock's next CORA child session (resumeImages). */
-  private imagesSuspended = false;
+  /** CORA frames stay refused after an overload until the Dock's next CORA child
+   *  session (resumeImages): stale ones would paint over a resynced app. */
+  private coraSuspended = false;
+  /** Local producers (splash, widgets) pause until the work queue drains completely. */
+  private localSuspended = false;
   /** After a resume, strip patches wait for a full frame to draw on. */
   private needStripBase = false;
 
@@ -78,9 +81,7 @@ export class WorkerHidDriver extends EventEmitter implements DockDriver {
     }
     if (this.closing) return Promise.reject(new Error('driver is closing'));
     this.touchStripOptions = DEFAULT_TOUCH_STRIP_OPTIONS;
-    this.queue.reset();
-    this.imagesSuspended = false;
-    this.needStripBase = false;
+    this.resetGeneration();
     if (!this.worker) {
       const { worker: w, url } = spawnWorker(workerSource);
       this.objectUrl = url;
@@ -137,10 +138,13 @@ export class WorkerHidDriver extends EventEmitter implements DockDriver {
    *  writes the native bytes to the device. Offloads the synchronous FFI transform
    *  and hid_write burst that would otherwise stall the main thread on connect. */
   sendSplashImage(keyIndex: number, bytes: Uint8Array, spec: DeviceImageSpec): void {
-    this.submit({ type: 'imageWithSpec', keyIndex, bytes: new Uint8Array(bytes), spec }, 'image', {
+    // No pre-copy: postMessage clones synchronously (see renderCoraImage).
+    this.submit({ type: 'imageWithSpec', keyIndex, bytes, spec }, 'image', {
       bytes: bytes.byteLength,
       // A newer icon for the same key and spec replaces a waiting one.
       coalesceKey: `spec:${keyIndex}:${JSON.stringify(spec)}`,
+      snapshot: () => ({ type: 'imageWithSpec', keyIndex, bytes: bytes.slice(), spec }),
+      local: true,
     });
   }
 
@@ -151,8 +155,9 @@ export class WorkerHidDriver extends EventEmitter implements DockDriver {
       if (region) return; // a patch needs the full frame it lands on
       this.needStripBase = false;
     }
-    this.submit({ type: 'touchImage', bytes: new Uint8Array(bytes), region }, 'touch', {
+    this.submit({ type: 'touchImage', bytes, region }, 'touch', {
       bytes: bytes.byteLength,
+      snapshot: () => ({ type: 'touchImage', bytes: bytes.slice(), region }),
     });
   }
 
@@ -205,7 +210,7 @@ export class WorkerHidDriver extends EventEmitter implements DockDriver {
     if (!w) return Promise.resolve();
     this.settleOpen(null, new Error('driver closed'));
     // Unposted frames and settings are moot once the device closes.
-    this.queue.reset();
+    this.resetGeneration();
     const done = Promise.withResolvers<void>();
     const closing = {
       worker: w,
@@ -234,10 +239,10 @@ export class WorkerHidDriver extends EventEmitter implements DockDriver {
   /** Workers whose close timed out: terminated once they report 'closed'. */
   private readonly orphans = new Set<Worker>();
 
-  /** Lift an overload's suspension: the Dock's CORA child has a fresh session. */
+  /** Lift an overload's CORA suspension: the Dock's CORA child has a fresh session. */
   resumeImages(): void {
-    if (!this.imagesSuspended) return;
-    this.imagesSuspended = false;
+    if (!this.coraSuspended) return;
+    this.coraSuspended = false;
     this.needStripBase = true;
   }
 
@@ -313,7 +318,7 @@ export class WorkerHidDriver extends EventEmitter implements DockDriver {
   private onLifecycleMessage(msg: WorkerToMain): boolean {
     switch (msg.type) {
       case 'workDone':
-        this.queue.complete(msg.ids);
+        if (this.queue.complete(msg.ids) > 0) this.resumeLocalIfDrained();
         return true;
       case 'disconnect':
         this.emit('disconnect');
@@ -364,27 +369,61 @@ export class WorkerHidDriver extends EventEmitter implements DockDriver {
   // Deliberately NO transfer list: txiki accepts one but only DETACHES the buffers,
   // cloning the content regardless (mod_channel.c). Measured 4 KB..1 MB, transferring
   // is equal-or-slower. Re-measure before adding one.
-  private submit(msg: MainToWorker, kind: WorkKind, opts: Omit<WorkOptions, 'kind'>): void {
+  /** `local`: a DeckBridge-owned image (splash, widget) — paused by its own suspension,
+   *  and its overload doesn't drop the CORA session. */
+  private submit(
+    msg: MainToWorker,
+    kind: WorkKind,
+    opts: Omit<WorkOptions, 'kind'> & { local?: boolean },
+  ): void {
     if (!this.worker || this.closing) return;
-    if (kind !== 'control' && this.imagesSuspended) return;
-    const admission = this.queue.submit(msg, { ...opts, kind });
-    if (admission === 'rejected') this.onOverload();
+    const { local = false, ...workOpts } = opts;
+    if (kind !== 'control') {
+      if (local ? this.localSuspended : this.coraSuspended) return;
+      // Could never be admitted: drop it rather than suspend everything for nothing.
+      if (workOpts.bytes > this.queue.maxPayloadBytes) {
+        log('warn', this.model.id, `dropping ${msg.type}: ${workOpts.bytes} bytes exceeds budget`);
+        return;
+      }
+    }
+    const admission = this.queue.submit(msg, { ...workOpts, kind });
+    if (admission === 'rejected') this.onOverload(local);
     else if (admission === 'failed') log('warn', this.model.id, `posting ${msg.type} failed`);
   }
 
-  /** Out of budget: stop taking images until the producer restarts (one event per
-   *  suspension, so a flood can't flood the log too). */
-  private onOverload(): void {
-    if (this.imagesSuspended) return;
-    this.imagesSuspended = true;
-    const q = this.queue;
-    log(
-      'warn',
-      this.model.id,
-      `USB worker backlog full (${q.postedCount} posted, ${q.pendingCount} waiting, ` +
-        `${q.pendingBytes} bytes) — dropping the CORA session to resync`,
-    );
-    this.emit('overload');
+  private resetGeneration(): void {
+    this.queue.reset();
+    this.coraSuspended = false;
+    this.localSuspended = false;
+    this.needStripBase = false;
+  }
+
+  /** Out of budget: stop taking images until the backlog clears. One warning per
+   *  suspension, so a flood can't flood the log too. A CORA (or control) rejection also
+   *  asks the Dock to drop the CORA session; a local one only pauses local producers. */
+  private onOverload(local: boolean): void {
+    const wasSuspended = this.localSuspended;
+    const dropCora = !local && !this.coraSuspended;
+    this.localSuspended = true;
+    if (!local) this.coraSuspended = true;
+    if (!wasSuspended) {
+      const q = this.queue;
+      log(
+        'warn',
+        this.model.id,
+        `USB worker backlog full (${q.postedCount} posted, ${q.pendingCount} waiting, ` +
+          `${q.pendingBytes} bytes) — ${local ? 'pausing local images' : 'dropping the CORA session to resync'}`,
+      );
+    }
+    if (dropCora) this.emit('overload');
+  }
+
+  /** The worker has finished everything admitted: local producers may repaint. One
+   *  'imagesDrained' per suspension; a close/reopen cleared the flag, so it never fires then. */
+  private resumeLocalIfDrained(): void {
+    if (!this.localSuspended || !this.queue.isEmpty || !this.worker || this.closing) return;
+    this.localSuspended = false;
+    this.emit('imagesDrained');
   }
 
   /** Null the refs synchronously, then defer the native terminate() — see
@@ -400,7 +439,7 @@ export class WorkerHidDriver extends EventEmitter implements DockDriver {
   private detachWorker(): Worker | null {
     const w = this.worker;
     this.worker = null;
-    this.queue.reset();
+    this.resetGeneration();
     if (this.objectUrl) revokeBlobUrl(this.objectUrl);
     this.objectUrl = null;
     return w;

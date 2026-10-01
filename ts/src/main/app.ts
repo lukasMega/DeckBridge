@@ -26,6 +26,7 @@ import { PersistedSettings } from '../infra/settings.js';
 import { createDailyPing, sendBeacon } from '../infra/daily-ping.js';
 import { STARTUP_DELAY_MS, CHECK_INTERVAL_MS } from '../infra/update-check.js';
 import { stopCommands } from '../infra/command-runner.js';
+import { stopSpawns } from '../infra/owned-spawn.js';
 import { shutdownPluginHost } from '../plugin/plugin-host.js';
 import { createShutdown } from './shutdown.js';
 import {
@@ -125,8 +126,7 @@ globalThis.addEventListener('unhandledrejection', (ev: PromiseRejectionEvent) =>
   shutdown().catch(() => tjs.exit(1));
 });
 
-// Deduped: DriverManager's 'changed' fires on every dock status change (brightness
-// drags included), and the tray only cares about a few fields.
+// Deduped: 'changed' fires on every dock status change; the tray cares about few fields.
 let lastTrayState = '';
 function pushTrayState(): void {
   if (!tray) return;
@@ -173,6 +173,8 @@ const driverManager = new DriverManager({
   onElgatoAttached: (dockIndex) => elgatoAutoRestart.onElgatoAttached(dockIndex),
 });
 
+webui.setHidInventory(() => driverManager.hidInventory());
+
 // One fan-out for every dock/probe state change: the WebUI dock list (deduped
 // there) and the tray.
 driverManager.on('changed', () => {
@@ -190,6 +192,7 @@ const elgatoAutoRestart = new ElgatoAutoRestart(
 const shutdown = createShutdown({
   quiesce: () => {
     shuttingDown = true;
+    webui.beginShutdown();
     for (const [sig, handler] of signalHandlers) {
       try {
         tjs.removeSignalListener(sig, handler);
@@ -202,7 +205,7 @@ const shutdown = createShutdown({
     driverManager.stopScan();
   },
   owners: [
-    ['commands', stopCommands],
+    ['commands', () => Promise.all([stopCommands(), stopSpawns()])],
     ['plugins', shutdownPluginHost],
     ['docks', () => driverManager.shutdown()],
     ['webui', () => webui.stop()],
@@ -220,8 +223,7 @@ function onSignal(sig?: string): void {
   shutdown().catch(() => tjs.exit(1));
 }
 
-// Kept as [signal, handler] pairs so shutdown() can unregister the exact same
-// function references it registered.
+// [signal, handler] pairs: shutdown() unregisters the exact registered references.
 const signalHandlers = (['SIGINT', 'SIGTERM', 'SIGHUP'] as const).map(
   (sig) => [sig, () => onSignal(sig)] as const,
 );

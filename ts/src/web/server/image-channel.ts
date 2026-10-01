@@ -16,6 +16,9 @@ type StripMirror = { full?: { wireId: number; data: Buffer }; slots: Map<number,
 
 /** Distinct partial windows kept per dock; the app repaints the same few zones. */
 const MAX_TOUCH_FRAMES = 32;
+/** Retained touch-frame bytes per dock. Oldest evicted first; the newest frame is
+ *  always kept, even alone over budget, so a replay still shows something. */
+export const MAX_TOUCH_BYTES = 4 * 1024 * 1024;
 
 export class ImageChannel {
   private readonly dockImages = new Map<number, Map<number, DockFrame>>();
@@ -64,7 +67,7 @@ export class ImageChannel {
     const key = region ? `${region.x},${region.y},${region.w},${region.h}` : 'full';
     frames.delete(key);
     frames.set(key, { data, region });
-    if (frames.size > MAX_TOUCH_FRAMES) frames.delete(frames.keys().next().value!);
+    trimTouchFrames(frames);
     if (dock === this.selectedDock()) this.broadcastTouch({ data, region });
   }
 
@@ -94,7 +97,10 @@ export class ImageChannel {
     } else {
       mirror.slots.set(wireId, data);
     }
-    if (dock === this.selectedDock()) this.broadcastStrip(stripPayload(wireId, data, full));
+    // Same rule as the key-image broadcasts: no client, no base64.
+    if (dock === this.selectedDock() && this.bus.size > 0) {
+      this.broadcastStrip(stripPayload(wireId, data, full));
+    }
   }
 
   /** Last paint of one of the selected dock's widgets (size previews re-lay its lines). */
@@ -146,6 +152,7 @@ export class ImageChannel {
     for (const [wireId, paint] of this.dockExtraKeys.get(dock) ?? []) {
       this.broadcastExtraKey(wireId, paint);
     }
+    if (this.bus.size === 0) return;
     for (const msg of stripMessages(this.dockStrip.get(dock))) this.broadcastStrip(msg);
   }
 
@@ -177,6 +184,16 @@ export class ImageChannel {
     for (const wireId of extraKeys?.keys() ?? []) this.broadcastExtraKey(wireId);
     this.broadcastStrip({ clear: true });
     return true;
+  }
+}
+
+function trimTouchFrames(frames: Map<string, TouchFrame>): void {
+  let bytes = 0;
+  for (const frame of frames.values()) bytes += frame.data.length;
+  for (const [key, frame] of frames) {
+    if (frames.size <= 1 || (frames.size <= MAX_TOUCH_FRAMES && bytes <= MAX_TOUCH_BYTES)) break;
+    frames.delete(key);
+    bytes -= frame.data.length;
   }
 }
 

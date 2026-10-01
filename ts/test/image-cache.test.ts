@@ -1,5 +1,11 @@
 import assert from 'tjs:assert';
-import { hashJpeg, makeCacheKey, imageCache, specRevision } from '../src/transform/image-cache.js';
+import {
+  hashJpeg,
+  makeCacheKey,
+  imageCache,
+  specRevision,
+  LruCache,
+} from '../src/transform/image-cache.js';
 import type { DeviceImageSpec } from '../src/devices/driver.js';
 import { IMAGE_CACHE_SIZE } from '../src/shared/types.js';
 import { test, summaryExit } from './helpers/harness.js';
@@ -324,5 +330,32 @@ test('recency: get promotes a key so it survives the next eviction', () => {
 });
 
 // Summary
+
+console.log('\nLruCache byte budget');
+
+test('evicts LRU until both entry cap and byte budget fit', () => {
+  const cache = new LruCache<string, Buffer>(100, 10, (b) => b.length);
+  cache.set('a', Buffer.alloc(4));
+  cache.set('b', Buffer.alloc(4));
+  cache.get('a'); // b is now LRU
+  cache.set('c', Buffer.alloc(4));
+  assert.equal(cache.get('b'), undefined);
+  assert.notEqual(cache.get('a'), undefined);
+  assert.equal(cache.byteSize, 8);
+});
+
+test('an entry larger than the budget is not retained and keeps the rest', () => {
+  const cache = new LruCache<string, Buffer>(100, 10, (b) => b.length);
+  cache.set('a', Buffer.alloc(4));
+  cache.set('big', Buffer.alloc(11));
+  assert.equal(cache.get('big'), undefined);
+  assert.notEqual(cache.get('a'), undefined);
+});
+
+test('replacing a key adjusts the byte total', () => {
+  const cache = new LruCache<string, Buffer>(100, 10, (b) => b.length);
+  for (const n of [8, 2]) cache.set('a', Buffer.alloc(n));
+  assert.equal(cache.byteSize, 2);
+});
 
 summaryExit();

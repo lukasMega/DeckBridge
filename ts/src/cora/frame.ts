@@ -68,17 +68,28 @@ export function frameTotalLength(frame: CoraFrame): number {
   return CORA_HEADER_SIZE + frame.payload.length;
 }
 
+const EMPTY = Buffer.alloc(0);
+/** Retained views over a larger backing store are copied out above this slack. */
+const COMPACT_MIN_BACKING = 4096;
+
 export class CoraFrameReader {
-  private buffer = Buffer.alloc(0);
+  private buffer: Buffer = EMPTY;
 
   append(chunk: Buffer): void {
-    if (this.buffer.length + chunk.length > MAX_RECEIVE_BUFFER) {
-      const dropped = this.buffer.length + chunk.length - MAX_RECEIVE_BUFFER;
+    const total = this.buffer.length + chunk.length;
+    if (total > MAX_RECEIVE_BUFFER) {
+      const dropped = total - MAX_RECEIVE_BUFFER;
       warn(
         'cora',
         `receive buffer overflow: dropping ${dropped} oldest byte(s) (limit ${MAX_RECEIVE_BUFFER}) — possible desync`,
       );
-      this.buffer = this.buffer.subarray(Math.max(0, dropped)) as Buffer;
+      // The cap applies to existing + incoming, so an oversized chunk is cut too.
+      if (dropped >= this.buffer.length) {
+        chunk = chunk.subarray(dropped - this.buffer.length) as Buffer;
+        this.buffer = EMPTY;
+      } else {
+        this.buffer = this.buffer.subarray(dropped) as Buffer;
+      }
     }
     // Steady state: drainFrames() below fully drains every complete frame each
     // time, so `buffer` is usually empty when the next chunk lands — adopt it
@@ -87,6 +98,18 @@ export class CoraFrameReader {
     // so holding onto it here is safe. Only merge-copy when a partial frame or
     // split magic is still pending from last time.
     this.buffer = this.buffer.length === 0 ? chunk : Buffer.concat([this.buffer, chunk]);
+    this.compact();
+  }
+
+  /** Release the backing store of a drained or mostly-consumed view. */
+  private compact(): void {
+    const len = this.buffer.length;
+    if (len === 0) {
+      this.buffer = EMPTY;
+      return;
+    }
+    const backing = this.buffer.buffer.byteLength;
+    if (backing > COMPACT_MIN_BACKING && backing > 2 * len) this.buffer = Buffer.from(this.buffer);
   }
 
   private hasMagicAtStart(): boolean {
@@ -134,10 +157,16 @@ export class CoraFrameReader {
       this.buffer = this.buffer.subarray(totalLen) as Buffer;
       frames.push(frame);
     }
+    this.compact();
     return frames;
   }
 
   getBufferedLength(): number {
     return this.buffer.length;
+  }
+
+  /** Bytes of backing memory pinned by the buffered view (diagnostics/tests). */
+  retainedBytes(): number {
+    return this.buffer.buffer.byteLength;
   }
 }

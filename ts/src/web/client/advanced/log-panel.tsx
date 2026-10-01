@@ -50,6 +50,7 @@ function buildCommEntry(e: CommLog, showHex: boolean): HTMLElement {
 
 interface LogPaneOpts<T> {
   getLogs: (s: StoreState) => readonly T[];
+  getSeq: (s: StoreState) => number;
   buildEntry: (e: T) => HTMLElement;
   passes: (e: T) => boolean;
   filterDeps: unknown[];
@@ -66,6 +67,7 @@ function useLogPane<T, E extends HTMLElement>(
   const elRef = useRef<E>(null);
   // Index of the last log entry rendered into the DOM (for incremental appends)
   const renderedRef = useRef(0);
+  const epochRef = useRef(getSnapshot().logEpoch);
   // rAF scheduling flag (mirrors ui-logs.ts serverFlushScheduled / commFlushScheduled)
   const scheduledRef = useRef(false);
   // Latest callbacks, so rAF flushes see current filter state without a stale closure
@@ -79,17 +81,26 @@ function useLogPane<T, E extends HTMLElement>(
     scheduledRef.current = false;
     const el = elRef.current;
     if (!el) return;
-    const { getLogs, passes, buildEntry } = optsRef.current;
-    const logs = getLogs(getSnapshot());
-    const from = renderedRef.current;
-    if (from >= logs.length) return;
+    const { getLogs, getSeq, passes, buildEntry } = optsRef.current;
+    const snap = getSnapshot();
+    const logs = getLogs(snap);
+    if (epochRef.current !== snap.logEpoch) {
+      epochRef.current = snap.logEpoch;
+      el.innerHTML = '';
+      renderedRef.current = 0;
+    }
+    // Sequence, not length: once capped, length stops moving but entries keep arriving.
+    const seq = getSeq(snap);
+    const newCount = seq - renderedRef.current;
+    if (newCount <= 0) return;
+    const from = logs.length - Math.min(newCount, logs.length);
     const atBot = el.scrollHeight - el.clientHeight <= el.scrollTop + SCROLL_TOLERANCE;
     const frag = document.createDocumentFragment();
     for (let i = from; i < logs.length; i++) {
       const e = logs[i];
       if (e !== undefined && passes(e)) frag.appendChild(buildEntry(e));
     }
-    renderedRef.current = logs.length;
+    renderedRef.current = seq;
     el.appendChild(frag);
     while (el.children.length > LOG_MAX) el.removeChild(el.firstChild!);
     if (atBot) el.scrollTop = el.scrollHeight;
@@ -104,11 +115,14 @@ function useLogPane<T, E extends HTMLElement>(
   // Mount: initial render + subscribe for live appends
   useEffect(() => {
     schedule();
-    let prevLen = optsRef.current.getLogs(getSnapshot()).length;
+    let prevSeq = optsRef.current.getSeq(getSnapshot());
+    let prevEpoch = getSnapshot().logEpoch;
     return storeSubscribe(() => {
-      const len = optsRef.current.getLogs(getSnapshot()).length;
-      if (len !== prevLen) {
-        prevLen = len;
+      const snap = getSnapshot();
+      const seq = optsRef.current.getSeq(snap);
+      if (seq !== prevSeq || snap.logEpoch !== prevEpoch) {
+        prevSeq = seq;
+        prevEpoch = snap.logEpoch;
         schedule();
       }
     });
@@ -178,6 +192,7 @@ export function LogConsolePanel(): preact.JSX.Element {
 
   const server = useLogPane<ServerLog, HTMLPreElement>({
     getLogs: (s) => s.serverLogs,
+    getSeq: (s) => s.serverLogSeq,
     buildEntry: buildServerEntry,
     passes: (e) =>
       (!sfLevel || e.level === sfLevel) &&
@@ -187,6 +202,7 @@ export function LogConsolePanel(): preact.JSX.Element {
 
   const comm = useLogPane<CommLog, HTMLDivElement>({
     getLogs: (s) => s.commLogs,
+    getSeq: (s) => s.commLogSeq,
     buildEntry: (e) => buildCommEntry(e, cfShowHex),
     passes: (e) =>
       (!cfProtocol || e.protocol === cfProtocol) &&

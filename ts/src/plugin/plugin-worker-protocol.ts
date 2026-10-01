@@ -11,6 +11,9 @@ export interface PluginRunConfig {
   path: string;
   param: string;
   intervalMs?: number;
+  /** Host-assigned per entry lifetime: a removed-then-re-added key gets a new one, so
+   *  a fetch of the old poll (still in flight) can't be admitted for the new entry. */
+  gen: number;
 }
 
 /** Minimal fetch init a plugin may pass to ctx.fetch. The worker can NEVER call
@@ -44,7 +47,14 @@ export type PluginWorkerToMain =
   | { type: 'error'; key: string; message: string; forced?: boolean }
   // ctx.fetch proxy: the worker asks the main thread to run a real fetch.
   // `key` = the polling plugin, so removing it cancels only its own requests.
-  | { type: 'fetch'; fetchId: number; key: string; url: string; init?: PluginFetchInit }
+  | {
+      type: 'fetch';
+      fetchId: number;
+      key: string;
+      gen: number;
+      url: string;
+      init?: PluginFetchInit;
+    }
   | { type: 'pong'; seq: number }
   // ctx.log — routed through the main logger with a plugin-name component.
   | { type: 'log'; level: LogLevel; component: string; message: string };

@@ -10,6 +10,8 @@ import {
   GEN1_IMAGE_LAST_OFFSET,
   MAX_IMAGE_ASSEMBLY_BYTES,
   MAX_IMAGE_ASSEMBLY_CHUNKS,
+  MAX_TOTAL_ASSEMBLY_BYTES,
+  ASSEMBLY_STALE_MS,
   PARTIAL_WINDOW_HEADER_SIZE,
   PARTIAL_WINDOW_X_OFFSET,
   PARTIAL_WINDOW_Y_OFFSET,
@@ -24,6 +26,78 @@ import { warn } from '../shared/logger.js';
 export interface ImageAssembly {
   chunks: Buffer[];
   bytes: number;
+  /** Set only while tracked by an AssemblyBudget. */
+  owner?: Map<never, ImageAssembly>;
+  key?: number | string;
+  touchedAt?: number;
+}
+
+/** Aggregate byte budget over every in-flight assembly of one connection. The Set keeps
+ *  least-recently-touched first (delete+add on each chunk), so eviction and stale expiry
+ *  only look at the head — no per-chunk scan. */
+export class AssemblyBudget {
+  private readonly live = new Set<ImageAssembly>();
+  private total = 0;
+  private lastWarn = 0;
+
+  constructor(
+    private readonly maxBytes = MAX_TOTAL_ASSEMBLY_BYTES,
+    private readonly staleMs = ASSEMBLY_STALE_MS,
+  ) {}
+
+  get bytes(): number {
+    return this.total;
+  }
+
+  get count(): number {
+    return this.live.size;
+  }
+
+  /** Forget everything; callers replace their maps. */
+  clear(): void {
+    this.live.clear();
+    this.total = 0;
+  }
+
+  /** Account `delta` more bytes for `a`; evicts the oldest others to fit. False when `a`
+   *  alone cannot fit (caller drops it). */
+  charge(a: ImageAssembly, delta: number, now: number): boolean {
+    if (!this.live.has(a)) this.expireStale(now);
+    else this.live.delete(a);
+    a.touchedAt = now;
+    this.live.add(a);
+    this.total += delta;
+    while (this.total > this.maxBytes) {
+      const oldest = this.live.values().next().value!;
+      if (oldest === a) {
+        this.total -= a.bytes + delta;
+        this.live.delete(a);
+        return false;
+      }
+      this.evict(oldest, 'aggregate byte budget');
+    }
+    return true;
+  }
+
+  release(a: ImageAssembly): void {
+    if (this.live.delete(a)) this.total -= a.bytes;
+  }
+
+  private expireStale(now: number): void {
+    for (const a of this.live) {
+      if (now - (a.touchedAt ?? now) < this.staleMs) break;
+      this.evict(a, 'stale');
+    }
+  }
+
+  private evict(a: ImageAssembly, why: string): void {
+    this.release(a);
+    (a.owner as Map<number | string, ImageAssembly> | undefined)?.delete(a.key!);
+    const now = Date.now();
+    if (now - this.lastWarn < MALFORMED_WARN_INTERVAL_MS) return;
+    this.lastWarn = now;
+    warn('assembler', `key ${a.key}: incomplete image assembly dropped (${why})`);
+  }
 }
 
 const GEN2_LABEL = 'image assembly';
@@ -41,6 +115,16 @@ export function resetMalformedWarnThrottle(): void {
   malformedWarnState.clear();
 }
 
+function discard<K extends number | string>(
+  pages: Map<K, ImageAssembly>,
+  key: K,
+  budget?: AssemblyBudget,
+): void {
+  const a = pages.get(key);
+  if (a && budget) budget.release(a);
+  pages.delete(key);
+}
+
 /** Drop the in-flight assembly for `keyIndex` and report why, at most once per window.
  *  Callers return null themselves — a `null`-returning helper trips
  *  sonarjs/no-invariant-returns. */
@@ -49,8 +133,9 @@ function dropMalformed<K extends number | string>(
   keyIndex: K,
   label: string,
   reason: string,
+  budget?: AssemblyBudget,
 ): void {
-  pages.delete(keyIndex);
+  discard(pages, keyIndex, budget);
   const throttleKey = `${label}:${reason}`;
   const now = Date.now();
   const state = malformedWarnState.get(throttleKey);
@@ -67,19 +152,33 @@ function dropMalformed<K extends number | string>(
   );
 }
 
-/** Append `chunk` to the per-key assembly, enforcing both assembly caps.
- *  On overflow: drops the key, warns naming the cap that tripped and its value
+interface AccumulateOpts {
+  label: string;
+  budget?: AssemblyBudget;
+  /** Max distinct in-flight keys; the oldest is evicted for a new one. */
+  maxPages?: number;
+}
+
+/** Append `chunk` to the per-key assembly, enforcing the per-key, aggregate and
+ *  key-count caps. On overflow: drops the key, warns naming the cap that tripped
  *  (`label` distinguishes gen1/gen2 wording), and returns null. Otherwise pushes
- *  the chunk and returns the updated assembly. */
+ *  the chunk and returns the updated assembly. `chunk` is retained by reference. */
 function accumulateChunk<K extends number | string>(
   pages: Map<K, ImageAssembly>,
   keyIndex: K,
   chunk: Buffer,
-  label: string,
+  { label, budget, maxPages }: AccumulateOpts,
 ): ImageAssembly | null {
-  const assembly = pages.get(keyIndex) ?? { chunks: [], bytes: 0 };
+  let assembly = pages.get(keyIndex);
+  if (!assembly) {
+    if (maxPages !== undefined && pages.size >= maxPages) {
+      // Map iteration is insertion order: the first key is the oldest in-flight one.
+      discard(pages, pages.keys().next().value!, budget);
+    }
+    assembly = { chunks: [], bytes: 0, owner: pages as Map<never, ImageAssembly>, key: keyIndex };
+  }
   if (assembly.bytes + chunk.length > MAX_IMAGE_ASSEMBLY_BYTES) {
-    pages.delete(keyIndex);
+    discard(pages, keyIndex, budget);
     warn(
       'assembler',
       `key ${keyIndex}: ${label} exceeded ${MAX_IMAGE_ASSEMBLY_BYTES} bytes, dropping`,
@@ -88,11 +187,16 @@ function accumulateChunk<K extends number | string>(
   }
   // Empty chunks are not retained, so they cannot push the chunk count up.
   if (chunk.length > 0 && assembly.chunks.length >= MAX_IMAGE_ASSEMBLY_CHUNKS) {
-    pages.delete(keyIndex);
+    discard(pages, keyIndex, budget);
     warn(
       'assembler',
       `key ${keyIndex}: ${label} exceeded ${MAX_IMAGE_ASSEMBLY_CHUNKS} chunks, dropping`,
     );
+    return null;
+  }
+  if (budget && !budget.charge(assembly, chunk.length, Date.now())) {
+    pages.delete(keyIndex);
+    warn('assembler', `key ${keyIndex}: ${label} exceeded the aggregate byte budget, dropping`);
     return null;
   }
   if (chunk.length > 0) assembly.chunks.push(chunk);
@@ -101,9 +205,20 @@ function accumulateChunk<K extends number | string>(
   return assembly;
 }
 
+/** One copy out of the assembly: a single chunk is copied (so the result does not pin
+ *  the wire packet), several are concatenated. `limit` truncates. */
+function consolidate(acc: ImageAssembly, limit = acc.bytes): Buffer {
+  if (acc.chunks.length === 1) return Buffer.from(acc.chunks[0]!.subarray(0, limit));
+  return Buffer.concat(acc.chunks, limit);
+}
+
+/** `pkt` is retained by reference until the image completes: the caller hands over
+ *  ownership (CORA frame payloads are already private copies). */
 export function assembleImageChunk(
   pages: Map<number, ImageAssembly>,
   pkt: Buffer,
+  budget?: AssemblyBudget,
+  maxPages?: number,
 ): ImageEvent | null {
   // Shorter than the key byte itself: the packet names no key, so there is
   // nothing identifiable to drop. Bail before deriving keyIndex — reading past
@@ -111,36 +226,39 @@ export function assembleImageChunk(
   if (pkt.length <= IMAGE_CHUNK_KEY_OFFSET) return null;
   const keyIndex = pkt[IMAGE_CHUNK_KEY_OFFSET]!;
   if (pkt.length < ELGATO_IMAGE_HEADER_SIZE) {
-    dropMalformed(pages, keyIndex, GEN2_LABEL, 'packet shorter than the 8-byte header');
+    dropMalformed(pages, keyIndex, GEN2_LABEL, 'packet shorter than the 8-byte header', budget);
     return null;
   }
   const isLast = pkt[IMAGE_CHUNK_FLAG_OFFSET] === IMAGE_CHUNK_LAST_FLAG;
   const bodyLength = pkt.readUInt16LE(IMAGE_CHUNK_LEN_OFFSET);
   if (bodyLength > pkt.length - ELGATO_IMAGE_HEADER_SIZE) {
-    dropMalformed(pages, keyIndex, GEN2_LABEL, 'declared body length exceeds the packet');
+    dropMalformed(pages, keyIndex, GEN2_LABEL, 'declared body length exceeds the packet', budget);
     return null;
   }
   if (!isLast && bodyLength === 0) {
-    dropMalformed(pages, keyIndex, GEN2_LABEL, 'empty non-final chunk');
+    dropMalformed(pages, keyIndex, GEN2_LABEL, 'empty non-final chunk', budget);
     return null;
   }
-  const chunk = Buffer.from(
-    pkt.subarray(ELGATO_IMAGE_HEADER_SIZE, ELGATO_IMAGE_HEADER_SIZE + bodyLength),
-  );
+  const chunk = pkt.subarray(ELGATO_IMAGE_HEADER_SIZE, ELGATO_IMAGE_HEADER_SIZE + bodyLength);
 
-  const acc = accumulateChunk(pages, keyIndex, chunk, GEN2_LABEL);
+  const acc = accumulateChunk(pages, keyIndex, chunk as Buffer, {
+    label: GEN2_LABEL,
+    budget,
+    maxPages,
+  });
   if (acc === null) return null;
 
   if (!isLast) return null;
 
-  const data = Buffer.concat(acc.chunks, acc.bytes);
-  pages.delete(keyIndex);
+  const data = consolidate(acc);
+  discard(pages, keyIndex, budget);
   return { keyIndex, data, format: 'jpeg' };
 }
 
 export function assembleGen1ImageChunk(
   pages: Map<number, ImageAssembly>,
   pkt: Buffer,
+  budget?: AssemblyBudget,
 ): ImageEvent | null {
   // Shorter than the key byte itself: the packet names no key, so there is
   // nothing identifiable to drop. Bail before deriving keyIndex — reading past
@@ -149,36 +267,35 @@ export function assembleGen1ImageChunk(
   // gen1: key is 1-based at byte 5
   const keyIndex = pkt[GEN1_IMAGE_KEY_OFFSET]! - 1;
   if (pkt.length < GEN1_IMAGE_HEADER_SIZE) {
-    dropMalformed(pages, keyIndex, GEN1_LABEL, 'packet shorter than the 16-byte header');
+    dropMalformed(pages, keyIndex, GEN1_LABEL, 'packet shorter than the 16-byte header', budget);
     return null;
   }
   const isLast = pkt[GEN1_IMAGE_LAST_OFFSET] === IMAGE_CHUNK_LAST_FLAG;
   if (!isLast && pkt.length === GEN1_IMAGE_HEADER_SIZE) {
-    dropMalformed(pages, keyIndex, GEN1_LABEL, 'empty non-final chunk');
+    dropMalformed(pages, keyIndex, GEN1_LABEL, 'empty non-final chunk', budget);
     return null;
   }
 
   // Slice full payload region (1008 bytes). Last packet has trailing zeros —
   // trimmed after assembly using BMP bfSize field (offset 2, LE uint32).
-  const payload = Buffer.from(pkt.subarray(GEN1_IMAGE_HEADER_SIZE));
+  const payload = pkt.subarray(GEN1_IMAGE_HEADER_SIZE) as Buffer;
 
-  const acc = accumulateChunk(pages, keyIndex, payload, GEN1_LABEL);
+  const acc = accumulateChunk(pages, keyIndex, payload, { label: GEN1_LABEL, budget });
   if (acc === null) return null;
   if (!isLast) return null;
 
-  pages.delete(keyIndex);
-  const assembled = Buffer.concat(acc.chunks, acc.bytes);
+  discard(pages, keyIndex, budget);
 
-  // BMP magic: 'B'=0x42 'M'=0x4D; bfSize at offset 2 (LE uint32).
-  let data: Buffer;
-  if (assembled.length >= 6 && assembled[0] === 0x42 && assembled[1] === 0x4d) {
-    const bfSize = assembled.readUInt32LE(2);
-    data = bfSize <= assembled.length ? Buffer.from(assembled.subarray(0, bfSize)) : assembled;
-  } else {
-    data = assembled; // malformed BMP — forward as-is, device will reject
+  // BMP magic: 'B'=0x42 'M'=0x4D; bfSize at offset 2 (LE uint32). The first chunk holds
+  // the header, so the trim is applied during the single consolidating copy.
+  const first = acc.chunks[0];
+  let limit = acc.bytes; // malformed BMP — forward as-is, device will reject
+  if (first && first.length >= 6 && first[0] === 0x42 && first[1] === 0x4d) {
+    const bfSize = first.readUInt32LE(2);
+    if (bfSize <= acc.bytes) limit = bfSize;
   }
 
-  return { keyIndex, data, format: 'bmp' };
+  return { keyIndex, data: consolidate(acc, limit), format: 'bmp' };
 }
 
 const PARTIAL_WINDOW_LABEL = 'partial window assembly';
@@ -198,6 +315,7 @@ export interface PartialWindowEvent extends TouchWindowRegion {
 export function assemblePartialWindowChunk(
   pages: Map<string, ImageAssembly>,
   pkt: Buffer,
+  budget?: AssemblyBudget,
 ): PartialWindowEvent | null {
   if (pkt.length < PARTIAL_WINDOW_HEADER_SIZE) return null;
   const x = pkt.readUInt16LE(PARTIAL_WINDOW_X_OFFSET);
@@ -206,24 +324,32 @@ export function assemblePartialWindowChunk(
   const h = pkt.readUInt16LE(PARTIAL_WINDOW_H_OFFSET);
   const key = `${x}:${y}:${w}:${h}`;
   if (w === 0 || h === 0 || x + w > PLUS_TOUCH_WIDTH || y + h > PLUS_TOUCH_HEIGHT) {
-    dropMalformed(pages, key, PARTIAL_WINDOW_LABEL, 'region outside the 800×100 window');
+    dropMalformed(pages, key, PARTIAL_WINDOW_LABEL, 'region outside the 800×100 window', budget);
     return null;
   }
   const isLast = pkt[PARTIAL_WINDOW_LAST_OFFSET] === IMAGE_CHUNK_LAST_FLAG;
   const bodyLength = pkt.readUInt16LE(PARTIAL_WINDOW_SIZE_OFFSET);
   if (bodyLength > pkt.length - PARTIAL_WINDOW_HEADER_SIZE) {
-    dropMalformed(pages, key, PARTIAL_WINDOW_LABEL, 'declared body length exceeds the packet');
+    dropMalformed(
+      pages,
+      key,
+      PARTIAL_WINDOW_LABEL,
+      'declared body length exceeds the packet',
+      budget,
+    );
     return null;
   }
-  if (!pages.has(key) && pages.size >= MAX_PARTIAL_WINDOW_ASSEMBLIES) {
-    // Map iteration is insertion order: the first key is the oldest in-flight region.
-    pages.delete(pages.keys().next().value!);
-  }
-  const chunk = Buffer.from(
-    pkt.subarray(PARTIAL_WINDOW_HEADER_SIZE, PARTIAL_WINDOW_HEADER_SIZE + bodyLength),
-  );
-  const acc = accumulateChunk(pages, key, chunk, PARTIAL_WINDOW_LABEL);
+  const chunk = pkt.subarray(
+    PARTIAL_WINDOW_HEADER_SIZE,
+    PARTIAL_WINDOW_HEADER_SIZE + bodyLength,
+  ) as Buffer;
+  const acc = accumulateChunk(pages, key, chunk, {
+    label: PARTIAL_WINDOW_LABEL,
+    budget,
+    maxPages: MAX_PARTIAL_WINDOW_ASSEMBLIES,
+  });
   if (!acc || !isLast) return null;
-  pages.delete(key);
-  return { x, y, w, h, data: Buffer.concat(acc.chunks, acc.bytes) };
+  const data = consolidate(acc);
+  discard(pages, key, budget);
+  return { x, y, w, h, data };
 }

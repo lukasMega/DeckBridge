@@ -73,7 +73,6 @@ export function buildTrayState(input: {
 }
 
 const enc = new TextEncoder();
-const dec = new TextDecoder();
 
 export function serializeTrayState(state: TrayState): string {
   return JSON.stringify(state) + '\n';
@@ -84,6 +83,7 @@ class TrayProcess implements TrayHandle {
   private socket: TjsTCPSocket | null = null;
   private pending: TrayState | null = null;
   private closed = false;
+  private sending = false;
   private proc: TjsProcess | null = null;
 
   private constructor() {}
@@ -108,29 +108,33 @@ class TrayProcess implements TrayHandle {
 
   private async _readLoop(proc: TjsProcess, handlers: TrayHandlers): Promise<void> {
     const reader = proc.stdout.getReader();
+    const dispatch = (line: string): void => {
+      const trimmed = line.trim();
+      if (!trimmed) return;
+      try {
+        this._handleTrayEvent(JSON.parse(trimmed) as { event: string; port?: number }, handlers);
+      } catch {
+        /* ignore malformed stdout */
+      }
+    };
+    const decoder = new TextDecoder();
     let buf = '';
     try {
       for (;;) {
         const { value, done } = await reader.read();
         if (done) break;
-        buf += dec.decode(value, { stream: true });
+        buf += decoder.decode(value, { stream: true });
         const lines = buf.split('\n');
         buf = lines.pop() ?? '';
-        for (const line of lines) {
-          const trimmed = line.trim();
-          if (!trimmed) continue;
-          try {
-            this._handleTrayEvent(
-              JSON.parse(trimmed) as { event: string; port?: number },
-              handlers,
-            );
-          } catch {
-            /* ignore malformed stdout */
-          }
-        }
+        for (const line of lines) dispatch(line);
       }
+      // Flush the decoder and a last line the tray wrote without a trailing newline.
+      buf += decoder.decode();
+      dispatch(buf);
     } catch {
       /* process exited */
+    } finally {
+      reader.releaseLock();
     }
   }
 
@@ -147,26 +151,34 @@ class TrayProcess implements TrayHandle {
       this.writer = writable.getWriter();
       if (this.pending) {
         void this._send(this.pending);
-        this.pending = null;
       }
     } catch (e) {
       warn('tray', `TCP connect failed: ${e instanceof Error ? e.message : String(e)}`);
     }
   }
 
+  /** One write in flight; pushes meanwhile collapse into `pending` (newest wins). */
   private async _send(state: TrayState): Promise<void> {
+    this.sending = true;
     try {
-      await this.writer!.write(enc.encode(serializeTrayState(state)));
-    } catch (e) {
-      warn('tray', `send error: ${e instanceof Error ? e.message : String(e)}`);
+      let next: TrayState | null = state;
+      while (next && this.writer) {
+        this.pending = null;
+        try {
+          await this.writer.write(enc.encode(serializeTrayState(next)));
+        } catch (e) {
+          warn('tray', `send error: ${e instanceof Error ? e.message : String(e)}`);
+        }
+        next = this.pending;
+      }
+    } finally {
+      this.sending = false;
     }
   }
 
   push(state: TrayState): void {
-    if (!this.writer) {
-      this.pending = state;
-      return;
-    }
+    this.pending = state;
+    if (!this.writer || this.sending) return;
     void this._send(state);
   }
 

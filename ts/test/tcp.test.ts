@@ -1,5 +1,10 @@
 import assert from 'tjs:assert';
-import { createConnection, createServer, NodeLikeSocket } from '../src/platform/tcp.js';
+import {
+  createConnection,
+  createServer,
+  MAX_PENDING_WRITE_BYTES,
+  NodeLikeSocket,
+} from '../src/platform/tcp.js';
 import type { NodeLikeServer } from '../src/platform/tcp.js';
 import { testAsync, summaryExit } from './helpers/harness.js';
 
@@ -351,5 +356,61 @@ await testAsync('200 FIN-driven reconnect cycles return descriptors to baseline'
   }
   await closeServer(srv);
 });
+
+await testAsync(
+  'stalled reader: backlog past the cap destroys the socket with an error',
+  async () => {
+    const { srv, port: p, next } = await acceptingServer();
+    const client = await tjs.connect('tcp', HOST, p);
+    await client.opened; // never read: the peer stalls
+    const server = await next();
+    const events = closeEvents(server);
+    const errors: Error[] = [];
+    server.on('error', (e) => errors.push(e));
+    const chunk = new Uint8Array(64 * 1024);
+    for (let i = 0; i < 4096 && !server.destroyed; i++) {
+      server.write(chunk);
+      if (i % 8 === 0) await sleep(0);
+    }
+    assert.ok(server.destroyed, 'destroyed once the backlog passed the cap');
+    assert.ok(server.pendingBytes <= MAX_PENDING_WRITE_BYTES);
+    await within(server.cleanup, 2000, 'cleanup');
+    await sleep(10);
+    assert.deepEqual(events, [true]);
+    assert.equal(errors.length, 1);
+    client.close();
+    await closeServer(srv);
+  },
+);
+
+await testAsync(
+  'pending bytes are counted and drain to zero; normal traffic survives',
+  async () => {
+    const { srv, port: p, next } = await acceptingServer();
+    const client = await tjs.connect('tcp', HOST, p);
+    const { readable } = await client.opened;
+    const reader = readable.getReader();
+    const server = await next();
+    const events = closeEvents(server);
+    server.write(new Uint8Array(100));
+    server.write(new Uint8Array(50));
+    assert.equal(server.pendingBytes, 150);
+    let got = 0;
+    while (got < 150) {
+      const r = await within(reader.read(), 1000, 'read');
+      if (r.done) break;
+      got += r.value.length;
+    }
+    assert.equal(got, 150);
+    await sleep(10);
+    assert.equal(server.pendingBytes, 0);
+    assert.ok(!server.destroyed);
+    assert.deepEqual(events, []);
+    server.destroy();
+    reader.releaseLock();
+    client.close();
+    await closeServer(srv);
+  },
+);
 
 summaryExit();

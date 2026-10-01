@@ -206,6 +206,52 @@ test('no WS clients: nothing broadcast, still cached', () => {
 
 console.log('\nwidgetPreviews');
 
+/** Count base64 conversions made while `fn` runs. */
+function countBase64(fn: () => void): number {
+  const proto = Buffer.prototype as unknown as { toString: (enc?: string) => string };
+  const orig = proto.toString;
+  let n = 0;
+  proto.toString = function (this: unknown, enc?: string) {
+    if (enc === 'base64') n++;
+    return orig.call(this, enc);
+  };
+  try {
+    fn();
+  } finally {
+    proto.toString = orig;
+  }
+  return n;
+}
+
+test('no WS clients: zero base64 conversions on strip/touch writes and replay', () => {
+  const { ch, setClients } = channel();
+  setClients(0);
+  const n = countBase64(() => {
+    ch.notifyDockStripWrite(0, 1, new Uint8Array(64), true);
+    ch.notifyDockStripWrite(0, 2, new Uint8Array(64), false);
+    ch.notifyDockTouchImage(0, new Uint8Array(64));
+    ch.replay(0);
+  });
+  assert.equal(n, 0);
+  setClients(1);
+  assert.ok(countBase64(() => ch.replay(0)) > 0, 'the spy sees conversions when clients exist');
+});
+
+test('touch cache is byte-bounded: oldest evicted, newest kept even if oversize', () => {
+  const { ch, sent } = channel();
+  const mib = 1024 * 1024;
+  for (let i = 0; i < 6; i++) {
+    ch.notifyDockTouchImage(0, new Uint8Array(mib), { x: i, y: 0, w: 1, h: 1 });
+  }
+  sent.length = 0;
+  ch.replay(0);
+  assert.equal(sent.filter((s) => s.event === 'touchImage').length, 4, '4 MiB budget');
+  ch.notifyDockTouchImage(0, new Uint8Array(5 * mib));
+  sent.length = 0;
+  ch.replay(0);
+  assert.equal(sent.filter((s) => s.event === 'touchImage').length, 1, 'oversize frame kept alone');
+});
+
 test('one BMP per text size, in picker order, with clipping', () => {
   const previews = widgetPreviews({ ...PAINT, lines: [{ text: 'Hello', big: true }] });
   assert.deepEqual(

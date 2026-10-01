@@ -24,25 +24,44 @@ export function b64ToBytes(b64: string): Uint8Array {
 export async function gunzip(data: Uint8Array): Promise<Uint8Array> {
   const ds = new DecompressionStream('gzip');
   const writer = ds.writable.getWriter();
-  const writeDone = writer.write(data as BufferSource).then(() => writer.close());
-  const chunks: Uint8Array[] = [];
   const reader = ds.readable.getReader();
-  for (;;) {
-    const { value, done } = await reader.read();
-    if (done) break;
-    chunks.push(value);
-  }
-  await writeDone;
+  const writeDone = writer.write(data as BufferSource).then(() => writer.close());
+  // Observed up front so a failure that wins the race can't surface as unhandled.
+  const writeSettled = writeDone.then(
+    () => undefined,
+    (e: unknown) => e,
+  );
+  const chunks: Uint8Array[] = [];
   let total = 0;
-  for (const c of chunks) total += c.length;
+  try {
+    for (;;) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      chunks.push(value);
+      total += value.length;
+    }
+    await writeDone;
+  } catch (e) {
+    void reader.cancel(e).catch(() => undefined);
+    void writer.abort(e).catch(() => undefined);
+    await writeSettled;
+    throw e;
+  } finally {
+    reader.releaseLock();
+    writer.releaseLock();
+  }
+  // Drain chunks as they are copied so decoded data and output never fully coexist.
   const out = new Uint8Array(total);
   let off = 0;
-  for (const c of chunks) {
-    out.set(c, off);
-    off += c.length;
+  for (let i = 0; i < chunks.length; i++) {
+    out.set(chunks[i]!, off);
+    off += chunks[i]!.length;
+    chunks[i] = EMPTY;
   }
   return out;
 }
+
+const EMPTY = new Uint8Array(0);
 
 // `platform` defaults to the real platformName() — tests pass it explicitly so
 // each branch is exercised deterministically regardless of the host OS running

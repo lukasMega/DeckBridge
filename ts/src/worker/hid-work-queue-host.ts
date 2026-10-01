@@ -89,6 +89,16 @@ export class HidWorkQueue {
     return this.waitingBytes;
   }
 
+  /** Largest single payload that can ever be admitted. */
+  get maxPayloadBytes(): number {
+    return this.budgets.postedBytes;
+  }
+
+  /** Nothing posted and nothing waiting: the worker has finished every admitted message. */
+  get isEmpty(): boolean {
+    return this.posted.size === 0 && this.waiting.length === 0;
+  }
+
   get inFlightBytes(): number {
     return this.postedBytes;
   }
@@ -128,15 +138,18 @@ export class HidWorkQueue {
   }
 
   /** The worker finished (wrote, skipped or failed) these ids. Unknown ids — stale
-   *  generation or duplicates — are ignored. */
-  complete(ids: readonly number[]): void {
+   *  generation or duplicates — are ignored. Returns how many current credits it released. */
+  complete(ids: readonly number[]): number {
+    let released = 0;
     for (const id of ids) {
       const bytes = this.posted.get(id);
       if (bytes === undefined) continue;
       this.posted.delete(id);
       this.postedBytes -= bytes;
+      released++;
     }
     this.drain();
+    return released;
   }
 
   /** Generation change (open, close, disconnect): forget everything, never replay. */

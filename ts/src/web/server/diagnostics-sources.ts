@@ -9,14 +9,18 @@ import type { KeyEventEntry, LogEntry, StateResponse } from './types.js';
 import type { CommEntry } from '../../shared/types.js';
 import type { DeviceModelOverride } from '../../devices/driver.js';
 import type { ModelOverridesController } from './model-overrides-controller.js';
-import { enumerateDevices, toDeviceRow } from '../../cli/devices.js';
-import { listAllHidDevicesTimed } from '../../ffi/hidapi.js';
+import { deviceRowsFromInventory } from '../../cli/devices.js';
+import type { HidDeviceInfo } from '../../ffi/hidapi.js';
 import { tailLogFile } from '../../infra/log-file.js';
 import { defaultCacheRoot } from '../../infra/native-libs.js';
 import { settingsPath } from '../../infra/settings-store.js';
 import { MIN_DWELL_MS, suppressReason } from '../../infra/daily-ping-env.js';
 import { isElgatoAppRunning, openPathInOS, platformName } from '../../infra/os-utils.ts';
 import { versionText } from '../../shared/cli.js';
+
+/** Full HID inventory off the main thread (scan worker) — the server must never call
+ *  the sync FFI enumerators: hid_enumerate can block for seconds. */
+export type HidInventoryFn = () => Promise<{ devices: HidDeviceInfo[]; tookMs: number }>;
 
 /** The fields both the resolved inputs and the raw args carry verbatim. */
 interface DiagnosticsInputsBase {
@@ -35,6 +39,7 @@ export interface LiveDiagnosticsInputs extends DiagnosticsInputsBase {
   comms: CommEntry[];
   keyEvents: KeyEventEntry[];
   ringLogs: LogEntry[];
+  inventory: HidInventoryFn;
 }
 
 /** The live-source assembly, expressed against the two controllers/buffers the
@@ -44,9 +49,10 @@ export function liveDiagnosticsInputs(
   args: DiagnosticsInputsBase & {
     overrides: ModelOverridesController;
     activity: { comms: CommEntry[]; keyEvents: KeyEventEntry[]; logs: LogEntry[] };
+    inventory: HidInventoryFn;
   },
 ): LiveDiagnosticsInputs {
-  const { overrides, activity, ...rest } = args;
+  const { overrides, activity, inventory, ...rest } = args;
   const modelOverrides = overrides.all();
   // Post-override spec of every model the user has tuned — so a report from a
   // tuned device shows what it is actually running, not the registry default.
@@ -62,6 +68,7 @@ export function liveDiagnosticsInputs(
     comms: activity.comms,
     keyEvents: activity.keyEvents,
     ringLogs: activity.logs,
+    inventory,
   };
 }
 
@@ -84,12 +91,28 @@ function dailyPingEnvState(): string {
   return reason ? `suppressed (${reason})` : `eligible after ${MIN_DWELL_MS / 60000} min uptime`;
 }
 
+interface HidSnapshot {
+  devices: HidDeviceInfo[];
+  tookMs?: number;
+  error?: string;
+}
+
+/** Concurrent reports share the worker's single in-flight inventory; a failure becomes
+ *  report text instead of aborting the whole report. */
+async function fetchInventory(inventory: HidInventoryFn): Promise<HidSnapshot> {
+  try {
+    return await inventory();
+  } catch (e) {
+    return { devices: [], error: e instanceof Error ? e.message : String(e) };
+  }
+}
+
 function sourcesFor(
   live: LiveDiagnosticsInputs,
   logTail: string,
   elgatoAppRunning: boolean,
+  hid: HidSnapshot,
 ): DiagnosticsSources {
-  const hidEnum = listAllHidDevicesTimed();
   return {
     header: {
       version: versionText(),
@@ -108,9 +131,10 @@ function sourcesFor(
     },
     modelOverrides: live.modelOverrides,
     effectiveModels: live.effectiveModels,
-    hidDevices: hidEnum.devices,
-    hidEnumerateMs: hidEnum.tookMs,
-    deviceRows: enumerateDevices().map(toDeviceRow),
+    hidDevices: hid.devices,
+    hidEnumerateMs: hid.tookMs,
+    hidError: hid.error,
+    deviceRows: deviceRowsFromInventory(hid.devices),
     state: live.state,
     updates: {
       enabled: live.state.updateInfo.enabled,
@@ -133,13 +157,17 @@ export async function buildLiveDiagnostics(
   live: LiveDiagnosticsInputs,
   opt: DiagnosticsOptions = {},
 ): Promise<string> {
-  // Read the whole file and let the builder apply the line cap — the tail is the
-  // one section whose length is worth bounding at render time, not at read time.
+  // tailLogFile reads a bounded byte window; the builder applies the line cap.
   const logTail = await tailLogFile(Number.MAX_SAFE_INTEGER, live.cacheRoot);
   // Probed here, not read off the status snapshot: that flag is a conflict signal,
   // forced false whenever DeckBridge holds the device (app.ts's poll) and stale
   // whenever no WebUI client is connected. A report must say what is actually running.
-  const sources = sourcesFor(live, logTail, await isElgatoAppRunning());
+  const sources = sourcesFor(
+    live,
+    logTail,
+    await isElgatoAppRunning(),
+    await fetchInventory(live.inventory),
+  );
   sources.requirements = await checkRequirements();
   return buildDiagnostics(sources, opt);
 }

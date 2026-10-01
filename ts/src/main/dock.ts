@@ -23,6 +23,7 @@ import { ExtraKeyWidgets } from './extra-keys.js';
 import { EncoderActions } from './encoders.js';
 import { ExtraKeyActions } from './command-actions.js';
 import type { CoraDock } from './cora-dock.js';
+import { begin, settleAll } from './settle.js';
 import { LastFrames, wireDockImages } from './dock-frames.js';
 import type { ImageFormat } from './dock-frames.js';
 import {
@@ -99,6 +100,8 @@ export class Dock {
   private readonly extraKeyActions: ExtraKeyActions;
   private resendTimer: ReturnType<typeof setTimeout> | null = null;
   private stopped = false;
+  /** Shared by every stop() caller so duplicates see the same completion/failure. */
+  private stopping: Promise<void> | null = null;
 
   constructor(opts: DockOptions) {
     this.index = opts.index;
@@ -229,17 +232,28 @@ export class Dock {
 
   /** Idempotent teardown: close the attached driver, stop the CORA pair
    *  (cancels the pairing watchdog; server.stop() also stops mDNS). */
-  async stop(): Promise<void> {
-    if (this.stopped) return;
+  stop(): Promise<void> {
+    this.stopping ??= this.runStop();
+    return this.stopping;
+  }
+
+  private async runStop(): Promise<void> {
+    // Everything up to the first await is synchronous: producers are dead and the
+    // driver detached before any slow close can be observed.
     this.stopped = true;
     this.resendTimer = clearTimer(this.resendTimer);
     this.encoders.stop();
     this.extraKeyActions.stop();
-    await this.detach()
-      ?.close()
-      .catch(() => undefined);
-    await this.cora.stop();
-    this.changed();
+    const driver = this.detach();
+    try {
+      // Concurrent: a driver that never acks close must not hold the CORA ports.
+      await settleAll(`dock ${this.index} stop`, [
+        begin(() => driver?.close()),
+        begin(() => this.cora.stop()),
+      ]);
+    } finally {
+      this.changed();
+    }
   }
 
   /** Apply + record a brightness level (WebUI slider or Elgato app). */
@@ -371,6 +385,18 @@ export class Dock {
     // USB can't keep up with the app: drop its session (it reconnects and re-sends
     // everything) rather than queue without bound or lose strip patches silently.
     driver.on('overload', () => child.dropClient());
+    driver.on('imagesDrained', () => this.onImagesDrained(driver));
+  }
+
+  /** The worker drained after an overload that paused local producers: put back what was
+   *  dropped. CORA frames only replay if the CORA side isn't still suspended (a fresh
+   *  session re-sends them anyway). Widgets repaint with their paint cache cleared. */
+  private onImagesDrained(driver: DockDriver): void {
+    if (this.stopped || this.getShuttingDown() || this.driver !== driver) return;
+    log('info', this.model.id, `dock ${this.index}: USB backlog drained, repainting`);
+    sendSplashImages(driver);
+    this.frames.replay(driver);
+    this.widgets?.repaint();
   }
 
   /** Push the persisted per-device settings before the splash; absent = device default. */

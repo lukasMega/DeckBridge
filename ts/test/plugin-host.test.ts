@@ -5,11 +5,14 @@ import type {
   MainToPluginWorker,
   PluginWorkerToMain,
 } from '../src/plugin/plugin-worker-protocol.js';
+import pluginWorkerSource from 'virtual:plugin-worker';
+import { spawnWorker } from '../src/shared/worker-lifecycle.js';
 import { testAsync as runTest, summaryExit } from './helpers/harness.js';
 
 const macrotask = (): Promise<void> => new Promise((r) => setTimeout(r, 0));
 const sleepMs = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
 
+const KEY = 'p.js\0';
 const PLUGINS_DIR = `${tjs.tmpDir}/plugin-host-plugins`;
 // http:// on purpose — the ctx.fetch proxy is http-only (no TLS in the slim build).
 // eslint-disable-next-line sonarjs/no-clear-text-protocols
@@ -73,7 +76,7 @@ console.log('\nplugin-worker-protocol');
 await runTest('configure/value/fetch/pong message shapes round-trip', () => {
   const cfg: MainToPluginWorker = {
     type: 'configure',
-    plugins: [{ key: 'a\0x', path: `${PLUGINS_DIR}/a.js`, param: 'x', intervalMs: 30_000 }],
+    plugins: [{ key: 'a\0x', path: `${PLUGINS_DIR}/a.js`, param: 'x', intervalMs: 30_000, gen: 1 }],
   };
   assert.equal(cfg.type, 'configure');
   assert.equal(cfg.plugins[0]!.path, `${PLUGINS_DIR}/a.js`);
@@ -83,7 +86,13 @@ await runTest('configure/value/fetch/pong message shapes round-trip', () => {
   assert.equal(value.value, 'hi');
   assert.equal(cleared.value, null);
 
-  const fetchReq: PluginWorkerToMain = { type: 'fetch', fetchId: 7, key: 'k', url: HTTP_URL };
+  const fetchReq: PluginWorkerToMain = {
+    type: 'fetch',
+    fetchId: 7,
+    key: 'k',
+    gen: 1,
+    url: HTTP_URL,
+  };
   const fetchRes: MainToPluginWorker = {
     type: 'fetchResult',
     fetchId: 7,
@@ -167,7 +176,7 @@ await runTest('plaintext fetch request → main-thread fetch → fetchResult', a
   try {
     const { host, workers } = makeHost();
     host.request('p.js', undefined, undefined, () => {});
-    workers[0]!.emit({ type: 'fetch', fetchId: 1, key: 'k', url: HTTP_URL });
+    workers[0]!.emit({ type: 'fetch', fetchId: 1, key: KEY, gen: 1, url: HTTP_URL });
     await macrotask();
     const res = workers[0]!.posted.find((m) => m.type === 'fetchResult');
     assert.ok(res, 'fetchResult posted');
@@ -182,7 +191,7 @@ await runTest('plaintext fetch request → main-thread fetch → fetchResult', a
 await runTest('non-http url is rejected without calling fetch', async () => {
   const { host, workers } = makeHost();
   host.request('p.js', undefined, undefined, () => {});
-  workers[0]!.emit({ type: 'fetch', fetchId: 2, key: 'k', url: 'https://example/x' });
+  workers[0]!.emit({ type: 'fetch', fetchId: 2, key: KEY, gen: 1, url: 'https://example/x' });
   await macrotask();
   const res = workers[0]!.posted.find((m) => m.type === 'fetchResult') as
     | { ok: boolean; error?: string }
@@ -248,15 +257,13 @@ function hostWithTimeout(ms: number): { host: PluginHost; workers: FakeWorker[] 
   return { host, workers };
 }
 
-const KEY = 'p.js\0';
-
 await runTest('stalled headers: the deadline aborts the request itself', async () => {
   await withFetch(
     (c) => untilAborted(c.signal),
     async (calls) => {
       const { host, workers } = hostWithTimeout(40);
       host.request('p.js', undefined, undefined, () => {});
-      workers[0]!.emit({ type: 'fetch', fetchId: 1, key: KEY, url: HTTP_URL });
+      workers[0]!.emit({ type: 'fetch', fetchId: 1, key: KEY, gen: 1, url: HTTP_URL });
       const r = await waitForResult(workers[0]!, 1);
       assert.equal(r.error, 'fetch timeout');
       assert.ok(calls[0]!.signal.aborted, 'native request aborted, not just raced');
@@ -285,7 +292,7 @@ await runTest('headers arrive, body stalls: the original deadline still fires', 
     async () => {
       const { host, workers } = hostWithTimeout(60);
       host.request('p.js', undefined, undefined, () => {});
-      workers[0]!.emit({ type: 'fetch', fetchId: 1, key: KEY, url: HTTP_URL });
+      workers[0]!.emit({ type: 'fetch', fetchId: 1, key: KEY, gen: 1, url: HTTP_URL });
       const r = await waitForResult(workers[0]!, 1);
       assert.equal(r.error, 'fetch timeout');
       assert.equal(r.body, '', 'no partial body on failure');
@@ -315,7 +322,7 @@ await runTest('a slow trickle never resets the deadline', async () => {
       const { host, workers } = hostWithTimeout(80);
       host.request('p.js', undefined, undefined, () => {});
       const t0 = Date.now();
-      workers[0]!.emit({ type: 'fetch', fetchId: 1, key: KEY, url: HTTP_URL });
+      workers[0]!.emit({ type: 'fetch', fetchId: 1, key: KEY, gen: 1, url: HTTP_URL });
       const r = await waitForResult(workers[0]!, 1);
       assert.equal(r.error, 'fetch timeout');
       assert.ok(Date.now() - t0 < 500);
@@ -346,7 +353,7 @@ await runTest('unknown-length body over 1 MiB fails while streaming', async () =
     async () => {
       const { host, workers } = hostWithTimeout(5000);
       host.request('p.js', undefined, undefined, () => {});
-      workers[0]!.emit({ type: 'fetch', fetchId: 1, key: KEY, url: HTTP_URL });
+      workers[0]!.emit({ type: 'fetch', fetchId: 1, key: KEY, gen: 1, url: HTTP_URL });
       const r = await waitForResult(workers[0]!, 1);
       assert.ok(r.error?.includes('response exceeds'), r.error);
       assert.ok(cancelled);
@@ -374,7 +381,7 @@ await runTest('declared oversized body is refused before reading it', async () =
     async (calls) => {
       const { host, workers } = hostWithTimeout(5000);
       host.request('p.js', undefined, undefined, () => {});
-      workers[0]!.emit({ type: 'fetch', fetchId: 1, key: KEY, url: HTTP_URL });
+      workers[0]!.emit({ type: 'fetch', fetchId: 1, key: KEY, gen: 1, url: HTTP_URL });
       const r = await waitForResult(workers[0]!, 1);
       assert.ok(r.error?.includes('response exceeds'), r.error);
       assert.ok(calls[0]!.signal.aborted);
@@ -391,7 +398,7 @@ await runTest('a fifth simultaneous request fails at once (no queue)', async () 
       const { host, workers } = hostWithTimeout(5000);
       host.request('p.js', undefined, undefined, () => {});
       for (let id = 1; id <= 5; id++) {
-        workers[0]!.emit({ type: 'fetch', fetchId: id, key: KEY, url: HTTP_URL });
+        workers[0]!.emit({ type: 'fetch', fetchId: id, key: KEY, gen: 1, url: HTTP_URL });
       }
       const r = await waitForResult(workers[0]!, 5);
       assert.ok(r.error?.includes('too many concurrent'), r.error);
@@ -411,7 +418,14 @@ await runTest('oversized request body is refused before fetch', async () => {
       const { host, workers } = hostWithTimeout(5000);
       host.request('p.js', undefined, undefined, () => {});
       const body = 'x'.repeat(1024 * 1024 + 1);
-      workers[0]!.emit({ type: 'fetch', fetchId: 1, key: KEY, url: HTTP_URL, init: { body } });
+      workers[0]!.emit({
+        type: 'fetch',
+        fetchId: 1,
+        key: KEY,
+        gen: 1,
+        url: HTTP_URL,
+        init: { body },
+      });
       const r = await waitForResult(workers[0]!, 1);
       assert.ok(r.error?.includes('request body exceeds'), r.error);
       assert.equal(calls.length, 0);
@@ -440,7 +454,7 @@ await runTest('HTTP error status and multibyte body survive within limits', asyn
     async () => {
       const { host, workers } = hostWithTimeout(5000);
       host.request('p.js', undefined, undefined, () => {});
-      workers[0]!.emit({ type: 'fetch', fetchId: 1, key: KEY, url: HTTP_URL });
+      workers[0]!.emit({ type: 'fetch', fetchId: 1, key: KEY, gen: 1, url: HTTP_URL });
       const r = await waitForResult(workers[0]!, 1);
       assert.equal(r.ok, false);
       assert.equal(r.status, 503);
@@ -458,8 +472,8 @@ await runTest('removing a plugin cancels only its own requests', async () => {
       const { host, workers } = hostWithTimeout(5000);
       host.request('a.js', undefined, undefined, () => {});
       host.request('b.js', undefined, undefined, () => {});
-      workers[0]!.emit({ type: 'fetch', fetchId: 1, key: 'a.js\0', url: HTTP_URL });
-      workers[0]!.emit({ type: 'fetch', fetchId: 2, key: 'b.js\0', url: HTTP_URL });
+      workers[0]!.emit({ type: 'fetch', fetchId: 1, key: 'a.js\0', gen: 1, url: HTTP_URL });
+      workers[0]!.emit({ type: 'fetch', fetchId: 2, key: 'b.js\0', gen: 2, url: HTTP_URL });
       priv(host).entries.get('a.js\0')!.lastRequested = 0;
       priv(host).hbTick(); // reaps the stale key
       const r = await waitForResult(workers[0]!, 1);
@@ -478,11 +492,11 @@ await runTest('a respawned worker never receives the old worker’s result', asy
     async (calls) => {
       const { host, workers } = hostWithTimeout(5000);
       host.request('p.js', undefined, undefined, () => {});
-      workers[0]!.emit({ type: 'fetch', fetchId: 1, key: KEY, url: HTTP_URL });
+      workers[0]!.emit({ type: 'fetch', fetchId: 1, key: KEY, gen: 1, url: HTTP_URL });
       workers[0]!.emitError('boom'); // respawn
       assert.ok(calls[0]!.signal.aborted, 'old request aborted with its worker');
-      workers[0]!.emit({ type: 'fetch', fetchId: 9, key: KEY, url: HTTP_URL }); // stale sender
-      workers[1]!.emit({ type: 'fetch', fetchId: 1, key: KEY, url: HTTP_URL }); // same id
+      workers[0]!.emit({ type: 'fetch', fetchId: 9, key: KEY, gen: 1, url: HTTP_URL }); // stale sender
+      workers[1]!.emit({ type: 'fetch', fetchId: 1, key: KEY, gen: 1, url: HTTP_URL }); // same id
       assert.equal(calls.length, 2, 'the stale worker’s message was ignored');
       pending[0]!(new Response('old'));
       pending[1]!(new Response('new'));
@@ -502,7 +516,7 @@ await runTest('dispose aborts every request, settles, and never respawns', async
     async (calls) => {
       const { host, workers } = hostWithTimeout(5000);
       host.request('p.js', undefined, undefined, () => {});
-      workers[0]!.emit({ type: 'fetch', fetchId: 1, key: KEY, url: HTTP_URL });
+      workers[0]!.emit({ type: 'fetch', fetchId: 1, key: KEY, gen: 1, url: HTTP_URL });
       await host.dispose();
       assert.ok(calls[0]!.signal.aborted);
       assert.equal(host.activeFetchCount, 0);
@@ -539,7 +553,13 @@ await runTest('native loopback: a stalled body is aborted and the connection clo
   })();
   const { host, workers } = hostWithTimeout(150);
   host.request('p.js', undefined, undefined, () => {});
-  workers[0]!.emit({ type: 'fetch', fetchId: 1, key: KEY, url: `http://127.0.0.1:${port}/` });
+  workers[0]!.emit({
+    type: 'fetch',
+    fetchId: 1,
+    key: KEY,
+    gen: 1,
+    url: `http://127.0.0.1:${port}/`,
+  });
   const r = await waitForResult(workers[0]!, 1, 3000);
   assert.equal(r.error, 'fetch timeout');
   await Promise.race([peerClosed, sleepMs(2000)]);
@@ -547,6 +567,154 @@ await runTest('native loopback: a stalled body is aborted and the connection clo
   host.stop();
   accepts.releaseLock();
   server.close();
+});
+
+await runTest('removed key with a surviving peer: zero new HTTP, no admission', async () => {
+  await withFetch(
+    (c) => untilAborted(c.signal),
+    async (calls) => {
+      const { host, workers } = hostWithTimeout(5000);
+      host.request('a.js', undefined, undefined, () => {});
+      host.request('b.js', undefined, undefined, () => {});
+      priv(host).entries.get('a.js\0')!.lastRequested = 0;
+      priv(host).hbTick(); // reaps a; b keeps the worker alive
+      assert.ok(!workers[0]!.terminated, 'worker survives');
+      for (let id = 1; id <= 6; id++) {
+        workers[0]!.emit({ type: 'fetch', fetchId: id, key: 'a.js\0', gen: 1, url: HTTP_URL });
+      }
+      assert.equal(calls.length, 0, 'no HTTP for the removed key');
+      assert.equal(host.activeFetchCount, 0, 'nothing allocated');
+      assert.equal(results(workers[0]!).length, 6, 'each refused at once');
+      assert.equal(results(workers[0]!)[0]!.error, 'plugin removed');
+      // The peer still gets the whole shared concurrency.
+      for (let id = 10; id < 14; id++) {
+        workers[0]!.emit({ type: 'fetch', fetchId: id, key: 'b.js\0', gen: 2, url: HTTP_URL });
+      }
+      assert.equal(calls.length, 4);
+      assert.equal(host.activeFetchCount, 4);
+      host.stop();
+      await host.dispose();
+      assert.equal(host.activeFetchCount, 0);
+    },
+  );
+});
+
+await runTest('disabled key: immediate rejection, no request', async () => {
+  await withFetch(
+    (c) => untilAborted(c.signal),
+    async (calls) => {
+      const { host, workers } = hostWithTimeout(5000);
+      host.request('p.js', undefined, undefined, () => {});
+      host.request('q.js', undefined, undefined, () => {});
+      priv(host).entries.get(KEY)!.status = 'disabled';
+      workers[0]!.emit({ type: 'fetch', fetchId: 1, key: KEY, gen: 1, url: HTTP_URL });
+      assert.equal(results(workers[0]!)[0]!.error, 'plugin disabled');
+      assert.equal(calls.length, 0);
+      assert.equal(host.activeFetchCount, 0);
+      host.stop();
+    },
+  );
+});
+
+await runTest('removed then re-added key: the old poll stays rejected', async () => {
+  await withFetch(
+    (c) => untilAborted(c.signal),
+    async (calls) => {
+      const { host, workers } = hostWithTimeout(5000);
+      host.request('a.js', undefined, undefined, () => {});
+      host.request('b.js', undefined, undefined, () => {});
+      priv(host).entries.get('a.js\0')!.lastRequested = 0;
+      priv(host).hbTick();
+      host.request('a.js', undefined, undefined, () => {}); // re-added: new generation
+      const cfg = workers[0]!
+        .configures()
+        .at(-1)!
+        .plugins.find((p) => p.key === 'a.js\0')!;
+      assert.notEqual(cfg.gen, 1, 'new poll identity');
+      workers[0]!.emit({ type: 'fetch', fetchId: 1, key: 'a.js\0', gen: 1, url: HTTP_URL });
+      assert.equal(calls.length, 0, 'old poll refused');
+      assert.equal(results(workers[0]!)[0]!.error, 'plugin removed');
+      workers[0]!.emit({ type: 'fetch', fetchId: 2, key: 'a.js\0', gen: cfg.gen, url: HTTP_URL });
+      assert.equal(calls.length, 1, 'new poll admitted');
+      host.stop();
+    },
+  );
+});
+
+await runTest('removal during body read cancels the reader and settles', async () => {
+  let cancelled = false;
+  await withFetch(
+    () =>
+      Promise.resolve(
+        new Response(
+          new ReadableStream<Uint8Array>({
+            start(c) {
+              c.enqueue(new TextEncoder().encode('partial'));
+            },
+            cancel() {
+              cancelled = true;
+            },
+          }),
+        ),
+      ),
+    async () => {
+      const { host, workers } = hostWithTimeout(5000);
+      host.request('a.js', undefined, undefined, () => {});
+      host.request('b.js', undefined, undefined, () => {});
+      workers[0]!.emit({ type: 'fetch', fetchId: 1, key: 'a.js\0', gen: 1, url: HTTP_URL });
+      await sleepMs(20); // headers in, body stalled
+      priv(host).entries.get('a.js\0')!.lastRequested = 0;
+      priv(host).hbTick();
+      const r = await waitForResult(workers[0]!, 1);
+      assert.equal(r.error, 'plugin removed');
+      assert.ok(cancelled, 'reader cancelled');
+      assert.equal(host.activeFetchCount, 0);
+      host.stop();
+    },
+  );
+});
+
+await runTest('real worker: a cancelled poll’s ctx.fetch rejects before posting', async () => {
+  await tjs.makeDir(PLUGINS_DIR, { recursive: true }).catch(() => undefined);
+  await tjs.writeFile(
+    `${PLUGINS_DIR}/late.js`,
+    `export default { async fetch(ctx) {
+      setTimeout(async () => {
+        try { await ctx.fetch('http://example/x'); ctx.log('late-ok'); }
+        catch (e) { ctx.log('late-rejected:' + e.message); }
+      }, 400);
+      return 'v';
+    } };`,
+  );
+  await tjs.writeFile(
+    `${PLUGINS_DIR}/peer.js`,
+    `export default { async fetch() { return 'p'; } };`,
+  );
+  const seen: PluginWorkerToMain[] = [];
+  const host = new PluginHost({
+    pluginsDir: PLUGINS_DIR,
+    workerFactory: () => {
+      const { worker: w } = spawnWorker(pluginWorkerSource);
+      w.addEventListener('message', (e: MessageEvent) => seen.push(e.data as PluginWorkerToMain));
+      return {
+        // oxlint-disable-next-line unicorn/require-post-message-target-origin -- Worker.postMessage takes no targetOrigin
+        postMessage: (m) => w.postMessage(m),
+        terminate: () => w.terminate(),
+        addEventListener: (t, l) => w.addEventListener(t, l as EventListener),
+      };
+    },
+  });
+  host.request('late.js', undefined, undefined, () => {});
+  host.request('peer.js', undefined, undefined, () => {});
+  await sleepMs(250); // poll ran; its timer is armed
+  priv(host).entries.get('late.js\0')!.lastRequested = 0;
+  host.request('peer.js', undefined, undefined, () => {});
+  priv(host).hbTick(); // late.js removed, peer keeps the worker
+  await sleepMs(500);
+  const logs = seen.filter((m) => m.type === 'log').map((m) => (m as { message: string }).message);
+  assert.ok(logs.includes('late-rejected:plugin removed'), `logs: ${logs.join('|')}`);
+  assert.equal(seen.filter((m) => m.type === 'fetch').length, 0, 'nothing posted');
+  host.stop();
 });
 
 // heartbeat watchdog

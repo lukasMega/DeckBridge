@@ -2,6 +2,9 @@ import { clearRepeating } from '../../shared/types.js';
 import { WS_KEEPALIVE_INTERVAL_MS, STATS_BROADCAST_INTERVAL_MS } from './constants.js';
 import type { WsEvents } from '../contract.js';
 
+/** A browser that lets this much queue up is stalled; dropping it beats unbounded growth. */
+export const WS_MAX_BUFFERED_BYTES = 4 * 1024 * 1024;
+
 function wsMsg(event: string, data: unknown): string {
   return JSON.stringify({ event, data });
 }
@@ -75,6 +78,11 @@ export class Broadcaster {
   private send(msg: string): void {
     for (const ws of this.clients) {
       try {
+        if ((ws.bufferedAmount ?? 0) > WS_MAX_BUFFERED_BYTES) {
+          this.clients.delete(ws);
+          ws.close(1013, 'client too slow');
+          continue;
+        }
         ws.sendText(msg);
       } catch {
         this.clients.delete(ws);

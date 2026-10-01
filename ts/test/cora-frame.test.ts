@@ -338,6 +338,36 @@ test('oversized payloadLength header is dropped, logs one warn, resyncs to next 
   }
 });
 
+test('oversized single chunk is capped at MAX_RECEIVE_BUFFER', () => {
+  const reader = new CoraFrameReader();
+  reader.append(makeSafeGarbage(MAX_RECEIVE_BUFFER * 2));
+  assert.ok(reader.getBufferedLength() <= MAX_RECEIVE_BUFFER);
+});
+
+test('drained buffer releases its backing allocation', () => {
+  const reader = new CoraFrameReader();
+  const payload = Buffer.alloc(48 * 1024, 7);
+  const frame = encodeCoraFrame(payload, 0, 1, 5);
+  reader.append(frame);
+  const frames = reader.drainFrames();
+  assert.equal(frames.length, 1);
+  assert.equal(reader.getBufferedLength(), 0);
+  assert.ok(reader.retainedBytes() < 1024, `retained ${reader.retainedBytes()}`);
+});
+
+test('fragmented large frame still decodes', () => {
+  const reader = new CoraFrameReader();
+  const payload = Buffer.alloc(60 * 1024, 9);
+  const frame = encodeCoraFrame(payload, 0, 1, 6);
+  let out = 0;
+  for (let i = 0; i < frame.length; i += 1000) {
+    reader.append(Buffer.from(frame.subarray(i, i + 1000)));
+    out += reader.drainFrames().length;
+  }
+  assert.equal(out, 1);
+  assert.equal(reader.getBufferedLength(), 0);
+});
+
 // Summary
 
 summary();

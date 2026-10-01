@@ -6,6 +6,7 @@ import {
   assemblePartialWindowChunk,
   resetMalformedWarnThrottle,
   MAX_PARTIAL_WINDOW_ASSEMBLIES,
+  AssemblyBudget,
 } from '../src/cora/image-assembler.js';
 import {
   MAX_IMAGE_ASSEMBLY_BYTES,
@@ -581,6 +582,65 @@ test('partial window: in-flight regions are capped, oldest evicted', () => {
   assert.equal(pages.size, MAX_PARTIAL_WINDOW_ASSEMBLIES);
   assert.equal(pages.has('0:0:10:10'), false); // oldest gone
   assert.equal(pages.has(`${MAX_PARTIAL_WINDOW_ASSEMBLIES + 4}:0:10:10`), true);
+});
+
+test('aggregate budget drops the oldest incomplete assembly', () => {
+  resetMalformedWarnThrottle();
+  const budget = new AssemblyBudget(3000, 60_000);
+  const pages = new Map<number, ImageAssembly>();
+  const body = Buffer.alloc(1000, 1);
+  captureWarnings(() => {
+    for (const key of [1, 2, 3]) {
+      assembleImageChunk(pages, makeChunkPkt(key, 0, false, body), budget);
+    }
+    assembleImageChunk(pages, makeChunkPkt(4, 0, false, body), budget);
+  });
+  assert.equal(pages.has(1), false);
+  assert.equal(pages.size, 3);
+  assert.equal(budget.bytes, 3000);
+});
+
+test('budget is released on completion and on clear', () => {
+  const budget = new AssemblyBudget(3000, 60_000);
+  const pages = new Map<number, ImageAssembly>();
+  assembleImageChunk(pages, makeChunkPkt(1, 0, false, Buffer.alloc(100, 1)), budget);
+  const ev = assembleImageChunk(pages, makeChunkPkt(1, 1, true, Buffer.alloc(50, 2)), budget);
+  assert.equal(ev!.data.length, 150);
+  assert.equal(budget.bytes, 0);
+  assert.equal(budget.count, 0);
+});
+
+test('stale incomplete assemblies expire when a new one starts', () => {
+  const budget = new AssemblyBudget(10_000, 0);
+  const pages = new Map<number, ImageAssembly>();
+  captureWarnings(() => {
+    assembleImageChunk(pages, makeChunkPkt(1, 0, false, Buffer.alloc(100, 1)), budget);
+    assembleImageChunk(pages, makeChunkPkt(2, 0, false, Buffer.alloc(100, 1)), budget);
+  });
+  assert.equal(pages.has(1), false);
+  assert.equal(pages.has(2), true);
+});
+
+test('window id count is bounded by maxPages', () => {
+  const pages = new Map<number, ImageAssembly>();
+  for (let key = 0; key < 10; key++) {
+    assembleImageChunk(pages, makeChunkPkt(key, 0, false, Buffer.alloc(10, 1)), undefined, 2);
+  }
+  assert.equal(pages.size, 2);
+});
+
+test('gen1 BMP trim happens in the single consolidating copy', () => {
+  const pages = new Map<number, ImageAssembly>();
+  const bmp = Buffer.alloc(1008 + 100, 0);
+  bmp[0] = 0x42;
+  bmp[1] = 0x4d;
+  bmp.writeUInt32LE(1050, 2);
+  assembleGen1ImageChunk(pages, makeGen1ChunkPkt(0, false, Buffer.from(bmp.subarray(0, 1008))));
+  const ev = assembleGen1ImageChunk(
+    pages,
+    makeGen1ChunkPkt(0, true, Buffer.from(bmp.subarray(1008))),
+  );
+  assert.equal(ev!.data.length, 1050);
 });
 
 summary();

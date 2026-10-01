@@ -3,6 +3,7 @@
 // pure half + a curl beacon, silent on failure. See docs/privacy.md.
 import { log } from '../shared/logger.js';
 import { readText } from './os-utils.js';
+import { spawnOwned } from './owned-spawn.js';
 import { suppressReason } from './daily-ping-env.js';
 import type { SuppressReason } from './daily-ping-env.js';
 import { parseSemver } from './update-check.js';
@@ -200,7 +201,7 @@ export async function readOsVersion(os: DailyPingOs): Promise<string> {
     }
     if (os === 'macos' || os === 'windows') {
       const cmd = os === 'macos' ? ['sw_vers', '-productVersion'] : ['cmd', '/c', 'ver'];
-      const p = tjs.spawn(cmd, { stdout: 'pipe', stderr: 'ignore' });
+      const p = spawnOwned(cmd, { stdout: 'pipe', stderr: 'ignore' });
       // Same guard as sendBeacon: `readText` would await a wedged child's
       // stdout forever.
       const killer = setTimeout(() => {
@@ -234,7 +235,7 @@ export async function readLocale(os: DailyPingOs): Promise<string> {
       os === 'macos'
         ? ['defaults', 'read', '-g', 'AppleLocale']
         : ['powershell', '-NoProfile', '-NonInteractive', '-Command', '(Get-Culture).Name'];
-    const p = tjs.spawn(cmd, { stdout: 'pipe', stderr: 'ignore' });
+    const p = spawnOwned(cmd, { stdout: 'pipe', stderr: 'ignore' });
     const killer = setTimeout(() => {
       try {
         p.kill();
@@ -263,7 +264,7 @@ export async function sendBeacon(
 ): Promise<void> {
   let p: TjsProcess;
   try {
-    p = tjs.spawn(
+    p = spawnOwned(
       [
         'curl',
         '-fsS',

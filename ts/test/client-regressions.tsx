@@ -3,6 +3,9 @@ import { act } from 'preact/test-utils';
 import { useLayoutEffect } from 'preact/hooks';
 import {
   addKeyEvent,
+  addServerLogs,
+  addCommLogs,
+  subscribe,
   getSnapshot,
   patch,
   useStore,
@@ -25,7 +28,11 @@ import { updateBadgeVersion } from '../src/web/client/ui-helpers.js';
 import { popoverShift } from '../src/web/client/lib/ui-hooks.js';
 import { KeyGridPreview } from '../src/web/client/components/KeyGridPreview.js';
 import { applyImage, clearImageStore } from '../src/web/client/key-preview.js';
-import { applyTouchImage, resetTouchStrip } from '../src/web/client/touch-strip-preview.js';
+import {
+  applyTouchImage,
+  attachTouchCanvas,
+  resetTouchStrip,
+} from '../src/web/client/touch-strip-preview.js';
 import {
   applyStripWrite,
   attachZoneCanvas,
@@ -244,6 +251,8 @@ async function run(): Promise<void> {
   await runChipRadioGroup();
   await runTouchStripPreview();
   await runStripZonePreview();
+  await runPreviewBacklog();
+  await runLogBatches();
   runUpdateBadge();
   runHydrateRegression();
 }
@@ -449,6 +458,131 @@ async function runStripZonePreview(): Promise<void> {
     'Dock switch blanks the zones',
   );
   for (const z of [z1, z2, z3, z4]) z.detach();
+}
+
+/** Count Image.decode calls (the expensive step) while `fn` runs. */
+async function countDecodes(fn: () => Promise<void>): Promise<number> {
+  const proto = HTMLImageElement.prototype;
+  // eslint-disable-next-line @typescript-eslint/unbound-method -- re-called with the right this
+  const origDecode = proto.decode;
+  let n = 0;
+  proto.decode = function (this: HTMLImageElement) {
+    n++;
+    return origDecode.call(this);
+  };
+  try {
+    await fn();
+  } finally {
+    proto.decode = origDecode;
+  }
+  return n;
+}
+
+const idle = (ms = 150) => new Promise((res) => setTimeout(res, ms));
+
+// F10: queued preview work stays bounded and obsolete work is never decoded.
+async function runPreviewBacklog(): Promise<void> {
+  resetTouchStrip();
+  const canvas = document.createElement('canvas');
+  canvas.width = 40;
+  canvas.height = 10;
+  const red = solidJpeg(40, 10, '#ff0000');
+  const detach = attachTouchCanvas(canvas);
+  await idle();
+
+  let decodes = await countDecodes(async () => {
+    for (let i = 0; i < 100; i++) applyTouchImage({ data: red });
+    await idle();
+  });
+  check(decodes <= 3, `A burst of 100 full frames decodes a bounded number (${decodes})`);
+
+  decodes = await countDecodes(async () => {
+    for (let i = 0; i < 100; i++) applyTouchImage({ data: red });
+    resetTouchStrip();
+    await idle();
+  });
+  check(decodes <= 1, `A reset during a backlog decodes no obsolete frames (${decodes})`);
+
+  // Distinct partial windows keep their order: the later patch lands on top.
+  const blue = solidJpeg(20, 10, '#0000ff');
+  const green = solidJpeg(20, 10, '#00ff00');
+  applyTouchImage({ data: solidJpeg(40, 10, '#000000') });
+  applyTouchImage({ data: blue, region: { x: 0, y: 0, w: 20, h: 10 } });
+  applyTouchImage({ data: green, region: { x: 10, y: 0, w: 20, h: 10 } });
+  await idle();
+  const px = (x: number) => canvas.getContext('2d')!.getImageData(x, 5, 1, 1).data;
+  check(px(5)[2]! > 200 && px(25)[1]! > 200, 'Queued partial patches composite in order');
+  check(px(15)[1]! > 200, 'The later overlapping patch lands on top');
+
+  // Detach: nothing is painted to (or decoded for) a canvas that left.
+  detach();
+  const before = canvas.getContext('2d')!.getImageData(5, 5, 1, 1).data.join();
+  decodes = await countDecodes(async () => {
+    applyTouchImage({ data: red });
+    await idle();
+  });
+  check(decodes === 0, 'No decode while no canvas is attached');
+  check(
+    canvas.getContext('2d')!.getImageData(5, 5, 1, 1).data.join() === before,
+    'A detached canvas is not painted',
+  );
+  const again = attachTouchCanvas(canvas);
+  check(await stripRed(5, 5, (r) => r > 200).then(() => true), 'Reattach repaints from cache');
+  again();
+
+  // Zone previews: reset during a backlog decodes nothing obsolete.
+  resetStripZones();
+  const z = zoneCanvas(zone(2, 204));
+  const slotRed = solidJpeg(176, 112, '#ff0000');
+  decodes = await countDecodes(async () => {
+    for (let i = 0; i < 100; i++) applyStripWrite({ wireId: 2, data: slotRed });
+    await idle();
+  });
+  check(decodes <= 3, `A burst of 100 slot writes decodes a bounded number (${decodes})`);
+  check(await zonePixel(z.canvas, 88, 56, isRed), 'The newest slot write is painted');
+  decodes = await countDecodes(async () => {
+    for (let i = 0; i < 100; i++) applyStripWrite({ wireId: 2, data: slotRed, full: true });
+    resetStripZones();
+    await idle();
+  });
+  check(decodes <= 1, `Zone reset during a backlog decodes no obsolete writes (${decodes})`);
+  z.detach();
+  decodes = await countDecodes(async () => {
+    applyStripWrite({ wireId: 2, data: slotRed });
+    await idle();
+  });
+  check(decodes === 0, 'A detached zone canvas is not decoded for');
+  resetStripZones();
+}
+
+// F19: a log batch is one copy + one notify, and the panel keeps up past the cap.
+async function runLogBatches(): Promise<void> {
+  const mk = (i: number) => ({ ts: i, level: 'info' as const, component: 'c', message: `m${i}` });
+  let notifies = 0;
+  const unsub = subscribe(() => notifies++);
+  const seq0 = getSnapshot().serverLogSeq;
+  addServerLogs(Array.from({ length: 500 }, (_, i) => mk(i)));
+  check(notifies === 1, 'A 500-entry batch notifies once');
+  check(getSnapshot().serverLogSeq === seq0 + 500, 'The append sequence counts the batch');
+  addServerLogs(Array.from({ length: 2500 }, (_, i) => mk(1000 + i)));
+  const logs = getSnapshot().serverLogs;
+  check(logs.length === 2000 && logs[1999]!.message === 'm3499', 'The cap keeps the newest 2000');
+  addCommLogs([]);
+  check(notifies === 2, 'An empty batch does not notify');
+  unsub();
+
+  await act(() => render(<LogConsolePanel />, root));
+  await new Promise((res) => requestAnimationFrame(res));
+  const pre = root.querySelector('pre')!;
+  check(pre.children.length === 2000, 'The panel renders the capped log');
+  addServerLogs([mk(9001), mk(9002)]);
+  await new Promise((res) => requestAnimationFrame(res));
+  await new Promise((res) => requestAnimationFrame(res));
+  check(
+    pre.children.length === 2000 && pre.lastElementChild!.textContent.includes('m9002'),
+    'The panel keeps appending once the log is at the cap',
+  );
+  await act(() => render(null, root));
 }
 
 // Device tuning + diagnostics panels (simple/device-tuning.tsx,

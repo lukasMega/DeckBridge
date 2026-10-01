@@ -57,12 +57,8 @@ const handlers: Partial<Handlers> = {
     flashKey(e.mk2Index);
     store.addKeyEvent(e);
   },
-  logBatch: (entries) => {
-    for (const e of entries) store.addServerLog(e);
-  },
-  commBatch: (entries) => {
-    for (const e of entries) store.addCommLog(e);
-  },
+  logBatch: (entries) => store.addServerLogs(entries),
+  commBatch: (entries) => store.addCommLogs(entries),
   stats: (stats) => store.patch({ stats }),
   ...(__MOCK_BUILD__
     ? { mockConfig: (mockConfig: WsEvents['mockConfig']) => store.patch({ mockConfig }) }
