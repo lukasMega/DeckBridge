@@ -23,7 +23,7 @@ export interface TouchImageEvent {
 
 export class TouchStripAssembler {
   private windowPages = new Map<number, ImageAssembly>();
-  private partialPages = new Map<string, ImageAssembly>();
+  private partialPages = new Map<number, ImageAssembly>();
 
   constructor(private readonly budget?: AssemblyBudget) {}
 
