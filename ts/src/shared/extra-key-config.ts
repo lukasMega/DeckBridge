@@ -254,7 +254,8 @@ export function extraKeyConfigError(v: unknown): string | null {
   if (!isOneOf(EXTRA_KEY_WIDGETS, r.widget)) {
     return `widget must be one of: ${EXTRA_KEY_WIDGETS.join(', ')}`;
   }
-  if (r.widget === 'external' && !isPushChannel(r.param)) {
+  // No channel yet is valid: picking the widget posts before the user types a name.
+  if (r.widget === 'external' && r.param !== undefined && !isPushChannel(r.param)) {
     return 'param must be a channel name: 1–32 of a-z 0-9 . _ - (starting with a letter or digit)';
   }
   for (const [field, check] of CONFIG_CHECKS) {

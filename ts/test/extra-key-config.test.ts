@@ -127,9 +127,9 @@ test('normalize folds them into style; an explicit style field wins', () => {
 
 console.log('\nexternal widget config');
 
-test('external needs a valid channel param', () => {
+test('external: channel optional, but must be valid when set', () => {
   assert.ok(isExtraKeyConfig({ widget: 'external', param: 'obs-rec' }));
-  assert.ok(!isExtraKeyConfig({ widget: 'external' }));
+  assert.ok(isExtraKeyConfig({ widget: 'external' }));
   assert.ok(!isExtraKeyConfig({ widget: 'external', param: 'Bad Name' }));
 });
 

@@ -194,7 +194,11 @@ try {
       expire: 'text',
       fallbackText: 'off',
     });
-    assert.equal((await admin('/api/extra-key', { wireId: 16, widget: 'external' })).status, 400);
+    assert.equal((await admin('/api/extra-key', { wireId: 16, widget: 'external' })).status, 200);
+    assert.equal(
+      (await admin('/api/extra-key', { wireId: 16, widget: 'external', param: 'Bad Name' })).status,
+      400,
+    );
   });
 
   await test('admin send-test and clear routes', async () => {
