@@ -35,13 +35,25 @@ export class ProbePacer {
   probing = false;
   /** A reconnect timer is pending; cleared when a probe starts, however it was started. */
   private scheduled = false;
+  private timer: ReturnType<typeof setTimeout> | null = null;
+  private cancelled = false;
 
   /** Run `probe` after the current interval, unless one is already pending. */
   schedule(probe: () => void): void {
-    if (this.scheduled) return;
+    if (this.scheduled || this.cancelled) return;
     this.scheduled = true;
     this.attempts++;
-    setTimeout(probe, this.delayMs);
+    this.timer = setTimeout(() => {
+      this.timer = null;
+      probe();
+    }, this.delayMs);
+  }
+
+  /** Shutdown: drop the pending reconnect and refuse new ones. */
+  cancel(): void {
+    this.cancelled = true;
+    if (this.timer !== null) clearTimeout(this.timer);
+    this.timer = null;
   }
 
   /** A connect attempt started (timer, startup, mode switch): a later failure may schedule again. */

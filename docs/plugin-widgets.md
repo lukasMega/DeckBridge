@@ -103,6 +103,13 @@ Failure handling:
 - **Do not use the global `fetch` or `WebSocket`.** They are removed from the plugin
   worker on startup — calling them throws (in the underlying runtime they would abort the
   whole process). Always use `ctx.fetch` for HTTP.
+- **`ctx.fetch` limits.** Each request gets 10 seconds in total, from sending it to
+  the last byte of the response. Request and response bodies are each capped at 1 MiB.
+  At most 4 requests run at the same time; another request fails at once and is not
+  queued. A request over a limit rejects with an `Error` that names the limit, for
+  example `fetch timeout`, `response exceeds 1048576 bytes` or
+  `too many concurrent requests (max 4)`. Requests still running when the plugin is
+  removed, or when DeckBridge quits, are aborted.
 - **Value length cap.** Returned strings are truncated to 256 characters. Each display zone
   fits a few short lines.
 - **Absolute paths only for imports.** DeckBridge imports your file by its on-disk path;

@@ -13,8 +13,14 @@ export interface TrayState {
 
 export interface TrayHandle {
   push(state: TrayState): void;
-  close(): void;
+  /** Close the socket and stop the sidecar; resolves once it has exited (or did not
+   *  exit even after SIGKILL within the grace). */
+  close(): Promise<void>;
 }
+
+/** SIGTERM → SIGKILL grace, then the same again for the exit itself. */
+const TRAY_EXIT_GRACE_MS = 500;
+const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
 
 /** Tray stdout events routed to app.ts. `onRestartElgatoApp` is the manual path
  *  for the "Restart Elgato App" menu item — the tray only emits the event, TS
@@ -77,6 +83,7 @@ class TrayProcess implements TrayHandle {
   private writer: WritableStreamDefaultWriter<Uint8Array> | null = null;
   private socket: TjsTCPSocket | null = null;
   private pending: TrayState | null = null;
+  private closed = false;
   private proc: TjsProcess | null = null;
 
   private constructor() {}
@@ -129,8 +136,14 @@ class TrayProcess implements TrayHandle {
 
   private async _connect(port: number): Promise<void> {
     try {
-      this.socket = await tjs.connect('tcp', '127.0.0.1', port);
-      const { writable } = await this.socket.opened;
+      const socket = await tjs.connect('tcp', '127.0.0.1', port);
+      // close() ran while connecting: this socket has no owner any more.
+      if (this.closed) {
+        socket.close();
+        return;
+      }
+      this.socket = socket;
+      const { writable } = await socket.opened;
       this.writer = writable.getWriter();
       if (this.pending) {
         void this._send(this.pending);
@@ -157,18 +170,40 @@ class TrayProcess implements TrayHandle {
     void this._send(state);
   }
 
-  close(): void {
+  async close(): Promise<void> {
+    this.closed = true;
+    const writer = this.writer;
+    this.writer = null;
+    this.pending = null;
+    if (writer) {
+      void writer.abort().catch(() => undefined);
+      writer.releaseLock();
+    }
     this.socket?.close();
+    this.socket = null;
     // deckbridge-tray's behavior on stdin EOF / socket close is unverified — SIGTERM
     // it explicitly on shutdown so it can't be orphaned across restarts.
-    if (this.proc) {
-      try {
-        this.proc.kill('SIGTERM');
-      } catch {
-        /* already exited */
-      }
-      this.proc = null;
-    }
+    const proc = this.proc;
+    this.proc = null;
+    if (!proc) return;
+    const state = { exited: false };
+    const exit = (async (): Promise<void> => {
+      await proc.wait();
+      state.exited = true;
+    })();
+    killQuietly(proc, 'SIGTERM');
+    await Promise.race([exit, sleep(TRAY_EXIT_GRACE_MS)]);
+    if (state.exited) return;
+    killQuietly(proc, 'SIGKILL');
+    await Promise.race([exit, sleep(TRAY_EXIT_GRACE_MS)]);
+  }
+}
+
+function killQuietly(proc: TjsProcess, signal: string): void {
+  try {
+    proc.kill(signal);
+  } catch {
+    /* already exited */
   }
 }
 

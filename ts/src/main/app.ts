@@ -25,6 +25,9 @@ import { runDiagnoseCommand } from '../cli/diagnose.js';
 import { PersistedSettings } from '../infra/settings.js';
 import { createDailyPing, sendBeacon } from '../infra/daily-ping.js';
 import { STARTUP_DELAY_MS, CHECK_INTERVAL_MS } from '../infra/update-check.js';
+import { stopCommands } from '../infra/command-runner.js';
+import { shutdownPluginHost } from '../plugin/plugin-host.js';
+import { createShutdown } from './shutdown.js';
 import {
   MIN_DWELL_MS,
   PING_SCHEDULE_SLACK_MS,
@@ -99,10 +102,17 @@ const childServer = new ElgatoChildServer(
 // startWithRetry() (see cora-dock.ts). DriverManager wraps it as dock 0.
 const primaryDock = new CoraDock(server, childServer, 'dock 0');
 
-let shuttingDown = false;
+// Widened: TS would otherwise narrow it to `false` across the startup awaits.
+let shuttingDown = false as boolean;
 let tray: TrayHandle | null = null;
-let updateCheckTimer: ReturnType<typeof setInterval> | null = null;
-let dailyPingTimer: ReturnType<typeof setInterval> | null = null;
+/** Every startup/recurring timer, so shutdown can clear them all. */
+const timers: Array<ReturnType<typeof setTimeout>> = [];
+/** Update checks / daily pings in flight: they may still write settings. */
+const settingsWriters = new Set<Promise<unknown>>();
+function trackWriter(p: Promise<unknown>): void {
+  settingsWriters.add(p);
+  void p.finally(() => settingsWriters.delete(p));
+}
 
 setWebUILog((level, component, message) => webui.log(level, component, message));
 
@@ -176,6 +186,46 @@ driverManager.on('changed', () => {
 const elgatoAutoRestart = new ElgatoAutoRestart(
   createElgatoAutoRestartDeps({ webui, settings, driverManager }),
 );
+
+const shutdown = createShutdown({
+  quiesce: () => {
+    shuttingDown = true;
+    for (const [sig, handler] of signalHandlers) {
+      try {
+        tjs.removeSignalListener(sig, handler);
+      } catch {}
+    }
+    log('info', 'deckBr', 'shutting down...');
+    for (const t of timers) clearTimeout(t);
+    elgatoAutoRestart.dispose();
+    webui.elgatoApp.control.cancelLaunches();
+    driverManager.stopScan();
+  },
+  owners: [
+    ['commands', stopCommands],
+    ['plugins', shutdownPluginHost],
+    ['docks', () => driverManager.shutdown()],
+    ['webui', () => webui.stop()],
+    ['tray', async () => tray?.close()],
+    ['settings writers', () => Promise.allSettled(settingsWriters)],
+  ],
+  persist: () => settings.close(),
+  // Last: the shutdown path itself reaches the disk (tray "Quit" routes through here too).
+  drainLogs: stopLogFile,
+  exit: (code) => tjs.exit(code),
+});
+
+function onSignal(sig?: string): void {
+  log('warn', 'deckBr', `received ${sig ?? 'signal'} — shutting down`);
+  shutdown().catch(() => tjs.exit(1));
+}
+
+// Kept as [signal, handler] pairs so shutdown() can unregister the exact same
+// function references it registered.
+const signalHandlers = (['SIGINT', 'SIGTERM', 'SIGHUP'] as const).map(
+  (sig) => [sig, () => onSignal(sig)] as const,
+);
+for (const [sig, handler] of signalHandlers) tjs.addSignalListener(sig, handler);
 
 // Wiring both halves of the primary CORA pair share (scanned docks get serverLog only —
 // see coraDockFactory).
@@ -293,44 +343,6 @@ if (__MOCK_BUILD__)
     );
   });
 
-async function shutdown(): Promise<void> {
-  if (shuttingDown) return;
-  shuttingDown = true;
-  for (const [sig, handler] of signalHandlers) {
-    try {
-      tjs.removeSignalListener(sig, handler);
-    } catch {}
-  }
-  log('info', 'deckBr', 'shutting down...');
-  if (updateCheckTimer) clearInterval(updateCheckTimer);
-  if (dailyPingTimer) clearInterval(dailyPingTimer);
-  elgatoAutoRestart.dispose();
-  driverManager.stopScan();
-  await driverManager.stopScannedDocks().catch(() => undefined);
-  const prev = driverManager.getCurrentDriver();
-  if (prev) prev.removeAllListeners();
-  await prev?.close().catch(() => undefined);
-  await primaryDock.stop();
-  await webui.stop().catch(() => undefined);
-  tray?.close();
-  // Last thing before exit: drain the batched log lines so the shutdown path
-  // itself is on disk (the tray "Quit" handler routes through here too).
-  await stopLogFile().catch(() => undefined);
-  tjs.exit(0);
-}
-
-function onSignal(sig?: string): void {
-  log('warn', 'deckBr', `received ${sig ?? 'signal'} — shutting down`);
-  shutdown().catch(() => tjs.exit(1));
-}
-
-// Kept as [signal, handler] pairs so shutdown() can unregister the exact same
-// function references it registered.
-const signalHandlers = (['SIGINT', 'SIGTERM', 'SIGHUP'] as const).map(
-  (sig) => [sig, () => onSignal(sig)] as const,
-);
-for (const [sig, handler] of signalHandlers) tjs.addSignalListener(sig, handler);
-
 // Startup banner. Label padding is hand-set per line and reproduced verbatim in
 // issue reports — keep the widths as they are.
 const BANNER_RULE = '══════════════════════════════════════════════';
@@ -360,15 +372,17 @@ for (const [level, line] of [
 // connected (nobody reads the flag) or under --headless.
 let _elgatoAppConflict = false;
 if (!headless) {
-  setInterval(async () => {
-    if (!webui.hasClients()) return;
-    const connected = webui.snapshot().driverConnected;
-    const next = connected ? false : await isElgatoAppRunning();
-    if (next !== _elgatoAppConflict) {
-      _elgatoAppConflict = next;
-      webui.notifyElgatoAppConflict(next);
-    }
-  }, 2000);
+  timers.push(
+    setInterval(async () => {
+      if (!webui.hasClients()) return;
+      const connected = webui.snapshot().driverConnected;
+      const next = connected ? false : await isElgatoAppRunning();
+      if (next !== _elgatoAppConflict) {
+        _elgatoAppConflict = next;
+        webui.notifyElgatoAppConflict(next);
+      }
+    }, 2000),
+  );
 }
 
 // GitHub-release update check (update-check.ts): a delayed start keeps it off the
@@ -376,10 +390,13 @@ if (!headless) {
 // debug — an offline user is the normal case, see update-controller.ts.
 if (!__MOCK_BUILD__ || tjs.env.DECKBRIDGE_MOCK !== '1') {
   const runUpdateCheck = (): void => {
-    void webui.updates.check(false).catch((e: unknown) => log('debug', 'update', String(e)));
+    if (shuttingDown) return;
+    trackWriter(
+      webui.updates.check(false).catch((e: unknown) => log('debug', 'update', String(e))),
+    );
   };
-  setTimeout(runUpdateCheck, STARTUP_DELAY_MS);
-  updateCheckTimer = setInterval(runUpdateCheck, CHECK_INTERVAL_MS);
+  timers.push(setTimeout(runUpdateCheck, STARTUP_DELAY_MS));
+  timers.push(setInterval(runUpdateCheck, CHECK_INTERVAL_MS));
 
   // Own delay, not the update check's 30 s: MIN_DWELL_MS keeps CI/sandbox runs
   // from beaconing (daily-ping-env.ts) and lets a boot-time device enumerate
@@ -396,10 +413,11 @@ if (!__MOCK_BUILD__ || tjs.env.DECKBRIDGE_MOCK !== '1') {
     browserTimeZone: () => settings.browserTimeZone,
   });
   const runPing = (): void => {
-    void dailyPing.ping().catch((e: unknown) => log('debug', 'dailyPing', String(e)));
+    if (shuttingDown) return;
+    trackWriter(dailyPing.ping().catch((e: unknown) => log('debug', 'dailyPing', String(e))));
   };
-  setTimeout(runPing, MIN_DWELL_MS + PING_SCHEDULE_SLACK_MS);
-  dailyPingTimer = setInterval(runPing, PING_RETRY_INTERVAL_MS);
+  timers.push(setTimeout(runPing, MIN_DWELL_MS + PING_SCHEDULE_SLACK_MS));
+  timers.push(setInterval(runPing, PING_RETRY_INTERVAL_MS));
 }
 
 if (noWebui) {
@@ -431,8 +449,10 @@ if (headless) {
         },
       }),
     );
-    tray = spawned;
-    if (spawned) pushTrayState();
+    // Quit during the spawn: shutdown already ran its tray step, so close this one here.
+    if (shuttingDown) await spawned?.close();
+    else tray = spawned;
+    if (tray) pushTrayState();
     log('info', 'tray', spawned ? `started: ${trayBin}` : `failed to spawn: ${trayBin}`);
   } else {
     log(

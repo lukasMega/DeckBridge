@@ -35,6 +35,14 @@ import { StubDockDriver } from './helpers/stub-dock-driver.js';
 function makeFakeServer() {
   return Object.assign(new EventEmitter(), {
     hasClient: false,
+    stopCalls: 0,
+    start(): Promise<void> {
+      return Promise.resolve();
+    },
+    stop(): Promise<void> {
+      this.stopCalls++;
+      return Promise.resolve();
+    },
     setDeviceConfigCalls: [] as Partial<DeviceConfig>[],
     setChildGeometryCalls: [] as ChildGeometry[],
     restartMdnsCalls: [] as number[],
@@ -73,6 +81,14 @@ function primaryCora(
 /** An EventEmitter, so a test can push CORA images/brightness at the primary dock. */
 function makeFakeChildServer() {
   return Object.assign(new EventEmitter(), {
+    stopCalls: 0,
+    start(): Promise<void> {
+      return Promise.resolve();
+    },
+    stop(): Promise<void> {
+      this.stopCalls++;
+      return Promise.resolve();
+    },
     setChildGeometryCalls: [] as ChildGeometry[],
     sendKeyEventCalls: [] as { keyIndex: number; state: KeyState }[],
     hasClient: false,
@@ -1581,6 +1597,103 @@ await test('F6. the pacer keeps one reconnect pending and counts attempts until 
   pacer.connected();
   assert.equal(pacer.attempts, 0, 'reset on connect');
   await new Promise((r) => setTimeout(r, 5));
+});
+
+// Application shutdown (P1 plan, Stage 5 / F12 + F13)
+
+await test('S1. shutdown stops the primary dock: driver closed, CORA pair stopped, idempotent', async () => {
+  const { driverManager, server, childServer, usb } = setup();
+  let created: ControllableRealDriver | null = null;
+  usb.factory.make = (model) => {
+    created = new ControllableRealDriver(model);
+    created.resolveOpen();
+    return created as unknown as WorkerHidDriver;
+  };
+  try {
+    await driverManager.tryRealConnect();
+    assert.ok(driverManager.getCurrentDriver(), 'precondition: connected');
+    const a = driverManager.shutdown();
+    assert.equal(driverManager.shutdown(), a, 'one shared shutdown');
+    await a;
+    assert.equal(created!.closeCalls, 1, 'primary driver closed through Dock.stop()');
+    assert.equal(driverManager.getCurrentDriver(), null);
+    assert.equal(server.stopCalls, 1);
+    assert.equal(childServer.stopCalls, 1);
+  } finally {
+    usb.factory.reset();
+  }
+});
+
+await test('S2. a probe that opens after shutdown is closed, never attached', async () => {
+  const usb = fakeUsb();
+  const webui = makeFakeWebUI();
+  let shutting = false;
+  const driverManager = new DriverManager({
+    webui: webui as unknown as WebUIServer,
+    settings: webui as unknown as PersistedSettings,
+    cora: primaryCora(makeFakeServer(), makeFakeChildServer()),
+    getShuttingDown: () => shutting,
+    discovery: usb.discovery,
+    pool: usb.pool,
+  });
+  let created: ControllableRealDriver | null = null;
+  usb.factory.make = (model) => {
+    created ??= new ControllableRealDriver(model);
+    return created as unknown as WorkerHidDriver;
+  };
+  const probe = driverManager.tryRealConnect();
+  await flush();
+  shutting = true;
+  const stopping = driverManager.shutdown();
+  created!.resolveOpen();
+  await probe;
+  await stopping;
+  assert.equal(created!.closeCalls, 1, 'late driver closed');
+  assert.equal(driverManager.getCurrentDriver(), null, 'never attached');
+  assert.ok(
+    !webui.notifyDriverStatusCalls.some((c) => c.mode === 'real' && c.connected),
+    'never reported connected',
+  );
+});
+
+await test('S3. a scanned dock still opening at shutdown is closed and never registered (F13)', async () => {
+  const { driverManager, identities, present, usb, driversByPath } = setupCoord();
+  present.add(DEFAULT_MODEL.id);
+  present.add(MIRABOX_293_MODEL.id);
+  await driverManager.tryRealConnect();
+  const pending = Promise.withResolvers<void>();
+  let extra: CoordFakeDriver | null = null;
+  usb.factory.make = (m) => {
+    const d = new CoordFakeDriver(m);
+    d.open = (hidPath: string) => {
+      d.hidPath = hidPath;
+      driversByPath.set(hidPath, d);
+      return pending.promise;
+    };
+    extra = d;
+    return d as unknown as WorkerHidDriver;
+  };
+  const scan = driverManager.__scanOnce();
+  await flush();
+  assert.ok(extra, 'precondition: the extra open is in flight');
+  const stopping = driverManager.shutdown();
+  pending.resolve();
+  await scan;
+  await stopping;
+  assert.equal(extra!.closeCalls, 1, 'the late-opening extra was closed');
+  assert.equal(identities.length, 0, 'no scanned dock was ever created');
+  assert.deepEqual(driverManager.getDockStatuses(), []);
+});
+
+await test('S4. shutdown cancels the pending reconnect timer', async () => {
+  const pacer = new ProbePacer();
+  let probes = 0;
+  pacer.delayMs = 10;
+  pacer.schedule(() => probes++);
+  pacer.cancel();
+  pacer.schedule(() => probes++);
+  await new Promise((r) => setTimeout(r, 30));
+  assert.equal(probes, 0);
 });
 
 // Summary

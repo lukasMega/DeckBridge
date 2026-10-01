@@ -83,7 +83,7 @@ await runTest('configure/value/fetch/pong message shapes round-trip', () => {
   assert.equal(value.value, 'hi');
   assert.equal(cleared.value, null);
 
-  const fetchReq: PluginWorkerToMain = { type: 'fetch', fetchId: 7, url: HTTP_URL };
+  const fetchReq: PluginWorkerToMain = { type: 'fetch', fetchId: 7, key: 'k', url: HTTP_URL };
   const fetchRes: MainToPluginWorker = {
     type: 'fetchResult',
     fetchId: 7,
@@ -163,11 +163,11 @@ console.log('\nPluginHost fetch proxy');
 await runTest('plaintext fetch request → main-thread fetch → fetchResult', async () => {
   const realFetch = globalThis.fetch;
   (globalThis as { fetch: unknown }).fetch = (url: string) =>
-    Promise.resolve({ ok: true, status: 200, text: () => Promise.resolve(`body:${url}`) });
+    Promise.resolve(new Response(`body:${url}`, { status: 200 }));
   try {
     const { host, workers } = makeHost();
     host.request('p.js', undefined, undefined, () => {});
-    workers[0]!.emit({ type: 'fetch', fetchId: 1, url: HTTP_URL });
+    workers[0]!.emit({ type: 'fetch', fetchId: 1, key: 'k', url: HTTP_URL });
     await macrotask();
     const res = workers[0]!.posted.find((m) => m.type === 'fetchResult');
     assert.ok(res, 'fetchResult posted');
@@ -182,7 +182,7 @@ await runTest('plaintext fetch request → main-thread fetch → fetchResult', a
 await runTest('non-http url is rejected without calling fetch', async () => {
   const { host, workers } = makeHost();
   host.request('p.js', undefined, undefined, () => {});
-  workers[0]!.emit({ type: 'fetch', fetchId: 2, url: 'https://example/x' });
+  workers[0]!.emit({ type: 'fetch', fetchId: 2, key: 'k', url: 'https://example/x' });
   await macrotask();
   const res = workers[0]!.posted.find((m) => m.type === 'fetchResult') as
     | { ok: boolean; error?: string }
@@ -191,6 +191,362 @@ await runTest('non-http url is rejected without calling fetch', async () => {
   assert.equal(res!.ok, false);
   assert.ok((res!.error ?? '').includes('TLS'), 'error explains the no-TLS limitation');
   host.stop();
+});
+
+type FetchCall = { url: string; signal: AbortSignal; body?: string };
+
+/** Swap the global fetch for `impl` while `fn` runs. */
+async function withFetch(
+  impl: (call: FetchCall) => Promise<Response>,
+  fn: (calls: FetchCall[]) => Promise<void>,
+): Promise<void> {
+  const realFetch = globalThis.fetch;
+  const calls: FetchCall[] = [];
+  (globalThis as { fetch: unknown }).fetch = (url: string, init: RequestInit) => {
+    const call = { url, signal: init.signal!, body: init.body as string | undefined };
+    calls.push(call);
+    return impl(call);
+  };
+  try {
+    await fn(calls);
+  } finally {
+    (globalThis as { fetch: unknown }).fetch = realFetch;
+  }
+}
+
+/** Resolves with nothing until the request's signal aborts, then rejects like txiki. */
+const untilAborted = (signal: AbortSignal): Promise<never> =>
+  new Promise((_, reject) =>
+    signal.addEventListener('abort', () => reject(new Error('AbortError')), { once: true }),
+  );
+
+type FetchResult = Extract<MainToPluginWorker, { type: 'fetchResult' }>;
+const results = (w: FakeWorker): FetchResult[] =>
+  w.posted.filter((m): m is FetchResult => m.type === 'fetchResult');
+
+async function waitForResult(w: FakeWorker, fetchId: number, ms = 1000): Promise<FetchResult> {
+  const deadline = Date.now() + ms;
+  for (;;) {
+    const r = results(w).find((m) => m.fetchId === fetchId);
+    if (r) return r;
+    if (Date.now() > deadline) throw new Error(`no fetchResult for ${fetchId}`);
+    await sleepMs(5);
+  }
+}
+
+function hostWithTimeout(ms: number): { host: PluginHost; workers: FakeWorker[] } {
+  const workers: FakeWorker[] = [];
+  const host = new PluginHost({
+    pluginsDir: PLUGINS_DIR,
+    fetchTimeoutMs: ms,
+    workerFactory: () => {
+      const w = new FakeWorker();
+      workers.push(w);
+      return w;
+    },
+  });
+  return { host, workers };
+}
+
+const KEY = 'p.js\0';
+
+await runTest('stalled headers: the deadline aborts the request itself', async () => {
+  await withFetch(
+    (c) => untilAborted(c.signal),
+    async (calls) => {
+      const { host, workers } = hostWithTimeout(40);
+      host.request('p.js', undefined, undefined, () => {});
+      workers[0]!.emit({ type: 'fetch', fetchId: 1, key: KEY, url: HTTP_URL });
+      const r = await waitForResult(workers[0]!, 1);
+      assert.equal(r.error, 'fetch timeout');
+      assert.ok(calls[0]!.signal.aborted, 'native request aborted, not just raced');
+      assert.equal(host.activeFetchCount, 0);
+      host.stop();
+    },
+  );
+});
+
+await runTest('headers arrive, body stalls: the original deadline still fires', async () => {
+  let cancelled = false;
+  await withFetch(
+    () =>
+      Promise.resolve(
+        new Response(
+          new ReadableStream<Uint8Array>({
+            start(c) {
+              c.enqueue(new TextEncoder().encode('partial'));
+            },
+            cancel() {
+              cancelled = true;
+            },
+          }),
+        ),
+      ),
+    async () => {
+      const { host, workers } = hostWithTimeout(60);
+      host.request('p.js', undefined, undefined, () => {});
+      workers[0]!.emit({ type: 'fetch', fetchId: 1, key: KEY, url: HTTP_URL });
+      const r = await waitForResult(workers[0]!, 1);
+      assert.equal(r.error, 'fetch timeout');
+      assert.equal(r.body, '', 'no partial body on failure');
+      assert.ok(cancelled, 'body stream cancelled');
+      host.stop();
+    },
+  );
+});
+
+await runTest('a slow trickle never resets the deadline', async () => {
+  let timer: ReturnType<typeof setInterval> | undefined;
+  await withFetch(
+    () =>
+      Promise.resolve(
+        new Response(
+          new ReadableStream<Uint8Array>({
+            start(c) {
+              timer = setInterval(() => c.enqueue(new Uint8Array([0x61])), 10);
+            },
+            cancel() {
+              clearInterval(timer);
+            },
+          }),
+        ),
+      ),
+    async () => {
+      const { host, workers } = hostWithTimeout(80);
+      host.request('p.js', undefined, undefined, () => {});
+      const t0 = Date.now();
+      workers[0]!.emit({ type: 'fetch', fetchId: 1, key: KEY, url: HTTP_URL });
+      const r = await waitForResult(workers[0]!, 1);
+      assert.equal(r.error, 'fetch timeout');
+      assert.ok(Date.now() - t0 < 500);
+      host.stop();
+    },
+  );
+  clearInterval(timer);
+});
+
+await runTest('unknown-length body over 1 MiB fails while streaming', async () => {
+  let pulled = 0;
+  let cancelled = false;
+  await withFetch(
+    () =>
+      Promise.resolve(
+        new Response(
+          new ReadableStream<Uint8Array>({
+            pull(c) {
+              pulled++;
+              c.enqueue(new Uint8Array(64 * 1024));
+            },
+            cancel() {
+              cancelled = true;
+            },
+          }),
+        ),
+      ),
+    async () => {
+      const { host, workers } = hostWithTimeout(5000);
+      host.request('p.js', undefined, undefined, () => {});
+      workers[0]!.emit({ type: 'fetch', fetchId: 1, key: KEY, url: HTTP_URL });
+      const r = await waitForResult(workers[0]!, 1);
+      assert.ok(r.error?.includes('response exceeds'), r.error);
+      assert.ok(cancelled);
+      assert.ok(pulled <= 20, `stopped near the cap (pulled ${pulled} chunks)`);
+      host.stop();
+    },
+  );
+});
+
+await runTest('declared oversized body is refused before reading it', async () => {
+  let pulled = 0;
+  await withFetch(
+    () =>
+      Promise.resolve(
+        new Response(
+          new ReadableStream<Uint8Array>({
+            pull(c) {
+              pulled++;
+              c.enqueue(new Uint8Array(1));
+            },
+          }),
+          { headers: { 'content-length': String(8 * 1024 * 1024) } },
+        ),
+      ),
+    async (calls) => {
+      const { host, workers } = hostWithTimeout(5000);
+      host.request('p.js', undefined, undefined, () => {});
+      workers[0]!.emit({ type: 'fetch', fetchId: 1, key: KEY, url: HTTP_URL });
+      const r = await waitForResult(workers[0]!, 1);
+      assert.ok(r.error?.includes('response exceeds'), r.error);
+      assert.ok(calls[0]!.signal.aborted);
+      assert.ok(pulled <= 1, `body barely touched (pulled ${pulled})`);
+      host.stop();
+    },
+  );
+});
+
+await runTest('a fifth simultaneous request fails at once (no queue)', async () => {
+  await withFetch(
+    (c) => untilAborted(c.signal),
+    async (calls) => {
+      const { host, workers } = hostWithTimeout(5000);
+      host.request('p.js', undefined, undefined, () => {});
+      for (let id = 1; id <= 5; id++) {
+        workers[0]!.emit({ type: 'fetch', fetchId: id, key: KEY, url: HTTP_URL });
+      }
+      const r = await waitForResult(workers[0]!, 5);
+      assert.ok(r.error?.includes('too many concurrent'), r.error);
+      assert.equal(calls.length, 4, 'the fifth never reached fetch');
+      assert.equal(host.activeFetchCount, 4);
+      host.stop();
+      assert.equal(host.activeFetchCount, 0);
+      assert.ok(calls.every((c) => c.signal.aborted));
+    },
+  );
+});
+
+await runTest('oversized request body is refused before fetch', async () => {
+  await withFetch(
+    () => Promise.resolve(new Response('')),
+    async (calls) => {
+      const { host, workers } = hostWithTimeout(5000);
+      host.request('p.js', undefined, undefined, () => {});
+      const body = 'x'.repeat(1024 * 1024 + 1);
+      workers[0]!.emit({ type: 'fetch', fetchId: 1, key: KEY, url: HTTP_URL, init: { body } });
+      const r = await waitForResult(workers[0]!, 1);
+      assert.ok(r.error?.includes('request body exceeds'), r.error);
+      assert.equal(calls.length, 0);
+      host.stop();
+    },
+  );
+});
+
+await runTest('HTTP error status and multibyte body survive within limits', async () => {
+  const bytes = new TextEncoder().encode('é!');
+  await withFetch(
+    () =>
+      Promise.resolve(
+        new Response(
+          new ReadableStream<Uint8Array>({
+            start(c) {
+              // Split the two-byte é across chunks.
+              c.enqueue(bytes.slice(0, 1));
+              c.enqueue(bytes.slice(1));
+              c.close();
+            },
+          }),
+          { status: 503 },
+        ),
+      ),
+    async () => {
+      const { host, workers } = hostWithTimeout(5000);
+      host.request('p.js', undefined, undefined, () => {});
+      workers[0]!.emit({ type: 'fetch', fetchId: 1, key: KEY, url: HTTP_URL });
+      const r = await waitForResult(workers[0]!, 1);
+      assert.equal(r.ok, false);
+      assert.equal(r.status, 503);
+      assert.equal(r.body, 'é!');
+      assert.equal(r.error, undefined);
+      host.stop();
+    },
+  );
+});
+
+await runTest('removing a plugin cancels only its own requests', async () => {
+  await withFetch(
+    (c) => untilAborted(c.signal),
+    async (calls) => {
+      const { host, workers } = hostWithTimeout(5000);
+      host.request('a.js', undefined, undefined, () => {});
+      host.request('b.js', undefined, undefined, () => {});
+      workers[0]!.emit({ type: 'fetch', fetchId: 1, key: 'a.js\0', url: HTTP_URL });
+      workers[0]!.emit({ type: 'fetch', fetchId: 2, key: 'b.js\0', url: HTTP_URL });
+      priv(host).entries.get('a.js\0')!.lastRequested = 0;
+      priv(host).hbTick(); // reaps the stale key
+      const r = await waitForResult(workers[0]!, 1);
+      assert.equal(r.error, 'plugin removed');
+      assert.ok(calls[0]!.signal.aborted);
+      assert.ok(!calls[1]!.signal.aborted, 'the other plugin keeps its request');
+      host.stop();
+    },
+  );
+});
+
+await runTest('a respawned worker never receives the old worker’s result', async () => {
+  const pending: Array<(r: Response) => void> = [];
+  await withFetch(
+    () => new Promise<Response>((resolve) => pending.push(resolve)),
+    async (calls) => {
+      const { host, workers } = hostWithTimeout(5000);
+      host.request('p.js', undefined, undefined, () => {});
+      workers[0]!.emit({ type: 'fetch', fetchId: 1, key: KEY, url: HTTP_URL });
+      workers[0]!.emitError('boom'); // respawn
+      assert.ok(calls[0]!.signal.aborted, 'old request aborted with its worker');
+      workers[0]!.emit({ type: 'fetch', fetchId: 9, key: KEY, url: HTTP_URL }); // stale sender
+      workers[1]!.emit({ type: 'fetch', fetchId: 1, key: KEY, url: HTTP_URL }); // same id
+      assert.equal(calls.length, 2, 'the stale worker’s message was ignored');
+      pending[0]!(new Response('old'));
+      pending[1]!(new Response('new'));
+      const r = await waitForResult(workers[1]!, 1);
+      assert.equal(r.body, 'new');
+      await sleepMs(10);
+      assert.equal(results(workers[1]!).length, 1, 'exactly one result for the new worker');
+      assert.equal(results(workers[0]!).length, 0);
+      host.stop();
+    },
+  );
+});
+
+await runTest('dispose aborts every request, settles, and never respawns', async () => {
+  await withFetch(
+    (c) => untilAborted(c.signal),
+    async (calls) => {
+      const { host, workers } = hostWithTimeout(5000);
+      host.request('p.js', undefined, undefined, () => {});
+      workers[0]!.emit({ type: 'fetch', fetchId: 1, key: KEY, url: HTTP_URL });
+      await host.dispose();
+      assert.ok(calls[0]!.signal.aborted);
+      assert.equal(host.activeFetchCount, 0);
+      assert.ok(workers[0]!.terminated || priv(host).worker === null);
+      const v = host.request('q.js', undefined, undefined, () => {});
+      assert.equal(v.status, 'pending');
+      assert.equal(workers.length, 1, 'no worker spawned after dispose');
+    },
+  );
+});
+
+await runTest('native loopback: a stalled body is aborted and the connection closed', async () => {
+  const port = 47900 + (tjs.pid % 50);
+  const server = await tjs.listen('tcp', '127.0.0.1', port);
+  const { readable } = await server.opened;
+  const accepts = readable.getReader();
+  let hungUp = false;
+  const peerClosed = (async (): Promise<void> => {
+    const { value: conn } = await accepts.read();
+    const io = await conn!.opened;
+    const w = io.writable.getWriter();
+    const r = io.readable.getReader();
+    await r.read(); // request
+    await w.write(
+      new TextEncoder().encode('HTTP/1.1 200 OK\r\nContent-Length: 100\r\n\r\npartial'),
+    );
+    // Wait for the client to hang up (EOF or reset) — the abort must reach the socket.
+    try {
+      while (!(await r.read()).done);
+    } catch {
+      // reset also counts as a hang-up
+    }
+    hungUp = true;
+  })();
+  const { host, workers } = hostWithTimeout(150);
+  host.request('p.js', undefined, undefined, () => {});
+  workers[0]!.emit({ type: 'fetch', fetchId: 1, key: KEY, url: `http://127.0.0.1:${port}/` });
+  const r = await waitForResult(workers[0]!, 1, 3000);
+  assert.equal(r.error, 'fetch timeout');
+  await Promise.race([peerClosed, sleepMs(2000)]);
+  assert.ok(hungUp, 'server saw the connection close');
+  host.stop();
+  accepts.releaseLock();
+  server.close();
 });
 
 // heartbeat watchdog

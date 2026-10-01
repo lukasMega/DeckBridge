@@ -36,7 +36,12 @@ export type RestartResult =
   | { ok: true; killed: boolean } // killed = deeplink quit did not work in time
   | {
       ok: false;
-      reason: 'unsupported-platform' | 'not-running' | 'still-running' | 'launch-failed';
+      reason:
+        | 'unsupported-platform'
+        | 'not-running'
+        | 'still-running'
+        | 'launch-failed'
+        | 'cancelled';
     };
 
 export interface ElgatoAppControl {
@@ -50,6 +55,9 @@ export interface ElgatoAppControl {
   /** Launch the app in the background (no main window). Returns whether the
    *  process was confirmed running afterward. Never throws. */
   launch(): Promise<boolean>;
+  /** DeckBridge is quitting: a restart already past its quit step does not relaunch,
+   *  and later launches are refused. The app's own running state is left alone. */
+  cancelLaunches(): void;
 }
 
 interface Deps {
@@ -172,6 +180,7 @@ async function launchWith(deps: Deps, platform: string): Promise<boolean> {
 export function createElgatoAppControl(deps: Partial<Deps> = {}): ElgatoAppControl {
   const d: Deps = { ...defaultDeps(), ...deps };
   let inflightRestart: Promise<RestartResult> | undefined;
+  let launchesCancelled = false;
 
   async function isRunning(): Promise<boolean> {
     return d.isRunning();
@@ -183,6 +192,7 @@ export function createElgatoAppControl(deps: Partial<Deps> = {}): ElgatoAppContr
       log('info', 'elgato-app', `launch skipped: unsupported platform (${platform || 'unknown'})`);
       return false;
     }
+    if (launchesCancelled) return false;
     log('info', 'elgato-app', 'launching');
     const ok = await launchWith(d, platform);
     log('info', 'elgato-app', ok ? 'launch confirmed' : 'launch failed — process never appeared');
@@ -213,6 +223,10 @@ export function createElgatoAppControl(deps: Partial<Deps> = {}): ElgatoAppContr
     }
 
     await d.sleep(relaunchDelayMs);
+    if (launchesCancelled) {
+      log('info', 'elgato-app', 'relaunch skipped: DeckBridge is shutting down');
+      return { ok: false, reason: 'cancelled' };
+    }
 
     const launched = await launchWith(d, platform);
     if (!launched) {
@@ -236,5 +250,12 @@ export function createElgatoAppControl(deps: Partial<Deps> = {}): ElgatoAppContr
     return p;
   }
 
-  return { isRunning, restart, launch };
+  return {
+    isRunning,
+    restart,
+    launch,
+    cancelLaunches: () => {
+      launchesCancelled = true;
+    },
+  };
 }

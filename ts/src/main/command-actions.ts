@@ -7,7 +7,7 @@
 // Opt-in per control, trusted personal LAN only.
 import { COMMAND_TIMEOUT_DEFAULT_MS, effectivePressAction } from '../shared/types.js';
 import type { ExtraKeyConfig, KeyState } from '../shared/types.js';
-import { runCommand } from '../infra/os-utils.js';
+import { runCommand } from '../infra/command-runner.js';
 import { log } from '../shared/logger.js';
 
 export type CommandRunner = (cmd: string, timeoutMs: number) => Promise<string>;
@@ -19,6 +19,7 @@ export class CommandSlots {
   private readonly run: CommandRunner;
   /** `pending` = more events arrived while running. */
   private readonly inflight = new Map<string, { pending: boolean }>();
+  private stopped = false;
 
   constructor(component: string, run: CommandRunner) {
     this.component = component;
@@ -28,6 +29,7 @@ export class CommandSlots {
   /** `commandFor` is re-resolved per run, so a coalesced re-run honours a config
    *  change made meanwhile; undefined = nothing to run. */
   trigger(slot: string, commandFor: () => string | undefined): void {
+    if (this.stopped) return;
     const running = this.inflight.get(slot);
     if (running) {
       running.pending = true;
@@ -48,6 +50,13 @@ export class CommandSlots {
         if (entry.pending) this.trigger(slot, commandFor);
       });
   }
+
+  /** Terminal: no new runs and no coalesced follow-ups. Running commands are cancelled
+   *  by the runner's own shutdown (command-runner stopCommands). */
+  stop(): void {
+    this.stopped = true;
+    for (const entry of this.inflight.values()) entry.pending = false;
+  }
 }
 
 /** Runs one dock's extra-key presses: the press command (ExtraKeyConfig.pressCommand)
@@ -66,6 +75,10 @@ export class ExtraKeyActions {
     this.configFor = configFor;
     this.slots = new CommandSlots('extra-key', run);
     this.refresh = refresh;
+  }
+
+  stop(): void {
+    this.slots.stop();
   }
 
   handleKey(wireId: number, state: KeyState): void {

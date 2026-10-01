@@ -5,6 +5,7 @@ import { EventEmitter } from 'node:events';
 import workerSource from 'virtual:hid-worker';
 import { revokeBlobUrl, spawnWorker, terminateDeferred } from '../shared/worker-lifecycle.js';
 import type { MainToWorker, WorkerToMain } from './hid-worker-protocol.js';
+import { HidWorkQueue, type WorkKind, type WorkOptions } from './hid-work-queue-host.js';
 import type {
   DockDriver,
   DeviceImageSpec,
@@ -50,7 +51,19 @@ export class WorkerHidDriver extends EventEmitter implements DockDriver {
   private openResolve: (() => void) | null = null;
   private openReject: ((err: Error) => void) | null = null;
   private openTimer: ReturnType<typeof setTimeout> | null = null;
-  private closeResolve: (() => void) | null = null;
+  /** One close in flight, shared by every caller; bound to the worker it closes. */
+  private closing: {
+    worker: Worker;
+    promise: Promise<void>;
+    resolve: () => void;
+    reject: (err: Error) => void;
+    timer: ReturnType<typeof setTimeout>;
+  } | null = null;
+  private readonly queue = new HidWorkQueue((msg) => this.worker?.postMessage(msg));
+  /** Set by an overload until the Dock's next CORA child session (resumeImages). */
+  private imagesSuspended = false;
+  /** After a resume, strip patches wait for a full frame to draw on. */
+  private needStripBase = false;
 
   constructor(model: DeviceModel, overrides?: DeviceModelOverride) {
     super();
@@ -63,15 +76,20 @@ export class WorkerHidDriver extends EventEmitter implements DockDriver {
     if (this.openReject) {
       return Promise.reject(new Error('open already in flight'));
     }
+    if (this.closing) return Promise.reject(new Error('driver is closing'));
     this.touchStripOptions = DEFAULT_TOUCH_STRIP_OPTIONS;
+    this.queue.reset();
+    this.imagesSuspended = false;
+    this.needStripBase = false;
     if (!this.worker) {
       const { worker: w, url } = spawnWorker(workerSource);
       this.objectUrl = url;
       this.worker = w;
       w.addEventListener('message', (e: MessageEvent) =>
-        this.onWorkerMessage(e.data as WorkerToMain),
+        this.onWorkerMessage(w, e.data as WorkerToMain),
       );
       w.addEventListener('error', (e) => {
+        if (w !== this.worker) return;
         const message = (e as unknown as { message?: string }).message ?? 'worker error';
         if (this.openReject) {
           this.settleOpen(null, new Error(message));
@@ -89,7 +107,13 @@ export class WorkerHidDriver extends EventEmitter implements DockDriver {
         this.settleOpen(null, new Error('worker open timed out'));
         this.cleanupWorker();
       }, OPEN_TIMEOUT_MS);
-      this.post({ type: 'open', modelId: this.model.id, hidPath, overrides: this.overrides });
+      // oxlint-disable-next-line unicorn/require-post-message-target-origin -- Worker.postMessage takes no targetOrigin
+      this.worker?.postMessage({
+        type: 'open',
+        modelId: this.model.id,
+        hidPath,
+        overrides: this.overrides,
+      });
     });
   }
 
@@ -100,7 +124,12 @@ export class WorkerHidDriver extends EventEmitter implements DockDriver {
    *  so the clone can never observe a later mutation of `bytes` — a manual copy
    *  made just before this call would only be copied again by the clone itself. */
   renderCoraImage(keyIndex: number, bytes: Uint8Array, format: 'jpeg' | 'bmp'): void {
-    this.post({ type: 'image', keyIndex, bytes, format });
+    this.submit({ type: 'image', keyIndex, bytes, format }, 'image', {
+      bytes: bytes.byteLength,
+      coalesceKey: `cora:${keyIndex}`,
+      // Waiting means no clone yet, so it must not alias the caller's buffer.
+      snapshot: () => ({ type: 'image', keyIndex, bytes: bytes.slice(), format }),
+    });
   }
 
   /** Splash source image → worker: the worker transforms with `spec` (which
@@ -108,36 +137,46 @@ export class WorkerHidDriver extends EventEmitter implements DockDriver {
    *  writes the native bytes to the device. Offloads the synchronous FFI transform
    *  and hid_write burst that would otherwise stall the main thread on connect. */
   sendSplashImage(keyIndex: number, bytes: Uint8Array, spec: DeviceImageSpec): void {
-    this.post({ type: 'imageWithSpec', keyIndex, bytes: new Uint8Array(bytes), spec });
+    this.submit({ type: 'imageWithSpec', keyIndex, bytes: new Uint8Array(bytes), spec }, 'image', {
+      bytes: bytes.byteLength,
+      // A newer icon for the same key and spec replaces a waiting one.
+      coalesceKey: `spec:${keyIndex}:${JSON.stringify(spec)}`,
+    });
   }
 
   /** Stream Deck + window image (or a partial-window region) → worker: split into
    *  the device's touch segments and write each (off the main thread). */
   renderTouchImage(bytes: Uint8Array, region?: TouchWindowRegion): void {
-    this.post({ type: 'touchImage', bytes: new Uint8Array(bytes), region });
+    if (this.needStripBase) {
+      if (region) return; // a patch needs the full frame it lands on
+      this.needStripBase = false;
+    }
+    this.submit({ type: 'touchImage', bytes: new Uint8Array(bytes), region }, 'touch', {
+      bytes: bytes.byteLength,
+    });
   }
 
   /** Touch-strip zones DeckBridge widgets own — the worker withholds Elgato strip
    *  segments for them. Copied so the caller may reuse its array. */
   setTouchStripMask(wireIds: readonly number[]): void {
-    this.post({ type: 'setTouchStripMask', wireIds: [...wireIds] });
+    this.control({ type: 'setTouchStripMask', wireIds: [...wireIds] });
   }
 
   restoreTouchSegments(wireIds: readonly number[]): void {
-    this.post({ type: 'restoreTouchSegments', wireIds: [...wireIds] });
+    this.control({ type: 'restoreTouchSegments', wireIds: [...wireIds] });
   }
 
   setTouchStripOptions(options: TouchStripOptions): void {
     this.touchStripOptions = options;
-    this.post({ type: 'setTouchStripOptions', options: { ...options } });
+    this.control({ type: 'setTouchStripOptions', options: { ...options } });
   }
 
   setBrightness(level: number): void {
-    this.post({ type: 'setBrightness', level });
+    this.control({ type: 'setBrightness', level });
   }
 
   clearKey(keyIndex: number): void {
-    this.post({ type: 'clearKey', keyIndex });
+    this.control({ type: 'clearKey', keyIndex });
   }
 
   /** Live device-tuning swap (image fields only — see classifyOverrideChange).
@@ -148,26 +187,63 @@ export class WorkerHidDriver extends EventEmitter implements DockDriver {
   applyOverrides(overrides: DeviceModelOverride | undefined, effectiveModel: DeviceModel): void {
     this.overrides = overrides;
     this.model = effectiveModel;
-    this.post({ type: 'setOverrides', overrides });
+    this.control({ type: 'setOverrides', overrides });
   }
 
   /** Runtime log-level change — no device I/O, the worker just re-filters. */
   setLogLevel(level: string): void {
-    this.post({ type: 'setLogLevel', level });
+    this.control({ type: 'setLogLevel', level });
   }
 
+  /** Concurrent callers share one close. The worker answers 'closed' once its native
+   *  handle is released; if that takes longer than CLOSE_GRACE_MS the close rejects and
+   *  the worker is left running — terminating it mid native call can SIGBUS the
+   *  process — until it does answer (or the process exits). */
   close(): Promise<void> {
-    if (!this.worker) return Promise.resolve();
-    return new Promise<void>((resolve) => {
-      this.closeResolve = resolve;
-      this.post({ type: 'close' });
-      setTimeout(() => {
-        this.cleanupWorker();
-        const r = this.closeResolve;
-        this.closeResolve = null;
-        r?.();
-      }, CLOSE_GRACE_MS);
-    });
+    if (this.closing) return this.closing.promise;
+    const w = this.worker;
+    if (!w) return Promise.resolve();
+    this.settleOpen(null, new Error('driver closed'));
+    // Unposted frames and settings are moot once the device closes.
+    this.queue.reset();
+    const done = Promise.withResolvers<void>();
+    const closing = {
+      worker: w,
+      promise: done.promise,
+      resolve: done.resolve,
+      reject: done.reject,
+      timer: setTimeout(() => this.onCloseTimeout(w), CLOSE_GRACE_MS),
+    };
+    this.closing = closing;
+    // oxlint-disable-next-line unicorn/require-post-message-target-origin -- Worker.postMessage takes no targetOrigin
+    w.postMessage({ type: 'close' });
+    return closing.promise;
+  }
+
+  private onCloseTimeout(w: Worker): void {
+    const c = this.closing;
+    if (c?.worker !== w) return;
+    this.closing = null;
+    // Detach without terminating; onWorkerMessage terminates it on its late 'closed'.
+    if (this.worker === w) this.detachWorker();
+    this.orphans.add(w);
+    log('warn', this.model.id, `USB worker did not close within ${CLOSE_GRACE_MS}ms`);
+    c.reject(new Error('worker close timed out'));
+  }
+
+  /** Workers whose close timed out: terminated once they report 'closed'. */
+  private readonly orphans = new Set<Worker>();
+
+  /** Lift an overload's suspension: the Dock's CORA child has a fresh session. */
+  resumeImages(): void {
+    if (!this.imagesSuspended) return;
+    this.imagesSuspended = false;
+    this.needStripBase = true;
+  }
+
+  /** Queue counters (tests, diagnostics). */
+  get workQueue(): HidWorkQueue {
+    return this.queue;
   }
 
   private onOpened(msg: Extract<WorkerToMain, { type: 'opened' }>): void {
@@ -186,7 +262,12 @@ export class WorkerHidDriver extends EventEmitter implements DockDriver {
     }
   }
 
-  private onWorkerMessage(msg: WorkerToMain): void {
+  private onWorkerMessage(w: Worker, msg: WorkerToMain): void {
+    if (w !== this.worker) {
+      this.onOrphanMessage(w, msg);
+      return;
+    }
+    if (this.onLifecycleMessage(msg)) return;
     switch (msg.type) {
       case 'opened':
         this.onOpened(msg);
@@ -219,20 +300,35 @@ export class WorkerHidDriver extends EventEmitter implements DockDriver {
       case 'error':
         this.reportError(msg.message);
         break;
+    }
+  }
+
+  /** A detached worker is ignored, except that a timed-out close finally finishing
+   *  makes it safe to terminate. */
+  private onOrphanMessage(w: Worker, msg: WorkerToMain): void {
+    if (msg.type === 'closed' && this.orphans.delete(w)) terminateDeferred(w);
+  }
+
+  /** Credits and teardown; true when handled. */
+  private onLifecycleMessage(msg: WorkerToMain): boolean {
+    switch (msg.type) {
+      case 'workDone':
+        this.queue.complete(msg.ids);
+        return true;
       case 'disconnect':
         this.emit('disconnect');
         // Same grace as explicit close(): a physical unplug can race an
         // in-flight worker-thread FFI transform or hid_write, and terminating
         // the thread mid native call SIGBUS/SIGSEGVs the whole process.
         this.cleanupWorker(CLOSE_GRACE_MS);
-        break;
-      case 'closed': {
+        this.finishClose();
+        return true;
+      case 'closed':
         this.cleanupWorker();
-        const r = this.closeResolve;
-        this.closeResolve = null;
-        r?.();
-        break;
-      }
+        this.finishClose();
+        return true;
+      default:
+        return false;
     }
   }
 
@@ -253,11 +349,42 @@ export class WorkerHidDriver extends EventEmitter implements DockDriver {
     else resolve?.();
   }
 
+  private finishClose(): void {
+    const c = this.closing;
+    if (!c) return;
+    this.closing = null;
+    clearTimeout(c.timer);
+    c.resolve();
+  }
+
+  private control(msg: MainToWorker): void {
+    this.submit(msg, 'control', { bytes: 0 });
+  }
+
   // Deliberately NO transfer list: txiki accepts one but only DETACHES the buffers,
   // cloning the content regardless (mod_channel.c). Measured 4 KB..1 MB, transferring
   // is equal-or-slower. Re-measure before adding one.
-  private post(msg: MainToWorker): void {
-    this.worker?.postMessage(msg);
+  private submit(msg: MainToWorker, kind: WorkKind, opts: Omit<WorkOptions, 'kind'>): void {
+    if (!this.worker || this.closing) return;
+    if (kind !== 'control' && this.imagesSuspended) return;
+    const admission = this.queue.submit(msg, { ...opts, kind });
+    if (admission === 'rejected') this.onOverload();
+    else if (admission === 'failed') log('warn', this.model.id, `posting ${msg.type} failed`);
+  }
+
+  /** Out of budget: stop taking images until the producer restarts (one event per
+   *  suspension, so a flood can't flood the log too). */
+  private onOverload(): void {
+    if (this.imagesSuspended) return;
+    this.imagesSuspended = true;
+    const q = this.queue;
+    log(
+      'warn',
+      this.model.id,
+      `USB worker backlog full (${q.postedCount} posted, ${q.pendingCount} waiting, ` +
+        `${q.pendingBytes} bytes) — dropping the CORA session to resync`,
+    );
+    this.emit('overload');
   }
 
   /** Null the refs synchronously, then defer the native terminate() — see
@@ -265,10 +392,17 @@ export class WorkerHidDriver extends EventEmitter implements DockDriver {
    *  what `delayMs` buys: 0 when the worker can't be mid native call (open
    *  failure, graceful close), CLOSE_GRACE_MS on a physical disconnect. */
   private cleanupWorker(delayMs = 0): void {
+    const w = this.detachWorker();
+    if (w) terminateDeferred(w, delayMs);
+  }
+
+  /** Forget the worker and this generation's accounting, without terminating it. */
+  private detachWorker(): Worker | null {
     const w = this.worker;
     this.worker = null;
-    if (w) terminateDeferred(w, delayMs);
+    this.queue.reset();
     if (this.objectUrl) revokeBlobUrl(this.objectUrl);
     this.objectUrl = null;
+    return w;
   }
 }

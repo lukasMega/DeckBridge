@@ -1,7 +1,7 @@
 /** Generic USB HID worker thread entry point.
  *  Instantiates the right driver for the model's protocol (USB_DRIVERS),
  *  then bridges its EventEmitter events ↔ postMessage. */
-import type { MainToWorker, WorkerToMain } from './hid-worker-protocol.js';
+import type { MainToWorker, WorkMessage, WorkerToMain } from './hid-worker-protocol.js';
 import type { KeyEvent, DialEvent, TouchInputEvent } from '../shared/types.js';
 import { DEVICE_MODELS } from '../devices/registry.js';
 import type { DeviceModel, DeviceModelOverride } from '../devices/driver.js';
@@ -196,17 +196,27 @@ async function handle(msg: MainToWorker, deferNotification: boolean): Promise<vo
 }
 
 let queue: Promise<void> = Promise.resolve();
-let pendingImages: MainToWorker[] = [];
+let pendingImages: WorkMessage[] = [];
 let batchTimer: ReturnType<typeof setTimeout> | null = null;
 
-async function handleImageBatch(images: MainToWorker[]): Promise<void> {
-  const d = driver;
-  if (!d?.batch) return;
-  await d.batch(async () => {
-    for (const msg of images) await handle(msg, true);
-  });
-  for (const msg of images) {
-    if (msg.type === 'image') post({ type: 'imageSent', keyIndex: msg.keyIndex });
+/** Return the host's posting credits — after success, skip and failure alike. */
+function workDone(msgs: readonly WorkMessage[]): void {
+  const ids = msgs.flatMap((m) => (m.id === undefined ? [] : [m.id]));
+  if (ids.length > 0) post({ type: 'workDone', ids });
+}
+
+async function handleImageBatch(images: WorkMessage[]): Promise<void> {
+  try {
+    const d = driver;
+    if (!d?.batch) return;
+    await d.batch(async () => {
+      for (const msg of images) await handle(msg, true);
+    });
+    for (const msg of images) {
+      if (msg.type === 'image') post({ type: 'imageSent', keyIndex: msg.keyIndex });
+    }
+  } finally {
+    workDone(images);
   }
 }
 
@@ -223,7 +233,7 @@ function enqueueImageBatch(): void {
 }
 
 scope.addEventListener('message', (ev: MessageEvent) => {
-  const msg = ev.data as MainToWorker;
+  const msg = ev.data as WorkMessage;
   if (
     currentModel &&
     imageBatchingEnabled(currentModel) &&
@@ -238,5 +248,6 @@ scope.addEventListener('message', (ev: MessageEvent) => {
   enqueueImageBatch();
   queue = queue
     .then(() => handle(msg, false))
-    .catch((e: unknown) => post({ type: 'error', message: (e as Error).message }));
+    .catch((e: unknown) => post({ type: 'error', message: (e as Error).message }))
+    .finally(() => workDone([msg]));
 });

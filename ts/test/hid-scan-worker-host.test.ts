@@ -96,4 +96,19 @@ await test('reset survives a scan already in flight', async () => {
   await second;
 });
 
+await test('dispose settles a waiting scan, ignores its late result, refuses new scans', async () => {
+  const worker = new FakeScanWorker();
+  const host = new HidScanWorkerHost(() => worker);
+  const waiting = host.scan();
+  host.dispose();
+  let err = '';
+  await waiting.catch((e: unknown) => (err = (e as Error).message));
+  assert.equal(err, 'HID discovery disposed');
+  worker.finish(10); // the blocked native scan finally returns: ignored
+  let refused = false;
+  await host.scan().catch(() => (refused = true));
+  assert.ok(refused);
+  assert.equal(worker.posted.length, 1, 'no scan posted after dispose');
+});
+
 summaryExit();

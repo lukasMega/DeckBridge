@@ -20,6 +20,8 @@ export abstract class CoraServerBase extends EventEmitter {
   protected keepaliveSeq = 0;
   protected reader = new CoraFrameReader();
   private serverErrorHandler: ((err: Error) => void) | null = null;
+  /** Rejects a startServer() still waiting on listen when stopServer() cancels it. */
+  private cancelStart: ((err: Error) => void) | null = null;
 
   protected readonly port: number;
   public keepaliveIntervalMs = ELGATO_KEEPALIVE_MS;
@@ -53,20 +55,25 @@ export abstract class CoraServerBase extends EventEmitter {
         if (started) {
           this.emitLog('error', `${this.componentName} server error after start: ${err.message}`);
         } else {
+          this.cancelStart = null;
           reject(err);
         }
       };
       if (this.serverErrorHandler) this.server.removeListener('error', this.serverErrorHandler);
       this.serverErrorHandler = onError;
       this.server.on('error', onError);
+      this.cancelStart = onError;
       this.server.listen(this.port, bindAddr(), () => {
         started = true;
+        this.cancelStart = null;
         resolve();
       });
     });
   }
 
   protected stopServer(): Promise<void> {
+    this.cancelStart?.(new Error(`${this.componentName} stopped before listening`));
+    this.cancelStart = null;
     this.clearKeepalive();
     if (this.serverErrorHandler) {
       this.server.removeListener('error', this.serverErrorHandler);

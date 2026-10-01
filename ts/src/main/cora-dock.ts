@@ -37,6 +37,8 @@ export interface CoraDockStartOptions {
  *  this class owns what happens to the pair as a unit afterward). */
 export class CoraDock {
   private readonly watchdog: PairingWatchdog;
+  /** Bumped by stop() so a startWithRetry() in flight stops retrying. */
+  private stopGeneration = 0;
 
   constructor(
     readonly server: ElgatoServer,
@@ -83,13 +85,17 @@ export class CoraDock {
       maxAttempts = Infinity,
       delayMs = 5000,
     } = opts;
+    const generation = this.stopGeneration;
+    const cancelled = (): boolean => getShuttingDown() || generation !== this.stopGeneration;
     for (let attempt = 1; ; attempt++) {
-      if (getShuttingDown()) return;
+      if (cancelled()) return;
       try {
         await this.server.start();
         await this.childServer.start();
         return;
       } catch (err) {
+        // stop() mid-bind rejects the pending listen; that is not a port conflict.
+        if (cancelled()) return;
         const msg = coraPortConflict(primaryPort, childPort, `attempt ${attempt}`);
         // log() already mirrors to the WebUI (setWebUILog).
         log('error', 'elgato', `${msg}: ${(err as Error).message}`);
@@ -104,6 +110,7 @@ export class CoraDock {
   /** Idempotent teardown: cancel the watchdog, stop both servers
    *  (server.stop() also stops mDNS). */
   async stop(): Promise<void> {
+    this.stopGeneration++;
     this.watchdog.cancel();
     await this.server.stop().catch(() => undefined);
     await this.childServer.stop().catch(() => undefined);

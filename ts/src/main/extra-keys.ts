@@ -121,6 +121,8 @@ export class ExtraKeyWidgets {
 
   /** Force a full repaint on the next tick (config change / device reinit). */
   repaint(): void {
+    // A value source settling after stop() must not paint a detached driver.
+    if (!this.active) return;
     this.lastPainted.clear();
     this.pushMask();
     if (this.timer !== undefined) this.tick();

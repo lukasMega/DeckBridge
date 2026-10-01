@@ -8,7 +8,7 @@ import type {
   EncoderSettings,
   TouchStripMode,
 } from '../shared/types.js';
-import { runCommand } from '../infra/os-utils.js';
+import { runCommand } from '../infra/command-runner.js';
 import { CommandSlots, type CommandRunner } from './command-actions.js';
 
 /** One dock's strip mode + encoder settings, resolved per event. */
@@ -40,6 +40,10 @@ export class EncoderActions {
     this.settingsFor = settingsFor;
     this.slots = new CommandSlots('encoder', run);
     this.refreshZone = refreshZone;
+  }
+
+  stop(): void {
+    this.slots.stop();
   }
 
   /** True when the event is consumed — the caller must not forward it to the app.

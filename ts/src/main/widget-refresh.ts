@@ -1,9 +1,9 @@
 // Background value sources for the display widgets (weather + command), shared
 // across keys and docks, and the forced refresh a device tap asks for.
-import { runCommand } from '../infra/os-utils.js';
+import { runCommand } from '../infra/command-runner.js';
 import { log } from '../shared/logger.js';
 
-/** Runs a shell command, resolving its stdout (os-utils runCommand; injectable for tests). */
+/** Runs a shell command, resolving its stdout (command-runner runCommand; injectable for tests). */
 export type WidgetCommandRunner = (cmd: string, timeoutMs: number) => Promise<string>;
 
 /** Injectable clock + runner, so tests can drive the gates without real time or a shell. */

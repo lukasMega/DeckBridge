@@ -176,6 +176,10 @@ export class PersistedSettings implements DockPrefsStore {
   /** Serializes writes: overlapping write+rename pairs could land out of order. */
   private saveChain: Promise<void> = Promise.resolve();
   private pendingSave: Settings | undefined;
+  /** Outcome of the newest write that ran; false until a failed write is replaced. */
+  private lastSaveOk = true;
+  /** Set by close(): later mutations stay in memory and are never written. */
+  private closed = false;
 
   /** `cacheRoot` is overridable so tests never touch the real user cache dir;
    *  production passes undefined and settings-store.ts picks the default. */
@@ -213,6 +217,7 @@ export class PersistedSettings implements DockPrefsStore {
   /** Fire-and-forget write-through — called after every mutation of a persisted
    *  field. Errors are logged inside saveSettings(), never thrown. */
   persist(): void {
+    if (this.closed) return;
     void this.queueSave(this.current());
   }
 
@@ -221,16 +226,27 @@ export class PersistedSettings implements DockPrefsStore {
     await this.saveChain;
   }
 
+  /** Shutdown: stop persisting, wait for the queued newest snapshot to be written
+   *  (write + rename), and report whether that last write succeeded. The failure itself
+   *  was already logged by saveSettings(). */
+  async close(): Promise<boolean> {
+    this.closed = true;
+    await this.saveChain;
+    return this.lastSaveOk;
+  }
+
   /** A burst of saves coalesces onto one write of the newest snapshot. */
   private queueSave(snapshot: Settings): Promise<void> {
     this.pendingSave = snapshot;
-    this.saveChain = this.saveChain.then(async (): Promise<void> => {
-      const pending = this.pendingSave;
-      if (pending === undefined) return;
-      this.pendingSave = undefined;
-      return saveSettings(pending, this.cacheRoot);
-    });
+    this.saveChain = this.saveChain.then(() => this.writePending());
     return this.saveChain;
+  }
+
+  private async writePending(): Promise<void> {
+    const pending = this.pendingSave;
+    if (pending === undefined) return;
+    this.pendingSave = undefined;
+    this.lastSaveOk = await saveSettings(pending, this.cacheRoot);
   }
 
   json(): string {
