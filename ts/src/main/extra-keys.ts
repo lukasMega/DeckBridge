@@ -27,11 +27,16 @@ import {
   weatherTempFor,
   type SourceSeams,
 } from './widget-refresh.js';
+import { dimStyle, pushChannels, type PushChannelsReader } from '../shared/push-channels.js';
 import { renderWidgetLines, type WidgetContext } from './widget-lines.js';
 
 /** Test seams for the widget sources (clock, command runner) + the dock's live
  *  tap-feedback flags (default DEFAULT_TAP_FEEDBACK). */
-export type ExtraKeyWidgetsOptions = Partial<SourceSeams> & { tapFeedback?: () => TapFeedback };
+export type ExtraKeyWidgetsOptions = Partial<SourceSeams> & {
+  tapFeedback?: () => TapFeedback;
+  /** external widget source; default = the process-wide push store. */
+  push?: PushChannelsReader;
+};
 
 /** How long a tap flash shows the inverted widget before the normal repaint. */
 export const FLASH_MS = 150;
@@ -76,6 +81,7 @@ export class ExtraKeyWidgets {
   private widgetOnZone = new Set<number>();
   private readonly seams: SourceSeams;
   private readonly tapFeedback: () => TapFeedback;
+  private readonly push: PushChannelsReader;
   /** Placeholder feedback: wire ids showing '…' until their tap refresh settles. */
   private refreshing = new Map<number, ReturnType<typeof setTimeout>>();
   /** What each key shows now — the lines a tap flash paints inverted. */
@@ -95,6 +101,7 @@ export class ExtraKeyWidgets {
   ) {
     this.seams = { now: options.now ?? DEFAULT_SEAMS.now, run: options.run ?? DEFAULT_SEAMS.run };
     this.tapFeedback = options.tapFeedback ?? (() => DEFAULT_TAP_FEEDBACK);
+    this.push = options.push ?? pushChannels;
   }
 
   start(): void {
@@ -125,6 +132,12 @@ export class ExtraKeyWidgets {
     if (!this.active) return;
     this.lastPainted.clear();
     this.pushMask();
+    if (this.timer !== undefined) this.tick();
+  }
+
+  /** A push changed a channel: paint only keys whose content changed (unlike
+   *  repaint(), which re-sends every key). */
+  paintChanged(): void {
     if (this.timer !== undefined) this.tick();
   }
 
@@ -162,7 +175,26 @@ export class ExtraKeyWidgets {
       const { value, status } = pluginValueFor(cfg.param, cfg.pluginArg, cfg.intervalMs, onUpdate);
       return { now, pluginValue: value, pluginStatus: status };
     }
+    if (cfg.widget === 'external') {
+      return { now, external: this.push.view(cfg.param ?? '', now.getTime()) };
+    }
     return { now };
+  }
+
+  /** Pushed colours override the key style while live; an expired 'dim' value fades. */
+  private externalStyle(
+    cfg: ExtraKeyConfig | undefined,
+    style: ExtraKeyTextStyle,
+    nowMs: number,
+  ): ExtraKeyTextStyle {
+    if (cfg?.widget !== 'external') return style;
+    const v = this.push.view(cfg.param ?? '', nowMs);
+    if (v.state === 'waiting') return style;
+    if (v.state === 'expired' && (cfg.expire ?? 'dim') !== 'dim') return style;
+    const merged: ExtraKeyTextStyle = { ...style };
+    if (v.value.color) merged.color = v.value.color;
+    if (v.value.background) merged.background = v.value.background;
+    return v.state === 'expired' ? dimStyle(merged) : merged;
   }
 
   /** Force an immediate re-run of wireId's command widget (popup "Run now"),
@@ -262,7 +294,7 @@ export class ExtraKeyWidgets {
       const cfg = this.configFor(wireId);
       if (this.leftToApp(wireId, cfg, now.getTime())) continue;
       const lines = this.linesFor(wireId, cfg, now);
-      const style = effectiveTextStyle(cfg);
+      const style = this.externalStyle(cfg, effectiveTextStyle(cfg), now.getTime());
       const sig = lines === null ? '' : JSON.stringify([style, lines]);
       if (this.lastPainted.get(wireId) === sig) continue;
       this.lastPainted.set(wireId, sig);

@@ -115,13 +115,15 @@ Failure handling:
 - **Absolute paths only for imports.** DeckBridge imports your file by its on-disk path;
   don't rely on `file://` URLs or relative imports of sibling files.
 
+For a value another tool already has, prefer the [Push API](./push-api.md) over a polling plugin.
+
 ## Security
 
 A plugin is **arbitrary code with the same trust level as the command widget** — full
 filesystem, process-spawn, and native-library access via the runtime. The worker is a
 crash/CPU isolation boundary, **not a capability sandbox**. The web UI has no auth and
-binds all interfaces by default, so anyone who can reach it could point a key at a plugin
-file on the host. Plugin widgets are **opt-in per key** and meant for a **trusted personal
+binds `127.0.0.1` unless you pass `--bind`, so anyone who can reach it could point a key
+at a plugin file on the host. Plugin widgets are **opt-in per key** and meant for a **trusted personal
 LAN**. Only run plugin files you wrote or trust.
 
 ## Examples

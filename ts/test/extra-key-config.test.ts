@@ -125,4 +125,20 @@ test('normalize folds them into style; an explicit style field wins', () => {
   assert.equal(normalizeExtraKeyConfig(current), current, 'untouched');
 });
 
+console.log('\nexternal widget config');
+
+test('external: channel optional, but must be valid when set', () => {
+  assert.ok(isExtraKeyConfig({ widget: 'external', param: 'obs-rec' }));
+  assert.ok(isExtraKeyConfig({ widget: 'external' }));
+  assert.ok(!isExtraKeyConfig({ widget: 'external', param: 'Bad Name' }));
+});
+
+test('expire enum and fallbackText length are checked; legacy configs stay valid', () => {
+  const base = { widget: 'external', param: 'a' };
+  assert.ok(isExtraKeyConfig({ ...base, expire: 'blank', fallbackText: 'off' }));
+  assert.ok(!isExtraKeyConfig({ ...base, expire: 'fade' }));
+  assert.ok(!isExtraKeyConfig({ ...base, fallbackText: 'x'.repeat(129) }));
+  assert.ok(isExtraKeyConfig({ widget: 'clock' }));
+});
+
 summary();

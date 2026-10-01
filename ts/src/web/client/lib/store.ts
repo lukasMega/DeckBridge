@@ -9,6 +9,7 @@ import type {
   DeviceModel,
   EncoderSettings,
   ExtraKeyCfg,
+  PushChannelView,
   TouchStripMode,
   UpdateInfo,
 } from '../ui-types.js';
@@ -47,6 +48,8 @@ export interface StoreState {
   touchStripRepaintMs: number;
   encoders: EncoderSettings;
   updateInfo?: UpdateInfo;
+  /** Push API store (WS `pushChannels`); the Push API panel seeds it over HTTP. */
+  pushChannels: PushChannelView[];
 }
 
 /** Placeholder until the first hydrate(); ui-entry.ts mounts nothing before it. */
@@ -90,6 +93,7 @@ let state: StoreState = {
   touchStripRepaintMs: 0,
   encoders: {},
   updateInfo: undefined,
+  pushChannels: [],
 };
 
 const listeners = new Set<() => void>();

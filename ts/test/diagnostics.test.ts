@@ -323,4 +323,21 @@ test('is prefixed, timestamped, and free of characters Windows rejects', () => {
   assert.ok(!name.includes(':'), 'no colons — Windows rejects them in filenames');
 });
 
+console.log('\npush token hashes');
+
+test('hashes are stripped, names and prefixes stay; with and without redactCommands', () => {
+  const hash = 'a'.repeat(64);
+  const settingsJson = JSON.stringify({
+    pushTokens: [
+      { id: 'ab12', name: 'curl', scopes: ['push'], hash, prefix: 'Zx9_aB', createdAt: 'x' },
+    ],
+  });
+  for (const redactCommands of [false, true]) {
+    const report = buildDiagnostics({ ...fullSources(), settingsJson }, { redactCommands });
+    assert.ok(!report.includes(hash), 'hash leaked');
+    assert.ok(report.includes('Zx9_aB') || redactCommands, 'prefix kept');
+    assert.ok(report.includes('curl'));
+  }
+});
+
 summary();

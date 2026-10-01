@@ -35,6 +35,8 @@ import { DevicePrefsController } from './device-prefs-controller.js';
 import { EncodersController } from './encoders-controller.js';
 import { liveDiagnosticsInputs, type HidInventoryFn } from './diagnostics-sources.js';
 import { UpdateController } from './update-controller.js';
+import { PushController } from './push-controller.js';
+import { handlePushApi, isPushApiPath } from './push-routes.js';
 import { ElgatoAppController } from './elgato-app-controller.js';
 
 export { isAllowedWebRequest, isValidMacAddress, pickFallbackPort } from './web-request-guard.js';
@@ -62,6 +64,7 @@ export class WebUIServer extends EventEmitter implements WebUIController, WebUIC
   readonly updates: UpdateController;
   readonly settingsFile: SettingsFileController;
   readonly elgatoApp: ElgatoAppController;
+  readonly push: PushController;
   private readonly controllers: WebUIControllers;
   readonly imageChannel = new ImageChannel(this.bus, () => this.selectedDock);
   get selectedDock(): number {
@@ -149,6 +152,7 @@ export class WebUIServer extends EventEmitter implements WebUIController, WebUIC
     this.updates = new UpdateController(host, __VERSION__);
     this.settingsFile = new SettingsFileController(host, this.logging);
     this.elgatoApp = new ElgatoAppController(host);
+    this.push = new PushController(host, () => this.dockRegistry.list());
     this.controllers = {
       settings: this.settings,
       devicePrefs: this.devicePrefs,
@@ -159,6 +163,7 @@ export class WebUIServer extends EventEmitter implements WebUIController, WebUIC
       updates: this.updates,
       settingsFile: this.settingsFile,
       elgatoApp: this.elgatoApp,
+      push: this.push,
     };
     if (__MOCK_BUILD__) {
       this.applyMockConfig = (parsed) => {
@@ -217,6 +222,7 @@ export class WebUIServer extends EventEmitter implements WebUIController, WebUIC
 
   async stop(): Promise<void> {
     this.activity.stop();
+    this.push.dispose();
     this.bus.stop();
     const server = this.server;
     this.server = null;
@@ -329,9 +335,13 @@ export class WebUIServer extends EventEmitter implements WebUIController, WebUIC
 
   private handleRequest(
     req: Request,
-    extra: { server: TjsServeServer },
+    extra: { server: TjsServeServer; remoteAddress: string },
   ): Response | Promise<Response> | void {
     const url = new URL(req.url);
+    // Token-authenticated: its own Origin + bearer checks, no Host check (push-auth.ts).
+    if (isPushApiPath(url.pathname)) {
+      return handlePushApi(this.push, req, url, extra.remoteAddress || 'unknown', this._port);
+    }
     if (!isAllowedWebRequest(req.headers.get('Host'), req.headers.get('Origin'), this._port)) {
       return forbidden();
     }

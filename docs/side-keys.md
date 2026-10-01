@@ -2,7 +2,7 @@
 
 DeckBridge can show widgets on keys outside the Elgato app's grid. Mirabox 293S has three display-only side keys. AJAZZ AKP05E adds four touch strip zones. Stream Deck + pairing also exposes two side keys.
 
-Widgets update without an open browser. Choose a clock, date, text, weather, command output, or [JavaScript plugin](./plugin-widgets.md).
+Widgets update without an open browser. Choose a clock, date, text, weather, command output, a [JavaScript plugin](./plugin-widgets.md), or text pushed by another tool through the [Push API](./push-api.md).
 
 ## Assign a widget
 
@@ -23,6 +23,7 @@ Side keys show live previews. Touch strip previews also work as tabs: select a z
 | **Weather (°C)** | Current temperature | Coordinates such as `50.08,14.43` |
 | **Command output** | Shell command output | Enter a command |
 | **Plugin (JS)** | Custom value | Choose a plugin file |
+| **Push API (external)** | Text sent by another tool | Enter a channel name; see [Push API](./push-api.md) |
 
 ### Weather
 

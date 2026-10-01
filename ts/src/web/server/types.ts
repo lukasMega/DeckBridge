@@ -14,6 +14,7 @@ import type { EncodersController } from './encoders-controller.js';
 import type { ExtraKeysController } from './extra-keys-controller.js';
 import type { ModelOverridesController } from './model-overrides-controller.js';
 import type { LoggingController } from './logging-controller.js';
+import type { PushController } from './push-controller.js';
 import type { SettingsFileController } from './settings-file-controller.js';
 import type { RawMockInput } from './mock-input.js';
 // Canonical LogLevel lives in logger.ts (derived from cli.ts's LOG_LEVELS);
@@ -100,6 +101,7 @@ export interface WebUIControllers {
   readonly updates: UpdateController;
   readonly settingsFile: SettingsFileController;
   readonly elgatoApp: ElgatoAppController;
+  readonly push: PushController;
 }
 
 /**

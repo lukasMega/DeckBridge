@@ -25,6 +25,7 @@ const ZONE_TYPE_LABEL: Record<Exclude<ExtraKeyWidget, 'none'>, string> = {
   weather: 'Weather',
   command: 'Command',
   plugin: 'Plugin',
+  external: 'Push',
 };
 
 const PANEL_ID = 'strip-zone-panel';

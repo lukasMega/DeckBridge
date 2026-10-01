@@ -205,6 +205,19 @@ function keyEventsBlock(events: KeyEventEntry[] | undefined): string {
     .join('\n');
 }
 
+/** Remove push-token hashes from a settings.json string. Hashes are harmless, but have
+ *  no place in a public issue; the CLI path reads the raw file, so strip here. */
+export function stripPushTokenHashes(settingsJson: string): string {
+  try {
+    const parsed = JSON.parse(settingsJson) as { pushTokens?: Array<{ hash?: string }> };
+    if (!Array.isArray(parsed.pushTokens)) return settingsJson;
+    for (const t of parsed.pushTokens) delete t.hash;
+    return JSON.stringify(parsed, null, 2);
+  } catch {
+    return settingsJson;
+  }
+}
+
 /** Replace extra-key `param`/`pluginArg`/`pressCommand` in a settings.json string. Operates on
  *  the parsed object so it can't corrupt unrelated text that happens to match. */
 function redactSettings(settingsJson: string): string {
@@ -275,7 +288,8 @@ function overridesBlock(overrides: Record<string, unknown> | undefined): string 
  *  "(unavailable)" so a partial report still reaches the issue. */
 export function buildDiagnostics(src: DiagnosticsSources, opt: DiagnosticsOptions = {}): string {
   const maxLines = opt.logTailLines ?? DEFAULT_LOG_TAIL_LINES;
-  const settings = src.settingsJson;
+  const settings =
+    src.settingsJson === undefined ? undefined : stripPushTokenHashes(src.settingsJson);
   let settingsBlock = '';
   if (settings !== undefined) {
     settingsBlock = opt.redactCommands ? redactSettings(settings) : settings;

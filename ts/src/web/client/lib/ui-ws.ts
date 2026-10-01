@@ -64,6 +64,7 @@ const handlers: Partial<Handlers> = {
     ? { mockConfig: (mockConfig: WsEvents['mockConfig']) => store.patch({ mockConfig }) }
     : {}),
   update: (updateInfo) => store.patch({ updateInfo }),
+  pushChannels: ({ channels }) => store.patch({ pushChannels: channels }),
 };
 
 // Looked up by the server-sent event name: a Map has no prototype keys to hit.

@@ -1,7 +1,7 @@
 /** CLI argument parsing. Hand-rolled, zero dependencies (see CLAUDE.md boundaries —
  *  this file is classified 'shared' and must not import anything else in the tree). */
 
-export type CliCommand = 'run' | 'devices' | 'diagnose' | 'version' | 'help';
+export type CliCommand = 'run' | 'devices' | 'diagnose' | 'push' | 'version' | 'help';
 
 export interface CliFlags {
   mock: boolean;
@@ -29,11 +29,13 @@ export interface CliFlags {
 export interface ParsedCli {
   command: CliCommand;
   flags: CliFlags;
+  /** `push`: the args after the command word; cli/push.ts parses them itself. */
+  rest?: string[];
 }
 
 export type CliParseResult = { ok: true; cli: ParsedCli } | { ok: false; error: string };
 
-const COMMANDS = ['run', 'devices', 'diagnose', 'version', 'help'] as const;
+const COMMANDS = ['run', 'devices', 'diagnose', 'push', 'version', 'help'] as const;
 /** Single source of truth for the accepted levels — reused by the infra/settings.ts
  *  guard and POST /api/log-level so the three can't drift apart. */
 export const LOG_LEVELS = ['debug', 'info', 'warn', 'error', 'silent'] as const;
@@ -49,6 +51,7 @@ Commands:
   run                 Start the bridge (default when no command given)
   devices             List detected stream deck HID devices, then exit
   diagnose            Write a diagnostics report (for bug reports), then exit
+  push                Send text to a push channel of a running bridge, then exit
   version             Print version/build info, then exit
   help                Print usage, then exit
 
@@ -68,6 +71,12 @@ ${__MOCK_BUILD__ ? '  --mock                    Start with the mock driver (no h
 Flags (for diagnose):
   --out <path>              Write the report here instead of the cache dir
   --redact-commands         Replace extra-key commands/plugin args with <redacted>
+
+Usage (for push):
+  deckbridge push <channel> <text> [--ttl <s>] [--color #rrggbb] [--background #rrggbb]
+  deckbridge push <channel> --clear
+  --url <base>              Bridge WebUI address  [default http://127.0.0.1:3000]
+  --token <t>               Push token (default $DECKBRIDGE_PUSH_TOKEN; visible in the process list)
 
 Log level precedence: --log-level > $DECKBRIDGE_LOG_LEVEL > settings.json
 "logLevel" > the level baked in at build time.`;
@@ -171,8 +180,8 @@ type FlagsParseResult =
   | { ok: true; flags: CliFlags; commandOverride: CliCommand | null }
   | { ok: false; error: string };
 
-function parseFlagArgs(args: string[], startIndex: number): FlagsParseResult {
-  const flags: CliFlags = {
+function defaultFlags(): CliFlags {
+  return {
     ...(__MOCK_BUILD__ ? { mock: false } : {}),
     noWebui: false,
     open: false,
@@ -181,6 +190,10 @@ function parseFlagArgs(args: string[], startIndex: number): FlagsParseResult {
     noOverrides: false,
     noDailyPing: false,
   } as CliFlags;
+}
+
+function parseFlagArgs(args: string[], startIndex: number): FlagsParseResult {
+  const flags = defaultFlags();
   let commandOverride: CliCommand | null = null;
 
   for (let i = startIndex; i < args.length; i++) {
@@ -209,6 +222,13 @@ function parseFlagArgs(args: string[], startIndex: number): FlagsParseResult {
 export function parseCliArgs(args: string[]): CliParseResult {
   const word = parseCommandWord(args);
   if ('error' in word) return { ok: false, error: word.error };
+  // `push` has positional args and its own flags: cli/push.ts parses the rest.
+  if (word.command === 'push') {
+    return {
+      ok: true,
+      cli: { command: 'push', flags: defaultFlags(), rest: args.slice(word.consumed) },
+    };
+  }
 
   const parsedFlags = parseFlagArgs(args, word.consumed);
   if (!parsedFlags.ok) return parsedFlags;

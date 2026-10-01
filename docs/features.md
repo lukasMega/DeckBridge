@@ -97,6 +97,9 @@ a regular **Network device** at `localhost`; the deck behaves like Elgato hardwa
 - **Side-key widgets** — decks with display-only keys outside the grid (e.g. the 293S
   sixth column) show server-rendered clock / date / text / weather / command / plugin
   widgets; see [Side-key widgets](./side-keys.md).
+- **Push API** — other tools (OBS, Home Assistant, scripts, `deckbridge push`) write text
+  onto side keys and AKP05/AKP05E strip zones over token-authenticated HTTP, with a TTL;
+  see [Push API](./push-api.md).
 - **Live web UI** — `http://localhost:3000` shows the key grid and a log feed in real time.
 - **Device tuning** — rotation, flip, image fit, quality and size are adjustable at
   runtime per model, with a key-map learn mode that derives the correct key mapping from
@@ -258,7 +261,8 @@ only case that needs a system libhidapi installed.
 
   Old `native-<hash>` folders from previous versions are cleaned up automatically.
 - **Settings** — `settings.json` in the cache root: per-device brightness/identity,
-  side-key widgets, log level, and device tuning (`modelOverrides`).
+  side-key widgets, log level, device tuning (`modelOverrides`), and push-API tokens
+  (hashed; never exported).
 - **Log file** — `<cache-root>/logs/deckbridge.log`, rotated at 2 MB with three files
   kept. See [Troubleshooting](./troubleshooting.md#where-the-logs-live).
 - **Diagnostics reports** — `<cache-root>/diagnostics/`, only when you ask for one.
@@ -272,11 +276,11 @@ only case that needs a system libhidapi installed.
 | **5343** | `0.0.0.0` (LAN) | CORA main server — the Elgato app connects here |
 | **5344** | `0.0.0.0` (LAN) | CORA child server — image / data channel |
 | **5345–5350** | `0.0.0.0` (LAN) | Extra decks — each additional device gets its own CORA pair at +2 per device (max 3 extras) |
-| **3000** | `127.0.0.1` only | Web UI |
+| **3000** | `127.0.0.1` (LAN with `--bind`) | Web UI and [Push API](./push-api.md) |
 | mDNS `_elg._tcp` | LAN | Service discovery ("Network Stream Deck") |
 
-Set `DECKBRIDGE_BIND=127.0.0.1` to restrict the CORA ports to the local machine. The web
-UI is always localhost-only.
+Set `DECKBRIDGE_BIND` (or `--bind`) to change the listen address; it moves both the CORA
+ports and the Web UI. The Web UI binds `127.0.0.1` unless you pass `--bind`.
 
 ## Limitations
 
@@ -316,6 +320,7 @@ UI is always localhost-only.
 | `DECKBRIDGE_LOG_LEVEL` | Log verbosity: `debug`/`info`/`warn`/`error`/`silent` |
 | `DECKBRIDGE_CACHE_DIR` | Cache root (settings, logs, extracted native libs) |
 | `DECKBRIDGE_NO_OVERRIDES` | Safe mode: ignore device tuning for this session |
+| `DECKBRIDGE_PUSH_TOKEN` | Token used by `deckbridge push` (see [Push API](./push-api.md)) |
 
 Log verbosity resolves as `--log-level` > `$DECKBRIDGE_LOG_LEVEL` > `"logLevel"` in
 `settings.json` (what the web UI's **Debug logging** toggle writes) > the level compiled

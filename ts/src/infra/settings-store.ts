@@ -9,6 +9,7 @@ import { log } from '../shared/logger.js';
 import type { CliLogLevel } from '../shared/cli.js';
 import { defaultCacheRoot } from './native-libs.js';
 import { SERIAL_KEY_PREFIX } from './device-identity.js';
+import type { PushTokenRecord } from './push-tokens.js';
 import type {
   EncoderSettings,
   ExtraKeyConfig,
@@ -97,6 +98,8 @@ export interface Settings {
    *  dock (max MAX_MULTI_DECK_DOCKS). Absent/false = a single dock, and no USB
    *  scanning at all once it is connected. */
   multiDeck?: boolean;
+  /** Push-API tokens (hashed) — see push-tokens.ts. Machine-local: never exported/imported. */
+  pushTokens?: PushTokenRecord[];
   devices?: DeviceIdentitySettings[];
   /** Per-MODEL device tuning (rotation/flip/size/quality/keyMap — see
    *  devices/model-overrides.ts), keyed by model id.

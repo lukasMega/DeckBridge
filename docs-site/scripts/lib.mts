@@ -42,6 +42,7 @@ export const DOC_ROUTES: readonly string[] = [
   'akp05-guided-probe',
   'side-keys',
   'plugin-widgets',
+  'push-api',
   'hidapi-ffi',
   'image-flow',
   'references',

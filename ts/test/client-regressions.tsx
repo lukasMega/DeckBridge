@@ -17,6 +17,7 @@ import { CopyChip } from '../src/web/client/simple/controls.js';
 import { LogConsolePanel } from '../src/web/client/advanced/log-panel.js';
 import { DeviceTuningPanel } from '../src/web/client/simple/device-tuning.js';
 import { DiagnosticsPanel } from '../src/web/client/simple/diagnostics-panel.js';
+import { PushApiPanel } from '../src/web/client/simple/push-api-panel.js';
 import { MultiDeckPanel } from '../src/web/client/simple/multi-deck-panel.js';
 import { ElgatoAppPanel } from '../src/web/client/simple/elgato-app-panel.js';
 import { KeymapLearn } from '../src/web/client/simple/keymap-learn.js';
@@ -1123,6 +1124,7 @@ async function runKeymapAndDiagnosticsPanels(): Promise<void> {
   await runKeymapLearnNoWireId();
   await runDiagnosticsPanel();
   await runMultiDeckPanel();
+  await runPushApiPanel();
   await runElgatoAutoRestartPanel();
   await runElgatoAutoRestartUnsupported();
 }
@@ -1286,6 +1288,60 @@ async function runMultiDeckPanel(): Promise<void> {
       stub.restore();
       await act(() => render(null, root));
     }
+  }
+}
+
+// Push API panel: the token reveal is one-time, lists never show hashes, WS channel
+// updates reach the table, and Clear posts to the channel route.
+async function runPushApiPanel(): Promise<void> {
+  const token = 'dbp_SECRETSECRETSECRETSECRETSECRETSECRETSECRET1';
+  const row = { id: 'ab12cd34', name: 'curl', scopes: ['push'], prefix: 'SECRET', createdAt: 'x' };
+  const stub = stubFetch((url, init) => {
+    if (url === '/api/push-tokens' && init?.method === 'POST') {
+      return { payload: { ...row, token } };
+    }
+    if (url === '/api/push-tokens') return { payload: { tokens: [row] } };
+    if (url === '/api/push-channels') return { payload: { channels: [] } };
+    return { payload: { ok: true } };
+  });
+  try {
+    await act(() => render(<PushApiPanel />, root));
+    await settle();
+    check(root.textContent?.includes('dbp_SECRET…') === true, 'Token list shows name prefix');
+    check(!root.textContent?.includes('hash'), 'Token list never shows a hash');
+
+    const input = root.querySelector<HTMLInputElement>('input[aria-label="New push token name"]')!;
+    input.value = 'curl';
+    await act(() => {
+      input.dispatchEvent(new Event('input'));
+    });
+    await click('.push-test button');
+    await settle();
+    check(
+      root.querySelector('.push-token')?.textContent === token,
+      'Create reveals the token once',
+    );
+    await click('.push-reveal button:last-child');
+    check(!root.textContent?.includes(token), 'Closing the reveal removes the plaintext');
+
+    await act(() =>
+      patch({
+        pushChannels: [
+          { channel: 'obs-rec', text: 'REC', updatedAt: 0, expiresAt: null, bound: 1 },
+        ],
+      }),
+    );
+    check(root.textContent?.includes('obs-rec') === true, 'A channel update reaches the table');
+    await click('.push-channels button');
+    await settle();
+    check(
+      stub.calls.some((c) => c.url === '/api/push-channels/obs-rec/clear'),
+      'Clear posts to the channel clear route',
+    );
+  } finally {
+    stub.restore();
+    await act(() => patch({ pushChannels: [] }));
+    await act(() => render(null, root));
   }
 }
 

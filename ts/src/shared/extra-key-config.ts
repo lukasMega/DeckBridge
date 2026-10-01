@@ -3,6 +3,7 @@
 import type {
   ExtraKeyAlign,
   ExtraKeyConfig,
+  ExternalExpire,
   ExtraKeyFont,
   ExtraKeyPressAction,
   ExtraKeyTextSize,
@@ -11,6 +12,7 @@ import type {
   ExtraKeyWidget,
   ExtraKeyWrap,
 } from '../web/contract.js';
+import { isPushChannel } from './push-text.js';
 
 export type { ExtraKeyConfig };
 
@@ -30,7 +32,14 @@ export const EXTRA_KEY_WIDGETS = [
   'weather',
   'command',
   'plugin',
+  'external',
 ] as const satisfies readonly ExtraKeyWidget[];
+
+export const EXTERNAL_EXPIRES = [
+  'dim',
+  'blank',
+  'text',
+] as const satisfies readonly ExternalExpire[];
 
 /** Every widget text size, in the order the WebUI size picker shows them. */
 export const EXTRA_KEY_TEXT_SIZES = [
@@ -68,7 +77,12 @@ export const EXTRA_KEY_PRESS_ACTIONS = [
 ] as const satisfies readonly ExtraKeyPressAction[];
 
 /** Widgets showing free text — the only ones a wrap setting applies to. */
-export const WRAPPABLE_WIDGETS: readonly ExtraKeyWidget[] = ['text', 'command', 'plugin'];
+export const WRAPPABLE_WIDGETS: readonly ExtraKeyWidget[] = [
+  'text',
+  'command',
+  'plugin',
+  'external',
+];
 
 /** Cap on one encoder shell command (EncoderCommands press/rotateCw/rotateCcw) and
  *  on an extra key's press command (ExtraKeyConfig.pressCommand). */
@@ -221,6 +235,8 @@ const CONFIG_CHECKS: ReadonlyArray<[string, StyleCheck]> = [
   ['timeoutMs', optional(numberIn(COMMAND_TIMEOUT_MIN_MS, COMMAND_TIMEOUT_MAX_MS))],
   ['pressCommand', optional(stringUpTo(ENCODER_COMMAND_MAX))],
   ['pressAction', optional(oneOf(EXTRA_KEY_PRESS_ACTIONS))],
+  ['expire', optional(oneOf(EXTERNAL_EXPIRES))],
+  ['fallbackText', optional(stringUpTo(EXTRA_KEY_PARAM_MAX))],
   // Legacy top-level fields — folded into style by normalizeExtraKeyConfig.
   ['textSize', optional(oneOf(EXTRA_KEY_TEXT_SIZES))],
   ['wrap', optional(oneOf(EXTRA_KEY_WRAPS))],
@@ -237,6 +253,10 @@ export function extraKeyConfigError(v: unknown): string | null {
   const r = v as Record<string, unknown>;
   if (!isOneOf(EXTRA_KEY_WIDGETS, r.widget)) {
     return `widget must be one of: ${EXTRA_KEY_WIDGETS.join(', ')}`;
+  }
+  // No channel yet is valid: picking the widget posts before the user types a name.
+  if (r.widget === 'external' && r.param !== undefined && !isPushChannel(r.param)) {
+    return 'param must be a channel name: 1–32 of a-z 0-9 . _ - (starting with a letter or digit)';
   }
   for (const [field, check] of CONFIG_CHECKS) {
     const err = check(r[field], field);

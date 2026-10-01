@@ -1,5 +1,6 @@
 import { useRef, useState } from 'preact/hooks';
-import type { ExtraKeyCfg, ExtraKeyWidget, PluginStatus } from '../ui-types.js';
+import type { ExternalExpire, ExtraKeyCfg, ExtraKeyWidget, PluginStatus } from '../ui-types.js';
+import { copyLabel, useCopyText } from '../lib/use-copy-text.js';
 import { ICON, Icon } from '../components/Icon.js';
 import { fire } from '../lib/ui-api.js';
 import { useDismiss } from '../lib/ui-hooks.js';
@@ -14,6 +15,7 @@ const TIMEOUT_MAX_S = 60;
 const TIMEOUT_DEFAULT_S = 5;
 const PLUGIN_INTERVAL_DEFAULT_S = 5;
 export const PARAM_MAX = 128; // mirrors EXTRA_KEY_PARAM_MAX (types.ts)
+export const CHANNEL_MAX = 32; // mirrors PUSH_CHANNEL_RE (push-text.ts)
 
 const STATUS_LABEL: Record<PluginStatus, string> = {
   pending: 'pending',
@@ -29,7 +31,7 @@ export type DisplayPrefs = Pick<ExtraKeyCfg, 'style'>;
 
 /** The server replaces the whole widget part, so every post carries the display prefs too. */
 export function postExtraKey(wireId: number, next: WidgetCfg, prefs: DisplayPrefs = {}): void {
-  const { widget, param, intervalMs, timeoutMs, pluginArg } = next;
+  const { widget, param, intervalMs, timeoutMs, pluginArg, expire, fallbackText } = next;
   const { style } = prefs;
   fire('/api/extra-key', {
     wireId,
@@ -38,6 +40,8 @@ export function postExtraKey(wireId: number, next: WidgetCfg, prefs: DisplayPref
     ...(intervalMs !== undefined ? { intervalMs } : {}),
     ...(timeoutMs !== undefined ? { timeoutMs } : {}),
     ...(pluginArg !== undefined ? { pluginArg } : {}),
+    ...(expire !== undefined ? { expire } : {}),
+    ...(fallbackText ? { fallbackText } : {}),
     ...(style && Object.keys(style).length > 0 ? { style } : {}),
   });
 }
@@ -49,6 +53,7 @@ function runExtraKeyNow(wireId: number): void {
 export function paramPlaceholder(widget: ExtraKeyWidget): string {
   if (widget === 'weather') return 'lat,lon e.g. 50.08,14.43';
   if (widget === 'command') return 'shell command e.g. date +%H:%M';
+  if (widget === 'external') return 'channel e.g. obs-rec';
   return 'text (\\n = new line)';
 }
 
@@ -177,6 +182,79 @@ function PluginConfigPopover({
   );
 }
 
+const EXPIRE_OPTIONS: ReadonlyArray<{ value: ExternalExpire; label: string }> = [
+  { value: 'dim', label: 'Dim last value' },
+  { value: 'blank', label: 'Blank' },
+  { value: 'text', label: 'Show text' },
+];
+
+/** Popup for the push (external) widget: what an expired value shows, plus a ready curl line. */
+function ExternalConfigPopover({
+  wireId,
+  cfg,
+  anchorRef,
+  onClose,
+}: Readonly<{
+  wireId: number;
+  cfg?: ExtraKeyCfg;
+  anchorRef: { current: HTMLDivElement | null };
+  onClose: () => void;
+}>): preact.JSX.Element {
+  useDismiss(onClose, anchorRef);
+  const copy = useCopyText();
+  const expire = cfg?.expire ?? 'dim';
+  const [fallback, setFallback] = useState(cfg?.fallbackText ?? '');
+  const post = (next: { expire?: ExternalExpire; fallbackText?: string }): void =>
+    postExtraKey(
+      wireId,
+      { widget: 'external', param: cfg?.param, expire: expire, fallbackText: fallback, ...next },
+      cfg,
+    );
+  const curl =
+    `curl -X POST ${location.origin}/api/push/${cfg?.param ?? 'channel'} ` +
+    `-H "Authorization: Bearer $DECKBRIDGE_PUSH_TOKEN" -H "Content-Type: application/json" ` +
+    `-d '{"text":"hello","ttl":60}'`;
+
+  return (
+    <div class="xkey-popover floating-surface">
+      <label class="xkey-popover-field">
+        <span>When the value expires</span>
+        <select
+          class="input"
+          value={expire}
+          onChange={(e) =>
+            post({ expire: (e.target as HTMLSelectElement).value as ExternalExpire })
+          }
+        >
+          {EXPIRE_OPTIONS.map((o) => (
+            <option key={o.value} value={o.value}>
+              {o.label}
+            </option>
+          ))}
+        </select>
+      </label>
+      {expire === 'text' && (
+        <label class="xkey-popover-field xkey-popover-arg">
+          <span>Text</span>
+          <input
+            class="input"
+            type="text"
+            maxLength={PARAM_MAX}
+            value={fallback}
+            placeholder="--"
+            onInput={(e) => setFallback((e.target as HTMLInputElement).value)}
+            onChange={(e) => post({ fallbackText: (e.target as HTMLInputElement).value })}
+          />
+        </label>
+      )}
+      <code class="xkey-popover-curl">{curl}</code>
+      <button class="ghostbtn xkey-popover-run" type="button" onClick={() => void copy.copy(curl)}>
+        {copyLabel(copy.status, 'Copy curl')}
+      </button>
+    </div>
+  );
+}
+
 export function ConfigButton({
   wireId,
   label,
@@ -215,6 +293,14 @@ export function ConfigButton({
           wireId={wireId}
           cfg={cfg}
           status={pluginStatus}
+          anchorRef={anchorRef}
+          onClose={() => setShowConfig(false)}
+        />
+      )}
+      {showConfig && widget === 'external' && (
+        <ExternalConfigPopover
+          wireId={wireId}
+          cfg={cfg}
           anchorRef={anchorRef}
           onClose={() => setShowConfig(false)}
         />
