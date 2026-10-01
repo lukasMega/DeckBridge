@@ -30,8 +30,19 @@ jobs:
         working-directory: .github/virustotal-poc
     steps:
       - uses: actions/checkout@v7
-      - uses: ilammy/msvc-dev-cmd@v1
+      # Inline instead of ilammy/msvc-dev-cmd: that action still ships on node20.
+      - name: Load MSVC environment
         if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+          $vs = & $vswhere -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
+          if (-not $vs) { throw 'MSVC build tools not found' }
+          cmd /c "`"$vs\VC\Auxiliary\Build\vcvars64.bat`" >nul && set" | ForEach-Object {
+            if ($_ -match '^([^=]+)=(.*)$' -and [Environment]::GetEnvironmentVariable($Matches[1]) -ne $Matches[2]) {
+              "$($Matches[1])=$($Matches[2])" >> $env:GITHUB_ENV
+            }
+          }
       - uses: dtolnay/rust-toolchain@stable
       - uses: jdx/mise-action@v4
       - uses: actions/setup-python@v7
