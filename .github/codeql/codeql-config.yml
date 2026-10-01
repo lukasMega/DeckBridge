@@ -1,0 +1,6 @@
+name: DeckBridge CodeQL config
+
+# Vendored upstream fork (no alerts we could fix) and the Tauri tray (large dependency tree).
+paths-ignore:
+  - rust/jpeg-encoder
+  - rust/deckbridge-tray
