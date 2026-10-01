@@ -22,8 +22,10 @@ interface ScannedUnit {
 
 // Index 0 is the primary dock, so scanned docks draw from 1..maxDocks-1 — an empty pool
 // (maxDocks 1, the default) is what makes single-deck mode dock nothing.
-const freshIndexPool = (maxDocks: number) =>
-  Array.from({ length: Math.max(0, maxDocks - 1) }, (_, k) => k + 1);
+const freshIndexPool = (maxDocks: number, reserved: ReadonlySet<number> = new Set()) =>
+  Array.from({ length: Math.max(0, maxDocks - 1) }, (_, k) => k + 1).filter(
+    (i) => !reserved.has(i),
+  );
 
 export class DockScanner {
   private readonly deps: DockScannerDeps;
@@ -34,6 +36,8 @@ export class DockScanner {
    *  scan pool, and the scan timer never runs. Raised by setMaxDocks(). */
   private maxDocks = 1;
   private freeIndices: number[] = freshIndexPool(1);
+  /** Indices owned by something other than a USB unit (the browser deck's dock). */
+  private readonly reserved = new Set<number>();
   private scanTimer: ReturnType<typeof setInterval> | null = null;
   /** app.ts asked for scanning; whether it actually runs also depends on maxDocks. */
   private scanWanted = false;
@@ -76,10 +80,23 @@ export class DockScanner {
       await this.stopScannedDocks();
     } else {
       const held = new Set(this.units.keys());
-      this.freeIndices = freshIndexPool(next).filter((i) => !held.has(i));
+      this.freeIndices = freshIndexPool(next, this.reserved).filter((i) => !held.has(i));
     }
     this.syncTimer();
     log('info', 'coord', `dock cap: ${next}`);
+  }
+
+  /** Keep scanned docks off `index` (a dock registered from outside). Throws if a USB unit
+   *  already holds it. */
+  reserveIndex(index: number): void {
+    if (this.units.has(index)) throw new Error(`dock index ${index} is held by a USB unit`);
+    this.reserved.add(index);
+    this.freeIndices = this.freeIndices.filter((i) => i !== index);
+  }
+
+  unreserveIndex(index: number): void {
+    if (!this.reserved.delete(index)) return;
+    if (index < this.maxDocks && index > 0 && !this.units.has(index)) this.releaseIndex(index);
   }
 
   /** The timer runs only when app.ts wants scanning AND a second dock is allowed
@@ -327,7 +344,7 @@ export class DockScanner {
     const docks = [...this.units.keys()].flatMap((i) => this.deps.docks.get(i) ?? []);
     for (const index of this.units.keys()) this.deps.docks.delete(index);
     this.units.clear();
-    this.freeIndices = freshIndexPool(this.maxDocks);
+    this.freeIndices = freshIndexPool(this.maxDocks, this.reserved);
     // Every dock starts closing now; a hung one must not delay its siblings.
     const stops = docks.map((dock) => begin(() => dock.stop()));
     try {

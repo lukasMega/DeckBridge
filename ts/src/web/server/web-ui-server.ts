@@ -36,6 +36,8 @@ import { EncodersController } from './encoders-controller.js';
 import { liveDiagnosticsInputs, type HidInventoryFn } from './diagnostics-sources.js';
 import { UpdateController } from './update-controller.js';
 import { PushController } from './push-controller.js';
+import { checkKeyPress } from './key-press.js';
+import { VirtualDeckController } from './virtual-deck/virtual-deck-controller.js';
 import { handlePushApi, isPushApiPath } from './push-routes.js';
 import { ElgatoAppController } from './elgato-app-controller.js';
 
@@ -65,6 +67,7 @@ export class WebUIServer extends EventEmitter implements WebUIController, WebUIC
   readonly settingsFile: SettingsFileController;
   readonly elgatoApp: ElgatoAppController;
   readonly push: PushController;
+  readonly virtualDeck: VirtualDeckController;
   private readonly controllers: WebUIControllers;
   readonly imageChannel = new ImageChannel(this.bus, () => this.selectedDock);
   get selectedDock(): number {
@@ -91,7 +94,6 @@ export class WebUIServer extends EventEmitter implements WebUIController, WebUIC
   private readonly deviceModels: DeviceModelInfo[];
   declare private mockConfig: MockDeviceConfig | undefined;
   declare applyMockConfig: (parsed: Partial<MockDeviceConfig>) => MockDeviceConfig;
-  declare trySimulateKey: (n: number) => ReqError | null;
   declare trySimulateInput: (raw: RawMockInput) => ReqError | null;
 
   constructor(
@@ -153,6 +155,7 @@ export class WebUIServer extends EventEmitter implements WebUIController, WebUIC
     this.settingsFile = new SettingsFileController(host, this.logging);
     this.elgatoApp = new ElgatoAppController(host);
     this.push = new PushController(host, () => this.dockRegistry.list());
+    this.virtualDeck = new VirtualDeckController(host, this.push);
     this.controllers = {
       settings: this.settings,
       devicePrefs: this.devicePrefs,
@@ -164,6 +167,7 @@ export class WebUIServer extends EventEmitter implements WebUIController, WebUIC
       settingsFile: this.settingsFile,
       elgatoApp: this.elgatoApp,
       push: this.push,
+      virtualDeck: this.virtualDeck,
     };
     if (__MOCK_BUILD__) {
       this.applyMockConfig = (parsed) => {
@@ -172,16 +176,6 @@ export class WebUIServer extends EventEmitter implements WebUIController, WebUIC
         this.bus.broadcast('mockConfig', config);
         this.emit('mockConfig', { ...config });
         return config;
-      };
-      this.trySimulateKey = (n) => {
-        const invalid = mockConfigHelpers!.validateSimulatedKey(
-          n,
-          this.status.keyCount,
-          this.status.driverMode,
-        );
-        if (invalid) return invalid;
-        this.emit('keyPress', n);
-        return null;
       };
       this.trySimulateInput = (raw) => {
         const checked = mockInputHelpers!.checkMockInput(
@@ -194,6 +188,18 @@ export class WebUIServer extends EventEmitter implements WebUIController, WebUIC
         return null;
       };
     }
+  }
+
+  /** Click-to-press: validates against the selected dock, then asks main to press it. */
+  trySimulateKey(n: number): ReqError | null {
+    const checked = checkKeyPress(
+      this.settings.webuiKeyPress,
+      this.dockRegistry.selectedStatus(),
+      n,
+    );
+    if ('error' in checked) return checked;
+    this.emit('keyPress', checked);
+    return null;
   }
 
   // Settings are loaded by app.ts before construction.
@@ -379,6 +385,7 @@ export class WebUIServer extends EventEmitter implements WebUIController, WebUIC
       logLevel: this.logging.level(),
       logFilePath: this.logging.path(),
       multiDeck: this.settings.multiDeck,
+      keyPressEnabled: this.settings.webuiKeyPress,
       updateInfo: this.updates.info(),
       elgatoAutoRestart: this.elgatoApp.state(),
     });

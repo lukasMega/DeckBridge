@@ -2,13 +2,20 @@ import { spawn, type ChildProcess } from 'node:child_process';
 import { existsSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
-import { freePort, freePortPair, waitFor } from './ports.js';
+import { freePort, freePortBlock, waitFor } from './ports.js';
 
 const REPO = resolve(import.meta.dirname, '..', '..');
+
+/** The browser deck is dock 3: CORA ports base + 2*3 (primary) and base + 2*3 + 1 (child). */
+const VIRTUAL_DOCK_OFFSET = 6;
 
 export interface AppServer {
   baseURL: string;
   childPort: number;
+  /** The browser deck's listener (off until enabled via POST /api/virtual-deck). */
+  deckURL: string;
+  /** CORA child port of the browser deck's dock. */
+  virtualChildPort: number;
   stop(): Promise<void>;
 }
 
@@ -48,7 +55,9 @@ export async function startAppServer(): Promise<AppServer> {
   if (!existsSync(bundle)) throw new Error(`${bundle} missing — run \`mise run build\` first`);
 
   const port = await freePort();
-  const [coraPort, childPort] = await freePortPair();
+  const coraPort = await freePortBlock(8);
+  const childPort = coraPort + 1;
+  const deckPort = await freePort();
   const cacheDir = mkdtempSync(join(tmpdir(), 'deckbridge-e2e-'));
   const baseURL = `http://127.0.0.1:${port}`;
 
@@ -56,6 +65,7 @@ export async function startAppServer(): Promise<AppServer> {
     ...process.env,
     DECKBRIDGE_MOCK: '1',
     DECKBRIDGE_CORA_PORT: String(coraPort),
+    DECKBRIDGE_DECK_PORT: String(deckPort),
     DECKBRIDGE_NATIVE_LIB: nativeLibPath(),
   };
   // The tray sidecar is resolved from $DECKBRIDGE_TRAY_BIN *or* a sibling file; --headless
@@ -112,5 +122,18 @@ export async function startAppServer(): Promise<AppServer> {
     throw new Error(`${(err as Error).message}\n--- app output ---\n${log}`);
   }
 
-  return { baseURL, childPort, stop };
+  // Click-to-press is opt-in (off by default); the specs that press keys need it on.
+  await fetch(`${baseURL}/api/webui-key-press`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ enabled: true }),
+  });
+
+  return {
+    baseURL,
+    childPort,
+    deckURL: `http://127.0.0.1:${deckPort}`,
+    virtualChildPort: coraPort + VIRTUAL_DOCK_OFFSET + 1,
+    stop,
+  };
 }

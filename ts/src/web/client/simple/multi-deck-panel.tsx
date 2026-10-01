@@ -13,6 +13,7 @@ const MULTI_DECK_HELP =
   'Turn this on for a second deck — it gets its own dock in the Elgato app. Maximum two.';
 import { postJson } from '../lib/ui-api.js';
 import { Feedback, useAsyncAction } from '../lib/ui-async.js';
+import { PairingAddressLink } from './pairing-address-modal.js';
 
 /** `enabled` null = the settings page hasn't read /api/state yet (the toggle is
  *  disabled until then), same contract as DiagnosticsPanel's logLevel. */
@@ -45,6 +46,7 @@ export function MultiDeckPanel({
       </ToggleRow>
       <p class="multi-deck-note">Disconnects second deck. Settings stay saved.</p>
       <Feedback error={action.error} status={action.status} />
+      <PairingAddressLink />
     </Collapsible>
   );
 }

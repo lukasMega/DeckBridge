@@ -168,6 +168,15 @@ console.log('\nstartTray().close()');
 // The fixtures below are POSIX shell scripts.
 const posix = platformName() !== 'Windows';
 
+const trayStateWithAttempts = (n: number) =>
+  buildTrayState({
+    deviceName: 'D',
+    driverConnected: true,
+    elgatoConnected: false,
+    reconnectAttempts: n,
+    update: { enabled: false, updateAvailable: false } as never,
+  });
+
 if (posix) {
   await asyncTest('push coalesces to the newest snapshot while a write is in flight', async () => {
     const received: string[] = [];
@@ -200,22 +209,17 @@ if (posix) {
     try {
       tray = startTray(script, { onQuit: () => {}, onRestartElgatoApp: () => {} });
       assert.ok(tray, 'spawned');
-      const mk = (n: number) => ({
-        ...buildTrayState({
-          deviceName: 'D',
-          driverConnected: true,
-          elgatoConnected: false,
-          reconnectAttempts: n,
-          update: { enabled: false, updateAvailable: false } as never,
-        }),
-      });
       // Let the tray connect, then burst while the first write is in flight.
       await new Promise((r) => setTimeout(r, 400));
-      tray!.push(mk(0));
-      for (let i = 1; i <= 50; i++) tray!.push(mk(i));
+      tray!.push(trayStateWithAttempts(0));
+      for (let i = 1; i <= 50; i++) tray!.push(trayStateWithAttempts(i));
       await new Promise((r) => setTimeout(r, 300));
       assert.ok(received.length >= 1 && received.length <= 2, `writes: ${received.length}`);
-      assert.equal(JSON.parse(received[received.length - 1]!).reconnectAttempts, 50);
+      assert.equal(
+        (JSON.parse(received[received.length - 1]!) as { reconnectAttempts: number })
+          .reconnectAttempts,
+        50,
+      );
     } finally {
       await tray?.close();
       server.close();

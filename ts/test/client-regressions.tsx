@@ -19,6 +19,7 @@ import { DeviceTuningPanel } from '../src/web/client/simple/device-tuning.js';
 import { DiagnosticsPanel } from '../src/web/client/simple/diagnostics-panel.js';
 import { PushApiPanel } from '../src/web/client/simple/push-api-panel.js';
 import { MultiDeckPanel } from '../src/web/client/simple/multi-deck-panel.js';
+import { runDeckPage } from './client-deck.js';
 import { ElgatoAppPanel } from '../src/web/client/simple/elgato-app-panel.js';
 import { KeymapLearn } from '../src/web/client/simple/keymap-learn.js';
 import { DockList } from '../src/web/client/simple/dock-cards.js';
@@ -285,6 +286,7 @@ function runHydrateRegression(): void {
     logLevel: 'info',
     logFilePath: '',
     multiDeck: false,
+    keyPressEnabled: false,
     updateInfo: { enabled: true, current: '0.14.1', updateAvailable: true, latest: '0.15.0' },
     elgatoAutoRestart: { enabled: true, delayS: 10, supported: true },
   });
@@ -556,16 +558,22 @@ async function runPreviewBacklog(): Promise<void> {
   resetStripZones();
 }
 
+const logEntry = (i: number) => ({
+  ts: i,
+  level: 'info' as const,
+  component: 'c',
+  message: `m${i}`,
+});
+
 // F19: a log batch is one copy + one notify, and the panel keeps up past the cap.
 async function runLogBatches(): Promise<void> {
-  const mk = (i: number) => ({ ts: i, level: 'info' as const, component: 'c', message: `m${i}` });
   let notifies = 0;
   const unsub = subscribe(() => notifies++);
   const seq0 = getSnapshot().serverLogSeq;
-  addServerLogs(Array.from({ length: 500 }, (_, i) => mk(i)));
+  addServerLogs(Array.from({ length: 500 }, (_, i) => logEntry(i)));
   check(notifies === 1, 'A 500-entry batch notifies once');
   check(getSnapshot().serverLogSeq === seq0 + 500, 'The append sequence counts the batch');
-  addServerLogs(Array.from({ length: 2500 }, (_, i) => mk(1000 + i)));
+  addServerLogs(Array.from({ length: 2500 }, (_, i) => logEntry(1000 + i)));
   const logs = getSnapshot().serverLogs;
   check(logs.length === 2000 && logs[1999]!.message === 'm3499', 'The cap keeps the newest 2000');
   addCommLogs([]);
@@ -576,7 +584,7 @@ async function runLogBatches(): Promise<void> {
   await new Promise((res) => requestAnimationFrame(res));
   const pre = root.querySelector('pre')!;
   check(pre.children.length === 2000, 'The panel renders the capped log');
-  addServerLogs([mk(9001), mk(9002)]);
+  addServerLogs([logEntry(9001), logEntry(9002)]);
   await new Promise((res) => requestAnimationFrame(res));
   await new Promise((res) => requestAnimationFrame(res));
   check(
@@ -1125,6 +1133,7 @@ async function runKeymapAndDiagnosticsPanels(): Promise<void> {
   await runDiagnosticsPanel();
   await runMultiDeckPanel();
   await runPushApiPanel();
+  await runDeckPage(root, check);
   await runElgatoAutoRestartPanel();
   await runElgatoAutoRestartUnsupported();
 }
@@ -1307,8 +1316,8 @@ async function runPushApiPanel(): Promise<void> {
   try {
     await act(() => render(<PushApiPanel />, root));
     await settle();
-    check(root.textContent?.includes('dbp_SECRET…') === true, 'Token list shows name prefix');
-    check(!root.textContent?.includes('hash'), 'Token list never shows a hash');
+    check(root.textContent.includes('dbp_SECRET…'), 'Token list shows name prefix');
+    check(!root.textContent.includes('hash'), 'Token list never shows a hash');
 
     const input = root.querySelector<HTMLInputElement>('input[aria-label="New push token name"]')!;
     input.value = 'curl';
@@ -1322,7 +1331,7 @@ async function runPushApiPanel(): Promise<void> {
       'Create reveals the token once',
     );
     await click('.push-reveal button:last-child');
-    check(!root.textContent?.includes(token), 'Closing the reveal removes the plaintext');
+    check(!root.textContent.includes(token), 'Closing the reveal removes the plaintext');
 
     await act(() =>
       patch({
@@ -1331,7 +1340,7 @@ async function runPushApiPanel(): Promise<void> {
         ],
       }),
     );
-    check(root.textContent?.includes('obs-rec') === true, 'A channel update reaches the table');
+    check(root.textContent.includes('obs-rec'), 'A channel update reaches the table');
     await click('.push-channels button');
     await settle();
     check(

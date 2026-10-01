@@ -8,6 +8,8 @@ import { IdentityRow } from '../components/IdentityRow.js';
 import { DiagnosticsPanel } from './diagnostics-panel.js';
 import { PushApiPanel } from './push-api-panel.js';
 import { MultiDeckPanel } from './multi-deck-panel.js';
+import { VirtualDeckPanel } from './virtual-deck-panel.js';
+import { KeyPressPanel } from './key-press-panel.js';
 import { UpdatePanel } from './update-panel.js';
 import { ElgatoAppPanel } from './elgato-app-panel.js';
 import { DeviceTuningPanel } from './device-tuning.js';
@@ -183,6 +185,7 @@ type SettingsState = Pick<
   | 'logLevel'
   | 'logFilePath'
   | 'multiDeck'
+  | 'keyPressEnabled'
   | 'updateInfo'
   | 'elgatoAutoRestart'
 >;
@@ -363,6 +366,8 @@ export function SettingsPage({ onBack }: Readonly<{ onBack: () => void }>): prea
       <RealIdentityList realIdentity={realIdentity} />
 
       <MultiDeckPanel enabled={state.data ? state.data.multiDeck : null} />
+      <KeyPressPanel enabled={state.data ? state.data.keyPressEnabled : null} />
+      <VirtualDeckPanel />
       <PushApiPanel />
       <UpdatePanel info={updateInfoFor(state.data)} />
       <ElgatoAppPanel state={elgatoAutoRestartFor(state.data)} />

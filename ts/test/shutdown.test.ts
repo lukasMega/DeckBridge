@@ -4,6 +4,8 @@ import { PersistedSettings } from '../src/infra/settings.js';
 import { loadSettings } from '../src/infra/settings-store.js';
 import { testAsync as test, summary } from './helpers/harness.js';
 
+const noop = (): void => {};
+
 const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
 const ROOT = `${tjs.tmpDir}/shutdown-test-${tjs.pid}`;
 
@@ -116,7 +118,7 @@ await test('drain that never settles is bounded and fails the exit', async () =>
 });
 
 await test('a late drain rejection after the timeout stays observed', async () => {
-  let reject: (e: Error) => void = () => {};
+  let reject: (e: Error) => void = noop;
   const { plan, events } = recorder({
     drainLogs: () => new Promise((_, rej) => (reject = rej)),
   });

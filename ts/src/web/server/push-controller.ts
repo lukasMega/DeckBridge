@@ -1,10 +1,11 @@
 // Push API state: the channel store, token admin and the coalesced repaint/broadcast.
 import {
-  PUSH_TOKENS_MAX,
+  ACCESS_TOKENS_MAX,
   PUSH_TOKEN_NAME_MAX,
   generatePushToken,
   hashPushToken,
   newTokenId,
+  type PushScope,
   type PushTokenRecord,
 } from '../../infra/push-tokens.js';
 import { PushChannels, pushChannels } from '../../shared/push-channels.js';
@@ -97,32 +98,38 @@ export class PushController {
   }
 
   records(): readonly PushTokenRecord[] {
-    return this.host.settings.pushTokenRecords();
+    return this.host.settings.accessTokenRecords();
   }
 
+  /** Push-scoped tokens only: browser-deck tokens are listed by the Browser deck panel. */
   tokens(): PushTokenView[] {
-    return this.records().map((r) => this.view(r));
+    return this.records()
+      .filter((r) => r.scopes.includes('push'))
+      .map((r) => this.view(r));
   }
 
-  async createToken(name: unknown): Promise<PushTokenCreated | ReqError> {
+  async createToken(
+    name: unknown,
+    scope: PushScope = 'push',
+  ): Promise<PushTokenCreated | ReqError> {
     const trimmed = typeof name === 'string' ? name.trim() : '';
     if (trimmed.length < 1 || trimmed.length > PUSH_TOKEN_NAME_MAX) {
       return { status: 400, error: `name must be 1–${PUSH_TOKEN_NAME_MAX} characters` };
     }
     const records = this.records();
-    if (records.length >= PUSH_TOKENS_MAX) {
-      return { status: 409, error: `at most ${PUSH_TOKENS_MAX} tokens` };
+    if (records.length >= ACCESS_TOKENS_MAX) {
+      return { status: 409, error: `at most ${ACCESS_TOKENS_MAX} tokens` };
     }
     const { token, prefix } = generatePushToken();
     const record: PushTokenRecord = {
       id: newTokenId(),
       name: trimmed,
-      scopes: ['push'],
+      scopes: [scope],
       hash: await hashPushToken(token),
       prefix,
       createdAt: new Date(this.now()).toISOString(),
     };
-    this.host.settings.setPushTokens([...this.records(), record]);
+    this.host.settings.setAccessTokens([...this.records(), record]);
     log('info', 'push', `push token created: ${record.name} (${record.id})`);
     return { ...this.view(record), token };
   }
@@ -132,7 +139,7 @@ export class PushController {
     if (!old) return { status: 404, error: 'no such token' };
     const { token, prefix } = generatePushToken();
     const record: PushTokenRecord = { ...old, hash: await hashPushToken(token), prefix };
-    this.host.settings.setPushTokens(this.records().map((r) => (r.id === id ? record : r)));
+    this.host.settings.setAccessTokens(this.records().map((r) => (r.id === id ? record : r)));
     log('info', 'push', `push token rotated: ${old.name} (${id})`);
     return { ...this.view(record), token };
   }
@@ -140,10 +147,15 @@ export class PushController {
   revokeToken(id: string): ReqError | null {
     const old = this.records().find((r) => r.id === id);
     if (!old) return { status: 404, error: 'no such token' };
-    this.host.settings.setPushTokens(this.records().filter((r) => r.id !== id));
+    this.host.settings.setAccessTokens(this.records().filter((r) => r.id !== id));
     this.lastUsed.delete(id);
     log('info', 'push', `push token revoked: ${old.name} (${id})`);
+    this.host.emit('tokenRevoked', id); // the browser deck closes that token's pages
     return null;
+  }
+
+  lastUsedAt(tokenId: string): number | undefined {
+    return this.lastUsed.get(tokenId);
   }
 
   noteUsed(tokenId: string): void {

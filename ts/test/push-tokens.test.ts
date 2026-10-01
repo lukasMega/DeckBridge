@@ -75,23 +75,23 @@ await test('settings: persist, reload (drops invalid), json() omits, import igno
   const dir = `${ROOT}/rt`;
   const s = new PersistedSettings(dir);
   const good = await record('a', 'dbp_aaa');
-  s.setPushTokens([good]);
+  s.setAccessTokens([good]);
   await s.flush();
   const onDisk = await loadSettings(dir);
-  assert.equal(onDisk.pushTokens?.length, 1);
+  assert.equal(onDisk.accessTokens?.length, 1);
   assert.ok(!JSON.stringify(onDisk).includes('dbp_aaa'), 'plaintext never stored');
-  assert.ok(!('pushTokens' in JSON.parse(s.json())), 'export has no pushTokens');
+  assert.ok(!('accessTokens' in JSON.parse(s.json())), 'export has no accessTokens');
 
   const s2 = new PersistedSettings(dir);
   await s2.load();
-  assert.equal(s2.pushTokenRecords().length, 1);
+  assert.equal(s2.accessTokenRecords().length, 1);
 
   const bad = new PersistedSettings(`${ROOT}/bad`);
-  bad.setPushTokens([good, { id: 'x' } as unknown as PushTokenRecord]);
+  bad.setAccessTokens([good, { id: 'x' } as unknown as PushTokenRecord]);
   await bad.flush();
   const bad2 = new PersistedSettings(`${ROOT}/bad`);
   await bad2.load();
-  assert.equal(bad2.pushTokenRecords().length, 1);
+  assert.equal(bad2.accessTokenRecords().length, 1);
 });
 
 summary();

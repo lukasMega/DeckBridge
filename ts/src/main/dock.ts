@@ -9,6 +9,7 @@ import {
   DEFAULT_BRIGHTNESS,
   DEFAULT_MAC_ADDRESS,
   MDNS_SERVICE_NAME,
+  MOCK_KEY_PRESS_DURATION_MS,
 } from '../shared/types.js';
 import type { DockStatus, KeyState, TouchStripMode, TouchWindowRegion } from '../shared/types.js';
 import type { WidgetPaint } from '../shared/widget-layout.js';
@@ -73,6 +74,8 @@ export interface DockOptions {
   deviceInfo?: DeviceInfo;
   hooks?: DockHooks;
   getShuttingDown?: () => boolean;
+  /** Extra status fields only this dock knows (the browser deck's connected pages). */
+  statusExtra?: () => Partial<DockStatus>;
 }
 
 export class Dock {
@@ -82,6 +85,7 @@ export class Dock {
   private readonly settings: DockSettings;
   private readonly hooks: DockHooks;
   private readonly getShuttingDown: () => boolean;
+  private readonly statusExtra: (() => Partial<DockStatus>) | undefined;
 
   /** Effective model (registry + device tuning); swapped by applyTuning. */
   model: DeviceModel;
@@ -100,6 +104,8 @@ export class Dock {
   private readonly extraKeyActions: ExtraKeyActions;
   private resendTimer: ReturnType<typeof setTimeout> | null = null;
   private stopped = false;
+  /** Click-to-press releases still pending, by key: one virtual press per key at a time. */
+  private readonly virtualPresses = new Map<number, ReturnType<typeof setTimeout>>();
   /** Shared by every stop() caller so duplicates see the same completion/failure. */
   private stopping: Promise<void> | null = null;
 
@@ -110,6 +116,7 @@ export class Dock {
     this.settings = opts.settings;
     this.hooks = opts.hooks ?? {};
     this.getShuttingDown = opts.getShuttingDown ?? (() => false);
+    this.statusExtra = opts.statusExtra;
     this.model = opts.model ?? DEFAULT_MODEL;
     this.deviceInfo = opts.deviceInfo;
     this.identity = opts.identity;
@@ -142,7 +149,7 @@ export class Dock {
   }
 
   status(): DockStatus {
-    return buildDockStatus({
+    const status = buildDockStatus({
       model: this.model,
       index: this.index,
       primaryPort: this.ports.primary,
@@ -152,6 +159,7 @@ export class Dock {
       elgatoConnected: this.cora.childHasClient,
       deviceInfo: this.deviceInfo,
     });
+    return this.statusExtra ? { ...status, ...this.statusExtra() } : status;
   }
 
   /** Resolve (or generate + persist) the identity for `deviceKey` and push it to the
@@ -244,6 +252,8 @@ export class Dock {
     this.resendTimer = clearTimer(this.resendTimer);
     this.encoders.stop();
     this.extraKeyActions.stop();
+    for (const t of this.virtualPresses.values()) clearTimeout(t);
+    this.virtualPresses.clear();
     const driver = this.detach();
     try {
       // Concurrent: a driver that never acks close must not hold the CORA ports.
@@ -254,6 +264,26 @@ export class Dock {
     } finally {
       this.changed();
     }
+  }
+
+  /** Click-to-press from the WebUI: the key goes down on the CORA child now and up after a
+   *  short hold. A real press on the same key wins (see wireDriver); a second click while one
+   *  is pending is ignored, so no release is ever queued twice. */
+  simulateKeyPress(mk2Index: number): boolean {
+    if (this.stopped || mk2Index < 0 || mk2Index >= this.model.keyCount) return false;
+    if (this.virtualPresses.has(mk2Index)) return false;
+    const child = this.cora.childServer;
+    child.sendKeyEvent(mk2Index, 'down');
+    this.hooks.key?.(mk2Index, 'down'); // no wireId: key-map learn must not take it as evidence
+    this.virtualPresses.set(
+      mk2Index,
+      setTimeout(() => {
+        this.virtualPresses.delete(mk2Index);
+        child.sendKeyEvent(mk2Index, 'up');
+        this.hooks.key?.(mk2Index, 'up');
+      }, MOCK_KEY_PRESS_DURATION_MS),
+    );
+    return true;
   }
 
   /** Apply + record a brightness level (WebUI slider or Elgato app). */
@@ -363,6 +393,9 @@ export class Dock {
     const sinks: DriverEventSinks = {
       onAction: this.hooks.action,
       onKey: (index, state, wireId) => {
+        // The device's own report overwrites a pending virtual press: drop its release.
+        clearTimeout(this.virtualPresses.get(index));
+        this.virtualPresses.delete(index);
         child.sendKeyEvent(index, state);
         this.hooks.key?.(index, state, wireId);
       },

@@ -12,17 +12,14 @@ import { KeyEventsPanel } from './key-events.js';
 import { LogConsolePanel } from './log-panel.js';
 import { KeyGridPreview } from '../components/KeyGridPreview.js';
 import { Brightness } from '../simple/controls.js';
-import { fire } from '../lib/ui-api.js';
+import { pressKey } from '../simple/handlers.js';
 import { selectedCoraProfile } from '../ui-helpers.js';
-
-function postKey(index: number): void {
-  fire(`/api/key/${index}`);
-}
 
 // Thin layout wrapper so only this subtree re-renders on status changes;
 // #grid-section stays because DragResizer targets it by id.
 function AdvGridSection(): preact.JSX.Element {
   const status = useStore((s) => s.status);
+  const keyPressEnabled = useStore((s) => s.keyPressEnabled);
   return (
     <div class="grid-section" id="grid-section">
       <KeyGridPreview
@@ -34,8 +31,8 @@ function AdvGridSection(): preact.JSX.Element {
         label="Key grid"
         showIndex
         flash
-        onKeyClick={__MOCK_BUILD__ ? postKey : undefined}
-        clickable={__MOCK_BUILD__ && status.driverMode === 'mock'}
+        onKeyClick={pressKey}
+        clickable={keyPressEnabled && status.elgatoConnected}
       />
     </div>
   );

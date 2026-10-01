@@ -2315,3 +2315,39 @@ select.input.xkey-select {
   word-break: break-all;
   margin: 6px 0;
 }
+
+/* ---- pairing-address helper modal ---- */
+.address-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: oklch(0 0 0 / 0.45);
+}
+.address-modal {
+  width: min(520px, 92vw);
+  max-height: 88vh;
+  overflow-y: auto;
+  padding: 18px 20px;
+}
+.address-modal h4 {
+  margin: 14px 0 6px;
+}
+.address-tabs {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+.address-step--wait {
+  opacity: 0.6;
+}
+.address-link {
+  margin: 6px 0;
+}
+
+/* click-to-press: keys that fire on double-click */
+.key-grid .key-cell.clickable {
+  cursor: pointer;
+}

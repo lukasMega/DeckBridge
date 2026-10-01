@@ -18,6 +18,7 @@ const sidebars: SidebarsConfig = {
     'devices',
     'getting-started',
     'features',
+    'browser-deck',
     'headless-linux',
     'troubleshooting',
     'virustotal',

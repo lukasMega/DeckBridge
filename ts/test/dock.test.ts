@@ -25,6 +25,7 @@ import {
   MDNS_SERVICE_NAME,
   ELGATO_PLUS_PID,
   DEFAULT_CHILD_FIRMWARE_VERSION,
+  MOCK_KEY_PRESS_DURATION_MS,
 } from '../src/shared/types.js';
 import type {
   DialEvent,
@@ -42,6 +43,8 @@ import type { DeviceModel } from '../src/devices/driver.js';
 import type { WorkerHidDriver } from '../src/worker/hid-worker-host.js';
 import { testAsync as test, summaryExit } from './helpers/harness.js';
 import { StubDockDriver } from './helpers/stub-dock-driver.js';
+
+const noop = (): void => {};
 
 // Fakes
 
@@ -789,7 +792,7 @@ await test('stop(): driver and CORA both fail, both outcomes are kept', async ()
 await test('stop(): a hung driver close does not delay CORA teardown; duplicates share it', async () => {
   const { server, childServer, driver, dock, start } = makeTestSetup();
   await start();
-  let release: () => void = () => {};
+  let release: () => void = noop;
   driver.close = () => new Promise<void>((r) => (release = r));
   const first = dock.stop();
   const second = dock.stop();
@@ -842,6 +845,51 @@ await test('imagesDrained is ignored while the app shuts down', async () => {
   driver.emit('imagesDrained');
   assert.equal(driver.splashCalls.length, splash);
   await dock.stop();
+});
+
+await test('click-to-press: down now, up after the hold; a second click while pending is ignored', async () => {
+  const { childServer, dock, start } = makeTestSetup();
+  await start();
+  assert.equal(dock.simulateKeyPress(3), true);
+  assert.equal(dock.simulateKeyPress(3), false, 'single-flight per key');
+  assert.deepEqual(childServer.sendKeyEventCalls, [{ keyIndex: 3, state: 'down' }]);
+  await new Promise((r) => setTimeout(r, MOCK_KEY_PRESS_DURATION_MS + 60));
+  assert.deepEqual(childServer.sendKeyEventCalls.at(-1), { keyIndex: 3, state: 'up' });
+  assert.equal(dock.simulateKeyPress(3), true, 'free again after the release');
+  await new Promise((r) => setTimeout(r, MOCK_KEY_PRESS_DURATION_MS + 60));
+});
+
+await test('click-to-press: a different key is independent; out of range is refused', async () => {
+  const { childServer, dock, start } = makeTestSetup();
+  await start();
+  assert.equal(dock.simulateKeyPress(0), true);
+  assert.equal(dock.simulateKeyPress(1), true);
+  assert.equal(dock.simulateKeyPress(DEFAULT_MODEL.keyCount), false);
+  assert.equal(dock.simulateKeyPress(-1), false);
+  assert.equal(childServer.sendKeyEventCalls.length, 2);
+  await new Promise((r) => setTimeout(r, MOCK_KEY_PRESS_DURATION_MS + 60));
+});
+
+await test('click-to-press: a real press on the same key cancels the pending virtual release', async () => {
+  const { childServer, driver, dock, start } = makeTestSetup();
+  await start();
+  dock.simulateKeyPress(2);
+  driver.emit('key', { keyIndex: 2, state: 'down' }); // the hardware (or a browser page) takes over
+  await new Promise((r) => setTimeout(r, MOCK_KEY_PRESS_DURATION_MS + 60));
+  const states = childServer.sendKeyEventCalls.map((c) => c.state);
+  assert.deepEqual(states, ['down', 'down'], 'no stray virtual up while the real key is held');
+  driver.emit('key', { keyIndex: 2, state: 'up' });
+  assert.equal(childServer.sendKeyEventCalls.at(-1)?.state, 'up');
+});
+
+await test('click-to-press: stop() drops a pending release; a stopped dock refuses', async () => {
+  const { childServer, dock, start } = makeTestSetup();
+  await start();
+  dock.simulateKeyPress(4);
+  await dock.stop();
+  await new Promise((r) => setTimeout(r, MOCK_KEY_PRESS_DURATION_MS + 60));
+  assert.deepEqual(childServer.sendKeyEventCalls, [{ keyIndex: 4, state: 'down' }]);
+  assert.equal(dock.simulateKeyPress(5), false);
 });
 
 // Summary

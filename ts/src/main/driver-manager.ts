@@ -151,6 +151,27 @@ export class DriverManager extends EventEmitter {
     this.emit('changed');
   }
 
+  /** The same hooks `dockHooks` gives scanned docks, for a dock built outside the manager. */
+  hooksForDock(index: number): DockHooks {
+    return this.dockHooks(index);
+  }
+
+  /** Register a dock that is not backed by a scanned USB unit (the browser deck). The index
+   *  is reserved first so a scan can never take it. Not touched by switchMode or
+   *  stopScannedDocks. */
+  addExternalDock(dock: Dock): void {
+    if (this.docks.has(dock.index)) throw new Error(`dock index ${dock.index} is in use`);
+    this.scanner.reserveIndex(dock.index);
+    this.docks.set(dock.index, dock);
+    this.changed();
+  }
+
+  removeExternalDock(index: number): void {
+    if (index === 0 || !this.docks.delete(index)) return;
+    this.scanner.unreserveIndex(index);
+    this.changed();
+  }
+
   /** Status + WebUI mirror hooks every dock gets, tagged with its index. */
   private dockHooks(index: number): DockHooks {
     const { webui } = this.deps;
@@ -174,6 +195,11 @@ export class DriverManager extends EventEmitter {
 
   getCurrentDriver(): DockDriver | null {
     return this.primary.driver;
+  }
+
+  /** Click-to-press: false when the dock is gone, the index is out of range or a press is pending. */
+  simulateKeyPress(dockIndex: number, mk2Index: number): boolean {
+    return this.docks.get(dockIndex)?.simulateKeyPress(mk2Index) ?? false;
   }
 
   /** The live dock at `index` (0 is always present). */

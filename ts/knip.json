@@ -6,6 +6,7 @@
     "src/worker/hid-scan-worker.ts",
     "src/plugin/plugin-worker.ts",
     "src/web/client/ui-entry.ts",
+    "src/web/client/deck/deck-entry.ts",
     "src/dev/mirabox-smoke.ts",
     "src/dev/k1pro-probe.ts",
     "src/dev/d6-capture.ts",

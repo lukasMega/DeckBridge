@@ -328,7 +328,7 @@ console.log('\npush token hashes');
 test('hashes are stripped, names and prefixes stay; with and without redactCommands', () => {
   const hash = 'a'.repeat(64);
   const settingsJson = JSON.stringify({
-    pushTokens: [
+    accessTokens: [
       { id: 'ab12', name: 'curl', scopes: ['push'], hash, prefix: 'Zx9_aB', createdAt: 'x' },
     ],
   });

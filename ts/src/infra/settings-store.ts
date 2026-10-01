@@ -98,8 +98,14 @@ export interface Settings {
    *  dock (max MAX_MULTI_DECK_DOCKS). Absent/false = a single dock, and no USB
    *  scanning at all once it is connected. */
   multiDeck?: boolean;
-  /** Push-API tokens (hashed) — see push-tokens.ts. Machine-local: never exported/imported. */
-  pushTokens?: PushTokenRecord[];
+  /** Click-to-press in the WebUI preview (double-click a key = a virtual press on the Elgato
+   *  app). Opt-in, off by default; never imported from a settings file. */
+  webuiKeyPress?: boolean;
+  /** Browser deck (phone/tablet as a CORA dock); absent = off. `profile` is a
+   *  BrowserDeckProfile id, validated on load. */
+  virtualDeck?: { enabled: boolean; profile: string };
+  /** Push-API and browser-deck tokens (hashed) — see push-tokens.ts. Machine-local: never exported/imported. */
+  accessTokens?: PushTokenRecord[];
   devices?: DeviceIdentitySettings[];
   /** Per-MODEL device tuning (rotation/flip/size/quality/keyMap — see
    *  devices/model-overrides.ts), keyed by model id.

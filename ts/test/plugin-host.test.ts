@@ -207,7 +207,7 @@ type FetchCall = { url: string; signal: AbortSignal; body?: string };
 /** Swap the global fetch for `impl` while `fn` runs. */
 async function withFetch(
   impl: (call: FetchCall) => Promise<Response>,
-  fn: (calls: FetchCall[]) => Promise<void>,
+  fn: (calls: FetchCall[]) => void | Promise<void>,
 ): Promise<void> {
   const realFetch = globalThis.fetch;
   const calls: FetchCall[] = [];
@@ -602,7 +602,7 @@ await runTest('removed key with a surviving peer: zero new HTTP, no admission', 
 await runTest('disabled key: immediate rejection, no request', async () => {
   await withFetch(
     (c) => untilAborted(c.signal),
-    async (calls) => {
+    (calls) => {
       const { host, workers } = hostWithTimeout(5000);
       host.request('p.js', undefined, undefined, () => {});
       host.request('q.js', undefined, undefined, () => {});
@@ -619,7 +619,7 @@ await runTest('disabled key: immediate rejection, no request', async () => {
 await runTest('removed then re-added key: the old poll stays rejected', async () => {
   await withFetch(
     (c) => untilAborted(c.signal),
-    async (calls) => {
+    (calls) => {
       const { host, workers } = hostWithTimeout(5000);
       host.request('a.js', undefined, undefined, () => {});
       host.request('b.js', undefined, undefined, () => {});
