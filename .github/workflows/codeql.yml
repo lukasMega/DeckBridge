@@ -36,7 +36,7 @@ jobs:
           - language: javascript-typescript
             paths: ''
           - language: rust
-            paths: '^(rust/|\.github/workflows/codeql\.yml$)'
+            paths: '^(rust/(deckbridge-native/|Cargo\.|rust-toolchain)|\.github/(workflows/codeql\.yml|codeql/))'
     steps:
       - uses: actions/checkout@v7
         with:
@@ -64,6 +64,7 @@ jobs:
         with:
           languages: ${{ matrix.language }}
           build-mode: none
+          config-file: ./.github/codeql/codeql-config.yml
 
       - name: Perform CodeQL Analysis
         if: steps.gate.outputs.run == 'true'
