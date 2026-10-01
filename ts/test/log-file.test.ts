@@ -12,6 +12,8 @@ import {
 } from '../src/infra/log-file.js';
 import { testAsync as test, summary } from './helpers/harness.js';
 
+const noop = (): void => {};
+
 const ROOT = `${tjs.tmpDir}/log-file-test-${tjs.pid}`;
 
 async function readText(path: string): Promise<string> {
@@ -247,9 +249,9 @@ await test('pending lines are capped; one marker reports the drops', async () =>
 });
 
 await test('flush requests behind a running drain coalesce into one', async () => {
-  let release: () => void = () => {};
+  let release: () => void = noop;
   let writes = 0;
-  let entered: () => void = () => {};
+  let entered: () => void = noop;
   const firstWrite = new Promise<void>((r) => (entered = r));
   const { h } = fakeHandle({
     write: () => {

@@ -5,6 +5,8 @@ import type { SourceSeams } from '../src/main/widget-refresh.js';
 import { renderWidgetLines } from '../src/main/widget-lines.js';
 import { testAsync as test, summaryExit } from './helpers/harness.js';
 
+const noop = (): void => {};
+
 const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
 const macrotask = (): Promise<void> => sleep(0);
 const NOW = new Date(2026, 6, 15, 9, 5);
@@ -148,7 +150,7 @@ await test('idle command entry is evicted after its TTL, on the next insert', as
 
 await test('an in-flight entry is never evicted: its callback still fires', async () => {
   const clock = { t: 20_000_000 };
-  let finish: (v: string) => void = () => {};
+  let finish: (v: string) => void = noop;
   const s = seams(clock, (cmd) =>
     cmd === 'slow' ? new Promise<string>((r) => (finish = r)) : Promise.resolve('x'),
   );
@@ -167,7 +169,7 @@ await test('an in-flight entry is never evicted: its callback still fires', asyn
 
 await test('a later caller replaces the repaint closure of a shared entry', async () => {
   const clock = { t: 30_000_000 };
-  let finish: (v: string) => void = () => {};
+  let finish: (v: string) => void = noop;
   const s = seams(clock, () => new Promise<string>((r) => (finish = r)));
   let oldCalls = 0;
   let newCalls = 0;

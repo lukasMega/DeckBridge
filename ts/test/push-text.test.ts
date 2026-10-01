@@ -91,12 +91,15 @@ await test('toPushInput defaults the ttl to 600', () => {
 
 console.log('\ndimStyle');
 
+const hexChannel = (h: string, i: number): number => parseInt(h.slice(1 + i * 2, 3 + i * 2), 16);
+
 await test('blends colour halfway toward the background', () => {
   const dim = dimStyle({});
-  const ch = (h: string, i: number): number => parseInt(h.slice(1 + i * 2, 3 + i * 2), 16);
   for (let i = 0; i < 3; i++) {
-    const want = Math.round((ch(DEFAULT_TEXT_COLOR, i) + ch(DEFAULT_TEXT_BACKGROUND, i)) / 2);
-    assert.equal(ch(dim.color!, i), want);
+    const want = Math.round(
+      (hexChannel(DEFAULT_TEXT_COLOR, i) + hexChannel(DEFAULT_TEXT_BACKGROUND, i)) / 2,
+    );
+    assert.equal(hexChannel(dim.color!, i), want);
   }
   const s = dimStyle({ color: '#ffffff', background: '#000000', outline: '#ffffff', bold: true });
   assert.equal(s.color, '#808080');

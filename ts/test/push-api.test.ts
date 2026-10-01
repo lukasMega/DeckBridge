@@ -36,7 +36,7 @@ function dock(): DockStatus {
     mdnsServiceName: 'x',
     deviceKey: 'fake-device-0',
     extraKeys: [16],
-  } as DockStatus;
+  } satisfies DockStatus;
 }
 
 const admin = (path: string, body?: unknown): Promise<Response> =>
@@ -232,7 +232,7 @@ try {
     assert.ok(retry !== null && Number(retry) >= 1);
   });
 
-  await test('channel limit: 65th live channel → 409', async () => {
+  await test('channel limit: 65th live channel → 409', () => {
     const own = new PushChannels();
     for (let i = 0; i < 64; i++) own.set(`c${i}`, { text: 'x', ttlS: 0 }, Date.now());
     assert.equal(own.set('c64', { text: 'x', ttlS: 0 }, Date.now()), 'full');

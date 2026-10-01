@@ -44,6 +44,8 @@ import type { WorkerHidDriver } from '../src/worker/hid-worker-host.js';
 import { testAsync as test, summaryExit } from './helpers/harness.js';
 import { StubDockDriver } from './helpers/stub-dock-driver.js';
 
+const noop = (): void => {};
+
 // Fakes
 
 // Extends EventEmitter so CoraDock's constructor (watchPairing) can attach its
@@ -790,7 +792,7 @@ await test('stop(): driver and CORA both fail, both outcomes are kept', async ()
 await test('stop(): a hung driver close does not delay CORA teardown; duplicates share it', async () => {
   const { server, childServer, driver, dock, start } = makeTestSetup();
   await start();
-  let release: () => void = () => {};
+  let release: () => void = noop;
   driver.close = () => new Promise<void>((r) => (release = r));
   const first = dock.stop();
   const second = dock.stop();

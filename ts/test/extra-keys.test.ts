@@ -882,32 +882,35 @@ const liveValue = (text: string, extra: Partial<PushedValue> = {}): PushedValue 
   ...extra,
 });
 
-test('renderWidgetLines external: waiting, live, expired dim/blank/text', () => {
-  const cfg = (c: Partial<ExtraKeyConfig> = {}): ExtraKeyConfig => ({
-    widget: 'external',
-    param: 'a',
-    ...c,
-  });
+const externalCfg = (c: Partial<ExtraKeyConfig> = {}): ExtraKeyConfig => ({
+  widget: 'external',
+  param: 'a',
+  ...c,
+});
+
+await test('renderWidgetLines external: waiting, live, expired dim/blank/text', () => {
   const ctx = (external: ExternalView): { now: Date; external: ExternalView } => ({
     now: NOW,
     external,
   });
-  assert.deepEqual(renderWidgetLines(cfg(), { now: NOW }), [{ text: '…', big: true }]);
-  assert.deepEqual(renderWidgetLines(cfg(), ctx({ state: 'live', value: liveValue('OK') })), [
-    { text: 'OK', big: true },
-  ]);
+  assert.deepEqual(renderWidgetLines(externalCfg(), { now: NOW }), [{ text: '…', big: true }]);
+  assert.deepEqual(
+    renderWidgetLines(externalCfg(), ctx({ state: 'live', value: liveValue('OK') })),
+    [{ text: 'OK', big: true }],
+  );
   const expired: ExternalView = { state: 'expired', value: liveValue('OK') };
-  assert.deepEqual(renderWidgetLines(cfg(), ctx(expired)), [{ text: 'OK', big: true }]);
-  assert.equal(renderWidgetLines(cfg({ expire: 'blank' }), ctx(expired)), null);
-  assert.deepEqual(renderWidgetLines(cfg({ expire: 'text', fallbackText: 'off' }), ctx(expired)), [
-    { text: 'off', big: true },
-  ]);
-  assert.deepEqual(renderWidgetLines(cfg({ expire: 'text' }), ctx(expired)), [
+  assert.deepEqual(renderWidgetLines(externalCfg(), ctx(expired)), [{ text: 'OK', big: true }]);
+  assert.equal(renderWidgetLines(externalCfg({ expire: 'blank' }), ctx(expired)), null);
+  assert.deepEqual(
+    renderWidgetLines(externalCfg({ expire: 'text', fallbackText: 'off' }), ctx(expired)),
+    [{ text: 'off', big: true }],
+  );
+  assert.deepEqual(renderWidgetLines(externalCfg({ expire: 'text' }), ctx(expired)), [
     { text: '--', big: true },
   ]);
 });
 
-test('paintChanged paints only changed keys; same text twice sends nothing; before start is a no-op', () => {
+await test('paintChanged paints only changed keys; same text twice sends nothing; before start is a no-op', () => {
   const d = new FakeDriver();
   const push = new FakePush();
   const cfgs: Record<number, ExtraKeyConfig> = {
