@@ -101,7 +101,7 @@ test.describe('browser deck (dock 3 + deck listener)', () => {
     });
     try {
       await expect.poll(async () => (await deckState(request, base)).pending).toBeUndefined();
-      // Lightpanda cannot always synthesise pointer input (see e2e/README.md); the real-Chrome
+      // Lightpanda cannot always synthesize pointer input (see e2e/README.md); the real-Chrome
       // test-client run covers the press path in depth, so skip rather than fail here.
       const dispatched = await page.evaluate(() => {
         const key = document.querySelectorAll('.deck-key')[3];

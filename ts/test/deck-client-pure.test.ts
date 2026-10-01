@@ -1,4 +1,4 @@
-/* eslint-disable sonarjs/no-clear-text-protocols -- fake socket URL, never dialled */
+/* eslint-disable sonarjs/no-clear-text-protocols -- fake socket URL, never dialed */
 import assert from 'tjs:assert';
 import { PressTracker } from '../src/web/client/deck/press-tracker.js';
 import { computeDeckLayout, keyOrigin } from '../src/web/client/deck/layout.js';
