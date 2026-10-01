@@ -16,6 +16,11 @@ export const MAX_RECEIVE_BUFFER = 128 * 1024;
 // Per-key cap on accumulated image-chunk bytes before the LAST flag arrives, see S4
 export const MAX_IMAGE_ASSEMBLY_BYTES = 1024 * 1024;
 export const MAX_IMAGE_ASSEMBLY_CHUNKS = 4096;
+/** Across every in-flight assembly of one connection, so many keys cannot each sit
+ *  just under the per-key cap. */
+export const MAX_TOTAL_ASSEMBLY_BYTES = 8 * 1024 * 1024;
+/** An incomplete assembly untouched this long is abandoned on the next new assembly. */
+export const ASSEMBLY_STALE_MS = 30_000;
 
 // Capabilities packet structure
 export const CHILD_CAPS_VERSION = 0x0200;

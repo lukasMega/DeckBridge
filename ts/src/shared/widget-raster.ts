@@ -115,7 +115,8 @@ function encodeBmp({ px, width, height }: Canvas): Uint8Array {
     const srcY = height - 1 - row; // bottom-up
     buf.set(px.subarray(srcY * width * 3, (srcY + 1) * width * 3), 54 + row * rowSize);
   }
-  return new Uint8Array(buf);
+  // buf is freshly allocated here and never retained, so a view is safe without a copy.
+  return new Uint8Array(buf.buffer, buf.byteOffset, buf.length);
 }
 
 /** Draw a layout into an upright width×height 24-bit BMP (the worker transform

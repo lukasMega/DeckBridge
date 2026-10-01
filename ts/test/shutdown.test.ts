@@ -98,6 +98,42 @@ await test('a throwing quiesce still closes, persists and exits', async () => {
   assert.deepEqual(events, ['docks', 'webui', 'persist', 'logs', 'exit 1']);
 });
 
+await test('drain rejection: failure exit, exactly one exit call', async () => {
+  const { plan, events } = recorder({ drainLogs: () => Promise.reject(new Error('disk')) });
+  await createShutdown(plan)();
+  assert.deepEqual(
+    events.filter((e) => e.startsWith('exit')),
+    ['exit 1'],
+  );
+});
+
+await test('drain that never settles is bounded and fails the exit', async () => {
+  const { plan, events } = recorder({ drainLogs: () => new Promise(() => {}) });
+  const t0 = Date.now();
+  await createShutdown(plan)();
+  assert.ok(Date.now() - t0 < 3000);
+  assert.equal(events.at(-1), 'exit 1');
+});
+
+await test('a late drain rejection after the timeout stays observed', async () => {
+  let reject: (e: Error) => void = () => {};
+  const { plan, events } = recorder({
+    drainLogs: () => new Promise((_, rej) => (reject = rej)),
+  });
+  await createShutdown(plan)();
+  reject(new Error('late'));
+  await sleep(20);
+  assert.equal(events.at(-1), 'exit 1');
+});
+
+await test('owner failure still attempts settings and drain', async () => {
+  const { plan, events } = recorder({
+    owners: [['docks', () => Promise.reject(new Error('close ack missing'))]],
+  });
+  await createShutdown(plan)();
+  assert.deepEqual(events, ['quiesce', 'persist', 'logs', 'exit 1']);
+});
+
 console.log('\nPersistedSettings.close()');
 
 await test('close() lands the newest preference; reload sees it', async () => {

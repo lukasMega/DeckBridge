@@ -19,6 +19,16 @@ test('produces a well-formed 24-bit BMP of the key size', () => {
   assert.equal(buf.readUInt16LE(28), 24, 'bpp');
 });
 
+test('each call returns an independent buffer that starts at offset 0', () => {
+  const a = composeWidgetBmp([{ text: '8', big: true }], SIZE);
+  const b = composeWidgetBmp([{ text: '8', big: true }], SIZE);
+  assert.equal(a.byteOffset, 0);
+  assert.equal(a.byteLength, a.buffer.byteLength, 'view spans exactly its own allocation');
+  assert.deepEqual(Array.from(a), Array.from(b), 'byte-identical');
+  a.fill(0);
+  assert.equal(b[0], 0x42, 'mutating one result leaves the next intact');
+});
+
 /** Pixel (x, y) of an upright image stored bottom-up, as BGR. */
 function pixel(bmp: Uint8Array, x: number, y: number): number[] {
   const b = Buffer.from(bmp);

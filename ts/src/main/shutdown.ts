@@ -83,10 +83,25 @@ async function run(plan: ShutdownPlan, budgetMs: number, persistReserveMs: numbe
     log('error', 'deckBr', 'shutdown: the last settings change may not be saved');
   }
 
-  log(ok ? 'info' : 'warn', 'deckBr', ok ? 'shutdown complete' : 'shutdown incomplete');
-  await within(
-    plan.drainLogs().catch(() => undefined),
-    LOG_DRAIN_MS,
-  );
+  // Owner completion is not success yet: the final drain can still fail.
+  log(ok ? 'info' : 'warn', 'deckBr', ok ? 'shutdown: owners closed' : 'shutdown incomplete');
+  const drain: { error?: unknown } = {};
+  // Catch inside the task so a late rejection after the timeout stays observed.
+  const draining = (async (): Promise<void> => {
+    try {
+      await plan.drainLogs();
+    } catch (e) {
+      drain.error = e ?? new Error('log drain failed');
+    }
+  })();
+  const drained = await within(draining, LOG_DRAIN_MS);
+  if (!drained || drain.error !== undefined) {
+    ok = false;
+    // The file sink is detached by now (or failed), so this reaches the console only.
+    const why = drained ? `failed: ${message(drain.error)}` : 'timed out';
+    console.error(`shutdown: log drain ${why}`);
+  } else if (ok) {
+    log('info', 'deckBr', 'shutdown complete');
+  }
   plan.exit(ok ? 0 : 1);
 }

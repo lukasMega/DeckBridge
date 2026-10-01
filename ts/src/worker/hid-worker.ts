@@ -9,7 +9,12 @@ import { imageBatchingEnabled } from '../devices/driver.js';
 import { applyModelOverrides, overrideSummary } from '../devices/model-overrides.js';
 import { imageCache } from '../transform/image-cache.js';
 import { USB_DRIVERS, type UsbDriver } from '../devices/usb-drivers.js';
-import { renderImage, TouchStripCanvas } from '../transform/image-render.js';
+import {
+  discardImageDumps,
+  drainImageDumps,
+  renderImage,
+  TouchStripCanvas,
+} from '../transform/image-render.js';
 import { transformImageForDevice } from '../transform/translator.js';
 import { setWorkerPost, setLogLevel, info } from '../shared/logger.js';
 
@@ -186,6 +191,9 @@ async function handle(msg: MainToWorker, deferNotification: boolean): Promise<vo
       openRegistryModel = null;
       touchCanvas.reset();
       await d?.close().catch(() => undefined);
+      // Queued debug dumps are moot once closed; only an in-flight write is awaited.
+      discardImageDumps();
+      await drainImageDumps();
       post({ type: 'closed' });
       break;
     }

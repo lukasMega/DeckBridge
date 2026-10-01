@@ -8,8 +8,11 @@ const MAX_FRAMES = 32;
 
 const frames = new Map<string, TouchFrameMsg>();
 const canvases = new Set<HTMLCanvasElement>();
-// Decoding is async; chaining keeps a later patch from landing under an earlier frame.
-let paintChain: Promise<void> = Promise.resolve();
+/** Work not yet decoded. `target` set = a replay for one freshly attached canvas;
+ *  unset = a live frame for every canvas attached when it is painted. */
+type Job = { msg: TouchFrameMsg; target?: HTMLCanvasElement };
+let queue: Job[] = [];
+let pumping = false;
 // Bumped on reset so a decode still in flight for the old dock doesn't paint.
 let generation = 0;
 
@@ -29,25 +32,46 @@ export async function decodeJpeg(data: string): Promise<HTMLImageElement | null>
   }
 }
 
-async function paintFrames(
-  list: HTMLCanvasElement[],
-  msgs: TouchFrameMsg[],
-  gen: number,
-): Promise<void> {
-  for (const msg of msgs) {
-    const img = await decodeJpeg(msg.data);
-    if (!img || gen !== generation) continue;
-    for (const canvas of list) {
-      canvas.getContext('2d')?.drawImage(img, msg.region?.x ?? 0, msg.region?.y ?? 0);
-    }
-  }
+function drawJob(job: Job, img: HTMLImageElement): void {
+  const x = job.msg.region?.x ?? 0;
+  const y = job.msg.region?.y ?? 0;
+  // Read the live set (not a capture) so a detached canvas is never drawn to.
+  let targets: Iterable<HTMLCanvasElement> = canvases;
+  if (job.target) targets = canvases.has(job.target) ? [job.target] : [];
+  for (const canvas of targets) canvas.getContext('2d')?.drawImage(img, x, y);
 }
 
-function paint(targets: Iterable<HTMLCanvasElement>, msgs: TouchFrameMsg[]): void {
-  const list = [...targets];
-  const gen = generation;
-  // A failed paint must not break the chain for every later frame.
-  paintChain = paintChain.then(() => paintFrames(list, msgs, gen)).catch(() => undefined);
+// One decode at a time keeps arrival order; the queue stays bounded by coalescing.
+async function pump(): Promise<void> {
+  if (pumping) return;
+  pumping = true;
+  try {
+    for (let job = queue.shift(); job; job = queue.shift()) {
+      const gen = generation;
+      // Checked before the decode: a reset or detach must not still pay for it.
+      if (canvases.size === 0 || (job.target && !canvases.has(job.target))) continue;
+      const img = await decodeJpeg(job.msg.data);
+      if (img && gen === generation) drawJob(job, img);
+    }
+  } catch {
+    // A failed paint must not stall every later frame.
+  } finally {
+    pumping = false;
+  }
+  if (queue.length > 0) void pump();
+}
+
+function enqueue(job: Job): void {
+  if (!job.target) {
+    if (!job.msg.region) queue = [];
+    else {
+      const key = frameKey(job.msg);
+      // Same window fully overwrites the earlier one, so only the newest is needed.
+      queue = queue.filter((j) => j.target || !j.msg.region || frameKey(j.msg) !== key);
+    }
+  }
+  queue.push(job);
+  void pump();
 }
 
 export function applyTouchImage(msg: TouchFrameMsg): void {
@@ -56,12 +80,14 @@ export function applyTouchImage(msg: TouchFrameMsg): void {
   frames.delete(key);
   frames.set(key, msg);
   if (frames.size > MAX_FRAMES) frames.delete(frames.keys().next().value!);
-  paint(canvases, [msg]);
+  // No canvas: attachTouchCanvas repaints from the cache.
+  if (canvases.size > 0) enqueue({ msg });
 }
 
 /** Selected dock changed: the server replays the new dock's strip after this. */
 export function resetTouchStrip(): void {
   generation++;
+  queue = [];
   frames.clear();
   for (const canvas of canvases) {
     canvas.getContext('2d')?.clearRect(0, 0, canvas.width, canvas.height);
@@ -71,8 +97,10 @@ export function resetTouchStrip(): void {
 /** Attach a canvas and paint the frames seen so far; returns the detach. */
 export function attachTouchCanvas(canvas: HTMLCanvasElement): () => void {
   canvases.add(canvas);
-  paint([canvas], [...frames.values()]);
+  queue = queue.filter((j) => j.target !== canvas);
+  for (const msg of frames.values()) enqueue({ msg, target: canvas });
   return () => {
     canvases.delete(canvas);
+    queue = queue.filter((j) => j.target !== canvas);
   };
 }

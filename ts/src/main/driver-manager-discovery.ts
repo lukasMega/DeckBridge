@@ -8,7 +8,7 @@ import {
   installDiscoverySnapshot,
 } from '../ffi/hid-discovery.js';
 import { deviceKeyFor, sharedSerialModelId } from '../infra/device-identity.js';
-import { HidScanWorkerHost } from '../worker/hid-scan-worker-host.js';
+import { HidScanWorkerHost, type HidScanResult } from '../worker/hid-scan-worker-host.js';
 import { log } from '../shared/logger.js';
 
 export interface HidDiscovery {
@@ -21,6 +21,8 @@ export interface HidDiscovery {
   serial(hidPath: string): string | null;
   /** Re-init the native HID stack before the next scan (after a disconnect). */
   requestReset(): void;
+  /** Unfiltered HID inventory for diagnostics, off the main thread (shares the scan worker). */
+  inventory(): Promise<HidScanResult>;
   /** Shutdown: settle waiting scans now and refuse new ones (never terminates the worker). */
   dispose?(): void;
 }
@@ -46,6 +48,7 @@ export function nativeHidDiscovery(): HidDiscovery {
     paths: (model) =>
       cachedDiscoveryPaths(model.usbVendorId, model.usbProductIds, model.usagePage, model.usage),
     serial: cachedDiscoverySerial,
+    inventory: () => scanner.inventory(),
     requestReset: () => scanner.requestReset(),
     dispose: () => scanner.dispose(),
   };

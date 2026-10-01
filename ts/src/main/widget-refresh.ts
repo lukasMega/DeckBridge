@@ -2,6 +2,7 @@
 // across keys and docks, and the forced refresh a device tap asks for.
 import { runCommand } from '../infra/command-runner.js';
 import { log } from '../shared/logger.js';
+import { fetchTextBounded } from './bounded-http.js';
 
 /** Runs a shell command, resolving its stdout (command-runner runCommand; injectable for tests). */
 export type WidgetCommandRunner = (cmd: string, timeoutMs: number) => Promise<string>;
@@ -22,14 +23,61 @@ interface CacheEntry<T> {
   followUp?: () => Promise<T | undefined>;
   /** Called once the entry goes idle (run + any follow-up done, success or not). */
   settled: Array<() => void>;
+  /** Latest caller's repaint: a stopped widget's closure is replaced, then dropped
+   *  with the entry on eviction. */
+  onUpdate: () => void;
+  /** Last read/refresh by a widget; idle entries past `ttlMs` are evicted. */
+  lastAccess: number;
+  ttlMs: number;
 }
 
-function entryIn<T>(cache: Map<string, CacheEntry<T>>, key: string): CacheEntry<T> {
-  let entry = cache.get(key);
-  if (!entry) {
-    entry = { lastAttempt: 0, inflight: false, settled: [] };
-    cache.set(key, entry);
+const DEFAULT_TTL_MS = 5 * 60 * 1000;
+const MIN_TTL_MS = 60 * 1000;
+/** Hard cap so config churn can't grow a cache without bound between TTL sweeps. */
+const MAX_ENTRIES = 64;
+/** Entries kept for this many refresh intervals after the last widget access. */
+const TTL_INTERVALS = 3;
+
+/** Drop idle entries nobody has asked for lately. An entry with a run in flight or
+ *  waiting callbacks is never dropped, so its settled callbacks always fire. */
+const idle = (e: CacheEntry<unknown>): boolean => !e.inflight && e.settled.length === 0;
+
+function sweep<T>(cache: Map<string, CacheEntry<T>>, now: number): void {
+  for (const [k, e] of cache) {
+    if (idle(e) && now - e.lastAccess > e.ttlMs) cache.delete(k);
   }
+  // Map iterates in insertion order; touch() re-inserts, so the front is least recent.
+  for (const [k, e] of cache) {
+    if (cache.size <= MAX_ENTRIES) break;
+    if (idle(e)) cache.delete(k);
+  }
+}
+
+function entryIn<T>(
+  cache: Map<string, CacheEntry<T>>,
+  key: string,
+  now: number,
+  onUpdate: () => void,
+  refreshMs?: number,
+): CacheEntry<T> {
+  let entry = cache.get(key);
+  if (entry) {
+    cache.delete(key); // re-insert: keeps the Map in least-recently-used order
+  } else {
+    sweep(cache, now);
+    entry = {
+      lastAttempt: 0,
+      inflight: false,
+      settled: [],
+      onUpdate,
+      lastAccess: now,
+      ttlMs: DEFAULT_TTL_MS,
+    };
+  }
+  cache.set(key, entry);
+  entry.lastAccess = now;
+  entry.onUpdate = onUpdate;
+  if (refreshMs !== undefined) entry.ttlMs = Math.max(MIN_TTL_MS, TTL_INTERVALS * refreshMs);
   return entry;
 }
 
@@ -37,7 +85,6 @@ function startFetch<T>(
   e: CacheEntry<T>,
   key: string,
   fetchValue: () => Promise<T | undefined>,
-  onUpdate: () => void,
   now: () => number,
 ): void {
   e.inflight = true;
@@ -45,7 +92,7 @@ function startFetch<T>(
   fetchValue()
     .then((v) => {
       if (v !== undefined) e.value = v;
-      onUpdate();
+      e.onUpdate();
       return undefined;
     })
     .catch((err: unknown) =>
@@ -56,7 +103,7 @@ function startFetch<T>(
       const next = e.followUp;
       e.followUp = undefined;
       if (next) {
-        startFetch(e, key, next, onUpdate, now);
+        startFetch(e, key, next, now);
         return;
       }
       for (const done of e.settled.splice(0)) done();
@@ -74,9 +121,9 @@ function cachedValue<T>(
   onUpdate: () => void,
   now: () => number,
 ): T | undefined {
-  const e = entryIn(cache, key);
+  const e = entryIn(cache, key, now(), onUpdate, refreshMs);
   if (!e.inflight && now() - e.lastAttempt >= refreshMs) {
-    startFetch(e, key, fetchValue, onUpdate, now);
+    startFetch(e, key, fetchValue, now);
   }
   return e.value;
 }
@@ -91,10 +138,10 @@ function forceFetch<T>(
   onSettled: (() => void) | undefined,
   now: () => number,
 ): void {
-  const e = entryIn(cache, key);
+  const e = entryIn(cache, key, now(), onUpdate);
   if (onSettled) e.settled.push(onSettled);
   if (e.inflight) e.followUp = fetchValue;
-  else startFetch(e, key, fetchValue, onUpdate, now);
+  else startFetch(e, key, fetchValue, now);
 }
 
 // Weather (Open-Meteo, no API key)
@@ -112,13 +159,19 @@ export function parseLatLon(param: string | undefined): [number, number] | null 
   return Math.abs(lat) <= 90 && Math.abs(lon) <= 180 ? [lat, lon] : null;
 }
 
-async function fetchWeatherTemp(lat: number, lon: number): Promise<number | undefined> {
+export const WEATHER_TIMEOUT_MS = 10_000;
+const WEATHER_MAX_BYTES = 64 * 1024;
+
+export async function fetchWeatherTemp(
+  lat: number,
+  lon: number,
+  timeoutMs = WEATHER_TIMEOUT_MS,
+): Promise<number | undefined> {
   // Plain HTTP on purpose: the slim txiki build has no TLS ("HTTPS not
   // supported in this build") — only the location coordinates go cleartext.
   const url = `http://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current_weather=true`;
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  const data = (await res.json()) as { current_weather?: { temperature?: number } };
+  const text = await fetchTextBounded(url, timeoutMs, WEATHER_MAX_BYTES);
+  const data = JSON.parse(text) as { current_weather?: { temperature?: number } };
   const t = data.current_weather?.temperature;
   return typeof t === 'number' ? t : undefined;
 }
@@ -155,10 +208,10 @@ export function refreshWeather(
 ): boolean {
   const src = weatherSource(param);
   if (!src) return false;
-  const e = entryIn(weatherCache, src.key);
+  const e = entryIn(weatherCache, src.key, now(), onUpdate);
   if (!e.inflight) {
     if (now() - e.lastAttempt < WEATHER_FORCE_MIN_MS) return false;
-    startFetch(e, src.key, src.fetchTemp, onUpdate, now);
+    startFetch(e, src.key, src.fetchTemp, now);
   }
   if (onSettled) e.settled.push(onSettled);
   return true;

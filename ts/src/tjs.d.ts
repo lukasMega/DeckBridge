@@ -254,6 +254,8 @@ interface TjsTCPServerSocket {
 
 interface ServerWebSocket {
   readonly data: unknown;
+  /** Bytes queued by sendText/sendBinary that the socket has not flushed yet. */
+  readonly bufferedAmount?: number;
   sendText(data: string): void;
   sendBinary(data: Uint8Array): void;
   close(code?: number, reason?: string): void;
@@ -307,7 +309,8 @@ declare module '*.js' {
 }
 
 interface TjsFileHandle {
-  read(buf: Uint8Array): Promise<number>;
+  /** `position`: absolute file offset (pread); omitted reads at the current offset. */
+  read(buf: Uint8Array, position?: number): Promise<number>;
   write(data: Uint8Array | string): Promise<number>;
   stat(): Promise<{ isFile: boolean; isDirectory: boolean; size: number; mode: number }>;
   close(): Promise<void>;

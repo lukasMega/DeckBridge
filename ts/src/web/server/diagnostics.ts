@@ -49,6 +49,8 @@ export interface DiagnosticsSources {
   /** Wall time of the full diagnostic enumeration that produced `hidDevices`, in ms.
    * Large values identify HID stacks avoided by operational supported-only scans. */
   hidEnumerateMs?: number;
+  /** Inventory failed (worker error / shutdown); shown instead of the table. */
+  hidError?: string;
   deviceRows?: DeviceRow[];
   requirements?: RequirementResult[];
   /** Server path only — absent for the CLI path. */
@@ -287,7 +289,10 @@ export function buildDiagnostics(src: DiagnosticsSources, opt: DiagnosticsOption
     section('update check', updatesBlock(src.updates)),
     section('model overrides', overridesBlock(src.modelOverrides)),
     section('effective model specs', jsonBlock(src.effectiveModels)),
-    section(hidSectionTitle(src.hidEnumerateMs), hidTable(src.hidDevices)),
+    section(
+      hidSectionTitle(src.hidEnumerateMs),
+      src.hidError ? `unavailable: ${src.hidError}` : hidTable(src.hidDevices),
+    ),
     section('registry matches', registryTable(src.deviceRows)),
     section('requirements', requirementsBlock(src.requirements)),
     section('docks / live state', jsonBlock(src.state)),

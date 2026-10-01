@@ -259,6 +259,138 @@ await runTest('an old close timer cannot touch the replacement worker', async ()
   internals.worker = null;
 });
 
+console.log('\nhid-worker-host: local recovery after overload');
+
+const spec = DEFAULT_MODEL.image;
+const bmp = (n: number): Uint8Array => new Uint8Array(1024).fill(n);
+const ids = (w: FakeWorker): number[] => w.posted.map((m) => m.id!);
+
+/** Fill the posted + pending budget with CORA touch frames, so the next local image is refused. */
+function overloadViaCora(driver: WorkerHidDriver): void {
+  for (let i = 0; i < 200; i++) driver.renderTouchImage(new Uint8Array(100));
+}
+
+await runTest('local-only overload pauses local images with one warning, no CORA drop', () => {
+  const { driver, w, send } = attached();
+  let overloads = 0;
+  let drained = 0;
+  driver.on('overload', () => overloads++);
+  driver.on('imagesDrained', () => drained++);
+  // Fill the queue with local images of distinct keys (no coalescing).
+  for (let i = 0; i < 200; i++) driver.sendSplashImage(i, bmp(i), spec);
+  assert.equal(overloads, 0, 'local overload does not drop the CORA session');
+  const held = w.posted.length + driver.workQueue.pendingCount;
+  driver.sendSplashImage(999, bmp(1), spec);
+  assert.equal(w.posted.length + driver.workQueue.pendingCount, held, 'paused');
+  assert.equal(drained, 0);
+  // Partial credits: not empty yet.
+  send({ type: 'workDone', ids: ids(w).slice(0, 3) });
+  assert.equal(drained, 0, 'no resume before the queue is completely empty');
+  for (let n = 0; n < 50; n++) send({ type: 'workDone', ids: ids(w) });
+  assert.equal(drained, 1, 'one transition');
+  const before = w.posted.length;
+  driver.sendSplashImage(5, bmp(5), spec);
+  assert.equal(w.posted.length, before + 1, 'local image posts with no CORA session');
+  send({ type: 'workDone', ids: ids(w) }); // duplicate/stale credits
+  assert.equal(drained, 1, 'duplicate credits do not restart producers');
+});
+
+await runTest('CORA stays blocked until resumeImages while local recovers', () => {
+  const { driver, w, send } = attached();
+  let drained = 0;
+  driver.on('imagesDrained', () => drained++);
+  overloadViaCora(driver);
+  for (let n = 0; n < 50; n++) send({ type: 'workDone', ids: ids(w) });
+  assert.equal(drained, 1);
+  const before = w.posted.length;
+  driver.renderCoraImage(0, jpeg(1), 'jpeg');
+  assert.equal(w.posted.length, before, 'stale CORA image still refused');
+  driver.sendSplashImage(0, bmp(1), spec);
+  assert.equal(w.posted.length, before + 1, 'local image accepted');
+  driver.resumeImages();
+  driver.renderCoraImage(1, jpeg(1), 'jpeg');
+  assert.equal(w.posted.length, before + 2, 'CORA accepted after a fresh session');
+});
+
+await runTest('repeated overload cycles emit one drained transition each', () => {
+  const { driver, w, send } = attached();
+  let overloads = 0;
+  let drained = 0;
+  driver.on('overload', () => overloads++);
+  driver.on('imagesDrained', () => drained++);
+  for (let cycle = 1; cycle <= 3; cycle++) {
+    overloadViaCora(driver);
+    for (let n = 0; n < 50; n++) send({ type: 'workDone', ids: ids(w) });
+    send({ type: 'workDone', ids: ids(w) });
+    driver.resumeImages();
+    assert.equal(overloads, cycle);
+    assert.equal(drained, cycle);
+  }
+});
+
+await runTest('an oversized image never suspends or loops', () => {
+  const { driver, w } = attached();
+  let overloads = 0;
+  driver.on('overload', () => overloads++);
+  driver.sendSplashImage(0, new Uint8Array(3 * 1024 * 1024), spec);
+  driver.renderCoraImage(0, new Uint8Array(3 * 1024 * 1024), 'jpeg');
+  assert.equal(overloads, 0);
+  assert.equal(w.posted.length, 0);
+  driver.sendSplashImage(1, bmp(1), spec);
+  assert.equal(w.posted.length, 1, 'later images still flow');
+});
+
+await runTest('close or disconnect during a drain never emits imagesDrained', async () => {
+  const a = attached();
+  let drained = 0;
+  a.driver.on('imagesDrained', () => drained++);
+  overloadViaCora(a.driver);
+  const closing = a.driver.close();
+  a.send({ type: 'workDone', ids: ids(a.w) });
+  a.send({ type: 'closed' });
+  await closing;
+  assert.equal(drained, 0);
+
+  const b = attached();
+  b.driver.on('imagesDrained', () => drained++);
+  overloadViaCora(b.driver);
+  const stale = ids(b.w);
+  b.send({ type: 'disconnect' });
+  b.send({ type: 'workDone', ids: stale });
+  assert.equal(drained, 0, 'stale credits of an old generation are ignored');
+});
+
+await runTest('strip patch waits for a full base after resume', () => {
+  const { driver, w, send } = attached();
+  const patch = { x: 0, y: 0, w: 10, h: 10 };
+  overloadViaCora(driver);
+  for (let n = 0; n < 50; n++) send({ type: 'workDone', ids: ids(w) });
+  driver.resumeImages();
+  const before = w.posted.length;
+  driver.renderTouchImage(new Uint8Array(100), patch);
+  assert.equal(w.posted.length, before, 'patch skipped without a base');
+  driver.renderTouchImage(new Uint8Array(100));
+  assert.equal(w.posted.length, before + 1);
+});
+
+await runTest('splash and touch posts do not pre-copy; queued ones are snapshots', () => {
+  const { driver, w } = attached();
+  const src = bmp(7);
+  driver.sendSplashImage(0, src, spec);
+  const posted = w.posted[0] as unknown as { bytes: Uint8Array };
+  assert.equal(posted.bytes, src, 'posted directly (postMessage clones synchronously)');
+  // Fill the posted budget, then queue one and mutate its source.
+  for (let i = 1; i < 15; i++) driver.sendSplashImage(i, bmp(i), spec);
+  const queuedSrc = bmp(9);
+  driver.sendSplashImage(50, queuedSrc, spec);
+  assert.equal(driver.workQueue.pendingCount, 1);
+  queuedSrc.fill(0);
+  const t = w.posted.length;
+  const q = driver.workQueue as unknown as { waiting: Array<{ msg: { bytes: Uint8Array } }> };
+  assert.equal(q.waiting[0]!.msg.bytes[0], 9, 'waiting message is isolated from the caller');
+  assert.equal(w.posted.length, t);
+});
+
 // Force exit: drivers that hit a failed open keep their worker alive (the fix),
 // which would otherwise keep the event loop running and hang the test runner.
 summaryExit();

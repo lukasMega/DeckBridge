@@ -6,6 +6,7 @@
 import { debug, info, warn } from '../shared/logger.js';
 import { blitImage, canvasSliceToBmp, transformImageForDevice } from './translator.js';
 import { mk2IndexToDeviceImgId } from '../shared/key-map.js';
+import { DumpDir, DumpQueue, newDumpTag } from './image-dump.js';
 import { imageCache, hashJpeg, makeCacheKey, specRevision } from './image-cache.js';
 import type { DeviceImageSpec, DeviceModel } from '../devices/driver.js';
 import type { TouchStripOptions, TouchWindowRegion } from '../shared/types.js';
@@ -21,88 +22,70 @@ interface RenderTarget {
   sendImage(keyIndex: number, bytes: Uint8Array): void;
 }
 
-// Diagnostic image dumps. Both are off unless their env var is set, checked once at
-// module load so the normal case has zero overhead.
+// Diagnostic image dumps: off unless an env var is set, checked once at module load so
+// the normal case has zero overhead. Queue/ring mechanics live in image-dump.ts.
+const DUMP_KEEP = 200;
+const RAW_DUMP_KEEP = 60; // 30 in/out pairs
+const dumpEnv = tjs.env['DECKBRIDGE_DUMP_DIR'] || undefined;
+const rawDumpEnv = tjs.env['DECKBRIDGE_RAW_DUMP_DIR'] || undefined;
+const dumpQueue = new DumpQueue();
+const dumpTag = newDumpTag();
 
-/** Resolve a dump dir from `envVar`, creating it in the background. */
-function dumpDir(envVar: string): string | undefined {
-  const dir = tjs.env[envVar] || undefined;
-  if (!dir) return undefined;
-  tjs.makeDir(dir, { recursive: true }).catch((err: unknown) => {
-    // An already-existing dump dir is success, not a failure to warn about.
-    const msg = String(err);
-    if (!msg.includes('EEXIST')) warn('image', `failed to create ${envVar} ${dir}: ${msg}`);
-  });
-  return dir;
-}
-
-function writeDump(path: string, bytes: Uint8Array): void {
-  tjs.writeFile(path, bytes).catch((err: unknown) => {
-    warn('image', `failed to write dump ${path}: ${String(err)}`);
-  });
-}
+// DECKBRIDGE_DUMP_DIR: every device-bound image produced by the transform, for
+// offline diffing.
+const DUMP_DIR = dumpEnv ? new DumpDir(dumpEnv, DUMP_KEEP, dumpQueue, dumpTag) : undefined;
+// DECKBRIDGE_RAW_DUMP_DIR: each received CORA image beside its transform result, paired
+// by seq. Independent of DECKBRIDGE_DUMP_DIR (transform output only, own naming).
+const RAW_DUMP_DIR = rawDumpEnv
+  ? new DumpDir(rawDumpEnv, RAW_DUMP_KEEP, dumpQueue, dumpTag)
+  : undefined;
+let _dumpSeq = 0;
+let _rawSeq = 0;
 
 function seqTag(seq: number): string {
   return String(seq).padStart(4, '0');
 }
 
-// DECKBRIDGE_DUMP_DIR: every device-bound image produced by the transform, for
-// offline diffing.
-const DUMP_DIR = dumpDir('DECKBRIDGE_DUMP_DIR');
-let _dumpSeq = 0;
-
-function dumpNativeBytes(keyIndex: number, nativeBytes: Buffer): void {
-  if (!DUMP_DIR) return;
-  writeDump(`${DUMP_DIR}/key${keyIndex}-${seqTag(_dumpSeq++)}.jpg`, nativeBytes);
-}
-
-// DECKBRIDGE_RAW_DUMP_DIR: dumps each received CORA image beside its transform result,
-// paired by seq, newest RAW_DUMP_KEEP kept as a ring buffer. Pairing is race-free because
-// both writes happen on the worker thread, which processes images serially. Independent
-// of DECKBRIDGE_DUMP_DIR (transform output only, own naming).
-const RAW_DUMP_DIR = dumpDir('DECKBRIDGE_RAW_DUMP_DIR');
-const RAW_DUMP_KEEP = 30;
-let _rawSeq = 0;
-// Each entry holds the file paths written for one received image (raw, then its
-// transform). Newest last; pruned to RAW_DUMP_KEEP entries on each new arrival.
-const _rawDumpPairs: string[][] = [];
-
 function dumpExt(format: 'jpeg' | 'bmp'): string {
   return format === 'jpeg' ? 'jpg' : 'bmp';
 }
 
-/** Save the raw CORA image, assign it a seq, and prune the ring. Returns a
- *  handle (seq + this pair's file list) so the caller can attach the transform
- *  output, or null when DECKBRIDGE_RAW_DUMP_DIR is unset. */
+/** Wait for queued dumps (call on worker close, before the thread exits). */
+export function drainImageDumps(): Promise<void> {
+  return dumpQueue.drain();
+}
+
+/** Drop dumps that have not started yet. */
+export function discardImageDumps(): void {
+  dumpQueue.discard();
+}
+
+function dumpNativeBytes(keyIndex: number, nativeBytes: Buffer): void {
+  DUMP_DIR?.write(`key${keyIndex}-${seqTag(_dumpSeq++)}.jpg`, nativeBytes);
+}
+
+/** Save the raw CORA image and return its seq so the transform output can be paired,
+ *  or null when unset or the dump was dropped (then the pair is skipped whole). */
 function dumpRawReceived(
   keyIndex: number,
   coraBytes: Uint8Array,
   format: 'jpeg' | 'bmp',
-): { seq: number; files: string[] } | null {
+): number | null {
   if (!RAW_DUMP_DIR) return null;
   const seq = _rawSeq++;
-  const inPath = `${RAW_DUMP_DIR}/${seqTag(seq)}_key${keyIndex}_in.${dumpExt(format)}`;
-  writeDump(inPath, coraBytes);
-  const files = [inPath];
-  _rawDumpPairs.push(files);
-  while (_rawDumpPairs.length > RAW_DUMP_KEEP) {
-    const old = _rawDumpPairs.shift()!;
-    for (const p of old) tjs.remove(p).catch(() => undefined);
-  }
-  return { seq, files };
+  const ok = RAW_DUMP_DIR.write(`${seqTag(seq)}_key${keyIndex}_in.${dumpExt(format)}`, coraBytes);
+  return ok ? seq : null;
 }
 
 /** Save the device-bound transform output beside its raw input (same seq). */
 function dumpTransformed(
-  handle: { seq: number; files: string[] } | null,
+  seq: number | null,
   keyIndex: number,
   nativeBytes: Uint8Array,
   devFormat: 'jpeg' | 'bmp',
 ): void {
-  if (!handle) return;
-  const outPath = `${RAW_DUMP_DIR}/${seqTag(handle.seq)}_key${keyIndex}_out.${dumpExt(devFormat)}`;
-  writeDump(outPath, nativeBytes);
-  handle.files.push(outPath);
+  if (seq === null) return;
+  RAW_DUMP_DIR?.write(`${seqTag(seq)}_key${keyIndex}_out.${dumpExt(devFormat)}`, nativeBytes);
 }
 
 // Worker-side render performance tracking

@@ -7,6 +7,7 @@
 // the established escape hatch (os-utils.ts, mdns-advertiser.ts, tray.ts).
 // Missing curl must never surface as a startup error — see UpdateCheckError.
 import { readText } from './os-utils.ts';
+import { spawnOwned, spawnsStopped } from './owned-spawn.ts';
 
 const GITHUB_RELEASES_URL = 'https://api.github.com/repos/lukasMega/DeckBridge/releases/latest';
 const CURL_TIMEOUT_S = 10;
@@ -113,9 +114,11 @@ export async function fetchLatestRelease(
   version: string,
   timeoutMs = (CURL_TIMEOUT_S + 5) * 1000,
 ): Promise<string> {
+  // Quitting: not a missing curl, and not worth a spawn.
+  if (spawnsStopped()) throw new UpdateCheckError('network');
   let p: TjsProcess;
   try {
-    p = tjs.spawn(
+    p = spawnOwned(
       [
         'curl',
         '-fsSL',

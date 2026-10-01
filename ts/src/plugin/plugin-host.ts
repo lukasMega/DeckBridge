@@ -59,6 +59,8 @@ interface HostEntry {
   path: string;
   intervalMs?: number;
   configSig: string;
+  /** Identity of this entry's lifetime; see PluginRunConfig.gen. */
+  gen: number;
   value: string | null | undefined;
   status: PluginStatus;
   lastRequested: number;
@@ -85,6 +87,7 @@ export class PluginHost {
   private missedPongs = 0;
   private pingSeq = 0;
   private killCount = 0;
+  private genSeq = 0;
   private configSent = '';
   private readonly fetches: PluginFetchProxy;
   private disposed = false;
@@ -127,6 +130,7 @@ export class PluginHost {
         path: isAbsolutePath(f) ? f : `${this.dir}/${f}`,
         intervalMs,
         configSig: sig,
+        gen: ++this.genSeq,
         value: undefined,
         status: 'pending',
         lastRequested: now,
@@ -216,6 +220,7 @@ export class PluginHost {
       path: e.path,
       param: e.param,
       intervalMs: e.intervalMs,
+      gen: e.gen,
     }));
     const sig = JSON.stringify(plugins);
     if (sig === this.configSent) return;
@@ -314,9 +319,7 @@ export class PluginHost {
         this.applyError(msg.key, msg.message, msg.forced === true);
         break;
       case 'fetch':
-        if (this.worker) {
-          this.fetches.start(this.worker, msg, this.disposed ? 'plugin host stopped' : undefined);
-        }
+        if (this.worker) this.fetches.start(this.worker, msg, this.fetchRefusal(msg));
         break;
       case 'pong':
         this.awaitingPong = false;
@@ -326,6 +329,15 @@ export class PluginHost {
         log(msg.level, msg.component, msg.message);
         break;
     }
+  }
+
+  /** Host-side admission: only a current, enabled entry may issue requests. */
+  private fetchRefusal(msg: { key: string; gen: number }): string | undefined {
+    if (this.disposed) return 'plugin host stopped';
+    const entry = this.entries.get(msg.key);
+    if (!entry || entry.gen !== msg.gen) return 'plugin removed';
+    if (entry.status === 'disabled') return 'plugin disabled';
+    return undefined;
   }
 
   private applyValue(key: string, value: string | null, forced: boolean): void {

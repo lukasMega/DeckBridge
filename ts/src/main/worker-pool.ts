@@ -1,7 +1,8 @@
 // USB workers by model id. A worker whose open() failed is parked, not
 // terminated: spawn/terminate per retry SIGBUSes on macOS, and a parked worker
 // connects the moment open() succeeds. Shared by the primary probe and extras.
-import { WorkerHidDriver, closeDriver } from '../worker/hid-worker-host.js';
+import { begin, settleAll } from './settle.js';
+import { WorkerHidDriver } from '../worker/hid-worker-host.js';
 import type { DeviceModel, DeviceModelOverride } from '../devices/driver.js';
 
 export type WorkerFactory = (model: DeviceModel, override?: DeviceModelOverride) => WorkerHidDriver;
@@ -36,7 +37,15 @@ export class WorkerPool {
 
   /** One-off terminate (mode switch), off the hot retry loop. */
   async closeAll(): Promise<void> {
-    for (const d of this.idle.values()) await closeDriver(d);
+    const parked = [...this.idle.values()];
     this.idle.clear();
+    // Concurrent: one worker that never acks close must not delay the rest.
+    await settleAll(
+      'worker pool close',
+      parked.map((d) => {
+        d.removeAllListeners();
+        return begin(() => d.close());
+      }),
+    );
   }
 }

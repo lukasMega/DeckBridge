@@ -6,6 +6,7 @@
 // unbounded retries — the ports are protocol-fixed and can't fall back) and
 // every scanned dock (Dock.start in dock.ts, one attempt — its own scan-tick loop is
 // the retry mechanism).
+import { begin, settleAll } from './settle.js';
 import type { LogLevel } from '../shared/logger.js';
 import { watchPairing } from '../cora/pairing-watchdog.js';
 import type { PairingWatchdog } from '../cora/pairing-watchdog.js';
@@ -112,7 +113,10 @@ export class CoraDock {
   async stop(): Promise<void> {
     this.stopGeneration++;
     this.watchdog.cancel();
-    await this.server.stop().catch(() => undefined);
-    await this.childServer.stop().catch(() => undefined);
+    // Both attempted even if the first fails; the caller learns about either.
+    await settleAll('cora stop', [
+      begin(() => this.server.stop()),
+      begin(() => this.childServer.stop()),
+    ]);
   }
 }

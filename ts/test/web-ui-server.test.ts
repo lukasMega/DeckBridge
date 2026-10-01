@@ -1100,6 +1100,42 @@ try {
   await mdnsRouteUi.stop().catch(() => undefined);
 }
 
+// WebUIServer: beginShutdown refuses mutations
+
+console.log('\nwebui: beginShutdown');
+
+const SHUTDOWN_TEST_PORT = 13005;
+const shutdownUi = await webUIAt(`${DEVICE_IDENTITY_TEST_ROOT}/shutdown`, SHUTDOWN_TEST_PORT);
+await shutdownUi.start();
+
+try {
+  const base = `http://127.0.0.1:${shutdownUi.port}`;
+  const mdnsPost = (): Promise<Response> =>
+    fetch(`${base}/api/device-identity/mdns-name`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ deviceKey: '/dev/hidraw9', name: 'X' }),
+    });
+
+  await runWebTest('after beginShutdown: POST → 503 without mutating, GET still 200', async () => {
+    shutdownUi.settings.getOrCreateIdentity('/dev/hidraw9', 'Dock');
+    let emitted = false;
+    shutdownUi.on('mdnsNameChanged', () => {
+      emitted = true;
+    });
+    assert.equal((await mdnsPost()).status, 200, 'works before shutdown');
+    emitted = false;
+    shutdownUi.beginShutdown();
+    const r = await mdnsPost();
+    assert.equal(r.status, 503);
+    assert.deepEqual(await r.json(), { error: 'shutting down' });
+    assert.equal(emitted, false, 'handler never ran');
+    assert.equal((await fetch(`${base}/api/state`)).status, 200);
+  });
+} finally {
+  await shutdownUi.stop().catch(() => undefined);
+}
+
 // WebUIServer: GET/POST /api/settings
 
 console.log('\nwebui: GET/POST /api/settings');

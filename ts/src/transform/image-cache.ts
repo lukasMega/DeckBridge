@@ -5,31 +5,57 @@ export interface CacheEntry {
   nativeBytes: Buffer;
 }
 
-class LruCache<K, V> {
-  private readonly map = new Map<K, V>();
-  constructor(private readonly max: number) {}
+/** Retained-bytes ceiling beside the entry cap: a 1024² BMP is ~3 MiB, so 100 entries
+ *  alone could pin ~300 MiB per worker. */
+export const IMAGE_CACHE_MAX_BYTES = 32 * 1024 * 1024;
+
+export class LruCache<K, V> {
+  private readonly map = new Map<K, { value: V; size: number }>();
+  private bytes = 0;
+  constructor(
+    private readonly max: number,
+    private readonly maxBytes: number,
+    private readonly sizeOf: (value: V) => number,
+  ) {}
 
   get(key: K): V | undefined {
-    const v = this.map.get(key);
-    if (v !== undefined) {
-      this.map.delete(key);
-      this.map.set(key, v);
-    }
-    return v;
+    const e = this.map.get(key);
+    if (e === undefined) return undefined;
+    this.map.delete(key);
+    this.map.set(key, e);
+    return e.value;
   }
 
   set(key: K, value: V): void {
-    if (this.map.has(key)) this.map.delete(key);
-    else if (this.map.size >= this.max) this.map.delete(this.map.keys().next().value!);
-    this.map.set(key, value);
+    this.remove(key);
+    const size = this.sizeOf(value);
+    // An entry that can never fit would just flush the whole cache.
+    if (size > this.maxBytes) return;
+    while (this.map.size >= this.max || this.bytes + size > this.maxBytes) {
+      this.remove(this.map.keys().next().value!);
+    }
+    this.map.set(key, { value, size });
+    this.bytes += size;
+  }
+
+  private remove(key: K): void {
+    const e = this.map.get(key);
+    if (!e) return;
+    this.bytes -= e.size;
+    this.map.delete(key);
   }
 
   get size(): number {
     return this.map.size;
   }
 
+  get byteSize(): number {
+    return this.bytes;
+  }
+
   clear(): void {
     this.map.clear();
+    this.bytes = 0;
   }
 }
 
@@ -96,4 +122,8 @@ export function specRevision(spec: DeviceImageSpec): string {
   return fnv1aHex(JSON.stringify(spec));
 }
 
-export const imageCache = new LruCache<string, CacheEntry>(IMAGE_CACHE_SIZE);
+export const imageCache = new LruCache<string, CacheEntry>(
+  IMAGE_CACHE_SIZE,
+  IMAGE_CACHE_MAX_BYTES,
+  (e) => e.nativeBytes.length,
+);

@@ -78,14 +78,20 @@ const pendingFetches = new Map<
   }
 >();
 
-function proxiedFetch(key: string, url: string, init?: PluginFetchInit): Promise<PluginResponse> {
+function proxiedFetch(
+  rp: RunningPlugin,
+  url: string,
+  init?: PluginFetchInit,
+): Promise<PluginResponse> {
+  // A cancelled poll may still hold ctx; it must not start new HTTP.
+  if (rp.cancelled) return Promise.reject(new Error('plugin removed'));
   const fetchId = ++fetchSeq;
   const init2: PluginFetchInit | undefined = init
     ? { method: init.method, headers: init.headers, body: init.body }
     : undefined;
   return new Promise<{ ok: boolean; status: number; body: string }>((resolve, reject) => {
     pendingFetches.set(fetchId, { resolve, reject });
-    post({ type: 'fetch', fetchId, key, url, init: init2 });
+    post({ type: 'fetch', fetchId, key: rp.key, gen: rp.gen, url, init: init2 });
   }).then((r) => ({
     ok: r.ok,
     status: r.status,
@@ -161,7 +167,7 @@ async function pollLoop(rp: RunningPlugin): Promise<void> {
     get param() {
       return rp.param;
     },
-    fetch: (url, init) => proxiedFetch(rp.key, url, init),
+    fetch: (url, init) => proxiedFetch(rp, url, init),
     log: (message: string) =>
       post({ type: 'log', level: 'info', component: `plugin:${name}`, message }),
   };
@@ -192,7 +198,10 @@ function handleConfigure(plugins: PluginRunConfig[]): void {
   }
   for (const p of plugins) {
     const existing = running.get(p.key);
-    if (existing) {
+    if (existing && existing.gen !== p.gen) {
+      existing.cancelled = true;
+      running.delete(p.key);
+    } else if (existing) {
       // Live-update param/interval/path; the poll loop reads them each cycle.
       existing.param = p.param;
       existing.intervalMs = p.intervalMs;

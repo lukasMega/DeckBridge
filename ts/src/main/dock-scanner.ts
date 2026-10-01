@@ -10,6 +10,7 @@ import { HID_POLL_INTERVAL_MS, MAX_DOCKS, MDNS_SERVICE_NAME } from '../shared/ty
 import { DEVICE_MODELS } from '../devices/registry.js';
 import { dockSlot } from './dock-status.js';
 import { Dock } from './dock.js';
+import { begin, settleAll } from './settle.js';
 import { deviceKeyFor, sharedSerialModelId } from '../infra/device-identity.js';
 import type { DockScannerDeps, PrimaryUnit } from './dock-scanner-deps.js';
 
@@ -290,7 +291,9 @@ export class DockScanner {
         );
       }
       this.forget(index);
-      await dock.stop();
+      await dock.stop().catch((err: unknown) => {
+        log('warn', 'coord', `dock ${index} stop failed: ${(err as Error).message}`);
+      });
       await closeDriver(driver);
     }
   }
@@ -302,7 +305,9 @@ export class DockScanner {
     const unit = this.units.get(index);
     if (!dock || !unit) return;
     this.forget(index);
-    await dock.stop();
+    await dock.stop().catch((err: unknown) => {
+      log('warn', 'coord', `dock ${index} stop failed: ${(err as Error).message}`);
+    });
     log('info', 'coord', `dock down: ${unit.hidPath} idx=${index}`);
     this.deps.onChanged();
   }
@@ -323,10 +328,19 @@ export class DockScanner {
     for (const index of this.units.keys()) this.deps.docks.delete(index);
     this.units.clear();
     this.freeIndices = freshIndexPool(this.maxDocks);
-    for (const dock of docks) await dock.stop();
-    // A creation that was mid-open/start closes its own driver once it sees the bump.
-    await pending?.catch(() => undefined);
-    this.deps.onChanged();
+    // Every dock starts closing now; a hung one must not delay its siblings.
+    const stops = docks.map((dock) => begin(() => dock.stop()));
+    try {
+      await settleAll('scanned docks stop', [
+        ...stops,
+        // A creation that was mid-open/start closes its own driver once it sees the bump.
+        begin(async () => {
+          await pending?.catch(() => undefined);
+        }),
+      ]);
+    } finally {
+      this.deps.onChanged();
+    }
   }
 
   /** Tear down the scanned docks running `modelId` ('' = all) so the next scan

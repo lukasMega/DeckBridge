@@ -762,6 +762,88 @@ await test('stop() is idempotent and closes driver + both servers', async () => 
   assert.equal(childServer.stopCalls, 1, 'child server stopped exactly once');
 });
 
+await test('stop(): driver close rejects, CORA still closes, stop rejects, changed fires', async () => {
+  const { server, childServer, driver, dock, start, getStatusChanges } = makeTestSetup();
+  await start();
+  driver.close = () => Promise.reject(new Error('no close ack'));
+  const before = getStatusChanges();
+  let err: unknown;
+  await dock.stop().catch((e: unknown) => (err = e));
+  assert.ok(err instanceof Error && err.message.includes('no close ack'));
+  assert.equal(server.stopCalls, 1);
+  assert.equal(childServer.stopCalls, 1);
+  assert.equal(getStatusChanges(), before + 1);
+});
+
+await test('stop(): driver and CORA both fail, both outcomes are kept', async () => {
+  const { server, driver, dock, start } = makeTestSetup();
+  await start();
+  driver.close = () => Promise.reject(new Error('driver-fail'));
+  server.stop = () => Promise.reject(new Error('cora-fail'));
+  let err: unknown;
+  await dock.stop().catch((e: unknown) => (err = e));
+  const text = (err as Error).message;
+  assert.ok(text.includes('driver-fail') && text.includes('cora-fail'), text);
+});
+
+await test('stop(): a hung driver close does not delay CORA teardown; duplicates share it', async () => {
+  const { server, childServer, driver, dock, start } = makeTestSetup();
+  await start();
+  let release: () => void = () => {};
+  driver.close = () => new Promise<void>((r) => (release = r));
+  const first = dock.stop();
+  const second = dock.stop();
+  assert.equal(first, second, 'one shared completion');
+  assert.equal(dock.driver, null, 'detached synchronously');
+  await new Promise((r) => setTimeout(r, 5));
+  assert.equal(server.stopCalls, 1, 'CORA closed while the driver close is pending');
+  assert.equal(childServer.stopCalls, 1);
+  release();
+  await first;
+});
+
+await test('imagesDrained re-sends splash, replays frames and repaints; not after stop', async () => {
+  const { childServer, driver, dock, start } = makeTestSetup();
+  await start();
+  childServer.emit('image', { keyIndex: 3, data: Buffer.from([1]), format: 'jpeg' });
+  const splash = driver.splashCalls.length;
+  const renders = driver.renderCalls.length;
+  driver.emit('imagesDrained');
+  assert.ok(driver.splashCalls.length > splash, 'splash restored');
+  assert.equal(driver.renderCalls.length, renders + 1, 'last CORA frame replayed');
+
+  await dock.stop();
+  const after = driver.splashCalls.length;
+  driver.emit('imagesDrained');
+  assert.equal(driver.splashCalls.length, after, 'detached driver: no repaint after stop');
+});
+
+await test('imagesDrained is ignored while the app shuts down', async () => {
+  const server = new FakeServer();
+  const childServer = new FakeChildServer();
+  const driver = new FakeDriver(DEFAULT_MODEL);
+  const { prefs } = prefsWith({});
+  let shuttingDown = false;
+  const dock = new Dock({
+    index: 1,
+    cora: makeDock(server, childServer),
+    ports: { primary: 1, child: 2 },
+    settings: {
+      for: () => prefs,
+      getOrCreateIdentity: () => testIdentity(DEFAULT_MODEL),
+      markPaired: () => false,
+    },
+    identity: dockSlot(1, testIdentity(DEFAULT_MODEL)),
+    getShuttingDown: () => shuttingDown,
+  });
+  await dock.start(driver);
+  shuttingDown = true;
+  const splash = driver.splashCalls.length;
+  driver.emit('imagesDrained');
+  assert.equal(driver.splashCalls.length, splash);
+  await dock.stop();
+});
+
 // Summary
 
 summaryExit();

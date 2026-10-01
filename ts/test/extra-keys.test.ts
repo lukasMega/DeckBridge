@@ -729,7 +729,7 @@ await test('weather refresh refetches only once 60 s passed since the last fetch
   (globalThis as { fetch: unknown }).fetch = () => {
     fetches++;
     const body = { current_weather: { temperature: 20 + fetches } };
-    return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve(body) });
+    return Promise.resolve(new Response(JSON.stringify(body)));
   };
   try {
     const d = new FakeDriver();

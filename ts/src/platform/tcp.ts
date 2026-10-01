@@ -1,10 +1,9 @@
 // Node-net-like TCP API backed by the txiki.js tjs.connect / tjs.listen globals (no
 // tjs:* import needed — tjs is a runtime global).
 //
-// No write backpressure: write() fires-and-forgets writer.write() (errors still route
-// to the 'error'/close path). Safe only because every CORA frame is <=512 bytes, so the
-// OS socket buffer drains faster than frames are produced. Add backpressure here before
-// streaming anything larger.
+// Write backpressure is a cap, not flow control: write() stays fire-and-forget, but queued
+// bytes are tracked and a peer that lets more than MAX_PENDING_WRITE_BYTES pile up is
+// destroyed with an error (CORA's Elgato client reconnects and resyncs).
 //
 // Terminal cleanup closes the native handle itself: txiki only closes it once BOTH stream
 // halves finish, so a peer FIN (readable done, writable still locked) would otherwise
@@ -12,6 +11,9 @@
 
 /** tjs rejects with plain values as well as Errors; callbacks here take an Error. */
 const asError = (e: unknown): Error => (e instanceof Error ? e : new Error(String(e)));
+
+/** Queued-but-unsettled bytes past which a stalled peer is dropped. */
+export const MAX_PENDING_WRITE_BYTES = 1024 * 1024;
 
 const noop = (): void => {};
 
@@ -54,8 +56,14 @@ export class NodeLikeSocket {
   private _closing = false;
   private _hadError = false;
   private _cleanup: Promise<void> | null = null;
+  private _pendingBytes = 0;
   /** Aborts a connect still in flight (createConnection only). */
   _connectAbort: AbortController | null = null;
+
+  /** Bytes handed to the writer that have not settled yet. */
+  get pendingBytes(): number {
+    return this._pendingBytes;
+  }
 
   get destroyed(): boolean {
     return this._closing;
@@ -164,10 +172,25 @@ export class NodeLikeSocket {
 
   write(data: Uint8Array): void {
     if (this._closing || !this._writer) return;
-    void this._writer.write(data).catch((e: unknown) => {
-      const err = asError(e);
-      queueMicrotask(() => this._fail(err));
-    });
+    if (this._pendingBytes + data.byteLength > MAX_PENDING_WRITE_BYTES) {
+      this._fail(
+        new Error(`write backlog exceeded ${MAX_PENDING_WRITE_BYTES} bytes; peer stalled`),
+      );
+      return;
+    }
+    const len = data.byteLength;
+    this._pendingBytes += len;
+    void this._writer
+      .write(data)
+      .then(() => {
+        this._pendingBytes -= len;
+        return undefined;
+      })
+      .catch((e: unknown) => {
+        this._pendingBytes -= len;
+        const err = asError(e);
+        queueMicrotask(() => this._fail(err));
+      });
   }
 
   destroy(): void {

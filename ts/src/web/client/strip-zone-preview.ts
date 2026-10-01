@@ -11,8 +11,10 @@ type Orientation = Pick<WidgetDisplayInfo, 'rotate' | 'flipH' | 'flipV'>;
 let full: string | undefined;
 const slots = new Map<number, string>();
 const attached = new Map<HTMLCanvasElement, WidgetDisplayInfo>();
-// Decoding is async; chaining keeps a later write from landing under an earlier one.
-let paintChain: Promise<void> = Promise.resolve();
+// Canvases awaiting a repaint. Painting reads the CURRENT full/slot state, so a burst
+// of writes collapses to one paint per canvas and a later write can't land under an older.
+const dirty = new Set<HTMLCanvasElement>();
+let pumping = false;
 // Bumped on reset so a decode still in flight for the old dock doesn't paint.
 let generation = 0;
 
@@ -78,31 +80,44 @@ function paintZone(
   else canvas.dataset.empty = 'true';
 }
 
-async function paintZones(
-  targets: Array<[HTMLCanvasElement, WidgetDisplayInfo]>,
-  fullData: string | undefined,
-  slotData: ReadonlyMap<number, string>,
-  gen: number,
-): Promise<void> {
+async function paintBatch(batch: HTMLCanvasElement[]): Promise<void> {
+  const gen = generation;
+  const fullData = full;
+  const live = batch.filter((c) => attached.has(c));
+  // Checked before each decode so a reset or detach doesn't still pay for it.
+  if (live.length === 0) return;
   const fullImg = fullData ? await decodeJpeg(fullData) : null;
   const strips: StripCache = new Map();
-  for (const [canvas, zone] of targets) {
-    const slot = slotData.get(zone.wireId);
+  for (const canvas of live) {
+    const zone = attached.get(canvas);
+    if (!zone || gen !== generation || full !== fullData) return;
+    const slot = slots.get(zone.wireId);
     const slotImg = slot ? await decodeJpeg(slot) : null;
-    if (gen !== generation) return;
-    paintZone(canvas, zone, fullImg, slotImg, strips);
+    // A newer write re-marked this canvas dirty; its paint will cover it.
+    if (gen !== generation || full !== fullData || slots.get(zone.wireId) !== slot) continue;
+    if (attached.get(canvas) === zone) paintZone(canvas, zone, fullImg, slotImg, strips);
   }
 }
 
-function paint(targets: Array<[HTMLCanvasElement, WidgetDisplayInfo]>): void {
-  if (targets.length === 0) return;
-  const gen = generation;
-  const fullData = full;
-  const slotData = new Map(slots);
-  // A failed paint must not break the chain for every later write.
-  paintChain = paintChain
-    .then(() => paintZones(targets, fullData, slotData, gen))
-    .catch(() => undefined);
+async function pump(): Promise<void> {
+  if (pumping) return;
+  pumping = true;
+  try {
+    while (dirty.size > 0) {
+      const batch = [...dirty];
+      dirty.clear();
+      await paintBatch(batch);
+    }
+  } catch {
+    // A failed paint must not stall every later write.
+  } finally {
+    pumping = false;
+  }
+}
+
+function markDirty(canvases: Iterable<HTMLCanvasElement>): void {
+  for (const canvas of canvases) dirty.add(canvas);
+  void pump();
 }
 
 function blank(canvas: HTMLCanvasElement): void {
@@ -113,6 +128,7 @@ function blank(canvas: HTMLCanvasElement): void {
 export function applyStripWrite(msg: StripWriteMsg): void {
   if ('clear' in msg) {
     generation++;
+    dirty.clear();
     full = undefined;
     slots.clear();
     for (const canvas of attached.keys()) blank(canvas);
@@ -121,11 +137,11 @@ export function applyStripWrite(msg: StripWriteMsg): void {
   if (msg.full) {
     full = msg.data;
     slots.clear();
-    paint([...attached]);
+    markDirty(attached.keys());
     return;
   }
   slots.set(msg.wireId, msg.data);
-  paint([...attached].filter(([, zone]) => zone.wireId === msg.wireId));
+  markDirty([...attached].filter(([, z]) => z.wireId === msg.wireId).map(([c]) => c));
 }
 
 /** Selected dock changed: the server replays the new dock's strip after this. */
@@ -137,8 +153,9 @@ export function resetStripZones(): void {
 export function attachZoneCanvas(canvas: HTMLCanvasElement, zone: WidgetDisplayInfo): () => void {
   attached.set(canvas, zone);
   if (!full && !slots.has(zone.wireId)) blank(canvas);
-  else paint([[canvas, zone]]);
+  else markDirty([canvas]);
   return () => {
     attached.delete(canvas);
+    dirty.delete(canvas);
   };
 }
