@@ -204,11 +204,13 @@ main process.
 ([cli.ts](../ts/src/shared/cli.ts)) is the very first thing `app.ts` does, before anything else runs,
 because `version`/`help`/`devices` must exit immediately and any flags must land in `tjs.env`
 before other modules read it. `parseCliArgs()` is a hand-rolled, zero-dependency parser (deliberately
-kept dependency-free — it must not import anything else in the tree) recognizing one of five
-commands (`run` (default), `devices`, `diagnose`, `version`, `help`) plus flags: `--bind`,
+kept dependency-free — it must not import anything else in the tree) recognizing one of six
+commands (`run` (default), `devices`, `diagnose`, `push`, `version`, `help`) plus flags: `--bind`,
 `--webui-port`, `--no-webui`, `--open`, `--headless`, `--log-level`, `--no-overrides`,
 `--cache-dir`, `-h/--help`, `-V/--version`, and the `diagnose`-only `--out` and
-`--redact-commands`. `applyFlagsToEnv()` normalizes flags into the corresponding `DECKBRIDGE_*` env vars
+`--redact-commands`. `push` has positional args and its own flags, so the parser hands it the
+remaining args untouched (`rest`) and [cli/push.ts](../ts/src/cli/push.ts) parses them — a thin
+HTTP client for `/api/push/:channel` that loads no native libs and opens no device. `applyFlagsToEnv()` normalizes flags into the corresponding `DECKBRIDGE_*` env vars
 (flags override pre-existing env vars, which override defaults), so every downstream reader
 (including the HID worker thread, since env is process-wide) keeps using its existing env-var reads
 unchanged.

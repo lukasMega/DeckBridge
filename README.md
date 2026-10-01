@@ -116,6 +116,7 @@ Commands:
   run                 Start the bridge (default when no command given)
   devices             List detected stream deck HID devices, then exit
   diagnose            Write a diagnostics report (for bug reports), then exit
+  push                Send text to a push channel of a running bridge, then exit
   version             Print version/build info, then exit
   help                Print usage, then exit
 
@@ -134,6 +135,12 @@ Flags (for run):
 Flags (for diagnose):
   --out <path>              Write the report here instead of the cache dir
   --redact-commands         Replace extra-key commands/plugin args with <redacted>
+
+Usage (for push):
+  deckbridge push <channel> <text> [--ttl <s>] [--color #rrggbb] [--background #rrggbb]
+  deckbridge push <channel> --clear
+  --url <base>              Bridge WebUI address  [default http://127.0.0.1:3000]
+  --token <t>               Push token (default $DECKBRIDGE_PUSH_TOKEN; visible in the process list)
 
 Log level precedence: --log-level > $DECKBRIDGE_LOG_LEVEL > settings.json
 "logLevel" > the level baked in at build time.
