@@ -13,7 +13,7 @@ import { DeckApp } from '../src/web/client/deck/DeckApp.js';
 import { DeckScreen } from '../src/web/client/deck/deck-screen.js';
 import { PairScreen, pairErrorMessage } from '../src/web/client/deck/pair-screen.js';
 import { TOKEN_KEY } from '../src/web/client/deck/token-store.js';
-import { validateMatrix } from '../src/web/client/simple/pairing-qr.js';
+import { QR_LIB, validateMatrix } from '../src/web/client/simple/pairing-qr.js';
 import { PairingAddressLink } from '../src/web/client/simple/pairing-address-modal.js';
 import { VirtualDeckPanel } from '../src/web/client/simple/virtual-deck-panel.js';
 import type { PairingOffer, VirtualDeckState } from '../src/web/contract-deck.js';
@@ -382,8 +382,8 @@ async function checkPairingOffer(
   );
   check(root.querySelector('#qr-consent') !== null, 'The consent dialog is shown first');
   check(
-    textOf(root, '#qr-consent').includes('cdn.jsdelivr.net'),
-    'The consent dialog names the CDN URL',
+    textOf(root, '#qr-consent code') === QR_LIB.url,
+    'The consent dialog names the exact CDN URL',
   );
   await clickSettled(root, '#qr-load');
   check(loads() === 1, 'Confirming loads the QR library once');
