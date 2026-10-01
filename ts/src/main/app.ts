@@ -30,6 +30,7 @@ import { stopCommands } from '../infra/command-runner.js';
 import { stopSpawns } from '../infra/owned-spawn.js';
 import { shutdownPluginHost } from '../plugin/plugin-host.js';
 import { createShutdown } from './shutdown.js';
+import { wireVirtualDeck } from './virtual-deck/virtual-deck-wiring.js';
 import {
   MIN_DWELL_MS,
   PING_SCHEDULE_SLACK_MS,
@@ -191,6 +192,19 @@ const elgatoAutoRestart = new ElgatoAutoRestart(
   createElgatoAutoRestartDeps({ webui, settings, driverManager }),
 );
 
+webui.on('keyPress', ({ dock, index }: { dock: number; index: number }) =>
+  driverManager.simulateKeyPress(dock, index),
+);
+
+const virtualDeck = wireVirtualDeck({
+  webui,
+  settings,
+  driverManager,
+  coraDockFactory,
+  getShuttingDown: () => shuttingDown,
+  onDockConnected: (i, key) => elgatoAutoRestart.onDockConnected(i, key),
+});
+
 const shutdown = createShutdown({
   quiesce: () => {
     shuttingDown = true;
@@ -209,6 +223,7 @@ const shutdown = createShutdown({
   owners: [
     ['commands', () => Promise.all([stopCommands(), stopSpawns()])],
     ['plugins', shutdownPluginHost],
+    ['browser deck', () => virtualDeck.stop()],
     ['docks', () => driverManager.shutdown()],
     ['webui', () => webui.stop()],
     ['tray', async () => tray?.close()],
@@ -289,13 +304,6 @@ if (__MOCK_BUILD__) {
       log('error', 'deckBr', `switchMode(${mode}) failed: ${(err as Error).message}`);
       webui.notifyDriverStatus(mode, false);
     });
-  });
-
-  webui.on('keyPress', (mk2Index: number) => {
-    const d = driverManager.getCurrentDriver();
-    if (driverManager.getDriverMode() === 'mock' && d instanceof MockDriver) {
-      d.simulateKeyPress(mk2Index);
-    }
   });
 
   webui.on('mockInput', (input: MockInput) => {
@@ -500,5 +508,6 @@ await driverManager.setMultiDeck(settings.multiDeck);
 // Safe in mock mode: scanForDocks() guards on driverMode==='real' and a connected
 // primary, so it's a no-op until a real primary is up.
 driverManager.startScan();
+await virtualDeck.start();
 
 log('info', 'deckBr', 'startup complete — entering event loop');

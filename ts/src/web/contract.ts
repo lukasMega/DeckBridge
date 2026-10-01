@@ -263,6 +263,7 @@ export interface DockStatus {
   columns: number;
   rows: number;
   primaryPort: number; // the port the user enters in the Elgato app
+  virtualClients?: number; // browser deck only: connected browser pages
   primaryConnected: boolean; // primary (Network Dock) CORA client attached = app discovered us
   elgatoConnected: boolean; // child CORA client attached = paired & active
   brightness: number; // last level applied to this dock's panel (0-100)
@@ -358,6 +359,8 @@ export interface StateResponse extends StatusSnapshot {
   /** Multi-deck opt-in (settings.json `multiDeck`). Read once per Settings-page
    *  mount, like logLevel — it is not in the status snapshot. */
   multiDeck: boolean;
+  /** Click-to-press opt-in (settings.json `webuiKeyPress`): the preview may fire key presses. */
+  keyPressEnabled: boolean;
   /** GitHub-release update check (update-check.ts) — cached, no network. */
   updateInfo: UpdateInfo;
   /** Elgato-app auto-restart opt-out + grace delay (settings.json
@@ -379,7 +382,7 @@ export interface TouchImageMsg {
   region?: { x: number; y: number; w: number; h: number };
 }
 
-export type PushScope = 'push';
+export type PushScope = 'push' | 'deck';
 
 /** One push-API token as the WebUI lists it (never the secret or its hash). */
 export interface PushTokenView {

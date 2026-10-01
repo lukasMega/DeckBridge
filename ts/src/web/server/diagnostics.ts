@@ -209,9 +209,9 @@ function keyEventsBlock(events: KeyEventEntry[] | undefined): string {
  *  no place in a public issue; the CLI path reads the raw file, so strip here. */
 export function stripPushTokenHashes(settingsJson: string): string {
   try {
-    const parsed = JSON.parse(settingsJson) as { pushTokens?: Array<{ hash?: string }> };
-    if (!Array.isArray(parsed.pushTokens)) return settingsJson;
-    for (const t of parsed.pushTokens) delete t.hash;
+    const parsed = JSON.parse(settingsJson) as { accessTokens?: Array<{ hash?: string }> };
+    if (!Array.isArray(parsed.accessTokens)) return settingsJson;
+    for (const t of parsed.accessTokens) delete t.hash;
     return JSON.stringify(parsed, null, 2);
   } catch {
     return settingsJson;

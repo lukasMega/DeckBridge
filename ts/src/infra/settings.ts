@@ -22,7 +22,11 @@ import {
 import type { DockStatus, ExtraKeyConfig } from '../shared/types.js';
 import type { UpdateState } from './update-check.js';
 import { encoderSettingsError } from '../shared/encoder-settings.js';
-import { PUSH_TOKENS_MAX, isPushTokenRecord, type PushTokenRecord } from './push-tokens.js';
+import {
+  DEFAULT_BROWSER_DECK_PROFILE,
+  isBrowserDeckProfile,
+} from '../devices/virtual/browser-deck-profiles.js';
+import { ACCESS_TOKENS_MAX, isPushTokenRecord, type PushTokenRecord } from './push-tokens.js';
 import { DockPrefs, defaultRuntimePrefs } from './dock-prefs.js';
 import type { DockPrefsStore } from './dock-prefs.js';
 
@@ -146,6 +150,15 @@ export function sanitizeModelOverrides(raw: unknown): Record<string, DeviceModel
  *  entries (identity + brightness/override/extraKeys/…), keyed by
  *  device-identity.ts's deviceKeyFor(). Loaded once by app.ts before anything
  *  else reads it; this class is the sole settings.json writer. */
+/** A saved `virtualDeck` section, or undefined when absent/malformed; an unknown profile falls back. */
+function sanitizeVirtualDeck(
+  v: Settings['virtualDeck'],
+): { enabled: boolean; profile: string } | undefined {
+  if (!v || typeof v.enabled !== 'boolean') return undefined;
+  const profile = isBrowserDeckProfile(v.profile) ? v.profile : DEFAULT_BROWSER_DECK_PROFILE;
+  return { enabled: v.enabled, profile };
+}
+
 export class PersistedSettings implements DockPrefsStore {
   selectedDock = 0;
   /** undefined = not persisted; the level then comes from the CLI flag / env /
@@ -154,6 +167,8 @@ export class PersistedSettings implements DockPrefsStore {
   /** Opt-in second dock; false = single dock and no dock scan (types.ts
    *  MAX_MULTI_DECK_DOCKS, dock-scanner.ts). */
   multiDeck = false;
+  webuiKeyPress = false;
+  virtualDeck = { enabled: false, profile: DEFAULT_BROWSER_DECK_PROFILE as string };
   /** GitHub-release update check opt-out (see update-check.ts). undefined = enabled. */
   updateCheck: boolean | undefined = undefined;
   updateState: UpdateState | undefined = undefined;
@@ -173,7 +188,7 @@ export class PersistedSettings implements DockPrefsStore {
   /** Prefs of a dock with no settings.json entry (mock mode, pre-connect). Never persisted. */
   readonly runtime = defaultRuntimePrefs();
   private devices: DeviceIdentitySettings[] = [];
-  private pushTokens: PushTokenRecord[] = [];
+  private accessTokens: PushTokenRecord[] = [];
   private modelOverrides: Record<string, DeviceModelOverride> = {};
   /** Serializes writes: overlapping write+rename pairs could land out of order. */
   private saveChain: Promise<void> = Promise.resolve();
@@ -187,6 +202,15 @@ export class PersistedSettings implements DockPrefsStore {
    *  production passes undefined and settings-store.ts picks the default. */
   constructor(readonly cacheRoot?: string) {}
 
+  private loadAutoRestart(saved: Settings): void {
+    if (typeof saved.elgatoAutoRestart === 'boolean') {
+      this.elgatoAutoRestart = saved.elgatoAutoRestart;
+    }
+    if (typeof saved.elgatoAutoRestartDelayS === 'number') {
+      this.elgatoAutoRestartDelayS = clampAutoRestartDelayS(saved.elgatoAutoRestartDelayS);
+    }
+  }
+
   /** Apply settings.json (if present) over the defaults. Malformed device
    *  entries are dropped (same guard as import). Legacy path-keyed entries are
    *  pruned too: the IOKit path is volatile, so they can never re-match a
@@ -196,25 +220,22 @@ export class PersistedSettings implements DockPrefsStore {
     if (typeof saved.selectedDock === 'number') this.selectedDock = saved.selectedDock;
     if (isLogLevel(saved.logLevel)) this.logLevel = saved.logLevel;
     if (typeof saved.multiDeck === 'boolean') this.multiDeck = saved.multiDeck;
+    if (typeof saved.webuiKeyPress === 'boolean') this.webuiKeyPress = saved.webuiKeyPress;
+    this.virtualDeck = sanitizeVirtualDeck(saved.virtualDeck) ?? this.virtualDeck;
     if (typeof saved.updateCheck === 'boolean') this.updateCheck = saved.updateCheck;
     if (saved.updateState) this.updateState = saved.updateState;
     if (typeof saved.a7s === 'boolean') this.a7s = saved.a7s;
     if (typeof saved.a7sDay === 'string') this.a7sDay = saved.a7sDay;
-    if (typeof saved.elgatoAutoRestart === 'boolean') {
-      this.elgatoAutoRestart = saved.elgatoAutoRestart;
-    }
-    if (typeof saved.elgatoAutoRestartDelayS === 'number') {
-      this.elgatoAutoRestartDelayS = clampAutoRestartDelayS(saved.elgatoAutoRestartDelayS);
-    }
+    this.loadAutoRestart(saved);
     this.modelOverrides = sanitizeModelOverrides(saved.modelOverrides);
-    if (Array.isArray(saved.pushTokens)) {
-      const valid = saved.pushTokens.filter(isPushTokenRecord);
-      this.pushTokens = valid.slice(0, PUSH_TOKENS_MAX);
-      if (valid.length !== saved.pushTokens.length) {
+    if (Array.isArray(saved.accessTokens)) {
+      const valid = saved.accessTokens.filter(isPushTokenRecord);
+      this.accessTokens = valid.slice(0, ACCESS_TOKENS_MAX);
+      if (valid.length !== saved.accessTokens.length) {
         log(
           'warn',
           'settings',
-          `settings: dropped ${saved.pushTokens.length - valid.length} invalid push token(s)`,
+          `settings: dropped ${saved.accessTokens.length - valid.length} invalid access token(s)`,
         );
       }
     }
@@ -264,7 +285,7 @@ export class PersistedSettings implements DockPrefsStore {
 
   json(): string {
     // Export/import never carry credentials (JSON.stringify drops undefined).
-    return JSON.stringify({ ...this.current(), pushTokens: undefined }, null, 2);
+    return JSON.stringify({ ...this.current(), accessTokens: undefined }, null, 2);
   }
 
   /** Open settings.json in the OS default handler. Writes current settings
@@ -340,12 +361,27 @@ export class PersistedSettings implements DockPrefsStore {
     this.persist();
   }
 
-  pushTokenRecords(): readonly PushTokenRecord[] {
-    return this.pushTokens;
+  /** Persist the click-to-press opt-in (WebUI Settings). */
+  setWebuiKeyPress(enabled: boolean): void {
+    this.webuiKeyPress = enabled;
+    this.persist();
   }
 
-  setPushTokens(records: PushTokenRecord[]): void {
-    this.pushTokens = records;
+  /** Persist the browser-deck opt-in and layout (WebUI "Browser deck" panel). */
+  setVirtualDeck(next: { enabled: boolean; profile: string }): void {
+    this.virtualDeck = {
+      enabled: next.enabled,
+      profile: isBrowserDeckProfile(next.profile) ? next.profile : DEFAULT_BROWSER_DECK_PROFILE,
+    };
+    this.persist();
+  }
+
+  accessTokenRecords(): readonly PushTokenRecord[] {
+    return this.accessTokens;
+  }
+
+  setAccessTokens(records: PushTokenRecord[]): void {
+    this.accessTokens = records;
     this.persist();
   }
 
@@ -435,22 +471,32 @@ export class PersistedSettings implements DockPrefsStore {
     this.persist();
   }
 
-  private current(): Settings {
+  private autoRestartEntries(): Pick<Settings, 'elgatoAutoRestart' | 'elgatoAutoRestartDelayS'> {
     return {
-      selectedDock: this.selectedDock,
-      ...(this.logLevel !== undefined ? { logLevel: this.logLevel } : {}),
-      ...(this.multiDeck ? { multiDeck: true } : {}),
-      ...(this.updateCheck !== undefined ? { updateCheck: this.updateCheck } : {}),
-      ...(this.updateState ? { updateState: this.updateState } : {}),
-      ...(this.a7s !== undefined ? { a7s: this.a7s } : {}),
-      ...(this.a7sDay ? { a7sDay: this.a7sDay } : {}),
       ...(this.elgatoAutoRestart !== undefined
         ? { elgatoAutoRestart: this.elgatoAutoRestart }
         : {}),
       ...(this.elgatoAutoRestartDelayS !== undefined
         ? { elgatoAutoRestartDelayS: this.elgatoAutoRestartDelayS }
         : {}),
-      ...(this.pushTokens.length > 0 ? { pushTokens: this.pushTokens } : {}),
+    };
+  }
+
+  private current(): Settings {
+    return {
+      selectedDock: this.selectedDock,
+      ...(this.logLevel !== undefined ? { logLevel: this.logLevel } : {}),
+      ...(this.multiDeck ? { multiDeck: true } : {}),
+      ...(this.webuiKeyPress ? { webuiKeyPress: true } : {}),
+      ...(this.virtualDeck.enabled || this.virtualDeck.profile !== DEFAULT_BROWSER_DECK_PROFILE
+        ? { virtualDeck: this.virtualDeck }
+        : {}),
+      ...(this.updateCheck !== undefined ? { updateCheck: this.updateCheck } : {}),
+      ...(this.updateState ? { updateState: this.updateState } : {}),
+      ...(this.a7s !== undefined ? { a7s: this.a7s } : {}),
+      ...(this.a7sDay ? { a7sDay: this.a7sDay } : {}),
+      ...this.autoRestartEntries(),
+      ...(this.accessTokens.length > 0 ? { accessTokens: this.accessTokens } : {}),
       ...(this.devices.length > 0 ? { devices: this.devices } : {}),
       ...(Object.keys(this.modelOverrides).length > 0
         ? { modelOverrides: this.modelOverrides }

@@ -434,6 +434,34 @@ new dock.
 own CORA pair is wrapped in a `CoraDock` the same way; app.ts constructs and starts it and hands it to
 `DriverManager` (`cora` dep), which wraps it as dock 0.
 
+## Browser deck: a dock with no USB device
+
+A phone or tablet page is **dock 3** (`VIRTUAL_DOCK_INDEX`, CORA ports 5349/5350): fixed, not
+pool-allocated, so its ports — and the Elgato pairing, which is by IP:port — never move. It is
+the same `Dock` as every other, built around a **`VirtualDeckDriver`**
+([main/virtual-deck/](../ts/src/main/virtual-deck/virtual-deck-driver.ts)) instead of a USB worker:
+a main-thread `DockDriver` with no FFI. `renderCoraImage` (on the ACK path, so O(1)) stores the
+frame and hands it to the **`DeckHub`**; a page's key press becomes a driver `'key'` event and
+travels the normal `wireCommonDriverEvents` → `child.sendKeyEvent` path. `DriverManager.addExternalDock`
+registers it and reserves the index in the `DockScanner`, so a scan can never take it.
+
+The pages talk to a **fourth listener**, `DeckServer`
+([web/server/virtual-deck/](../ts/src/web/server/virtual-deck/deck-server.ts), port 44660): a separate
+`tjs.serve` that exists only while the feature is on and serves the page, `POST /deck/api/pair`
+and one WebSocket — no admin route is reachable on it. The wire format is
+[contract-deck.ts](../ts/src/web/contract-deck.ts): JSON control messages and binary image frames
+(`[type, key, format, 0] + JPEG`). tjs has no dependable send-buffer signal, so each page acks
+frames and `FrameQueue` keeps only the newest frame per key while the window is full. `HeldKeys`
+merges mirrored pages; liveness (3.5 s of silence) and a lateness check (`InputFreshness`, 1 s) mean
+a held key is always released and a press that sat in a socket buffer is dropped, never replayed.
+
+Credentials are the push plan's `dbp_…` records (hashed in `settings.json` `accessTokens`) with
+scope `deck`; a pairing is a one-time code exchanged at `/deck/api/pair`, and the WebSocket
+authenticates with its first message (browsers cannot set `Authorization` on a WebSocket). The page
+bundle is built separately for old browsers (`DECK_JS_TARGETS` in `ts/build.mjs`, plus a legacy-API
+check). `VirtualDock` ([virtual-dock.ts](../ts/src/main/virtual-deck/virtual-dock.ts)) starts and unwinds
+dock + hub + listener together; `wireVirtualDeck()` is the only thing `app.ts` calls.
+
 ## Settings persistence
 
 Per-device settings (brightness, brightness override, extra-key widget config)

@@ -185,7 +185,8 @@ function PushApiBody(): preact.JSX.Element {
 
   const loadTokens = async (): Promise<void> => {
     const r = await getJson<{ tokens: PushTokenView[] }>('/api/push-tokens');
-    setTokens(r.tokens);
+    // Browser-deck tokens (scope 'deck') are managed in the Browser deck panel.
+    setTokens(r.tokens.filter((t) => t.scopes.includes('push')));
   };
   useEffect(function loadInitial() {
     void loadTokens().catch(() => undefined);

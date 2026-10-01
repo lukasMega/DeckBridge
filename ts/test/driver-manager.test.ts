@@ -10,6 +10,7 @@ import { AJAZZ_AKP05E_MODEL } from '../src/devices/ajazz/akp05e.js';
 import { MockDriver } from '../src/devices/mock.js';
 import type { DockSlot } from '../src/main/dock-status.js';
 import { CoraDock } from '../src/main/cora-dock.js';
+import type { Dock } from '../src/main/dock.js';
 import type { DeviceModel, DeviceModelOverride } from '../src/devices/driver.js';
 import type { CommEntry, DialEvent, KeyState, TouchInputEvent } from '../src/shared/types.js';
 import { ELGATO_TCP_PORT, MAX_DOCKS, MAX_MULTI_DECK_DOCKS } from '../src/shared/types.js';
@@ -1741,6 +1742,44 @@ await test('S6. a primary driver that never acks close fails shutdown; parked wo
   await driverManager.shutdown().catch((e: unknown) => (err = e));
   assert.ok(err instanceof Error && err.message.includes('no close ack'));
   assert.equal(parked.closeCalls, 1, 'parked worker still closed');
+});
+
+await test('X1. an external dock reserves its index: scanned docks take only the others', async () => {
+  const { driverManager, identities, present, pathsByModel, getDocksChangedCalls } =
+    setupCoord(MAX_DOCKS);
+  present.add(DEFAULT_MODEL.id);
+  pathsByModel.set(DEFAULT_MODEL.id, ['hid:a', 'hid:b', 'hid:c', 'hid:d']);
+  const before = getDocksChangedCalls();
+  driverManager.addExternalDock({ index: 3, driver: null } as unknown as Dock);
+  assert.ok(getDocksChangedCalls() > before, "addExternalDock emits 'changed'");
+  assert.equal(driverManager.dock(3)?.index, 3);
+
+  await driverManager.tryRealConnect();
+  await driverManager.__scanOnce();
+  await driverManager.__scanOnce();
+  await driverManager.__scanOnce(); // a 4th unit: the only free index (3) is reserved
+  assert.deepEqual(
+    identities.map((i) => i.index).toSorted((a, b) => a - b),
+    [1, 2],
+    'three USB units fill 0,1,2; index 3 stays with the external dock',
+  );
+});
+
+await test('X2. switchMode/stopScannedDocks leave an external dock alone; remove frees the index', async () => {
+  const { driverManager, identities, present, getDocksChangedCalls } = setupCoord(MAX_DOCKS);
+  present.add(DEFAULT_MODEL.id);
+  const external = { index: 3, driver: null } as unknown as Dock;
+  driverManager.addExternalDock(external);
+  await driverManager.stopScannedDocks();
+  assert.equal(driverManager.dock(3), external, 'scanned-dock teardown does not touch it');
+  assert.throws(() => driverManager.addExternalDock(external), 'a taken index is refused');
+  const before = getDocksChangedCalls();
+  driverManager.removeExternalDock(3);
+  assert.equal(driverManager.dock(3), undefined);
+  assert.ok(getDocksChangedCalls() > before, "removeExternalDock emits 'changed'");
+  driverManager.removeExternalDock(0);
+  assert.ok(driverManager.dock(0), 'dock 0 can never be removed this way');
+  assert.equal(identities.length, 0);
 });
 
 // Summary

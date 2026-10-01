@@ -40,6 +40,9 @@ export const MAX_DOCKS = 4;
 // one scanned dock). Without it DeckBridge runs a single dock and stops scanning USB
 // once that dock is up — see dock-scanner.ts.
 export const MAX_MULTI_DECK_DOCKS = 2;
+// The browser deck's dock: fixed (not pool-allocated) so its CORA ports never move —
+// the Elgato app pairs by IP:port.
+export const VIRTUAL_DOCK_INDEX = MAX_DOCKS - 1;
 
 // Default device identity strings
 export const DEFAULT_DOCK_FIRMWARE_VERSION = '1.01.016';
@@ -73,6 +76,13 @@ export const HID_POLL_INTERVAL_MS = 3_000;
 // WebUI server
 export const WEBUI_PORT = 3000;
 export const WEBUI_LISTEN_ADDRESS = '127.0.0.1';
+
+// Browser deck listener (phones/tablets). Fixed, no fallback: a paired device bookmarks the URL.
+export const DECK_PORT = 44_660;
+export function deckPort(): number {
+  const n = typeof tjs !== 'undefined' ? Number(tjs.env['DECKBRIDGE_DECK_PORT']) : Number.NaN;
+  return Number.isInteger(n) && n > 0 && n < 65_535 ? n : DECK_PORT;
+}
 
 // Mock driver
 export const MOCK_KEY_PRESS_DURATION_MS = 50;

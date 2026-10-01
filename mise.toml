@@ -50,6 +50,11 @@ quiet = true
 depends = ["build-advanced"]
 run = "$TJS run ts/dist/bundle.js"
 
+[tasks.spike-docks]
+description = "Throwaway: 3 mock docks with distinct identities for the Elgato pairing-limit spike"
+depends = ["build-mock"]
+run = "node scripts/spike-docks.mjs"
+
 [tasks.mock-akp05]
 description = "Build and run mock AKP05 paired as Stream Deck + at http://127.0.0.1:3000"
 depends = ["build-mock"]

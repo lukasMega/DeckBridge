@@ -3,7 +3,7 @@
 // leaves nothing to brute-force.
 
 /** Structurally identical to the wire `PushScope` (web/contract.ts); infra may not import it. */
-export type PushScope = 'push';
+export type PushScope = 'push' | 'deck';
 
 export interface PushTokenRecord {
   id: string;
@@ -16,12 +16,12 @@ export interface PushTokenRecord {
   createdAt: string;
 }
 
-export const PUSH_TOKENS_MAX = 16;
+export const ACCESS_TOKENS_MAX = 16;
 export const PUSH_TOKEN_NAME_MAX = 40;
 export const PUSH_TOKEN_PREFIX = 'dbp_';
 
 const HEX64 = /^[0-9a-f]{64}$/;
-const PUSH_SCOPES: readonly string[] = ['push'];
+const PUSH_SCOPES: readonly string[] = ['push', 'deck'];
 
 export function isPushTokenRecord(v: unknown): v is PushTokenRecord {
   if (typeof v !== 'object' || v === null) return false;

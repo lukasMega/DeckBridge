@@ -308,6 +308,12 @@ export default defineConfig([
             // and the device registry (for DEFAULT_MODEL) — never live device I/O.
             {
               from: { element: { type: 'web-server' } },
+              allow: { to: { element: { type: 'assets' } } },
+              message:
+                'web-server may import assets ONLY for deck-icons.ts (the browser deck home-screen icons).',
+            },
+            {
+              from: { element: { type: 'web-server' } },
               allow: { to: { element: { type: ['ffi', 'devices', 'infra'] } } },
               message:
                 'web-server may import ffi ONLY for capability/requirements checks (getHidapiSystemCandidates), devices ONLY for the static registry (e.g. DEFAULT_MODEL), and infra for settings persistence (settings-store.ts) — never for device I/O.',

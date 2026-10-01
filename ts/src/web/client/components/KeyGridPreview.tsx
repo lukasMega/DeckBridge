@@ -47,7 +47,9 @@ export function KeyGridPreview({
   showIndex,
   flash,
   onKeyClick,
+  gesture,
   clickable,
+  clickTitle,
   touchStrip,
 }: Readonly<{
   keyCount: number;
@@ -66,10 +68,14 @@ export function KeyGridPreview({
   showIndex?: boolean;
   /** Flash a cell border on key press (advanced grid). */
   flash?: boolean;
-  /** Cell click handler (advanced grid, mock mode). */
+  /** Cell click handler (advanced grid, simple-view selected dock). */
   onKeyClick?: (index: number) => void;
-  /** Toggle the clickable cell state; undefined = never touched (simple view). */
+  /** Which gesture fires `onKeyClick`; default 'click'. */
+  gesture?: 'click' | 'dblclick';
+  /** Toggle the clickable cell state; undefined = never touched. */
   clickable?: boolean;
+  /** Tooltip for every cell ('' clears it); undefined leaves titles alone. */
+  clickTitle?: string;
   /** Advertised touch-strip size; shows the live strip under the keys. */
   touchStrip?: TouchStripSize;
 }>): preact.JSX.Element {
@@ -82,11 +88,11 @@ export function KeyGridPreview({
     const el = gridRef.current;
     if (!el || !live) return;
     // Create the KeyPreview instance once; broadcast() auto-prunes on disconnect
-    const kp = new KeyPreview(el, { showIndex, flash, onKeyClick });
+    const kp = new KeyPreview(el, { showIndex, flash, onKeyClick, gesture });
     previewRef.current = kp;
     kp.setModel(modelId, coraProfile);
     kp.rebuild(keyCount, columns);
-    if (clickable !== undefined) kp.setClickable(clickable);
+    if (clickable !== undefined) kp.setClickable(clickable, clickTitle);
   }, []);
   /* eslint-enable @eslint-react/exhaustive-deps */
 
@@ -97,8 +103,8 @@ export function KeyGridPreview({
     if (!kp) return;
     kp.setModel(modelId, coraProfile);
     kp.rebuild(keyCount, columns);
-    if (clickable !== undefined) kp.setClickable(clickable);
-  }, [keyCount, columns, modelId, coraProfile, clickable]);
+    if (clickable !== undefined) kp.setClickable(clickable, clickTitle);
+  }, [keyCount, columns, modelId, coraProfile, clickable, clickTitle]);
 
   const cls = 'preview panel-inset' + (isCompact ? ' compact' : '') + (dimmed ? ' dimmed' : '');
 

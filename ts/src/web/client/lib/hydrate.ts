@@ -19,6 +19,7 @@ export function hydrate(st: StateResponse): void {
     touchStripRepaintMs: st.touchStripRepaintMs,
     encoders: st.encoders,
     updateInfo: st.updateInfo,
+    keyPressEnabled: st.keyPressEnabled,
     keyEvents: st.keyEvents,
   });
   // Absent in simple-only builds (state-response.ts).

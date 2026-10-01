@@ -18,13 +18,17 @@ export function freePort(): Promise<number> {
   });
 }
 
-/** Ask for unused adjacent TCP ports, for CORA's primary and child listeners. */
-export async function freePortPair(): Promise<[number, number]> {
-  for (let attempt = 0; attempt < 20; attempt++) {
-    const primary = await freePort();
-    if (primary < 65_535 && (await isPortFree(primary + 1))) return [primary, primary + 1];
+/** Ask for `n` unused consecutive TCP ports; returns the first (the browser deck is dock 3,
+ *  so a CORA block of 8 puts its pair at base+6 / base+7). */
+export async function freePortBlock(n: number): Promise<number> {
+  for (let attempt = 0; attempt < 40; attempt++) {
+    const base = await freePort();
+    if (base + n >= 65_535) continue;
+    let free = true;
+    for (let i = 1; i < n && free; i++) free = await isPortFree(base + i);
+    if (free) return base;
   }
-  throw new Error('could not find free adjacent CORA ports');
+  throw new Error(`could not find ${n} free consecutive ports`);
 }
 
 /**

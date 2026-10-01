@@ -83,6 +83,8 @@ a regular **Network device** at `localhost`; the deck behaves like Elgato hardwa
 - **Works with non-Elgato decks** — [supported](./introduction.mdx#supported-devices)
   Mirabox / Ajazz decks present themselves to the app as an Elgato model it already
   knows, so nothing changes app-side.
+- **Browser deck (opt-in)** — a phone or tablet becomes one more network dock, with press
+  and hold; see [Browser deck](./browser-deck.md).
 - **Multiple decks (opt-in, max 2)** — off by default: DeckBridge uses one deck and stops
   looking for further USB devices once it is connected. Switch it on in Settings and a
   second deck appears as its own network dock, with per-deck pairing cards, a selectable
@@ -195,6 +197,19 @@ Unplugging an extra deck removes its card; replugging brings it back automatical
 Turning the setting back off disconnects the second deck (its settings are kept, so
 switching it on again restores the dock).
 
+Every dock needs its **own IP address** in the Elgato app — see
+[one dock per IP address](./browser-deck.md#one-dock-per-ip-address). A phone or tablet can
+be an extra dock too: see the [Browser deck](./browser-deck.md).
+
+## Click to press
+
+**Off by default.** *Settings → Click to press* lets you double-click a key in the web UI
+preview to press it on the Elgato app (Enter or Space on a focused key does the same). The
+dock must be paired. Anyone who can open the web UI can then press your keys, so keep the UI
+on `127.0.0.1` (the default) unless you trust the network. It is stored as
+`"webuiKeyPress": true` in settings.json and is never taken from an imported settings file.
+A virtual press is not a hardware press: key-map learn mode ignores it.
+
 ## Permissions
 
 Each permission is requested on first use; no admin / root rights are required.
@@ -261,8 +276,8 @@ only case that needs a system libhidapi installed.
 
   Old `native-<hash>` folders from previous versions are cleaned up automatically.
 - **Settings** — `settings.json` in the cache root: per-device brightness/identity,
-  side-key widgets, log level, device tuning (`modelOverrides`), and push-API tokens
-  (hashed; never exported).
+  side-key widgets, log level, device tuning (`modelOverrides`), the browser-deck and
+  click-to-press opt-ins, and push-API / browser-deck tokens (hashed; never exported).
 - **Log file** — `<cache-root>/logs/deckbridge.log`, rotated at 2 MB with three files
   kept. See [Troubleshooting](./troubleshooting.md#where-the-logs-live).
 - **Diagnostics reports** — `<cache-root>/diagnostics/`, only when you ask for one.
@@ -275,7 +290,9 @@ only case that needs a system libhidapi installed.
 |---|---|---|
 | **5343** | `0.0.0.0` (LAN) | CORA main server — the Elgato app connects here |
 | **5344** | `0.0.0.0` (LAN) | CORA child server — image / data channel |
-| **5345–5350** | `0.0.0.0` (LAN) | Extra decks — each additional device gets its own CORA pair at +2 per device (max 3 extras) |
+| **5345–5346** | `0.0.0.0` (LAN) | Second deck — its own CORA pair at +2 (only with *Use two decks at once*) |
+| **5349–5350** | `0.0.0.0` (LAN) | The [browser deck](./browser-deck.md)'s dock (only when it is turned on) |
+| **44660** | `0.0.0.0` (LAN) | Browser deck page, pairing and WebSocket (only when it is turned on; `DECKBRIDGE_DECK_PORT`) |
 | **3000** | `127.0.0.1` (LAN with `--bind`) | Web UI and [Push API](./push-api.md) |
 | mDNS `_elg._tcp` | LAN | Service discovery ("Network Stream Deck") |
 
@@ -284,11 +301,11 @@ ports and the Web UI. The Web UI binds `127.0.0.1` unless you pass `--bind`.
 
 ## Limitations
 
-- **Multiple decks: distinct models only** — each extra deck must be a **different
-  model**; a second deck of the same model is ignored. Up to 4 devices total (primary +
-  3 extras), each its own network dock (own mDNS name and port pair — see
-  [Network ports](#network-ports)). The web UI shows a live preview for **one selected
-  deck at a time** (click its card); the others stay static.
+- **Multiple decks: two USB decks** — *Use two decks at once* docks one extra USB deck
+  (same model is fine), each its own network dock (own mDNS name and port pair — see
+  [Network ports](#network-ports)). A phone or tablet [browser deck](./browser-deck.md) is
+  one more dock on top. The web UI shows a live preview for **one selected deck at a time**
+  (click its card); the others stay static.
 - **Keys and dials only** — DeckBridge drives keys plus the AJAZZ AKP05E's four rotary
   encoders and its touch strip (as widget displays, or a Stream Deck + window image).
   Dials and strip swipes and taps reach the Elgato app only when the AKP05E is re-paired
@@ -299,17 +316,19 @@ ports and the Web UI. The Web UI binds `127.0.0.1` unless you pass `--bind`.
   instance on the same machine.
 - **No auth or encryption** — the CORA ports trust the LAN; see
   [Network ports](#network-ports).
-- **Elgato desktop app: 2-device cap per computer** — the Elgato app itself, not
-  DeckBridge, only pairs **two** network docks on one computer: one via `127.0.0.1`
-  and one via the machine's real LAN IP (e.g. `192.168.1.42`). Adding a third
-  (even a different IP) fails in the Elgato app. To reach more DeckBridge devices
-  from one computer, pair the extras from a *different* computer on the LAN.
+- **Elgato desktop app: one network dock per IP address** — the Elgato app itself, not
+  DeckBridge, pairs only **one** network dock per IP address of the computer, whatever the
+  port. Use `127.0.0.1` for the first deck and the computer's LAN IP (e.g. `192.168.1.42`)
+  for the second. A third needs another local address, for example the loopback alias
+  `127.0.0.2` (on macOS: `sudo ifconfig lo0 alias 127.0.0.2 up`); the web UI's
+  **Need another address?** guide shows the steps and tests the address. Verified on macOS.
 
 ### Environment variables
 
 | Variable | Effect |
 |---|---|
-| `DECKBRIDGE_BIND` | Bind address for the CORA servers (default `0.0.0.0`) |
+| `DECKBRIDGE_BIND` | Bind address for the CORA servers and the browser deck (default `0.0.0.0`) |
+| `DECKBRIDGE_DECK_PORT` | Browser deck page port (default `44660`, no fallback) |
 | `HIDAPI_LIB` | Path to a specific libhidapi |
 | `DECKBRIDGE_NATIVE_LIB` | Path to the deckbridge-native cdylib |
 | `DECKBRIDGE_TRAY_BIN` | Path to the tray helper binary |

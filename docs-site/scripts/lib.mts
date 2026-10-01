@@ -32,6 +32,7 @@ export const DOC_ROUTES: readonly string[] = [
   'devices',
   'getting-started',
   'features',
+  'browser-deck',
   'headless-linux',
   'troubleshooting',
   'virustotal',

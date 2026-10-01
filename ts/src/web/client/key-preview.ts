@@ -12,6 +12,9 @@ export interface KeyPreviewOptions {
   showIndex?: boolean;
   flash?: boolean;
   onKeyClick?: (index: number) => void;
+  /** 'click' (default): one click fires. 'dblclick': double-click or Enter/Space fires, so a
+   *  single click stays free (the simple view's dock card selects on it). */
+  gesture?: 'click' | 'dblclick';
 }
 
 const KEY_FLASH_MS = 200;
@@ -95,8 +98,14 @@ export class KeyPreview {
     for (let i = 0; i < this.keyCount; i++) this.refreshKey(i);
   }
 
-  setClickable(clickable: boolean): void {
-    for (const c of this.root.children) c.classList.toggle('clickable', clickable);
+  /** `title` (when given) becomes every cell's tooltip, e.g. why the grid is inert. */
+  setClickable(clickable: boolean, title?: string): void {
+    for (const c of this.root.children) {
+      c.classList.toggle('clickable', clickable);
+      if (title === undefined) continue;
+      if (title === '') c.removeAttribute('title');
+      else c.setAttribute('title', title);
+    }
   }
 
   refreshKey(index: number): void {
@@ -138,11 +147,22 @@ export class KeyPreview {
       cell.appendChild(idx);
     }
     const onKeyClick = this.opts.onKeyClick;
-    if (onKeyClick) {
-      cell.addEventListener('click', () => {
-        if (!cell.classList.contains('clickable')) return;
-        onKeyClick(index);
+    if (!onKeyClick) return cell;
+    const fire = (): void => {
+      if (cell.classList.contains('clickable')) onKeyClick(index);
+    };
+    if (this.opts.gesture === 'dblclick') {
+      cell.addEventListener('dblclick', fire);
+      // Handled on keydown: the dock card's own Enter/Space handler would otherwise swallow
+      // the keystroke before the button turns it into a click.
+      cell.addEventListener('keydown', (e) => {
+        if ((e.key !== 'Enter' && e.key !== ' ') || !cell.classList.contains('clickable')) return;
+        e.preventDefault();
+        e.stopPropagation();
+        if (!e.repeat) fire();
       });
+    } else {
+      cell.addEventListener('click', fire);
     }
     return cell;
   }

@@ -5,6 +5,8 @@ import type { Route, RouteContext } from './router.js';
 import { badRequest, css, html, js, json, noContent, readJson, text } from './http.js';
 import type { RawMockInput } from './mock-input.js';
 import { pushAdminRoutes } from './push-routes.js';
+import { virtualDeckRoutes } from './virtual-deck/virtual-deck-routes.js';
+import { pairingAddressRoutes } from './pairing-address-routes.js';
 import type { ExternalExpire } from '../contract.js';
 import { isNonNegInt, nonNegIntMessage } from './types.js';
 import type { MockDeviceConfig } from './types.js';
@@ -44,10 +46,6 @@ export const routes: Route[] = [
         postJson('/api/driver-mode', setDriverMode),
         postJson('/api/mock-config', setMockConfig),
         postJson('/api/device-model', setDeviceModel, 'invalid request'),
-        post('/api/key/:n', ({ ui, params }) => {
-          const err = ui.trySimulateKey(Number(params.n));
-          return err ? json({ error: err.error }, err.status) : noContent();
-        }),
         post('/api/mock/extra-key/:wireId', ({ ui, params }) =>
           simulate(ui, { kind: 'extraKey', wireId: Number(params.wireId) }),
         ),
@@ -59,6 +57,11 @@ export const routes: Route[] = [
         ),
       ]
     : []),
+  post('/api/key/:n', ({ ui, params }) => {
+    const err = ui.trySimulateKey(Number(params.n));
+    return err ? json({ error: err.error }, err.status) : noContent();
+  }),
+  postJson('/api/webui-key-press', setWebuiKeyPress),
   postJson('/api/brightness', setBrightness),
   postJson('/api/brightness-override', setBrightnessOverride),
   postJson('/api/select-dock', selectDock),
@@ -67,6 +70,8 @@ export const routes: Route[] = [
   postJson('/api/extra-key/preview', previewExtraKey),
   postJson('/api/extra-key/press', setExtraKeyPress),
   ...pushAdminRoutes,
+  ...virtualDeckRoutes,
+  ...pairingAddressRoutes,
   postJson('/api/touch-strip-mode', setTouchStripMode),
   postJson('/api/touch-strip-repaint', setTouchStripRepaint),
   postJson('/api/encoders', setEncoders),
@@ -194,6 +199,13 @@ function setMultiDeckRoute(
 ): Response {
   if (typeof enabled !== 'boolean') return badRequest('enabled must be a boolean');
   settingsFile.setMultiDeck(enabled);
+  return json({ ok: true, enabled });
+}
+
+/** WebUI Settings "Click to press" opt-in. */
+function setWebuiKeyPress({ enabled }: { enabled: unknown }, { settings }: RouteContext): Response {
+  if (typeof enabled !== 'boolean') return badRequest('enabled must be a boolean');
+  settings.setWebuiKeyPress(enabled);
   return json({ ok: true, enabled });
 }
 

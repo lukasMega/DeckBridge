@@ -19,6 +19,7 @@ import { DeviceTuningPanel } from '../src/web/client/simple/device-tuning.js';
 import { DiagnosticsPanel } from '../src/web/client/simple/diagnostics-panel.js';
 import { PushApiPanel } from '../src/web/client/simple/push-api-panel.js';
 import { MultiDeckPanel } from '../src/web/client/simple/multi-deck-panel.js';
+import { runDeckPage } from './client-deck.js';
 import { ElgatoAppPanel } from '../src/web/client/simple/elgato-app-panel.js';
 import { KeymapLearn } from '../src/web/client/simple/keymap-learn.js';
 import { DockList } from '../src/web/client/simple/dock-cards.js';
@@ -285,6 +286,7 @@ function runHydrateRegression(): void {
     logLevel: 'info',
     logFilePath: '',
     multiDeck: false,
+    keyPressEnabled: false,
     updateInfo: { enabled: true, current: '0.14.1', updateAvailable: true, latest: '0.15.0' },
     elgatoAutoRestart: { enabled: true, delayS: 10, supported: true },
   });
@@ -1125,6 +1127,7 @@ async function runKeymapAndDiagnosticsPanels(): Promise<void> {
   await runDiagnosticsPanel();
   await runMultiDeckPanel();
   await runPushApiPanel();
+  await runDeckPage(root, check);
   await runElgatoAutoRestartPanel();
   await runElgatoAutoRestartUnsupported();
 }

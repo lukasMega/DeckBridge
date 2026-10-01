@@ -14,6 +14,9 @@ your issue.
 ## Common problems
 
 - **Ports 5343/5344 busy** — stop a conflicting DeckBridge, Network Dock, or ESP32 bridge.
+- **Elgato app will not pair another dock** — it takes one dock per IP address; see
+  [one dock per IP address](./browser-deck.md#one-dock-per-ip-address).
+- **Browser deck problems** — see [Browser deck → Troubleshooting](./browser-deck.md#troubleshooting).
 - **No device found** — check the USB cable; on macOS grant Input Monitoring; on Linux
   install the [udev rule](./features.md#permissions).
 - **Missing libhidapi** — see the [requirements check](./features.md#requirements).

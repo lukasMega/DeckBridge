@@ -48,6 +48,8 @@ export interface StoreState {
   touchStripRepaintMs: number;
   encoders: EncoderSettings;
   updateInfo?: UpdateInfo;
+  /** Click-to-press opt-in (Settings); the preview grids are inert while off. */
+  keyPressEnabled: boolean;
   /** Push API store (WS `pushChannels`); the Push API panel seeds it over HTTP. */
   pushChannels: PushChannelView[];
 }
@@ -93,6 +95,7 @@ let state: StoreState = {
   touchStripRepaintMs: 0,
   encoders: {},
   updateInfo: undefined,
+  keyPressEnabled: false,
   pushChannels: [],
 };
 

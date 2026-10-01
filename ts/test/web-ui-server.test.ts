@@ -6,6 +6,7 @@ import {
   WebUIServer,
 } from '../src/web/server/web-ui-server.js';
 import { Broadcaster } from '../src/web/server/broadcaster.js';
+import { OWN_IP_CACHE_TTL_MS, resetOwnIpCache } from '../src/web/server/web-request-guard.js';
 import { saveSettings } from '../src/infra/settings-store.js';
 import type { Settings } from '../src/infra/settings-store.js';
 import type { DockStatus } from '../src/shared/types.js';
@@ -158,6 +159,22 @@ test('foreign IP literal (TEST-NET-3, never a real interface) → false', () => 
 
 test('DNS-rebinding domain still rejected (own-IP addition does not allow-any-Host)', () => {
   assert.ok(!isAllowedWebRequest('evil.example:3000', null, 3000));
+});
+
+test('the own-IP cache survives its TTL: still allowed after the refresh', () => {
+  if (!ownIp) return;
+  resetOwnIpCache();
+  const realNow = Date.now;
+  let t = realNow();
+  Date.now = () => t;
+  try {
+    assert.ok(isAllowedWebRequest(`${ownIp}:3000`, null, 3000), 'primes the cache');
+    t += OWN_IP_CACHE_TTL_MS + 1; // next call rebuilds it from the live interface list
+    assert.ok(isAllowedWebRequest(`${ownIp}:3000`, null, 3000));
+    assert.ok(!isAllowedWebRequest('203.0.113.5:3000', null, 3000));
+  } finally {
+    Date.now = realNow;
+  }
 });
 
 test('localhost/127.0.0.1/[::1] still allowed alongside own-IP support', () => {
