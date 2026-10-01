@@ -22,6 +22,7 @@ import {
 import type { DockStatus, ExtraKeyConfig } from '../shared/types.js';
 import type { UpdateState } from './update-check.js';
 import { encoderSettingsError } from '../shared/encoder-settings.js';
+import { PUSH_TOKENS_MAX, isPushTokenRecord, type PushTokenRecord } from './push-tokens.js';
 import { DockPrefs, defaultRuntimePrefs } from './dock-prefs.js';
 import type { DockPrefsStore } from './dock-prefs.js';
 
@@ -172,6 +173,7 @@ export class PersistedSettings implements DockPrefsStore {
   /** Prefs of a dock with no settings.json entry (mock mode, pre-connect). Never persisted. */
   readonly runtime = defaultRuntimePrefs();
   private devices: DeviceIdentitySettings[] = [];
+  private pushTokens: PushTokenRecord[] = [];
   private modelOverrides: Record<string, DeviceModelOverride> = {};
   /** Serializes writes: overlapping write+rename pairs could land out of order. */
   private saveChain: Promise<void> = Promise.resolve();
@@ -205,6 +207,17 @@ export class PersistedSettings implements DockPrefsStore {
       this.elgatoAutoRestartDelayS = clampAutoRestartDelayS(saved.elgatoAutoRestartDelayS);
     }
     this.modelOverrides = sanitizeModelOverrides(saved.modelOverrides);
+    if (Array.isArray(saved.pushTokens)) {
+      const valid = saved.pushTokens.filter(isPushTokenRecord);
+      this.pushTokens = valid.slice(0, PUSH_TOKENS_MAX);
+      if (valid.length !== saved.pushTokens.length) {
+        log(
+          'warn',
+          'settings',
+          `settings: dropped ${saved.pushTokens.length - valid.length} invalid push token(s)`,
+        );
+      }
+    }
     if (Array.isArray(saved.devices)) {
       saved.devices.forEach(stripInvalidDeviceSettings);
       this.devices = saved.devices
@@ -250,7 +263,8 @@ export class PersistedSettings implements DockPrefsStore {
   }
 
   json(): string {
-    return JSON.stringify(this.current(), null, 2);
+    // Export/import never carry credentials (JSON.stringify drops undefined).
+    return JSON.stringify({ ...this.current(), pushTokens: undefined }, null, 2);
   }
 
   /** Open settings.json in the OS default handler. Writes current settings
@@ -323,6 +337,15 @@ export class PersistedSettings implements DockPrefsStore {
   /** Persist the multi-deck opt-in (WebUI "Use two decks at once"). */
   setMultiDeck(enabled: boolean): void {
     this.multiDeck = enabled;
+    this.persist();
+  }
+
+  pushTokenRecords(): readonly PushTokenRecord[] {
+    return this.pushTokens;
+  }
+
+  setPushTokens(records: PushTokenRecord[]): void {
+    this.pushTokens = records;
     this.persist();
   }
 
@@ -427,6 +450,7 @@ export class PersistedSettings implements DockPrefsStore {
       ...(this.elgatoAutoRestartDelayS !== undefined
         ? { elgatoAutoRestartDelayS: this.elgatoAutoRestartDelayS }
         : {}),
+      ...(this.pushTokens.length > 0 ? { pushTokens: this.pushTokens } : {}),
       ...(this.devices.length > 0 ? { devices: this.devices } : {}),
       ...(Object.keys(this.modelOverrides).length > 0
         ? { modelOverrides: this.modelOverrides }

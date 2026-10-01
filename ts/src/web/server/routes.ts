@@ -4,6 +4,8 @@ import { get, post, postJson } from './router.js';
 import type { Route, RouteContext } from './router.js';
 import { badRequest, css, html, js, json, noContent, readJson, text } from './http.js';
 import type { RawMockInput } from './mock-input.js';
+import { pushAdminRoutes } from './push-routes.js';
+import type { ExternalExpire } from '../contract.js';
 import { isNonNegInt, nonNegIntMessage } from './types.js';
 import type { MockDeviceConfig } from './types.js';
 import {
@@ -64,6 +66,7 @@ export const routes: Route[] = [
   postJson('/api/extra-key/run', runExtraKeyNow),
   postJson('/api/extra-key/preview', previewExtraKey),
   postJson('/api/extra-key/press', setExtraKeyPress),
+  ...pushAdminRoutes,
   postJson('/api/touch-strip-mode', setTouchStripMode),
   postJson('/api/touch-strip-repaint', setTouchStripRepaint),
   postJson('/api/encoders', setEncoders),
@@ -236,6 +239,8 @@ interface ExtraKeyBody {
   intervalMs?: unknown;
   timeoutMs?: unknown;
   pluginArg?: unknown;
+  expire?: unknown;
+  fallbackText?: unknown;
   style?: unknown;
 }
 
@@ -250,7 +255,7 @@ function extraKeyBodyError(body: ExtraKeyBody): string | null {
 function setExtraKey(body: ExtraKeyBody, { extraKeys }: RouteContext): Response {
   const invalid = extraKeyBodyError(body);
   if (invalid) return badRequest(invalid);
-  const { wireId, widget, param, intervalMs, timeoutMs, pluginArg } = body;
+  const { wireId, widget, param, intervalMs, timeoutMs, pluginArg, expire, fallbackText } = body;
   const style = body.style === undefined ? {} : compactTextStyle(body.style as ExtraKeyTextStyle);
   const cfg: ExtraKeyConfig = {
     widget: widget as ExtraKeyWidget,
@@ -258,6 +263,8 @@ function setExtraKey(body: ExtraKeyBody, { extraKeys }: RouteContext): Response 
     ...(typeof intervalMs === 'number' ? { intervalMs } : {}),
     ...(typeof timeoutMs === 'number' ? { timeoutMs } : {}),
     ...(typeof pluginArg === 'string' && pluginArg ? { pluginArg } : {}),
+    ...(typeof expire === 'string' ? { expire: expire as ExternalExpire } : {}),
+    ...(typeof fallbackText === 'string' && fallbackText ? { fallbackText } : {}),
     ...(Object.keys(style).length > 0 ? { style } : {}),
   };
   const err = extraKeys.trySet(wireId as number, cfg);

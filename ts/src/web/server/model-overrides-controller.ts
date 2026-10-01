@@ -13,7 +13,7 @@ import {
 } from '../../devices/model-overrides.js';
 import type { OverrideChangeKind } from '../../devices/model-overrides.js';
 import { overridesDisabled } from '../../shared/cli.js';
-import type { DeviceOverridesView } from '../contract.js';
+import type { DeviceOverridesView } from '../contract-tuning.js';
 
 export class ModelOverridesController {
   constructor(

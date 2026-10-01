@@ -272,11 +272,11 @@ only case that needs a system libhidapi installed.
 | **5343** | `0.0.0.0` (LAN) | CORA main server — the Elgato app connects here |
 | **5344** | `0.0.0.0` (LAN) | CORA child server — image / data channel |
 | **5345–5350** | `0.0.0.0` (LAN) | Extra decks — each additional device gets its own CORA pair at +2 per device (max 3 extras) |
-| **3000** | `127.0.0.1` only | Web UI |
+| **3000** | `127.0.0.1` (LAN with `--bind`) | Web UI and [Push API](./push-api.md) |
 | mDNS `_elg._tcp` | LAN | Service discovery ("Network Stream Deck") |
 
-Set `DECKBRIDGE_BIND=127.0.0.1` to restrict the CORA ports to the local machine. The web
-UI is always localhost-only.
+Set `DECKBRIDGE_BIND` (or `--bind`) to change the listen address; it moves both the CORA
+ports and the Web UI. The Web UI binds `127.0.0.1` unless you pass `--bind`.
 
 ## Limitations
 

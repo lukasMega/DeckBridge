@@ -8,7 +8,13 @@ import type {
   ExtraKeyWidget,
   PluginStatus,
 } from '../ui-types.js';
-import { ConfigButton, paramPlaceholder, postExtraKey, PARAM_MAX } from './extra-keys-popovers.js';
+import {
+  ConfigButton,
+  paramPlaceholder,
+  postExtraKey,
+  PARAM_MAX,
+  CHANNEL_MAX,
+} from './extra-keys-popovers.js';
 import { CommandInput } from './command-input.js';
 import { fire } from '../lib/ui-api.js';
 
@@ -20,6 +26,7 @@ const WIDGET_OPTIONS: ReadonlyArray<{ value: ExtraKeyWidget; label: string }> = 
   { value: 'weather', label: 'Weather (°C)' },
   { value: 'command', label: 'Command output' },
   { value: 'plugin', label: 'Plugin (JS)' },
+  { value: 'external', label: 'Push API (external)' },
 ];
 
 const PLUGIN_CUSTOM = '__custom__';
@@ -27,6 +34,7 @@ const PLUGIN_CUSTOM = '__custom__';
 const PARAM_NOUN: Partial<Record<ExtraKeyWidget, string>> = {
   weather: 'location',
   command: 'command',
+  external: 'channel',
 };
 
 export interface PluginFiles {
@@ -37,6 +45,11 @@ export interface PluginFiles {
 /** Widget has a value input or a config popover (i.e. more than the select). */
 export function hasWidgetValue(widget: ExtraKeyWidget): boolean {
   return widget !== 'none' && widget !== 'clock' && widget !== 'date';
+}
+
+function normalizeParam(widget: ExtraKeyWidget, raw: string): string {
+  if (widget === 'text') return raw.replaceAll('\\n', '\n');
+  return widget === 'external' ? raw.trim().toLowerCase() : raw;
 }
 
 // change (not input) — commits on blur/Enter. Only text widget maps "\n" to real line break.
@@ -54,15 +67,18 @@ function ParamInput({
   cfg?: ExtraKeyCfg;
 }>): preact.JSX.Element {
   const isText = widget === 'text';
+  const isChannel = widget === 'external';
   const handleParam = (e: Event): void => {
     const raw = (e.target as HTMLInputElement).value;
     postExtraKey(
       wireId,
       {
         widget,
-        param: isText ? raw.replaceAll('\\n', '\n') : raw,
+        param: normalizeParam(widget, raw),
         intervalMs: cfg?.intervalMs,
         timeoutMs: cfg?.timeoutMs,
+        expire: cfg?.expire,
+        fallbackText: cfg?.fallbackText,
       },
       cfg,
     );
@@ -71,7 +87,7 @@ function ParamInput({
     <input
       class="input xkey-select xkey-param"
       type="text"
-      maxLength={PARAM_MAX}
+      maxLength={isChannel ? CHANNEL_MAX : PARAM_MAX}
       value={isText ? param.replaceAll('\n', '\\n') : param}
       placeholder={paramPlaceholder(widget)}
       aria-label={`${label} side key ${PARAM_NOUN[widget] ?? 'text'}`}
@@ -187,6 +203,7 @@ export function WidgetSelect({
         param: next === widget ? (cfg?.param ?? '') : undefined,
         intervalMs: cfg?.intervalMs,
         timeoutMs: cfg?.timeoutMs,
+        ...(next === widget ? { expire: cfg?.expire, fallbackText: cfg?.fallbackText } : {}),
       },
       cfg,
     );
@@ -223,8 +240,9 @@ export function WidgetValue({
 }>): preact.JSX.Element {
   const widget = cfg?.widget ?? 'none';
   const param = cfg?.param ?? '';
-  const hasParam = widget === 'text' || widget === 'weather' || widget === 'command';
-  const hasConfig = widget === 'command' || widget === 'plugin';
+  const hasParam =
+    widget === 'text' || widget === 'weather' || widget === 'command' || widget === 'external';
+  const hasConfig = widget === 'command' || widget === 'plugin' || widget === 'external';
   return (
     <>
       <div class={hasConfig ? 'xkey-value' : 'xkey-value xkey-wide'}>

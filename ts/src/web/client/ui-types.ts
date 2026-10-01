@@ -4,12 +4,12 @@
 export type {
   ClientApp,
   CommEntry as CommLog,
-  DeviceOverridesView,
   DockStatus as DockUi,
   ElgatoAutoRestartState,
   EncoderCommands,
   EncoderSettings,
   ExtraKeyConfig as ExtraKeyCfg,
+  ExternalExpire,
   ExtraKeyPreview,
   ExtraKeyPreviewResponse,
   ExtraKeyPressAction,
@@ -21,6 +21,9 @@ export type {
   MockDeviceConfig as MockConfig,
   PluginStatus,
   PluginsInfo,
+  PushChannelView,
+  PushTokenCreated,
+  PushTokenView,
   StateResponse,
   Stats,
   StatusSnapshot as Status,
@@ -32,9 +35,12 @@ export type {
   TouchImageMsg,
   TouchStripMode,
   TouchStripSize,
-  TuningCropRect as DeviceCropRect,
-  TuningImage as DeviceImageOverride,
   UpdateInfo,
   WidgetDisplayInfo,
   WsEvents,
 } from '../contract.js';
+export type {
+  DeviceOverridesView,
+  TuningCropRect as DeviceCropRect,
+  TuningImage as DeviceImageOverride,
+} from '../contract-tuning.js';

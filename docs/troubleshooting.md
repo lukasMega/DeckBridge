@@ -63,6 +63,15 @@ commands, plugin arguments, local paths — because that is often the buggy part
 commands out: `./deckbridge diagnose --redact-commands`, or tick **Hide my commands** in
 the web UI. See also [Privacy](./privacy.md).
 
+Push-API tokens appear in the report without their hashes.
+
+## Push API errors
+
+- **401** — missing or unknown token. Create one in Settings → Push API and send `Authorization: Bearer dbp_…`.
+- **403** — the request carried a browser `Origin` header, or the token lacks the `push` scope.
+- **429** — too many requests, or too many failed attempts from one address. Wait `Retry-After` seconds.
+- The key shows `…` — nothing was pushed to its channel since DeckBridge started, or the value was deleted.
+
 ## Update check
 
 DeckBridge checks GitHub for a newer release on startup and every 24h — notify only,

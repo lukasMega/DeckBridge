@@ -21,6 +21,7 @@ import type { CoraDockFactory } from './dock-scanner-deps.js';
 import { isElgatoAppRunning, openPathInOS, platformName } from '../infra/os-utils.ts';
 import { parseCli, userArgs, applyFlagsToEnv, versionText, USAGE_TEXT } from '../shared/cli.js';
 import { runDevicesCommand } from '../cli/devices.js';
+import { runPushCommand } from '../cli/push.js';
 import { runDiagnoseCommand } from '../cli/diagnose.js';
 import { PersistedSettings } from '../infra/settings.js';
 import { createDailyPing, sendBeacon } from '../infra/daily-ping.js';
@@ -47,6 +48,7 @@ if (cli.command === 'help') {
   console.log(USAGE_TEXT);
   tjs.exit(0);
 }
+if (cli.command === 'push') tjs.exit(await runPushCommand(cli.rest ?? []));
 if (cli.command === 'devices') {
   await runDevicesCommand();
   tjs.exit(0);
@@ -320,6 +322,9 @@ if (__MOCK_BUILD__) {
 webui.on('extraKeyChanged', (dock: number) => {
   driverManager.dock(dock)?.repaintWidgets();
 });
+
+// A pushed channel changed (coalesced by PushController): paint only what changed.
+webui.on('pushChanged', () => driverManager.paintChangedWidgets());
 
 webui.on('extraKeyRunNow', (dock: number, wireId: number) => {
   driverManager.dock(dock)?.forceRunWidget(wireId);

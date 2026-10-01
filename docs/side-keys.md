@@ -23,6 +23,7 @@ Side keys show live previews. Touch strip previews also work as tabs: select a z
 | **Weather (°C)** | Current temperature | Coordinates such as `50.08,14.43` |
 | **Command output** | Shell command output | Enter a command |
 | **Plugin (JS)** | Custom value | Choose a plugin file |
+| **Push API (external)** | Text sent by another tool | Enter a channel name; see [Push API](./push-api.md) |
 
 ### Weather
 

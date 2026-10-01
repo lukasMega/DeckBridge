@@ -181,6 +181,11 @@ export class DriverManager extends EventEmitter {
     return this.docks.get(index);
   }
 
+  /** A pushed channel changed: every dock paints what changed (unbound keys cost a compare). */
+  paintChangedWidgets(): void {
+    for (const dock of this.docks.values()) dock.paintChangedWidgets();
+  }
+
   /** The live dock serving `deviceKey`, if any. */
   dockForDevice(deviceKey: string): Dock | undefined {
     for (const dock of this.docks.values()) if (dock.identity?.deviceKey === deviceKey) return dock;

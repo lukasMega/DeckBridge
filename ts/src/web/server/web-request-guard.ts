@@ -21,6 +21,16 @@ function ownInterfaceAddresses(): string[] {
   return ownInterfaceIps;
 }
 
+/** The Origin half of the guard: a browser-sent Origin must name this WebUI. Also the first
+ *  check of the token-authenticated push API, which skips the Host check. */
+export function isAllowedOrigin(origin: string, port: number): boolean {
+  const originLower = origin.toLowerCase();
+  const candidates: readonly string[] = [...ALLOWED_HOSTNAMES, ...ownInterfaceAddresses()];
+  return candidates.some(
+    (h) => originLower === `http://${h}` || originLower === `http://${h}:${port}`,
+  );
+}
+
 // Guards against DNS rebinding and cross-site requests (CSRF/WS hijack): the WebUI binds to
 // 127.0.0.1 by default, but without these checks any website open in the user's browser could
 // still reach it via a rebound hostname or a cross-origin fetch/WebSocket.
@@ -48,17 +58,7 @@ export function isAllowedWebRequest(
     return false;
   }
 
-  if (origin !== null) {
-    const originLower = origin.toLowerCase();
-    if (
-      !candidates.some(
-        (h) => originLower === `http://${h}` || originLower === `http://${h}:${port}`,
-      )
-    ) {
-      return false;
-    }
-  }
-
+  if (origin !== null && !isAllowedOrigin(origin, port)) return false;
   return true;
 }
 

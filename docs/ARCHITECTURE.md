@@ -160,7 +160,14 @@ filling, since diagnostics reads them directly.
 The CORA servers (5343/5344) listen on **all interfaces** (`0.0.0.0`) with **no
 authentication** — protocol-inherent, as the real Elgato Network Dock has none either. Any LAN host
 can connect, push images, and read key events. Set `DECKBRIDGE_BIND` (e.g. `127.0.0.1`) to restrict
-the listen address. The WebUI (3000) ignores `DECKBRIDGE_BIND` and always binds `127.0.0.1`.
+the listen address. The WebUI (3000) binds `127.0.0.1` by default; `--bind`/`DECKBRIDGE_BIND` moves
+both the CORA servers and the WebUI.
+
+`/api/push/*` is the one token-authenticated path (bearer token, `Origin` must be absent or the
+WebUI's own, no `Host` check; see [push-api.md](push-api.md)). A token authorizes nothing else, and
+the admin routes stay unauthenticated on a LAN bind. A push flows: route → `PushController` →
+in-memory `PushChannels` store → coalesced `pushChanged` event → `ExtraKeyWidgets.paintChanged()`,
+which repaints only keys whose content changed. The CORA servers are never touched.
 
 To reduce session-stealing, an actively-used CORA connection (sent data within
 `CLIENT_EVICTION_GRACE_MS`, default 10 s) can't be evicted by a new connection — the newcomer's

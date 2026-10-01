@@ -2,6 +2,7 @@
 // scheduler (extra-keys.ts) and its tests share one source of truth.
 import type { WidgetLine } from '../shared/widget-layout.js';
 import type { ExtraKeyConfig } from '../shared/types.js';
+import type { ExternalView } from '../shared/push-channels.js';
 import type { PluginStatus } from '../plugin/plugin-host.js';
 
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] as const;
@@ -19,6 +20,8 @@ export interface WidgetContext {
   pluginValue?: string | null;
   /** plugin widget: the key's plugin run status (ERR/disabled → 'ERR' on the key). */
   pluginStatus?: PluginStatus;
+  /** external widget: the pushed channel's current state; undefined = waiting. */
+  external?: ExternalView;
 }
 
 const MAX_TEXT_LINES = 4;
@@ -39,6 +42,14 @@ function textLines(s: string): WidgetLine[] | null {
   if (lines.length === 0) return null;
   const big = lines.length === 1 && lines[0]!.length <= 5;
   return lines.map((text) => ({ text, big }));
+}
+
+function externalLines(cfg: ExtraKeyConfig, v: ExternalView): WidgetLine[] | null {
+  if (v.state === 'waiting') return [{ text: '…', big: true }];
+  if (v.state === 'live') return textLines(v.value.text);
+  if ((cfg.expire ?? 'dim') === 'blank') return null;
+  if (cfg.expire === 'text') return textLines(cfg.fallbackText ?? '--');
+  return textLines(v.value.text); // 'dim': dimmed by the scheduler's style
 }
 
 /** The lines a widget shows right now, or null to clear the key ('none'). */
@@ -70,6 +81,8 @@ export function renderWidgetLines(cfg: ExtraKeyConfig, ctx: WidgetContext): Widg
       }
       if (ctx.pluginValue === undefined) return [{ text: '…', big: true }];
       return ctx.pluginValue === null ? null : textLines(ctx.pluginValue);
+    case 'external':
+      return externalLines(cfg, ctx.external ?? { state: 'waiting' });
     case 'none':
       return null;
   }

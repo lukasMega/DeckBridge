@@ -149,9 +149,9 @@ export default defineConfig([
       'boundaries/elements': [
         { type: 'web-client', mode: 'full', pattern: 'src/web/client/**' },
         { type: 'web-server', mode: 'full', pattern: 'src/web/server/**' },
-        // Zero-import leaf of HTTP/WS wire DTOs; the single G1 exception (type-only)
+        // Zero-import leaf of HTTP/WS wire DTOs (contract.ts + contract-tuning.ts); the single G1 exception (type-only)
         // so browser and server share one declaration instead of mirroring each other.
-        { type: 'web-contract', mode: 'full', pattern: 'src/web/contract.ts' },
+        { type: 'web-contract', mode: 'full', pattern: 'src/web/contract*.ts' },
         { type: 'ffi', mode: 'full', pattern: 'src/ffi/**' },
         { type: 'platform', mode: 'full', pattern: 'src/platform/**' },
         { type: 'assets', mode: 'full', pattern: 'src/assets/**' },

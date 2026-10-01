@@ -290,6 +290,11 @@ export class Dock {
     this.widgets?.repaint();
   }
 
+  /** A pushed channel changed: paint only widgets whose content changed. */
+  paintChangedWidgets(): void {
+    this.widgets?.paintChanged();
+  }
+
   /** Repaint the extra-key widgets (reinit / WebUI config change). */
   repaintWidgets(): void {
     this.widgets?.repaint();

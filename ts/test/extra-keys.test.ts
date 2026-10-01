@@ -1,4 +1,5 @@
 import assert from 'tjs:assert';
+import type { ExternalView, PushedValue } from '../src/shared/push-channels.js';
 import { ExtraKeyWidgets, FLASH_MS } from '../src/main/extra-keys.js';
 import { renderWidgetLines } from '../src/main/widget-lines.js';
 import { parseLatLon, WEATHER_FORCE_MIN_MS } from '../src/main/widget-refresh.js';
@@ -863,6 +864,75 @@ await test('both flags: flash first, then "…" until done; repaint-only widgets
   await runner.finishNext('B');
   w.stop();
   assert.deepEqual(lines.at(-2), ['B'], 'command result (then the text key)');
+});
+
+console.log('\nexternal (push) widget');
+
+class FakePush {
+  v: ExternalView = { state: 'waiting' };
+  view(): ExternalView {
+    return this.v;
+  }
+}
+
+const liveValue = (text: string, extra: Partial<PushedValue> = {}): PushedValue => ({
+  text,
+  updatedAt: 0,
+  expiresAt: null,
+  ...extra,
+});
+
+test('renderWidgetLines external: waiting, live, expired dim/blank/text', () => {
+  const cfg = (c: Partial<ExtraKeyConfig> = {}): ExtraKeyConfig => ({
+    widget: 'external',
+    param: 'a',
+    ...c,
+  });
+  const ctx = (external: ExternalView): { now: Date; external: ExternalView } => ({
+    now: NOW,
+    external,
+  });
+  assert.deepEqual(renderWidgetLines(cfg(), { now: NOW }), [{ text: '…', big: true }]);
+  assert.deepEqual(renderWidgetLines(cfg(), ctx({ state: 'live', value: liveValue('OK') })), [
+    { text: 'OK', big: true },
+  ]);
+  const expired: ExternalView = { state: 'expired', value: liveValue('OK') };
+  assert.deepEqual(renderWidgetLines(cfg(), ctx(expired)), [{ text: 'OK', big: true }]);
+  assert.equal(renderWidgetLines(cfg({ expire: 'blank' }), ctx(expired)), null);
+  assert.deepEqual(renderWidgetLines(cfg({ expire: 'text', fallbackText: 'off' }), ctx(expired)), [
+    { text: 'off', big: true },
+  ]);
+  assert.deepEqual(renderWidgetLines(cfg({ expire: 'text' }), ctx(expired)), [
+    { text: '--', big: true },
+  ]);
+});
+
+test('paintChanged paints only changed keys; same text twice sends nothing; before start is a no-op', () => {
+  const d = new FakeDriver();
+  const push = new FakePush();
+  const cfgs: Record<number, ExtraKeyConfig> = {
+    16: { widget: 'external', param: 'a' },
+    17: { widget: 'text', param: 'static' },
+  };
+  const w = new ExtraKeyWidgets(d, (id) => cfgs[id], undefined, undefined, undefined, { push });
+  w.paintChanged();
+  assert.equal(d.splashed.length, 0, 'no-op before start');
+  w.start();
+  const painted = d.splashed.length;
+  assert.equal(painted, 2, 'waiting placeholder + static text');
+  push.v = { state: 'live', value: liveValue('REC') };
+  w.paintChanged();
+  assert.equal(d.splashed.length, painted + 1);
+  assert.equal(d.splashed.at(-1)!.keyIndex, 16);
+  w.paintChanged();
+  assert.equal(d.splashed.length, painted + 1, 'unchanged text sends nothing');
+  push.v = { state: 'live', value: liveValue('REC', { color: '#ff0000' }) };
+  w.paintChanged();
+  assert.equal(d.splashed.length, painted + 2, 'colour-only push repaints');
+  push.v = { state: 'expired', value: liveValue('REC') };
+  w.paintChanged();
+  assert.equal(d.splashed.length, painted + 3, 'expiry flips to the dim style once');
+  w.stop();
 });
 
 summary();

@@ -31,6 +31,7 @@ const sidebars: SidebarsConfig = {
     'adding-a-device',
     'side-keys',
     'plugin-widgets',
+    'push-api',
     'hidapi-ffi',
     'image-flow',
     'references',

@@ -6,6 +6,7 @@ import { HELP } from '../ui-help.js';
 import { Collapsible } from '../components/Collapsible.js';
 import { IdentityRow } from '../components/IdentityRow.js';
 import { DiagnosticsPanel } from './diagnostics-panel.js';
+import { PushApiPanel } from './push-api-panel.js';
 import { MultiDeckPanel } from './multi-deck-panel.js';
 import { UpdatePanel } from './update-panel.js';
 import { ElgatoAppPanel } from './elgato-app-panel.js';
@@ -362,6 +363,7 @@ export function SettingsPage({ onBack }: Readonly<{ onBack: () => void }>): prea
       <RealIdentityList realIdentity={realIdentity} />
 
       <MultiDeckPanel enabled={state.data ? state.data.multiDeck : null} />
+      <PushApiPanel />
       <UpdatePanel info={updateInfoFor(state.data)} />
       <ElgatoAppPanel state={elgatoAutoRestartFor(state.data)} />
       <DiagnosticsPanel {...diagnosticsProps(state.data)} />
