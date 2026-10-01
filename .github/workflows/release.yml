@@ -65,7 +65,7 @@ jobs:
 
   build:
     name: Build ${{ matrix.platform }}
-    needs: [prepare, virustotal-poc]
+    needs: prepare
     if: needs.prepare.outputs.should_build == 'true'
     strategy:
       fail-fast: false
@@ -202,7 +202,7 @@ jobs:
   # Windows ships both portable ZIP and Tauri NSIS installer.
   build-windows:
     name: Build windows-x86_64 (NSIS + portable)
-    needs: [prepare, virustotal-poc]
+    needs: prepare
     if: needs.prepare.outputs.should_build == 'true'
     runs-on: windows-latest
     # Windows downloads txiki.js; source build is unverified on MSVC.
