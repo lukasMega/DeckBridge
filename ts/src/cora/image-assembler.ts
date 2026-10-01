@@ -136,6 +136,10 @@ function dropMalformed<K extends number | string>(
   budget?: AssemblyBudget,
 ): void {
   discard(pages, keyIndex, budget);
+  warnMalformed(keyIndex, label, reason);
+}
+
+function warnMalformed(keyIndex: number | string, label: string, reason: string): void {
   const throttleKey = `${label}:${reason}`;
   const now = Date.now();
   const state = malformedWarnState.get(throttleKey);
@@ -313,7 +317,7 @@ export interface PartialWindowEvent extends TouchWindowRegion {
  *  that rectangle so interleaved regions cannot mix. Returns the region on the last
  *  chunk, null otherwise. */
 export function assemblePartialWindowChunk(
-  pages: Map<string, ImageAssembly>,
+  pages: Map<number, ImageAssembly>,
   pkt: Buffer,
   budget?: AssemblyBudget,
 ): PartialWindowEvent | null {
@@ -322,20 +326,20 @@ export function assemblePartialWindowChunk(
   const y = pkt.readUInt16LE(PARTIAL_WINDOW_Y_OFFSET);
   const w = pkt.readUInt16LE(PARTIAL_WINDOW_W_OFFSET);
   const h = pkt.readUInt16LE(PARTIAL_WINDOW_H_OFFSET);
-  const key = `${x}:${y}:${w}:${h}`;
   if (w === 0 || h === 0 || x + w > PLUS_TOUCH_WIDTH || y + h > PLUS_TOUCH_HEIGHT) {
-    dropMalformed(pages, key, PARTIAL_WINDOW_LABEL, 'region outside the 800×100 window', budget);
+    warnMalformed(`${x}:${y}:${w}:${h}`, PARTIAL_WINDOW_LABEL, 'region outside the 800×100 window');
     return null;
   }
+  // Valid rectangles fit 34 bits: arithmetic avoids 32-bit bitwise truncation.
+  const key = ((x * 128 + y) * 1024 + w) * 128 + h;
   const isLast = pkt[PARTIAL_WINDOW_LAST_OFFSET] === IMAGE_CHUNK_LAST_FLAG;
   const bodyLength = pkt.readUInt16LE(PARTIAL_WINDOW_SIZE_OFFSET);
   if (bodyLength > pkt.length - PARTIAL_WINDOW_HEADER_SIZE) {
-    dropMalformed(
-      pages,
-      key,
+    discard(pages, key, budget);
+    warnMalformed(
+      `${x}:${y}:${w}:${h}`,
       PARTIAL_WINDOW_LABEL,
       'declared body length exceeds the packet',
-      budget,
     );
     return null;
   }

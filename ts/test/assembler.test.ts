@@ -25,6 +25,9 @@ import {
   PARTIAL_WINDOW_SIZE_OFFSET,
 } from '../src/cora/protocol.js';
 
+import { TouchStripAssembler } from '../src/cora/touch-strip-assembler.js';
+import { IMG_CMD_WINDOW_PARTIAL } from '../src/cora/protocol.js';
+
 import { test, summary } from './helpers/harness.js';
 
 function makeChunkPkt(keyIndex: number, partIndex: number, isLast: boolean, data: Buffer): Buffer {
@@ -461,6 +464,8 @@ test('gen1: after a drop, a normal small image for the same key still assembles'
 
 console.log('\npartial-window assembler');
 
+const ignoreTouchLog = (): void => {};
+
 function makePartialWindowChunk(
   x: number,
   y: number,
@@ -483,7 +488,7 @@ function makePartialWindowChunk(
 }
 
 test('partial window: single-chunk region assembles with its rectangle', () => {
-  const pages = new Map<string, ImageAssembly>();
+  const pages = new Map<number, ImageAssembly>();
   const payload = Buffer.from([0xff, 0xd8, 0xff, 0xd9]); // JPEG-ish
   const result = assemblePartialWindowChunk(
     pages,
@@ -500,7 +505,7 @@ test('partial window: single-chunk region assembles with its rectangle', () => {
 });
 
 test('partial window: multi-chunk region reassembles in order', () => {
-  const pages = new Map<string, ImageAssembly>();
+  const pages = new Map<number, ImageAssembly>();
   assemblePartialWindowChunk(
     pages,
     makePartialWindowChunk(0, 0, 800, 100, false, Buffer.from('abc')),
@@ -517,7 +522,7 @@ test('partial window: multi-chunk region reassembles in order', () => {
 });
 
 test('partial window: two interleaved regions do not mix', () => {
-  const pages = new Map<string, ImageAssembly>();
+  const pages = new Map<number, ImageAssembly>();
   assemblePartialWindowChunk(
     pages,
     makePartialWindowChunk(0, 0, 100, 100, false, Buffer.from('LL')),
@@ -545,7 +550,7 @@ test('partial window: two interleaved regions do not mix', () => {
 
 test('partial window: regions outside the 800×100 window or empty are dropped', () => {
   resetMalformedWarnThrottle();
-  const pages = new Map<string, ImageAssembly>();
+  const pages = new Map<number, ImageAssembly>();
   const body = Buffer.from('x');
   for (const [x, y, w, h] of [
     [0, 0, 0, 100], // zero width
@@ -563,7 +568,7 @@ test('partial window: regions outside the 800×100 window or empty are dropped',
 });
 
 test('partial window: declared body longer than the packet is dropped', () => {
-  const pages = new Map<string, ImageAssembly>();
+  const pages = new Map<number, ImageAssembly>();
   const pkt = makePartialWindowChunk(0, 0, 100, 100, true, Buffer.from('ab'));
   pkt.writeUInt16LE(pkt.length, PARTIAL_WINDOW_SIZE_OFFSET);
   assert.equal(assemblePartialWindowChunk(pages, pkt), null);
@@ -571,7 +576,7 @@ test('partial window: declared body longer than the packet is dropped', () => {
 });
 
 test('partial window: in-flight regions are capped, oldest evicted', () => {
-  const pages = new Map<string, ImageAssembly>();
+  const pages = new Map<number, ImageAssembly>();
   // Never-finished regions with distinct rectangles — the flood a hostile peer sends.
   for (let i = 0; i < MAX_PARTIAL_WINDOW_ASSEMBLIES + 5; i++) {
     assemblePartialWindowChunk(
@@ -580,8 +585,166 @@ test('partial window: in-flight regions are capped, oldest evicted', () => {
     );
   }
   assert.equal(pages.size, MAX_PARTIAL_WINDOW_ASSEMBLIES);
-  assert.equal(pages.has('0:0:10:10'), false); // oldest gone
-  assert.equal(pages.has(`${MAX_PARTIAL_WINDOW_ASSEMBLIES + 4}:0:10:10`), true);
+  assert.equal(pages.has(10 * 128 + 10), false); // oldest gone
+  assert.equal(pages.has(((MAX_PARTIAL_WINDOW_ASSEMBLIES + 4) * 128 * 1024 + 10) * 128 + 10), true);
+});
+
+test('partial window: every rectangle field preserves independent assemblies', () => {
+  const pages = new Map<number, ImageAssembly>();
+  const rectangles = [
+    [0, 0, 1, 1],
+    [1, 0, 1, 1],
+    [0, 1, 1, 1],
+    [0, 0, 2, 1],
+    [0, 0, 1, 2],
+    [0, 0, 800, 100],
+    [799, 99, 1, 1],
+    [256, 0, 1, 1],
+  ] as const;
+  for (const [index, [x, y, w, h]] of rectangles.entries()) {
+    assert.equal(
+      assemblePartialWindowChunk(
+        pages,
+        makePartialWindowChunk(x, y, w, h, false, Buffer.from([index])),
+      ),
+      null,
+    );
+  }
+  assert.equal(pages.size, rectangles.length);
+  // x=256 differs by 2^32 from x=0; bitwise packing would collide.
+  for (let index = rectangles.length - 1; index >= 0; index--) {
+    const [x, y, w, h] = rectangles[index]!;
+    const result = assemblePartialWindowChunk(
+      pages,
+      makePartialWindowChunk(x, y, w, h, true, Buffer.from([255])),
+    );
+    assert.deepEqual(result && { x: result.x, y: result.y, w: result.w, h: result.h }, {
+      x,
+      y,
+      w,
+      h,
+    });
+    assert.deepEqual(result && [...result.data], [index, 255]);
+  }
+  assert.equal(pages.size, 0);
+});
+
+test('partial window: invalid rectangles cannot alias or evict valid assemblies', () => {
+  const pages = new Map<number, ImageAssembly>();
+  const budget = new AssemblyBudget();
+  for (let x = 0; x < MAX_PARTIAL_WINDOW_ASSEMBLIES; x++) {
+    assemblePartialWindowChunk(
+      pages,
+      makePartialWindowChunk(x, 1, 1, 1, false, Buffer.from('ok')),
+      budget,
+    );
+  }
+  captureWarnings(() => {
+    for (const [x, y, w, h] of [
+      [0, 0, 1025, 1], // Carries into y=1, w=1 without validation.
+      [0, 1, 0, 1],
+      [0, 1, 1, 0],
+      [0, 1, 1, 129],
+      [0, 129, 1, 1],
+      [800, 1, 1, 1],
+      [65535, 65535, 65535, 65535],
+    ] as const) {
+      assert.equal(
+        assemblePartialWindowChunk(
+          pages,
+          makePartialWindowChunk(x, y, w, h, true, Buffer.from('bad')),
+          budget,
+        ),
+        null,
+      );
+    }
+  });
+  assert.equal(pages.size, MAX_PARTIAL_WINDOW_ASSEMBLIES);
+  assert.equal(budget.bytes, MAX_PARTIAL_WINDOW_ASSEMBLIES * 2);
+  for (let x = 0; x < MAX_PARTIAL_WINDOW_ASSEMBLIES; x++) {
+    const result = assemblePartialWindowChunk(
+      pages,
+      makePartialWindowChunk(x, 1, 1, 1, true, Buffer.from('!')),
+      budget,
+    );
+    assert.equal(result!.data.toString(), 'ok!');
+  }
+  assert.equal(budget.bytes, 0);
+});
+
+test('partial window: malformed payload releases only its rectangle budget', () => {
+  resetMalformedWarnThrottle();
+  const pages = new Map<number, ImageAssembly>();
+  const budget = new AssemblyBudget();
+  for (const x of [0, 100]) {
+    assemblePartialWindowChunk(
+      pages,
+      makePartialWindowChunk(x, 0, 100, 100, false, Buffer.from('ok')),
+      budget,
+    );
+  }
+  const malformed = makePartialWindowChunk(0, 0, 100, 100, true, Buffer.from('bad'));
+  malformed.writeUInt16LE(malformed.length, PARTIAL_WINDOW_SIZE_OFFSET);
+  const warnings = captureWarnings(() => {
+    assert.equal(assemblePartialWindowChunk(pages, malformed, budget), null);
+  });
+  assert.ok(warnings.some((line) => line.includes('key 0:0:100:100')));
+  assert.equal(pages.size, 1);
+  assert.equal(budget.bytes, 2);
+  const result = assemblePartialWindowChunk(
+    pages,
+    makePartialWindowChunk(100, 0, 100, 100, true, Buffer.from('!')),
+    budget,
+  );
+  assert.equal(result!.data.toString(), 'ok!');
+  assert.equal(budget.bytes, 0);
+});
+
+test('partial window: numeric owners survive budget eviction and stale expiry', () => {
+  for (const stale of [false, true]) {
+    const pages = new Map<number, ImageAssembly>();
+    const budget = new AssemblyBudget(stale ? 100 : 2, stale ? 0 : 60_000);
+    captureWarnings(() => {
+      for (const x of [799, 798]) {
+        assemblePartialWindowChunk(
+          pages,
+          makePartialWindowChunk(x, 99, 1, 1, false, Buffer.from('ok')),
+          budget,
+        );
+      }
+    });
+    assert.equal(pages.size, 1);
+    assert.equal(budget.bytes, 2);
+    const result = assemblePartialWindowChunk(
+      pages,
+      makePartialWindowChunk(798, 99, 1, 1, true, Buffer.alloc(0)),
+      budget,
+    );
+    assert.equal(result!.data.toString(), 'ok');
+    assert.equal(budget.bytes, 0);
+    assert.equal(budget.count, 0);
+  }
+});
+
+test('partial window: reset removes retained chunks for identical rectangle', () => {
+  const budget = new AssemblyBudget();
+  const assembler = new TouchStripAssembler(budget);
+  assembler.accept(
+    IMG_CMD_WINDOW_PARTIAL,
+    makePartialWindowChunk(799, 99, 1, 1, false, Buffer.from('old')),
+    ignoreTouchLog,
+  );
+  assembler.reset();
+  budget.clear(); // Shared-budget owner clears on connection reset.
+  const result = assembler.accept(
+    IMG_CMD_WINDOW_PARTIAL,
+    makePartialWindowChunk(799, 99, 1, 1, true, Buffer.from('new')),
+    ignoreTouchLog,
+  );
+  assert.equal(result!.data.toString(), 'new');
+  assert.deepEqual(result!.region, { x: 799, y: 99, w: 1, h: 1 });
+  assert.equal(budget.bytes, 0);
+  assert.equal(budget.count, 0);
 });
 
 test('aggregate budget drops the oldest incomplete assembly', () => {
