@@ -59,6 +59,10 @@ export class DriverManager extends EventEmitter {
   /** Docks 1..N (multi-deck); deps are closures over this instance's state. */
   private readonly scanner: DockScanner;
 
+  /** The running probe (tryRealConnect), so shutdown can wait for it to settle. */
+  private probeTask: Promise<unknown> | null = null;
+  private shutdownTask: Promise<void> | null = null;
+
   declare connectMock: (model?: DeviceModel) => Promise<void>;
   declare switchMode: (newMode: DriverMode) => Promise<void>;
 
@@ -288,8 +292,14 @@ export class DriverManager extends EventEmitter {
 
     // null: already probing, no device found, or dock torn down across await.
     // Each case did its own notify/schedule work inside acquireRealDriver.
-    const driver = await this.acquireRealDriver();
+    const task = this.acquireRealDriver();
+    this.probeTask = task;
+    const driver = await task;
     if (!driver) return;
+    if (this.deps.getShuttingDown()) {
+      await closeDriver(driver);
+      return;
+    }
 
     this.pacer.connected();
     log('info', 'hid', `connected: ${driver.model.name}`);
@@ -396,6 +406,25 @@ export class DriverManager extends EventEmitter {
   /** Tear down every scanned dock and reset the index pool (switchMode, shutdown). */
   async stopScannedDocks(): Promise<void> {
     await this.scanner.stopScannedDocks();
+  }
+
+  /** Application shutdown, idempotent: no new probes or scans, every dock stopped
+   *  (widgets, commands, driver, CORA pair + mDNS), then the parked workers closed.
+   *  Pending probes/creations settle first so nothing registers after this. */
+  shutdown(): Promise<void> {
+    this.shutdownTask ??= this.runShutdown();
+    return this.shutdownTask;
+  }
+
+  private async runShutdown(): Promise<void> {
+    this.stopScan();
+    this.pacer.cancel();
+    // Settles a probe/scan blocked on enumeration so its owner can see the shutdown.
+    this.discovery.dispose?.();
+    await this.scanner.stopScannedDocks();
+    await this.probeTask?.catch(() => undefined);
+    await this.primary.stop();
+    await this.pool.closeAll();
   }
 
   /** Status of every dock with a driver attached, sorted by index. */

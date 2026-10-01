@@ -335,6 +335,12 @@ export default defineConfig([
             },
             {
               from: { element: { type: 'worker-host' } },
+              allow: { to: { element: { type: 'worker-host' } } },
+              message:
+                'hid-worker-host.ts may import hid-work-queue-host.ts, its pure main-thread admission queue (same tier, no worker code).',
+            },
+            {
+              from: { element: { type: 'worker-host' } },
               allow: { to: { element: { type: 'ffi' } }, dependency: { kind: 'type' } },
             },
 
@@ -348,6 +354,12 @@ export default defineConfig([
             {
               from: { element: { type: 'plugin-worker-host' } },
               allow: { to: { element: { type: 'plugin-worker-ipc' } } },
+            },
+            {
+              from: { element: { type: 'plugin-worker-host' } },
+              allow: { to: { element: { type: 'plugin-worker-host' } } },
+              message:
+                'plugin-host.ts may import plugin-fetch-host.ts, its main-thread ctx.fetch proxy (same tier).',
             },
             {
               from: { element: { type: 'plugin-worker-host' } },

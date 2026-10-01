@@ -181,6 +181,11 @@ export class Dock {
   /** Take over an opened driver: wire it, seed the persisted prefs, splash, replay the
    *  app's last frames (same model only), start the widgets. */
   attach(driver: DockDriver, mock = false): void {
+    if (this.stopped) {
+      // A driver opened while the dock stopped: never wire it, still release it.
+      void driver.close().catch(() => undefined);
+      return;
+    }
     if (this.driver) this.detach();
     this.driver = driver;
     const real = !__MOCK_BUILD__ || !mock;
@@ -216,6 +221,8 @@ export class Dock {
       childPort: this.ports.child,
       maxAttempts: 1,
     });
+    // stop() during the bind leaves nothing to attach to; the caller still owns the driver.
+    if (this.stopped) throw new Error(`dock ${this.index} stopped during start`);
     this.cora.applyModel(this.model, this.deviceInfo);
     this.attach(driver);
   }
@@ -226,6 +233,8 @@ export class Dock {
     if (this.stopped) return;
     this.stopped = true;
     this.resendTimer = clearTimer(this.resendTimer);
+    this.encoders.stop();
+    this.extraKeyActions.stop();
     await this.detach()
       ?.close()
       .catch(() => undefined);
@@ -311,6 +320,8 @@ export class Dock {
   }
 
   private onElgatoAttached(): void {
+    // A fresh session re-sends every image, so an overloaded driver may take them again.
+    this.driver?.resumeImages?.();
     if (this.identity) this.settings.markPaired(this.identity.deviceKey);
     this.hooks.elgatoAttached?.();
     this.scheduleBrightnessResend();
@@ -357,6 +368,9 @@ export class Dock {
       this.hooks.disconnect?.();
     });
     if (this.hooks.imageSent) driver.on('imageSent', this.hooks.imageSent);
+    // USB can't keep up with the app: drop its session (it reconnects and re-sends
+    // everything) rather than queue without bound or lose strip patches silently.
+    driver.on('overload', () => child.dropClient());
   }
 
   /** Push the persisted per-device settings before the splash; absent = device default. */

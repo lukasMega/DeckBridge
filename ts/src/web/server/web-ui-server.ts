@@ -198,13 +198,12 @@ export class WebUIServer extends EventEmitter implements WebUIController, WebUIC
     });
   }
 
-  // Keep async: callers chain `stop().catch(...)`, so a sync throw from server?.stop() surfaces as a rejection, not an escape.
-  // eslint-disable-next-line @typescript-eslint/require-await -- intentional async (see above)
   async stop(): Promise<void> {
     this.activity.stop();
     this.bus.stop();
-    this.server?.stop();
+    const server = this.server;
     this.server = null;
+    await server?.close();
   }
 
   hasClients(): boolean {

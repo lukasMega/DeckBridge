@@ -356,4 +356,7 @@ export interface DockDriver extends DeviceDriver {
   applyOverrides(overrides: DeviceModelOverride | undefined, effectiveModel: DeviceModel): void;
   /** Runtime log-level change for the worker (new workers read DECKBRIDGE_LOG_LEVEL). */
   setLogLevel(level: string): void;
+  /** Take images again after an 'overload' event, once the producer has resynced
+   *  (a fresh CORA child session). Absent on drivers without a bounded queue. */
+  resumeImages?(): void;
 }

@@ -202,21 +202,24 @@ export async function loadSettings(cacheRoot: string = defaultCacheRoot()): Prom
 }
 
 /** Writes `data` to the settings file, atomically (tmp file + rename). */
+/** Atomic write + rename. Resolves false (after logging) on failure; never throws. */
 export async function saveSettings(
   data: Settings,
   cacheRoot: string = defaultCacheRoot(),
-): Promise<void> {
+): Promise<boolean> {
   const target = settingsPath(cacheRoot);
   const tmp = `${target}.tmp-${tjs.pid}-${tmpCounter++}`;
   try {
     await tjs.makeDir(cacheRoot, { recursive: true });
     await tjs.writeFile(tmp, JSON.stringify(data, null, 2));
     await tjs.rename(tmp, target);
+    return true;
   } catch (e) {
     log('error', 'settings', `saveSettings failed: ${(e as Error).message}`);
     try {
       await tjs.remove(tmp);
     } catch {}
+    return false;
   }
 }
 

@@ -43,7 +43,8 @@ export type PluginWorkerToMain =
   // Plugin threw (load or poll) — host marks the key ERR + warn-logs.
   | { type: 'error'; key: string; message: string; forced?: boolean }
   // ctx.fetch proxy: the worker asks the main thread to run a real fetch.
-  | { type: 'fetch'; fetchId: number; url: string; init?: PluginFetchInit }
+  // `key` = the polling plugin, so removing it cancels only its own requests.
+  | { type: 'fetch'; fetchId: number; key: string; url: string; init?: PluginFetchInit }
   | { type: 'pong'; seq: number }
   // ctx.log — routed through the main logger with a plugin-name component.
   | { type: 'log'; level: LogLevel; component: string; message: string };

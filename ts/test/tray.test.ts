@@ -1,5 +1,6 @@
 import assert from 'tjs:assert';
 import {
+  startTray,
   buildTrayState,
   parentDir,
   isAbsolutePath,
@@ -160,6 +161,40 @@ test('dismissed update is not flagged', () => {
   assert.equal(s.updateText, 'Update available: v1.1.0');
   assert.equal(s.updateAvailable, false);
 });
+
+console.log('\nstartTray().close()');
+
+await asyncTest(
+  'close escalates to SIGKILL for a sidecar ignoring SIGTERM and observes its exit',
+  async () => {
+    const script = `${tjs.tmpDir}/fake-tray-${tjs.pid}.sh`;
+    const pidFile = `${script}.pid`;
+    await tjs.writeFile(
+      script,
+      `#!/bin/sh\necho $$ > ${pidFile}\ntrap '' TERM\nwhile :; do sleep 0.05; done\n`,
+    );
+    await tjs.spawn(['chmod', '+x', script]).wait();
+    try {
+      const tray = startTray(script, { onQuit: () => {}, onRestartElgatoApp: () => {} });
+      assert.ok(tray, 'spawned');
+      let pid = 0;
+      for (let i = 0; i < 40 && !pid; i++) {
+        await new Promise((r) => setTimeout(r, 25));
+        const raw = await tjs.readFile(pidFile).catch(() => new Uint8Array());
+        pid = Number(new TextDecoder().decode(raw).trim());
+      }
+      assert.ok(pid > 0, 'sidecar started');
+      const t0 = Date.now();
+      await tray!.close();
+      assert.ok(Date.now() - t0 < 1500, 'bounded');
+      const probe = await tjs.spawn(['kill', '-0', String(pid)], { stderr: 'ignore' }).wait();
+      assert.notEqual(probe.exit_status, 0, 'sidecar gone');
+    } finally {
+      await tjs.remove(script).catch(() => undefined);
+      await tjs.remove(pidFile).catch(() => undefined);
+    }
+  },
+);
 
 // Summary
 

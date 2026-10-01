@@ -10,13 +10,13 @@ import { revokeBlobUrl, spawnWorker, terminateDeferred } from '../shared/worker-
 import { pluginsDir } from '../infra/settings-store.js';
 import { log } from '../shared/logger.js';
 import type { MainToPluginWorker, PluginWorkerToMain } from './plugin-worker-protocol.js';
+import { FETCH_TIMEOUT_MS, PluginFetchProxy } from './plugin-fetch-host.js';
+import type { FetchReplyTarget } from './plugin-fetch-host.js';
 
 const HEARTBEAT_MS = 2000;
 const MAX_MISSED_PONGS = 2; // ~4 s of silence → presume the worker wedged
 const MAX_CONSECUTIVE_KILLS = 3;
 const STALE_MS = 3000; // a key not re-requested this long (≥2 scheduler ticks) is dropped
-const FETCH_TIMEOUT_MS = 10_000;
-
 // Reaches the browser verbatim in the GET /api/plugins payload, so it is owned
 // by the web-contract leaf (web/contract.ts) rather than declared twice.
 import type { PluginStatus } from '../web/contract.js';
@@ -86,10 +86,20 @@ export class PluginHost {
   private pingSeq = 0;
   private killCount = 0;
   private configSent = '';
+  private readonly fetches: PluginFetchProxy;
+  private disposed = false;
 
-  constructor(opts?: { pluginsDir?: string; workerFactory?: WorkerFactory }) {
+  constructor(opts?: {
+    pluginsDir?: string;
+    workerFactory?: WorkerFactory;
+    fetchTimeoutMs?: number;
+  }) {
     this.dir = opts?.pluginsDir ?? pluginsDir();
     this.workerFactory = opts?.workerFactory ?? defaultWorkerFactory;
+    this.fetches = new PluginFetchProxy(
+      opts?.fetchTimeoutMs ?? FETCH_TIMEOUT_MS,
+      (w) => w === (this.worker as FetchReplyTarget | null),
+    );
   }
 
   /** Cached value for a plugin key, registering/refreshing it as a side effect.
@@ -102,7 +112,7 @@ export class PluginHost {
     onUpdate: () => void,
   ): PluginValue {
     const f = file?.trim();
-    if (!f) return { value: undefined, status: 'pending' };
+    if (!f || this.disposed) return { value: undefined, status: 'pending' };
     const param = arg ?? '';
     const key = entryKey(f, param);
     const sig = String(intervalMs ?? '');
@@ -164,6 +174,20 @@ export class PluginHost {
     return this.entries.get(entryKey(file, arg ?? ''))?.status ?? 'pending';
   }
 
+  /** Terminal (shutdown): stop the worker, abort every proxied fetch and wait for them
+   *  to settle. Later requests stay pending and never respawn the worker. */
+  async dispose(): Promise<void> {
+    this.disposed = true;
+    const inflight = this.fetches.abortAll('plugin worker stopped');
+    this.stop();
+    await Promise.all(inflight);
+  }
+
+  /** Proxied fetches still in flight (tests). */
+  get activeFetchCount(): number {
+    return this.fetches.size;
+  }
+
   /** Terminate the worker and stop the heartbeat. Cached entries are kept. */
   stop(): void {
     if (this.hbTimer !== undefined) {
@@ -179,6 +203,8 @@ export class PluginHost {
 
   private syncConfig(): void {
     const active = this.activeEntries();
+    const keys = new Set(active.map((e) => e.key));
+    this.fetches.abortRemoved(keys);
     if (active.length === 0) {
       this.configSent = '';
       this.stop();
@@ -198,12 +224,18 @@ export class PluginHost {
   }
 
   private ensureWorker(): void {
-    if (this.worker) return;
-    this.worker = this.workerFactory();
-    this.worker.addEventListener('message', (e) => this.onMessage(e.data as PluginWorkerToMain));
-    this.worker.addEventListener('error', (e) =>
-      this.onWorkerDead((e as unknown as { message?: string }).message ?? 'worker error'),
-    );
+    if (this.worker || this.disposed) return;
+    const w = this.workerFactory();
+    this.worker = w;
+    // A replaced worker's late messages (fetch ids restart at 1) must not reach this one.
+    w.addEventListener('message', (e) => {
+      if (this.worker === w) this.onMessage(e.data as PluginWorkerToMain);
+    });
+    w.addEventListener('error', (e) => {
+      if (this.worker === w) {
+        this.onWorkerDead((e as unknown as { message?: string }).message ?? 'worker error');
+      }
+    });
     this.awaitingPong = false;
     this.missedPongs = 0;
     this.configSent = '';
@@ -216,6 +248,7 @@ export class PluginHost {
     const w = this.worker;
     this.worker = null;
     this.awaitingPong = false;
+    void this.fetches.abortAll('plugin worker stopped');
     // The respawned worker never answers a runNow the old one took.
     for (const e of this.entries.values()) settleForced(e, true);
     // Deferred a macrotask — see terminateDeferred (worker-lifecycle.ts).
@@ -281,7 +314,9 @@ export class PluginHost {
         this.applyError(msg.key, msg.message, msg.forced === true);
         break;
       case 'fetch':
-        void this.runFetch(msg.fetchId, msg.url, msg.init);
+        if (this.worker) {
+          this.fetches.start(this.worker, msg, this.disposed ? 'plugin host stopped' : undefined);
+        }
         break;
       case 'pong':
         this.awaitingPong = false;
@@ -311,35 +346,6 @@ export class PluginHost {
     settleForced(entry, forced);
   }
 
-  /** Run a plugin's proxied fetch on the main thread. Only plain http:// works
-   *  (the slim build has no TLS); a per-call timeout guards a slow endpoint. */
-  private async runFetch(
-    fetchId: number,
-    url: string,
-    init: { method?: string; headers?: Record<string, string>; body?: string } | undefined,
-  ): Promise<void> {
-    try {
-      if (!/^http:\/\//i.test(url)) {
-        throw new Error('only http:// is supported (no TLS in this build)');
-      }
-      const res = await withTimeout(
-        fetch(url, { method: init?.method, headers: init?.headers, body: init?.body }),
-        FETCH_TIMEOUT_MS,
-      );
-      const body = await res.text();
-      this.post({ type: 'fetchResult', fetchId, ok: res.ok, status: res.status, body });
-    } catch (e) {
-      this.post({
-        type: 'fetchResult',
-        fetchId,
-        ok: false,
-        status: 0,
-        body: '',
-        error: (e as Error).message,
-      });
-    }
-  }
-
   private post(msg: MainToPluginWorker): void {
     this.worker?.postMessage(msg);
   }
@@ -352,19 +358,23 @@ function settleForced(entry: HostEntry, forced: boolean): void {
   for (const done of entry.settled.splice(0)) done();
 }
 
-function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
-  let timer: ReturnType<typeof setTimeout>;
-  const timeout = new Promise<T>((_, reject) => {
-    timer = setTimeout(() => reject(new Error('fetch timeout')), ms);
-  });
-  return Promise.race([p, timeout]).finally(() => clearTimeout(timer));
-}
-
 // module-level singleton (mirrors the weather/command caches in extra-keys)
 let host: PluginHost | null = null;
+let hostShutDown = false;
 function getPluginHost(): PluginHost {
-  host ??= new PluginHost();
+  if (!host) {
+    host = new PluginHost();
+    // Created after shutdown (a late widget tick): born disposed, never spawns a worker.
+    if (hostShutDown) void host.dispose();
+  }
   return host;
+}
+
+/** Application shutdown: stop the plugin worker and abort its HTTP requests. Never
+ *  constructs the host just to dispose it. */
+export async function shutdownPluginHost(): Promise<void> {
+  hostShutDown = true;
+  await host?.dispose();
 }
 
 /** Cached value for a plugin widget key, kicking off the poll loop as a side

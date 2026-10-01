@@ -1,7 +1,7 @@
 import assert from 'tjs:assert';
 import { MiraboxDriver } from '../src/devices/mirabox/driver.js';
 import { DEVICE_MODELS } from '../src/devices/registry.js';
-import type { MainToWorker, WorkerToMain } from '../src/worker/hid-worker-protocol.js';
+import type { WorkMessage, WorkerToMain } from '../src/worker/hid-worker-protocol.js';
 const MIRABOX_293S = DEVICE_MODELS.find((model) => model.id === 'mirabox-293s')!;
 let passed = 0;
 let failed = 0;
@@ -61,7 +61,7 @@ MiraboxDriver.prototype.open = function (): Promise<void> {
 };
 await import('../src/worker/hid-worker.js');
 
-function send(msg: MainToWorker): void {
+function send(msg: WorkMessage): void {
   receive!({ data: msg } as MessageEvent);
 }
 const wait = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
@@ -139,6 +139,46 @@ await test('CORA image completion notifications follow final STP', async () => {
   assert.equal(stpCount(), 1);
   assert.equal(notificationTags.length, 15);
   assert.ok(notificationTags.every((value) => value === 'STP'));
+});
+
+await test('workDone returns every batched id once, after imageSent and the final STP', async () => {
+  await open('mirabox-293s');
+  for (let keyIndex = 0; keyIndex < 3; keyIndex++) {
+    send({
+      type: 'image',
+      keyIndex,
+      bytes: new Uint8Array(20),
+      format: 'jpeg',
+      id: 100 + keyIndex,
+    });
+  }
+  send({ type: 'setBrightness', level: 40, id: 200 });
+  await wait(30);
+  const done = messages.flatMap((m, i) => (m.type === 'workDone' ? [{ i, ids: m.ids }] : []));
+  assert.deepEqual(
+    done.map((d) => d.ids),
+    [[100, 101, 102], [200]],
+  );
+  const lastSent = messages.findLastIndex((m) => m.type === 'imageSent');
+  assert.ok(done[0]!.i > lastSent, 'credits follow the imageSent notifications');
+});
+
+await test('a failed message still returns its credit', async () => {
+  await open('mirabox-293s');
+  send({
+    type: 'imageWithSpec',
+    keyIndex: 1,
+    bytes: new Uint8Array([0]),
+    spec: MIRABOX_293S.image,
+    id: 7,
+  });
+  send({ type: 'setBrightness', level: 33, id: 8 });
+  await wait(30);
+  const ids = messages.flatMap((m) => (m.type === 'workDone' ? m.ids : []));
+  assert.deepEqual(
+    ids.toSorted((a, b) => a - b),
+    [7, 8],
+  );
 });
 
 await test('page overflow receives another final STP', async () => {

@@ -21,6 +21,8 @@ export interface HidDiscovery {
   serial(hidPath: string): string | null;
   /** Re-init the native HID stack before the next scan (after a disconnect). */
   requestReset(): void;
+  /** Shutdown: settle waiting scans now and refuse new ones (never terminates the worker). */
+  dispose?(): void;
 }
 
 /** Production discovery: the process-lifetime scan worker, so a stalled Windows
@@ -35,6 +37,7 @@ export function nativeHidDiscovery(): HidDiscovery {
         return result.tookMs;
       } catch (e) {
         installDiscoverySnapshot([]);
+        if (scanner.disposed) return 0;
         log('error', 'hid', `discovery worker failed: ${(e as Error).message}`);
         return 0;
       }
@@ -44,6 +47,7 @@ export function nativeHidDiscovery(): HidDiscovery {
       cachedDiscoveryPaths(model.usbVendorId, model.usbProductIds, model.usagePage, model.usage),
     serial: cachedDiscoverySerial,
     requestReset: () => scanner.requestReset(),
+    dispose: () => scanner.dispose(),
   };
 }
 

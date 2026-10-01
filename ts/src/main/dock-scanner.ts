@@ -38,6 +38,10 @@ export class DockScanner {
   private scanWanted = false;
   private scanInFlight = false;
   private createInFlight = false;
+  /** Bumped by stopScannedDocks(): a creation that resumes under an older value is
+   *  stale and closes what it opened instead of registering it. */
+  private generation = 0;
+  private creating: Promise<void> | null = null;
 
   constructor(deps: DockScannerDeps) {
     this.deps = deps;
@@ -81,7 +85,7 @@ export class DockScanner {
    *  — single-deck mode must not enumerate USB every tick, which is the whole
    *  point of the default. */
   private syncTimer(): void {
-    const shouldRun = this.scanWanted && this.maxDocks > 1;
+    const shouldRun = this.scanWanted && this.maxDocks > 1 && !this.deps.getShuttingDown();
     if (shouldRun === (this.scanTimer !== null)) return;
     if (!shouldRun) {
       if (this.scanTimer !== null) clearInterval(this.scanTimer);
@@ -128,8 +132,10 @@ export class DockScanner {
       if (!pick) return;
       this.createInFlight = true;
       try {
-        await this.createDock(pick.model, pick.hidPath);
+        this.creating = this.createDock(pick.model, pick.hidPath, this.generation);
+        await this.creating;
       } finally {
+        this.creating = null;
         this.createInFlight = false;
       }
     } finally {
@@ -167,7 +173,20 @@ export class DockScanner {
     return pick;
   }
 
-  private async createDock(registryModel: DeviceModel, hidPath: string): Promise<void> {
+  /** Teardown (or shutdown, or a mode switch) since `generation` was captured. */
+  private stale(generation: number): boolean {
+    return (
+      generation !== this.generation ||
+      this.deps.getShuttingDown() ||
+      this.deps.getDriverMode() !== 'real'
+    );
+  }
+
+  private async createDock(
+    registryModel: DeviceModel,
+    hidPath: string,
+    generation: number,
+  ): Promise<void> {
     const factory = this.deps.coraDockFactory;
     if (!factory) return; // narrowing — scanForDocks already guarded this
 
@@ -187,10 +206,20 @@ export class DockScanner {
     try {
       await driver.open(hidPath);
     } catch (e) {
+      // Torn down meanwhile: the pool may already be closed, so close, don't park.
+      if (this.stale(generation)) {
+        await closeDriver(driver);
+        return;
+      }
       // Present but unopenable — park the worker alive (do NOT terminate) and
       // let a later scan retry open() on the same instance.
       log('debug', 'coord', `${model.id} extra open failed: ${(e as Error).message}`);
       this.deps.pool.park(model.id, driver);
+      return;
+    }
+
+    if (this.stale(generation)) {
+      await closeDriver(driver);
       return;
     }
 
@@ -252,8 +281,14 @@ export class DockScanner {
       // port (already logged with the port numbers by CoraDock.startWithRetry,
       // via dock.start()'s single-attempt call). Stop the dock and close this
       // freshly-opened worker (fine, it's not the churny unopenable-device
-      // case), then free the index for a retry.
-      log('error', 'coord', `dock ${model.id} idx=${index} start failed: ${(e as Error).message}`);
+      // case), then free the index for a retry. A teardown mid-start is not an error.
+      if (!this.stale(generation)) {
+        log(
+          'error',
+          'coord',
+          `dock ${model.id} idx=${index} start failed: ${(e as Error).message}`,
+        );
+      }
       this.forget(index);
       await dock.stop();
       await closeDriver(driver);
@@ -282,11 +317,15 @@ export class DockScanner {
   /** Tear down every scanned dock and reset the index pool. Used by switchMode and
    *  by app.ts on shutdown. */
   async stopScannedDocks(): Promise<void> {
+    this.generation++;
+    const pending = this.creating;
     const docks = [...this.units.keys()].flatMap((i) => this.deps.docks.get(i) ?? []);
     for (const index of this.units.keys()) this.deps.docks.delete(index);
     this.units.clear();
     this.freeIndices = freshIndexPool(this.maxDocks);
     for (const dock of docks) await dock.stop();
+    // A creation that was mid-open/start closes its own driver once it sees the bump.
+    await pending?.catch(() => undefined);
     this.deps.onChanged();
   }
 

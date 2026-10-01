@@ -58,6 +58,11 @@ export type MainToWorker =
   | { type: 'setLogLevel'; level: string }
   | { type: 'close' };
 
+/** Every message the host's work queue posts carries an `id` the worker acknowledges
+ *  with `workDone` once handled (written, skipped or failed) — see hid-work-queue-host.ts.
+ *  'open' and 'close' bypass the queue and carry none. */
+export type WorkMessage = MainToWorker & { id?: number };
+
 export type WorkerToMain =
   | { type: 'opened'; ok: true; deviceSerial?: string; deviceFirmware?: string; hidPath?: string }
   | { type: 'opened'; ok: false; error: string }
@@ -75,4 +80,7 @@ export type WorkerToMain =
   // thread repaints what it owns (extra-key icons).
   | { type: 'reinit' }
   | { type: 'disconnect' }
-  | { type: 'closed' };
+  | { type: 'closed' }
+  // Posting credits back: these work ids are finished. A batch reports after its final
+  // native write, together with its imageSent notifications.
+  | { type: 'workDone'; ids: number[] };

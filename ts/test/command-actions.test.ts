@@ -113,4 +113,15 @@ await test('presses while running coalesce into one re-run with the current comm
   assert.equal(runner.runs.length, 3, 'slot free again');
 });
 
+await test('stop: the coalesced follow-up never starts and new presses are ignored', async () => {
+  const { runner, actions } = setup({ 15: { widget: 'clock', pressCommand: 'echo hi' } });
+  actions.handleKey(15, 'down');
+  actions.handleKey(15, 'down'); // coalesced follow-up
+  actions.stop();
+  await runner.finishNext();
+  assert.equal(runner.runs.length, 1, 'no follow-up after stop');
+  actions.handleKey(15, 'down');
+  assert.equal(runner.runs.length, 1, 'no new run after stop');
+});
+
 summary();

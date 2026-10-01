@@ -29,10 +29,12 @@ export class HidScanWorkerHost {
   private inFlight: Promise<HidScanResult> | null = null;
   private resolve: ((result: HidScanResult) => void) | null = null;
   private reject: ((error: Error) => void) | null = null;
+  disposed = false;
 
   constructor(private readonly workerFactory: ScanWorkerFactory = defaultWorkerFactory) {}
 
   scan(): Promise<HidScanResult> {
+    if (this.disposed) return Promise.reject(new Error('HID discovery disposed'));
     if (this.inFlight) return this.inFlight;
     this.ensureWorker();
     const reset = this.resetPending;
@@ -44,6 +46,14 @@ export class HidScanWorkerHost {
     // oxlint-disable-next-line unicorn/require-post-message-target-origin -- Worker.postMessage has no targetOrigin
     this.worker!.postMessage(reset ? { type: 'scan', reset: true } : { type: 'scan' });
     return this.inFlight;
+  }
+
+  /** Shutdown: reject waiting callers now. A native scan still blocked in the worker is
+   *  left alone (terminating it mid call is unsafe); its late result is ignored and
+   *  process exit reclaims the worker. */
+  dispose(): void {
+    this.disposed = true;
+    this.settle(null, new Error('HID discovery disposed'));
   }
 
   /** Ask the next scan to re-init the native HID stack first (see the `reset` flag in
@@ -72,6 +82,7 @@ export class HidScanWorkerHost {
       log(msg.level, msg.component, msg.message);
       return;
     }
+    if (this.disposed) return;
     this.settle({ devices: msg.devices, tookMs: msg.tookMs }, null);
   }
 

@@ -78,14 +78,14 @@ const pendingFetches = new Map<
   }
 >();
 
-function proxiedFetch(url: string, init?: PluginFetchInit): Promise<PluginResponse> {
+function proxiedFetch(key: string, url: string, init?: PluginFetchInit): Promise<PluginResponse> {
   const fetchId = ++fetchSeq;
   const init2: PluginFetchInit | undefined = init
     ? { method: init.method, headers: init.headers, body: init.body }
     : undefined;
   return new Promise<{ ok: boolean; status: number; body: string }>((resolve, reject) => {
     pendingFetches.set(fetchId, { resolve, reject });
-    post({ type: 'fetch', fetchId, url, init: init2 });
+    post({ type: 'fetch', fetchId, key, url, init: init2 });
   }).then((r) => ({
     ok: r.ok,
     status: r.status,
@@ -161,7 +161,7 @@ async function pollLoop(rp: RunningPlugin): Promise<void> {
     get param() {
       return rp.param;
     },
-    fetch: proxiedFetch,
+    fetch: (url, init) => proxiedFetch(rp.key, url, init),
     log: (message: string) =>
       post({ type: 'log', level: 'info', component: `plugin:${name}`, message }),
   };

@@ -267,7 +267,9 @@ interface WebSocketHandlers {
 }
 
 interface TjsServeServer {
-  stop(): void;
+  /** Closes the listener; resolves once the native handle is closed. (No `stop()`:
+   *  txiki's httpserver.js Server only has close().) */
+  close(): Promise<void>;
   upgrade(request: Request, options?: { data?: unknown }): boolean;
 }
 
@@ -344,7 +346,12 @@ declare const tjs: {
     readonly networkInterfaces: NetworkInterface[];
     readonly cpus: CpuInfo[];
   };
-  connect(transport: 'tcp', host: string, port: number): Promise<TjsTCPSocket>;
+  connect(
+    transport: 'tcp',
+    host: string,
+    port: number,
+    options?: { signal?: AbortSignal },
+  ): Promise<TjsTCPSocket>;
   listen(transport: 'tcp', host: string, port: number): Promise<TjsTCPServerSocket>;
   serve(options: TjsServeOptions): TjsServeServer;
 };

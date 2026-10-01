@@ -206,4 +206,23 @@ await test('isRunning() forwards to the injected probe', async () => {
   assert.equal(await control.isRunning(), false);
 });
 
+await test('cancelLaunches: a restart past its quit step does not relaunch', async () => {
+  const { deps, calls, state, hooks } = fakeDeps();
+  hooks.onOpenUrl = (url) => {
+    if (url === 'streamdeck://app/quit') state.running = false;
+  };
+  const control = createElgatoAppControl({
+    ...deps,
+    // DeckBridge starts quitting during the relaunch delay.
+    sleep: () => {
+      control.cancelLaunches();
+      return Promise.resolve();
+    },
+  });
+  const result = await control.restart({ quitTimeoutMs: 50, relaunchDelayMs: 1 });
+  assert.deepEqual(result, { ok: false, reason: 'cancelled' });
+  assert.ok(!calls.some((c) => c.startsWith('spawn:open')), 'no launch spawned');
+  assert.equal(await control.launch(), false, 'later launches refused');
+});
+
 summary();
