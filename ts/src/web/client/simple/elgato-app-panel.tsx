@@ -28,6 +28,7 @@ export function ElgatoAppPanel({
   const enabled = current?.enabled ?? true;
   const delayS = current?.delayS ?? 10;
   const supported = current?.supported ?? true;
+  const restartStatus = current === null ? null : enabled;
 
   const toggle = (next: boolean): Promise<void> =>
     action.run(async () => {
@@ -63,7 +64,11 @@ export function ElgatoAppPanel({
     }, 'Restart failed.');
 
   return (
-    <Collapsible title="Elgato app" bodyId="elgato-app-body">
+    <Collapsible
+      title="Elgato app"
+      bodyId="elgato-app-body"
+      status={supported ? restartStatus : 'Unsupported'}
+    >
       {!supported && <p class="multi-deck-note">{UNSUPPORTED_NOTE}</p>}
       <ToggleRow
         id="toggle-elgato-auto-restart"

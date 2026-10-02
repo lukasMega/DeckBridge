@@ -32,13 +32,22 @@ export function UpdatePanel({ info }: Readonly<{ info: UpdateInfo | null }>): pr
     });
 
   return (
-    <Collapsible title="Updates" bodyId="update-body">
+    <Collapsible title="Updates" bodyId="update-body" status={current?.enabled ?? null}>
       <ToggleRow
         id="toggle-update-check"
         label="Check for updates"
         checked={enabled}
         onChange={(next) => void toggle(next)}
-      />
+      >
+        <button
+          class="ghostbtn"
+          type="button"
+          disabled={!enabled || action.busy}
+          onClick={() => void check()}
+        >
+          {action.busy ? 'Checking…' : 'Check now'}
+        </button>
+      </ToggleRow>
       {current?.updateAvailable && (
         <p class="multi-deck-note">
           <a href={current.releaseUrl} target="_blank" rel="noopener">
@@ -46,14 +55,6 @@ export function UpdatePanel({ info }: Readonly<{ info: UpdateInfo | null }>): pr
           </a>
         </p>
       )}
-      <button
-        class="ghostbtn"
-        type="button"
-        disabled={!enabled || action.busy}
-        onClick={() => void check()}
-      >
-        {action.busy ? 'Checking…' : 'Check now'}
-      </button>
       <Feedback error={action.error} status={action.status} />
     </Collapsible>
   );

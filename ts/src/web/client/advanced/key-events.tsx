@@ -9,9 +9,16 @@ import type { KeyEvent } from '../ui-types.js';
 
 export function KeyEventsPanel(): preact.JSX.Element {
   const keyEvents = useStore((s) => s.keyEvents);
+  const eventSummary = `${keyEvents.length} event${keyEvents.length === 1 ? '' : 's'}`;
 
   return (
-    <Collapsible class="panel" bodyId="key-events-body" title="Key Events" defaultOpen>
+    <Collapsible
+      class="panel"
+      bodyId="key-events-body"
+      title="Key Events"
+      status={keyEvents.length === 0 ? 'No events' : eventSummary}
+      defaultOpen
+    >
       <div id="key-events">
         {keyEvents.map((e: KeyEvent) => {
           const t = new Date(e.ts).toISOString().slice(11, 23);

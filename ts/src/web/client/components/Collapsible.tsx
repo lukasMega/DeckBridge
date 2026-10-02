@@ -7,6 +7,7 @@ import type { ComponentChildren } from 'preact';
 export function Collapsible({
   title,
   subtitle,
+  status,
   class: cls,
   id,
   bodyId,
@@ -16,6 +17,8 @@ export function Collapsible({
 }: Readonly<{
   title: string;
   subtitle?: string;
+  /** Collapsed summary; null means still loading. */
+  status?: string | boolean | null;
   class?: string;
   id?: string;
   bodyId?: string;
@@ -31,12 +34,17 @@ export function Collapsible({
     onToggle?.(next);
   };
   const rootClass = cls !== undefined ? `collapsible ${cls}` : 'collapsible';
+  const enabledText = status === true ? 'Enabled' : 'Disabled';
+  const statusText = typeof status === 'boolean' ? enabledText : (status ?? 'Loading…');
   return (
     <div class={rootClass} id={id}>
       <h3 class={`collapse-header${open ? '' : ' collapsed'}`} onClick={toggle}>
         <span>
           {title}
           {subtitle !== undefined && <span class="cfg-subtitle-hdr"> {subtitle}</span>}
+          {!open && status !== undefined && (
+            <span class="cfg-subtitle-hdr collapse-status"> · {statusText}</span>
+          )}
         </span>
         <span class="collapse-arrow">▼</span>
       </h3>

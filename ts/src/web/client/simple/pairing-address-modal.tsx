@@ -222,23 +222,29 @@ export function PairingAddressModal({
   return (
     <div class="address-backdrop" onClick={onClose}>
       <div
-        class="address-modal surface-card"
+        class="popover floating-surface address-modal"
         id="address-modal"
         role="dialog"
         aria-modal="true"
         aria-label="Pairing address"
         onClick={(e) => e.stopPropagation()}
       >
-        <h3>Need another address?</h3>
+        <button
+          class="pop-close circle"
+          id="address-close"
+          type="button"
+          aria-label="Close pairing address"
+          onClick={onClose}
+        >
+          ×
+        </button>
+        <h2>Need another address?</h2>
         <p class="multi-deck-note">
           The Elgato app pairs one dock per IP address of this computer. Give each dock its own.
         </p>
         {error && <p class="settings-error">{error}</p>}
         {!info && !error && <p class="multi-deck-note">Loading…</p>}
         {info && <ModalBody info={info} initialDock={initialDock} />}
-        <button class="ghostbtn" id="address-close" type="button" onClick={onClose}>
-          Close
-        </button>
       </div>
     </div>
   );

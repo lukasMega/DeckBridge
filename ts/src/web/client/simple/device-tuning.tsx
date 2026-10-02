@@ -149,6 +149,7 @@ function EmptyDeviceTuningPanel(): preact.JSX.Element {
   return (
     <Collapsible
       title="Device tuning"
+      status="Unavailable"
       class="tuning-section"
       id="device-tuning"
       bodyId="device-tuning-body"
@@ -300,10 +301,12 @@ export function DeviceTuningPanel(): preact.JSX.Element {
   const advanced = NUMBER_FIELDS.filter((f) => f.advanced);
   const fit = tuningFit(activeView, image);
   const fitMode = image.resizeMode ?? 'resize';
+  const overrideStatus = Object.keys(activeView.overrides).length > 0 ? 'Custom' : 'Defaults';
 
   return (
     <Collapsible
       title={`Device tuning — ${activeView.modelName}`}
+      status={activeView.safeMode ? 'Safe mode' : overrideStatus}
       class="tuning-section"
       id="device-tuning"
       bodyId="device-tuning-body"
@@ -418,7 +421,16 @@ export function DeviceTuningPanel(): preact.JSX.Element {
 
       <ProfileField view={activeView} coraProfile={coraProfile} onChange={setCoraProfile} />
 
-      <Collapsible title="Advanced">
+      <Collapsible
+        title="Advanced"
+        status={
+          advanced.some((field) => activeView.overrides.image?.[field.key] !== undefined) ||
+          activeView.overrides.image?.cropRect !== undefined ||
+          activeView.overrides.image?.resizeFilter !== undefined
+            ? 'Custom'
+            : 'Defaults'
+        }
+      >
         <div class="tuning-grid">
           {advanced.map((f) => (
             <NumberField
