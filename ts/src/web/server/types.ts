@@ -9,6 +9,7 @@ import type { OverrideChangeKind } from '../../devices/model-overrides.js';
 import type { PersistedSettings } from '../../infra/settings.js';
 import type { UpdateController } from './update-controller.js';
 import type { ElgatoAppController } from './elgato-app-controller.js';
+import type { StandbyController } from './standby-controller.js';
 import type { DevicePrefsController } from './device-prefs-controller.js';
 import type { EncodersController } from './encoders-controller.js';
 import type { ExtraKeysController } from './extra-keys-controller.js';
@@ -102,6 +103,7 @@ export interface WebUIControllers {
   readonly updates: UpdateController;
   readonly settingsFile: SettingsFileController;
   readonly elgatoApp: ElgatoAppController;
+  readonly standby: StandbyController;
   readonly push: PushController;
   readonly virtualDeck: VirtualDeckController;
 }

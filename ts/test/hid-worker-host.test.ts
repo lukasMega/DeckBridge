@@ -117,6 +117,20 @@ await runTest('setTouchStripOptions posts a copy of the options', () => {
   assert.ok((posted[0] as { options: unknown }).options !== options, 'not aliased');
 });
 
+await runTest('setSleep posts {type:setSleep} (sent as a control message)', () => {
+  const driver = new WorkerHidDriver(unknownModel);
+  const posted: unknown[] = [];
+  (driver as unknown as { worker: { postMessage: (m: unknown) => void } }).worker = {
+    postMessage: (m: unknown) => posted.push(withoutId(m)),
+  };
+  driver.setSleep(true);
+  driver.setSleep(false);
+  assert.deepEqual(posted, [
+    { type: 'setSleep', asleep: true },
+    { type: 'setSleep', asleep: false },
+  ]);
+});
+
 console.log('\nhid-worker-host: bounded admission and close');
 
 interface FakeWorker {

@@ -278,6 +278,37 @@ await test('LastFrames replays onto the same model, drops frames for a different
   assert.equal(repainted.renderCoraImageCalls.length, 2, 'and the frames are gone');
 });
 
+await test('repaint mirrors each frame, and has() reports recorded keys', () => {
+  const frames = new LastFrames();
+  const driver = makeFakeDriver(makePassthroughModel());
+  frames.record(1, Buffer.from([1]), 'jpeg');
+  frames.record(4, Buffer.from([2]), 'bmp');
+  assert.ok(frames.has(1) && frames.has(4), 'recorded');
+  assert.ok(!frames.has(0), 'not recorded');
+  const mirrored: string[] = [];
+  frames.repaint(driver, (key, _data, format) => mirrored.push(`${key}:${format}`));
+  assert.deepEqual(mirrored, ['1:jpeg', '4:bmp']);
+  assert.equal(driver.renderCoraImageCalls.length, 2);
+  frames.repaint(driver); // the mirror stays optional
+  assert.equal(driver.renderCoraImageCalls.length, 4);
+});
+
+await test('onAppFrame fires for an image and a touchImage, after the driver and mirror', () => {
+  const childServer = new EventEmitter();
+  const driver = makeFakeDriver(makePassthroughModel());
+  const order: string[] = [];
+  wireDockImages(childServer as unknown as ElgatoChildServer, {
+    driver: () => driver,
+    frames: new LastFrames(),
+    onImage: () => void order.push('mirror'),
+    onTouchImage: () => void order.push('touchMirror'),
+    onAppFrame: () => void order.push(`frame@${driver.renderCoraImageCalls.length}`),
+  });
+  childServer.emit('image', { keyIndex: 2, data: SOLID_RED_16X16_JPEG, format: 'jpeg' });
+  childServer.emit('touchImage', { data: new Uint8Array([1]) });
+  assert.deepEqual(order, ['mirror', 'frame@1', 'touchMirror', 'frame@1']);
+});
+
 // Summary
 
 summaryExit();

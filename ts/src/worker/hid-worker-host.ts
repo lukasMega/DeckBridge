@@ -180,6 +180,10 @@ export class WorkerHidDriver extends EventEmitter implements DockDriver {
     this.control({ type: 'setBrightness', level });
   }
 
+  setSleep(asleep: boolean): void {
+    this.control({ type: 'setSleep', asleep });
+  }
+
   clearKey(keyIndex: number): void {
     this.control({ type: 'clearKey', keyIndex });
   }

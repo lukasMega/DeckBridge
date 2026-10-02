@@ -40,6 +40,7 @@ import { checkKeyPress } from './key-press.js';
 import { VirtualDeckController } from './virtual-deck/virtual-deck-controller.js';
 import { handlePushApi, isPushApiPath } from './push-routes.js';
 import { ElgatoAppController } from './elgato-app-controller.js';
+import { StandbyController } from './standby-controller.js';
 
 export { isAllowedWebRequest, isValidMacAddress, pickFallbackPort } from './web-request-guard.js';
 
@@ -66,6 +67,7 @@ export class WebUIServer extends EventEmitter implements WebUIController, WebUIC
   readonly updates: UpdateController;
   readonly settingsFile: SettingsFileController;
   readonly elgatoApp: ElgatoAppController;
+  readonly standby: StandbyController;
   readonly push: PushController;
   readonly virtualDeck: VirtualDeckController;
   private readonly controllers: WebUIControllers;
@@ -154,6 +156,7 @@ export class WebUIServer extends EventEmitter implements WebUIController, WebUIC
     this.updates = new UpdateController(host, __VERSION__);
     this.settingsFile = new SettingsFileController(host, this.logging);
     this.elgatoApp = new ElgatoAppController(host);
+    this.standby = new StandbyController(host);
     this.push = new PushController(host, () => this.dockRegistry.list());
     this.virtualDeck = new VirtualDeckController(host, this.push);
     this.controllers = {
@@ -166,6 +169,7 @@ export class WebUIServer extends EventEmitter implements WebUIController, WebUIC
       updates: this.updates,
       settingsFile: this.settingsFile,
       elgatoApp: this.elgatoApp,
+      standby: this.standby,
       push: this.push,
       virtualDeck: this.virtualDeck,
     };

@@ -218,20 +218,25 @@ export function stripPushTokenHashes(settingsJson: string): string {
   }
 }
 
-/** Replace extra-key `param`/`pluginArg`/`pressCommand` in a settings.json string. Operates on
- *  the parsed object so it can't corrupt unrelated text that happens to match. */
+/** Set every present key of `obj` to the redaction marker. */
+function redactKeys(obj: object | undefined, keys: readonly string[]): void {
+  if (!obj) return;
+  const rec = obj as Record<string, unknown>;
+  for (const key of keys) if (rec[key] !== undefined) rec[key] = REDACTED;
+}
+
+/** Replace extra-key `param`/`pluginArg`/`pressCommand` and standby `sleepCommand`/
+ *  `wakeCommand` in a settings.json string. Operates on the parsed object so it can't
+ *  corrupt unrelated text that happens to match. */
 function redactSettings(settingsJson: string): string {
   try {
     const parsed = JSON.parse(settingsJson) as {
-      devices?: Array<{
-        extraKeys?: Record<string, { param?: string; pluginArg?: string; pressCommand?: string }>;
-      }>;
+      devices?: Array<{ extraKeys?: Record<string, object>; standby?: object }>;
     };
     for (const device of parsed.devices ?? []) {
+      redactKeys(device.standby, ['sleepCommand', 'wakeCommand']);
       for (const cfg of Object.values(device.extraKeys ?? {})) {
-        if (cfg.param !== undefined) cfg.param = REDACTED;
-        if (cfg.pluginArg !== undefined) cfg.pluginArg = REDACTED;
-        if (cfg.pressCommand !== undefined) cfg.pressCommand = REDACTED;
+        redactKeys(cfg, ['param', 'pluginArg', 'pressCommand']);
       }
     }
     return JSON.stringify(parsed, null, 2);

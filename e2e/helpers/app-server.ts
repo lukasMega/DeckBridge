@@ -67,6 +67,8 @@ export async function startAppServer(): Promise<AppServer> {
     DECKBRIDGE_CORA_PORT: String(coraPort),
     DECKBRIDGE_DECK_PORT: String(deckPort),
     DECKBRIDGE_NATIVE_LIB: nativeLibPath(),
+    // Standby minutes become seconds and the app-gone debounce 1 s (mock builds only).
+    DECKBRIDGE_STANDBY_FAST: '1',
   };
   // The tray sidecar is resolved from $DECKBRIDGE_TRAY_BIN *or* a sibling file; --headless
   // skips it entirely, but drop the env var too so a stale path can't be picked up.

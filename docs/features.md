@@ -102,6 +102,9 @@ a regular **Network device** at `localhost`; the deck behaves like Elgato hardwa
 - **Push API** — other tools (OBS, Home Assistant, scripts, `deckbridge push`) write text
   onto side keys and AKP05/AKP05E strip zones over token-authenticated HTTP, with a TTL;
   see [Push API](./push-api.md).
+- **Standby and burn-in care (opt-in)** — dim or turn off an idle deck, show a dim moving
+  clock while the Elgato app is away, run a night-time brightness window, and shift
+  DeckBridge's own widgets by 1 px; see [Standby and burn-in care](#standby-and-burn-in-care).
 - **Live web UI** — `http://localhost:3000` shows the key grid and a log feed in real time.
 - **Device tuning** — rotation, flip, image fit, quality and size are adjustable at
   runtime per model, with a key-map learn mode that derives the correct key mapping from
@@ -200,6 +203,60 @@ switching it on again restores the dock).
 Every dock needs its **own IP address** in the Elgato app — see
 [one dock per IP address](./browser-deck.md#one-dock-per-ip-address). A phone or tablet can
 be an extra dock too: see the [Browser deck](./browser-deck.md).
+
+## Standby and burn-in care
+
+Cheap LCD panels keep a ghost of a static image, and a deck left at full brightness with a
+stale page glares at night. **Settings → Standby & burn-in care** (for the selected deck) protects the
+panel. **Everything is off by default**; a deck behaves as before until you switch a piece on.
+
+- **Dim when idle** — after N minutes without a key, knob or touch input, the backlight drops
+  to the level you pick. Any input brings it back.
+- **Screen off** — a second idle stage turns the screen off after N more minutes. *How to turn
+  it off* is `auto` (the device's sleep mode where it has a verified one, else brightness 0)
+  or `brightness0`. No model uses hardware sleep yet, because it has not been verified on
+  real hardware: today both choices write brightness 0.
+- **Wake press** — by default the first press on a dimmed or dark deck only wakes it and is
+  not sent to the Elgato app. Switch it to *Wakes and runs the key* to forward it. A click
+  in the web UI (Click to press) is never swallowed.
+- **When the Elgato app is away** — keep the last images (default), show a dim clock, or turn
+  the screen off. DeckBridge waits 15 s before it acts, so the app's own reconnects and
+  restarts never flash the clock. It acts only for a paired deck (or one that was paired
+  since DeckBridge started) and not in the first minute after DeckBridge starts. The clock
+  moves to a new key every minute; when the app returns, its last images come back at once.
+  The Companion app is not treated as the Elgato app.
+- **Night mode** — between *From* and *To* the brightness is capped at the night level, and the
+  screen can go fully dark when idle. The window follows the **DeckBridge computer's clock**
+  (the web UI shows its current time), including its time zone and daylight saving.
+- **Pixel shift** — moves the side-key and touch-strip widgets DeckBridge draws by 1 px every
+  five minutes. The Elgato app's own key images are never shifted.
+
+Your brightness slider keeps the level you chose; dimming only changes what the panel shows,
+and the header of the panel says what is on the deck now. On the [Browser deck](./browser-deck.md)
+dimming and screen off work on the page, the clock choice acts as *Turn the screen off*, and
+pixel shift does not apply.
+
+Two optional shell commands run when the screen goes off and when it wakes. They are set in
+`settings.json` only (the web UI never shows or edits them), per device:
+
+```json
+{
+  "devices": [
+    {
+      "deviceKey": "usb:A00000000000",
+      "standby": {
+        "sleepCommand": "osascript -e 'tell application \"System Events\" to sleep'",
+        "wakeCommand": "echo woke >> /tmp/deck.log"
+      }
+    }
+  ]
+}
+```
+
+Like [command widgets](./side-keys.md#security), these run on your host with your rights, so
+keep the Web UI off untrusted networks. A command has 10 s, its output is dropped, and only
+one of each kind runs at a time. `./deckbridge diagnose --redact-commands` hides them in the
+report.
 
 ## Click to press
 

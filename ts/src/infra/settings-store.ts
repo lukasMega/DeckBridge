@@ -13,6 +13,7 @@ import type { PushTokenRecord } from './push-tokens.js';
 import type {
   EncoderSettings,
   ExtraKeyConfig,
+  StandbySettings,
   TouchStripMode,
   TouchStripOptions,
   TouchStripUpload,
@@ -59,6 +60,8 @@ export interface DeviceIdentitySettings {
    *  .claude/plans/2026-09-27_auto-restart-elgato-app.md §2). Set once by
    *  PersistedSettings.markPaired() and never cleared. */
   pairedAt?: string;
+  /** Idle dim / screen off / night / standby clock / pixel shift — see main/dock-standby.ts. */
+  standby?: Partial<StandbySettings>;
 }
 
 /** Tap-refresh feedback: `flash` = inverted colours for a moment on the tap;

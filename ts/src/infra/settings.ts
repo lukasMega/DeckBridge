@@ -22,6 +22,7 @@ import {
 import type { DockStatus, ExtraKeyConfig } from '../shared/types.js';
 import type { UpdateState } from './update-check.js';
 import { encoderSettingsError } from '../shared/encoder-settings.js';
+import { standbySettingsError } from '../shared/standby-settings.js';
 import {
   DEFAULT_BROWSER_DECK_PROFILE,
   isBrowserDeckProfile,
@@ -64,6 +65,7 @@ const OPTIONAL_DEVICE_FIELDS: ReadonlyArray<{ key: string; isValid: (v: unknown)
   { key: 'encoders', isValid: (v) => !encoderSettingsError(v) },
   { key: 'tapFeedback', isValid: isTapFeedback },
   { key: 'pairedAt', isValid: (v) => typeof v === 'string' },
+  { key: 'standby', isValid: (v) => standbySettingsError(v) === null },
 ];
 
 /** Strip bad optional per-device fields so they can't fail isDeviceIdentitySettings

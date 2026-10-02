@@ -403,6 +403,20 @@ brightness re-push). Everything a Dock reports out goes through optional `DockHo
 disconnect, key activity, WebUI image/strip/widget mirrors, …), so the WebUI mirror is just the hook
 set the caller passes.
 
+`Dock.brightness` is the **requested** level (what the slider shows and `settings.json` stores);
+the level on the panel is the **effective** one, computed by the per-dock `DockStandby`
+([dock-standby.ts](../ts/src/main/dock-standby.ts), pure maths in
+[standby-policy.ts](../ts/src/main/standby-policy.ts), injectable clock, timers on the main
+thread only). It owns the display state (`active | dimmed | night | standby | off`), the
+input gate that swallows a waking press at the single choke point in `wireDriver`, the
+15 s app-gone debounce over the CORA child link, and the optional sleep/wake shell hooks
+([standby-hooks.ts](../ts/src/main/standby-hooks.ts)). The standby clock is painted by
+`StandbyClockPainter` ([standby-clock.ts](../ts/src/main/standby-clock.ts)) and the app's frames
+come back from `LastFrames`. The only new worker message is `setSleep`, sent solely for a model
+that declares `sleep`; everything else reuses `setBrightness` and the splash path. The WebUI
+reads the state from the ordinary `status` broadcast (`displayState`, `effectiveBrightness`)
+and edits settings through `GET`/`POST /api/standby`.
+
 `DriverManager` emits one `'changed'` event for any dock/probe state change (a dock attached or
 stopped, brightness, pairing, rename, a failed probe); app.ts refreshes the WebUI dock list and the tray
 from that one listener. It keeps every live dock in one `Map<index, Dock>`: WebUI per-dock actions go to
@@ -723,6 +737,7 @@ shallow-memo `useStore` selector in `ts/src/web/client/lib/store.ts`, plus the c
 | Web & infra | `web-ui-server` (MAC/port/Broadcaster, NaN-PID V4, `resetImages` L3), `ui-helpers-docks` (dock list vs legacy-field synthesis), `key-preview`, `tray` (path helpers + `SIGTERM` L1), `mdns-advertiser` (per-platform `buildArgs`, E9), `native-libs` (extract/gunzip/cleanup), `buffer-shim` |
 | Settings & identity | `settings-store` (atomic write, corrupt/missing/array-shaped JSON → `{}`, concurrent-save safety), `device-identity` (stable `usb:<serial>` key vs unstable path fallback, deterministic MAC/serial, no-collision sampling) |
 | CLI | `cli` (flag parsing incl. `tjs run <bundle>` vs compiled-binary argv shape), `cli-devices` (device table formatting, known/unknown VID+PID rows) |
+| Standby & burn-in care | `standby-settings` (defaults, ranges, `HH:MM`, command keys), `standby-policy` (night window incl. DST, display table, pixel-shift orbit, clock slots), `dock-standby` (state machine, debounce, wake press, off/sleep, hooks), `standby-clock` (clock painter per geometry), `standby-hooks` (sleep/wake runner), `mirabox-driver-sleep` (HAN / wake sequence); `dock`, `dock-frames`, `extra-keys`, `settings`, `web-ui-server` and `diagnostics` carry the integration cases |
 | Plugins & extra keys | `extra-keys` (widget rendering: clock/date/text/weather/command/plugin, lat/lon parsing), `plugin-host` (message round-trip, lazy spawn, heartbeat respawn, `MAX_CONSECUTIVE_KILLS` disable, `http://`-only fetch proxy) |
 | Probes (non-assertion) | `k1pro-probe-layout`, `splash-size` — reproduce K1 Pro JPEG variants byte-for-byte and write samples under `/tmp` for offline analysis |
 | Captured hardware | `hid-report-descriptor`'s last block replays the real 54-byte report descriptor of a Fifine D6 rev. 2 (`test/fixtures/fifine-d6-rev2.report-descriptor.json`, taken with `mise run d6-capture`) — it pins the packet-size probe to bytes a physical board emitted, not to synthetic ones |

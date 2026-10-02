@@ -103,6 +103,8 @@ export const routes: Route[] = [
   postJson('/api/update-check-enabled', setUpdateCheckEnabled),
 
   postJson('/api/elgato-auto-restart', setElgatoAutoRestart),
+  get('/api/standby', ({ standby }) => json(standby.view())),
+  postJson('/api/standby', setStandby),
   post('/api/elgato-app/restart', async ({ elgatoApp }) => json(await elgatoApp.restartNow())),
 
   // text/plain, not JSON: the report is meant to be pasted verbatim into an issue.
@@ -358,6 +360,11 @@ function setEncoders(body: unknown, { encoders }: RouteContext): Response {
     ...(commands !== undefined ? { commands } : {}),
   });
   return err ? json({ error: err.error }, err.status) : json({ ok: true });
+}
+
+function setStandby(body: unknown, { standby }: RouteContext): Response {
+  const r = standby.trySet(body);
+  return 'error' in r ? json({ error: r.error }, r.status) : json(r.view);
 }
 
 function simulate(ui: RouteContext['ui'], raw: RawMockInput): Response {

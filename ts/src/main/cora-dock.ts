@@ -59,6 +59,11 @@ export class CoraDock {
     return this.childServer.hasClient;
   }
 
+  /** Ms since the child-port client last sent anything; 0 without one. */
+  get childRxIdleMs(): number {
+    return this.childServer.rxIdleMs;
+  }
+
   /** One call replacing the config/geometry/mDNS/capabilities push sequence
    *  (device/PID, advertised geometry, mDNS restart, child capabilities). */
   applyModel(model: DeviceModel, deviceInfo?: DeviceInfo): void {

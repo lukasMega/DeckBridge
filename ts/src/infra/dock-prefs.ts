@@ -4,7 +4,13 @@
 import type { DeviceIdentitySettings, TapFeedback } from './settings-store.js';
 import { tapFeedbackOf } from './settings-store.js';
 import { DEFAULT_TOUCH_STRIP_MODE, TOUCH_STRIP_REPAINT_DEFAULT_MS } from '../shared/types.js';
-import type { EncoderSettings, ExtraKeyConfig, TouchStripMode } from '../shared/types.js';
+import type {
+  EncoderSettings,
+  ExtraKeyConfig,
+  StandbySettings,
+  TouchStripMode,
+} from '../shared/types.js';
+import { resolveStandby } from '../shared/standby-settings.js';
 
 export const DEFAULT_BRIGHTNESS_OVERRIDE = true;
 
@@ -14,6 +20,7 @@ export interface RuntimePrefs {
   touchStripMode: TouchStripMode;
   touchStripRepaintMs: number;
   encoders: EncoderSettings;
+  standby: Partial<StandbySettings>;
 }
 
 export function defaultRuntimePrefs(): RuntimePrefs {
@@ -22,6 +29,7 @@ export function defaultRuntimePrefs(): RuntimePrefs {
     touchStripMode: DEFAULT_TOUCH_STRIP_MODE,
     touchStripRepaintMs: TOUCH_STRIP_REPAINT_DEFAULT_MS,
     encoders: {},
+    standby: {},
   };
 }
 
@@ -87,6 +95,17 @@ export class DockPrefs {
     return tapFeedbackOf(this.entry());
   }
 
+  /** What is persisted, unresolved (the WebUI POST merges into it). */
+  standbyStored(): Partial<StandbySettings> {
+    const e = this.entry();
+    return (e ? e.standby : this.store.runtime.standby) ?? {};
+  }
+
+  /** Resolved over the defaults, read live (the WebUI and imports change it). */
+  standby(): StandbySettings {
+    return resolveStandby(this.standbyStored());
+  }
+
   setBrightnessOverride(enabled: boolean): void {
     this.write(
       (e) => (e.brightnessOverride = enabled),
@@ -116,6 +135,17 @@ export class DockPrefs {
         else delete e.encoders;
       },
       (r) => (r.encoders = encoders),
+    );
+  }
+
+  /** An empty object clears the persisted field. */
+  setStandby(s: Partial<StandbySettings>): void {
+    this.write(
+      (e) => {
+        if (Object.keys(s).length > 0) e.standby = s;
+        else delete e.standby;
+      },
+      (r) => (r.standby = s),
     );
   }
 

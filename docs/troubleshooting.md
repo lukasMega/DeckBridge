@@ -22,6 +22,15 @@ your issue.
 - **Missing libhidapi** — see the [requirements check](./features.md#requirements).
 - **Restrict LAN access** — set `DECKBRIDGE_BIND=127.0.0.1`.
 - **Images rotated, mirrored, or on the wrong key** — see [Device tuning](#device-tuning).
+- **The first press after the deck dimmed does nothing** — by design: the first press only
+  wakes the deck. Set *Wake press* to *Wakes and runs the key* in Standby & burn-in care.
+- **A clock appeared on my deck** — the Elgato app disconnected (quit, its computer slept, or
+  the network dropped) for more than 15 s, and *When the Elgato app is away* is set to the
+  clock. Start the app again and its images return; set the option to *Keep showing the last
+  images* to turn the clock off.
+- **My deck went dark** — *Screen off* (after idle or at night) or *When the Elgato app is
+  away: Turn the screen off* is on. Press a key or turn a knob to wake it. Your brightness
+  level is unchanged.
 - **AJAZZ AKP05E panel wedged** — unplug it, wait briefly, then reconnect. DeckBridge
   sends the full init sequence on open (`CRT VER`, then `DIS`, `LIG`, `CLE 0xff`, `STP`)
   and nothing on close; do not send other reset commands during recovery.

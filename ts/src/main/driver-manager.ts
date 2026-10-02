@@ -212,6 +212,11 @@ export class DriverManager extends EventEmitter {
     for (const dock of this.docks.values()) dock.paintChangedWidgets();
   }
 
+  /** A settings import may change any dock's standby settings. */
+  reloadAllStandby(): void {
+    for (const dock of this.docks.values()) dock.reloadStandby();
+  }
+
   /** The live dock serving `deviceKey`, if any. */
   dockForDevice(deviceKey: string): Dock | undefined {
     for (const dock of this.docks.values()) if (dock.identity?.deviceKey === deviceKey) return dock;
