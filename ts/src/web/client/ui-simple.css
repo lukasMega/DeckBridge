@@ -143,9 +143,6 @@ later per-class rules keep only size/background/placement deltas */
   margin: 18px 0 4px;
   grid-template-columns: 1fr;
 }
-.dock-card {
-  padding: 13px;
-}
 /* .chip-radio: the radio itself is visually hidden, so it cannot carry the focus ring */
 :is(.dock-card:focus-visible, .strip-zone-tab:focus-visible),
 .chip-radio:has(input:focus-visible) {
@@ -187,6 +184,7 @@ later per-class rules keep only size/background/placement deltas */
   margin-top: 10px;
 }
 .dock-card {
+  padding: 13px;
   .preview {
     margin: 0;
   }
@@ -344,9 +342,6 @@ input[type='range'].range:disabled {
   margin-inline: auto;
   padding: 16px;
   border: 1px solid var(--border-strong);
-}
-:is(.side-keys-device-grid, .side-keys-device-column) {
-  display: contents;
 }
 .side-keys-device-key {
   aspect-ratio: 1;
@@ -725,11 +720,9 @@ input[type='range'].range:disabled {
   filter: brightness(1.08);
 }
 .conflict-after {
-  margin-top: 16px;
+  margin: 16px auto 0;
   line-height: 1.55;
   max-width: 30ch;
-  margin-left: auto;
-  margin-right: auto;
 }
 
 /* ---- Simple view — HELP view ---- */
@@ -878,8 +871,7 @@ input[type='range'].range:disabled {
   margin: 0 0 10px;
 }
 .popover .about-version {
-  margin-top: 16px;
-  margin-bottom: 0;
+  margin: 16px 0 0;
   padding-top: 12px;
   border-top: 1px solid var(--border);
 }
