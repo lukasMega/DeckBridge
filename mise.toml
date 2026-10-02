@@ -1,3 +1,7 @@
+[settings]
+# No "Finished in Ns" line after every task: silent on success.
+quiet = true
+
 [tools]
 node = "24"
 # Default aqua backend, NOT `npm:pnpm`: pnpm's npm tarball ships a placeholder `bin/pnpm`
@@ -91,27 +95,27 @@ description = "Build Rust system tray binary"
 quiet = true
 dir = "{{config_root}}/rust/deckbridge-tray"
 depends = ["deckbridge-native"]
-run = "cargo build --release"
+run = "cargo build -q --release"
 
 [tasks.ts-install]
 description = "Install TypeScript/esbuild dev dependencies"
 quiet = true
 dir = "ts"
-run = "pnpm install --silent && echo pnpm install OK"
+run = "pnpm install --silent"
 
 [tasks.ts]
 description = "Bundle TypeScript with esbuild (simple-only UI: excludes the advanced view + its CSS)"
 quiet = true
 dir = "ts"
 depends = ["ts-install", "deckbridge-native"]
-run = "node build.mjs"
+run = "node ../scripts/quiet.mjs --fail-only -- node build.mjs"
 
 [tasks.ts-mock]
 description = "Bundle TypeScript with mock driver and simulation routes"
 quiet = true
 dir = "ts"
 depends = ["ts-install", "deckbridge-native"]
-run = "DECKBRIDGE_BUILD_MOCK=1 node build.mjs"
+run = "DECKBRIDGE_BUILD_MOCK=1 node ../scripts/quiet.mjs --fail-only -- node build.mjs"
 
 [tasks.build]
 description = "Build everything (simple-only UI)"
@@ -164,9 +168,13 @@ depends = ["compile-advanced"]
 run = "SRC_BIN=deckbridge-advanced node scripts/package.mjs ${1:-dev}"
 
 [tasks.lint]
-description = "Lint with oxlint"
+description = "Lint with oxlint + eslint (silent unless findings)"
+quiet = true
 depends = ["ts-install"]
-run = "./ts/node_modules/.bin/oxlint ts && echo 'oxlint done ✅, waiting for eslint...' && ./ts/node_modules/.bin/eslint ts"
+run = """
+node scripts/quiet.mjs -- ./ts/node_modules/.bin/oxlint ts
+node scripts/quiet.mjs --ok=lint -- ./ts/node_modules/.bin/eslint ts
+"""
 
 [tasks.tauri-build]
 description = "Build Windows NSIS installer via Tauri (compile + stage sidecars + pinned npm CLI)"
@@ -177,7 +185,7 @@ run = "node scripts/tauri-build.mjs"
 description = "Install pinned prebuilt Tauri CLI"
 quiet = true
 dir = "src-tauri"
-run = "pnpm install --frozen-lockfile --silent && echo Tauri CLI install OK"
+run = "pnpm install --frozen-lockfile --silent"
 
 [tasks.tauri-build-macos]
 description = "Build macOS .app + .dmg via Tauri (compile + stage sidecars + pinned npm CLI)"
@@ -224,35 +232,43 @@ run = "node ../scripts/tauri-check-stubs.mjs && cargo check"
 # rust/rust-toolchain.toml, so rustup installs it on first use.
 [tasks.rust-lint]
 description = "Rust fmt-check + clippy + tests"
+quiet = true
 dir = "rust"
 run = """
-cargo fmt --check -p deckbridge-native -p deckbridge-tray
-cargo clippy --workspace --all-targets -- -D warnings
-cargo clippy -p deckbridge-native --no-default-features --features jpeg-fork,usb --all-targets -- -D warnings
-cargo test --workspace
-cargo clippy -p deckbridge-native --target x86_64-pc-windows-msvc --no-default-features --features jpeg-upstream --all-targets -- -D warnings
+Q="node ../scripts/quiet.mjs --fail-only --"
+$Q cargo fmt --check -p deckbridge-native -p deckbridge-tray
+$Q cargo clippy -q --workspace --all-targets -- -D warnings
+$Q cargo clippy -q -p deckbridge-native --no-default-features --features jpeg-fork,usb --all-targets -- -D warnings
+$Q cargo test -q --workspace
+$Q cargo clippy -q -p deckbridge-native --target x86_64-pc-windows-msvc --no-default-features --features jpeg-upstream --all-targets -- -D warnings
+echo '✔ rust-lint'
 """
 
 [tasks.format]
 description = "Format with oxfmt (single quotes)"
+quiet = true
 depends = ["ts-install"]
-run = "./ts/node_modules/.bin/oxfmt ts/src ts/test docs-site/src docs-site/scripts e2e/fixtures e2e/helpers e2e/scripts e2e/tests e2e/playwright.config.ts e2e/global-setup.ts e2e/global-teardown.ts"
+run = "node scripts/quiet.mjs --ok=format -- ./ts/node_modules/.bin/oxfmt ts/src ts/test docs-site/src docs-site/scripts e2e/fixtures e2e/helpers e2e/scripts e2e/tests e2e/playwright.config.ts e2e/global-setup.ts e2e/global-teardown.ts"
 
 [tasks.check]
 description = "Typecheck + lint + format check"
+quiet = true
 depends = ["types", "lint", "format"]
+run = "echo '✔ check'"
 
 [tasks.types]
 description = "Type-check TypeScript (no emit)"
+quiet = true
 dir = "ts"
 depends = ["ts-install"]
-run = "pnpm exec tsgo --noEmit"
+run = "node ../scripts/quiet.mjs --ok=types -- pnpm exec tsgo --noEmit"
 
 [tasks.knip]
 description = "Find unused files, exports, types, and dependencies (knip)"
+quiet = true
 dir = "ts"
 depends = ["ts-install"]
-run = "pnpm exec knip"
+run = "node ../scripts/quiet.mjs --ok=knip -- pnpm exec knip"
 
 [tasks.loc]
 description = "Top 10 largest .ts/.tsx files under ts/src by line count (excl. node_modules/dist/test, .d.ts)"
@@ -261,8 +277,9 @@ run = "node scripts/loc.mjs"
 
 [tasks.check-loc]
 description = "Fail (exit 1) if any .ts/.tsx file under ts/src exceeds 500 lines (test/ excluded)"
+quiet = true
 dir = "ts"
-run = "node scripts/check-loc.mjs"
+run = "node scripts/check-loc.mjs && echo '✔ check-loc'"
 
 
 [tasks.docs-devices]
@@ -273,21 +290,26 @@ run = "node scripts/gen-device-docs.mjs"
 
 [tasks.docs-devices-check]
 description = "Fail if the generated device docs are stale vs DEVICE_MODELS"
+quiet = true
 dir = "ts"
 depends = ["ts-install"]
-run = "node scripts/gen-device-docs.mjs --check"
+run = "node ../scripts/quiet.mjs --fail-only --ok=docs-devices -- node scripts/gen-device-docs.mjs --check"
 
 [tasks.ci-checks]
 description = "Lint, typecheck, core/browser tests, knip, check-loc, and generated device docs in parallel"
+quiet = true
 depends = ["lint", "types", "test", "test-client", "knip", "check-loc", "docs-devices-check"]
+run = "echo '✔ ci-checks'"
 timeout = "120s"
 
 [tasks.beforeCommit]
 description = "Format, lint, types, test, browser e2e, and compile — run before committing"
+quiet = true
 # e2e-browser is e2e-app + e2e-docs. e2e-docs carries `wait_for = ["docs-check"]`, so in
 # this run it starts only once docs-check has produced docs-site/build/.
 depends = ["format", "ci-checks", "rust-lint", "docs-check", "e2e-types", "e2e-browser", "compile"]
 dir = "ts"
+run = "echo '✔ beforeCommit'"
 # 300s, not 150s: e2e-docs can't start until docs-check's Docusaurus build finishes.
 timeout = "360s"
 
@@ -347,6 +369,7 @@ run = """
 
 [tasks.e2e]
 description = "Black-box smoke test of a packaged release zip (usage: mise run e2e -- dist/foo.zip)"
+quiet = true
 run = "./scripts/e2e-smoke.sh ${1:-}"
 timeout = "30s"
 
@@ -355,40 +378,45 @@ timeout = "30s"
 # screenshots, no boundingBox and no `locator.click()` — see e2e/helpers/click.ts.
 [tasks.e2e-install]
 description = "Install the Playwright e2e suite's dependencies"
+quiet = true
 dir = "e2e"
 # The bundled Chromium is never launched (Lightpanda is the runtime; the E2E_BROWSER=chromium
 # triage path uses $CHROME_BIN / a system install), so skip the ~150 MB download.
 env = { PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD = "1" }
-run = "pnpm install --silent && echo e2e pnpm install OK"
+run = "pnpm install --silent"
 
 [tasks.e2e-app]
 description = "Browser e2e: the DeckBridge Web UI in mock mode"
+quiet = true
 dir = "e2e"
 depends = ["build-mock", "e2e-install"]
-run = "pnpm run test:app"
+run = "pnpm --silent run test:app"
 timeout = "180s"
 
 [tasks.e2e-docs]
 description = "Browser e2e: the built Docusaurus site (run `mise run docs-build` first)"
+quiet = true
 dir = "e2e"
 depends = ["e2e-install"]
 # wait_for, not `depends`: standalone this task must fail in seconds with "run mise run
 # docs-build first" instead of silently triggering a multi-minute Docusaurus build. Within
 # beforeCommit, docs-check produces docs-site/build/ and wait_for stops the two racing.
 wait_for = ["docs-check"]
-run = "pnpm run test:docs"
+run = "pnpm --silent run test:docs"
 timeout = "180s"
 
 [tasks.e2e-browser]
 alias = ["e2e-all"]
 description = "All browser e2e suites (app + docs)"
+quiet = true
 depends = ["e2e-app", "e2e-docs"]
 
 [tasks.e2e-types]
 description = "Type-check the e2e suite"
+quiet = true
 dir = "e2e"
 depends = ["e2e-install"]
-run = "pnpm run types"
+run = "node ../scripts/quiet.mjs --ok=e2e-types -- pnpm --silent run types"
 
 [tasks.test]
 description = "Run tests (TJS)"
@@ -400,15 +428,17 @@ timeout = "240s"
 
 [tasks.test-client]
 description = "Run Preact browser regression tests"
+quiet = true
 dir = "ts"
 depends = ["ts-install"]
-run = "pnpm run test:client"
+run = "node ../scripts/quiet.mjs --fail-only --ok=test-client -- pnpm --silent run test:client"
 # The script's own browser budget is 90s; keep this clear of it so a browser timeout
 # fails with the script's diagnostic (Chrome path + stderr) instead of a bare task kill.
 timeout = "150s"
 
 [tasks.docs-install]
 description = "Install docs-site pnpm dependencies"
+quiet = true
 dir = "docs-site"
 run = "pnpm install"
 
@@ -422,9 +452,10 @@ run = "pnpm exec docusaurus start --port 3001 --host 0.0.0.0"
 
 [tasks.docs-check]
 description = "docs-site: typecheck + tests (build/links/content/output)"
+quiet = true
 dir = "docs-site"
 depends = ["docs-install"]
-run = "pnpm run beforeCommit"
+run = "node ../scripts/quiet.mjs --fail-only --ok=docs-check -- pnpm run beforeCommit"
 
 [tasks.docs-build]
 description = "Build Docusaurus static HTML (docs-site/build/)"

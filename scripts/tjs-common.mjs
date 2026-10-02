@@ -27,7 +27,6 @@ export function requireTjsEnv() {
   }
 
   if (existsSync(TJS)) {
-    console.log(`tjs already present: ${TJS}`);
     process.exit(0);
   }
 

@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 // Run the txiki.js test suite. For each ts/test/*.test.ts: bundle it, then run it
-// under $TJS. Prints one line per test file (relative to project root). On a build
-// or run failure (including SIGSEGV), prints the captured output and exit status.
-// Continues past failures; exits non-zero if any test failed.
+// under $TJS. Silent on success except one summary line (VERBOSE=1 prints a line per
+// passing file). On a build or run failure (including SIGSEGV), prints the captured
+// output and exit status. Continues past failures; exits non-zero if any test failed.
 //
 // Env (provided by mise): TJS, DECKBRIDGE_NATIVE_LIB. Invoked by [tasks.test] in mise.toml.
 import { spawnSync } from 'node:child_process';
@@ -30,7 +30,9 @@ const files = readdirSync(join(tsDir, 'test'))
   .filter((f) => process.env.CI || !CI_ONLY_TESTS.has(f))
   .sort();
 
+const verbose = Boolean(process.env.VERBOSE);
 let rc = 0;
+let failed = 0;
 for (const file of files) {
   const startedAt = process.hrtime.bigint();
   const name = file.slice(0, -'.test.ts'.length);
@@ -46,6 +48,7 @@ for (const file of files) {
     process.stdout.write((build.stdout ?? '') + (build.stderr ?? ''));
     console.log(`  build exit ${build.status ?? `signal ${build.signal}`}`);
     rc = 1;
+    failed++;
     continue;
   }
 
@@ -56,10 +59,15 @@ for (const file of files) {
     // status is null when the process is killed by a signal (e.g. SIGSEGV).
     console.log(`  exit ${run.status ?? `signal ${run.signal}`}`);
     rc = 1;
+    failed++;
     continue;
   }
 
-  console.log(`✔ ${label}${duration()}`);
+  if (verbose) console.log(`✔ ${label}${duration()}`);
 }
+
+console.log(
+  failed ? `✘ tests: ${failed} of ${files.length} files failed` : `✔ tests (${files.length} files)`,
+);
 
 process.exit(rc);
