@@ -17,7 +17,6 @@ export default async function globalSetup(): Promise<void> {
   }
 
   const bin: string = ensureLightpanda();
-  console.log(`[e2e] lightpanda ${lightpandaVersion(bin)}`);
 
   const port = await freePort();
   // --load-resources stylesheet: external CSS is NOT fetched by default, and several
