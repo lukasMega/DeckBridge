@@ -23,12 +23,12 @@ const CACHED = join(CACHE_DIR, 'lightpanda');
 const LOCK = join(CACHE_DIR, '.install.lock');
 const VERSION_FILE = join(import.meta.dirname, '..', '.lightpanda-version');
 
-/** @returns {string} the pinned release, e.g. "0.4.0" */
+/** @returns {string} the pinned release, e.g. "1.0.0" */
 export function pinnedVersion() {
   return readFileSync(VERSION_FILE, 'utf8').trim();
 }
 
-/** @returns {string} the version string a binary reports, e.g. "0.4.0" */
+/** @returns {string} the version string a binary reports, e.g. "1.0.0" */
 export function lightpandaVersion(bin) {
   return execFileSync(bin, ['version'], { encoding: 'utf8' }).trim();
 }
