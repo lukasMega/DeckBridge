@@ -25,9 +25,20 @@ export class LastFrames {
     this.frames.clear();
   }
 
-  /** Re-render every frame through the driver (live spec change); the frames themselves are unchanged. */
-  repaint(driver: DockDriver): void {
-    for (const [key, { data, format }] of this.frames) driver.renderCoraImage(key, data, format);
+  has(key: number): boolean {
+    return this.frames.has(key);
+  }
+
+  /** Re-render every frame through the driver (live spec change, standby exit); the frames
+   *  themselves are unchanged. `mirror` restores the WebUI preview too. */
+  repaint(
+    driver: DockDriver,
+    mirror?: (key: number, data: Buffer, format: ImageFormat) => void,
+  ): void {
+    for (const [key, { data, format }] of this.frames) {
+      driver.renderCoraImage(key, data, format);
+      mirror?.(key, data, format);
+    }
   }
 
   /** On (re)attach: paint the app's last frames over the splash when the same model came back
@@ -57,6 +68,8 @@ export interface DockImageSink {
   onTouchFrame?: (region?: TouchWindowRegion) => void;
   /** WebUI mirror of a touch-strip frame. */
   onTouchImage?: (data: Uint8Array, region?: TouchWindowRegion) => void;
+  /** Any app frame landed: proof the app is alive (standby exit). Must stay O(1). */
+  onAppFrame?: () => void;
 }
 
 /** CORA image → device, then → frame store + WebUI mirror. */
@@ -73,6 +86,7 @@ export function wireDockImages(
     // Only frames painted on a device are replayable onto it.
     if (driver) sink.frames.record(keyIndex, data, format);
     sink.onImage?.(keyIndex, data, format);
+    sink.onAppFrame?.();
     perfOnWebUI();
   });
   // `region` is set for partial-window uploads, undefined for a full window strip.
@@ -82,6 +96,7 @@ export function wireDockImages(
       sink.driver()?.renderTouchImage(data, region);
       sink.onTouchFrame?.(region);
       sink.onTouchImage?.(data, region);
+      sink.onAppFrame?.();
     },
   );
 }

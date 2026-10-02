@@ -15,6 +15,7 @@ import {
 } from '../shared/types.js';
 import type {
   KeyEvent,
+  DisplayState,
   DockStatus,
   DialEvent,
   TouchInputEvent,
@@ -90,6 +91,12 @@ export interface DockStatusInput {
   elgatoConnected: boolean;
   /** Absent (not just empty) omits realDeviceIdentity — the pre-connect primary. */
   deviceInfo: DeviceInfo | undefined;
+  /** Standby view of the backlight; absent = fields omitted. */
+  display?: {
+    state: DisplayState;
+    effectiveBrightness: number;
+    caps: { sleep: boolean; clock: boolean };
+  };
 }
 
 /** The one place a DockStatus is built: the primary dock (driver-manager-primary)
@@ -122,6 +129,13 @@ export function buildDockStatus(s: DockStatusInput): DockStatus {
     primaryConnected: s.primaryConnected,
     elgatoConnected: s.elgatoConnected,
     brightness: s.brightness,
+    ...(s.display
+      ? {
+          displayState: s.display.state,
+          effectiveBrightness: s.display.effectiveBrightness,
+          standbyCaps: s.display.caps,
+        }
+      : {}),
     dockFirmwareVersion: DEFAULT_DOCK_FIRMWARE_VERSION,
     childFirmwareVersion: childFirmwareFor(model, deviceInfo),
     serialNumber: identity?.dockSerial ?? DEFAULT_DOCK_SERIAL_NUMBER,

@@ -42,6 +42,11 @@ export abstract class CoraServerBase extends EventEmitter {
     return this.client !== null;
   }
 
+  /** Standby's CORA-silence signal: ms since the client last sent anything; 0 without one. */
+  get rxIdleMs(): number {
+    return this.client ? Date.now() - this.lastClientRxTs : 0;
+  }
+
   /** Close the attached client but keep listening. Unlike stop(), `client` stays
    *  set until the socket's close handler runs, so 'clientDisconnected' fires. */
   dropClient(): void {

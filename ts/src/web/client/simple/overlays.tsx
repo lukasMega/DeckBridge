@@ -13,6 +13,7 @@ import { KeyPressPanel } from './key-press-panel.js';
 import { UpdatePanel } from './update-panel.js';
 import { ElgatoAppPanel } from './elgato-app-panel.js';
 import { DeviceTuningPanel } from './device-tuning.js';
+import { StandbyPanel } from './standby-panel.js';
 import { postJson, useFetched } from '../lib/ui-api.js';
 import { Feedback, useAsyncAction, type AsyncAction } from '../lib/ui-async.js';
 import { useDismiss } from '../lib/ui-hooks.js';
@@ -371,6 +372,7 @@ export function SettingsPage({ onBack }: Readonly<{ onBack: () => void }>): prea
       <PushApiPanel />
       <UpdatePanel info={updateInfoFor(state.data)} />
       <ElgatoAppPanel state={elgatoAutoRestartFor(state.data)} />
+      <StandbyPanel />
       <DiagnosticsPanel {...diagnosticsProps(state.data)} />
       <DeviceTuningPanel />
 

@@ -22,6 +22,8 @@ import { MultiDeckPanel } from '../src/web/client/simple/multi-deck-panel.js';
 import { UpdatePanel } from '../src/web/client/simple/update-panel.js';
 import { Collapsible } from '../src/web/client/components/Collapsible.js';
 import { runDeckPage } from './client-deck.js';
+import { StandbyPanel } from '../src/web/client/simple/standby-panel.js';
+import type { StandbyView } from '../src/web/contract-standby.js';
 import { ElgatoAppPanel } from '../src/web/client/simple/elgato-app-panel.js';
 import { KeymapLearn } from '../src/web/client/simple/keymap-learn.js';
 import { DockList } from '../src/web/client/simple/dock-cards.js';
@@ -1140,6 +1142,7 @@ async function runKeymapAndDiagnosticsPanels(): Promise<void> {
   await runDeckPage(root, check);
   await runElgatoAutoRestartPanel();
   await runElgatoAutoRestartUnsupported();
+  await runStandbyPanel();
 }
 
 async function runCollapsedHeaderStatuses(): Promise<void> {
@@ -2292,6 +2295,148 @@ async function runSideKeysPanel(): Promise<void> {
     stub.restore();
     await act(() => render(null, root));
     await act(() => patch({ status: baseStatus, extraKeys: {}, touchStripMode: 'elgato' }));
+  }
+}
+
+const STANDBY_VIEW: StandbyView = {
+  dock: 0,
+  settings: {
+    idleDim: false,
+    idleMinutes: 5,
+    idleLevel: 10,
+    offWhenIdle: false,
+    offMinutes: 30,
+    offMode: 'auto',
+    wakePress: 'swallow',
+    appGoneAction: 'none',
+    clockLevel: 20,
+    night: false,
+    nightStart: '23:00',
+    nightEnd: '07:00',
+    nightLevel: 10,
+    nightOffWhenIdle: true,
+    pixelShift: false,
+  },
+  serverTime: '12:34',
+  canSleep: false,
+  canShowClock: true,
+  hasCommands: false,
+};
+
+// Standby panel: defaults, toggle POST, disabled fields, status text, time field POST,
+// and a rejected save keeping the previous values.
+async function runStandbyPanel(): Promise<void> {
+  const dimmed: DockUi = {
+    ...DOCKS[0]!,
+    brightness: 80,
+    displayState: 'dimmed',
+    effectiveBrightness: 10,
+  };
+  let reject = false;
+  let server = STANDBY_VIEW;
+  const stub = stubFetch((_url, init) => {
+    if (init?.method !== 'POST') return { payload: server };
+    const sent = JSON.parse(init.body as string) as { settings: Partial<StandbyView['settings']> };
+    if (reject) return { status: 400, payload: { error: 'Night start and end must differ.' } };
+    // The real server merges the posted keys into the stored ones.
+    server = { ...server, settings: { ...server.settings, ...sent.settings } };
+    return { payload: server };
+  });
+  const posts = (): number => stub.calls.filter((c) => c.method === 'POST').length;
+  const lastPosted = (): Partial<StandbyView['settings']> | undefined =>
+    (
+      stub.calls.findLast((c) => c.method === 'POST')?.body as
+        | { settings: StandbyView['settings'] }
+        | undefined
+    )?.settings;
+  const field = (label: string): HTMLInputElement | null =>
+    Array.from(root.querySelectorAll('.tuning-field'))
+      .find((f) => f.querySelector('span')?.textContent === label)
+      ?.querySelector('input') ?? null;
+  try {
+    await act(() => patch({ status: { ...baseStatus, docks: [dimmed], selectedDock: 0 } }));
+    await act(() => render(<StandbyPanel />, root));
+    await settle();
+    check(
+      elementText('.collapse-status').includes('Dimmed to 10%'),
+      'Standby header summarises the dimmed state',
+    );
+    check(
+      root.textContent.includes('Now: Dimmed to 10% (requested 80%)'),
+      'Standby status line shows effective and requested levels',
+    );
+    check(
+      root.querySelector<HTMLInputElement>('#toggle-standby-idle-dim')?.checked === false,
+      'Standby renders the defaults from GET',
+    );
+    check(
+      field('After (minutes)')?.disabled === true && field('From')?.disabled === true,
+      'Standby fields are disabled while their toggle is off',
+    );
+    check(root.textContent.includes('DeckBridge time now: 12:34'), 'Standby shows the host time');
+
+    await click('#toggle-standby-idle-dim');
+    await settle();
+    check(
+      JSON.stringify(lastPosted()) === '{"idleDim":true}',
+      'Dim toggle posts only the changed key',
+    );
+    check(field('After (minutes)')?.disabled === false, 'Dim fields enable after the toggle');
+
+    // Two edits before the first save returns must both survive (no stale-view revert).
+    await act(async () => {
+      root.querySelector<HTMLButtonElement>('#toggle-standby-night')?.click();
+      root.querySelector<HTMLButtonElement>('#toggle-standby-pixel-shift')?.click();
+      await Promise.resolve();
+    });
+    await settle();
+    check(
+      root.querySelector<HTMLInputElement>('#toggle-standby-night')?.checked === true &&
+        root.querySelector<HTMLInputElement>('#toggle-standby-pixel-shift')?.checked === true,
+      'Two quick standby edits both stick',
+    );
+    check(
+      server.settings.night && server.settings.pixelShift,
+      'Both quick edits reached the server',
+    );
+    await click('#toggle-standby-pixel-shift');
+    await settle();
+
+    // Levels start at 1: 0 would read as screen off but is not a dim level.
+    const level = field('Dimmed brightness (%)')!;
+    check(level.min === '1', 'Standby level fields start at 1');
+    const before = posts();
+    await act(() => {
+      level.value = '0';
+      level.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    await settle();
+    check(posts() === before, 'A level of 0 is ignored, not posted');
+
+    const from = field('From')!;
+    await act(() => {
+      from.value = '22:30';
+      from.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+    await settle();
+    check(lastPosted()?.nightStart === '22:30', 'Night time change posts nightStart');
+
+    reject = true;
+    await click('#toggle-standby-pixel-shift');
+    await settle();
+    check(
+      elementText('.settings-error').includes('must differ'),
+      'A rejected save shows the server error',
+    );
+    check(
+      root.querySelector<HTMLInputElement>('#toggle-standby-pixel-shift')?.checked === false &&
+        field('From')?.value === '22:30',
+      'A rejected save keeps the previous values',
+    );
+  } finally {
+    stub.restore();
+    await act(() => render(null, root));
+    await act(() => patch({ status: baseStatus }));
   }
 }
 

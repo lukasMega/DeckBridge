@@ -3,6 +3,18 @@ import { EventEmitter } from 'node:events';
 import { CoraDock } from '../src/main/cora-dock.js';
 import type { ElgatoServer } from '../src/cora/primary-server.js';
 import type { ElgatoChildServer } from '../src/cora/child-server.js';
+import { ElgatoChildServer as RealChildServer } from '../src/cora/child-server.js';
+import { modelToChildGeometry } from '../src/devices/registry.js';
+import { MK2_MODEL } from '../src/devices/elgato/mk2.js';
+import {
+  DEFAULT_CHILD_FIRMWARE_VERSION,
+  DEFAULT_CHILD_SERIAL_NUMBER,
+  DEFAULT_DOCK_FIRMWARE_VERSION,
+  DEFAULT_DOCK_SERIAL_NUMBER,
+  ELGATO_MK2_PID,
+} from '../src/shared/types.js';
+import { connect, sendFrame } from './helpers/cora-framer.js';
+import { CORA_FLAG_VERBATIM } from '../src/cora/frame.js';
 import { setLogLevel } from '../src/shared/logger.js';
 import { testAsync as runTest, summary } from './helpers/harness.js';
 
@@ -15,6 +27,7 @@ class FakeCoraServer extends EventEmitter {
   startCalls = 0;
   stopCalls = 0;
   hasClient = false;
+  rxIdleMs = 0;
 
   constructor(failuresRemaining: number) {
     super();
@@ -189,6 +202,47 @@ await runTest('stop() attempts both servers and rejects when one fails', async (
   await dock.stop().catch((e: unknown) => (err = e));
   assert.ok(err instanceof Error && err.message.includes('primary stuck'));
   assert.equal(childServer.stopCalls, 1);
+});
+
+console.log('\nrx idle surface (standby CORA-silence)');
+
+await runTest('childRxIdleMs forwards the child server getter', () => {
+  const child = new FakeCoraServer(0);
+  const dock = makeDock(new FakeCoraServer(0), child);
+  assert.equal(dock.childRxIdleMs, 0);
+  child.rxIdleMs = 1234;
+  assert.equal(dock.childRxIdleMs, 1234);
+});
+
+await runTest('rxIdleMs is 0 without a client and grows after the last data', async () => {
+  const port = 25601;
+  const server = new RealChildServer(
+    modelToChildGeometry(MK2_MODEL),
+    port,
+    {
+      dockFirmwareVersion: DEFAULT_DOCK_FIRMWARE_VERSION,
+      childFirmwareVersion: DEFAULT_CHILD_FIRMWARE_VERSION,
+      serialNumber: DEFAULT_DOCK_SERIAL_NUMBER,
+      childSerialNumber: DEFAULT_CHILD_SERIAL_NUMBER,
+      productId: ELGATO_MK2_PID,
+      macAddress: [0x02, 0x00, 0x00, 0x00, 0x00, 0x01],
+    },
+    false,
+  );
+  await server.start();
+  try {
+    assert.equal(server.rxIdleMs, 0, 'no client');
+    const f = await connect(port);
+    await f.recv(); // initial keepalive: the client socket is attached
+    await new Promise((r) => setTimeout(r, 80));
+    assert.ok(server.rxIdleMs >= 60, `idle grows while the client is silent (${server.rxIdleMs})`);
+    await sendFrame(f, Buffer.alloc(0), CORA_FLAG_VERBATIM, 0, 1);
+    await new Promise((r) => setTimeout(r, 20));
+    assert.ok(server.rxIdleMs < 60, `data resets the idle clock (${server.rxIdleMs})`);
+    f.close();
+  } finally {
+    await server.stop();
+  }
 });
 
 summary();

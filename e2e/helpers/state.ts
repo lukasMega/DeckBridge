@@ -37,6 +37,8 @@ export interface DockState {
   deviceKey: string;
   mdnsServiceName: string;
   brightness: number;
+  displayState?: 'active' | 'dimmed' | 'night' | 'standby' | 'off';
+  effectiveBrightness?: number;
   elgatoConnected: boolean;
   extraKeys?: number[];
   pressableExtraKeys?: number[];

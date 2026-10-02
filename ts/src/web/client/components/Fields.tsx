@@ -87,11 +87,16 @@ export function SelectField<T extends string | number>({
   label,
   value,
   options,
+  optionLabel,
+  disabled,
   onChange,
 }: Readonly<{
   label: string;
   value: T | undefined;
   options: readonly T[];
+  /** Display text per option; defaults to the value itself. */
+  optionLabel?: (v: T) => string;
+  disabled?: boolean;
   onChange: (v: T) => void;
 }>): preact.JSX.Element {
   return (
@@ -100,6 +105,7 @@ export function SelectField<T extends string | number>({
       <select
         class="input"
         value={String(value ?? '')}
+        disabled={disabled}
         onChange={(e) => {
           const raw = (e.target as HTMLSelectElement).value;
           const match = options.find((o) => String(o) === raw);
@@ -108,7 +114,7 @@ export function SelectField<T extends string | number>({
       >
         {options.map((o) => (
           <option key={String(o)} value={String(o)}>
-            {String(o)}
+            {optionLabel?.(o) ?? String(o)}
           </option>
         ))}
       </select>

@@ -248,3 +248,8 @@ export function layoutWidget(
   });
   return { lines: placed, clipped, style };
 }
+
+/** A copy of `layout` with every line moved by (dx, dy) px; pure. */
+export function shiftLayout(layout: WidgetLayout, dx: number, dy: number): WidgetLayout {
+  return { ...layout, lines: layout.lines.map((l) => ({ ...l, x: l.x + dx, y: l.y + dy })) };
+}

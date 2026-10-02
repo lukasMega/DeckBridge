@@ -330,6 +330,9 @@ if (__MOCK_BUILD__) {
 webui.on('extraKeyChanged', (dock: number) => {
   driverManager.dock(dock)?.repaintWidgets();
 });
+webui.on('standbyChanged', (dock?: number) =>
+  dock === undefined ? driverManager.reloadAllStandby() : driverManager.dock(dock)?.reloadStandby(),
+);
 
 // A pushed channel changed (coalesced by PushController): paint only what changed.
 webui.on('pushChanged', () => driverManager.paintChangedWidgets());

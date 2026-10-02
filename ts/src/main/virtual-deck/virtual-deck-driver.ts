@@ -26,6 +26,8 @@ export interface VirtualDeckSink {
 
 export class VirtualDeckDriver extends EventEmitter implements DockDriver {
   readonly model: DeviceModel;
+  /** sendSplashImage is a no-op here, so standby's clock can't show. */
+  readonly paintsSplash = false;
   readonly touchStripOptions: TouchStripOptions = DEFAULT_TOUCH_STRIP_OPTIONS;
   private readonly rotate: 0 | 180;
   private readonly profile: BrowserDeckProfile;

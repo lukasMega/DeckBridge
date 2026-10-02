@@ -46,7 +46,11 @@ export class SettingsFileController {
       this.host.emit('modelOverridesChanged', '');
     }
     // devices[] first, so the selected dock's entry is in place before we (re)select + re-apply.
-    if (this.host.settings.importDevices(s.devices)) this.reapplySelectedDeviceLive();
+    if (this.host.settings.importDevices(s.devices)) {
+      this.reapplySelectedDeviceLive();
+      // No index: every dock's standby settings may have changed, not just the selected one.
+      this.host.emit('standbyChanged');
+    }
     // selectedDock is best-effort — an index absent on this host (file imported from a machine
     // with more docks) is ignored; trySelectDock() fires its own broadcast + reapply on change.
     if (typeof s.selectedDock === 'number' && Number.isInteger(s.selectedDock)) {

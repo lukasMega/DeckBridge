@@ -181,6 +181,9 @@ async function handle(msg: MainToWorker, deferNotification: boolean): Promise<vo
     case 'setBrightness':
       driver?.setBrightness(msg.level);
       break;
+    case 'setSleep':
+      driver?.setSleep?.(msg.asleep);
+      break;
     case 'clearKey':
       driver?.clearKey(msg.keyIndex);
       break;

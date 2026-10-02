@@ -41,8 +41,12 @@ import type { ChildGeometry } from '../src/devices/driver.js';
 import type { DeviceConfig } from '../src/cora/types.js';
 import type { DeviceModel } from '../src/devices/driver.js';
 import type { WorkerHidDriver } from '../src/worker/hid-worker-host.js';
+import { DEFAULT_TIMING } from '../src/main/standby-policy.js';
+import type { StandbyClock, StandbyTiming } from '../src/main/standby-policy.js';
 import { testAsync as test, summaryExit } from './helpers/harness.js';
+import { FakeClock } from './helpers/fake-standby-clock.js';
 import { StubDockDriver } from './helpers/stub-dock-driver.js';
+import { SOLID_RED_16X16_JPEG } from './helpers/fixtures.js';
 
 const noop = (): void => {};
 
@@ -120,6 +124,8 @@ class FakeDriver extends StubDockDriver {
   renderCalls: { keyIndex: number; format: string }[] = [];
   splashCalls: number[] = [];
   brightnessCalls: number[] = [];
+  /** Like the browser deck's driver: splash images are ignored there. */
+  paintsSplash?: boolean;
   override close(): Promise<void> {
     this.closeCalls++;
     return Promise.resolve();
@@ -169,6 +175,8 @@ function makeTestDock(opts: {
   prefs: DockPrefs;
   deviceInfo?: { serial?: string; firmware?: string };
   hooks?: DockHooks;
+  standbyClock?: StandbyClock;
+  standbyTiming?: StandbyTiming;
 }): Dock {
   const settings = {
     for: () => opts.prefs,
@@ -186,13 +194,27 @@ function makeTestDock(opts: {
     model: opts.model,
     deviceInfo: opts.deviceInfo,
     hooks: opts.hooks,
+    standbyClock: opts.standbyClock,
+    standbyTiming: opts.standbyTiming,
   });
 }
 
 const encoderFields = (o?: EncoderOverride): Partial<DeviceIdentitySettings> =>
   o ? { touchStripMode: o.mode, encoders: o.encoders } : {};
 
-function makeTestSetup(model: DeviceModel = DEFAULT_MODEL, encoderOverride?: EncoderOverride) {
+interface SetupExtras {
+  /** Extra per-device settings (standby, pairedAt, …). */
+  fields?: Partial<DeviceIdentitySettings>;
+  /** A fake standby clock + timing (silence off: the fake child has no rx counter). */
+  clock?: FakeClock;
+  timing?: Partial<StandbyTiming>;
+}
+
+function makeTestSetup(
+  model: DeviceModel = DEFAULT_MODEL,
+  encoderOverride?: EncoderOverride,
+  extras: SetupExtras = {},
+) {
   const server = new FakeServer();
   const childServer = new FakeChildServer();
   const driver = new FakeDriver(model);
@@ -201,8 +223,10 @@ function makeTestSetup(model: DeviceModel = DEFAULT_MODEL, encoderOverride?: Enc
   const { entry, prefs } = prefsWith({
     brightnessOverride: false,
     ...encoderFields(encoderOverride),
+    ...extras.fields,
   });
   const imageCalls: { keyIndex: number; format: string }[] = [];
+  const keyCalls: string[] = [];
   const dock = makeTestDock({
     identity: dockSlot(1, testIdentity(model)),
     cora: makeDock(server, childServer),
@@ -218,8 +242,13 @@ function makeTestSetup(model: DeviceModel = DEFAULT_MODEL, encoderOverride?: Enc
       image: (keyIndex, _data, format) => {
         imageCalls.push({ keyIndex, format });
       },
+      key: (mk2, state) => {
+        keyCalls.push(`${mk2}:${state}`);
+      },
     },
     prefs,
+    standbyClock: extras.clock,
+    standbyTiming: extras.clock && { ...DEFAULT_TIMING, silenceMs: 0, ...extras.timing },
   });
   return {
     server,
@@ -228,6 +257,8 @@ function makeTestSetup(model: DeviceModel = DEFAULT_MODEL, encoderOverride?: Enc
     dock,
     start: () => dock.start(driver),
     imageCalls,
+    keyCalls,
+    entry,
     getDisconnects: () => disconnects,
     getStatusChanges: () => statusChanges,
     setIgnoreElgato: (v: boolean) => {
@@ -659,6 +690,182 @@ await test('setBrightness applies to the driver and shows in status()', async ()
   assert.deepEqual(driver.brightnessCalls, [40], 'driver.setBrightness called');
   assert.equal(dock.status().brightness, 40, 'status() reflects the level');
   assert.equal(getStatusChanges(), before + 1, 'status change fired');
+});
+
+const SEC = 1000;
+const MIN = 60 * SEC;
+
+/** A dock on a fake standby clock: idle dim after 5 min to 10%, requested 60. */
+async function dimmedSetup(fields: Partial<DeviceIdentitySettings> = {}) {
+  const clock = new FakeClock();
+  const t = makeTestSetup(DEFAULT_MODEL, undefined, {
+    clock,
+    fields: { standby: { idleDim: true, idleMinutes: 5, idleLevel: 10 }, ...fields },
+  });
+  await t.start();
+  t.dock.setBrightness(60);
+  return { ...t, clock };
+}
+
+await test('status() reports the effective level next to the requested one', async () => {
+  const { driver, dock, start } = makeTestSetup();
+  await start();
+  dock.setBrightness(60);
+  const status = dock.status();
+  assert.equal(driver.brightnessCalls.at(-1), 60, 'driver got the level');
+  assert.equal(status.brightness, 60);
+  assert.equal(status.effectiveBrightness, 60);
+  assert.equal(status.displayState, 'active');
+  assert.deepEqual(status.standbyCaps, { sleep: false, clock: true });
+});
+
+await test('idle dim lowers the panel, never the requested (persisted) level', async () => {
+  const { clock, driver, dock } = await dimmedSetup();
+  clock.advance(5 * MIN);
+  assert.equal(driver.brightnessCalls.at(-1), 10, 'driver dimmed');
+  const status = dock.status();
+  assert.equal(status.brightness, 60, 'requested level untouched');
+  assert.equal(status.effectiveBrightness, 10);
+  assert.equal(status.displayState, 'dimmed');
+});
+
+await test('a waking press is swallowed (still in the activity feed); the next is forwarded', async () => {
+  const { clock, childServer, driver, keyCalls } = await dimmedSetup();
+  clock.advance(5 * MIN);
+  driver.emit('key', { keyIndex: 3, state: 'down' });
+  driver.emit('key', { keyIndex: 3, state: 'up' });
+  assert.equal(childServer.sendKeyEventCalls.length, 0, 'not sent to the Elgato app');
+  assert.deepEqual(keyCalls, ['3:down', '3:up'], 'hooks.key still sees it');
+  assert.equal(driver.brightnessCalls.at(-1), 60, 'brightness restored');
+  driver.emit('key', { keyIndex: 3, state: 'down' });
+  assert.equal(childServer.sendKeyEventCalls.length, 1, 'the next press goes through');
+});
+
+await test('a waking knob turn and touch are swallowed', async () => {
+  const { clock, childServer, driver } = await dimmedSetup();
+  clock.advance(5 * MIN);
+  driver.emit('dial', { index: 0, kind: 'rotate', delta: 1 });
+  assert.equal(childServer.sendDialCalls.length, 0, 'knob swallowed');
+  clock.advance(5 * MIN);
+  driver.emit('touch', { type: 'tap', x: 10, y: 10 });
+  assert.equal(childServer.sendTouchCalls.length, 0, 'touch swallowed');
+});
+
+await test('WebUI click-to-press wakes the deck and is never swallowed', async () => {
+  const { clock, childServer, driver, dock } = await dimmedSetup();
+  clock.advance(5 * MIN);
+  assert.ok(dock.simulateKeyPress(2));
+  assert.equal(childServer.sendKeyEventCalls[0]?.state, 'down', 'forwarded');
+  assert.equal(driver.brightnessCalls.at(-1), 60, 'counted as activity');
+});
+
+await test('an app brightness while dimmed is held back until the deck wakes', async () => {
+  const { clock, childServer, driver, dock } = await dimmedSetup();
+  clock.advance(5 * MIN);
+  const writes = driver.brightnessCalls.length;
+  childServer.emit('brightness', 30);
+  assert.equal(driver.brightnessCalls.length, writes, 'no write while capped');
+  assert.equal(dock.status().brightness, 30, 'requested follows the app');
+  driver.emit('key', { keyIndex: 0, state: 'down' });
+  assert.equal(driver.brightnessCalls.at(-1), 30, 'wakes to the new level');
+});
+
+await test("the driver's 'reinit' re-applies the effective level", async () => {
+  const { clock, driver } = await dimmedSetup();
+  clock.advance(5 * MIN);
+  const writes = driver.brightnessCalls.length;
+  driver.emit('reinit');
+  assert.equal(driver.brightnessCalls.length, writes + 1, 'one write');
+  assert.equal(driver.brightnessCalls.at(-1), 10, 'the dimmed level, not the board default');
+});
+
+/** Paired dock on a fake clock whose app connects, then goes away. */
+async function standbySetup(action: 'clock' | 'off' = 'clock') {
+  const clock = new FakeClock();
+  const t = makeTestSetup(DEFAULT_MODEL, undefined, {
+    clock,
+    fields: {
+      standby: { appGoneAction: action, clockLevel: 20 },
+      pairedAt: new Date().toISOString(),
+    },
+  });
+  await t.start();
+  const connect = (): void => {
+    t.childServer.hasClient = true;
+    t.childServer.emit('clientConnected');
+  };
+  const disconnect = (): void => {
+    t.childServer.hasClient = false;
+    t.childServer.emit('clientDisconnected');
+  };
+  connect();
+  return { ...t, clock, connect, disconnect };
+}
+
+await test('standby: the app going away shows the clock; coming back restores its frames', async () => {
+  const { clock, childServer, driver, dock, connect, disconnect } = await standbySetup();
+  for (const keyIndex of [0, 1, 2]) {
+    childServer.emit('image', { keyIndex, data: SOLID_RED_16X16_JPEG, format: 'jpeg' });
+  }
+  disconnect();
+  clock.advance(14 * SEC);
+  assert.equal(dock.status().displayState, 'active', 'a blip never shows the clock');
+  const [cleared, splashed] = [driver.clearKeyCalls.length, driver.splashCalls.length];
+  clock.advance(2 * MIN);
+  assert.equal(dock.status().displayState, 'standby');
+  assert.equal(dock.status().effectiveBrightness, 20);
+  assert.equal(dock.status().brightness, 100, 'requested level untouched');
+  assert.deepEqual(
+    driver.clearKeyCalls.slice(cleared, cleared + 15).toSorted((a, b) => a - b),
+    Array.from({ length: 15 }, (_, i) => i),
+    'every grid key blanked',
+  );
+  assert.ok(driver.splashCalls.length - splashed >= 2, 'clock and date painted');
+  const rendered = driver.renderCalls.length;
+  connect();
+  assert.equal(driver.renderCalls.length - rendered, 3, 'the last frames are put back at once');
+  assert.equal(dock.status().displayState, 'active');
+  assert.equal(driver.brightnessCalls.at(-1), 100);
+});
+
+await test('standby: any app frame ends it, deferred off the image path', async () => {
+  const { clock, childServer, dock, disconnect } = await standbySetup();
+  disconnect();
+  clock.advance(2 * MIN);
+  assert.equal(dock.status().displayState, 'standby');
+  childServer.emit('image', { keyIndex: 0, data: SOLID_RED_16X16_JPEG, format: 'jpeg' });
+  assert.equal(dock.status().displayState, 'standby', 'not synchronously');
+  clock.advance(0);
+  assert.equal(dock.status().displayState, 'active');
+});
+
+await test("standby on the browser deck: 'clock' acts as screen off and caps say so", async () => {
+  const { clock, driver, dock, disconnect } = await standbySetup();
+  driver.paintsSplash = false;
+  assert.equal(dock.status().standbyCaps?.clock, false);
+  disconnect();
+  clock.advance(2 * MIN);
+  assert.equal(dock.status().displayState, 'off');
+  assert.equal(dock.status().effectiveBrightness, 0);
+  assert.equal(dock.status().brightness, 100);
+});
+
+await test('reloadStandby re-reads the settings', async () => {
+  const { clock, driver, dock, entry } = await dimmedSetup();
+  entry.standby = { idleDim: true, idleMinutes: 1, idleLevel: 5 };
+  dock.reloadStandby();
+  clock.advance(MIN);
+  assert.equal(driver.brightnessCalls.at(-1), 5);
+  entry.standby = undefined;
+  dock.reloadStandby();
+  assert.equal(driver.brightnessCalls.at(-1), 60, 'features off: back to the requested level');
+});
+
+await test('stop() ends the standby timers', async () => {
+  const { clock, dock } = await dimmedSetup();
+  assert.ok(clock.pending() > 0);
+  await dock.stop();
+  assert.equal(clock.pending(), 0);
 });
 
 await test('status exposes real device identity separately', () => {

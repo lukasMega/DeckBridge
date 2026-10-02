@@ -12,6 +12,7 @@ import {
   MOCK_KEY_PRESS_DURATION_MS,
 } from '../shared/types.js';
 import type { DockStatus, KeyState, TouchStripMode, TouchWindowRegion } from '../shared/types.js';
+import type { ClientApp } from '../shared/types.js';
 import type { WidgetPaint } from '../shared/widget-layout.js';
 import { sendSplashImages } from '../shared/splash-sender.js';
 import { DEFAULT_MODEL, findModelById } from '../devices/registry.js';
@@ -27,6 +28,9 @@ import type { CoraDock } from './cora-dock.js';
 import { begin, settleAll } from './settle.js';
 import { LastFrames, wireDockImages } from './dock-frames.js';
 import type { ImageFormat } from './dock-frames.js';
+import { createDockStandby, dialInput } from './dock-standby.js';
+import type { DockStandby } from './dock-standby.js';
+import type { StandbyClock, StandbyTiming } from './standby-policy.js';
 import {
   buildDockStatus,
   knobRefresh,
@@ -76,6 +80,9 @@ export interface DockOptions {
   getShuttingDown?: () => boolean;
   /** Extra status fields only this dock knows (the browser deck's connected pages). */
   statusExtra?: () => Partial<DockStatus>;
+  /** Test seams for the standby timers; production passes neither. */
+  standbyClock?: StandbyClock;
+  standbyTiming?: StandbyTiming;
 }
 
 export class Dock {
@@ -102,6 +109,7 @@ export class Dock {
   private widgets: ExtraKeyWidgets | null = null;
   private readonly encoders: EncoderActions;
   private readonly extraKeyActions: ExtraKeyActions;
+  private readonly standby: DockStandby;
   private resendTimer: ReturnType<typeof setTimeout> | null = null;
   private stopped = false;
   /** Click-to-press releases still pending, by key: one virtual press per key at a time. */
@@ -135,6 +143,19 @@ export class Dock {
       undefined,
       (wireId) => this.widgets?.refresh(wireId),
     );
+    this.standby = createDockStandby({
+      index: this.index,
+      driver: () => this.driver,
+      frames: this.frames,
+      mirror: this.hooks.image,
+      widgets: () => this.widgets,
+      settings: () => this.prefs().standby(),
+      pairedBefore: () => !!this.identityPrefs()?.entry()?.pairedAt,
+      cora: this.cora,
+      changed: () => this.changed(),
+      clock: opts.standbyClock,
+      timing: opts.standbyTiming,
+    });
     this.wireCora();
   }
 
@@ -158,6 +179,7 @@ export class Dock {
       primaryConnected: this.cora.hasClient,
       elgatoConnected: this.cora.childHasClient,
       deviceInfo: this.deviceInfo,
+      display: this.standby.display,
     });
     return this.statusExtra ? { ...status, ...this.statusExtra() } : status;
   }
@@ -209,6 +231,8 @@ export class Dock {
       this.frames.clear();
     }
     this.startWidgets(driver);
+    // Last: it restarts the standby clock over the splash/replayed frames.
+    this.standby.onDriverAttached(this.brightness);
     this.changed();
   }
 
@@ -220,6 +244,7 @@ export class Dock {
     this.widgets = null;
     driver.removeAllListeners();
     this.driver = null;
+    this.standby.onDriverDetached();
     return driver;
   }
 
@@ -250,6 +275,7 @@ export class Dock {
     // driver detached before any slow close can be observed.
     this.stopped = true;
     this.resendTimer = clearTimer(this.resendTimer);
+    this.standby.stop();
     this.encoders.stop();
     this.extraKeyActions.stop();
     for (const t of this.virtualPresses.values()) clearTimeout(t);
@@ -272,6 +298,7 @@ export class Dock {
   simulateKeyPress(mk2Index: number): boolean {
     if (this.stopped || mk2Index < 0 || mk2Index >= this.model.keyCount) return false;
     if (this.virtualPresses.has(mk2Index)) return false;
+    this.standby.noteActivity();
     const child = this.cora.childServer;
     child.sendKeyEvent(mk2Index, 'down');
     this.hooks.key?.(mk2Index, 'down'); // no wireId: key-map learn must not take it as evidence
@@ -286,11 +313,24 @@ export class Dock {
     return true;
   }
 
-  /** Apply + record a brightness level (WebUI slider or Elgato app). */
+  /** Apply + record the requested brightness level (WebUI slider): counts as activity,
+   *  so dragging it on a dimmed deck shows the change. */
   setBrightness(level: number): void {
+    this.setRequestedBrightness(level);
+    this.standby.noteActivity();
+  }
+
+  /** The requested level (what is persisted); standby decides the effective one. */
+  private setRequestedBrightness(level: number): void {
     this.brightness = level;
-    this.driver?.setBrightness(level);
+    this.standby.setRequested(level);
     this.changed();
+  }
+
+  /** Standby settings changed (WebUI/import): re-evaluate; pixel shift needs a repaint. */
+  reloadStandby(): void {
+    this.standby.reload();
+    this.repaintWidgets();
   }
 
   /** Live device tuning (image-only change) for `modelId` ('' = any): swap the spec on
@@ -350,12 +390,17 @@ export class Dock {
       driver: () => this.driver,
       frames: this.frames,
       onImage: this.hooks.image,
+      onAppFrame: () => this.standby.noteAppTraffic(),
       onTouchFrame: (region) => this.widgets?.noteTouchFrame(region),
       onTouchImage: this.hooks.touchImage,
     });
     child.on('brightness', (level: number) => this.onAppBrightness(level));
     child.on('clientConnected', () => this.onElgatoAttached());
-    child.on('clientDisconnected', () => this.changed());
+    child.on('clientDisconnected', () => {
+      this.standby.onAppDetached();
+      this.changed();
+    });
+    child.on('clientAppDetected', (app: ClientApp) => this.standby.onClientApp(app));
   }
 
   private onAppBrightness(level: number): void {
@@ -364,7 +409,7 @@ export class Dock {
       return;
     }
     log('info', 'elgato', `dock ${this.index}: brightness set to ${level}`);
-    this.setBrightness(level);
+    this.setRequestedBrightness(level);
     this.hooks.brightness?.(level);
   }
 
@@ -372,6 +417,7 @@ export class Dock {
     // A fresh session re-sends every image, so an overloaded driver may take them again.
     this.driver?.resumeImages?.();
     if (this.identity) this.settings.markPaired(this.identity.deviceKey);
+    this.standby.onAppAttached();
     this.hooks.elgatoAttached?.();
     this.scheduleBrightnessResend();
     this.changed();
@@ -384,7 +430,7 @@ export class Dock {
     this.resendTimer = setTimeout(() => {
       this.resendTimer = null;
       if (this.stopped || this.getShuttingDown()) return;
-      this.setBrightness(this.prefs().brightness() ?? this.brightness);
+      this.setRequestedBrightness(this.prefs().brightness() ?? this.brightness);
     }, BRIGHTNESS_RESEND_MS);
   }
 
@@ -396,18 +442,30 @@ export class Dock {
         // The device's own report overwrites a pending virtual press: drop its release.
         clearTimeout(this.virtualPresses.get(index));
         this.virtualPresses.delete(index);
-        child.sendKeyEvent(index, state);
+        // A swallowed waking press stays off the app; the activity feed / key-map learn still see it.
+        if (!this.standby.noteInput({ kind: 'key', mk2: index, state })) {
+          child.sendKeyEvent(index, state);
+        }
         this.hooks.key?.(index, state, wireId);
       },
-      onExtraKey: (wireId, state) => this.extraKeyActions.handleKey(wireId, state),
+      onExtraKey: (wireId, state) => {
+        if (!this.standby.noteInput({ kind: 'extraKey', wireId, state })) {
+          this.extraKeyActions.handleKey(wireId, state);
+        }
+      },
       // The knob override / a widget tap refresh consumes the event; else the app gets it.
       onDial: (event) => {
+        if (this.standby.noteInput(dialInput(event))) return;
         if (!this.encoders.handleDial(event)) child.sendDial(event);
       },
       onTouch: (event) => {
+        if (this.standby.noteInput({ kind: 'touch' })) return;
         if (!tapRefresh(this.widgets, this.model, event)) child.sendTouch(event);
       },
-      onReinit: () => this.widgets?.repaint(),
+      onReinit: () => {
+        this.widgets?.repaint();
+        this.standby.onDeviceReinit();
+      },
       onStripWrite: this.hooks.stripWrite,
     };
     if (__MOCK_BUILD__ && !real) {
@@ -444,6 +502,8 @@ export class Dock {
     const level = prefs.brightness();
     if (level !== undefined) {
       this.brightness = level;
+      this.standby.setRequested(level);
+      // Before the splash, as ever; standby re-applies any cap once attached.
       driver.setBrightness(level);
     }
     const entry = prefs.entry();
@@ -461,7 +521,7 @@ export class Dock {
       prefs.stripMode(),
       () => prefs.repaintMs(),
       this.hooks.widgetPaint,
-      { tapFeedback: () => prefs.tapFeedback() },
+      { tapFeedback: () => prefs.tapFeedback(), pixelShift: () => prefs.standby().pixelShift },
     );
     this.widgets.start();
   }

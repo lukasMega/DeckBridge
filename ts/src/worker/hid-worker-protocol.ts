@@ -34,6 +34,8 @@ export type MainToWorker =
   // Finding 1).
   | { type: 'imageWithSpec'; keyIndex: number; bytes: Uint8Array; spec: DeviceImageSpec }
   | { type: 'setBrightness'; level: number }
+  // Hardware screen-off; only sent for a model with `sleep` set (standby).
+  | { type: 'setSleep'; asleep: boolean }
   | { type: 'clearKey'; keyIndex: number }
   // Live device-tuning swap — image-transform fields only, so no reopen is
   // needed. Re-merged on top of the worker's OWN registry entry, exactly like

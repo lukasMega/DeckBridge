@@ -1,7 +1,13 @@
 // Display widgets for physical keys outside the emulated CORA grid
 // (model.keyMap.extraKeys — 293S 6th column, wire ids 16/17/18). Those keys have no
 // switches, so each shows a server-rendered value: clock, date, text, or weather.
-import { layoutWidget, type WidgetLine, type WidgetPaint } from '../shared/widget-layout.js';
+import {
+  layoutWidget,
+  shiftLayout,
+  type WidgetLayout,
+  type WidgetLine,
+  type WidgetPaint,
+} from '../shared/widget-layout.js';
 import { composeLayout } from '../shared/widget-raster.js';
 import { DEFAULT_TAP_FEEDBACK, type TapFeedback } from '../infra/settings-store.js';
 import {
@@ -16,7 +22,7 @@ import {
   type TouchStripMode,
   type TouchWindowRegion,
 } from '../shared/types.js';
-import type { DockDriver } from '../devices/driver.js';
+import type { DeviceImageSpec, DockDriver } from '../devices/driver.js';
 import { splashSpec } from '../shared/splash-sender.js';
 import { forcePluginRefresh, pluginValueFor } from '../plugin/plugin-host.js';
 import {
@@ -29,6 +35,7 @@ import {
 } from './widget-refresh.js';
 import { dimStyle, pushChannels, type PushChannelsReader } from '../shared/push-channels.js';
 import { renderWidgetLines, type WidgetContext } from './widget-lines.js';
+import { DEFAULT_TIMING, pixelShiftAt } from './standby-policy.js';
 
 /** Test seams for the widget sources (clock, command runner) + the dock's live
  *  tap-feedback flags (default DEFAULT_TAP_FEEDBACK). */
@@ -36,6 +43,9 @@ export type ExtraKeyWidgetsOptions = Partial<SourceSeams> & {
   tapFeedback?: () => TapFeedback;
   /** external widget source; default = the process-wide push store. */
   push?: PushChannelsReader;
+  /** Burn-in care: orbit DeckBridge's own text by 1 px; read live. */
+  pixelShift?: () => boolean;
+  pixelShiftPeriodMs?: number;
 };
 
 /** How long a tap flash shows the inverted widget before the normal repaint. */
@@ -82,6 +92,10 @@ export class ExtraKeyWidgets {
   private readonly seams: SourceSeams;
   private readonly tapFeedback: () => TapFeedback;
   private readonly push: PushChannelsReader;
+  private readonly pixelShift: () => boolean;
+  private readonly pixelShiftPeriodMs: number;
+  /** Orbit offset of the tick in progress (null = off); flash() reuses the last one. */
+  private shift: readonly [number, number] | null = null;
   /** Placeholder feedback: wire ids showing '…' until their tap refresh settles. */
   private refreshing = new Map<number, ReturnType<typeof setTimeout>>();
   /** What each key shows now — the lines a tap flash paints inverted. */
@@ -102,6 +116,8 @@ export class ExtraKeyWidgets {
     this.seams = { now: options.now ?? DEFAULT_SEAMS.now, run: options.run ?? DEFAULT_SEAMS.run };
     this.tapFeedback = options.tapFeedback ?? (() => DEFAULT_TAP_FEEDBACK);
     this.push = options.push ?? pushChannels;
+    this.pixelShift = options.pixelShift ?? (() => false);
+    this.pixelShiftPeriodMs = options.pixelShiftPeriodMs ?? DEFAULT_TIMING.pixelShiftPeriodMs;
   }
 
   start(): void {
@@ -239,8 +255,8 @@ export class ExtraKeyWidgets {
   private flash(wireId: number): void {
     const spec = this.widgetDisplay(wireId)?.image ?? splashSpec(this.driver.model);
     const { lines, style } = this.shown.get(wireId) ?? { lines: [], style: {} };
-    const layout = layoutWidget(lines, spec.width, spec.height, style);
-    this.driver.sendSplashImage(wireId, composeLayout(layout, spec.width, spec.height, true), spec);
+    const { bmp } = this.composeFor(lines, style, spec, true);
+    this.driver.sendSplashImage(wireId, bmp, spec);
     const timer = setTimeout(() => {
       this.flashTimers.delete(timer);
       this.repaint();
@@ -290,12 +306,13 @@ export class ExtraKeyWidgets {
     const widgetIds = this.widgetIds();
     if (widgetIds.length === 0) return;
     const now = new Date(this.seams.now());
+    this.shift = this.pixelShift() ? pixelShiftAt(now.getTime(), this.pixelShiftPeriodMs) : null;
     for (const wireId of widgetIds) {
       const cfg = this.configFor(wireId);
       if (this.leftToApp(wireId, cfg, now.getTime())) continue;
       const lines = this.linesFor(wireId, cfg, now);
       const style = this.externalStyle(cfg, effectiveTextStyle(cfg), now.getTime());
-      const sig = lines === null ? '' : JSON.stringify([style, lines]);
+      const sig = lines === null ? '' : JSON.stringify([style, lines, this.shift]);
       if (this.lastPainted.get(wireId) === sig) continue;
       this.lastPainted.set(wireId, sig);
       this.paint(wireId, lines, style);
@@ -313,6 +330,21 @@ export class ExtraKeyWidgets {
     return true;
   }
 
+  /** With a shift the text is laid out 2 px smaller inside a 1-px margin, so no glyph
+   *  can leave the image at any orbit offset. */
+  private composeFor(
+    lines: readonly WidgetLine[],
+    style: ExtraKeyTextStyle,
+    { width, height }: DeviceImageSpec,
+    inverted = false,
+  ): { layout: WidgetLayout; bmp: Uint8Array } {
+    const shift = this.shift;
+    const layout = shift
+      ? shiftLayout(layoutWidget(lines, width - 2, height - 2, style), 1 + shift[0], 1 + shift[1])
+      : layoutWidget(lines, width, height, style);
+    return { layout, bmp: composeLayout(layout, width, height, inverted) };
+  }
+
   private paint(wireId: number, lines: WidgetLine[] | null, style: ExtraKeyTextStyle): void {
     const display = this.widgetDisplay(wireId);
     if (lines === null) {
@@ -324,8 +356,7 @@ export class ExtraKeyWidgets {
     this.shown.set(wireId, { lines, style });
     const spec = display?.image ?? splashSpec(this.driver.model);
     const { width, height } = spec;
-    const layout = layoutWidget(lines, width, height, style);
-    const bmp = composeLayout(layout, width, height);
+    const { layout, bmp } = this.composeFor(lines, style, spec);
     this.driver.sendSplashImage(wireId, bmp, spec);
     const zone = display !== undefined;
     const clipped = layout.clipped;
@@ -364,6 +395,12 @@ export class ExtraKeyWidgets {
     if (nowMs - at < this.repaintIntervalMs()) return true;
     this.lastElgatoFrameAt.delete(wireId);
     return false;
+  }
+
+  /** Strip zones the Elgato app draws right now (no DeckBridge widget): standby blanks them. */
+  appOwnedZones(): number[] {
+    const widgetOwned = this.mode !== 'elgato';
+    return this.widgetDisplayIds().filter((id) => !(widgetOwned && owns(this.configFor(id))));
   }
 
   private widgetIds(): readonly number[] {

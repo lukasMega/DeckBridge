@@ -215,6 +215,9 @@ export interface DeviceModel {
   splash?: DeviceSplashSpec;
   widgetDisplays?: readonly DeviceWidgetDisplay[];
   touchStripDisplay?: DeviceTouchStripDisplay;
+  /** Hardware screen-off. Set only after the HAN hardware spike passes on that model
+   *  (.claude/plans/2026-09-30_standby-burn-in-care.md, Task 0 item 4); not tunable. */
+  sleep?: 'mirabox-han';
 }
 
 /** Elgato's own HID protocol (MK.2/Mini/…), as opposed to a Mirabox-family board. */
@@ -324,6 +327,8 @@ export interface DeviceDriver extends EventEmitter {
   close(): Promise<void>;
   clearKey(keyIndex: number): void;
   setBrightness(level: number): void;
+  /** Hardware screen-off / wake. Only drivers whose model sets `sleep` implement it. */
+  setSleep?(asleep: boolean): void;
 }
 
 /** What a Dock drives on the main thread: `WorkerHidDriver` (the USB worker proxy)
@@ -356,6 +361,9 @@ export interface DockDriver extends DeviceDriver {
   applyOverrides(overrides: DeviceModelOverride | undefined, effectiveModel: DeviceModel): void;
   /** Runtime log-level change for the worker (new workers read DECKBRIDGE_LOG_LEVEL). */
   setLogLevel(level: string): void;
+  /** False on a driver that ignores splash/widget images (the browser deck): standby's
+   *  clock can't show there. Absent = paints. */
+  readonly paintsSplash?: boolean;
   /** Take images again after an 'overload' event, once the producer has resynced
    *  (a fresh CORA child session). Absent on drivers without a bounded queue. */
   resumeImages?(): void;

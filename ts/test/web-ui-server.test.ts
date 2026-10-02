@@ -13,6 +13,8 @@ import type { DockStatus } from '../src/shared/types.js';
 import type { StatusSnapshot } from '../src/web/contract.js';
 import { test, testAsync as runWebTest, summaryExit } from './helpers/harness.js';
 import { PersistedSettings } from '../src/infra/settings.js';
+import { DEFAULT_STANDBY, publicStandby } from '../src/shared/standby-settings.js';
+import type { StandbyView } from '../src/web/contract-standby.js';
 
 /** WebUIServer over settings loaded from `root`, as app.ts loads them before construction. */
 async function webUIAt(root: string, port?: number): Promise<WebUIServer> {
@@ -803,6 +805,26 @@ try {
   });
 
   await runWebTest(
+    'GET/POST /api/standby: defaults, validated write, 400 on bad bodies',
+    async () => {
+      const got = (await (await fetch(`${base}/api/standby`)).json()) as StandbyView;
+      assert.equal(got.settings.idleDim, false);
+      assert.ok(/^\d\d:\d\d$/.test(got.serverTime));
+      assert.equal(got.hasCommands, false);
+      const ok = await post('/api/standby', { settings: { idleDim: true, idleMinutes: 3 } });
+      assert.equal(ok.status, 200);
+      const view = (await ok.json()) as StandbyView;
+      assert.equal(view.settings.idleDim, true);
+      assert.equal(view.settings.idleMinutes, 3);
+      assert.equal((await post('/api/standby', { settings: { idleLevel: 150 } })).status, 400);
+      assert.equal((await post('/api/standby', { settings: 'x' })).status, 400);
+      assert.equal((await post('/api/standby', {})).status, 400);
+      const after = (await (await fetch(`${base}/api/standby`)).json()) as StandbyView;
+      assert.equal(after.settings.idleMinutes, 3, 'a rejected write changes nothing');
+    },
+  );
+
+  await runWebTest(
     'POST /api/extra-key/preview: bad wireId → 400, MK.2 has no extra key → 400',
     async () => {
       assert.equal((await post('/api/extra-key/preview', { wireId: -1 })).status, 400);
@@ -1587,6 +1609,94 @@ await runWebTest(
     await tjs.remove(root, { recursive: true }).catch(() => undefined);
   },
 );
+
+// StandbyController (selected dock's standby settings)
+
+console.log('\nstandby controller');
+
+function standbyUi() {
+  const ui = new WebUIServer(undefined, [], 'real', new PersistedSettings(TEST_SETTINGS_ROOT));
+  ui.settings.getOrCreateIdentity('fake-device-0', 'Dock');
+  ui.notifyDocks([{ ...fakeDockStatus(0), standbyCaps: { sleep: true, clock: false } }]);
+  const changed: unknown[][] = [];
+  ui.on('standbyChanged', (...args: unknown[]) => changed.push(args));
+  const stored = () => ui.settings.entryFor('fake-device-0')?.standby;
+  return { ui, changed, stored };
+}
+
+test('standby view: defaults, host time, capabilities from the dock status', () => {
+  const { ui } = standbyUi();
+  const view = ui.standby.view();
+  assert.deepEqual(view.settings, publicStandby(DEFAULT_STANDBY));
+  assert.ok(/^\d\d:\d\d$/.test(view.serverTime));
+  assert.equal(view.dock, 0);
+  assert.equal(view.canSleep, true);
+  assert.equal(view.canShowClock, false);
+  assert.equal(view.hasCommands, false);
+});
+
+test('standby set: persists the merge, emits standbyChanged for the selected dock', () => {
+  const { ui, changed, stored } = standbyUi();
+  const r = ui.standby.trySet({ settings: { idleDim: true, idleMinutes: 3 } });
+  assert.ok('view' in r && r.view.settings.idleMinutes === 3);
+  assert.deepEqual(stored(), { idleDim: true, idleMinutes: 3 });
+  assert.deepEqual(changed, [[0]]);
+  ui.standby.trySet({ settings: { idleLevel: 20 } });
+  assert.deepEqual(stored(), { idleDim: true, idleMinutes: 3, idleLevel: 20 }, 'merged');
+});
+
+test('standby set: invalid values and start == end are 400 and persist nothing', () => {
+  const { ui, changed, stored } = standbyUi();
+  for (const settings of [{ idleLevel: 150 }, { nightStart: '08:00', nightEnd: '08:00' }]) {
+    const r = ui.standby.trySet({ settings });
+    assert.ok('error' in r && r.status === 400, JSON.stringify(settings));
+  }
+  const notObject = ui.standby.trySet({ settings: [] });
+  assert.ok('error' in notObject && notObject.status === 400);
+  assert.equal(stored(), undefined);
+  assert.equal(changed.length, 0);
+});
+
+test('standby set: unknown keys are dropped, command keys are never written by the WebUI', () => {
+  const { ui, stored } = standbyUi();
+  ui.standby.trySet({ settings: { pixelShift: true, bogus: 1, wakeCommand: 'touch /tmp/x' } });
+  assert.deepEqual(stored(), { pixelShift: true });
+});
+
+test('standby: stored sleep/wake commands survive a POST and never reach the browser', () => {
+  const { ui, stored } = standbyUi();
+  ui.settingsFile.applyJson(
+    JSON.stringify({
+      devices: [
+        {
+          ...deviceEntry('fake-device-0', {}),
+          standby: { wakeCommand: 'touch /tmp/woke', bogus: true },
+        },
+      ],
+    }),
+  );
+  assert.equal(stored()?.wakeCommand, 'touch /tmp/woke');
+  ui.standby.trySet({ settings: { idleDim: true } });
+  assert.deepEqual(
+    stored(),
+    { wakeCommand: 'touch /tmp/woke', idleDim: true },
+    'kept, unknown gone',
+  );
+  const view = ui.standby.view();
+  assert.equal(view.hasCommands, true);
+  assert.ok(!JSON.stringify(view).includes('woke'), 'the command text is not sent');
+});
+
+test('a settings import with devices[].standby emits standbyChanged', () => {
+  const { ui, changed, stored } = standbyUi();
+  ui.settingsFile.applyJson(
+    JSON.stringify({
+      devices: [{ ...deviceEntry('fake-device-0', {}), standby: { night: true, nightLevel: 5 } }],
+    }),
+  );
+  assert.deepEqual(stored(), { night: true, nightLevel: 5 });
+  assert.deepEqual(changed, [[]], 'no index: every dock reloads, not just the selected one');
+});
 
 // Summary
 

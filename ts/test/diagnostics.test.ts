@@ -23,6 +23,11 @@ const SETTINGS_WITH_COMMANDS = JSON.stringify(
           '17': { widget: 'plugin', param: 'weather.js', pluginArg: '/home/me/apikey.txt' },
           '18': { widget: 'clock', pressCommand: 'open -a Hunter3' },
         },
+        standby: {
+          idleDim: true,
+          sleepCommand: 'ssh me@host suspend --pw hunter4',
+          wakeCommand: 'wakeonlan hunter5',
+        },
       },
     ],
   },
@@ -230,6 +235,7 @@ test('commands are included verbatim by default', () => {
   const report = buildDiagnostics(fullSources());
   assert.ok(report.includes('hunter2'), 'extra-key command is present');
   assert.ok(report.includes('/home/me/apikey.txt'), 'plugin arg is present');
+  assert.ok(report.includes('hunter5'), 'standby commands are present too');
 });
 
 test('--redact-commands replaces param, pluginArg and pressCommand only', () => {
@@ -237,6 +243,9 @@ test('--redact-commands replaces param, pluginArg and pressCommand only', () => 
   assert.ok(!report.includes('hunter2'), 'command is gone');
   assert.ok(!report.includes('/home/me/apikey.txt'), 'plugin arg is gone');
   assert.ok(!report.includes('Hunter3'), 'press command is gone');
+  assert.ok(!report.includes('hunter4'), 'standby sleep command is gone');
+  assert.ok(!report.includes('hunter5'), 'standby wake command is gone');
+  assert.ok(report.includes('"idleDim": true'), 'the rest of the standby settings stay');
   assert.ok(report.includes('<redacted>'), 'replaced, not dropped');
   assert.ok(report.includes('usb:ABC123:mirabox-293s'), 'the rest of settings.json survives');
   assert.ok(report.includes('"widget": "clock"'), 'the widget itself is untouched');

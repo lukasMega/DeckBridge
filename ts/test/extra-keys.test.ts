@@ -938,4 +938,105 @@ await test('paintChanged paints only changed keys; same text twice sends nothing
   w.stop();
 });
 
+console.log('\nExtraKeyWidgets pixel shift');
+
+const PERIOD = 300_000;
+const T0 = PERIOD * 6_000_000; // epoch-aligned, so the orbit starts at step 0 mod 8
+
+function shiftWidgets(cfg: ExtraKeyConfig, on: boolean, clock: { t: number }) {
+  const d = new FakeDriver();
+  const w = new ExtraKeyWidgets(
+    d,
+    (id) => (id === 16 ? cfg : undefined),
+    undefined,
+    undefined,
+    undefined,
+    {
+      now: () => clock.t,
+      pixelShift: () => on,
+      pixelShiftPeriodMs: PERIOD,
+    },
+  );
+  w.start();
+  return { d, w };
+}
+
+const painted16 = (d: FakeDriver) => d.splashed.filter((p) => p.keyIndex === 16);
+
+await test('pixel shift off: nothing repaints across periods and the BMP is stable', () => {
+  const clock = { t: T0 };
+  const { d, w } = shiftWidgets({ widget: 'text', param: 'static' }, false, clock);
+  for (let i = 0; i < 3; i++) {
+    clock.t += PERIOD;
+    tick(w);
+  }
+  w.stop();
+  assert.equal(painted16(d).length, 1);
+});
+
+await test('pixel shift on: a static widget repaints once per period, with a moved BMP', () => {
+  const clock = { t: T0 };
+  const { d, w } = shiftWidgets({ widget: 'text', param: 'static' }, true, clock);
+  tick(w);
+  assert.equal(painted16(d).length, 1, 'same period: no repaint');
+  clock.t += PERIOD - 1;
+  tick(w);
+  assert.equal(painted16(d).length, 1);
+  clock.t += 1;
+  tick(w);
+  w.stop();
+  const p = painted16(d);
+  assert.equal(p.length, 2);
+  assert.notEqual(
+    Buffer.from(p[0]!.bytes).toString('hex'),
+    Buffer.from(p[1]!.bytes).toString('hex'),
+  );
+});
+
+await test('a clock minute change that lands on a period change paints once', () => {
+  const clock = { t: T0 + PERIOD - 1000 };
+  const { d, w } = shiftWidgets({ widget: 'clock' }, true, clock);
+  assert.equal(painted16(d).length, 1);
+  clock.t = T0 + PERIOD;
+  tick(w);
+  assert.equal(painted16(d).length, 2, 'minute + offset changed on one tick: one upload');
+  tick(w);
+  assert.equal(painted16(d).length, 2);
+  w.stop();
+});
+
+await test('shifted text is never clipped at any orbit offset', () => {
+  const clock = { t: T0 };
+  const wide = {
+    widget: 'text',
+    param: 'WWWWWWWWWWWW',
+    style: { color: '#ffffff', background: '#000000' },
+  } as const;
+  const { d, w } = shiftWidgets(wide, true, clock);
+  for (let i = 1; i < 8; i++) {
+    clock.t += PERIOD;
+    tick(w);
+  }
+  w.stop();
+  const lit = painted16(d).map(({ bytes }) => {
+    let n = 0;
+    for (let o = 54; o < bytes.length; o += 3) if (bytes[o] !== 0) n++;
+    return n;
+  });
+  assert.equal(lit.length, 8);
+  assert.ok(lit[0]! > 0);
+  assert.deepEqual(new Set(lit).size, 1, 'same glyph pixel count at every offset');
+});
+
+await test('appOwnedZones: strip zones without a DeckBridge widget; none in elgato-mode ownership', () => {
+  const d = new FakeDriver(AJAZZ_AKP05E_MODEL);
+  const ids = AJAZZ_AKP05E_MODEL.widgetDisplays!.map((x) => x.wireId);
+  const cfg = (id: number): ExtraKeyConfig | undefined =>
+    id === ids[0] ? { widget: 'text', param: 'x' } : undefined;
+  const ignore = new ExtraKeyWidgets(d, cfg, 'deckbridge-ignore');
+  assert.deepEqual(ignore.appOwnedZones(), ids.slice(1));
+  const elgato = new ExtraKeyWidgets(d, cfg, 'elgato');
+  assert.deepEqual(elgato.appOwnedZones(), ids);
+});
+
 summary();

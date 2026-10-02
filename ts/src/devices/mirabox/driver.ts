@@ -29,6 +29,9 @@ export class MiraboxDriver extends HidDeviceBase {
   private reportId = HID_REPORT_ID_BYTE;
   private imageBatch = false;
   private pendingStp = false;
+  private asleep = false;
+  // setSleep(false) restores this; _writeInitSequence still sends the default on reinit.
+  private lastLevel = DEFAULT_BRIGHTNESS;
   // Reused scratch buffers (single-threaded worker), sized in open(): one image
   // chunk and one report-id-prefixed write frame. Avoids a fresh 1024 B + 1025 B
   // allocation per chunk per image (P5).
@@ -82,6 +85,8 @@ export class MiraboxDriver extends HidDeviceBase {
   /** Bring the panel to a known state: DIS, brightness, clear all. Sent on open, and
    *  again after a sleep/wake gap (the device may have dropped into idle mode). */
   private _writeInitSequence(): void {
+    // DIS wakes the panel, so a later setSleep(true) must send HAN again.
+    this.asleep = false;
     this.write(this._buildCrt(CMD_DIS));
     this.write(this._buildLig(DEFAULT_BRIGHTNESS));
     this.write(this._buildCle(CLEAR_ALL_KEYS));
@@ -93,6 +98,7 @@ export class MiraboxDriver extends HidDeviceBase {
   async open(hidPath: string): Promise<void> {
     this.pktSize = this.model.wire.packetSize;
     this.reportId = this.model.wire.reportId ?? HID_REPORT_ID_BYTE;
+    this.asleep = false;
     this._chunkScratch = Buffer.alloc(this.pktSize);
     this._writeScratch = Buffer.alloc(this.pktSize + 1);
 
@@ -203,7 +209,20 @@ export class MiraboxDriver extends HidDeviceBase {
   }
 
   setBrightness(level: number): void {
+    this.lastLevel = level;
     this.write(this._buildLig(level));
+  }
+
+  /** HAN screen-off; DIS + LIG wakes it. Gated on the model so unverified boards never get HAN. */
+  setSleep(asleep: boolean): void {
+    if (this.model.sleep !== 'mirabox-han' || asleep === this.asleep) return;
+    this.asleep = asleep;
+    if (asleep) {
+      this.write(this._buildCrt(CMD_HAN));
+    } else {
+      this.write(this._buildCrt(CMD_DIS));
+      this.write(this._buildLig(this.lastLevel));
+    }
   }
 
   // Comm tracing (the human-readable write/read descriptions the 'comm' event carries)

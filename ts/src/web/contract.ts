@@ -254,6 +254,9 @@ export interface ExtraKeyConfig {
   fallbackText?: string;
 }
 
+/** Why the panel is not at the requested level (see main/standby-policy.ts). */
+export type DisplayState = 'active' | 'dimmed' | 'night' | 'standby' | 'off';
+
 /** One dock's status as shown in the WebUI (primary index 0 + extras). */
 export interface DockStatus {
   index: number; // 0 = primary
@@ -267,6 +270,9 @@ export interface DockStatus {
   primaryConnected: boolean; // primary (Network Dock) CORA client attached = app discovered us
   elgatoConnected: boolean; // child CORA client attached = paired & active
   brightness: number; // last level applied to this dock's panel (0-100)
+  displayState?: DisplayState; // absent = pre-feature server / no Dock
+  effectiveBrightness?: number; // level actually on the panel (0-100); brightness = requested
+  standbyCaps?: { sleep: boolean; clock: boolean }; // hardware sleep / standby clock possible
   // The identifiers this dock actually sends to the Elgato app (mDNS advert +
   // CORA device-info/capabilities frames) — shown read-only under Settings,
   // per-dock so a multi-device setup shows the currently selected dock's own

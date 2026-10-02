@@ -115,6 +115,67 @@ await test('with an entry: reads live and persists writes', async () => {
   await settings.flush();
 });
 
+console.log('\nPersistedSettings — standby');
+
+const standbyDevice = (key: string, standby: unknown) => ({
+  deviceKey: key,
+  mdnsServiceName: 'Dock',
+  macAddress: '00:11:22:33:44:55',
+  dockSerial: 'A',
+  childSerial: 'B',
+  standby,
+});
+
+await test('load() keeps a valid standby object', async () => {
+  const dir = `${ROOT}/standby-valid`;
+  await saveSettings(
+    { devices: [standbyDevice('usb:SB1', { idleDim: true, idleMinutes: 3 })] } as never,
+    dir,
+  );
+  const settings = new PersistedSettings(dir);
+  await settings.load();
+  assert.deepEqual(settings.entryFor('usb:SB1')?.standby, { idleDim: true, idleMinutes: 3 });
+  assert.equal(settings.for('usb:SB1').standby().idleMinutes, 3);
+});
+
+await test('load() drops an invalid standby but keeps the identity', async () => {
+  const dir = `${ROOT}/standby-invalid`;
+  await saveSettings({ devices: [standbyDevice('usb:SB2', { idleLevel: 'x' })] } as never, dir);
+  const settings = new PersistedSettings(dir);
+  await settings.load();
+  const e = settings.entryFor('usb:SB2');
+  assert.ok(e, 'identity kept');
+  assert.equal(e!.macAddress, '00:11:22:33:44:55');
+  assert.ok(!('standby' in e!), 'standby removed');
+});
+
+await test('importDevices() round-trips standby', async () => {
+  const settings = new PersistedSettings(`${ROOT}/standby-import`);
+  const standby = { night: true, nightStart: '22:00', wakeCommand: 'touch /tmp/x' };
+  assert.ok(settings.importDevices([standbyDevice('usb:SB3', standby)]));
+  assert.deepEqual(settings.entryFor('usb:SB3')?.standby, standby);
+  await settings.flush();
+});
+
+await test('DockPrefs.standby(): runtime fallback, then persisted write', async () => {
+  const settings = new PersistedSettings(`${ROOT}/standby-prefs`);
+  const noEntry = settings.for('');
+  assert.equal(noEntry.standby().idleDim, false, 'defaults');
+  noEntry.setStandby({ idleDim: true });
+  assert.equal(settings.for('usb:NONE').standby().idleDim, true, 'runtime shared');
+  assert.ok(!settings.json().includes('idleDim'), 'nothing persisted');
+
+  settings.getOrCreateIdentity('usb:SB4', 'Dock');
+  const prefs = settings.for('usb:SB4');
+  prefs.setStandby({ pixelShift: true });
+  assert.deepEqual(settings.entryFor('usb:SB4')?.standby, { pixelShift: true });
+  assert.equal(prefs.standby().pixelShift, true);
+  prefs.setStandby({});
+  assert.ok(!('standby' in settings.entryFor('usb:SB4')!), 'empty clears the field');
+  assert.equal(prefs.standby().pixelShift, false);
+  await settings.flush();
+});
+
 console.log('\nPersistedSettings — elgatoAutoRestart / pairing');
 
 await test('setElgatoAutoRestart persists enabled + clamped delay; getters read defaults', async () => {
