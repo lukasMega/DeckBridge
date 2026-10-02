@@ -57,7 +57,7 @@ const FAST_TIMING: StandbyTiming = {
   pixelShiftPeriodMs: 5_000,
 };
 
-/** DECKBRIDGE_STANDBY_FAST=1 is honoured in mock builds only, so a release
+/** DECKBRIDGE_STANDBY_FAST=1 is honored in mock builds only, so a release
  *  binary can't be sped up by a stray env var. */
 export function standbyTiming(): StandbyTiming {
   return __MOCK_BUILD__ && tjs.env['DECKBRIDGE_STANDBY_FAST'] === '1'

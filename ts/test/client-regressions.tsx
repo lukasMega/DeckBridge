@@ -2359,7 +2359,7 @@ async function runStandbyPanel(): Promise<void> {
     await settle();
     check(
       elementText('.collapse-status').includes('Dimmed to 10%'),
-      'Standby header summarises the dimmed state',
+      'Standby header summarizes the dimmed state',
     );
     check(
       root.textContent.includes('Now: Dimmed to 10% (requested 80%)'),
