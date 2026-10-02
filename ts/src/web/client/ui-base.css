@@ -55,9 +55,6 @@ body {
   color: var(--fg);
   background: radial-gradient(120% 90% at 50% -10%, var(--bg) 0%, var(--bg-2) 100%) fixed;
   min-height: 100dvh;
-  /*display: flex;*/
-  /*align-items: center;*/
-  /*justify-content: center;*/
   padding: 28px 20px;
 }
 
@@ -75,23 +72,17 @@ html[data-mode='advanced'] body {
 }
 
 /* ---- view visibility ---- */
-#simple-view {
+#simple-view,
+html[data-mode='advanced'] #advanced-view,
+:is(.side-keys-device-grid, .side-keys-device-column) {
   display: contents;
 }
-#advanced-view {
-  display: none;
-}
+#advanced-view,
 html[data-mode='advanced'] #simple-view {
   display: none;
 }
-html[data-mode='advanced'] #advanced-view {
-  display: contents;
-}
 
 /* ---- shared key preview grid (simple + advanced views) ---- */
-.key-grid {
-  display: grid;
-}
 .key-grid .key-cell {
   aspect-ratio: 1;
   position: relative;
@@ -132,8 +123,7 @@ html[data-mode='advanced'] #advanced-view {
   white-space: nowrap;
 }
 
-/* Shared UI primitives. */
-/* Shared layout, controls, typography, and surfaces. */
+/* Shared layout, controls, typography, and surfaces (property-grouped). */
 :is(.app, .fader, .xkey-tile, .xkey-config-anchor, .popover, .chip-radio, .crop-source),
 :is(.manual-add-list li, .help-back svg),
 .diag-section > .collapse-header {
@@ -370,7 +360,7 @@ select.input {
 }
 :is(.circle, .b-ico, .w-ico, .help-stage, .side-keys-device-key, .hero, .dock-list),
 :is(.strip-zones, .side-keys-device, .xkey-row, .xkey-size-thumb, .xkey-style-popover),
-:is(.scrim, .address-backdrop, .tuning-grid, .image-fit-sizes) {
+:is(.scrim, .address-backdrop, .tuning-grid, .image-fit-sizes, .key-grid) {
   display: grid;
 }
 :is(.xkey-size-grid, .xkey-style-row, .tuning-dimensions) {
