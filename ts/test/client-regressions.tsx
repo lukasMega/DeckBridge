@@ -1673,6 +1673,7 @@ const AKP05E_DOCK: DockUi = {
   ...DOCK_IDENTITY,
   modelId: 'ajazz-akp05e',
   modelName: 'AJAZZ AKP05E',
+  coraProfile: 'stream-deck-plus',
   keyCount: 8,
   columns: 5,
   rows: 2,
@@ -1708,8 +1709,8 @@ async function checkSideKeysHelp(): Promise<void> {
   check(
     [...help!.querySelectorAll('.side-keys-device-grid .side-keys-device-key')]
       .map((key) => key.textContent)
-      .join(',') === '1,2,3,4,6,7,8,9',
-    'Plus mode highlights only physical keys controlled by Elgato',
+      .join(',') === '1,2,3,4,5,6,7,8',
+    'Plus mode numbers Elgato keys consecutively across both rows',
   );
   check(
     [...help!.querySelectorAll('.side-keys-device-column .side-keys-device-key')]
@@ -1717,6 +1718,11 @@ async function checkSideKeysHelp(): Promise<void> {
       .join(',') === 'Top,Bottom' &&
       help!.querySelector('.side-keys-sankey')?.textContent.includes('4 × 2 keys') === true,
     'Plus mode labels physical side keys and correct Sankey grid size',
+  );
+  check(
+    help!.querySelector('.side-keys-device')?.getAttribute('aria-label') ===
+      '5 by 2 device grid; 4 by 2 Elgato grid, with 2 side keys in right column',
+    'Plus mode shows four Elgato columns and one side-key column',
   );
   await click('button[aria-label="Close side keys help"]');
   check(root.querySelector('dialog.side-keys-help') === null, 'Side keys help closes');
@@ -2217,6 +2223,17 @@ async function runSideKeysPanel(): Promise<void> {
     await settle();
 
     await checkSideKeysHelp();
+    await act(() =>
+      patch({
+        status: {
+          ...baseStatus,
+          docks: [{ ...AKP05E_DOCK, modelId: 'ajazz-akp05', modelName: 'AJAZZ AKP05' }],
+          selectedDock: 0,
+        },
+      }),
+    );
+    await checkSideKeysHelp();
+    await act(() => patch({ status: { ...baseStatus, docks: [AKP05E_DOCK], selectedDock: 0 } }));
     await checkDeviceTestMode();
     await checkTextSize(stub);
     await checkPressAction(stub);

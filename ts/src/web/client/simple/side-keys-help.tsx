@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from 'preact/hooks';
 import type { DockUi } from '../ui-types.js';
 
-// AKP05E exposes physical 5×2 geometry even when paired as Stream Deck +.
+// AKP05/AKP05E retain physical 5×2 geometry when paired as Stream Deck +.
 function elgatoColumns(dock: DockUi): number {
-  return dock.modelId === 'ajazz-akp05e' && dock.extraKeys?.length === 2 ? 4 : dock.columns;
+  return dock.coraProfile === 'stream-deck-plus' ? 4 : dock.columns;
 }
 
 function KeyDataFlow({ dock }: Readonly<{ dock: DockUi }>): preact.JSX.Element {
@@ -215,7 +215,7 @@ function SideKeysDialog({
                 gridRow: Math.floor(index / columns) + 1,
               }}
             >
-              {Math.floor(index / columns) * physicalColumns + (index % columns) + 1}
+              {index + 1}
             </span>
           ))}
         </div>
