@@ -152,7 +152,6 @@ export function ManualAddPanel({
         <CopyChip label="IP" value={ip} cls="addr-chip" pending={pending} />
         <span class="step-sub">Or use local IP if everything is on the same machine:</span>
         <CopyChip label="IP" value="127.0.0.1" cls="addr-port-chip" />
-        <span> : </span>
         <CopyChip label="Port" value={port} cls="addr-port-chip" />
       </div>
     </div>

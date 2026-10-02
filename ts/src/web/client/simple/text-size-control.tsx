@@ -20,7 +20,7 @@ import { TextStyleButton } from './text-style-popover.js';
 // Mirrors EXTRA_KEY_TEXT_SIZES / WRAPPABLE_WIDGETS (extra-key-config.ts).
 const MIN_STEP = -2;
 const MAX_STEP = 2;
-const WRAPPABLE: readonly ExtraKeyWidget[] = ['text', 'command', 'plugin'];
+const WRAPPABLE: readonly ExtraKeyWidget[] = ['text', 'command', 'plugin', 'external'];
 
 const WRAP_OPTIONS: ReadonlyArray<{ value: ExtraKeyWrap | 'off'; label: string }> = [
   { value: 'off', label: 'Wrap: off' },
@@ -193,8 +193,8 @@ export function TextSizeControl({
           />
         )}
       </div>
-      {WRAPPABLE.includes(cfg.widget) && <WrapSelect wireId={wireId} label={label} cfg={cfg} />}
       <TextStyleButton wireId={wireId} label={label} cfg={cfg} />
+      {WRAPPABLE.includes(cfg.widget) && <WrapSelect wireId={wireId} label={label} cfg={cfg} />}
     </div>
   );
 }

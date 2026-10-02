@@ -392,13 +392,17 @@ async function checkPairingOffer(
 
 async function runVirtualDeckPanel(root: HTMLElement, check: Check): Promise<void> {
   const original = globalThis.fetch;
+  let panelState = PANEL_STATE;
   const posts: Array<{ url: string; body: unknown }> = [];
   globalThis.fetch = ((url: string, init?: RequestInit) => {
     if (init?.method === 'POST') {
       posts.push({ url, body: bodyOf(init) });
+      if (url === '/api/virtual-deck') {
+        panelState = { ...panelState, enabled: (bodyOf(init) as { enabled: boolean }).enabled };
+      }
       return Promise.resolve(jsonResponse(200, url.endsWith('/pairing') ? PANEL_OFFER : {}));
     }
-    return Promise.resolve(jsonResponse(200, PANEL_STATE));
+    return Promise.resolve(jsonResponse(200, panelState));
   }) as unknown as typeof fetch;
   const confirmOriginal = window.confirm.bind(window);
   window.confirm = () => true;
@@ -416,6 +420,10 @@ async function runVirtualDeckPanel(root: HTMLElement, check: Check): Promise<voi
       ),
     );
     await settleAll();
+    check(
+      textOf(root, '.collapse-status').includes('Enabled'),
+      'Browser deck header loads status while collapsed',
+    );
     checkPanelBasics(root, check);
     await checkPairingOffer(root, check, () => loadCount);
 
@@ -432,6 +440,11 @@ async function runVirtualDeckPanel(root: HTMLElement, check: Check): Promise<voi
         validateMatrix(fakeMatrix().slice(1)) === null &&
         validateMatrix(fakeMatrix().map((r) => r.map((c) => (c ? 1 : 0)))) === null,
       'The QR matrix validator accepts squares of booleans and rejects the rest',
+    );
+    await clickSettled(root, '#toggle-virtual-deck');
+    check(
+      textOf(root, '.collapse-status').includes('Disabled'),
+      'Browser deck header refreshes after disabling',
     );
     await act(() => render(null, root));
   } finally {
@@ -584,6 +597,10 @@ async function runClickToPress(root: HTMLElement, check: Check): Promise<void> {
     const toggle = root.querySelector<HTMLInputElement>('#toggle-key-press')!;
     check(!toggle.checked, 'The Click to press toggle starts off');
     check(
+      textOf(root, '.collapse-status').includes('Disabled'),
+      'Click to press header starts disabled',
+    );
+    check(
       root.textContent.includes('Double-click a key in the preview'),
       'The toggle explains the double-click gesture and the exposure',
     );
@@ -592,6 +609,10 @@ async function runClickToPress(root: HTMLElement, check: Check): Promise<void> {
       for (let i = 0; i < 10; i++) await Promise.resolve();
     });
     const posted = calls.find((c) => c.url === '/api/webui-key-press');
+    check(
+      textOf(root, '.collapse-status').includes('Enabled'),
+      'Click to press header updates after saving',
+    );
     check(
       (posted?.body as { enabled?: boolean } | undefined)?.enabled === true,
       'Turning Click to press on posts {enabled: true}',

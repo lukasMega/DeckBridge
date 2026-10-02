@@ -176,9 +176,9 @@ function ChannelTable({ channels }: Readonly<{ channels: PushChannelView[] }>): 
   );
 }
 
-function PushApiBody(): preact.JSX.Element {
+export function PushApiPanel(): preact.JSX.Element {
   const channels = useStore((s) => s.pushChannels);
-  const [tokens, setTokens] = useState<PushTokenView[]>([]);
+  const [tokens, setTokens] = useState<PushTokenView[] | null>(null);
   const [created, setCreated] = useState<PushTokenCreated | null>(null);
   const [name, setName] = useState('');
   const action = useAsyncAction();
@@ -203,13 +203,17 @@ function PushApiBody(): preact.JSX.Element {
     });
 
   return (
-    <>
+    <Collapsible
+      title="Push API"
+      bodyId="push-api-body"
+      status={tokens === null ? null : tokens.length > 0}
+    >
       <p class="multi-deck-note">
         Let other tools write text onto side keys. Plain HTTP; reachable from the LAN only with
         --bind. See docs/push-api.md.
       </p>
       {created && <TokenReveal created={created} onClose={() => setCreated(null)} />}
-      <TokenList tokens={tokens} onChanged={loadTokens} onCreated={setCreated} />
+      <TokenList tokens={tokens ?? []} onChanged={loadTokens} onCreated={setCreated} />
       <div class="push-test">
         <input
           class="input"
@@ -231,14 +235,6 @@ function PushApiBody(): preact.JSX.Element {
       </div>
       <Feedback error={action.error} status={action.status} />
       <ChannelTable channels={channels} />
-    </>
-  );
-}
-
-export function PushApiPanel(): preact.JSX.Element {
-  return (
-    <Collapsible title="Push API" bodyId="push-api-body">
-      <PushApiBody />
     </Collapsible>
   );
 }

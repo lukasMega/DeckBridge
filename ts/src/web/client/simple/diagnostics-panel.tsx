@@ -29,6 +29,7 @@ export function DiagnosticsPanel({
   // binary: debug ⇄ info. Finer levels stay available via --log-level.
   const level = toggledLevel ?? logLevel;
   const debugOn = level === 'debug';
+  const debugStatus = `Debug ${debugOn ? 'enabled' : 'disabled'}`;
 
   const toggleDebug = (): Promise<void> =>
     action.run(async () => {
@@ -71,7 +72,12 @@ export function DiagnosticsPanel({
     });
 
   return (
-    <Collapsible title={'Logging & diagnostics'} class="diag-section" bodyId="diagnostics-body">
+    <Collapsible
+      title={'Logging & diagnostics'}
+      class="diag-section"
+      bodyId="diagnostics-body"
+      status={level === null ? 'Loading…' : debugStatus}
+    >
       <p class="help-lead">
         Enable debug logging. Reproduce problem. Create report.{' '}
         <a href={TROUBLESHOOTING_URL} target="_blank" rel="noopener">

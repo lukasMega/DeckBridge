@@ -35,7 +35,7 @@ export function MultiDeckPanel({
     });
 
   return (
-    <Collapsible title="Multiple decks" bodyId="multi-deck-body">
+    <Collapsible title="Multiple decks" bodyId="multi-deck-body" status={toggled ?? enabled}>
       <ToggleRow
         id="toggle-multi-deck"
         label="Use two decks"

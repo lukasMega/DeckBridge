@@ -311,7 +311,7 @@ export function SettingsPage({ onBack }: Readonly<{ onBack: () => void }>): prea
   const realIdentity = state.data?.realDeviceIdentity ?? null;
 
   return (
-    <div class="help">
+    <div class="help settings-page">
       <h1>Settings</h1>
       <div class="settings-actions">
         <button class="ghostbtn" type="button" onClick={() => void handleExport()}>
@@ -374,7 +374,10 @@ export function SettingsPage({ onBack }: Readonly<{ onBack: () => void }>): prea
       <DiagnosticsPanel {...diagnosticsProps(state.data)} />
       <DeviceTuningPanel />
 
-      <Collapsible title="Saved settings (JSON)">
+      <Collapsible
+        title="Saved settings (JSON)"
+        status={settingsText === null ? 'Loading…' : 'Loaded'}
+      >
         <pre class="settings-json-preview panel-inset">{settingsText ?? 'Loading…'}</pre>
       </Collapsible>
     </div>

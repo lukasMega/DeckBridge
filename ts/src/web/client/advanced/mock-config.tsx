@@ -136,6 +136,7 @@ export function MockConfigForm(): preact.JSX.Element {
       id="mock-cfg-panel"
       bodyId="mock-cfg-body"
       title="Device Config"
+      status={status.driverConnected ? 'Connected' : 'Disconnected'}
       subtitle="(all modes)"
     >
       <div class="cfg-grid">

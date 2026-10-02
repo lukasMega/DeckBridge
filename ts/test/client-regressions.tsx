@@ -19,6 +19,8 @@ import { DeviceTuningPanel } from '../src/web/client/simple/device-tuning.js';
 import { DiagnosticsPanel } from '../src/web/client/simple/diagnostics-panel.js';
 import { PushApiPanel } from '../src/web/client/simple/push-api-panel.js';
 import { MultiDeckPanel } from '../src/web/client/simple/multi-deck-panel.js';
+import { UpdatePanel } from '../src/web/client/simple/update-panel.js';
+import { Collapsible } from '../src/web/client/components/Collapsible.js';
 import { runDeckPage } from './client-deck.js';
 import { ElgatoAppPanel } from '../src/web/client/simple/elgato-app-panel.js';
 import { KeymapLearn } from '../src/web/client/simple/keymap-learn.js';
@@ -1128,6 +1130,8 @@ async function runSettingsPanels(): Promise<void> {
 }
 
 async function runKeymapAndDiagnosticsPanels(): Promise<void> {
+  await runCollapsedHeaderStatuses();
+  await runTuningHeaderStatuses();
   await runKeymapLearnHappyPath();
   await runKeymapLearnNoWireId();
   await runDiagnosticsPanel();
@@ -1136,6 +1140,82 @@ async function runKeymapAndDiagnosticsPanels(): Promise<void> {
   await runDeckPage(root, check);
   await runElgatoAutoRestartPanel();
   await runElgatoAutoRestartUnsupported();
+}
+
+async function runCollapsedHeaderStatuses(): Promise<void> {
+  try {
+    await act(() =>
+      render(
+        <Collapsible title="Example" status="Disabled">
+          Content
+        </Collapsible>,
+        root,
+      ),
+    );
+    check(elementText('.collapse-status').includes('Disabled'), 'Collapsed headers show status');
+    await click('.collapse-header');
+    check(root.querySelector('.collapse-status') === null, 'Expanded headers omit status');
+    await act(() =>
+      render(
+        <Collapsible title="Example" status="Enabled">
+          Content
+        </Collapsible>,
+        root,
+      ),
+    );
+    await click('.collapse-header');
+    check(elementText('.collapse-status').includes('Enabled'), 'Collapsing shows latest status');
+  } finally {
+    await act(() => render(null, root));
+  }
+
+  const stub = stubFetch(() => ({ status: 500, payload: { error: 'Save failed' } }));
+  try {
+    await act(() => render(<UpdatePanel info={null} />, root));
+    check(
+      elementText('.collapse-status').includes('Loading'),
+      'Unknown update status shows loading',
+    );
+    await act(() => render(<UpdatePanel info={{ ...baseUpdateInfo(), enabled: false }} />, root));
+    check(
+      elementText('.collapse-status').includes('Disabled'),
+      'Updates header reflects disabled checks',
+    );
+    await click('#toggle-update-check');
+    await settle();
+    check(
+      elementText('.collapse-status').includes('Disabled'),
+      'Failed saves retain confirmed status',
+    );
+  } finally {
+    stub.restore();
+    await act(() => render(null, root));
+  }
+}
+
+async function runTuningHeaderStatuses(): Promise<void> {
+  const previousStatus = getSnapshot().status;
+  const cases = [
+    { safeMode: false, overrides: {}, expected: 'Defaults' },
+    { safeMode: false, overrides: { image: { blur: 1 } }, expected: 'Custom' },
+    { safeMode: true, overrides: { image: { blur: 1 } }, expected: 'Safe mode' },
+  ];
+  for (const { safeMode, overrides, expected } of cases) {
+    const stub = stubFetch(() => ({ payload: { ...OVERRIDES_VIEW, safeMode, overrides } }));
+    try {
+      await act(() => patch({ status: baseStatus }));
+      await act(() => render(<DeviceTuningPanel />, root));
+      await settle();
+      check(
+        elementText('#device-tuning > .collapse-header .collapse-status').includes(expected),
+        `Device tuning header distinguishes ${expected}`,
+      );
+    } finally {
+      stub.restore();
+      await act(() => render(null, root));
+      await act(() => patch({ status: previousStatus }));
+    }
+  }
 }
 
 // Key-map learn mode: the derived array IS the deliverable (it gets pasted into
@@ -1254,6 +1334,10 @@ async function runDiagnosticsPanel(): Promise<void> {
         'Debug toggle reflects the current level',
       );
       check(
+        elementText('.collapse-status').includes('Debug disabled'),
+        'Diagnostics header identifies debug state',
+      );
+      check(
         root.textContent.includes('/home/u/.cache/deckbridge/logs/deckbridge.log'),
         'The log file path is shown so a reporter can find it',
       );
@@ -1267,6 +1351,10 @@ async function runDiagnosticsPanel(): Promise<void> {
       check(
         elementText('#toggle-debug-logging').includes('on'),
         'The toggle updates after a successful post',
+      );
+      check(
+        elementText('.collapse-status').includes('Debug enabled'),
+        'Diagnostics header updates after saving',
       );
     } finally {
       stub.restore();
@@ -1284,6 +1372,10 @@ async function runMultiDeckPanel(): Promise<void> {
       await settle();
       const box = (): HTMLInputElement | null => root.querySelector('#toggle-multi-deck');
       check(box()?.checked === false, 'Multi-deck toggle starts off (the default)');
+      check(
+        elementText('.collapse-status').includes('Disabled'),
+        'Multiple decks header starts disabled',
+      );
 
       await click('#toggle-multi-deck');
       await settle();
@@ -1293,6 +1385,10 @@ async function runMultiDeckPanel(): Promise<void> {
         'Enabling posts enabled:true',
       );
       check(box()?.checked === true, 'The toggle updates after a successful post');
+      check(
+        elementText('.collapse-status').includes('Enabled'),
+        'Multiple decks header updates after saving',
+      );
     } finally {
       stub.restore();
       await act(() => render(null, root));
@@ -1316,6 +1412,10 @@ async function runPushApiPanel(): Promise<void> {
   try {
     await act(() => render(<PushApiPanel />, root));
     await settle();
+    check(
+      elementText('.collapse-status').includes('Enabled'),
+      'Push API header reflects usable push tokens',
+    );
     check(root.textContent.includes('dbp_SECRET…'), 'Token list shows name prefix');
     check(!root.textContent.includes('hash'), 'Token list never shows a hash');
 
@@ -1352,6 +1452,22 @@ async function runPushApiPanel(): Promise<void> {
     await act(() => patch({ pushChannels: [] }));
     await act(() => render(null, root));
   }
+
+  const deckOnly = stubFetch((url) => ({
+    payload:
+      url === '/api/push-tokens' ? { tokens: [{ ...row, scopes: ['deck'] }] } : { channels: [] },
+  }));
+  try {
+    await act(() => render(<PushApiPanel />, root));
+    await settle();
+    check(
+      elementText('.collapse-status').includes('Disabled'),
+      'Browser-deck tokens cannot enable the Push API summary',
+    );
+  } finally {
+    deckOnly.restore();
+    await act(() => render(null, root));
+  }
 }
 
 // Elgato-app auto-restart panel: toggle posts + reflects state, and the delay
@@ -1367,6 +1483,10 @@ async function runElgatoAutoRestartPanel(): Promise<void> {
       const delayInput = (): HTMLInputElement | null =>
         root.querySelector('.tuning-field input[type="number"]');
       check(box()?.checked === true, 'Elgato auto-restart toggle starts on (the fixture state)');
+      check(
+        elementText('.collapse-status').includes('Enabled'),
+        'Elgato header reflects enabled auto-restart',
+      );
       check(delayInput()?.disabled === false, 'Delay field is enabled while the toggle is on');
 
       await click('#toggle-elgato-auto-restart');
@@ -1377,6 +1497,10 @@ async function runElgatoAutoRestartPanel(): Promise<void> {
         'Disabling posts enabled:false',
       );
       check(box()?.checked === false, 'The toggle updates after a successful post');
+      check(
+        elementText('.collapse-status').includes('Disabled'),
+        'Elgato header updates after saving',
+      );
       check(delayInput()?.disabled === true, 'Delay field disables once the toggle is off');
     } finally {
       stub.restore();
@@ -1398,6 +1522,10 @@ async function runElgatoAutoRestartUnsupported(): Promise<void> {
       );
       const box = (): HTMLInputElement | null => root.querySelector('#toggle-elgato-auto-restart');
       check(box()?.disabled === true, 'Toggle is disabled on an unsupported platform');
+      check(
+        elementText('.collapse-status').includes('Unsupported'),
+        'Elgato header distinguishes unsupported platforms',
+      );
       const restartBtn = Array.from(root.querySelectorAll('button')).find((b) =>
         b.textContent.includes('Restart Elgato app now'),
       );
@@ -1708,6 +1836,33 @@ async function checkWrapSelect(stub: Stub, card: Element): Promise<void> {
     card.querySelector('select[aria-label="Bottom line wrapping"]') === null,
     'No wrap select on clock/date/weather',
   );
+  const pushed = {
+    widget: 'external' as const,
+    param: 'obs-rec',
+    expire: 'text' as const,
+    fallbackText: 'Waiting',
+    style: { textSize: 1 as const, color: '#00ff00', wrap: 'words' as const },
+  };
+  await act(() => patch({ extraKeys: { '10': pushed } }));
+  const pushWrap = card.querySelector<HTMLSelectElement>(
+    'select[aria-label="Bottom line wrapping"]',
+  );
+  check(pushWrap?.value === 'words', 'Push API exposes its saved line wrapping mode');
+  for (const mode of ['chars', 'words', 'off']) {
+    pushWrap!.value = mode;
+    await act(() => {
+      pushWrap!.dispatchEvent(new Event('change'));
+    });
+    check(
+      JSON.stringify(lastPost(stub, '/api/extra-key')) ===
+        JSON.stringify({
+          wireId: 10,
+          ...pushed,
+          style: { ...pushed.style, wrap: mode === 'off' ? undefined : mode },
+        }),
+      `Push API wrap ${mode} preserves channel, expiry, fallback and other styling`,
+    );
+  }
   await act(() => patch({ extraKeys: { '10': { widget: 'command', param: 'date' } } }));
 }
 

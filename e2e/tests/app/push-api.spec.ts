@@ -1,8 +1,10 @@
 import { gotoApp } from '../../helpers/goto.js';
+import { selectValue } from '../../helpers/click.js';
 import {
   api,
   connectElgato,
   DEFAULT_DEVICE,
+  deviceEntry,
   expect,
   getSettings,
   restoreSettings,
@@ -82,6 +84,22 @@ test.describe('push API (293S side key bound to a channel)', () => {
 
       await gotoApp(page, `${base}/`);
       await expect(page.getByLabel('Top side key widget')).toHaveValue('external');
+      const wrapping = page.getByLabel('Top line wrapping');
+      await expect(wrapping).toHaveValue('off');
+      for (const mode of ['words', 'chars', 'off']) {
+        await selectValue(wrapping, mode);
+        await expect(wrapping).toHaveValue(mode);
+        await expect
+          .poll(async () => {
+            const cfg = (await deviceEntry(request, base, 'mock:mirabox-293s'))?.extraKeys?.['16'];
+            return cfg;
+          })
+          .toEqual({
+            widget: 'external',
+            param: 'obs-rec',
+            ...(mode === 'off' ? {} : { style: { wrap: mode } }),
+          });
+      }
 
       const del = await request.delete(`${base}/api/push/obs-rec`, { headers: auth });
       expect(del.status()).toBe(204);

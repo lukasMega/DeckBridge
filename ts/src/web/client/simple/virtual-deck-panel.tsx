@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'preact/hooks';
 import { Collapsible } from '../components/Collapsible.js';
 import { ToggleRow } from '../components/Fields.js';
+import { ICON, Icon } from '../components/Icon.js';
 import { getJson, postJson } from '../lib/ui-api.js';
 import { Feedback, useAsyncAction } from '../lib/ui-async.js';
 import type { PairingOffer, VirtualDeckDeviceView, VirtualDeckState } from '../../contract-deck.js';
@@ -11,6 +12,9 @@ import { PairingAddressLink } from './pairing-address-modal.js';
 import { PairingQr, type QrLoader } from './pairing-qr.js';
 
 const POLL_MS = 2000;
+const VIRTUAL_DECK_HELP =
+  'Opens a page for any browser on your network. It shows up as one more dock in the Elgato ' +
+  'app. Layout: Stream Deck MK.2 (15 keys); more layouts may come.';
 // Mirrors shared/types.ts VIRTUAL_DOCK_INDEX (MAX_DOCKS - 1): the browser deck's fixed dock.
 const VIRTUAL_DOCK_INDEX = 3;
 
@@ -189,20 +193,21 @@ function DeckDetails({
         </p>
       )}
       <ElgatoHint state={state} />
-      <PairingAddressLink initialDock={VIRTUAL_DOCK_INDEX} />
-      {offer ? (
-        <Offer offer={offer} now={now} onCancel={onCancel} loadQr={loadQr} />
-      ) : (
-        <button
-          class="ghostbtn"
-          id="deck-pair"
-          type="button"
-          disabled={busy || !state.listening}
-          onClick={onPair}
-        >
-          Pair a device
-        </button>
-      )}
+      <div class="settings-actions">
+        <PairingAddressLink initialDock={VIRTUAL_DOCK_INDEX} />
+        {!offer && (
+          <button
+            class="ghostbtn"
+            id="deck-pair"
+            type="button"
+            disabled={busy || !state.listening}
+            onClick={onPair}
+          >
+            Pair a device
+          </button>
+        )}
+      </div>
+      {offer && <Offer offer={offer} now={now} onCancel={onCancel} loadQr={loadQr} />}
       <DeviceList state={state} busy={busy} onRevoke={onRevoke} onRevokeAll={onRevokeAll} />
       {state.latencyP95Ms !== undefined && (
         <p class="multi-deck-note" id="deck-latency">
@@ -214,10 +219,16 @@ function DeckDetails({
 }
 
 function VirtualDeckBody({
-  open,
+  state,
+  now,
+  refresh,
   loadQr,
-}: Readonly<{ open: boolean; loadQr?: QrLoader }>): preact.JSX.Element {
-  const { state, now, refresh } = useVirtualDeckState(open);
+}: Readonly<{
+  state: VirtualDeckState | null;
+  now: number;
+  refresh: () => Promise<void>;
+  loadQr?: QrLoader;
+}>): preact.JSX.Element {
   const [offer, setOffer] = useState<PairingOffer | null>(null);
   const action = useAsyncAction();
 
@@ -267,11 +278,9 @@ function VirtualDeckBody({
         checked={enabled}
         disabled={state === null || action.busy}
         onChange={(next) => void toggle(next)}
-      />
-      <p class="multi-deck-note">
-        Opens a page for any browser on your network. It shows up as one more dock in the Elgato
-        app. Layout: Stream Deck MK.2 (15 keys); more layouts may come.
-      </p>
+      >
+        <Icon class="multi-deck-help" html={ICON.help} title={VIRTUAL_DECK_HELP} />
+      </ToggleRow>
       {state?.lastError && <p class="settings-error">{state.lastError}</p>}
       {state && enabled && (
         <DeckDetails
@@ -293,9 +302,15 @@ function VirtualDeckBody({
 
 export function VirtualDeckPanel({ loadQr }: Readonly<{ loadQr?: QrLoader }>): preact.JSX.Element {
   const [open, setOpen] = useState(false);
+  const { state, now, refresh } = useVirtualDeckState(open);
   return (
-    <Collapsible title="Browser deck" bodyId="virtual-deck-body" onToggle={setOpen}>
-      <VirtualDeckBody open={open} loadQr={loadQr} />
+    <Collapsible
+      title="Browser deck"
+      bodyId="virtual-deck-body"
+      status={state?.enabled ?? null}
+      onToggle={setOpen}
+    >
+      <VirtualDeckBody state={state} now={now} refresh={refresh} loadQr={loadQr} />
     </Collapsible>
   );
 }

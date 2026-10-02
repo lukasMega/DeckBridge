@@ -26,7 +26,7 @@ export function KeyPressPanel({
     });
 
   return (
-    <Collapsible title="Click to press" bodyId="key-press-body">
+    <Collapsible title="Click to press" bodyId="key-press-body" status={toggled ?? enabled}>
       <ToggleRow
         id="toggle-key-press"
         label="Click to press"
