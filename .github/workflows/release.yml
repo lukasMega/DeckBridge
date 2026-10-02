@@ -388,11 +388,17 @@ jobs:
 
       - uses: actions/download-artifact@v8
         with:
-          path: artifacts
-          merge-multiple: true
+          path: downloaded
 
-      - name: Remove PoC reports from release files
-        run: rm -f artifacts/results-*.md artifacts/results-*.json
+      # PoC samples (hello-tauri-setup.exe, hello-tauri.dmg) would match the release globs.
+      - name: Collect release files, excluding VirusTotal PoC artifacts
+        run: |
+          mkdir artifacts
+          for dir in downloaded/*/; do
+            case "$(basename "$dir")" in virustotal-poc-*) continue ;; esac
+            mv "$dir"* artifacts/
+          done
+          ls -la artifacts
 
       # Scan before checksumming and publishing; infections fail release.
       - name: Install ClamAV and update signatures
