@@ -14,6 +14,28 @@ npm run serve      # serve the built site
 npm run typecheck  # tsc
 ```
 
+## Refresh screenshots
+
+From repository root:
+
+```bash
+mise run docs-screenshots
+```
+
+Captures both themes using isolated mocks.
+Updates `/features`, `/getting-started`, and homepage assets.
+Includes four setup states and AKP05.
+Runtime and dependencies build automatically.
+No hardware or running server required.
+Failed captures preserve existing screenshot assets.
+
+Uses `$CHROME_BIN` or macOS Google Chrome.
+Otherwise, install Chromium once:
+
+```bash
+pnpm --dir e2e exec playwright install chromium
+```
+
 ## Project-specific bits
 
 - **Mermaid → inline SVG at build** — `plugins/remark-mermaid-prerender.mjs` runs
