@@ -63,7 +63,7 @@ interface LogPaneOpts<T> {
  */
 function useLogPane<T, E extends HTMLElement>(
   opts: LogPaneOpts<T>,
-): { ref: RefObject<E>; clear: () => void } {
+): { ref: RefObject<E | null>; clear: () => void } {
   const elRef = useRef<E>(null);
   // Index of the last log entry rendered into the DOM (for incremental appends)
   const renderedRef = useRef(0);

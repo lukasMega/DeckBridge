@@ -9,7 +9,7 @@
 //       (href=/DeckBridge/features), so a `href="..."` regex matches nothing.
 //   G2  internal links carry the baseUrl prefix and are extensionless
 //       (/DeckBridge/features -> build/features/index.html).
-// See .claude/plans/docs-site-test-plan.md for the full write-up.
+// See .claude/plans/.done/2026-07-29_docs-site-test-plan.md for the full write-up.
 
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { dirname, extname, join, resolve } from 'node:path';

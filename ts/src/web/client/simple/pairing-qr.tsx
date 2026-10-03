@@ -100,6 +100,7 @@ export function loadQrViaSandbox(text: string): Promise<boolean[][]> {
       } else if (data?.t === 'error') finish(new Error('Could not load the QR library'));
     };
     const timer = setTimeout(() => finish(new Error('QR library timed out')), LOAD_TIMEOUT_MS);
+    // eslint-disable-next-line sonarjs/post-message -- sandbox origin is opaque; onMessage verifies frame.contentWindow
     window.addEventListener('message', onMessage);
     frame.srcdoc = sandboxDoc();
     document.body.appendChild(frame);
