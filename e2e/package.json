@@ -8,6 +8,7 @@
     "test": "playwright test",
     "test:app": "playwright test --project=app",
     "test:docs": "playwright test --project=docs",
+    "screenshots:docs": "node scripts/docs-screenshots.mjs",
     "types": "tsc --noEmit",
     "lightpanda": "node scripts/ensure-lightpanda.mjs"
   },

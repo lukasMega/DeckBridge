@@ -450,6 +450,13 @@ dir = "docs-site"
 # Docusaurus reads it as the positional siteDir.
 run = "pnpm exec docusaurus start --port 3001 --host 0.0.0.0"
 
+[tasks.docs-screenshots]
+description = "Refresh docs Web UI screenshots in light and dark themes"
+dir = "e2e"
+depends = ["build-mock", "e2e-install"]
+run = "pnpm run screenshots:docs"
+timeout = "120s"
+
 [tasks.docs-check]
 description = "docs-site: typecheck + tests (build/links/content/output)"
 quiet = true
