@@ -214,15 +214,16 @@ await test('a masked zone turns a full window into per-slot uploads of the rest'
   );
 });
 
+// A 16-px red patch at `x`; the first upload is the leftmost slot it touches.
+const redIn = (zoneFit: 'crop' | 'scale', x: number): number => {
+  const canvas = new TouchStripCanvas();
+  canvas.setOptions({ zoneFit, upload: 'full-frames' });
+  const driver = makeFakeDriver();
+  canvas.apply(driver, AJAZZ_AKP05E_MODEL, SOLID_RED_16X16_JPEG, { x, y: 40, w: 16, h: 16 });
+  return redPixels(driver.calls[0]!.bytes);
+};
+
 await test("'crop' shows the slot window's own pixels; 'scale' shows the whole zone", () => {
-  // A 16-px red patch at `x`; the first upload is the leftmost slot it touches.
-  const redIn = (zoneFit: 'crop' | 'scale', x: number): number => {
-    const canvas = new TouchStripCanvas();
-    canvas.setOptions({ zoneFit, upload: 'full-frames' });
-    const driver = makeFakeDriver();
-    canvas.apply(driver, AJAZZ_AKP05E_MODEL, SOLID_RED_16X16_JPEG, { x, y: 40, w: 16, h: 16 });
-    return redPixels(driver.calls[0]!.bytes);
-  };
   assert.equal(redIn('crop', 190), 0, 'x 190–205 is zone 1 and gap only: slot 1 ends at 176');
   assert.ok(redIn('scale', 184) > 0, 'scale keeps zone 1 x 184–199');
   assert.ok(redIn('crop', 203) > 0, 'crop shows slot 2 x 203+');

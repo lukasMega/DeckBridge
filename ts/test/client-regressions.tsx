@@ -785,6 +785,9 @@ async function setCropRect(values: readonly string[]): Promise<void> {
   }
 }
 
+const chip = (name: string, value: string): HTMLInputElement | null =>
+  root.querySelector<HTMLInputElement>(`input[name="${name}"][value="${value}"]`);
+
 async function checkImageFitApplicability(): Promise<void> {
   const view: DeviceOverridesView = {
     ...OVERRIDES_VIEW,
@@ -793,8 +796,6 @@ async function checkImageFitApplicability(): Promise<void> {
     sourceSize: { width: 120, height: 120 },
   };
   const stub = stubFetch(() => ({ payload: view }));
-  const chip = (name: string, value: string): HTMLInputElement | null =>
-    root.querySelector<HTMLInputElement>(`input[name="${name}"][value="${value}"]`);
   try {
     await act(() => patch({ status: { ...baseStatus, modelId: 'ajazz-akp05e' } }));
     await act(() => render(<DeviceTuningPanel />, root));
@@ -2193,6 +2194,12 @@ async function checkSideKeyCards(sideKeys: Element): Promise<void> {
   await act(() => patch({ extraKeyImages: {} }));
 }
 
+const section = (title: string): Element =>
+  root.querySelector(`[role="group"][aria-label="${title}"]`)!;
+const rows = (title: string, extra = ''): Element[] => [
+  ...section(title).querySelectorAll(`.xkey-row:not(.xkey-grid-head)${extra}`),
+];
+
 async function runSideKeysPanel(): Promise<void> {
   const stub = stubFetch((url) =>
     url === '/api/extra-key/preview'
@@ -2208,11 +2215,6 @@ async function runSideKeysPanel(): Promise<void> {
         }
       : { payload: { dir: '', files: [], status: {} } },
   );
-  const section = (title: string): Element =>
-    root.querySelector(`[role="group"][aria-label="${title}"]`)!;
-  const rows = (title: string, extra = ''): Element[] => [
-    ...section(title).querySelectorAll(`.xkey-row:not(.xkey-grid-head)${extra}`),
-  ];
   try {
     await act(() =>
       patch({
@@ -2323,6 +2325,11 @@ const STANDBY_VIEW: StandbyView = {
   hasCommands: false,
 };
 
+const field = (label: string): HTMLInputElement | null =>
+  Array.from(root.querySelectorAll('.tuning-field'))
+    .find((f) => f.querySelector('span')?.textContent === label)
+    ?.querySelector('input') ?? null;
+
 // Standby panel: defaults, toggle POST, disabled fields, status text, time field POST,
 // and a rejected save keeping the previous values.
 async function runStandbyPanel(): Promise<void> {
@@ -2349,10 +2356,6 @@ async function runStandbyPanel(): Promise<void> {
         | { settings: StandbyView['settings'] }
         | undefined
     )?.settings;
-  const field = (label: string): HTMLInputElement | null =>
-    Array.from(root.querySelectorAll('.tuning-field'))
-      .find((f) => f.querySelector('span')?.textContent === label)
-      ?.querySelector('input') ?? null;
   try {
     await act(() => patch({ status: { ...baseStatus, docks: [dimmed], selectedDock: 0 } }));
     await act(() => render(<StandbyPanel />, root));
