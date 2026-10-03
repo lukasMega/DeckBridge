@@ -514,6 +514,9 @@ test('applySettingsJson: bad touchStripMode / encoders fail the device-entry gua
   ]);
 });
 
+const extraKeyEntry = (extraKeys: unknown): string =>
+  JSON.stringify({ devices: [{ ...deviceEntry('fake-device-0', {}), extraKeys }] });
+
 test('extra-key press command: pressable keys only, widget and command replace independently', () => {
   const ui = new WebUIServer(undefined, [], 'real', new PersistedSettings(TEST_SETTINGS_ROOT));
   ui.settings.getOrCreateIdentity('fake-device-0', 'Dock');
@@ -552,14 +555,16 @@ test('extra-key press command: pressable keys only, widget and command replace i
   assert.equal(ui.extraKeys.trySet(15, { pressCommand: '' }), null);
   assert.deepEqual(cfg(), { widget: 'none', pressAction: 'refresh' });
 
-  const entry = (extraKeys: unknown): string =>
-    JSON.stringify({ devices: [{ ...deviceEntry('fake-device-0', {}), extraKeys }] });
-  ui.settingsFile.applyJson(entry({ '15': { widget: 'none', pressAction: 'always' } }));
+  ui.settingsFile.applyJson(extraKeyEntry({ '15': { widget: 'none', pressAction: 'always' } }));
   assert.deepEqual(cfg(), { widget: 'none', pressAction: 'refresh' }, 'bad action import ignored');
-  ui.settingsFile.applyJson(entry({}));
-  ui.settingsFile.applyJson(entry({ '15': { widget: 'none', pressCommand: 'x'.repeat(513) } }));
+  ui.settingsFile.applyJson(extraKeyEntry({}));
+  ui.settingsFile.applyJson(
+    extraKeyEntry({ '15': { widget: 'none', pressCommand: 'x'.repeat(513) } }),
+  );
   assert.equal(cfg(), undefined, 'over-long press command rejected');
-  ui.settingsFile.applyJson(entry({ '15': { widget: 'none', pressCommand: 'open -a Music' } }));
+  ui.settingsFile.applyJson(
+    extraKeyEntry({ '15': { widget: 'none', pressCommand: 'open -a Music' } }),
+  );
   assert.deepEqual(cfg(), { widget: 'none', pressCommand: 'open -a Music' });
 });
 
@@ -1223,13 +1228,14 @@ try {
     assert.equal(r.status, 400);
   });
 
+  const post = (body: Record<string, unknown>): Promise<Response> =>
+    fetch(`${base}/api/browser-locale`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+
   await runWebTest('browser locale route keeps timezone in memory only', async () => {
-    const post = (body: Record<string, unknown>): Promise<Response> =>
-      fetch(`${base}/api/browser-locale`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      });
     assert.equal((await post({ locale: 'sk-SK', timeZone: 'Europe/Bratislava' })).status, 200);
     assert.equal(settingsUi.settings.browserLocale, 'sk-SK');
     assert.equal(settingsUi.settings.browserTimeZone, 'Europe/Bratislava');

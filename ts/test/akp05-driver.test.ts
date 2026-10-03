@@ -166,22 +166,23 @@ test('sendImage frames BAT → 1024-byte data chunks → ULEND, one report id by
   assert.equal(last[1 + 476], 0, 'and zero padding after it');
 });
 
-test('firmware comes from feature report 0x01 (20 B); a failed read leaves it unknown', () => {
-  const read = (reply: string | null): { firmware: string | undefined; request: number[] } => {
-    const request: number[] = [];
-    const hid = {
-      hid_get_feature_report(_device: unknown, buf: Uint8Array, len: number): number {
-        request.push(buf[0]!, len);
-        if (reply === null) return -1;
-        buf.set(Buffer.from(reply, 'ascii'));
-        return reply.length;
-      },
-    };
-    const d = new WriteCaptureDriver() as unknown as {
-      readFirmware(h: unknown): string | undefined;
-    };
-    return { firmware: d.readFirmware(hid), request };
+const read = (reply: string | null): { firmware: string | undefined; request: number[] } => {
+  const request: number[] = [];
+  const hid = {
+    hid_get_feature_report(_device: unknown, buf: Uint8Array, len: number): number {
+      request.push(buf[0]!, len);
+      if (reply === null) return -1;
+      buf.set(Buffer.from(reply, 'ascii'));
+      return reply.length;
+    },
   };
+  const d = new WriteCaptureDriver() as unknown as {
+    readFirmware(h: unknown): string | undefined;
+  };
+  return { firmware: d.readFirmware(hid), request };
+};
+
+test('firmware comes from feature report 0x01 (20 B); a failed read leaves it unknown', () => {
   assert.deepEqual(read('V3.AKP05E.02.007\0'), {
     firmware: 'V3.AKP05E.02.007',
     request: [0x01, 20],
