@@ -4,25 +4,26 @@ Documents how a key image travels from the Elgato software to the USB device and
 
 ## Overview
 
-![Image flow diagram](./image-flow-diagram.svg)
+See current sequence diagram below.
 
 The Elgato desktop sends image data to the CORA child server in the format matching the capabilities the relay advertises via `model.cora` (geometry, PID, product name) — so the CORA format depends on what's physically plugged in. **Everything device-specific is read from the active `DeviceModel`** (`model.image`, `model.keyMap`, `model.cora`) — there is no per-brand branching in the pipeline.
 
-The per-device rows below carry the *argument*; for the raw values of every field, see
-the generated [Device specs](./device-specs.mdx).
+[Device specs](./device-specs.mdx) derives model values.
+[Supported devices](./devices.mdx) records verification status.
+CORA profiles determine incoming image formats.
+USB protocols determine outgoing report framing.
+Those choices are independent.
 
-| Connected device | Advertised caps (`model.cora`) | CORA format | Sidecar | `model.image` transform |
-|-----------------|-----------------|-------------|---------|-----------|
-| Mirabox 293V3 (`mirabox-cora`) | MK.2 spoof (PID `0x00a5`, `advertiseAs: 'mk2'`) | gen2 JPEG 72×72 | Yes | `sidecar`: resize 72→112 (lanczos3), rotate 0 |
-| Mirabox 293S (`mirabox-cora-v1`) | MK.2 spoof (PID `0x00a5`, `advertiseAs: 'mk2'`) | gen2 JPEG 72×72 | Yes | `sidecar`: pad 72→85 (edge), rotate 90 |
-| Mirabox K1 Pro (`mirabox-cora`) | Mini spoof (PID `0x0063`, `advertiseAs: 'mini'`) | gen1 BMP 80×80 | Yes | `sidecar`: crop 6 px/side (80→68) → resize 64, rotate 0 + flipH, BMP→JPEG |
-| Ajazz AKP153E/R rev. 2 (`mirabox-cora`) — untested | MK.2 spoof (PID `0x00a5`, `advertiseAs: 'mk2'`) | gen2 JPEG 72×72 | Yes | identical to the 293V3 (same board, different VID/PID) |
-| Fifine AmpliGame D6 rev. 1 (untested) / rev. 2 (`mirabox-cora`) | MK.2 spoof (PID `0x00a5`, `advertiseAs: 'mk2'`) | gen2 JPEG 72×72 | Yes | identical to the 293V3 (same board, different VID/PID); rev. 2 uses 1024-byte packets, rev. 1 uses 512 |
-| AKP153/E/R, MSD-ONE, GK150K, Vision 01, TMICE Stream Controller (`mirabox-cora-v1`) — untested | MK.2 spoof (PID `0x00a5`, `advertiseAs: 'mk2'`) | gen2 JPEG 72×72 | Yes | identical to the 293S (same board, different VID/PID) |
-| Stream Deck MK.2 (`elgato-gen2`) | real MK.2 (PID `0x0080`) | gen2 JPEG 72×72 | No | `passthrough` (rotate 0) |
-| Stream Deck Mini (`elgato-gen1`) | real Mini (6 key, 3×2, PID `0x0063`) | gen1 BMP 80×80 BGR | No | `passthrough` (BMP short-circuit) |
+| Example | Incoming format | Worker behavior |
+|---|---|---|
+| MK.2 | 72×72 JPEG | Forward native bytes |
+| Mini | 80×80 BMP | Forward native bytes |
+| K1 Pro emulating Mini | 80×80 BMP | Crop, transform, encode JPEG |
+| Mirabox 293S emulating MK.2 | 72×72 JPEG | Pad and rotate |
+| AKP05 / AKP05E emulating Plus | 120×120 JPEG; strip updates | Transform keys; composite strip |
 
-Each **Mirabox/Ajazz/Fifine** model advertises as an Elgato device the desktop already knows (MK.2 for the 293V3/293S, the AKP153 rev. 2 clones, the Fifine D6, and the 7 v1 rebadges, Mini for the K1 Pro), and the sidecar resizes/rotates to the device's native key size per `model.image` (K1 Pro also re-encodes BMP→JPEG). **Elgato devices** advertise their real geometry and forward device-native data with no transform — the desktop pre-applies all orientation/color work itself.
+AKP05 and AKP05E advertise as a Stream Deck + by default.
+Each emulation carries its own mapping.
 
 On image arrival (`wireDockImages` in `dock-frames.ts`, one per dock) the path splits into two tracks on **different threads**:
 
@@ -82,12 +83,13 @@ sequenceDiagram
     EL->>CS: CORA image chunks (gen1 BMP or gen2 JPEG)
     CS->>PIPE: emit 'image' {keyIndex, data, format}
 
-    PIPE->>WEB: notifyImageUpdate(keyIndex, data, format)
-    WEB-->>BR: WS 'image' {mk2Index, v, data: b64, format}
-    Note over BR: data:image/jpeg or image/bmp<br/>(MIME from format field)
-
     PIPE->>HOST: renderCoraImage(keyIndex, data, format)
-    HOST-->>REND: postMessage 'image' {keyIndex, bytes, format}
+    Note over HOST: bounded admission, waiting images may coalesce
+    HOST-->>REND: admitted image via postMessage
+    Note over PIPE: record LastFrames after driver admission
+    PIPE->>WEB: notifyDockImage(dock, keyIndex, data, format)
+    WEB-->>BR: WS image with base64 and format
+    Note over BR: MIME follows incoming format
     Note over REND: key = model.id : specRevision : FNV1a32(full data)<br/>cache hit → reuse nativeBytes, skip transform
 
     alt bmp in & device bmp [Mini]  OR  transform passthrough [MK.2]
@@ -97,11 +99,12 @@ sequenceDiagram
         RS-->>REND: resized/rotated JPEG (K1 Pro: BMP→JPEG)
     end
 
-    Note over REND: store nativeBytes in LRU cache (max IMAGE_CACHE_SIZE=100)
+    Note over REND: store nativeBytes in LRU cache (100 entries / 32 MiB)
     REND->>DRV: sendImage(deviceKeyIndex, nativeBytes)
     Note over DRV: blocking hid_write (same worker thread)
     DRV-->>HOST: postMessage 'imageSent' {keyIndex}
-    HOST-->>WEB: notifyStats({ imagesSent }) via driver-manager
+    REND-->>HOST: workDone returns admission credits
+    HOST-->>WEB: update dock statistics
 ```
 
 Key behaviours (the format/cache/remap logic now lives in `renderImage` in `image-render.ts`, on the worker; `wireDockImages` on the main thread only calls `renderCoraImage`, records the dock's last frame, and broadcasts to the WebUI):
@@ -116,23 +119,18 @@ Key behaviours (the format/cache/remap logic now lives in `renderImage` in `imag
 
 Orientation is fully described by the active model: `model.image` for live CORA frames and `model.splash.transformOverride` for splash images (whose sources are upright, not desktop-pre-rotated).
 
-<details>
-<summary>Per-model orientation values</summary>
+Live transforms follow effective `model.image`.
+Splash transforms overlay `splash.transformOverride`.
+MK.2 splash currently rotates 180 degrees.
+AKP153E rev. 2 uses calibrated 95×95.
+AKP153R still inherits 293V3 defaults.
+Keep individual values in generated specifications.
 
-| Model | Live `image` rotate/flip | `splash.transformOverride` |
-|---|---|---|
-| MK.2 | rotate 0 (passthrough) | — (none) |
-| Mini | rotate 90, BGR (desktop pre-applies; forwarded verbatim) | rotate 90, flipH |
-| Mirabox 293V3 | rotate 0, resize 72→112 | rotate 180 |
-| Mirabox 293S | rotate 90, pad 72→85 (edge) | rotate 270 |
-| Mirabox K1 Pro | crop 6 px/side (80→68) → resize 64, rotate 0, flipH (BMP→JPEG) | rotate 90 (flipH off) |
-| Ajazz AKP153E/R rev. 2 (untested) | rotate 0, resize 72→112 (as 293V3) | rotate 180 |
-| Fifine AmpliGame D6 rev. 1 (untested) / rev. 2 | rotate 0, resize 72→112 (as 293V3) | rotate 180 |
-| AKP153/E/R, MSD-ONE, GK150K, Vision 01, TMICE Stream Controller (untested) | rotate 90, pad 72→85 (edge) (as 293S) | rotate 270 |
-
-</details>
-
-The Rust deckbridge-native cdylib applies rotations CW first, then flips. To re-calibrate a device, change `model.image` (live) or `model.splash.transformOverride` (splash) — see [Adding a Device, Phase 4](./adding-a-device.md#phase-4--measure-image-orientation-on-hardware).
+Rust crops source pixels first.
+Padding operates before rotation and flips.
+Ordinary resizing operates after those transforms.
+EXIF auto-rotation is disabled.
+See [hardware calibration](./adding-a-device.md#phase-4--measure-image-orientation-on-hardware).
 
 ### Web preview orientation
 
@@ -143,23 +141,49 @@ The browser shows the **received CORA bytes** immediately (72×72 JPEG for the 2
 .key-grid .key-cell img                            { transform: rotate(180deg); } /* default */
 .key-grid[data-model='mini'] .key-cell img         { transform: rotate(270deg) rotateY(180deg); }
 .key-grid[data-model='mirabox-k1pro'] .key-cell img { transform: rotate(90deg) rotateX(180deg); }
+.key-grid[data-cora='stream-deck-plus'] .key-cell img { transform: none; }
 ```
 
-Both views render through the shared `KeyPreview` class (`key-preview.ts`), which sets `data-model` on the grid root. Adjust these selectors if a new device's preview appears rotated.
+`KeyPreview.setModel(modelId, coraProfile)` sets both attributes.
+Check previews for each advertised profile.
+USB image rotation cannot determine preview rotation.
 
 ## Threading & ordering
 
-Since P1 there is **no main-thread image queue** — the main thread only does the two cheap steps from the Overview (WebUI broadcast, `renderCoraImage()` → one `postMessage`) and returns to the CORA ACK loop. All heavy work runs on the **USB worker**:
+Main-thread `HidWorkQueue` bounds admission and memory.
+It performs no transforms or writes.
 
-- **One FIFO message queue** (`hid-worker.ts`) — the worker processes `'image'` messages in arrival order, each fully completing (transform → cache → `hid_write`) before the next. This preserves per-key (and overall) ordering for free, **without any main-thread write queue**; the old per-key `imageWriteQueue` and the `SIDECAR_CONCURRENCY` round-trip queue were deleted.
-- **LRU cache** (`image-render.ts`, holding the `image-cache.ts` singleton, max `IMAGE_CACHE_SIZE` = 100) — keyed by `makeCacheKey(model.id, hashJpeg(data), override ?? 'def', revisionFor(model))`, which formats as `modelId:mode:rev:jpegHash`. Three of the four slots exist to stop a stale hit:
+| Budget | Current default |
+|---|---:|
+| Posted messages | 15 |
+| Posted payload bytes | 2 MiB |
+| Waiting messages | 64 |
+| Waiting payload bytes | 4 MiB |
+| Additional control slots | 32 |
 
-  - **model id** — the same CORA frame yields separate entries per device.
-  - **mode** — the WebUI image-fit override (`'def'` when the caller tracks none), so resize ⇄ pad-\* can't serve each other's bytes.
-  - **rev** — `specRevision(model.image)`, a short FNV-1a hash of the *effective* `DeviceImageSpec` (memoised per model in `image-render.ts`'s `_specRevisions` WeakMap). Without it a device-tuning change (rotation, quality, size — see `devices/model-overrides.ts`) would keep serving entries encoded under the **old** spec, and the tweak would appear to do nothing until a restart.
-  - **jpegHash** — `hashJpeg()`, a word-wise FNV-1a-32 over the whole buffer. See [Image-cache hash](#image-cache-hash).
+Waiting complete-key frames may replace predecessors.
+Touch frames and controls form barriers.
+Their ordering must survive coalescing.
+Lifecycle resets discard queued work.
+`workDone` returns credits after processing.
 
-  On a hit the Rust transform is skipped entirely (reconnect / static deck → 0 transform calls).
+USB workers serialize admitted messages.
+Eligible models collect bounded image batches.
+Batch limits are 15 images / 16ms.
+Final STP precedes completion notifications.
+Currently only 293S enables batching by default.
+Its seven rebadges require explicit tuning.
+
+Image caching has two independent limits.
+Maximum count is 100 entries.
+Maximum retained payload is 32 MiB.
+Keys combine model, mode, revision, and hash.
+Current rendering uses constant mode `'def'`.
+`specRevision(model.image)` distinguishes effective tuning.
+Cache hits skip encoding, not USB writes.
+
+Source: `worker/hid-work-queue-host.ts`, `worker/hid-worker.ts`,
+`transform/image-render.ts`, and `transform/image-cache.ts`.
 
 ### Image-cache hash
 
@@ -239,13 +263,14 @@ the server's `broadcast<K>` and the client's handler table are both typed by it.
 | `ts/src/transform/image-render.ts` | `renderImage(driver, model, keyIndex, coraBytes, format)` (worker) — transform (deckbridge-native FFI) + LRU cache + CORA→wire remap + `sendImage` to the device |
 | `ts/src/cora/image-assembler.ts` | `assembleImageChunk()` (gen2 JPEG) · `assembleGen1ImageChunk()` (gen1 BMP, BMP `bfSize` trim) |
 | `ts/src/cora/child-server.ts` | `ElgatoChildServer.handleCoraPacket` — dispatches `IMG_CMD_WRITE` / `GEN1_IMG_CMD`, emits `'image'` |
-| `ts/src/transform/image-cache.ts` | `LruCache` (`IMAGE_CACHE_SIZE` = 100) · `hashJpeg()` (full-buffer FNV-1a 32-bit) · `makeCacheKey(modelId, hash)` |
-| `ts/src/transform/translator.ts` | `transformImageForDevice(jpeg, spec)` (resize/rotate/flip/format) · `mk2IndexToDeviceImgId()` · `deviceInputToMk2Index()` |
-| `rust/deckbridge-native/src/lib.rs` | Rust deckbridge-native cdylib (`image_proc_transform` over FFI): reads EXIF, rotates/flips pixels, resizes, re-encodes JPEG (or BMP) |
+| `ts/src/transform/image-cache.ts` | `LruCache` (`IMAGE_CACHE_SIZE` = 100; 32 MiB) · `hashJpeg()` (full-buffer FNV-1a 32-bit) · `makeCacheKey(modelId, hash)` |
+| `ts/src/transform/translator.ts` | `transformImageForDevice(jpeg, spec)`; native blit and BMP helpers |
+| `ts/src/shared/key-map.ts` | Pure input/image index mappings |
+| `rust/deckbridge-native/src/transform.rs` | Native transforms; EXIF auto-rotation disabled |
 | `ts/src/worker/hid-worker.ts` · `hid-worker-host.ts` | USB worker entry + `WorkerHidDriver` proxy — carry the `'image'` / `'imageSent'` messages across the thread boundary |
 | `ts/src/web/server/image-channel.ts` | Per-dock frame cache · `notifyDockImage()` · `sendSnapshot()` for a new WS client · `replay()` on dock select |
 | `ts/src/web/client/key-preview.ts` | Shared `KeyPreview` grid + image store + `imageSrc()` — single render path for both views |
 | `ts/src/web/client/ui-base.css` | Per-model `.key-grid[data-model] .key-cell img` rotation (single source of truth) |
 | `ts/src/web/client/advanced/key-grid.tsx` | Advanced view — Preact component owning a persistent `KeyPreview`; `rebuild/setModel/setClickable` on `status` changes |
-| `ts/src/web/client/simple/controls.tsx` | Simple view — Preact component creating its `KeyPreview` on mount, rebuilding on prop changes |
+| `ts/src/web/client/components/KeyGridPreview.tsx` | Simple-view grid lifecycle and profile selection |
 | `ts/src/web/client/lib/ui-ws.ts` | WS message handler — `applyImage`/`resetPreviews`/`flashKey` into the shared image store |

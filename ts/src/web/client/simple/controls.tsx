@@ -1,14 +1,13 @@
-// Reusable stage controls: checklist step, copy chip, manual-add panel,
+// Reusable stage controls: copy chip, manual-add panel,
 // and the brightness fader. (Live key-grid preview moved to
 // components/KeyGridPreview.tsx — shared with the advanced view.)
 import { useState, useEffect, useRef } from 'preact/hooks';
-import type { ComponentChildren } from 'preact';
 import { useStore } from '../lib/store.js';
 import { useCopyText } from '../lib/use-copy-text.js';
 import { ICON, Icon, HelpButton } from '../components/Icon.js';
 import { CORA_PORT } from '../ui-help.js';
 import { fire } from '../lib/ui-api.js';
-import { postBrightnessOverride, restartElgatoApp } from './handlers.js';
+import { postBrightnessOverride } from './handlers.js';
 
 /** "Back" pill used by the settings and help screens. */
 export function BackButton({ onClick }: Readonly<{ onClick: () => void }>): preact.JSX.Element {
@@ -17,60 +16,6 @@ export function BackButton({ onClick }: Readonly<{ onClick: () => void }>): prea
       <Icon html={ICON.back} />
       <span>Back</span>
     </button>
-  );
-}
-
-/** "Paired before? Restart the Elgato app" reconnect hint. */
-export function RestartNote(): preact.JSX.Element {
-  return (
-    <p class="dock-pairing-note">
-      Paired before?{' '}
-      <button class="linkbtn accent" type="button" onClick={restartElgatoApp}>
-        Restart the Elgato app
-      </button>{' '}
-      to reconnect.
-    </p>
-  );
-}
-
-type StepKind = 'done' | 'active' | 'pending';
-
-export function Step({
-  kind,
-  title,
-  helpId,
-  onHelp,
-  children,
-}: Readonly<{
-  kind: StepKind;
-  /** Plain text, or a node (e.g. a link) when the step title itself is interactive. */
-  title: ComponentChildren;
-  helpId?: string;
-  onHelp?: (id: string) => void;
-  children?: ComponentChildren;
-}>): preact.JSX.Element {
-  return (
-    <div class={`step surface-card ${kind}`}>
-      <div class="step-ico">
-        {kind === 'done' && <Icon class="ico-done circle" html={ICON.check} />}
-        {kind === 'active' && <span class="ico-spin" />}
-        {kind === 'pending' && <span class="ico-pending" />}
-      </div>
-      <div class="step-body">
-        <div class="step-title">
-          <span>{title}</span>
-          {helpId !== undefined && onHelp !== undefined && (
-            <HelpButton
-              helpId={helpId}
-              onHelp={onHelp}
-              ariaLabel={typeof title === 'string' ? `Help: ${title}` : 'Help'}
-              title="What do I do here?"
-            />
-          )}
-        </div>
-        {children}
-      </div>
-    </div>
   );
 }
 
@@ -120,41 +65,38 @@ export function CopyChip({
 export function ManualAddPanel({
   onHelp,
   port = CORA_PORT,
-}: Readonly<{ onHelp: (id: string) => void; port?: string }>): preact.JSX.Element {
+  expanded = false,
+}: Readonly<{
+  onHelp: (id: string) => void;
+  port?: string;
+  expanded?: boolean;
+}>): preact.JSX.Element {
   const ip = useStore((s) => s.status.localIp);
-  const pending = !ip;
 
   return (
-    <div class="manual-add panel-inset">
-      <div class="manual-add-head">
-        <span>Not showing up?</span>
+    <details class="manual-add panel-inset" open={expanded}>
+      <summary class="manual-add-head">Pair manually</summary>
+      <p class="step-sub">
+        In the Elgato app, open the device menu (top left), choose{' '}
+        <strong>Add Network Device…</strong> and enter:{' '}
         <HelpButton
           helpId="network-device"
           onHelp={onHelp}
           ariaLabel="Help: add a network device"
           title="Show me how"
         />
-      </div>
-      <div class="manual-add-steps">
-        {' '}
-        <ol class="manual-add-list">
-          <li>
-            Navigate to the <span class="nstrong">top-left corner</span> of the Elgato app to locate
-            the device drop-down menu.
-          </li>
-          <li>
-            Open the drop-down menu, scroll to the bottom and select{' '}
-            <span class="nstrong">Add Network Device…</span>, then enter this address:
-          </li>
-        </ol>
-      </div>
+      </p>
       <div class="addr-row">
-        <CopyChip label="IP" value={ip} cls="addr-chip" pending={pending} />
-        <span class="step-sub">Or use local IP if everything is on the same machine:</span>
-        <CopyChip label="IP" value="127.0.0.1" cls="addr-port-chip" />
-        <CopyChip label="Port" value={port} cls="addr-port-chip" />
+        <CopyChip label="IP" value={ip} cls="addr-chip" pending={!ip} />
       </div>
-    </div>
+      <details class="addr-other">
+        <summary class="step-sub">Elgato app on this computer?</summary>
+        <div class="addr-row">
+          <CopyChip label="IP" value="127.0.0.1" cls="addr-port-chip" />
+          <CopyChip label="Port" value={port} cls="addr-port-chip" />
+        </div>
+      </details>
+    </details>
   );
 }
 

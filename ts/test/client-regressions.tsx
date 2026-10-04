@@ -22,6 +22,7 @@ import { MultiDeckPanel } from '../src/web/client/simple/multi-deck-panel.js';
 import { UpdatePanel } from '../src/web/client/simple/update-panel.js';
 import { Collapsible } from '../src/web/client/components/Collapsible.js';
 import { runDeckPage } from './client-deck.js';
+import { runPairingFlow } from './client-pairing.js';
 import { StandbyPanel } from '../src/web/client/simple/standby-panel.js';
 import type { StandbyView } from '../src/web/contract-standby.js';
 import { ElgatoAppPanel } from '../src/web/client/simple/elgato-app-panel.js';
@@ -1141,6 +1142,7 @@ async function runKeymapAndDiagnosticsPanels(): Promise<void> {
   await runMultiDeckPanel();
   await runPushApiPanel();
   await runDeckPage(root, check);
+  await runPairingFlow(root, check);
   await runElgatoAutoRestartPanel();
   await runElgatoAutoRestartUnsupported();
   await runStandbyPanel();
@@ -2243,7 +2245,7 @@ async function runSideKeysPanel(): Promise<void> {
     await checkTextSize(stub);
     await checkPressAction(stub);
 
-    await checkSideKeyCards(section('Side keys'));
+    await checkSideKeyCards(section('Extra buttons'));
     check(
       rows('Touch strip').length === 0 &&
         !section('Touch strip').textContent.includes('DeckBridge widgets are off') &&

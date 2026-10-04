@@ -2,16 +2,17 @@
 
 Documentation site for [DeckBridge](../) — built with [Docusaurus](https://docusaurus.io/).
 
-Uses **npm** (a `package-lock.json` is committed; there is no `yarn.lock`).
+Uses **pnpm** through repository `mise` tasks.
+Dependencies use committed `pnpm-lock.yaml`.
 
 ## Develop
 
 ```bash
-npm install
-npm run start      # dev server with live reload
-npm run build      # static site → build/
-npm run serve      # serve the built site
-npm run typecheck  # tsc
+pnpm install
+pnpm run start      # dev server with live reload
+pnpm run build      # static site → build/
+pnpm run serve      # serve the built site
+pnpm run typecheck  # tsc
 ```
 
 ## Refresh screenshots

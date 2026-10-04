@@ -11,15 +11,15 @@ import { GridHeader } from './config-section.js';
 const MODE_OPTIONS: ReadonlyArray<{ value: TouchStripMode; label: string }> = [
   {
     value: 'elgato',
-    label: 'Elgato only — app paints strip',
+    label: 'App — Elgato app paints the strip',
   },
   {
     value: 'deckbridge-ignore',
-    label: 'DeckBridge ignore — widgets only',
+    label: 'Widgets — DeckBridge paints the strip',
   },
   {
     value: 'deckbridge-repaint',
-    label: 'Repaint — app images show; widgets return',
+    label: 'Temporary app — app images show, then widgets return',
   },
 ];
 

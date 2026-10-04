@@ -255,7 +255,7 @@ const COLUMNS = {
       key: 'resizeFilter',
       label: 'Filter',
       description:
-        'Interpolation filter for the resize: triangle (default), nearest (K1 Pro, matches the known-good reference encoder), lanczos3 (best on upscale).',
+        'Resize filter: triangle, nearest, or lanczos3. Current K1 Pro configuration uses lanczos3.',
     },
     {
       key: 'sharpen',
@@ -639,7 +639,7 @@ function gridDiagram(m) {
     String(keyCount - 1).length,
   );
   const lines = [
-    `${m.cora.advertiseAs ?? 'mk2'} index → wire image id  (${columns}×${m.rows}, row-major)`,
+    `${m.cora.advertiseAs ?? m.id} index → wire image id  (${columns}×${m.rows}, row-major)`,
     '',
   ];
   for (let r = 0; r < m.rows; r++) {
@@ -698,7 +698,7 @@ function specsPage(models, notes) {
   out.push('title: Device specs');
   out.push('sidebar_label: Device specs');
   out.push(
-    'description: Every value DeckBridge uses to drive a deck — identity, image spec, wire framing, key maps.',
+    'description: Selected registry fields covering identity, images, framing, and key maps.',
   );
   out.push('---');
   out.push('');
@@ -708,9 +708,10 @@ function specsPage(models, notes) {
   out.push("import deviceData from '@site/src/data/devices.generated.json';");
   out.push('');
   out.push(
-    'Every field of every `DeviceModel`, generated from `ts/src/devices/registry.ts`. This is',
-    'the page to read when you are porting a deck or chasing a black panel; if you just want',
-    'to know whether your deck works, read [Supported devices](./devices.mdx) instead.',
+    'Selected fields derive from `ts/src/devices/registry.ts`.',
+    'Tables omit some optional display/capability fields.',
+    'Consult model source for complete definitions.',
+    'Hardware evidence appears under [Supported devices](./devices.mdx).',
   );
   out.push('');
   out.push('The three tables below are **live**: type to filter rows, click a header to sort,');
@@ -721,10 +722,11 @@ function specsPage(models, notes) {
   out.push('How much to trust a value:');
   out.push('');
   out.push(
-    '- **Measured** — anything on a deck marked tested. The image tuning and key maps of the',
-    '  MK.2, 293V3, 293S, K1 Pro, D6 rev. 2 and Mini were derived on hardware.',
-    '- **Inherited** — the rebadges copy a tested board field-for-field, by construction, so',
-    '  they cannot drift; what is untested is the *assumption* that the board is the same.',
+    '- **Measured** — only specifically recorded hardware observations.',
+    '  Tested labels do not validate every PID.',
+    '  Individual fields may still be inherited.',
+    '- **Inherited** — defaults copied from related models.',
+    '  Rebadges can override individual behavior flags.',
     '- **Inferred** — read out of a reference implementation. Each device lists its sources.',
     '- **Probed at runtime** — only `packetSizeCandidates`: when set, the real output-report',
     '  size is read from the HID report descriptor at `open()` and overrules `packetSize`,',

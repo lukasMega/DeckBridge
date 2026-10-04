@@ -15,7 +15,6 @@ import {
   PLUS_PROFILE,
   resetOverride,
   restoreSettings,
-  setOverride,
   test,
   useDevice,
   waitForState,
@@ -41,7 +40,7 @@ test.describe('touch strip + knobs (AKP05E)', () => {
     elgato = await connectElgato(workerRequest, app.baseURL, app.childPort);
   });
 
-  // Each test starts from the snapshot's per-device settings on a native AKP05E.
+  // Each test starts from the snapshot's per-device settings on an AKP05E (pairs as a Stream Deck + by default).
   test.beforeEach(async ({ request, app }) => {
     await restoreSettings(request, app.baseURL, snapshot);
     await useDevice(request, app.baseURL, AKP05E.id);
@@ -161,33 +160,25 @@ test.describe('touch strip + knobs (AKP05E)', () => {
     expect((await api(request, base, '/api/encoders', { connectToApp: true })).status).toBe(409);
   });
 
-  test('Plus emulation re-lays the grid and adds the strip preview', async ({
+  test('pairs as a Stream Deck + by default: re-laid grid and strip preview', async ({
     page,
     request,
     app,
   }) => {
     const base = app.baseURL;
-    await gotoApp(page, `${base}/`);
-    const grid = page.locator('#stage .key-grid');
-    await expect(grid.locator('button[data-key]')).toHaveCount(AKP05E.keyCount);
-    await expect(page.locator('.touch-strip-preview')).toHaveCount(0);
-
-    const plus = await setOverride(
-      request,
-      base,
-      AKP05E.id,
-      { cora: { advertiseAs: PLUS_PROFILE.advertiseAs, productId: PLUS_PROFILE.productId } },
-      (s) => dock0(s).coraProfile === PLUS_PROFILE.advertiseAs,
-    );
-    expect([plus.keyCount, plus.columns, plus.rows]).toEqual([
+    const state = await getState(request, base);
+    expect([state.keyCount, state.columns, state.rows]).toEqual([
       PLUS_PROFILE.keyCount,
       PLUS_PROFILE.columns,
       PLUS_PROFILE.rows,
     ]);
-    expect(dock0(plus).touchStripSize).toEqual(PLUS_PROFILE.touchStrip);
+    expect(dock0(state).coraProfile).toBe(PLUS_PROFILE.advertiseAs);
+    expect(dock0(state).touchStripSize).toEqual(PLUS_PROFILE.touchStrip);
     // The physical panel is unchanged; only what the app sees is re-laid.
-    expect([dock0(plus).keyCount, dock0(plus).columns]).toEqual([AKP05E.keyCount, AKP05E.columns]);
+    expect([dock0(state).keyCount, dock0(state).columns]).toEqual([AKP05E.physicalKeys, 5]);
 
+    await gotoApp(page, `${base}/`);
+    const grid = page.locator('#stage .key-grid');
     await expect(grid).toHaveAttribute('data-cora', PLUS_PROFILE.advertiseAs);
     await expect(grid.locator('button[data-key]')).toHaveCount(PLUS_PROFILE.keyCount);
     const canvas = page.locator('.touch-strip-preview');
@@ -200,10 +191,6 @@ test.describe('touch strip + knobs (AKP05E)', () => {
       overrides: { cora: { advertiseAs: 'mini', productId: 0x63 } },
     });
     expect(bogus.status).toBe(400);
-
-    await resetOverride(request, base, AKP05E.id, (s) => dock0(s).coraProfile === undefined);
-    await expect(grid.locator('button[data-key]')).toHaveCount(AKP05E.keyCount);
-    await expect(canvas).toHaveCount(0);
   });
 
   test('knob and strip input: commands, zone refreshes, forwarding to the app', async ({
@@ -255,30 +242,20 @@ test.describe('touch strip + knobs (AKP05E)', () => {
       (f) => f.event === 'deviceAction' && String(f.data.message).includes('tap'),
       () => api(request, base, '/api/mock/touch', { type: 'tap', x: 100, y: 50 }),
     );
-    // Natively the app sees no strip, so the action names the strip, not a knob zone; the
-    // zone still resolves on the 800 px Plus scale.
-    expect(tap.data.message).toBe('Touch strip tap (100, 50)');
+    // The Plus strip is split into knob zones, so the action names the knob above the tap.
+    expect(tap.data.message).toBe('Knob 1 touch tap (100, 50)');
     await expect.poll(count('zone1')).toBe(zone1 + 1);
     // Outside the strip is refused.
     expect(
       (await api(request, base, '/api/mock/touch', { type: 'tap', x: 800, y: 0 })).status,
     ).toBe(400);
 
-    // Knobs connected: a turn goes to the Elgato app instead — which only a Plus-advertised
-    // session has knobs for.
+    // Knobs connected: a turn goes to the Elgato app instead.
     await api(request, base, '/api/encoders', { connectToApp: true });
-    await setOverride(
-      request,
-      base,
-      AKP05E.id,
-      { cora: { advertiseAs: PLUS_PROFILE.advertiseAs, productId: PLUS_PROFILE.productId } },
-      (s) => dock0(s).coraProfile === PLUS_PROFILE.advertiseAs,
-    );
     await waitForState(request, base, (s) => s.elgatoConnected);
     const cw = count('knob1cw')();
     await dial({ index: 0, kind: 'rotate', delta: 1 });
     await expect.poll(() => elgato!.received().includes(PLUS_ROTATE_KNOB0)).toBe(true);
     expect(count('knob1cw')()).toBe(cw);
-    await resetOverride(request, base, AKP05E.id, (s) => dock0(s).coraProfile === undefined);
   });
 });

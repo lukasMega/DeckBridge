@@ -289,11 +289,11 @@ depends = ["ts-install"]
 run = "node scripts/gen-device-docs.mjs"
 
 [tasks.docs-devices-check]
-description = "Fail if the generated device docs are stale vs DEVICE_MODELS"
+description = "Fail if the generated device docs or device SVGs are stale vs DEVICE_MODELS"
 quiet = true
 dir = "ts"
 depends = ["ts-install"]
-run = "node ../scripts/quiet.mjs --fail-only --ok=docs-devices -- node scripts/gen-device-docs.mjs --check"
+run = "node ../scripts/quiet.mjs --fail-only --ok=docs-devices -- node scripts/gen-device-docs.mjs --check && node ../scripts/quiet.mjs --fail-only --ok=device-svgs -- node scripts/gen-device-svgs.mjs --check"
 
 [tasks.ci-checks]
 description = "Lint, typecheck, core/browser tests, knip, check-loc, and generated device docs in parallel"

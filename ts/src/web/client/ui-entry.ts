@@ -1,5 +1,5 @@
 import { connectWS } from './lib/ui-ws.js';
-import { mountSimple } from './simple/mount.js';
+import { mountBoot, mountSimple } from './simple/mount.js';
 import { mountAdvanced } from './advanced/mount.js';
 import { hydrate } from './lib/hydrate.js';
 import type { StateResponse } from './ui-types.js';
@@ -14,16 +14,27 @@ if (__SIMPLE_ONLY__) {
   localStorage.removeItem('deckbridge.mode');
 }
 
-void fetch('/api/state')
-  .then((r) => r.json() as Promise<StateResponse>)
-  .then((st) => {
-    hydrate(st);
+async function fetchState(): Promise<StateResponse> {
+  const r = await fetch('/api/state');
+  if (!r.ok) throw new Error(`state ${r.status}`);
+  return (await r.json()) as StateResponse;
+}
 
-    mountSimple();
-    // __SIMPLE_ONLY__ folds to a constant; esbuild DCEs this branch and tree-shakes
-    // mountAdvanced → AdvancedApp out of the bundle — which is the default build
-    // (only `node build.mjs --advanced` keeps the advanced view).
-    if (!__SIMPLE_ONLY__) mountAdvanced();
-    connectWS();
-    return undefined;
-  });
+function start(st: StateResponse): void {
+  hydrate(st);
+
+  mountSimple();
+  // __SIMPLE_ONLY__ folds to a constant; esbuild DCEs this branch and tree-shakes
+  // mountAdvanced → AdvancedApp out of the bundle — which is the default build
+  // (only `node build.mjs --advanced` keeps the advanced view).
+  if (!__SIMPLE_ONLY__) mountAdvanced();
+  connectWS();
+}
+
+function boot(): void {
+  mountBoot(false, boot);
+  // Two-argument then: only a failed fetch shows the retry screen, never a render error.
+  fetchState().then(start, () => mountBoot(true, boot));
+}
+
+boot();

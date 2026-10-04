@@ -204,6 +204,12 @@ export interface ElgatoAutoRestartState {
   supported: boolean;
 }
 
+/** Local process status for the pairing flow's open/restart action. */
+export interface ElgatoAppStatus {
+  running: boolean;
+  supported: boolean;
+}
+
 /** Server log level; `silent` never reaches the wire. */
 export type WireLogLevel = 'debug' | 'info' | 'warn' | 'error';
 

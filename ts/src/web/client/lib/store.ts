@@ -52,6 +52,8 @@ export interface StoreState {
   keyPressEnabled: boolean;
   /** Push API store (WS `pushChannels`); the Push API panel seeds it over HTTP. */
   pushChannels: PushChannelView[];
+  /** 'stale' = WebSocket closed: every status field above may be out of date. */
+  connection: 'live' | 'stale';
 }
 
 /** Placeholder until the first hydrate(); ui-entry.ts mounts nothing before it. */
@@ -97,6 +99,7 @@ let state: StoreState = {
   updateInfo: undefined,
   keyPressEnabled: false,
   pushChannels: [],
+  connection: 'live',
 };
 
 const listeners = new Set<() => void>();

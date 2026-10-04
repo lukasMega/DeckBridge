@@ -110,7 +110,6 @@ test('findModel returns each supported AKP05 PID', () => {
 
 test('AKP05E has its proven 2x5 output mapping', () => {
   assert.equal(AJAZZ_AKP05E_MODEL.protocol, 'ajazz-akp05');
-  assert.equal(AJAZZ_AKP05E_MODEL.protocol, 'ajazz-akp05');
   assert.deepEqual(modelToChildGeometry(AJAZZ_AKP05E_MODEL), {
     rows: 2,
     columns: 5,
@@ -122,12 +121,7 @@ test('AKP05E has its proven 2x5 output mapping', () => {
     touchWidth: 0,
     touchHeight: 0,
   });
-  // CORA already delivers key art upright for this panel; only the splash needs 180.
-  assert.equal(AJAZZ_AKP05E_MODEL.image.rotate, 0);
   assert.equal(AJAZZ_AKP05E_MODEL.splash?.transformOverride?.rotate, 180);
-  assert.deepEqual(AJAZZ_AKP05E_MODEL.keyMap.coraToWireImage, [11, 12, 13, 14, 15, 6, 7, 8, 9, 10]);
-  // Input codes are 1-based row-order, not the image wire ids.
-  assert.deepEqual(AJAZZ_AKP05E_MODEL.keyMap.wireInputToCora, [-1, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9]);
 });
 
 test('AKP05 inherits AKP05E output protocol', () => {
@@ -135,7 +129,7 @@ test('AKP05 inherits AKP05E output protocol', () => {
   assert.equal(AJAZZ_AKP05_MODEL.wire, AJAZZ_AKP05E_MODEL.wire);
 });
 
-test('AKP05 pairs as Stream Deck + by default', () => {
+test('AKP05 and AKP05E pair as Stream Deck + by default', () => {
   assert.equal(AJAZZ_AKP05_MODEL.cora.advertiseAs, 'stream-deck-plus');
   assert.equal(AJAZZ_AKP05_MODEL.cora.productId, ELGATO_PLUS_PID);
   assert.deepEqual(
@@ -144,7 +138,10 @@ test('AKP05 pairs as Stream Deck + by default', () => {
   );
   assert.deepEqual(AJAZZ_AKP05_MODEL.image, STREAM_DECK_PLUS_EMULATION.image);
   assert.deepEqual(AJAZZ_AKP05_MODEL.keyMap, STREAM_DECK_PLUS_EMULATION.keyMap);
-  assert.equal(AJAZZ_AKP05E_MODEL.cora.advertiseAs, undefined);
+  assert.equal(AJAZZ_AKP05E_MODEL.cora.advertiseAs, 'stream-deck-plus');
+  assert.equal(AJAZZ_AKP05E_MODEL.cora.productId, ELGATO_PLUS_PID);
+  assert.deepEqual(AJAZZ_AKP05E_MODEL.image, STREAM_DECK_PLUS_EMULATION.image);
+  assert.deepEqual(AJAZZ_AKP05E_MODEL.keyMap, STREAM_DECK_PLUS_EMULATION.keyMap);
 });
 
 // Stream Deck + emulation profile

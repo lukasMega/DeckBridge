@@ -86,6 +86,7 @@ test('mermaid diagrams are prerendered to inline SVG', () => {
   for (const route of MERMAID_ROUTES) {
     const html = readPage(route);
     assert.match(html, /aria-roledescription=/, `route '${route}' has no prerendered mermaid SVG`);
+    assert.doesNotMatch(html, /data:font\//, `route '${route}' embeds fonts into diagram SVGs`);
     assert.doesNotMatch(
       html,
       /language-mermaid|```mermaid/,

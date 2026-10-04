@@ -123,8 +123,8 @@ prefix and differ in the tail: the companion issue #32 USB dump
 (`USB\VID_3142&PID_0060\81D0DA784037`) and the captured unit above. Neither is
 mirajazz's shared `355499441494`.
 
-For rev. 1 this is an assumption, not a finding — see open question O3 in
-`.claude/plans/2026-09-10_fifine-d6-support.md`. Mirajazz hardcodes the shared
+Rev. 1 serial uniqueness remains unverified.
+Historical supporting plan is absent here. Mirajazz hardcodes the shared
 `355499441494` for v1 devices, and rev. 1 _is_ a v1 board on the write path, but
 it masks that serial rather than reading it, so that isn't proof the firmware
 reports it. If two rev. 1 units ever collide on one settings key,
@@ -159,18 +159,22 @@ covered here; it needs the 293S-style model instead (see below).
 ## The 7 v1 rebadges of the 293S board (`rebadge/akp153-v1-clones.ts`)
 
 `protocol_version 1`, 512-byte packets, 3×6 physical grid (15 keys + a 3-key right
-column), JPEG 85×85, rotate90 + pad-to-85 edge-clamp, mirror Both, keydown-only
-(no release event), identical 18-entry button remap.
+column), JPEG 85×85, and keydown-only input.
+Current model rotates 90 degrees.
+Both flip flags are false.
+Padding uses edge-clamped 85×85 output.
 
 Confirmed by **both** keydeck (device JSON byte-identical to `Mirabox-HSV293S.json`
 apart from VID/PID and name) and opendeck-akp153 (`Kind::protocol_version()` → 1,
 and `get_image_format_for_key()` derives the image spec from `protocol_version`
 alone — "same version" really is "same params").
 
-**NOT hardware-tested.** Every field (including the derived `extraKeys` guess and
-the hardware-verified `keyMap`/`image` tuning) is inherited verbatim from
-`MIRABOX_293S_MODEL` by construction, so it cannot drift out of sync — see
-`mirabox-293s.ts` for the tuning rationale and its own hardware caveats.
+**Hardware remains untested.**
+Image and mapping defaults inherit `MIRABOX_293S_MODEL`.
+Identity fields vary per rebadge.
+`batchImageTransfers` explicitly defaults to false.
+293S itself defaults batching to true.
+Inherited values do not establish hardware equivalence.
 
 ### Adjacent PIDs, different protocols — do not merge
 

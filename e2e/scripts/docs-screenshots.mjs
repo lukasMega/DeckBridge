@@ -114,6 +114,9 @@ async function capture(name, snapshot, heading, wide = false) {
       await page.routeWebSocket('**/api/ws', () => {});
       await page.goto(base, { waitUntil: 'networkidle' });
       await page.getByRole('heading', { name: heading, exact: true }).waitFor();
+      if (name === 'webui-simple' || name === 'webui-state-pairing') {
+        await page.getByRole('button', { name: 'No', exact: true }).click();
+      }
       await page.evaluate(() => document.fonts.ready);
       assert.equal(await page.locator('html').getAttribute('data-theme'), theme);
       assert.equal(await page.locator('.app-version').textContent(), `v${version}`);
@@ -168,8 +171,8 @@ try {
   });
   const pairing = await state();
   assert.equal(pairing.modelId, 'mk2');
-  await capture('webui-simple', pairing, 'Almost there — 1 step left', true);
-  await capture('webui-state-pairing', pairing, 'Almost there — 1 step left');
+  await capture('webui-simple', pairing, 'Connect your control app', true);
+  await capture('webui-state-pairing', pairing, 'Connect your control app');
   const absent = {
     ...pairing,
     driverMode: 'real',
@@ -181,14 +184,14 @@ try {
     elgatoAppConflict: false,
     elgatoDevicePresent: false,
   };
-  await capture('webui-state-no-device', absent, "Let's get you set up");
+  await capture('webui-state-no-device', absent, 'Connect your device');
   await capture(
     'webui-state-conflict',
     { ...absent, elgatoAppConflict: true, elgatoDevicePresent: true },
-    'Elgato app is blocking access',
+    'Elgato app owns the USB device',
   );
   await pair();
-  await capture('webui-state-ready', await state(), "Everything's working");
+  await capture('webui-state-ready', await state(), 'Connected');
   socket.destroy();
   await waitFor(async () => !(await state()).elgatoConnected, {
     timeoutMs: 10000,
@@ -211,7 +214,7 @@ try {
   const akp05 = await state();
   assert.equal(akp05.docks[0].coraProfile, 'stream-deck-plus');
   assert.equal(akp05.keyCount, 8);
-  await capture('webui-akp05-plus', akp05, "Everything's working");
+  await capture('webui-akp05-plus', akp05, 'Connected');
 
   // Publish only after every capture passes; failed runs retain existing docs images.
   for (const filename of files) {

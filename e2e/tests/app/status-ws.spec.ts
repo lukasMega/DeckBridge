@@ -77,8 +77,8 @@ test.describe('live status channel', () => {
     await gotoApp(page, `${app.baseURL}/`);
     // driverConnected && !elgatoConnected => StageDeviceNoElgato (ui-helpers.ts deriveState).
     const stage = page.locator('#stage');
-    await expect(stage).toContainText('Almost there');
-    await expect(stage).toContainText('1 step left');
+    await expect(stage).toContainText('Connect your control app');
+    await expect(stage.locator('.conn-path')).toBeVisible();
   });
 
   test('renders a full key grid for the default model', async ({ page, app }) => {

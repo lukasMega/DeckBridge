@@ -13,9 +13,9 @@ import {
   PLUS_PROFILE,
   resetOverride,
   restoreSettings,
-  setOverride,
   test,
   useDevice,
+  waitForState,
   type ElgatoClient,
   type SettingsJson,
 } from '../../fixtures/app.js';
@@ -156,11 +156,9 @@ test.describe('side keys (293S, AKP153 rev. 1, AKP05E as a Stream Deck +)', () =
     const base = app.baseURL;
     const id = 'ajazz-akp05e';
     await useDevice(request, base, id);
-    const state = await setOverride(
+    const state = await waitForState(
       request,
       base,
-      id,
-      { cora: { advertiseAs: PLUS_PROFILE.advertiseAs, productId: PLUS_PROFILE.productId } },
       (s) => dock0(s).coraProfile === PLUS_PROFILE.advertiseAs,
     );
     expect(dock0(state).extraKeys).toEqual(PLUS_PROFILE.extraKeys);
@@ -205,7 +203,5 @@ test.describe('side keys (293S, AKP153 rev. 1, AKP05E as a Stream Deck +)', () =
     await expect.poll(runs).toBe(2);
     // A grid-only wire id is not a side key.
     expect((await api(request, base, '/api/mock/extra-key/11', {})).status).toBe(400);
-
-    await resetOverride(request, base, id, (s) => dock0(s).coraProfile === undefined);
   });
 });

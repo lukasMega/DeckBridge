@@ -65,9 +65,12 @@ journalctl -u deckbridge -f
 
 ### udev rule — `99-deckbridge.rules`
 
-Grants the `deckbridge` user access to `/dev/hidraw*` for every supported
-device's USB VID/PID, generated from `ts/src/devices/registry.ts`. Two grants
-per device: `TAG+="uaccess"` for systemd-logind ACLs (most systems), and a
+Rules grant access for listed VID/PIDs.
+Current rule inventory is manually maintained.
+New models need matching packaging entries.
+AKP05/AKP05E entries remain missing during review.
+Validated against source: 2026-10-03.
+Each listed device receives two grants: `TAG+="uaccess"` for systemd-logind ACLs (most systems), and a
 `MODE="0660", GROUP="plugdev"` fallback for minimal non-logind images. Without
 this rule, DeckBridge fails to open the deck with `Permission denied`.
 

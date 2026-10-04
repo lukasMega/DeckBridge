@@ -17,13 +17,16 @@
 // drives. Where the physical product has more surface than DeckBridge exposes (the
 // Ajazz rev. 2 boards), the illustration follows the registry, not the retail box.
 
-import { mkdirSync, readFileSync, writeFileSync, existsSync } from 'node:fs';
+import { mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync, existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { tmpdir } from 'node:os';
+import * as esbuild from 'esbuild';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const OUT_DIR = join(HERE, '..', '..', 'docs-site', 'static', 'img', 'devices');
 const OUT_REL = 'docs-site/static/img/devices';
+const REGISTRY = join(HERE, '..', 'src', 'devices', 'registry.ts');
 
 // Style constants — the single source of the "same style for all devices" rule.
 
@@ -74,6 +77,9 @@ const DEVICES = [
   { id: 'ajazz-akp153', name: 'Ajazz AKP153', brand: 'AJAZZ', cols: 5, rows: 3, strip: true, gap: 0.30, bodyR: 14, label: 'bottom', stand: 'wedge', chassis: 'ink', accent: '#e8590c' }, // prettier-ignore
   { id: 'ajazz-akp153e', name: 'Ajazz AKP153E (rev. 1)', brand: 'AJAZZ', cols: 5, rows: 3, strip: true, gap: 0.30, bodyR: 14, label: 'bottom', stand: 'wedge', chassis: 'ink', accent: '#e8590c' }, // prettier-ignore
   { id: 'ajazz-akp153r', name: 'Ajazz AKP153R (rev. 1)', brand: 'AJAZZ', cols: 5, rows: 3, strip: true, gap: 0.30, bodyR: 14, label: 'bottom', stand: 'wedge', chassis: 'white', accent: '#e8590c' }, // prettier-ignore
+
+  { id: 'ajazz-akp05', name: 'AJAZZ AKP05', brand: 'AJAZZ', cols: 5, rows: 2, gap: 0.22, bodyR: 18, label: 'top-left', stand: 'wedge', chassis: 'graphite', accent: '#e8590c' }, // prettier-ignore
+  { id: 'ajazz-akp05e', name: 'AJAZZ AKP05E', brand: 'AJAZZ', cols: 5, rows: 2, gap: 0.22, bodyR: 18, label: 'top-left', stand: 'wedge', chassis: 'graphite', accent: '#e8590c' }, // prettier-ignore
 
   // --- Fifine -------------------------------------------------------------
   { id: 'fifine-d6', name: 'Fifine AmpliGame D6', brand: 'AMPLIGAME', cols: 5, rows: 3, gap: 0.19, bodyR: 14, label: 'top', stand: 'integrated', underglow: true, chassis: 'ink', accent: '#f59f00' }, // prettier-ignore
@@ -306,6 +312,50 @@ function render(d) {
 // Main
 
 const check = process.argv.includes('--check');
+
+/** Registry model ids, via a throwaway esbuild bundle (the registry is pure data). */
+async function loadModelIds() {
+  const tmp = join(tmpdir(), `deckbridge-svg-registry-${process.pid}.mjs`);
+  try {
+    await esbuild.build({
+      entryPoints: [REGISTRY],
+      bundle: true,
+      format: 'esm',
+      platform: 'neutral',
+      outfile: tmp,
+      logLevel: 'silent',
+    });
+    // .mjs matters: `await import()` of a .js outside a type:module package parses as CJS.
+    const mod = await import(`file://${tmp}`);
+    return mod.DEVICE_MODELS.map((m) => m.id);
+  } finally {
+    rmSync(tmp, { force: true });
+  }
+}
+
+/** Problems that make the SVG set disagree with the registry or with itself. */
+function coverageProblems(registryIds, files) {
+  const mapped = new Set(DEVICES.map((d) => d.id));
+  const problems = [];
+  for (const id of registryIds)
+    if (!mapped.has(id)) problems.push(`registry model with no DEVICES entry: ${id}`);
+  for (const id of mapped)
+    if (!registryIds.includes(id)) problems.push(`DEVICES entry with no registry model: ${id}`);
+  if (mapped.size !== DEVICES.length) problems.push('duplicate id in DEVICES');
+  for (const f of files)
+    if (!mapped.has(f.replace(/\.svg$/, ''))) problems.push(`unexpected file: ${OUT_REL}/${f}`);
+  return problems;
+}
+
+const problems = coverageProblems(
+  await loadModelIds(),
+  existsSync(OUT_DIR) ? readdirSync(OUT_DIR).filter((f) => f.endsWith('.svg')) : [],
+);
+// A stray file only fails --check; a plain run reports it but still regenerates.
+const fatal = problems.filter((p) => !p.startsWith('unexpected file'));
+for (const p of problems) console.error(p);
+if (fatal.length || (check && problems.length)) process.exit(1);
+
 mkdirSync(OUT_DIR, { recursive: true });
 
 let stale = 0;
@@ -325,7 +375,9 @@ for (const d of DEVICES) {
 
 if (check) {
   if (stale) {
-    console.error(`\n${stale} device SVG(s) out of date — run 'node ts/scripts/gen-device-svgs.mjs'.`);
+    console.error(
+      `\n${stale} device SVG(s) out of date — run 'node ts/scripts/gen-device-svgs.mjs'.`,
+    );
     process.exit(1);
   }
   console.log(`device SVGs up to date (${DEVICES.length})`);

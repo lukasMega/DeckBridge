@@ -61,8 +61,10 @@ systems older than glibc 2.38.
 
 ## 2. Plug in your deck
 
-Connect a [supported device](./introduction.mdx#supported-devices). DeckBridge retries every 2
-seconds until it finds one. On macOS, grant **Input Monitoring** when prompted.
+Connect [supported hardware](./introduction.mdx#supported-devices).
+Fast discovery retries every three seconds.
+Slow scans back off toward thirty seconds.
+On macOS, grant **Input Monitoring** access.
 
 ## 3. Run it
 
@@ -92,11 +94,16 @@ On macOS the icon sits in the menu bar. Click it for status plus **Open Web UI**
 ## 4. Pair with the Elgato app
 
 Open Elgato Stream Deck or Companion on any computer using the **same LAN**. Follow the
-web UI. It shows the exact pairing address and port.
+web UI's **Already paired?** choice:
+
+- **Yes** — **Open Elgato app** if stopped, or **Restart Elgato app** if running.
+- **No** — **Pair manually** opens setup steps and the pairing address.
+
+App buttons control DeckBridge's computer. Open a remote app on its own computer.
 
 <ThemedImage
   className="img-center"
-  alt="DeckBridge web UI showing the guided pairing card with the connected Stream Deck MK.2 and the network address to add in the Elgato app"
+  alt="DeckBridge pairing screen with No selected under Already paired, manual pairing steps, and the network address"
   sources={{
     light: require('./img/webui-simple.png').default,
     dark: require('./img/webui-simple-dark.png').default,
@@ -110,8 +117,10 @@ and port (5345, 5347, …). See [Multiple decks](./features.md#multiple-decks).
 
 - Open **http://localhost:3000**. Check live keys and logs.
 - Use tray → **Check Requirements** for [diagnostics](./features.md#requirements).
-- Developers can run `mise run s-advanced` for mock devices and extra controls. Released
-  binaries exclude this dashboard.
+- `mise run s-advanced` enables advanced controls.
+  Mock simulation needs `mise run build-mock`.
+  Then run with `DECKBRIDGE_MOCK=1`.
+  Released binaries exclude mock simulation.
 
 ## Troubleshooting
 

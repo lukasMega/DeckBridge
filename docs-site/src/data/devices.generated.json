@@ -166,7 +166,7 @@
         {
           "key": "resizeFilter",
           "label": "Filter",
-          "description": "Interpolation filter for the resize: triangle (default), nearest (K1 Pro, matches the known-good reference encoder), lanczos3 (best on upscale).",
+          "description": "Resize filter: triangle, nearest, or lanczos3. Current K1 Pro configuration uses lanczos3.",
           "defaultVisible": false
         },
         {
@@ -603,7 +603,7 @@
           "format": "jpeg",
           "width": "112",
           "height": "112",
-          "rotate": "0°",
+          "rotate": "180°",
           "flipH": "no",
           "flipV": "no",
           "colorMode": "rgb",

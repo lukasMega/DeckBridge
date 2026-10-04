@@ -43,8 +43,7 @@ and it stays out of the way.
 
 ## Supported devices
 
-See **[Supported devices](https://lukasmega.github.io/DeckBridge/devices)**. Every value
-DeckBridge uses to drive a deck: **[Device specs](https://lukasmega.github.io/DeckBridge/device-specs)**.
+See **[Supported devices](https://lukasmega.github.io/DeckBridge/devices)**. Selected registry fields: **[Device specs](https://lukasmega.github.io/DeckBridge/device-specs)**.
 
 | Device | Grid | Image size | Protocol |
 |---|---|---|---|

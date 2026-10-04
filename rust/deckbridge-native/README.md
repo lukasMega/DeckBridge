@@ -9,12 +9,12 @@ over txiki.js FFI. The image transform replaces the former subprocess sidecar (T
 
 The compiled shared library (`libdeckbridge_native.dylib` on macOS, `libdeckbridge_native.so` on Linux,
 `deckbridge_native.dll` on Windows) is loaded at runtime by `ts/src/ffi/image-proc.ts` (and
-`ts/src/ffi/hidapi.ts` for the HID export) using `FFI.dlopen(process.env.DECKBRIDGE_NATIVE_LIB)`. The
+`ts/src/ffi/hidapi.ts` / `ts/src/ffi/hid-discovery.ts` for HID exports) using `FFI.dlopen(tjs.env.DECKBRIDGE_NATIVE_LIB)`. The
 `DECKBRIDGE_NATIVE_LIB` environment variable must point to the absolute path of the library; `mise run
 start` sets it automatically via `mise.toml`.
 
 The library is embedded inside the compiled `deckbridge` binary and extracted at runtime to a
-per-version cache directory (`ts/src/native-libs.ts`), which sets `DECKBRIDGE_NATIVE_LIB` itself. The
+per-version cache directory (`ts/src/infra/native-libs.ts`), which sets `DECKBRIDGE_NATIVE_LIB` itself. The
 env var is otherwise an optional override for dev/power-user use.
 
 ## Build
@@ -28,9 +28,13 @@ cargo build --release
 #         ../target/release/deckbridge_native.dll        (Windows)
 ```
 
-Default build (no `usb` feature) is pure Rust — no C/system library dependencies. Cross-compiles
-with a plain `cargo build --release --target <triple>` on all three platforms. The `usb` feature
-(enables `mirabox_hid_find_path`) adds a dependency on `hidapi`.
+Default features include `jpeg-upstream` and `usb`.
+USB discovery therefore builds by default.
+Image-only builds can disable USB explicitly:
+
+```bash
+cargo build --release --no-default-features --features jpeg-upstream
+```
 
 **Crate type:** `crate-type = ["cdylib"]`
 
@@ -40,10 +44,10 @@ catch panics from third-party codec code and return `-3` instead of aborting the
 **JPEG encoder backend (cargo feature, exactly one):** output is always baseline 4:2:0 with a
 single interleaved scan — the only format every supported device decodes (K1 Pro probe round 5).
 
-- `jpeg-upstream` (default) — crates.io `jpeg-encoder 0.6.1`, standard Huffman tables.
+- `jpeg-upstream` (default) — crates.io `jpeg-encoder 0.7.1`, standard Huffman tables.
 - `jpeg-fork` — vendored `../jpeg-encoder` fork: optimized Huffman tables kept in the single
   interleaved scan (~20 % smaller files, identical pixels). Build via `JPEG_FORK=1 mise run build`
-  (= `cargo build --release --no-default-features --features jpeg-fork`).
+  (= `cargo build --release --no-default-features --features jpeg-fork,usb`).
 
 Upstream's `set_optimized_huffman_tables(true)` must never be used directly: it emits one scan per
 component, which the K1 Pro firmware renders as chroma garbage. See internal probe notes
@@ -98,6 +102,15 @@ int32_t image_proc_transform(
     int32_t        flip_v,
     int32_t        format,
     int32_t        bmp_ppm,
+    uint32_t       blur_sigma_tenths,
+    uint32_t       resize_filter,
+    uint32_t       sharpen_sigma_tenths,
+    uint32_t       fill_mode,
+    uint32_t       crop_px,
+    uint32_t       crop_x,
+    uint32_t       crop_y,
+    uint32_t       crop_w,
+    uint32_t       crop_h,
     uint8_t       *out_buf,
     size_t         out_cap,
     uint8_t       *err_buf,
@@ -107,12 +120,32 @@ int32_t image_proc_transform(
 
 No heap ownership crosses the boundary — the caller owns all buffers.
 
+Additional parameters follow current `src/transform.rs`.
+TypeScript signatures live in `ffi/image-proc.ts`.
+
+| Parameters | Interpretation |
+|---|---|
+| `blur_sigma_tenths`, `sharpen_sigma_tenths` | Sigma multiplied by ten |
+| `resize_filter` | 0 triangle; 1 nearest; 2 Lanczos3 |
+| `fill_mode` | 0 resize; 1–3 padding modes |
+| `fill_mode` bit 4 | Centre-crop oversized source axes |
+| `crop_px` | Symmetric source-edge crop |
+| `crop_x`, `crop_y`, `crop_w`, `crop_h` | Source region; zero dimensions disable |
+
+Region crop precedes symmetric crop selection.
+Padding runs before rotation and flips.
+Ordinary resizing runs after those transforms.
+Blur and sharpening precede encoding.
+
+
 ### TypeScript binding
 
-`ts/src/ffi/image-proc.ts` loads the symbol via `FFI.dlopen` (the same pattern as
-`ts/src/ffi/hidapi.ts` — both `dlopen` `DECKBRIDGE_NATIVE_LIB`). The caller allocates a reusable 256 KB
-output scratch buffer (`new Uint8Array(256 * 1024)`) which covers all current paths — worst case
-is a Mini 80×80 BMP at ~19 KB. On a `-2` return the caller may allocate a larger buffer and retry.
+`ts/src/ffi/image-proc.ts` declares both image exports.
+`ts/src/transform/translator.ts` owns reusable output scratch.
+Scratch starts at 256 KiB.
+Return `-2` doubles capacity before retrying.
+Growth stops at 4 MiB.
+Successful bytes copy into owned buffers.
 
 ## Calling model
 
@@ -122,7 +155,7 @@ on the USB worker thread alongside the CORA TCP servers and WebUI on the main th
 call is synchronous, the single reusable output buffer is safe: the result is copied into a fresh
 `Buffer` before any `await` point, so two queued transform tasks cannot share the buffer mid-flight.
 
-The image cache (`ts/src/image-cache.ts`, FNV-1a keyed by device model + image hash) short-circuits
+The image cache (`ts/src/transform/image-cache.ts`, keyed by model, mode, spec revision, and image hash) short-circuits
 repeated transforms, so steady-state usage issues very few FFI calls.
 
 ## Output size bounds
@@ -133,7 +166,10 @@ repeated transforms, so steady-state usage issues very few FFI calls.
 | BMP (Stream Deck Mini 80×80) | `54 + 80×80×3` = 19,254 bytes |
 | JPEG splash (MK.2 72×72, Mirabox 112×112) | a few KB |
 
-A 256 KB scratch buffer covers all of these with ample headroom.
+These examples fit initial scratch capacity.
+Larger supported outputs use bounded growth.
+Decode limits remain independent of output capacity.
+Current limits: 800×500; 900 KiB allocation.
 
 ## EXIF auto-rotation
 
@@ -145,41 +181,42 @@ parameters are unaffected and work normally.
 If a future use-case requires EXIF auto-rotation, re-add `kamadak-exif = "0.5"` to `Cargo.toml`
 and restore the `read_exif_orientation` + orientation-match logic in `lib.rs`.
 
-## Exported C functions (usb feature): mirabox_hid_find_path, mirabox_hid_present
+## HID exports
 
-Behind the `usb` Cargo feature, the crate also exports HID device enumeration (source in
-`src/hid.rs`):
+Declarations live in `src/hid.rs`.
+Operational discovery uses these exports:
 
 ```c
-int32_t mirabox_hid_find_path(
-    uint16_t vid,
-    uint16_t pid,        // 0 = match any product ID
-    uint16_t usage_page,
-    uint16_t usage,
-    char    *out_buf,
-    size_t   out_len
+int32_t mirabox_hid_list_supported(
+    const char *filter_spec, char *out_buf, size_t out_len
 );
-// Returns 1 + writes null-terminated path into out_buf, or 0 if not found.
+int32_t mirabox_hid_list_all(char *out_buf, size_t out_len);
+int32_t mirabox_hid_reset(void);
 ```
 
-`libhidapi` exposes `hid_open(vid, pid)` which opens the **first** matching interface. On macOS
-this picks whichever IOKit interface the kernel serves first — often the system-claimed one, not
-the data interface. `mirabox_hid_find_path` wraps the full `hid_enumerate()` loop so the
-TypeScript side can filter by `usage_page` and `usage` before opening, then opens by path via
-`hid_open_path()`.
+Filters contain comma-separated hexadecimal VID/PID pairs.
+Inventory output contains tab-separated device rows.
+TypeScript applies model-specific usage matching afterward.
+Scan-worker reset preserves native thread affinity.
 
-```c
-int32_t mirabox_hid_present(uint16_t vid, uint16_t pid);
-// Returns 1 if a HID interface matching vid + (pid==0 or pid) is enumerated, 0 otherwise.
-// Enumeration only — never opens the device.
-```
+Legacy exports remain for path/presence lookup:
+`mirabox_hid_find_path`, `mirabox_hid_list_paths`,
+`mirabox_hid_serial_for_path`, and `mirabox_hid_present`.
+Production discovery bypasses those legacy helpers.
+No production VID/PID opening fallback exists.
 
-`mirabox_hid_present` checks device presence via `hid_enumerate()` without ever calling
-`hid_open()` — used by the host's probe to pick the connected model before spawning a worker,
-so it never opens an absent device (which corrupts IOKit state on macOS) or loads hidapi in a
-throwaway worker (whose teardown SIGBUSes while IOKit run-loop callbacks are live).
+## Strip composition export
 
-`ts/src/ffi/hidapi.ts` (`loadHidEnum()` / `findHidPath()` / `hidDevicePresent()`) loads both
-symbols from the same `DECKBRIDGE_NATIVE_LIB`. If the lib is unavailable, `findHidPath()` returns
-`null` and the caller falls back to plain `hid_open(VID, PID)` — one attempt per PID, off macOS
-only. See `rust/README.md` for the full open-fallback flow.
+`src/blit.rs` defines `image_proc_blit`.
+It decodes JPEG/BMP into RGB24 canvases.
+Caller supplies dimensions and destination offsets.
+Writes clip against canvas bounds.
+`ffi/image-proc.ts` declares matching parameter order.
+`transform/translator.ts` exposes `blitImage()`.
+
+## Validation
+
+Checked against source: 2026-10-03.
+ABI edits require matching Rust/TypeScript signatures.
+Fixture tests cannot establish device compatibility.
+Hardware captures must verify new protocol behavior.

@@ -16,6 +16,7 @@ import { generateDeviceIdentity } from '../src/infra/device-identity.js';
 import { DEFAULT_MODEL } from '../src/devices/registry.js';
 import { MIRABOX_293S_MODEL } from '../src/devices/mirabox/mirabox-293s.js';
 import { AJAZZ_AKP05E_MODEL } from '../src/devices/ajazz/akp05e.js';
+import { NATIVE_AKP05E_MODEL } from './helpers/native-akp05e.js';
 import { applyModelOverrides } from '../src/devices/model-overrides.js';
 import { deviceInputToMk2Index } from '../src/shared/key-map.js';
 import {
@@ -374,7 +375,7 @@ await test('Plus emulation forwards a 2.00.x child firmware to the desktop', asy
 });
 
 await test('a native model resets the child firmware to the default (no stale Plus line)', async () => {
-  const { server, start } = makeTestSetup(AJAZZ_AKP05E_MODEL);
+  const { server, start } = makeTestSetup(NATIVE_AKP05E_MODEL);
   await start();
   assert.equal(
     server.setDeviceConfigCalls[0]?.childFirmwareVersion,
@@ -514,7 +515,7 @@ await test('status() reports the re-paired CORA profile only when advertising as
     cora: { advertiseAs: 'stream-deck-plus' },
   });
   assert.equal(makeTestSetup(plus).dock.status().coraProfile, 'stream-deck-plus');
-  assert.equal(makeTestSetup(AJAZZ_AKP05E_MODEL).dock.status().coraProfile, undefined, 'native');
+  assert.equal(makeTestSetup(NATIVE_AKP05E_MODEL).dock.status().coraProfile, undefined, 'native');
 });
 
 await test('status() lists the AKP05E right column as pressable extra keys only as a Plus', () => {
@@ -524,7 +525,7 @@ await test('status() lists the AKP05E right column as pressable extra keys only 
   const status = makeTestSetup(plus).dock.status();
   assert.deepEqual(status.extraKeys, [15, 10]);
   assert.deepEqual(status.pressableExtraKeys, [15, 10]);
-  const native = makeTestSetup(AJAZZ_AKP05E_MODEL).dock.status();
+  const native = makeTestSetup(NATIVE_AKP05E_MODEL).dock.status();
   assert.equal(native.extraKeys, undefined, 'native 5×2 grid has no extra keys');
   assert.equal(native.pressableExtraKeys, undefined);
 });
@@ -600,7 +601,7 @@ await test('strip zones map left→right onto taps (800 px Plus strip) and knobs
   assert.equal(zoneForTouch(DEFAULT_MODEL, tap(10)), undefined, 'no strip');
   // Native AKP05E (no Plus profile) advertises no strip, so taps fall back to 800 px.
   assert.deepEqual(
-    [0, 199, 200, 450, 799].map((x) => zoneForTouch(AJAZZ_AKP05E_MODEL, tap(x))),
+    [0, 199, 200, 450, 799].map((x) => zoneForTouch(NATIVE_AKP05E_MODEL, tap(x))),
     [1, 1, 2, 3, 4],
   );
 });

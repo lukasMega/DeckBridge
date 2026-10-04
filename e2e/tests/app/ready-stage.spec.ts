@@ -26,7 +26,7 @@ async function dragBrightness(page: import('@playwright/test').Page, level: numb
   }, level);
 }
 
-// A fake Elgato child connection is what makes the stage "Everything's working"; the
+// A fake Elgato child connection is what makes the stage 'Ready'; the
 // hero flip itself is covered by paired.spec.ts.
 test.describe('Ready stage (paired via a fake CORA client)', () => {
   let elgato: ElgatoClient | undefined;
@@ -51,7 +51,7 @@ test.describe('Ready stage (paired via a fake CORA client)', () => {
     const base = app.baseURL;
     await api(request, base, '/api/brightness-override', { enabled: true });
     await gotoApp(page, `${base}/`);
-    await expect(page.locator('#stage .hero h1')).toHaveText("Everything's working");
+    await expect(page.locator('#stage .stage-title')).toHaveText(/^Connected/);
 
     const slider = page.locator('#simple-brightness');
     await expect(slider).toBeEnabled();
@@ -99,7 +99,7 @@ test.describe('Ready stage (paired via a fake CORA client)', () => {
     for (const d of PLAIN_DEVICES) {
       await useDevice(request, base, d.id);
       await expect(stage.locator('.key-grid')).toHaveAttribute('data-model', d.id);
-      await expect(stage.locator('.hero h1')).toHaveText("Everything's working");
+      await expect(stage.locator('.stage-title')).toHaveText(/^Connected/);
       await expect(stage.locator('.key-grid button[data-key]')).toHaveCount(d.keyCount);
       await expect(page.locator('#simple-brightness')).toHaveCount(1);
       await expect(sideKeys).toHaveCount(0);
@@ -114,20 +114,20 @@ test.describe('Ready stage (paired via a fake CORA client)', () => {
       await expect(stage.locator('.key-grid')).toHaveAttribute('data-model', id);
       await expect(sideKeys).toHaveCount(3);
       await expect(stage.locator('.xkey-pos')).toHaveText(['Top', 'Middle', 'Bottom']);
-      await expect(stage.getByRole('group', { name: 'Side keys' })).toHaveCount(1);
+      await expect(stage.getByRole('group', { name: 'Status displays' })).toHaveCount(1);
       await expect(stage.getByRole('group', { name: 'Touch strip' })).toHaveCount(0);
       await expect(strip).toHaveCount(0);
       await expect(knobs).toHaveCount(0);
     }
 
-    // AKP05E (native 5×2): strip zones + knobs, and no side keys until it re-pairs as a
-    // Stream Deck + (touch-strip-knobs.spec.ts).
+    // AKP05E (pairs as a Stream Deck +): strip zones + knobs, and the right column as
+    // two side keys (touch-strip-knobs.spec.ts).
     const akp05e = device('ajazz-akp05e');
     await useDevice(request, base, akp05e.id);
     await expect(stage.locator('.key-grid')).toHaveAttribute('data-model', akp05e.id);
     await expect(strip.getByRole('listitem')).toHaveCount(akp05e.stripZones!.length);
     await expect(knobs).toHaveCount(1);
-    await expect(sideKeys).toHaveCount(0);
+    await expect(sideKeys).toHaveCount(2);
 
     // Back to a plain board: nothing stale from the previous model.
     await useDevice(request, base, DEFAULT_DEVICE);

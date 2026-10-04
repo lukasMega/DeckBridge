@@ -1,12 +1,12 @@
 // Multi-dock cards: one per connected Stream Deck (see DockUi in ui-types.ts).
 // The SELECTED dock (click a card) gets the live KeyGridPreview — the server
 // mirrors only the selected dock's images; every other card renders a static
-// dimmed grid.
+// dimmed grid. Pairing help shows once, on the selected card that still needs it.
 import { useStore } from '../lib/store.js';
 import type { DockUi } from '../ui-types.js';
 import { ICON } from '../components/Icon.js';
 import { fire } from '../lib/ui-api.js';
-import { ManualAddPanel, RestartNote } from './controls.js';
+import { PairingFlow } from './pairing-flow.js';
 import { KeyGridPreview } from '../components/KeyGridPreview.js';
 import { StatusChip } from '../components/StatusChip.js';
 import { PairingAddressLink } from './pairing-address-modal.js';
@@ -53,7 +53,7 @@ export function DockCard({
 }: Readonly<{
   dock: DockUi;
   selected: boolean;
-  /** Two or more docks: each needs its own IP in the Elgato app. */
+  /** Two or more docks: each needs its own IP in the Elgato app (see PairingAddressLink). */
   showAddressHelp?: boolean;
   /** Click-to-press opt-in (Settings): the selected card's keys fire on double-click. */
   keyPressEnabled?: boolean;
@@ -62,24 +62,23 @@ export function DockCard({
   const select = (): void => {
     if (!selected) postSelectDock(dock.index);
   };
+  // Pointer convenience only: the name button is the keyboard/AT way to select, and
+  // controls inside the card (copy chips, links) must keep their own clicks.
+  const selectFromCard = (e: MouseEvent): void => {
+    if (!(e.target as Element).closest('button, a, summary, input')) select();
+  };
+  const pairing = selected && !dock.elgatoConnected;
   return (
     <div
       class={selected ? 'dock-card surface-card dock-card--selected' : 'dock-card surface-card'}
-      role="button"
-      tabIndex={0}
-      onClick={select}
-      onKeyDown={(e) => {
-        if (e.key === 'Enter' || e.key === ' ') {
-          e.preventDefault();
-          select();
-        }
-      }}
+      onClick={selectFromCard}
     >
       <div class="dock-card-head">
-        <span class="dock-card-name">{dock.modelName}</span>
+        <button class="dock-card-name" type="button" aria-pressed={selected} onClick={select}>
+          {dock.modelName}
+        </button>
         <DockChip dock={dock} />
       </div>
-      {showAddressHelp && <PairingAddressLink initialDock={dock.index} />}
       {dock.virtualClients !== undefined && (
         <StatusChip variant="accent" id={`virtual-clients-${dock.index}`}>
           Browser deck · {dock.virtualClients} connected
@@ -113,7 +112,7 @@ export function DockCard({
           badge="Click to view"
         />
       )}
-      {!dock.elgatoConnected &&
+      {pairing &&
         (dock.primaryConnected ? (
           // App already discovered this dock (primary CORA connected) but the
           // panel session hasn't (re)started. Adding it again wouldn't help —
@@ -124,8 +123,8 @@ export function DockCard({
           </p>
         ) : (
           <>
-            <RestartNote />
-            <ManualAddPanel port={String(dock.primaryPort)} onHelp={onHelp} />
+            <PairingFlow port={String(dock.primaryPort)} onHelp={onHelp} />
+            {showAddressHelp && <PairingAddressLink initialDock={dock.index} />}
           </>
         ))}
     </div>

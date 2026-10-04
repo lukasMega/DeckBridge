@@ -72,8 +72,6 @@ const handlerByEvent = new Map<string, (d: unknown) => void>(
   Object.entries(handlers) as [string, (d: unknown) => void][],
 );
 
-let _wsConnected = false;
-
 export function connectWS(): void {
   const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
   const ws = new WebSocket(`${proto}//${location.host}/api/ws`);
@@ -83,16 +81,20 @@ export function connectWS(): void {
     // previous connection left before they arrive.
     resetPreviews();
     resetTouchStrip();
-    if (_wsConnected) {
-      // Full re-hydrate: an app restart while disconnected changes more than images.
-      void fetch('/api/state')
-        .then((r) => r.json() as Promise<StateResponse>)
-        .then((st) => {
-          hydrate(st);
-          return undefined;
-        });
-    }
-    _wsConnected = true;
+    if (store.getSnapshot().connection === 'live') return;
+    // Full re-hydrate: an app restart while disconnected changes more than images.
+    // Only a fresh snapshot may clear the stale marker; on failure, reconnect again.
+    void fetch('/api/state')
+      .then((r) => {
+        if (!r.ok) throw new Error(`state ${r.status}`);
+        return r.json() as Promise<StateResponse>;
+      })
+      .then((st) => {
+        hydrate(st);
+        store.patch({ connection: 'live' });
+        return undefined;
+      })
+      .catch(() => ws.close());
   });
 
   ws.addEventListener('message', (e: MessageEvent<string>) => {
@@ -102,7 +104,10 @@ export function connectWS(): void {
     if (typeof handler === 'function') handler(data);
   });
 
-  ws.addEventListener('close', () => setTimeout(connectWS, 2000));
+  ws.addEventListener('close', () => {
+    store.patch({ connection: 'stale' });
+    setTimeout(connectWS, 2000);
+  });
   ws.addEventListener('error', (e) =>
     error('ws', e instanceof Error ? e.message : 'WebSocket error'),
   );

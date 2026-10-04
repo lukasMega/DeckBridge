@@ -14,13 +14,13 @@
       "alsoSoldAs": [],
       "quirks": [
         "Hardware testing with PID 0x0080 confirmed the native 72×72 JPEG passthrough and `image.rotate: 0`. The other accepted PIDs (0x006d and 0x00a5) remain source-derived.",
-        "The only non-Elgato-emulating model: `cora.usePhysicalIdentity` is true, so the deck's real serial and firmware version are forwarded to the app."
+        "Physical serial and firmware are forwarded. Mini also uses physical identity."
       ],
       "sources": ["own hardware test (macOS, PID 0x0080)"]
     },
     "mini": {
       "tested": { "status": true, "platform": "macOS" },
-      "summary": "Elgato's 6-key deck. BMP panel, not JPEG: the app's bitmap is forwarded as-is by the `format: 'bmp'` short-circuit in image-pipeline.",
+      "summary": "Elgato's 6-key deck. BMP panel, not JPEG: the app's bitmap is forwarded as-is by the `format: 'bmp'` short-circuit in image-render.ts.",
       "alsoSoldAs": [],
       "quirks": [
         "BGR pixel order plus a 90° CW rotation, matching the reference 6-key implementation's `rotate + yFlip`.",
@@ -46,7 +46,7 @@
       "quirks": [
         "Keydown-only firmware — the driver synthesizes the key-up event.",
         "The app sends MK.2-native 72×72 but the panel is 85×85, so the image is padded (pixels stay 1:1) with an edge-clamped border instead of being upscaled.",
-        "Net image transform is the anti-transpose (rotate 90 ∘ flipV). The opendeck-akp153 guess of rotate90 + flipH + flipV reduces to a plain rotate270 and renders vertically flipped.",
+        "Current live tuning rotates 90 degrees. Both flip flags are false. Splash tuning rotates 270 degrees.",
         "The right column's wire ids (16, 17, 18) are derived from the opendeck-akp153 wire-id namespace, not hardware-verified.",
         "v1 firmware reports one hardcoded serial (`355499441494`) on every unit of every v1 model, so `sharedSerial` makes the settings key include the model id."
       ],
@@ -66,7 +66,7 @@
     },
     "ajazz-akp05e": {
       "tested": { "status": true, "platform": "macOS", "date": "2026-09-21" },
-      "summary": "AJAZZ AKP05E (VID 0x0300, PID 0x3004): ten 112×112 LCD keys in a 2×5 grid, plus four rotary encoders (press + rotate, emitted as CORA dial events) and a touch strip whose four zones render DeckBridge widget displays (or a Stream Deck + window image when re-paired as a Plus). Dedicated protocol driver: CRT VER on open, the CRT DIS / LIG / CLE / STP init sequence, CRT BAT uploads committed with CRT ULEND, and a CRT CONNECT keepalive.",
+      "summary": "AJAZZ AKP05E (VID 0x0300, PID 0x3004): ten 112×112 LCD keys in a 2×5 grid, plus four rotary encoders (press + rotate, emitted as CORA dial events) and a touch strip whose four zones render DeckBridge widget displays (or a Stream Deck + window image, since it pairs as a Plus by default). Dedicated protocol driver: CRT VER on open, the CRT DIS / LIG / CLE / STP init sequence, CRT BAT uploads committed with CRT ULEND, and a CRT CONNECT keepalive.",
       "alsoSoldAs": [],
       "quirks": [
         "Only PID 0x3004 is hardware-tested; the retail AKP05 (0x3006) is registered from opendeck-akp05 evidence. Do not add Pro, Mirabox, or hub siblings without their own evidence packet.",
@@ -90,7 +90,7 @@
       "summary": "Retail AJAZZ AKP05 (VID 0x0300, PID 0x3006). It uses the AKP05 dedicated driver, with ten 112×112 LCD keys, CRT BAT uploads, CRT ULEND commits, and CRT LIG brightness.",
       "alsoSoldAs": [],
       "quirks": [
-        "VID, PID, vendor HID collection, protocol version 3 and 112×112 JPEG format come from ambiso/opendeck-akp05; the key transform is the AKP05E's (upright keys, 180° splash). DeckBridge hardware has not tested this SKU.",
+        "Identity and protocol facts are source-derived. Default Plus emulation rotates keys 180°. Splash rotation also remains 180°. This SKU remains hardware-unverified.",
         "Pairs as Stream Deck + by default. Shares the AKP05E init sequence, CRT CONNECT keepalive, Plus key map, encoder, swipe and tap decoding, and the AKP05E strip geometry and 10 100 B upload cap (both untested on this SKU). See the AKP05E notes for the captured input codes.",
         "Close sends no disconnect command — the firmware can wedge after speculative commands. Unplug and replug if the panel wedges."
       ],
@@ -116,7 +116,7 @@
     },
     "ajazz-akp153r-rev2": {
       "tested": { "status": false },
-      "summary": "The Mirabox 293V3 board behind VID 0x0300, PID 0x3011. Identical to the AKP153E rev. 2 apart from the PID.",
+      "summary": "Untested Mirabox 293V3-derived configuration. AKP153R retains inherited 112×112 images. AKP153E has separate 95×95 calibration.",
       "alsoSoldAs": [],
       "quirks": [
         "Not hardware-tested; inherits the 293V3's hardware-verified tuning verbatim.",
@@ -161,7 +161,7 @@
     },
     "ajazz-akp153": {
       "tested": { "status": false },
-      "summary": "A v1 rebadge of the Mirabox 293S board (VID 0x5548, PID 0x6674). Every field is inherited from the 293S model by construction, so it cannot drift out of sync.",
+      "summary": "A v1 rebadge of the Mirabox 293S board (VID 0x5548, PID 0x6674). Image and mapping defaults inherit 293S. Image batching remains disabled by default.",
       "alsoSoldAs": [],
       "quirks": [
         "Not hardware-tested; see the 293S for the tuning rationale and its own caveats.",
@@ -174,7 +174,7 @@
       "summary": "Rev. 1 of the AKP153E — a v1 rebadge of the Mirabox 293S board (VID 0x0300, PID 0x1010).",
       "alsoSoldAs": [],
       "quirks": [
-        "Not hardware-tested; inherits the 293S model verbatim.",
+        "Hardware remains untested. Image and mapping defaults inherit 293S. Image batching remains disabled by default.",
         "Do not merge with `ajazz-akp153e-rev2` (PID 0x3010): same VID, adjacent PIDs, completely different protocol."
       ],
       "sources": ["opendeck-akp153", "keydeck"]
@@ -184,7 +184,7 @@
       "summary": "Rev. 1 of the AKP153R — a v1 rebadge of the Mirabox 293S board (VID 0x0300, PID 0x1020).",
       "alsoSoldAs": [],
       "quirks": [
-        "Not hardware-tested; inherits the 293S model verbatim.",
+        "Hardware remains untested. Image and mapping defaults inherit 293S. Image batching remains disabled by default.",
         "Do not merge with `ajazz-akp153r-rev2` (PID 0x3011)."
       ],
       "sources": ["opendeck-akp153", "keydeck"]
@@ -193,28 +193,36 @@
       "tested": { "status": false },
       "summary": "A v1 rebadge of the Mirabox 293S board (VID 0x0b00, PID 0x1000).",
       "alsoSoldAs": [],
-      "quirks": ["Not hardware-tested; inherits the 293S model verbatim."],
+      "quirks": [
+        "Hardware remains untested. Image and mapping defaults inherit 293S. Image batching remains disabled by default."
+      ],
       "sources": ["opendeck-akp153", "keydeck"]
     },
     "maddog-gk150k": {
       "tested": { "status": false },
       "summary": "A v1 rebadge of the Mirabox 293S board (VID 0x0c00, PID 0x1000).",
       "alsoSoldAs": [],
-      "quirks": ["Not hardware-tested; inherits the 293S model verbatim."],
+      "quirks": [
+        "Hardware remains untested. Image and mapping defaults inherit 293S. Image batching remains disabled by default."
+      ],
       "sources": ["opendeck-akp153", "keydeck"]
     },
     "risemode-vision-01": {
       "tested": { "status": false },
       "summary": "A v1 rebadge of the Mirabox 293S board (VID 0x0a00, PID 0x1001).",
       "alsoSoldAs": [],
-      "quirks": ["Not hardware-tested; inherits the 293S model verbatim."],
+      "quirks": [
+        "Hardware remains untested. Image and mapping defaults inherit 293S. Image batching remains disabled by default."
+      ],
       "sources": ["opendeck-akp153", "keydeck"]
     },
     "tmice-stream-controller": {
       "tested": { "status": false },
       "summary": "A v1 rebadge of the Mirabox 293S board (VID 0x0500, PID 0x1001).",
       "alsoSoldAs": [],
-      "quirks": ["Not hardware-tested; inherits the 293S model verbatim."],
+      "quirks": [
+        "Hardware remains untested. Image and mapping defaults inherit 293S. Image batching remains disabled by default."
+      ],
       "sources": ["opendeck-akp153", "keydeck"]
     }
   }

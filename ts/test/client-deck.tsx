@@ -361,6 +361,12 @@ function checkPanelBasics(root: HTMLElement, check: Check): void {
     'The panel names the dock port and the one-dock-per-IP rule',
   );
   check(textOf(root, '#deck-latency').includes('42 ms'), 'The panel shows the input latency p95');
+  const heads = [...root.querySelectorAll('.manual-add-head')].map((h) => h.textContent);
+  check(
+    heads.some((t) => t.startsWith('1. Browser') && t.includes('Connected')) &&
+      heads.some((t) => t.startsWith('2. Elgato app')),
+    'The panel shows browser and Elgato app as separate milestones',
+  );
   check(root.querySelectorAll('#deck-devices li').length === 1, 'The panel lists paired devices');
 }
 
