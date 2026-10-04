@@ -125,11 +125,11 @@ html[data-mode='advanced'] #simple-view {
 
 /* Shared layout, controls, typography, and surfaces (property-grouped). */
 :is(.app, .fader, .xkey-tile, .xkey-config-anchor, .popover, .chip-radio, .crop-source),
-:is(.manual-add-list li, .help-back svg),
+.help-back svg,
 .diag-section > .collapse-header {
   position: relative;
 }
-:is(.app, .preview, .side-keys-device, .xkey-popover-run, .step-title, .addr-chip, .popover),
+:is(.app, .preview, .side-keys-device, .xkey-popover-run, .addr-chip, .popover),
 .push-channels,
 .xkey-popover-arg input,
 .tuning-field .input {
@@ -140,7 +140,7 @@ html[data-mode='advanced'] #simple-view {
   overflow: hidden;
 }
 :is(.side-keys-legend, .tuning-checkboxes, .crop-stage, .xkey-card, .xkey-card-span),
-:is(.xkey-value, .step),
+.xkey-value,
 .help-steps li {
   display: flex;
 }
@@ -151,7 +151,7 @@ html[data-mode='advanced'] #simple-view {
   display: flex;
   align-items: center;
 }
-:is(.app, .help, .checklist, .strip-zone, .tuning-field, .tuning-group, .manual-add-list),
+:is(.app, .help, .strip-zone, .tuning-field, .tuning-group),
 :is(.help-steps, .identity-list, .push-tokens) {
   display: flex;
   flex-direction: column;
@@ -164,7 +164,7 @@ html[data-mode='advanced'] #simple-view {
 .xkey-popover-arg {
   flex-direction: column;
 }
-:is(.xkey-card, .checklist, .addr-chip) {
+:is(.xkey-card, .addr-chip) {
   gap: 10px;
 }
 :is(.app-version, .strip-zone-title, .side-keys-legend, .manual-add-head, .manual-add-docs),
@@ -207,7 +207,6 @@ html[data-mode='advanced'] #simple-view {
   color: var(--fg-dim);
 }
 :is(.dock-card, .xkey-size-thumb, .xkey-swatch, .chip-radio, .collapse-header, .crop-key),
-.manual-add-steps .app-link,
 .key-grid .key-cell.clickable {
   cursor: pointer;
 }
@@ -224,7 +223,7 @@ select.input {
 }
 :is(.wordmark, .stage-title, .b-val, .manual-add-head, .help-section-label),
 .side-keys-flow-heading,
-:is(.hero h1, .conflict h1, .help h1, .popover h2, .about-notice h3),
+:is(.conflict h1, .help h1, .popover h2, .about-notice h3),
 .help-steps li b {
   font-weight: 650;
 }
@@ -241,18 +240,18 @@ select.input {
   font-size: 12px;
   color: var(--fg-muted);
 }
-:is(.hero, .xkey-row) {
+.xkey-row {
   align-items: center;
 }
 :is(.xkey-config-btn, .linkbtn, .conflict-body, .help-lead, .strip-zone-type),
 :is(.xkey-size-btn, .xkey-size-thumb, .pop-close, .identity-label, .chip-radio),
 :is(.multi-deck-help, .tuning-help),
-:is(.hero p, .image-fit-sizes dt) {
+.image-fit-sizes dt {
   color: var(--fg-muted);
 }
 :is(.ghostbtn, .b-mode-select, .xkeys-option, .xkey-popover-field, .xkey-popover-status),
 :is(.xkey-size-note, .xkey-style-row, .tuning-field, .settings-checkbox, .step-sub),
-:is(.manual-add-steps, .status-line),
+.status-line,
 :is(.popover p, .about-notice h3, .about-notice p),
 .popover .about-usage {
   color: var(--fg-muted);
@@ -297,12 +296,10 @@ select.input {
 .input {
   border-radius: var(--r-sm);
 }
-:is(.stage-title .accent, .tuning-section > .collapse-header),
-.step-title a,
+.stage-title .accent,
 :is(.help-section-label, .tuning-group-label) {
   color: var(--accent);
 }
-.manual-add-steps .app-link,
 .step-sub a,
 .manual-add-docs {
   color: var(--accent);
@@ -315,9 +312,9 @@ select.input {
 :is(.disclaimer, .strip-zone-type, .conflict, .toast) {
   text-align: center;
 }
-:is(.disclaimer, .conflict-body, .help-lead, .stage-title, .step-sub, .manual-add-steps),
+:is(.disclaimer, .conflict-body, .help-lead, .stage-title, .step-sub),
 .conflict-after,
-:is(.hero p, .popover p, .help h1, .help-steps li) {
+:is(.popover p, .help h1, .help-steps li) {
   text-wrap: pretty;
 }
 :is(.linkbtn, .xkey-size-btn, .xkey-size-thumb, .xkey-swatch-custom) {
@@ -325,8 +322,7 @@ select.input {
 }
 :is(.preview-label, .dock-chip, .live-dot, .dock-card-name, .xkey-pos, .b-mode-select),
 :is(.xkey-tile-empty, .strip-zone-title, .side-keys-device-key, .step-title, .addr-text),
-:is(.ctabtn, .collapse-header),
-.manual-add-steps .nstrong {
+:is(.ctabtn, .collapse-header) {
   font-weight: 600;
 }
 :is(.topbar, .preview-head, .dock-card-head, .manual-add-head, .xkey-popover-field),
@@ -358,7 +354,7 @@ select.input {
   flex: none;
   display: grid;
 }
-:is(.circle, .b-ico, .w-ico, .help-stage, .side-keys-device-key, .hero, .dock-list),
+:is(.circle, .b-ico, .w-ico, .help-stage, .side-keys-device-key, .dock-list),
 :is(.strip-zones, .side-keys-device, .xkey-row, .xkey-size-thumb, .xkey-style-popover),
 :is(.scrim, .address-backdrop, .tuning-grid, .image-fit-sizes, .key-grid) {
   display: grid;
@@ -398,10 +394,9 @@ select.input {
 :is(.crop-source canvas, .crop-preview canvas) {
   border: 1px solid var(--border);
 }
-:is(.panel-inset, .hero, .surface-card, .side-keys-device, .diag-section) {
+:is(.panel-inset, .surface-card, .side-keys-device, .diag-section) {
   border-radius: var(--r-md);
 }
-.hero,
 :is(.xkeys-compact .xkey-press-label, .strip-zone-panel .xkey-press-label) {
   text-align: left;
 }
@@ -413,7 +408,7 @@ select.input {
 .device-test-option .settings-checkbox {
   margin: 0;
 }
-:is(.hero-badge, .live-dot, .xkey-status-ok, .settings-status),
+:is(.live-dot, .xkey-status-ok, .settings-status),
 :is(.addr-chip, .addr-port-chip).copied,
 .addr-chip.copied :is(.addr-text, .addr-copy) {
   color: var(--ok);
@@ -426,7 +421,7 @@ select.input {
   font-size: 13px;
   color: var(--fg);
 }
-:is(.conflict-body, .help-lead, .step-title, .ctabtn, .side-keys-flow-heading),
+:is(.conflict-body, .help-lead, .ctabtn, .side-keys-flow-heading),
 .side-keys-flow-label,
 .popover .about-intro {
   font-size: 14px;
@@ -469,7 +464,7 @@ select.input {
   height: 26px;
 }
 :is(.floating-surface, .input),
-:is(.popover.side-keys-help, .manual-add-steps .nstrong, .popover .about-intro) {
+:is(.popover.side-keys-help, .popover .about-intro) {
   color: var(--fg);
 }
 :is(.b-val, .xkey-press-label, .identity-value) {

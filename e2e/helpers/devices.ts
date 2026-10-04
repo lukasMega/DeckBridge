@@ -17,6 +17,12 @@ export interface DeviceCase {
   rows: number;
   /** docks[0].extraKeys — side keys outside the grid (without any tuning override). */
   extraKeys?: readonly number[];
+  /** Keys on the physical panel when an emulation advertises fewer (default: keyCount). */
+  physicalKeys?: number;
+  /** docks[0].pressableExtraKeys — side keys with a switch (default: none). */
+  pressableExtraKeys?: readonly number[];
+  /** docks[0].touchStripSize — the strip the app sees (default: none). */
+  touchStripSize?: { width: number; height: number };
   /** docks[0].encoderCount — physical knobs. */
   encoderCount?: number;
   /** docks[0].widgetDisplays wire ids — touch-strip zones. */
@@ -34,11 +40,17 @@ export const DEVICES: readonly DeviceCase[] = [
     label: 'Ajazz AKP05E',
     id: 'ajazz-akp05e',
     name: 'AJAZZ AKP05E',
-    keyCount: 10,
-    columns: 5,
+    // Pairs as a Stream Deck + by default: the Plus 4×2 grid, the right column as extra keys.
+    keyCount: 8,
+    columns: 4,
     rows: 2,
+    physicalKeys: 10,
+    extraKeys: [15, 10],
+    pressableExtraKeys: [15, 10],
+    touchStripSize: { width: 800, height: 100 },
     encoderCount: 4,
     stripZones: [1, 2, 3, 4],
+    coraProfile: 'stream-deck-plus',
     emulations: ['stream-deck-plus'],
     fixedWireSizes: ['packetSize'],
   },

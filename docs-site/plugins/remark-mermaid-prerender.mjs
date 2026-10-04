@@ -10,7 +10,7 @@
 // jiti transpiles it cleanly.
 //
 // Rendered SVGs are content-hashed and cached under node_modules/.cache, so a
-// diagram is only re-rendered when its source changes.
+// diagram is re-rendered when its source, dependencies or render settings change.
 
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
@@ -20,6 +20,14 @@ import { join } from 'node:path';
 const CWD = process.cwd();
 const CACHE_DIR = join(CWD, 'node_modules', '.cache', 'db-mermaid');
 const MMDC = join(CWD, 'node_modules', '.bin', 'mmdc');
+// Keep Mermaid 11's appearance and avoid embedding fonts into every inline SVG.
+const CONFIG_PATH = join(CWD, 'plugins', 'mermaid-config.json');
+const RENDER_ARGS = ['-b', 'transparent', '--no-font-embed', '-c', CONFIG_PATH];
+const RENDER_KEY = createHash('sha256')
+  .update(readFileSync(join(CWD, 'pnpm-lock.yaml')))
+  .update(readFileSync(CONFIG_PATH))
+  .update(JSON.stringify(RENDER_ARGS))
+  .digest('hex');
 // Reuse the system Chrome so mmdc's puppeteer never needs its own download.
 const DEFAULT_CHROME =
   '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
@@ -28,7 +36,8 @@ const DEFAULT_CHROME =
 function replaceMermaid(node, chromePath) {
   const source = node.value;
   const hash = createHash('sha256')
-    .update(`${source}`)
+    .update(RENDER_KEY)
+    .update(source)
     .digest('hex')
     .slice(0, 16);
   const svgPath = join(CACHE_DIR, `${hash}.svg`);
@@ -41,7 +50,7 @@ function replaceMermaid(node, chromePath) {
     if (chromePath && existsSync(chromePath)) {
       env.PUPPETEER_EXECUTABLE_PATH = chromePath;
     }
-    const args = ['-i', mmdPath, '-o', svgPath, '-b', 'transparent'];
+    const args = ['-i', mmdPath, '-o', svgPath, ...RENDER_ARGS];
     // CI: pass a puppeteer config (e.g. {"args":["--no-sandbox"]}) so headless
     // Chrome launches on Linux runners. Unset locally → behaviour unchanged.
     if (process.env.MMDC_PUPPETEER_CONFIG) {

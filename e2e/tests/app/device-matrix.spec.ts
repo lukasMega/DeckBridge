@@ -51,11 +51,11 @@ test.describe('device matrix', () => {
       expect(dock.modelId).toBe(d.id);
       expect(dock.deviceKey).toBe(`mock:${d.id}`);
       expect(dock.extraKeys).toEqual(d.extraKeys);
-      expect(dock.pressableExtraKeys).toBeUndefined();
+      expect(dock.pressableExtraKeys).toEqual(d.pressableExtraKeys);
       expect(dock.encoderCount).toBe(d.encoderCount);
       expect(dock.widgetDisplays?.map((z) => z.wireId)).toEqual(d.stripZones);
       expect(dock.coraProfile).toBe(d.coraProfile);
-      expect(dock.touchStripSize).toBeUndefined();
+      expect(dock.touchStripSize).toEqual(d.touchStripSize);
 
       // Last key of this geometry round-trips HTTP → mock driver → WS (off-by-one guard).
       const last = d.keyCount - 1;
@@ -65,7 +65,9 @@ test.describe('device matrix', () => {
         () => api(request, base, `/api/key/${last}`, {}),
       );
       expect(press.data.mk2Index).toBe(last);
-      expect((await api(request, base, `/api/key/${d.keyCount}`, {})).status).toBe(400);
+      expect(
+        (await api(request, base, `/api/key/${d.physicalKeys ?? d.keyCount}`, {})).status,
+      ).toBe(400);
 
       // Mock inputs the device cannot produce are refused.
       if (!d.encoderCount) {
@@ -80,7 +82,8 @@ test.describe('device matrix', () => {
       }
       // Side keys without a switch (293S column) cannot be pressed either.
       const sideKey = d.extraKeys?.[0] ?? 16;
-      expect((await api(request, base, `/api/mock/extra-key/${sideKey}`, {})).status).toBe(400);
+      const sideKeyStatus = (await api(request, base, `/api/mock/extra-key/${sideKey}`, {})).status;
+      expect(sideKeyStatus).toBe(d.pressableExtraKeys?.includes(sideKey) ? 204 : 400);
 
       // Device tuning lists the model; protocol-fixed wire sizes are never offered.
       const tuning = (await api<TuningView>(request, base, `/api/device-overrides?modelId=${d.id}`))
@@ -115,7 +118,7 @@ test.describe('device matrix', () => {
       await expect(page.locator('#stage .preview')).toHaveClass(
         d.keyCount === 6 ? /\bcompact\b/ : /^(?!.*\bcompact\b)/,
       );
-      await expect(page.locator('.step-sub').first()).toHaveText(d.name);
+      await expect(page.locator('.conn-node').first()).toContainText(d.name);
     }
   });
 });

@@ -5,6 +5,7 @@ export type {
   ClientApp,
   CommEntry as CommLog,
   DockStatus as DockUi,
+  ElgatoAppStatus,
   ElgatoAutoRestartState,
   EncoderCommands,
   EncoderSettings,

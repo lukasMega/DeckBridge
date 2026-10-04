@@ -126,6 +126,13 @@ thread; the WebUI rides the main thread's spare time. Mock mode stays on the mai
 
 **Multi-device**: this whole pair (CORA server pair + worker thread) repeats per physical device.
 
+`WorkerHidDriver` uses bounded `HidWorkQueue` admission.
+Waiting complete-key images can coalesce.
+Touch updates and controls preserve ordering.
+Worker completion messages release admission credits.
+See [Threading and ordering](image-flow.md#threading--ordering).
+
+
 #### Supporting workers
 
 Two lighter worker types sit outside the CORA/image hot path:
@@ -174,7 +181,7 @@ To reduce session-stealing, an actively-used CORA connection (sent data within
 socket is closed instead. A quiet connection (desktop app closed) can still be replaced.
 
 Malformed-input guards on the CORA path: incoming images (gen2 JPEG / gen1 BMP) are decoded by
-`deckbridge-native` with bounded limits (max 500×500 px, 900 KB decode alloc), so an
+`deckbridge-native` with bounded limits (max 800×500 px, 900 KiB decode alloc), so an
 oversized/malformed image is rejected rather than allocating large buffers (real key images are ≤
 ~800 px); image chunks with an out-of-range `keyIndex` are dropped before assembly (an
 unauthenticated peer can't grow assembly buffers or repaint key 0 via index coercion); and a frame
@@ -238,72 +245,27 @@ The retry interval is **adaptive, not fixed**. `ProbePacer` starts at `HID_POLL_
 
 ### Probe order
 
-| Priority | Model | VID | PIDs | Open strategy |
-|----------|-------|-----|------|---------------|
-| 1 | Stream Deck MK.2 | `0x0fd9` | `0x0080`, `0x006d`, `0x00a5` | VID+PID |
-| 2 | Stream Deck Mini | `0x0fd9` | `0x0063`, `0x0090`, `0x00b3`, `0x00b8` | VID+PID |
-| 3 | Mirabox 293V3 | `0x6603` | `0x1005`, `0x1006`, `0x1010`, `0x1014` ‡ | usage-page path first, then VID+PID |
-| 4 | Mirabox 293S | `0x5548` | `0x6670` | usage-page path first, then VID+PID |
-| 5 | Mirabox K1 Pro | `0x6603` | `0x1015`, `0x1019` | usage-page path first, then VID+PID |
-| 6 | Ajazz AKP153E (rev. 2) † | `0x0300` | `0x3010` | usage-page path first, then VID+PID |
-| 7 | Ajazz AKP153R (rev. 2) † | `0x0300` | `0x3011` | usage-page path first, then VID+PID |
-| 8 | Fifine AmpliGame D6 ¶ | `0x3142` | `0x0007` | usage-page path first, then VID+PID |
-| 9 | Fifine AmpliGame D6 (rev. 2) ¶ | `0x3142` | `0x0060` | usage-page path first, then VID+PID |
-| 10 | Ajazz AKP153 § | `0x5548` | `0x6674` | usage-page path first, then VID+PID |
-| 11 | Ajazz AKP153E § | `0x0300` | `0x1010` | usage-page path first, then VID+PID |
-| 12 | Ajazz AKP153R § | `0x0300` | `0x1020` | usage-page path first, then VID+PID |
-| 13 | Mars Gaming MSD-ONE § | `0x0b00` | `0x1000` | usage-page path first, then VID+PID |
-| 14 | Mad Dog GK150K § | `0x0c00` | `0x1000` | usage-page path first, then VID+PID |
-| 15 | Risemode Vision 01 § | `0x0a00` | `0x1001` | usage-page path first, then VID+PID |
-| 16 | TMICE Stream Controller § | `0x0500` | `0x1001` | usage-page path first, then VID+PID |
+`DEVICE_MODELS` defines explicit probe priority.
+Current registry contains eighteen USB models.
+Elgato MK.2 and Mini come first.
+Mirabox 293, 293S, and K1 follow.
+AKP05E and AKP05 precede remaining rebadges.
+See [registry source](../ts/src/devices/registry.ts).
 
-‡ `0x1014` is the **HSV293SV3 / "293S V3"** refresh — the same v3 board, so it rides the
-293V3 model rather than getting its own entry (opendeck-akp153 names `0x1005` and `0x1014`
-identically; keydeck's two device JSONs differ only in PID). Untested — no hardware. Note
-it reports as "Mirabox 293V3" in the WebUI and mDNS name.
+[Supported devices](devices.mdx) records support evidence.
+[Device specs](device-specs.mdx) derives registry values.
+Avoid duplicating those inventories here.
 
-† **Untested — no hardware.** Both are the 293V3 board behind a different VID/PID: same
-`mirabox-cora` v3 wire (1024-byte CRT packets, 512-byte reads), same `0xffa0`/`1` usage,
-same 3×6 grid and key map, so `ajazz/akp153-rev2.ts` clones `MIRABOX_293_MODEL`. Rev. 1
-(`0x0300:0x1010`/`0x1020`) is a **v1/512-byte** device and is deliberately not in the
-registry — it would need a 293S-style model.
+Important family differences remain model-specific:
 
-¶ **Rev. 2 hardware-tested (macOS); rev. 1 untested — no hardware.** The Fifine AmpliGame
-D6 (`devices/fifine/fifine-d6.ts`) is the 293V3 board behind VID `0x3142`: same
-`mirabox-cora` v3 wire, same `0xffa0`/`1` usage, same 3×5 grid and key map, so it clones
-`MIRABOX_293_MODEL`. It is **two** models rather than one model with two PIDs because the
-revisions use **different CRT packet sizes**: rev. 1 (`0x0007`) is 512-byte, rev. 2
-(`0x0060`) is 1024-byte — 512-byte writes render black on rev. 2 according to four
-independent reports. That asymmetry is deliberate; see the packet-size test in
-`ts/test/device-models.test.ts`. A rev. 2 unit confirmed the whole path end to end:
-enumeration via the `0xffa0`/`1` usage path, all 15 keys rendered through the sidecar, and
-key events mapped as expected (wire `0x0f` → MK.2 index 14, `0x0b` → 10).
-
-Because rev. 1's size is inferred rather than measured, these are the only models that set
-`wire.packetSizeCandidates: [512, 1024]`. On open, `MiraboxDriver` reads the device's HID
-report descriptor (`devices/hid-report-descriptor.ts`) and, if it states an
-unambiguous output-report size that is one of those candidates, uses it instead of the
-model constant and logs a warning. This is the one D6 unknown the hardware can settle for
-itself: a wrong `packetSize` is otherwise **silent** — the firmware discards short writes
-while `hid_write` still returns success, so the device enumerates and reports key presses
-normally and only the panel stays black. The parser refuses (keeps the model constant) on
-anything it cannot read with certainty, and the candidate list means a probe can only
-correct a guess, never introduce an untested value. Panel resolution and
-press-vs-release, by contrast, are **not** detectable and stay as plain constants.
-`wire.chunkDelayMs` (inter-chunk busy-wait pacing) also exists for this family but is
-left off — our worker already writes chunks synchronously and in order.
-
-§ **Untested — no hardware, whole block.** The 7 v1 rebadges of the 293S board
-(`devices/rebadge/akp153-v1-clones.ts`) — same `mirabox-cora-v1` wire (512-byte
-packets, keydown-only), same `0xffa0`/`1` usage, same 3×6 grid and key map, so each
-clones `MIRABOX_293S_MODEL` verbatim (only `id`/`name`/`vendor`/`usbVendorId`/
-`usbProductIds` differ). Rest on two agreeing reference implementations (keydeck +
-opendeck-akp153) plus the 293S board itself being hardware-verified — nothing here has
-been probed on real units. v1 firmware also reports a hardcoded serial shared by every
-unit of every v1 model (`355499441494`); `deviceKeyFor()` disambiguates by model id (see
-[Settings persistence](#settings-persistence)).
-
-Elgato models are probed first so they take priority over Mirabox; the loop is generic — every model opens through the same `WorkerHidDriver`. Models needing key remapping (Mirabox 293/293S/K1 Pro, via `hasInputKeyMap(model)`) have wire input codes translated by `deviceInputToMk2Index()` before forwarding to the CORA child server; Elgato models (empty `keyMap`) pass through unchanged.
+- D6 revisions use different packet sizes.
+  Descriptor correction accepts only listed candidates.
+- AKP153E rev. 2 has calibrated mappings.
+  AKP153R retains unverified inherited defaults.
+- Rev. 1 rebadges are registered separately.
+  Their image batching defaults remain disabled.
+- Stream Deck + is emulation-only.
+  `CORA_PROFILES` never enters USB discovery.
 
 ### Open strategy per device
 
@@ -327,15 +289,19 @@ If all candidates fail, the error includes install instructions (`brew install h
 
 ### HID path enumeration
 
-The Rust `deckbridge-native` cdylib ([rust/deckbridge-native/](https://github.com/lukasMega/DeckBridge/tree/main/rust/deckbridge-native)) is loaded at runtime via the `DECKBRIDGE_NATIVE_LIB` env var. Among its exports is:
+Production discovery uses `mirabox_hid_list_supported()`.
+`hid-scan-worker.ts` supplies registry-derived VID/PID pairs.
+`ffi/hid-discovery.ts` parses returned inventory rows.
+`HidDiscovery.paths(model)` applies usage filters afterward.
+USB workers receive explicit interface paths.
 
-```c
-int mirabox_hid_find_path(uint16_t vid, uint16_t pid, uint16_t usage_page, uint16_t usage,
-                          uint8_t *buf, size_t buf_len);
-// pid == 0 matches any product ID. Returns 1 and writes the null-terminated HID path into buf on success, 0 if not found.
-```
+Full diagnostics use `mirabox_hid_list_all()` instead.
+Native exports also retain legacy lookup helpers.
+Current production discovery bypasses those helpers.
 
-If `DECKBRIDGE_NATIVE_LIB` is unset, path-based open is skipped and the driver falls straight through to VID+PID.
+Missing native libraries produce empty discovery.
+No VID/PID opening fallback exists.
+See [HID via FFI](hidapi-ffi.md).
 
 ### Serial and firmware reading
 
@@ -343,13 +309,20 @@ If `DECKBRIDGE_NATIVE_LIB` is unset, path-based open is skipped and the driver f
 
 ### Adding a new device model
 
-Full walkthrough: [docs/adding-a-device.md](adding-a-device.md). In short:
+Follow [Adding support](adding-a-device.md).
+Known protocols reuse existing worker drivers.
+New models still require supporting artifacts:
 
-1. Create a `DeviceModel` ([driver.ts](../ts/src/devices/driver.ts)) under `devices/elgato/` or `devices/mirabox/`; most behavior is in the nested specs (`image`, required `wire`, `keyMap`, `cora`, optional `splash`).
-2. Add to `DEVICE_MODELS` in [registry.ts](../ts/src/devices/registry.ts) — list position is probe priority.
-3. Set `usagePage`+`usage` only for a vendor-specific HID interface (all Mirabox use `0xffa0`/`1`); undefined for standard Elgato VID+PID.
-4. Pick the `protocol`: it selects the driver in `USB_DRIVERS` ([usb-drivers.ts](../ts/src/devices/usb-drivers.ts)), the single registration point, and the tunable wire keys in `TUNABLE_WIRE_KEYS` ([driver.ts](../ts/src/devices/driver.ts)).
-5. For a new wire protocol beyond the four variants, add a `DeviceProtocol` literal: Elgato variants implement pack/parse behavior under [protocol/](https://github.com/lukasMega/DeckBridge/tree/main/ts/src/devices/protocol) (in `PROTOCOL_STRATEGY`); packet and input sizes remain model-owned in `wire`. Mirabox variants are driven by `wire` fields in `devices/mirabox/driver.ts`.
+1. Define model facts and registration.
+2. Record variant-specific hardware evidence.
+3. Update Linux permissions and artwork.
+4. Regenerate published device data.
+5. Add relevant independent regression cases.
+
+New protocols require additional registrations.
+These include factories, tuning, and documentation families.
+Elgato-compatible strategies also require complete `ProtocolStrategy`.
+Keep FFI imports inside worker-side modules.
 
 ## CORA device capabilities
 
@@ -368,8 +341,9 @@ model's `cora` spec (`DeviceCoraSpec`) drives it:
 
 It then applies the change to both CORA servers and the WebUI:
 
-- `resetImagePipeline()` + `webui.resetImages()` — drop the old model's per-key write queues and
-  cached WebUI images so stale keys don't linger, then broadcast a repaint
+- `webui.resetImages()` clears browser previews.
+  `Dock.setModel()` selects model-specific retained frames.
+  Worker lifecycle changes reset admission queues.
 - `server.setDeviceConfig(patch)` — update PID (+ serial/firmware for Elgato)
 - `setChildGeometry(geo)` on both CORA servers (child reallocates `keyStates`, keeping the overlapping prefix on a hot-swap)
 - `server.restartMdns(pid)` — re-advertise with the new PID (skipped when PID + serial are unchanged, to avoid dns-sd/avahi churn on every unplug/replug)

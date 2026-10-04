@@ -4,6 +4,7 @@ import { useEffect, useState } from 'preact/hooks';
 import { Collapsible } from '../components/Collapsible.js';
 import { ToggleRow } from '../components/Fields.js';
 import { ICON, Icon } from '../components/Icon.js';
+import { useStore } from '../lib/store.js';
 import { getJson, postJson } from '../lib/ui-api.js';
 import { Feedback, useAsyncAction } from '../lib/ui-async.js';
 import type { PairingOffer, VirtualDeckDeviceView, VirtualDeckState } from '../../contract-deck.js';
@@ -43,6 +44,23 @@ function ElgatoHint({ state }: Readonly<{ state: VirtualDeckState }>): preact.JS
       no other dock uses, for example 127.0.0.2 (macOS: run{' '}
       <code>sudo ifconfig lo0 alias 127.0.0.2 up</code> first).
     </p>
+  );
+}
+
+// Two independent milestones: the browser authorizes against DeckBridge, the Elgato app
+// pairs to dock 3. Each reports its own server state.
+function Milestone({
+  step,
+  title,
+  status,
+}: Readonly<{ step: number; title: string; status?: string }>): preact.JSX.Element {
+  return (
+    <div class="manual-add-head">
+      <span>
+        {step}. {title}
+      </span>
+      {status !== undefined && <span>{status}</span>}
+    </div>
   );
 }
 
@@ -182,8 +200,19 @@ function DeckDetails({
   onRevoke: (id: string, name: string) => void;
   onRevokeAll: () => void;
 }>): preact.JSX.Element {
+  const appPaired = useStore(
+    (s) => s.status.docks.find((d) => d.index === VIRTUAL_DOCK_INDEX)?.elgatoConnected,
+  );
+  const browserConnected = state.devices.some((d) => d.connected);
+  let appStatus: string | undefined;
+  if (appPaired !== undefined) appStatus = appPaired ? 'Paired' : 'Not paired yet';
   return (
     <>
+      <Milestone
+        step={1}
+        title="Browser"
+        status={browserConnected ? 'Connected' : 'Waiting for a browser'}
+      />
       <p class="multi-deck-note" id="deck-status">
         {listeningText(state)}
       </p>
@@ -192,10 +221,8 @@ function DeckDetails({
           DeckBridge is bound to 127.0.0.1 (--bind), so phones and tablets cannot reach it.
         </p>
       )}
-      <ElgatoHint state={state} />
-      <div class="settings-actions">
-        <PairingAddressLink initialDock={VIRTUAL_DOCK_INDEX} />
-        {!offer && (
+      {!offer && (
+        <div class="settings-actions">
           <button
             class="ghostbtn"
             id="deck-pair"
@@ -205,8 +232,8 @@ function DeckDetails({
           >
             Pair a device
           </button>
-        )}
-      </div>
+        </div>
+      )}
       {offer && <Offer offer={offer} now={now} onCancel={onCancel} loadQr={loadQr} />}
       <DeviceList state={state} busy={busy} onRevoke={onRevoke} onRevokeAll={onRevokeAll} />
       {state.latencyP95Ms !== undefined && (
@@ -214,6 +241,11 @@ function DeckDetails({
           Input latency p95: {Math.round(state.latencyP95Ms)} ms (last 200 presses)
         </p>
       )}
+      <Milestone step={2} title="Elgato app" status={appStatus} />
+      <ElgatoHint state={state} />
+      <div class="settings-actions">
+        <PairingAddressLink initialDock={VIRTUAL_DOCK_INDEX} />
+      </div>
     </>
   );
 }

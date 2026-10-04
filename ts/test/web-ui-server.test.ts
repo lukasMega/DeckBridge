@@ -754,6 +754,47 @@ try {
     });
 
   await runWebTest(
+    'GET /api/elgato-app/status reads process state without controlling the app',
+    async () => {
+      const control = routesUi.elgatoApp.control;
+      const original = {
+        isRunning: control.isRunning.bind(control),
+        restart: control.restart.bind(control),
+        launch: control.launch.bind(control),
+      };
+      let running = false;
+      let launches = 0;
+      let restarts = 0;
+      control.isRunning = () => Promise.resolve(running);
+      control.launch = () => {
+        launches++;
+        return Promise.resolve(true);
+      };
+      control.restart = () => {
+        restarts++;
+        return Promise.resolve({ ok: true, killed: false });
+      };
+      try {
+        for (const value of [false, true]) {
+          running = value;
+          const response = await fetch(`${base}/api/elgato-app/status`);
+          assert.equal(response.status, 200);
+          assert.equal(((await response.json()) as { running: boolean }).running, value);
+        }
+        assert.equal(launches, 0);
+        assert.equal(restarts, 0);
+        await post('/api/elgato-app/restart', {});
+        assert.equal(restarts, 1, 'a running process is restarted');
+        running = false;
+        await post('/api/elgato-app/restart', {});
+        assert.equal(launches, 1, 'a stopped process is launched');
+      } finally {
+        Object.assign(control, original);
+      }
+    },
+  );
+
+  await runWebTest(
     'POST /api/touch-strip-mode: unknown mode → 400, valid mode on MK.2 → 409',
     async () => {
       assert.equal((await post('/api/touch-strip-mode', { mode: 'sometimes' })).status, 400);

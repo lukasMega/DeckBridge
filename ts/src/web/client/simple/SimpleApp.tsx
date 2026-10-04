@@ -12,7 +12,7 @@ import { deriveState, isMultiDockView, updateBadgeVersion } from '../ui-helpers.
 import { switchToAdvanced } from './handlers.js';
 import { AboutPopover, SettingsPage, HelpScreen } from './overlays.js';
 import { BackButton } from './controls.js';
-import { ICON } from '../components/Icon.js';
+import { ICON, Icon } from '../components/Icon.js';
 import { ThemeButton } from '../components/ThemeButton.js';
 import {
   StageReady,
@@ -22,9 +22,21 @@ import {
   StageMultiPairing,
 } from './stages.js';
 
+function StaleBanner(): preact.JSX.Element | null {
+  const stale = useStore((s) => s.connection === 'stale');
+  if (!stale) return null;
+  return (
+    <div class="warnrow conn-banner" id="connBanner" role="status">
+      <Icon class="w-ico" html={ICON.warn} />
+      <span>Connection interrupted. Retrying…</span>
+    </div>
+  );
+}
+
 export function SimpleApp(): preact.JSX.Element {
   const status = useStore((s) => s.status);
   const updateInfo = useStore((s) => s.updateInfo);
+  const stale = useStore((s) => s.connection === 'stale');
   const [activeHelp, setActiveHelp] = useState<string | null>(null);
   const [aboutOpen, setAboutOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -147,7 +159,9 @@ export function SimpleApp(): preact.JSX.Element {
             )}
           </div>
         </div>
-        <section class="stage" id="stage" aria-live="polite">
+        <StaleBanner />
+        {/* inert: the shown status is cached, so its controls must not act on it. */}
+        <section class="stage" id="stage" aria-live="polite" inert={stale}>
           {stageContent}
         </section>
         <footer class="disclaimer">

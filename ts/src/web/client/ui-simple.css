@@ -86,43 +86,18 @@ later per-class rules keep only size/background/placement deltas */
 }
 
 /* ---- Simple view — READY state ---- */
-.hero {
-  grid-template-columns: 36px minmax(0, 1fr);
-  column-gap: 12px;
-  padding: 12px 14px;
-  background: color-mix(in oklab, var(--ok) 4%, var(--surface));
-  border: 1px solid color-mix(in oklab, var(--ok) 22%, var(--border));
-}
-:is(.hero-badge, .conflict-badge) {
+.conflict-badge {
   animation: rise 0.35s ease;
-}
-.hero-badge {
-  grid-row: 1 / 3;
-  width: 36px;
-  height: 36px;
-  background: var(--ok-soft);
-  box-shadow: inset 0 0 0 1px var(--ok-soft);
 }
 .conflict-badge svg {
   height: 28px;
 }
-.hero-badge svg {
-  width: 19px;
-  height: 19px;
-}
-:is(.hero h1, .conflict h1, .help h1),
+:is(.conflict h1, .help h1),
 .stage-title {
   letter-spacing: -0.015em;
 }
-.hero h1 {
-  font-size: 15px;
-}
 :is(.conflict-body, .help-lead) {
   line-height: 1.55;
-}
-.hero p {
-  font-size: 12px;
-  line-height: 1.35;
 }
 
 /* ---- live key preview ---- */
@@ -525,25 +500,10 @@ input[type='range'].range:disabled {
   margin-top: 2px;
 }
 
-/* ---- Simple view — CHECKLIST states ---- */
+/* ---- Simple view — SETUP states ---- */
 .stage-title,
 .help-lead {
   margin: 0 0 18px;
-}
-.step {
-  gap: 13px;
-  padding: 14px;
-  transition: 0.25s;
-}
-.step.active {
-  border-color: color-mix(in oklab, var(--wait), var(--border) 35%);
-  background: linear-gradient(180deg, var(--surface), var(--wait-soft));
-}
-.step.done {
-  opacity: 0.92;
-}
-.step.pending {
-  opacity: 0.66;
 }
 .step-ico {
   width: 24px;
@@ -551,13 +511,10 @@ input[type='range'].range:disabled {
   margin-top: 1px;
 }
 
-/* A step whose title is itself the action (e.g. "Open the Elgato Stream Deck app"). */
-:is(.step-title a, .step-sub a),
-.manual-add-docs,
-.manual-add-steps .app-link {
+:is(.step-sub a, .manual-add-docs) {
   text-decoration: none;
 }
-:is(.step-title a:hover, .step-sub a:hover) {
+.step-sub a:hover {
   text-decoration: underline;
   text-underline-offset: 2px;
 }
@@ -597,6 +554,28 @@ input[type='range'].range:disabled {
 }
 
 /* manual "Add Network Device" fallback */
+.pairing-flow {
+  margin-top: 20px;
+}
+.pairing-question {
+  margin: 0 0 10px;
+  font-weight: 600;
+}
+.pairing-answers {
+  display: flex;
+  gap: 8px;
+}
+.pairing-answers [aria-pressed='true'],
+.ctabtn.pairing-action {
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+.pairing-action-row {
+  margin-top: 14px;
+}
+.ctabtn.pairing-action {
+  margin-top: 0;
+}
 .manual-add {
   margin-top: 13px;
   border-radius: var(--r-sm);
@@ -604,22 +583,9 @@ input[type='range'].range:disabled {
 .manual-add-head {
   margin-bottom: 5px;
 }
-.manual-add-steps {
-  line-height: 1.6;
-}
-:is(.manual-add-list, .help-steps, .identity-list, .push-tokens) {
+:is(.help-steps, .identity-list, .push-tokens) {
   list-style: none;
 }
-.manual-add-list {
-  margin: 7px 0 0;
-  counter-reset: ma;
-  gap: 7px;
-}
-.manual-add-list li {
-  padding-left: 26px;
-  counter-increment: ma;
-}
-.manual-add-list li::before,
 .help-steps .num {
   border-radius: 50%;
   display: grid;
@@ -629,25 +595,14 @@ input[type='range'].range:disabled {
   font-weight: 700;
   font-variant-numeric: tabular-nums;
 }
-.manual-add-list li::before {
-  content: counter(ma);
-  position: absolute;
-  left: 0;
-  top: -1px;
-  width: 18px;
-  height: 18px;
-  font-size: 11px;
-}
-.manual-add-docs,
-.manual-add-steps .app-link {
+.manual-add-docs {
   border-bottom: 1px solid color-mix(in oklab, var(--accent), transparent 60%);
   transition: border-color 0.14s;
 }
 .manual-add-docs {
   margin-top: 11px;
 }
-.manual-add-docs:hover,
-.manual-add-steps .app-link:hover {
+.manual-add-docs:hover {
   border-bottom-color: var(--accent);
 }
 .addr-row {
@@ -719,6 +674,31 @@ input[type='range'].range:disabled {
 .ctabtn:hover {
   filter: brightness(1.08);
 }
+.own-diagram {
+  display: block;
+  width: min(100%, 300px);
+  margin: 0 auto 14px;
+  font-size: 11px;
+}
+.own-node {
+  fill: var(--surface-2);
+  stroke: var(--border-strong);
+}
+.own-label {
+  fill: currentColor;
+  font-weight: 600;
+}
+.own-cap {
+  fill: var(--fg-dim);
+}
+.own-link {
+  stroke: var(--warn);
+  stroke-width: 2;
+}
+.own-new {
+  stroke: var(--accent);
+  animation: fade 0.9s ease both;
+}
 .conflict-after {
   margin: 16px auto 0;
   line-height: 1.55;
@@ -773,13 +753,14 @@ input[type='range'].range:disabled {
   background: var(--wait-soft);
 }
 
-/* SVG animation primitives: fade-in (hin), slide (hslide), pulse, bounce */
+/* SVG animation primitives: fade-in (hin), slide (hslide), pulse, bounce. Each plays
+   once (under 5 s) and holds its end state (WCAG 2.2.2). */
 .hsvg :is(.litkey, .bounce, .windowin, .clickring, .menuin, .hilite, .plug, .cursor) {
   transform-box: fill-box;
   transform-origin: center;
 }
 .hsvg :is(.litkey, .windowin, .rowin, .menuin) {
-  animation: hin 3.2s ease-in-out infinite both;
+  animation: hin 3.2s ease-in-out both;
 }
 .hsvg .rowin {
   animation-delay: 0.9s;
@@ -795,14 +776,13 @@ input[type='range'].range:disabled {
   }
 }
 .hsvg :is(.hilite, .clickring) {
-  animation: hpulse 1.8s ease-in-out infinite;
+  animation: hpulse 1s ease-in-out 3 alternate both;
 }
 @keyframes hpulse {
-  0%,
-  100% {
+  from {
     opacity: 0.35;
   }
-  50% {
+  to {
     opacity: 1;
   }
 }
@@ -816,7 +796,7 @@ input[type='range'].range:disabled {
   --y1: 130px;
 }
 .hsvg :is(.plug, .cursor) {
-  animation: hslide 3.4s ease-in-out infinite;
+  animation: hslide 3.4s ease-in-out both;
 }
 @keyframes hslide {
   0%,
@@ -829,7 +809,7 @@ input[type='range'].range:disabled {
   }
 }
 .hsvg .bounce {
-  animation: hbounce 3s ease-in-out infinite;
+  animation: hbounce 3s ease-in-out;
   transform-origin: bottom center;
 }
 @keyframes hbounce {
@@ -840,6 +820,94 @@ input[type='range'].range:disabled {
   }
   8% {
     transform: translateY(-9px);
+  }
+}
+
+/* ---- connection path, disclosures, stale connection ---- */
+.conn-path {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px 0;
+  margin: 0 0 16px;
+  padding: 0;
+  list-style: none;
+}
+.conn-node {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 13px;
+  font-weight: 600;
+}
+.conn-node + .conn-node::before {
+  content: '';
+  width: 14px;
+  height: 2px;
+  margin: 0 6px;
+  background: var(--border-strong);
+}
+.conn-node.pending {
+  opacity: 0.66;
+}
+:is(.manual-add, .addr-other) > summary {
+  cursor: pointer;
+}
+.manual-add > summary {
+  list-style: none;
+}
+.manual-add > summary::-webkit-details-marker {
+  display: none;
+}
+.manual-add > summary::after {
+  content: '';
+  width: 7px;
+  height: 7px;
+  flex-shrink: 0;
+  margin-right: 3px;
+  border-right: 2px solid currentColor;
+  border-bottom: 2px solid currentColor;
+  transform: rotate(45deg);
+  transition: transform 0.14s;
+}
+.manual-add[open] > summary::after {
+  transform: rotate(225deg);
+}
+:is(.manual-add, .addr-other)[open] > summary {
+  margin-bottom: 8px;
+}
+:is(.step-sub, .addr-row) > .step-help {
+  margin-left: 6px;
+}
+.stage[inert] {
+  opacity: 0.55;
+}
+.conn-banner {
+  margin: 12px 22px 0;
+}
+/* 320 px: side-key fields drop under their tile; the top bar wraps instead of clipping */
+@media (max-width: 380px) {
+  .xkey-card,
+  .topbar-left {
+    flex-wrap: wrap;
+  }
+  .topbar-left {
+    min-width: 0;
+  }
+  .xkeys-compact .xkey-card-fields {
+    flex-basis: 100%;
+  }
+  .app-version {
+    display: none;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  *,
+  ::before,
+  ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
   }
 }
 

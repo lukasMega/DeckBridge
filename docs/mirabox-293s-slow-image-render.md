@@ -1,5 +1,10 @@
 # Mirabox 293S image-transfer investigation
 
+Historical measurements remain scoped to recorded hardware.
+Current implementation also coalesces waiting frames.
+See [current queue behavior](./image-flow.md#threading--ordering).
+Earlier baseline sections describe pre-batching behavior.
+
 Investigated September 17, 2026.
 
 Software improvements look plausible. USB-side work likely dominates. Firmware limits remain unproven.

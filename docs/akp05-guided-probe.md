@@ -1,38 +1,23 @@
 # AKP05 guided strip probe
 
-Research refreshed: 2026-09-24.
-Hardware observations remain pending.
+Historical research: 2026-09-24.
+Availability checked: 2026-10-03.
+Guided probe scripts are absent here.
+Their former task is also absent.
+Instructions below describe historical experiments only.
 
-Run with DeckBridge stopped:
-
-```sh
-mise run akp05-strip-guided-probe
-```
-
-Answer directly inside your terminal.
-Each question accepts yes/no or numbers.
-Press Enter after each answer.
-Device buttons never advance tests.
-Enter `-1` for unknown numbers.
-Ctrl+C saves partial results.
-
-Results save after each answer.
-Terminal prints `results.json` location.
-Matching JPEGs accompany that file.
-JPEGs contain device-oriented, rotated pixels.
-Upload metadata records sizes and timings.
-Firmware feature bytes also get recorded.
-
-No-hardware rehearsal:
+Current input capture remains available:
 
 ```sh
-mise run akp05-strip-guided-probe -- --dry-run
+mise run akp05-capture
 ```
 
-Rehearsal still requires native image conversion.
-It never opens USB hardware.
-Results explicitly mark `dryRun: true`.
-Rehearsal answers provide no hardware evidence.
+This capture opens and initializes hardware.
+It does not reproduce strip experiments.
+Current model uses 800×112 strip geometry.
+Slot origins are 0/204/406/610.
+Current upload cap is 10,100 bytes.
+See [current device notes](./devices.mdx#ajazz-akp05e).
 
 ## Research basis
 
@@ -47,7 +32,8 @@ Rehearsal answers provide no hardware evidence.
   Its pacing setting supports transport comparisons.
 - [Background fork geometry](https://github.com/VibeCodyH/opendeck-akp05/blob/0f09344d7b72da6dd093b768a24f5a0542bfdb0c/tools/render_frames.py#L60)
   suggests x=0/208/416/624 for slot origins.
-  Local hardware tuning corrected them to x=0/203/406/609.
+  Earlier tuning suggested x=0/203/406/609.
+  Current model uses x=0/204/406/610.
 - [Mirajazz firmware retrieval](https://github.com/4ndv/mirajazz/blob/5e3e1a4dd30f7cb2d914b534ae82bef9ab7b1368/src/device.rs#L304)
   reads 20-byte feature report `0x01`.
   This probe tries it last.
@@ -55,7 +41,8 @@ Rehearsal answers provide no hardware evidence.
 Earlier local findings establish 800px width.
 They also establish compositing slot writes.
 Those observations override conflicting upstream claims.
-Reviewed sources establish no 10KB cap.
+Those historical sources established no cap.
+Later local captures established current limits.
 
 ## Controlled comparisons
 
@@ -103,7 +90,8 @@ Final-settling success implicates completion timing.
 Small-only success leaves several explanations open.
 Buffer limits and decoder constraints remain.
 It doesn't prove exactly 10240 bytes.
-Keep 9500 bytes provisional until verified.
+Historical 9500-byte limit was provisional.
+Current model supersedes that provisional limit.
 
 This probe changes visible images.
 Initialization and CLE can clear keys.

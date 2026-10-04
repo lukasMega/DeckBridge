@@ -288,6 +288,50 @@ function useSettingsFileActions(
   return { fileInputRef, handleExport, handleImportClick, handleOpenInOS, handleFileChange };
 }
 
+/** Identity fields sent to the Elgato app; collapsed because they only matter when troubleshooting. */
+function ConnectionDetails({
+  identity,
+  realIdentity,
+  onRenamed,
+}: Readonly<{
+  identity: DeviceIdentity | null;
+  realIdentity: RealDeviceIdentity | null;
+  onRenamed: (name: string) => void;
+}>): preact.JSX.Element {
+  return (
+    <Collapsible title="Connection details" status="Sent to the Elgato app">
+      <p class="help-section-label">Device identity sent to the Elgato app</p>
+      {identity ? (
+        <ul class="identity-list panel-inset">
+          <MdnsNameEditor
+            // Remount (resetting the local edit buffer) when the underlying
+            // device changes — not on every rename, which would clobber
+            // in-progress typing. See MdnsNameEditor: local state is seeded
+            // from props once, on mount, by design.
+            key={identity.deviceKey ?? 'identity'}
+            identity={identity}
+            onSaved={onRenamed}
+          />
+          {IDENTITY_FIELDS.map(({ key, label }) => (
+            <IdentityRow key={key} label={label}>
+              {isSensitiveIdentityKey(key) ? (
+                <SensitiveValue value={formatIdentityValue(key, identity[key])} />
+              ) : (
+                <code class="identity-value">{formatIdentityValue(key, identity[key])}</code>
+              )}
+            </IdentityRow>
+          ))}
+        </ul>
+      ) : (
+        <p class="help-lead">Loading…</p>
+      )}
+
+      <p class="help-section-label">Real device identity</p>
+      <RealIdentityList realIdentity={realIdentity} />
+    </Collapsible>
+  );
+}
+
 export function SettingsPage({ onBack }: Readonly<{ onBack: () => void }>): preact.JSX.Element {
   const action = useAsyncAction();
   // Both reads are per-mount, so the preview and the identifiers are fresh every
@@ -311,18 +355,35 @@ export function SettingsPage({ onBack }: Readonly<{ onBack: () => void }>): prea
       : fetchedIdentity;
   const realIdentity = state.data?.realDeviceIdentity ?? null;
 
+  const deviceName = realIdentity?.modelName;
+
   return (
     <div class="help settings-page">
       <h1>Settings</h1>
+
+      <p class="help-section-label">Devices</p>
+      <MultiDeckPanel enabled={state.data ? state.data.multiDeck : null} />
+      <KeyPressPanel enabled={state.data ? state.data.keyPressEnabled : null} />
+      <VirtualDeckPanel />
+
+      <p class="help-section-label">
+        {deviceName === undefined ? 'Selected device' : `Selected device — ${deviceName}`}
+      </p>
+      <StandbyPanel />
+      <DeviceTuningPanel />
+
+      <p class="help-section-label">App connection</p>
+      <ElgatoAppPanel state={elgatoAutoRestartFor(state.data)} />
+
+      <p class="help-section-label">Maintenance</p>
+      <UpdatePanel info={updateInfoFor(state.data)} />
+      <DiagnosticsPanel {...diagnosticsProps(state.data)} />
       <div class="settings-actions">
         <button class="ghostbtn" type="button" onClick={() => void handleExport()}>
           Export settings
         </button>
         <button class="ghostbtn" type="button" onClick={handleImportClick}>
           Import settings
-        </button>
-        <button class="ghostbtn" type="button" onClick={() => void handleOpenInOS()}>
-          Open settings.json
         </button>
         <input
           ref={fileInputRef}
@@ -334,53 +395,29 @@ export function SettingsPage({ onBack }: Readonly<{ onBack: () => void }>): prea
       </div>
       <Feedback error={action.error} status={action.status} />
 
-      <p class="help-section-label">Device identity sent to the Elgato app</p>
-      {identity ? (
-        <ul class="identity-list panel-inset">
-          <MdnsNameEditor
-            // Remount (resetting the local edit buffer) when the underlying
-            // device changes — not on every rename, which would clobber
-            // in-progress typing. See MdnsNameEditor: local state is seeded
-            // from props once, on mount, by design.
-            key={identity.deviceKey ?? 'identity'}
-            identity={identity}
-            onSaved={(name) => {
-              setRenamed(name);
-              void settings.reload();
-            }}
-          />
-          {IDENTITY_FIELDS.map(({ key, label }) => (
-            <IdentityRow key={key} label={label}>
-              {isSensitiveIdentityKey(key) ? (
-                <SensitiveValue value={formatIdentityValue(key, identity[key])} />
-              ) : (
-                <code class="identity-value">{formatIdentityValue(key, identity[key])}</code>
-              )}
-            </IdentityRow>
-          ))}
-        </ul>
-      ) : (
-        <p class="help-lead">Loading…</p>
-      )}
-
-      <p class="help-section-label">Real device identity</p>
-      <RealIdentityList realIdentity={realIdentity} />
-
-      <MultiDeckPanel enabled={state.data ? state.data.multiDeck : null} />
-      <KeyPressPanel enabled={state.data ? state.data.keyPressEnabled : null} />
-      <VirtualDeckPanel />
+      <p class="help-section-label">Integrations</p>
       <PushApiPanel />
-      <UpdatePanel info={updateInfoFor(state.data)} />
-      <ElgatoAppPanel state={elgatoAutoRestartFor(state.data)} />
-      <StandbyPanel />
-      <DiagnosticsPanel {...diagnosticsProps(state.data)} />
-      <DeviceTuningPanel />
+
+      <p class="help-section-label">Advanced details</p>
+      <ConnectionDetails
+        identity={identity}
+        realIdentity={realIdentity}
+        onRenamed={(name) => {
+          setRenamed(name);
+          void settings.reload();
+        }}
+      />
 
       <Collapsible
         title="Saved settings (JSON)"
         status={settingsText === null ? 'Loading…' : 'Loaded'}
       >
         <pre class="settings-json-preview panel-inset">{settingsText ?? 'Loading…'}</pre>
+        <div class="settings-actions">
+          <button class="ghostbtn" type="button" onClick={() => void handleOpenInOS()}>
+            Open settings.json
+          </button>
+        </div>
       </Collapsible>
     </div>
   );

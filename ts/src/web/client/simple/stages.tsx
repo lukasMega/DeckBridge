@@ -1,13 +1,16 @@
 // Stage renderers — one per device state (see deriveState in ui-helpers).
+import { OwnershipDiagram } from '../components/OwnershipDiagram.js';
 import { useStore } from '../lib/store.js';
 import { useFetched } from '../lib/ui-api.js';
 import { ICON, Icon } from '../components/Icon.js';
 import type { DockUi } from '../ui-types.js';
-import { Step, Brightness, ManualAddPanel, RestartNote } from './controls.js';
+import { Brightness } from './controls.js';
+import { PairingFlow } from './pairing-flow.js';
+import { ConnectionPath } from '../components/ConnectionPath.js';
 import { KeyGridPreview } from '../components/KeyGridPreview.js';
 import { ExtraKeysPanel } from './extra-keys-panel.js';
-import { DockList } from './dock-cards.js';
-import { openSdApp, quitElgatoApp } from './handlers.js';
+import { DockList, keyPressTitle } from './dock-cards.js';
+import { pressKey, quitElgatoApp } from './handlers.js';
 import {
   isMultiDockView,
   clientAppName,
@@ -26,25 +29,22 @@ export function StageReady({
   const touchStrip = useStore((s) => selectedTouchStripSize(s.status));
   const selectedDock = useStore((s) => s.status.selectedDock);
   const appName = useStore((s) => clientAppName(s.status.clientApp));
+  const modelName = useStore((s) => s.status.modelName);
+  const keyPressEnabled = useStore((s) => s.keyPressEnabled);
+  const paired = useStore((s) => s.status.elgatoConnected);
 
   if (docks !== undefined && isMultiDockView(docks) && onHelp !== undefined) {
     const sel = docks.find((d) => d.index === selectedDock) ?? docks[0]!;
-    const summary =
-      docks.length > 1
-        ? `All ${docks.length} decks are connected${appName} and ready to use.`
-        : `${sel.modelName} is connected${appName} and ready to use.`;
+    const many = docks.length > 1;
     return (
       <>
-        <div class="hero">
-          {/* eslint-disable-next-line @eslint-react/dom-no-dangerously-set-innerhtml -- static trusted SVG icon markup */}
-          <div class="hero-badge circle" dangerouslySetInnerHTML={{ __html: ICON.check }} />
-          <h1>Everything&apos;s working</h1>
-          <p>{summary}</p>
-        </div>
+        <h1 class="stage-title">
+          {many ? `All ${docks.length} decks connected` : 'Connected'}
+          {appName}
+        </h1>
+        {!many && <ConnectionPath device="done" app="done" deviceName={sel.modelName} />}
         <DockList docks={docks} onHelp={onHelp} />
-        {docks.length > 1 && (
-          <p class="step-sub">Click a deck to see its live preview and adjust its brightness.</p>
-        )}
+        {many && <p class="step-sub">Select a deck for its live preview and brightness.</p>}
         <Brightness dock={sel.index} level={sel.brightness} deviceName={sel.modelName} />
         <ExtraKeysPanel />
       </>
@@ -53,12 +53,8 @@ export function StageReady({
 
   return (
     <>
-      <div class="hero">
-        {/* eslint-disable-next-line @eslint-react/dom-no-dangerously-set-innerhtml -- static trusted SVG icon markup */}
-        <div class="hero-badge circle" dangerouslySetInnerHTML={{ __html: ICON.check }} />
-        <h1>Everything&apos;s working</h1>
-        <p>Your Stream Deck is connected{appName} and ready to use.</p>
-      </div>
+      <h1 class="stage-title">Connected{appName}</h1>
+      <ConnectionPath device="done" app="done" deviceName={modelName} />
       <KeyGridPreview
         keyCount={keyCount}
         columns={columns}
@@ -66,6 +62,10 @@ export function StageReady({
         modelId={modelId}
         coraProfile={coraProfile}
         touchStrip={touchStrip}
+        onKeyClick={pressKey}
+        gesture="dblclick"
+        clickable={keyPressEnabled && paired}
+        clickTitle={keyPressTitle(keyPressEnabled, paired)}
       />
       <Brightness />
       <ExtraKeysPanel />
@@ -85,9 +85,7 @@ export function StageMultiPairing({
         {docks.length} decks connected — {left} left to pair
       </h1>
       <DockList docks={docks} onHelp={onHelp} />
-      <p class="step-sub">
-        Each deck appears as its own Network Dock in the Elgato app — pair them one at a time.
-      </p>
+      <p class="step-sub">Each deck pairs as its own Network Dock. Select one to pair it.</p>
     </>
   );
 }
@@ -104,36 +102,9 @@ export function StageDeviceNoElgato({
 
   return (
     <>
-      {/* eslint-disable @eslint-react/dom-no-dangerously-set-innerhtml -- static trusted HTML string literal */}
-      <h1
-        class="stage-title"
-        dangerouslySetInnerHTML={{
-          __html: 'Almost there — <span class="accent">1 step left</span>',
-        }}
-      />
-      {/* eslint-enable @eslint-react/dom-no-dangerously-set-innerhtml */}
-      <div class="checklist">
-        <Step kind="done" title="Stream Deck connected">
-          {modelName && <div class="step-sub">{modelName}</div>}
-        </Step>
-        <Step
-          kind="active"
-          title={
-            <a
-              href="streamdeck://"
-              id="openSdApp"
-              class="app-link"
-              title="Open Elgato Stream Deck"
-              onClick={openSdApp}
-            >
-              Open the Elgato Stream Deck app
-            </a>
-          }
-        >
-          <ManualAddPanel onHelp={onHelp} />
-          <RestartNote />
-        </Step>
-      </div>
+      <h1 class="stage-title">Connect your control app</h1>
+      <ConnectionPath device="done" app="active" deviceName={modelName} />
+      <PairingFlow onHelp={onHelp} />
       <KeyGridPreview
         keyCount={keyCount}
         columns={columns}
@@ -156,25 +127,14 @@ export function StageNoDevice({
 
   return (
     <>
-      <h1 class="stage-title">Let&apos;s get you set up</h1>
-      <div class="checklist">
-        <Step kind="active" title="Plug in your Stream Deck" helpId="plug-in" onHelp={onHelp}>
-          <div class="step-sub">
-            Connect it via USB. Make sure the Elgato desktop app is not running.
-          </div>
-        </Step>
-        <Step
-          kind="pending"
-          title="Open the Elgato Stream Deck app"
-          helpId="open-app"
-          onHelp={onHelp}
-        >
-          <div class="step-sub">Once your deck is detected, this lights up next.</div>
-        </Step>
-      </div>
-      <div class="status-line">
-        <span class="ico-spin" /> Waiting for a device…
-      </div>
+      <h1 class="stage-title">Connect your device</h1>
+      <ConnectionPath device="active" app="pending" />
+      <p class="step-sub">
+        Plug it in via USB and quit the Elgato app.{' '}
+        <button class="linkbtn accent" type="button" onClick={() => onHelp('plug-in')}>
+          Help
+        </button>
+      </p>
       {hidapiMissing && (
         <div class="warnrow">
           <Icon class="w-ico" html={ICON.warn} />
@@ -195,16 +155,14 @@ export function StageConflict(): preact.JSX.Element {
     <div class="conflict">
       {/* eslint-disable-next-line @eslint-react/dom-no-dangerously-set-innerhtml -- static trusted SVG icon markup */}
       <div class="conflict-badge circle" dangerouslySetInnerHTML={{ __html: ICON.warn }} />
-      <h1>Elgato app is blocking access</h1>
-      <p class="conflict-body">
-        The Elgato Stream Deck app is running and has claimed the USB device. Quit it so DeckBridge
-        can take over.
-      </p>
+      <h1>Elgato app owns the USB device</h1>
+      <OwnershipDiagram />
+      <p class="conflict-body">Quit the Elgato app so DeckBridge can take over.</p>
       <button class="ctabtn" id="quitElgatoBtn" type="button" onClick={quitElgatoApp}>
-        Quit Elgato App
+        Quit Elgato app
       </button>
       <p class="conflict-after">
-        After quitting, reconnect your Stream Deck if it isn&apos;t detected automatically.
+        Quits the app on this computer only. Then reconnect your deck if it is not detected.
       </p>
     </div>
   );

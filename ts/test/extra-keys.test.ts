@@ -12,6 +12,7 @@ import {
 } from '../src/shared/types.js';
 import { MIRABOX_293S_MODEL } from '../src/devices/mirabox/mirabox-293s.js';
 import { AJAZZ_AKP05E_MODEL } from '../src/devices/ajazz/akp05e.js';
+import { NATIVE_AKP05E_MODEL } from './helpers/native-akp05e.js';
 import type { DeviceImageSpec, DeviceModel } from '../src/devices/driver.js';
 import type { WidgetPaint } from '../src/shared/widget-layout.js';
 import { testAsync as test, summary } from './helpers/harness.js';
@@ -315,7 +316,7 @@ await test('a text size change alone repaints; the paint reports clipping', () =
 
 await test('AKP05E touch-strip widgets use all four zones and their image spec', () => {
   const d = new FakeDriver();
-  d.model = AJAZZ_AKP05E_MODEL;
+  d.model = NATIVE_AKP05E_MODEL;
   const w = new ExtraKeyWidgets(
     d,
     (wireId) => (wireId === 1 ? { widget: 'text', param: 'Hi' } : undefined),
@@ -347,7 +348,7 @@ const zone1Only = (wireId: number): ExtraKeyConfig | undefined => {
 
 function stripDock(mode?: TouchStripMode): { d: FakeDriver; w: ExtraKeyWidgets } {
   const d = new FakeDriver();
-  d.model = AJAZZ_AKP05E_MODEL;
+  d.model = NATIVE_AKP05E_MODEL;
   return { d, w: new ExtraKeyWidgets(d, zone1Only, mode) };
 }
 
@@ -419,7 +420,7 @@ function repaintDock(
   upload: TouchStripUpload = 'full-frames',
 ): { d: FakeDriver; w: ExtraKeyWidgets } {
   const d = new FakeDriver();
-  d.model = AJAZZ_AKP05E_MODEL;
+  d.model = NATIVE_AKP05E_MODEL;
   d.touchStripOptions = { zoneFit: 'crop', upload };
   const configFor = (wireId: number) => (wireId === 1 ? zone1() : undefined);
   return { d, w: new ExtraKeyWidgets(d, configFor, 'deckbridge-repaint', () => holdMs) };
@@ -1029,8 +1030,8 @@ await test('shifted text is never clipped at any orbit offset', () => {
 });
 
 await test('appOwnedZones: strip zones without a DeckBridge widget; none in elgato-mode ownership', () => {
-  const d = new FakeDriver(AJAZZ_AKP05E_MODEL);
-  const ids = AJAZZ_AKP05E_MODEL.widgetDisplays!.map((x) => x.wireId);
+  const d = new FakeDriver(NATIVE_AKP05E_MODEL);
+  const ids = NATIVE_AKP05E_MODEL.widgetDisplays!.map((x) => x.wireId);
   const cfg = (id: number): ExtraKeyConfig | undefined =>
     id === ids[0] ? { widget: 'text', param: 'x' } : undefined;
   const ignore = new ExtraKeyWidgets(d, cfg, 'deckbridge-ignore');

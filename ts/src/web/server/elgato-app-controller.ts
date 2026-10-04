@@ -8,6 +8,7 @@ import { createElgatoAppControl } from '../../infra/elgato-app.js';
 import type { ElgatoAppControl, RestartResult } from '../../infra/elgato-app.js';
 import { platformName } from '../../infra/os-utils.js';
 import type { ControllerHost } from './types.js';
+import type { ElgatoAppStatus } from '../contract.js';
 
 const SUPPORTED_PLATFORMS = new Set(['macOS', 'Windows']);
 
@@ -35,6 +36,13 @@ export class ElgatoAppController {
   /** Persist the auto-restart opt-out + grace delay (WebUI "Elgato app" toggle/field). */
   set(enabled: boolean, delayS?: number): void {
     this.host.settings.setElgatoAutoRestart(enabled, delayS);
+  }
+
+  async status(): Promise<ElgatoAppStatus> {
+    return {
+      running: await this.control.isRunning(),
+      supported: this.state().supported,
+    };
   }
 
   /** Manual restart (WebUI button / tray "Restart Elgato App"): the app is

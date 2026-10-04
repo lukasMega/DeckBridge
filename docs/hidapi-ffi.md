@@ -1,8 +1,9 @@
-# HID via FFI: why `libhidapi` is loaded from Homebrew
+# HID transport and discovery through FFI
 
-Documents `ts/src/ffi/hidapi.ts` — why DeckBridge reaches out to a system-installed
-`libhidapi` (the Homebrew `dylib` on macOS) instead of bundling HID support, and how
-that loading works at runtime.
+Validated against source: 2026-10-03.
+Packaged builds embed their native libraries.
+Development builds can use system libraries.
+Discovery and device transport remain separate.
 
 ## TL;DR
 
@@ -20,8 +21,9 @@ Rather than compile a C extension into the binary, the project **borrows the OS'
 - `import FFI from 'tjs:ffi'` — txiki.js's foreign-function interface (libffi under the hood).
 - `FFI.dlopen(path, { ...signatures })` opens the shared library and declares each C
   function's arg/return types so JS can call them. That is the entire `HidapiSymbols`
-  surface: `hid_init`, `hid_open`, `hid_open_path`, `hid_write`, `hid_read_timeout`,
+  surface: `hid_init`, `hid_exit`, `hid_open_path`, `hid_write`, `hid_read_timeout`,
   feature reports, `hid_close`, `hid_error`.
+  Report-descriptor access loads optionally.
 
 So `libhidapi` is the actual device driver; `hidapi.ts` is the thin, typed bridge from
 TypeScript into it.
@@ -60,61 +62,84 @@ The handle is opened once and reused for the worker session (module-level
 
 ## Two separate libraries
 
-Do not conflate the two `dlopen`s in this file — they serve different roles:
+| Library | Binding | Responsibility |
+|---|---|---|
+| `libhidapi` | `ffi/hidapi.ts` | Open paths; read/write reports |
+| `deckbridge-native` | `ffi/hid-discovery.ts` | Filtered operational inventory and reset |
+| `deckbridge-native` | `ffi/hidapi.ts` | Full diagnostic inventory |
+| `deckbridge-native` | `ffi/image-proc.ts` | Image transform and strip composition |
 
-| Library | Loaded by | Source | Role |
-|---------|-----------|--------|------|
-| **`libhidapi`** | `loadHidapi()` | OS / Homebrew (or bundled `HIDAPI_LIB`) | The real HID driver: open device, read/write reports. Drives the Stream Deck. |
-| **`deckbridge-native`** (HID export) | `loadHidEnum()` | Project's own Rust cdylib via `DECKBRIDGE_NATIVE_LIB` | Device **enumeration only** — `mirabox_hid_find_path(vid, pid, usagePage, usage)` returns a single device-path string (`pid=0` matches any PID). |
+### Why native enumeration exists
 
-### Why a Rust helper just for enumeration
+Native code walks HID enumeration structures.
+TypeScript receives tab-separated inventory rows.
+Operational scans filter supported VID/PID pairs.
+Diagnostics can request full inventories separately.
+Server-side enumeration runs on `hid-scan-worker.ts`.
+Standalone CLI diagnostics can enumerate synchronously.
 
-`loadHidapi`'s binding list **deliberately omits** `hid_enumerate` — it returns a
-linked-list of C structs painful to marshal across this FFI. Instead the
-`deckbridge-native` cdylib walks the device list natively and returns one null-terminated
-path, which the driver opens with `hid_open_path()`. Opening by path avoids claiming
-system-owned interfaces on macOS (the OS grants the first `hid_open(VID,PID)` caller
-exclusive access).
+```text
+DEVICE_MODELS → supported VID/PID pairs
+  → scan worker → mirabox_hid_list_supported
+  → inventory → HidDiscovery.paths(model)
+  → USB worker → HidDeviceBase._openPath
+  → libhidapi.hid_open_path
+```
 
-If `DECKBRIDGE_NATIVE_LIB` is unset or fails to load, enumeration finds no path and no
-device opens: drivers open by path only (`HidDeviceBase._openPath`), with no
-`hid_open(VID, PID)` fallback. On macOS `hid_open(VID, PID)` opens the device's first IOKit
-interface, and a permission-denied open on it SIGBUSes the whole process; elsewhere it can
-grab the wrong unit. Reconnect retries happen at a higher level, in `driver-manager`.
-Every Mirabox/Ajazz/Fifine model sets `usagePage`/`usage` (293V3, 293S, K1 Pro, Fifine
-AmpliGame D6 rev. 2, and the untested Ajazz AKP153E/R rev. 2 — all `0xffa0`/`1`); Elgato models skip path-based open entirely.
+All real drivers open explicit paths.
+Elgato models also use this flow.
+Optional usage filters select HID collections.
+Missing discovery libraries mean no matching paths.
+There is no VID/PID open fallback.
 
 ## FFI type signatures
 
-```
-hid_init()                         → int
-hid_exit()                         → int
-hid_open(uint16 vid, uint16 pid, pointer serial)   → pointer (device handle)
-hid_open_path(string path)         → pointer
-hid_write(pointer dev, buffer, size_t len)         → int
-hid_read_timeout(pointer dev, buffer, size_t len, int timeoutMs) → int
-hid_send_feature_report(pointer dev, buffer, size_t len)         → int
-hid_get_feature_report(pointer dev, buffer, size_t len)          → int
-hid_close(pointer dev)             → void
-hid_error(pointer dev)             → pointer (const wchar_t*; decode via hidErrorString())
+```text
+hid_init() → int
+hid_exit() → int
+hid_open_path(string path) → pointer
+hid_write(pointer, buffer, size_t) → int
+hid_read_timeout(pointer, buffer, size_t, int) → int
+hid_send_feature_report(pointer, buffer, size_t) → int
+hid_get_feature_report(pointer, buffer, size_t) → int
+hid_close(pointer) → void
+hid_error(pointer) → pointer
+hid_get_report_descriptor(pointer, buffer, size_t) → int  [optional]
 
-// deckbridge-native HID exports:
-mirabox_hid_find_path(uint16 vid, uint16 pid, uint16 usagePage, uint16 usage,
-                      buffer out, size_t bufLen)   → int  (1=found, 0=not; pid=0 matches any PID)
-mirabox_hid_present(uint16 vid, uint16 pid)        → int  (1=found, 0=not; presence via enumeration, never opens)
+mirabox_hid_list_supported(string filters, buffer, size_t) → int
+mirabox_hid_list_all(buffer, size_t) → int
+mirabox_hid_reset() → int
 ```
 
-`isNullPtr()` guards returns from `hid_open` / `hid_open_path` — an FFI pointer that
-`.equals(null)` means the open failed.
+`hid_error` returns native wide characters.
+Decode them through `hidErrorString()`.
+`isNullPtr()` checks failed path opens.
+Descriptor loading falls back to core symbols.
+Older libraries therefore retain basic transport.
+
+Native legacy lookup exports remain available.
+Current discovery bindings bypass those exports.
+See `rust/deckbridge-native/src/hid.rs` for declarations.
+
+## Handle lifecycle
+
+`HidDeviceBase` owns worker-local transport handles.
+Successful sessions close before library teardown.
+Failed opens call `hid_exit()` without unloading.
+Preserve this distinction during driver changes.
+Discovery reset runs on its scan thread.
 
 ## Key files
 
-| File | Role |
-|------|------|
-| `ts/src/ffi/hidapi.ts` | `loadHidapi()` candidate chain · `loadHidEnum()` / `listHidPaths()` · FFI signatures · `isNullPtr()` |
-| `rust/deckbridge-native/` | Rust cdylib exporting `mirabox_hid_find_path` (loaded via `DECKBRIDGE_NATIVE_LIB`), plus `image_proc_transform` |
-| `ts/src/infra/native-libs.ts` | Extracts the embedded native libs at runtime and sets `DECKBRIDGE_NATIVE_LIB` / `HIDAPI_LIB` (no separate `run.sh` — libs are embedded in the binary) |
-| `ts/src/devices/hid-device-base.ts` | Per-worker `loadHidapi()` singleton · `_openPath()` (path-only open) · read loop · teardown |
+| File | Responsibility |
+|---|---|
+| `ts/src/ffi/hidapi.ts` | Transport loading; full inventory; matching |
+| `ts/src/ffi/hid-discovery.ts` | Filtered scans and discovery reset |
+| `ts/src/worker/hid-scan-worker.ts` | Enumeration thread and registry filters |
+| `ts/src/main/driver-manager-discovery.ts` | Snapshot-based device path selection |
+| `ts/src/devices/hid-device-base.ts` | Path open, polling, transport cleanup |
+| `rust/deckbridge-native/src/hid.rs` | Native inventory and legacy exports |
+| `ts/src/infra/native-libs.ts` | Embedded-library extraction and environment |
 
 ## Related docs
 

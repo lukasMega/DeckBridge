@@ -13,7 +13,6 @@ import {
   PLUS_PROFILE,
   resetOverride,
   restoreSettings,
-  setOverride,
   test,
   useDevice,
   waitForState,
@@ -91,13 +90,7 @@ test.describe('standby and burn-in care (mock, fast timing)', () => {
     const base = app.baseURL;
     await useDevice(request, base, AKP05E.id);
     await api(request, base, '/api/encoders', { connectToApp: true });
-    await setOverride(
-      request,
-      base,
-      AKP05E.id,
-      { cora: { advertiseAs: PLUS_PROFILE.advertiseAs, productId: PLUS_PROFILE.productId } },
-      (s) => dock0(s).coraProfile === PLUS_PROFILE.advertiseAs,
-    );
+    await waitForState(request, base, (s) => dock0(s).coraProfile === PLUS_PROFILE.advertiseAs);
     // Two seconds of idle, so the follow-up turn lands before the deck dims again.
     await setStandby(request, base, { idleDim: true, idleMinutes: 2, idleLevel: 10 });
     const elgato = await connectElgato(request, base, app.childPort);
@@ -115,7 +108,6 @@ test.describe('standby and burn-in care (mock, fast timing)', () => {
       await expect.poll(() => elgato.received().includes(PLUS_ROTATE_KNOB0)).toBe(true);
     } finally {
       await elgato.close();
-      await resetOverride(request, base, AKP05E.id, (s) => dock0(s).coraProfile === undefined);
       await useDevice(request, base, DEFAULT_DEVICE);
     }
   });

@@ -1,4 +1,4 @@
-import { ELGATO_MK2_PID, IMAGE_JPEG_QUALITY } from '../../shared/types.js';
+import { ELGATO_PLUS_PID, IMAGE_JPEG_QUALITY } from '../../shared/types.js';
 import type { DeviceEmulation, DeviceImageSpec, DeviceModel } from '../driver.js';
 
 const KEY_IMAGE: DeviceImageSpec = {
@@ -65,7 +65,7 @@ export const AJAZZ_AKP05E_MODEL: DeviceModel = {
   rows: 2,
   keyWidth: 112,
   keyHeight: 112,
-  image: KEY_IMAGE,
+  image: STREAM_DECK_PLUS_EMULATION.image,
   splash: { transformOverride: { rotate: 180 } },
   wire: { packetSize: 1024, inSize: 512, reportId: 0 },
   widgetDisplays: [
@@ -75,15 +75,13 @@ export const AJAZZ_AKP05E_MODEL: DeviceModel = {
     { wireId: 4, label: 'Right', image: TOUCH_SLOT_IMAGE, stripX: 610 },
   ],
   touchStripDisplay: { wireId: 1, image: TOUCH_STRIP_IMAGE },
-  // Input codes are 1-based and row-ordered (1-5 top, 6-10 bottom), unlike the image
-  // wire ids above. Encoder/touch codes (0x33+) are decoded by the driver, not mapped here.
-  keyMap: {
-    coraToWireImage: [11, 12, 13, 14, 15, 6, 7, 8, 9, 10],
-    wireInputToCora: [-1, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
-  },
+  // Default pairing is the Stream Deck + emulation; the raw 1-based input codes
+  // (1-5 top, 6-10 bottom) are mapped by the emulation's keyMap.
+  keyMap: STREAM_DECK_PLUS_EMULATION.keyMap,
   // Desktop acceptance of custom 2x5 geometry needs hardware pairing validation.
   cora: {
-    productId: ELGATO_MK2_PID,
+    productId: ELGATO_PLUS_PID,
+    advertiseAs: 'stream-deck-plus',
     usePhysicalIdentity: false,
     emulations: { 'stream-deck-plus': STREAM_DECK_PLUS_EMULATION },
   },
