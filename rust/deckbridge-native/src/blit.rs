@@ -83,7 +83,6 @@ mod tests {
     use crate::bmp::encode_bmp;
     use image::{DynamicImage, Rgb, RgbImage};
 
-    /// Widths stay multiples of 4: encode_bmp writes unpadded rows.
     fn bmp(w: u32, h: u32, px: [u8; 3]) -> Vec<u8> {
         encode_bmp(
             DynamicImage::ImageRgb8(RgbImage::from_pixel(w, h, Rgb(px))),
