@@ -77,7 +77,7 @@ later per-class rules keep only size/background/placement deltas */
 .push-tokens li {
   flex-wrap: wrap;
 }
-:is(.strip-zone-canvas, .side-keys-sankey),
+.strip-zone-canvas,
 .help-stage svg {
   height: auto;
 }
@@ -141,6 +141,9 @@ later per-class rules keep only size/background/placement deltas */
 }
 
 /* ---- live key preview ---- */
+.stage > .preview:first-child {
+  margin-top: 0;
+}
 :is(.preview-label, .addr-label) {
   letter-spacing: 0.06em;
 }
@@ -867,8 +870,11 @@ input[type='range'].range:disabled {
     opacity: 1;
   }
 }
-.hsvg :is(.hilite, .clickring) {
+.hsvg .hilite {
   animation: hpulse 1s ease-in-out 3 alternate both;
+}
+.hsvg .clickring {
+  animation: fade 3.4s step-end both;
 }
 @keyframes hpulse {
   from {
@@ -1181,27 +1187,6 @@ select.input.xkey-select {
 .toast.show {
   opacity: 1;
   transform: translateX(-50%) translateY(0);
-}
-.side-keys-flow-blue {
-  fill: #60a5fa;
-}
-.side-keys-flow-amber {
-  fill: #fbbf24;
-}
-.side-keys-flow-direction {
-  fill: none;
-  stroke-width: 1.5;
-}
-.side-keys-flow-node {
-  fill: var(--surface-2);
-  stroke: var(--border-strong);
-}
-:is(.side-keys-flow-heading, .side-keys-flow-label, .side-keys-flow-caption) {
-  text-anchor: middle;
-  fill: var(--fg);
-}
-.side-keys-flow-caption {
-  fill: var(--fg-muted);
 }
 .device-test-option {
   gap: 6px 12px;

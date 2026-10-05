@@ -1721,9 +1721,8 @@ async function checkSideKeysHelp(): Promise<void> {
   check(
     [...help!.querySelectorAll('.side-keys-device-column .side-keys-device-key')]
       .map((key) => key.textContent)
-      .join(',') === 'Top,Bottom' &&
-      help!.querySelector('.side-keys-sankey')?.textContent.includes('4 × 2 keys') === true,
-    'Plus mode labels physical side keys and correct Sankey grid size',
+      .join(',') === 'Top,Bottom',
+    'Plus mode labels physical side keys',
   );
   check(
     help!.querySelector('.side-keys-device')?.getAttribute('aria-label') ===
