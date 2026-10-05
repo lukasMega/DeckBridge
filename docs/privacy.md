@@ -20,7 +20,8 @@ Per page view, stored only as running daily counts:
 - **Browser, OS, device type** — from the server-side User-Agent, no version fingerprint.
 - **Language** and **timezone** — coarse locale hint instead of IP geolocation.
 - **Viewport bucket** (`<640`, `640–1024`, `>1024`) — layout only.
-- **Campaign tags** (`utm_source` / `utm_medium` / `utm_campaign`) when present.
+- **Campaign tags** (`utm_source` / `utm_medium` / `utm_campaign`) when present. Links from
+  the DeckBridge app carry them; the page removes them from the address bar once counted.
 - **Outbound-link / download clicks** — destination host or file name.
 - **Whether the page saw any interaction**, and how soon after load, as one of three
   coarse buckets. No mouse coordinates, no movement, no event trace — only that a real
@@ -58,7 +59,7 @@ request. Turn it off with the **Check for updates** toggle in Settings, or by se
 `"updateCheck": false` in `settings.json`.
 
 A **daily usage ping**, on its own timer (first one 5 minutes after startup — see
-below for why). One request per UTC day, carrying six things:
+below for why). One request per UTC day, carrying seven things:
 
 - **OS family** — `macos` / `windows` / `linux`.
 - **OS major version** — `windows-11`, `macos-26`, `ubuntu-24.04`. Never the patch level.
@@ -71,10 +72,13 @@ below for why). One request per UTC day, carrying six things:
   WebUI reports one. Otherwise, UTC offset, such as `UTC+02:00`. Named zones
   reveal more about approximate location than offsets. This remains an
   aggregate-only counter; browser timezone is never saved in settings.
+- **Docs topics opened from the WebUI** since the last ping — topic names only (e.g.
+  `push-api`): no count, no time, nothing about the page you were on. Not recorded at all
+  while the ping is off.
 
 The collector stores aggregate counters only: no row per install, no visitor id,
 nothing to join two days' pings together. The only local state is `a7sDay`, the UTC day
-of the last ping, which never leaves the machine. Turn it off with `"a7s": false` in
+of the last ping (which never leaves the machine), and the docs topics waiting for the next ping. Turn it off with `"a7s": false` in
 `settings.json` — a separate switch from the update check.
 
 ### When DeckBridge does not ping at all

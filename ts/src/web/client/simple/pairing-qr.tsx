@@ -2,6 +2,7 @@
 // confirm, one pinned file is fetched from a CDN and run ONLY inside a sandboxed iframe (no
 // allow-same-origin), because the admin page can edit settings and bind keys to shell commands.
 // The frame gets text and returns a boolean matrix; nothing else crosses the boundary.
+import { DocsLink } from '../components/DocsLink.js';
 import { useEffect, useState } from 'preact/hooks';
 
 export const QR_LIB = {
@@ -159,9 +160,8 @@ export function PairingQr({
         </p>
         <code class="push-token">{QR_LIB.url}</code>
         <p class="multi-deck-note">
-          The request leaves this computer. The file is checked against {QR_LIB.integrity} and runs
-          in an isolated frame that cannot reach DeckBridge. Skip this and use the 6-digit code
-          instead.
+          The request leaves this computer; the file is checked and sandboxed. Or use the 6-digit
+          code. <DocsLink topic="qr-code" />
         </p>
         <button class="ghostbtn" id="qr-load" type="button" onClick={confirm}>
           {state.kind === 'failed' ? 'Try again' : 'Load QR code'}

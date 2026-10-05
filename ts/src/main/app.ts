@@ -425,6 +425,7 @@ if (!__MOCK_BUILD__ || tjs.env.DECKBRIDGE_MOCK !== '1') {
     getLastPingDay: () => settings.a7sDay,
     setLastPingDay: (day) => settings.setDailyPingDay(day),
     modelIds: () => driverManager.getDockStatuses().map((d) => d.modelId),
+    docsSeen: () => settings.docsSeen,
     send: sendBeacon,
     platform: platformName,
     browserLocale: () => settings.browserLocale,

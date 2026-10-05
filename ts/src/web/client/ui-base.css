@@ -301,6 +301,7 @@ select.input {
   color: var(--accent);
 }
 .step-sub a,
+.docs-link,
 .manual-add-docs {
   color: var(--accent);
   font-weight: 600;

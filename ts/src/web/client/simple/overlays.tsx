@@ -1,5 +1,6 @@
 // Full-stage overlays: the About popover, the Settings page, and the
 // per-step help screen.
+import { DocsLink } from '../components/DocsLink.js';
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { ICON, Icon } from '../components/Icon.js';
 import { HELP } from '../ui-help.js';
@@ -160,6 +161,7 @@ export function AboutPopover({ onClose }: Readonly<{ onClose: () => void }>): pr
           runs on your computer and appears as a network device.
         </p>
         <p class="about-usage">Free, community-built software for personal and hobby use.</p>
+        <DocsLink topic="home" block label="Documentation" />
         <div class="about-notice">
           <h3>Independent project</h3>
           <p>
@@ -459,16 +461,20 @@ export function HelpScreen({
         })}
       </ol>
       {topic.docs && (
-        <a
-          class="manual-add-docs"
-          href={topic.docs.href}
-          target="_blank"
-          rel="noopener"
-          style="margin-top:16px"
-        >
-          <Icon html={ICON.book} />
-          <span>{topic.docs.label}</span>
-        </a>
+        <div style="margin-top:5px">
+          {topic.docs.map((d) => (
+            <div key={'topic' in d ? d.topic : d.href}>
+              {'topic' in d ? (
+                <DocsLink topic={d.topic} block label={d.label} />
+              ) : (
+                <a class="manual-add-docs" href={d.href} target="_blank" rel="noopener">
+                  <Icon html={ICON.book} />
+                  <span>{d.label}</span>
+                </a>
+              )}
+            </div>
+          ))}
+        </div>
       )}
     </div>
   );

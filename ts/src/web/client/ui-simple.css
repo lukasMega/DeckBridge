@@ -901,6 +901,17 @@ input[type='range'].range:disabled {
     display: none;
   }
 }
+/* 200 % zoom on a phone (~195 px): wrap the rows that cannot shrink */
+@media (max-width: 240px) {
+  .topbar,
+  .brand,
+  .brightness {
+    flex-wrap: wrap;
+  }
+  .brightness .fader {
+    flex-basis: 100%;
+  }
+}
 @media (prefers-reduced-motion: reduce) {
   *,
   ::before,

@@ -5,6 +5,7 @@ import {
   pickFallbackPort,
   WebUIServer,
 } from '../src/web/server/web-ui-server.js';
+import { docsUrl, docsTrackingAllowed } from '../src/web/server/docs-links.js';
 import { Broadcaster } from '../src/web/server/broadcaster.js';
 import { OWN_IP_CACHE_TTL_MS, resetOwnIpCache } from '../src/web/server/web-request-guard.js';
 import { saveSettings } from '../src/infra/settings-store.js';
@@ -889,6 +890,41 @@ try {
 
   await runWebTest('POST /api/touch-strip (removed) → 404', async () => {
     assert.equal((await post('/api/touch-strip', { disabled: true })).status, 404);
+  });
+
+  const goDocs = (topic: string, headers: Record<string, string> = {}): Promise<Response> =>
+    fetch(`${base}/go/docs/${topic}`, { redirect: 'manual', headers });
+  const ownNav = { 'Sec-Fetch-Site': 'same-origin', 'Sec-Fetch-Dest': 'document' };
+
+  await runWebTest('GET /go/docs/:topic: unknown topic → 404, nothing recorded', async () => {
+    assert.equal((await goDocs('nope', ownNav)).status, 404);
+    assert.equal((await goDocs('__proto__', ownNav)).status, 404);
+    assert.deepEqual(routesUi.settings.docsSeen, []);
+  });
+
+  await runWebTest(
+    'GET /go/docs/:topic: own navigation → 302 to docsUrl, topic recorded',
+    async () => {
+      const r = await goDocs('image-fit', ownNav);
+      assert.equal(r.status, 302);
+      assert.equal(r.headers.get('location'), docsUrl('image-fit'));
+      assert.equal(r.headers.get('referrer-policy'), 'no-referrer');
+      // A CI/kill-switch environment legitimately suppresses recording.
+      if (docsTrackingAllowed(routesUi.settings.a7s, tjs.env)) {
+        assert.deepEqual(routesUi.settings.docsSeen, ['image-fit']);
+      }
+      routesUi.settings.docsSeen = [];
+    },
+  );
+
+  await runWebTest('GET /go/docs/:topic: cross-site or opted-out → 302, not recorded', async () => {
+    const r = await goDocs('push-api', { 'Sec-Fetch-Site': 'cross-site' });
+    assert.equal(r.status, 302);
+    assert.equal(r.headers.get('location'), docsUrl('push-api'));
+    routesUi.settings.a7s = false;
+    assert.equal((await goDocs('push-api', ownNav)).status, 302);
+    routesUi.settings.a7s = undefined;
+    assert.deepEqual(routesUi.settings.docsSeen, []);
   });
 } finally {
   await routesUi.stop().catch(() => undefined);

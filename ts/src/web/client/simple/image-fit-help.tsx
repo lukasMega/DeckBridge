@@ -1,4 +1,5 @@
 // Image fit applicability + the `?` modal explaining source vs device key size.
+import { DocsLink } from '../components/DocsLink.js';
 import { useState } from 'preact/hooks';
 import { ICON } from '../components/Icon.js';
 import { useDismiss } from '../lib/ui-hooks.js';
@@ -99,16 +100,18 @@ function ImageFitDialog({
           <dd id="image-fit-target">{px(fit.target)}</dd>
         </dl>
         <p>
-          <strong>resize</strong> scales the image to the key. Always works; adds slight blur.
+          <strong>resize</strong> scales to the key; slight blur.
         </p>
         <p>
-          <strong>pad</strong> keeps pixels 1:1 and fills the border. Only when the image is smaller
-          than the key{fit.padApplies ? '.' : ' — not the case here.'}
+          <strong>pad</strong> keeps pixels 1:1 and fills the border. Needs an image smaller than
+          the key{fit.padApplies ? '.' : ' — not the case here.'}
         </p>
         <p>
-          <strong>crop</strong> keeps pixels 1:1 and trims the centre to the key; smaller axes are
-          padded. Only when the image is larger than the key
-          {fit.cropApplies ? '.' : ' — not the case here.'}
+          <strong>crop</strong> keeps pixels 1:1 and trims the centre. Needs an image larger than
+          the key{fit.cropApplies ? '.' : ' — not the case here.'}
+        </p>
+        <p>
+          <DocsLink topic="image-fit" />
         </p>
       </div>
     </div>

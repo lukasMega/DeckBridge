@@ -47,8 +47,8 @@ function widgetSections(dock: DockUi | undefined): WidgetSection[] {
       title: pressable.size > 0 ? 'Extra buttons' : 'Status displays',
       subtitle:
         pressable.size > 0
-          ? 'Right column outside the Elgato grid — show a value; a press refreshes it or runs a command'
-          : 'Display-only right column — show a value on each zone',
+          ? 'Shows a value; a press refreshes it or runs a command.'
+          : 'Shows a value on each zone.',
       touchStrip: false,
       displays: [],
       encoderCount: 0,

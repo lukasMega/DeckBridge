@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'preact/hooks';
 import { Collapsible } from '../components/Collapsible.js';
 import { ToggleRow } from '../components/Fields.js';
-import { ICON, Icon } from '../components/Icon.js';
+import { DocsLink } from '../components/DocsLink.js';
 import { useStore } from '../lib/store.js';
 import { getJson, postJson } from '../lib/ui-api.js';
 import { Feedback, useAsyncAction } from '../lib/ui-async.js';
@@ -13,9 +13,6 @@ import { PairingAddressLink } from './pairing-address-modal.js';
 import { PairingQr, type QrLoader } from './pairing-qr.js';
 
 const POLL_MS = 2000;
-const VIRTUAL_DECK_HELP =
-  'Opens a page for any browser on your network. It shows up as one more dock in the Elgato ' +
-  'app. Layout: Stream Deck MK.2 (15 keys); more layouts may come.';
 // Mirrors shared/types.ts VIRTUAL_DOCK_INDEX (MAX_DOCKS - 1): the browser deck's fixed dock.
 const VIRTUAL_DOCK_INDEX = 3;
 
@@ -311,7 +308,7 @@ function VirtualDeckBody({
         disabled={state === null || action.busy}
         onChange={(next) => void toggle(next)}
       >
-        <Icon class="multi-deck-help" html={ICON.help} title={VIRTUAL_DECK_HELP} />
+        <DocsLink topic="browser-deck" />
       </ToggleRow>
       {state?.lastError && <p class="settings-error">{state.lastError}</p>}
       {state && enabled && (

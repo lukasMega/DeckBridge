@@ -2,6 +2,7 @@
 // log-file location, and the two diagnostics-report actions.
 //
 // Kept out of overlays.tsx to stay under the 500-line check-loc gate.
+import { DocsLink } from '../components/DocsLink.js';
 import { useState } from 'preact/hooks';
 import { Collapsible } from '../components/Collapsible.js';
 import { CheckField } from '../components/Fields.js';
@@ -12,8 +13,6 @@ import { Feedback, useAsyncAction } from '../lib/ui-async.js';
 /** Shown next to both report buttons and repeated as the report's own first line
  *  (diagnostics.ts REVIEW_NOTICE) — the file outlives this screen. */
 const PRIVACY_NOTE = 'Contains settings, commands and paths. Review before sharing.';
-
-const TROUBLESHOOTING_URL = 'https://deckbridge.dev/docs/troubleshooting';
 
 /** `logLevel` null = the settings page hasn't read /api/state yet. It is read
  *  there, not here, so opening Settings costs one request instead of two. */
@@ -80,9 +79,7 @@ export function DiagnosticsPanel({
     >
       <p class="help-lead">
         Enable debug logging. Reproduce problem. Create report.{' '}
-        <a href={TROUBLESHOOTING_URL} target="_blank" rel="noopener">
-          Troubleshooting
-        </a>
+        <DocsLink topic="troubleshooting" label="Troubleshooting" />
       </p>
       <div class="settings-actions">
         <button

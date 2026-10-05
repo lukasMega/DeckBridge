@@ -478,3 +478,19 @@ export interface WsEvents {
   update: UpdateInfo;
   pushChannels: { channels: PushChannelView[] };
 }
+
+/** Docs sections the WebUI links to; the id is the `/go/docs/:topic` path segment. */
+export type DocsTopic =
+  | 'home'
+  | 'devices'
+  | 'getting-started'
+  | 'pairing'
+  | 'browser-deck'
+  | 'qr-code'
+  | 'multi-deck'
+  | 'click-to-press'
+  | 'push-api'
+  | 'side-keys'
+  | 'device-tuning'
+  | 'image-fit'
+  | 'troubleshooting';

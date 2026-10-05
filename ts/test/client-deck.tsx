@@ -607,7 +607,7 @@ async function runClickToPress(root: HTMLElement, check: Check): Promise<void> {
       'Click to press header starts disabled',
     );
     check(
-      root.textContent.includes('Double-click a key in the preview'),
+      root.textContent.includes('Double-click a preview key'),
       'The toggle explains the double-click gesture and the exposure',
     );
     await act(async () => {

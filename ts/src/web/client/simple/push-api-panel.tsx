@@ -1,5 +1,6 @@
 // Settings-page block for the push API: token admin + the live channel table.
 // Values live in memory on the server; this panel only reads and clears them.
+import { DocsLink } from '../components/DocsLink.js';
 import { useEffect, useState } from 'preact/hooks';
 import { Collapsible } from '../components/Collapsible.js';
 import { copyLabel, useCopyText } from '../lib/use-copy-text.js';
@@ -209,8 +210,7 @@ export function PushApiPanel(): preact.JSX.Element {
       status={tokens === null ? null : tokens.length > 0}
     >
       <p class="multi-deck-note">
-        Let other tools write text onto side keys. Plain HTTP; reachable from the LAN only with
-        --bind. See docs/push-api.md.
+        Let other tools write text onto side keys. <DocsLink topic="push-api" />
       </p>
       {created && <TokenReveal created={created} onClose={() => setCreated(null)} />}
       <TokenList tokens={tokens ?? []} onChanged={loadTokens} onCreated={setCreated} />
