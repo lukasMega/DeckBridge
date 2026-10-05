@@ -210,6 +210,30 @@ await test('capped at MAX_DEVICE_IDS', () => {
 
 console.log('\nencodePayload / beaconUrl');
 
+await test('docs topics ride as a sorted, deduped dc field', () => {
+  const p = buildPayload({
+    ...base,
+    modelIds: [],
+    docsTopics: ['push-api', 'image-fit', 'push-api'],
+  });
+  assert.equal(p.dc, 'image-fit,push-api');
+});
+
+await test('dc is omitted entirely when nothing was opened', () => {
+  assert.equal('dc' in buildPayload({ ...base, modelIds: [] }), false);
+  assert.equal('dc' in buildPayload({ ...base, modelIds: [], docsTopics: [] }), false);
+});
+
+await test('docs topics outside the id shape are dropped', () => {
+  const p = buildPayload({
+    ...base,
+    modelIds: [],
+    docsTopics: ['ok-topic', 'Bad Topic', 'a,b', '', 'x'.repeat(33)],
+  });
+  assert.equal(p.dc, 'ok-topic');
+  assert.equal('dc' in buildPayload({ ...base, modelIds: [], docsTopics: ['A,B'] }), false);
+});
+
 await test('round-trips through the collector decode', () => {
   const encoded = encodePayload(buildPayload({ ...base, modelIds: ['mirabox-293s'] }));
   assert.deepEqual(decodePayload(encoded), {
@@ -283,6 +307,7 @@ function harness(
     version?: string;
     lastPingDay?: string;
     modelIds?: string[];
+    docsSeen?: string[];
     suppress?: SuppressReason;
     readLocale?: string;
     browserLocale?: string;
@@ -299,8 +324,11 @@ function harness(
     setLastPingDay: (d) => {
       lastPingDay = d;
       days.push(d);
+      // Mirrors settings.setDailyPingDay, which clears the live set.
+      opts.docsSeen?.splice(0);
     },
     modelIds: () => opts.modelIds ?? [],
+    docsSeen: () => opts.docsSeen ?? [],
     send: (encoded, version) => {
       sent.push({ encoded, version });
       return Promise.resolve();
@@ -330,6 +358,12 @@ await test('sends the OS, version and device model, and records the day', async 
     country: 'pl-PL',
   });
   assert.deepEqual(h.days, ['2026-09-18']);
+});
+
+await test('docs topics are snapshotted before setLastPingDay clears them', async () => {
+  const h = harness({ docsSeen: ['push-api', 'image-fit'] });
+  await h.ping();
+  assert.equal(decodePayload(h.sent[0]!.encoded).dc, 'image-fit,push-api');
 });
 
 await test('a thrown OS-version probe degrades the dim, it does not lose the ping', async () => {

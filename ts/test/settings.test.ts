@@ -240,4 +240,41 @@ await test('markPaired on a deviceKey with no entry (mock mode) is a no-op', () 
   assert.equal(settings.wasPaired(''), false);
 });
 
+await test('addDocsSeen dedupes and round-trips through disk', async () => {
+  const dir = `${ROOT}/docs-seen`;
+  const settings = new PersistedSettings(dir);
+  settings.addDocsSeen('push-api');
+  settings.addDocsSeen('image-fit');
+  settings.addDocsSeen('push-api');
+  assert.deepEqual(settings.docsSeen, ['push-api', 'image-fit']);
+  await settings.flush();
+
+  const reloaded = new PersistedSettings(dir);
+  await reloaded.load();
+  assert.deepEqual(reloaded.docsSeen, ['push-api', 'image-fit']);
+});
+
+await test('load() drops docsSeen entries outside the topic-id shape', async () => {
+  const dir = `${ROOT}/docs-seen-invalid`;
+  await saveSettings(
+    { docsSeen: ['ok', 'Bad Id', 'a,b', 42, '', 'x'.repeat(33)] as unknown as string[] },
+    dir,
+  );
+  const settings = new PersistedSettings(dir);
+  await settings.load();
+  assert.deepEqual(settings.docsSeen, ['ok']);
+});
+
+await test('setDailyPingDay clears docsSeen on disk too', async () => {
+  const dir = `${ROOT}/docs-seen-cleared`;
+  const settings = new PersistedSettings(dir);
+  settings.addDocsSeen('push-api');
+  settings.setDailyPingDay('2026-10-04');
+  assert.deepEqual(settings.docsSeen, []);
+  await settings.flush();
+  const onDisk = await loadSettings(dir);
+  assert.equal(onDisk.docsSeen, undefined);
+  assert.equal(onDisk.a7sDay, '2026-10-04');
+});
+
 summary();

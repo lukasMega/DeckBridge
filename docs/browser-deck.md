@@ -48,6 +48,19 @@ Both are needed.
 
 QR codes need an optional download. The address and code work without it.
 
+## QR code
+
+DeckBridge ships no QR library. When you ask for a QR code, it downloads
+**qrcode-generator 1.4.4** (MIT licence, about 55 kB) from the jsDelivr CDN:
+`https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.js`.
+
+- The request leaves your computer, so jsDelivr sees it.
+- The file is checked against a subresource-integrity hash
+  (`sha384-8FWZA6BGMXhsfO+BLtrJK0We6gg5o1JyO8xQm6peWDEUs17ACA5ziE/NIAkl9z2k`) taken from the
+  npm tarball, not only the CDN copy. A file that does not match is not run.
+- It runs in an isolated frame that cannot reach DeckBridge.
+- Skipping it is fine: the 6-digit code pairs the phone the same way.
+
 ### One dock per IP address
 
 Each deck needs a different IP address in the Elgato app.

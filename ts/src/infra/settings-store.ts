@@ -130,6 +130,8 @@ export interface Settings {
    *  — the only dailyPing state kept, and it never leaves the machine. */
   a7s?: boolean;
   a7sDay?: string;
+  /** Docs topics opened from the WebUI since the last daily ping; cleared when it is sent. */
+  docsSeen?: string[];
   /** Restart the Elgato desktop app when a previously-paired dock connects and the
    *  app hasn't attached to it itself within the grace period. Absent = on (see
    *  .claude/plans/2026-09-27_auto-restart-elgato-app.md). */

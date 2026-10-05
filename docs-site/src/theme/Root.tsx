@@ -41,6 +41,28 @@ export default function Root({ children }: { children: ReactNode }): ReactNode {
     return () => document.removeEventListener('click', onClick);
   }, []);
 
+  // Links from the DeckBridge app carry utm_* so the beacon can attribute them;
+  // drop them from the address bar once it has read them (only on first load).
+  useEffect(function stripUtm() {
+    const params = new URLSearchParams(location.search);
+    const keys = [...params.keys()].filter((k) => k.startsWith('utm_'));
+    if (keys.length === 0) return;
+    // The beacon sets globalThis.__da once running; without a collector, give up at 3 s.
+    const started = Date.now();
+    const timer = setInterval(() => {
+      if (!('__da' in globalThis) && Date.now() - started < 3000) return;
+      clearInterval(timer);
+      for (const k of keys) params.delete(k);
+      const q = params.toString();
+      history.replaceState(
+        history.state,
+        '',
+        location.pathname + (q ? `?${q}` : '') + location.hash,
+      );
+    }, 100);
+    return () => clearInterval(timer);
+  }, []);
+
   // Close on Esc / scroll, lock body scroll while open.
   useEffect(() => {
     if (!preview) return;

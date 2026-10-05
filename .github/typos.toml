@@ -60,6 +60,8 @@ labelled = "labelled"
 normalise = "normalise"
 normalises = "normalises"
 signalling = "signalling"
+licence = "licence"
+defence = "defence"
 # Legit domain tokens flagged as typos.
 IST = "IST"      # India Standard Time (worldclock example)
 Nd = "Nd"        # "N days" shorthand (countdown plugin)

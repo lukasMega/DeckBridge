@@ -6,11 +6,8 @@
 import { useState } from 'preact/hooks';
 import { Collapsible } from '../components/Collapsible.js';
 import { ToggleRow } from '../components/Fields.js';
-import { ICON, Icon } from '../components/Icon.js';
+import { DocsLink } from '../components/DocsLink.js';
 
-const MULTI_DECK_HELP =
-  'DeckBridge uses one deck and stops scanning USB once it is connected. ' +
-  'Turn this on for a second deck — it gets its own dock in the Elgato app. Maximum two.';
 import { postJson } from '../lib/ui-api.js';
 import { Feedback, useAsyncAction } from '../lib/ui-async.js';
 import { PairingAddressLink } from './pairing-address-modal.js';
@@ -42,7 +39,7 @@ export function MultiDeckPanel({
         checked={on}
         onChange={(next) => void toggle(next)}
       >
-        <Icon class="multi-deck-help" html={ICON.help} title={MULTI_DECK_HELP} />
+        <DocsLink topic="multi-deck" />
       </ToggleRow>
       <p class="multi-deck-note">Disconnects second deck. Settings stay saved.</p>
       <Feedback error={action.error} status={action.status} />

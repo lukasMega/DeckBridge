@@ -1,5 +1,6 @@
 // Settings-page block for click-to-press: lets the dock preview fire key presses on the
 // Elgato app. Off by default, because anyone who can open the WebUI could press your keys.
+import { DocsLink } from '../components/DocsLink.js';
 import { useState } from 'preact/hooks';
 import { Collapsible } from '../components/Collapsible.js';
 import { ToggleRow } from '../components/Fields.js';
@@ -35,8 +36,8 @@ export function KeyPressPanel({
         onChange={(next) => void toggle(next)}
       />
       <p class="multi-deck-note">
-        Double-click a key in the preview to press it on the Elgato app. Anyone who can open this
-        page can press your keys.
+        Double-click a preview key to press it. Anyone who can open this page can press your keys.{' '}
+        <DocsLink topic="click-to-press" />
       </p>
       <Feedback error={action.error} status={action.status} />
     </Collapsible>

@@ -1,3 +1,4 @@
+import { DocsLink } from '../components/DocsLink.js';
 import { useEffect, useRef, useState } from 'preact/hooks';
 import type { DockUi } from '../ui-types.js';
 
@@ -242,7 +243,9 @@ function SideKeysDialog({
           DeckBridge side keys
         </span>
       </div>
-      <p>{description}</p>
+      <p>
+        {description} <DocsLink topic="side-keys" />
+      </p>
     </dialog>
   );
 }

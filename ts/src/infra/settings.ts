@@ -33,6 +33,10 @@ import type { DockPrefsStore } from './dock-prefs.js';
 
 /** Grace-period bounds for elgatoAutoRestartDelayS (see
  *  .claude/plans/2026-09-27_auto-restart-elgato-app.md §4.2). */
+/** Ids land in the daily ping, so keep them to a closed shape (infra can't import web/contract). */
+const DOCS_TOPIC_ID = /^[a-z0-9-]{1,32}$/;
+const MAX_DOCS_SEEN = 32;
+
 const ELGATO_AUTO_RESTART_DELAY_S_MIN = 3;
 const ELGATO_AUTO_RESTART_DELAY_S_MAX = 120;
 const ELGATO_AUTO_RESTART_DELAY_S_DEFAULT = 10;
@@ -177,6 +181,8 @@ export class PersistedSettings implements DockPrefsStore {
   /** Daily usage ping opt-out (see daily-ping.ts). undefined = enabled. */
   a7s: boolean | undefined = undefined;
   a7sDay: string | undefined = undefined;
+  /** Docs topics opened since the last ping (see web/server/docs-links.ts). */
+  docsSeen: string[] = [];
   /** Elgato-app auto-restart opt-out + grace delay (see elgato-auto-restart.ts).
    *  undefined = enabled / default delay. */
   elgatoAutoRestart: boolean | undefined = undefined;
@@ -228,6 +234,11 @@ export class PersistedSettings implements DockPrefsStore {
     if (saved.updateState) this.updateState = saved.updateState;
     if (typeof saved.a7s === 'boolean') this.a7s = saved.a7s;
     if (typeof saved.a7sDay === 'string') this.a7sDay = saved.a7sDay;
+    if (Array.isArray(saved.docsSeen)) {
+      this.docsSeen = saved.docsSeen
+        .filter((t): t is string => typeof t === 'string' && DOCS_TOPIC_ID.test(t))
+        .slice(0, MAX_DOCS_SEEN);
+    }
     this.loadAutoRestart(saved);
     this.modelOverrides = sanitizeModelOverrides(saved.modelOverrides);
     if (Array.isArray(saved.accessTokens)) {
@@ -401,6 +412,15 @@ export class PersistedSettings implements DockPrefsStore {
   /** Record the UTC day of the latest usage ping (daily-ping.ts). */
   setDailyPingDay(day: string): void {
     this.a7sDay = day;
+    // The ping snapshots docsSeen before calling this, so clearing here loses nothing.
+    this.docsSeen = [];
+    this.persist();
+  }
+
+  /** Remember that a docs topic was opened (sent with the next daily ping). */
+  addDocsSeen(topic: string): void {
+    if (this.docsSeen.includes(topic) || this.docsSeen.length >= MAX_DOCS_SEEN) return;
+    this.docsSeen.push(topic);
     this.persist();
   }
 
@@ -497,6 +517,7 @@ export class PersistedSettings implements DockPrefsStore {
       ...(this.updateState ? { updateState: this.updateState } : {}),
       ...(this.a7s !== undefined ? { a7s: this.a7s } : {}),
       ...(this.a7sDay ? { a7sDay: this.a7sDay } : {}),
+      ...(this.docsSeen.length > 0 ? { docsSeen: this.docsSeen } : {}),
       ...this.autoRestartEntries(),
       ...(this.accessTokens.length > 0 ? { accessTokens: this.accessTokens } : {}),
       ...(this.devices.length > 0 ? { devices: this.devices } : {}),

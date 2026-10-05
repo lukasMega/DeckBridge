@@ -1,14 +1,18 @@
+import type { DocsTopic } from '../contract.js';
+
 export interface HelpStep {
   you: boolean;
   html: string;
 }
+
+export type HelpDocsLink = { label: string; topic: DocsTopic } | { label: string; href: string };
 
 export interface HelpTopic {
   title: string;
   lead: string;
   svg: () => string;
   steps: HelpStep[];
-  docs?: { href: string; label: string };
+  docs?: HelpDocsLink[];
 }
 
 export const CORA_PORT = '5343';
@@ -107,7 +111,7 @@ function svgNetwork(): string {
 export const HELP: Record<string, HelpTopic> = {
   'plug-in': {
     title: 'Plug in your Stream Deck',
-    lead: 'DeckBridge talks to your Stream Deck over USB, then re-shares it on your network. First it needs to see the hardware.',
+    lead: 'DeckBridge first needs to see your deck over USB.',
     svg: svgPlugIn,
     steps: [
       { you: true, html: 'Connect the Stream Deck to your computer with its <b>USB cable</b>.' },
@@ -120,10 +124,11 @@ export const HELP: Record<string, HelpTopic> = {
         html: 'DeckBridge detects the device and lights up its keys. This step turns green automatically.',
       },
     ],
+    docs: [{ topic: 'devices', label: 'Supported devices' }],
   },
   'open-app': {
     title: 'Open the Elgato Stream Deck app',
-    lead: 'Once the hardware is detected, the official Elgato app connects to it through DeckBridge as if it were on the network.',
+    lead: 'The Elgato app connects to your deck through DeckBridge.',
     svg: svgOpenApp,
     steps: [
       { you: true, html: 'Launch the <b>Elgato Stream Deck</b> app on this computer.' },
@@ -132,10 +137,11 @@ export const HELP: Record<string, HelpTopic> = {
         html: "Your deck shows up in the app's device list within a few seconds and is marked connected.",
       },
     ],
+    docs: [{ topic: 'getting-started', label: 'Getting started guide' }],
   },
   'network-device': {
     title: 'Add it as a network device',
-    lead: "If your deck doesn't appear automatically, add it manually using the local address of this machine where DeckBridge is running.",
+    lead: 'Deck not listed? Add it by address.',
     svg: svgNetwork,
     steps: [
       {
@@ -149,12 +155,15 @@ export const HELP: Record<string, HelpTopic> = {
       { you: false, html: 'The app connects over the network and your keys come to life.' },
       {
         you: true,
-        html: "Got more than one deck? Each one shows up as its own network device with its own port — take the port from that deck's card. The Elgato app remembers paired docks across restarts, so you only do this once per deck.",
+        html: 'More decks? Add each one with the port from its card. The Elgato app remembers them.',
       },
     ],
-    docs: {
-      href: 'https://www.elgato.com/us/en/explorer/products/stream-deck/how-to-set-up-stream-deck-network-dock#p-data-block-keysud1bbstream-deck-software-setupbp',
-      label: "Read Elgato's official setup guide",
-    },
+    docs: [
+      { topic: 'pairing', label: 'DeckBridge pairing guide' },
+      {
+        href: 'https://www.elgato.com/us/en/explorer/products/stream-deck/how-to-set-up-stream-deck-network-dock#p-data-block-keysud1bbstream-deck-software-setupbp',
+        label: "Elgato's setup guide",
+      },
+    ],
   },
 };

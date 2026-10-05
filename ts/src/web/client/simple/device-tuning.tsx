@@ -1,6 +1,7 @@
 // Settings-page device tuning over POST /api/device-overrides.
 // Supports runtime calibration before copying values into a registry PR.
 // Key-map wizard lives in keymap-learn.tsx.
+import { DocsLink } from '../components/DocsLink.js';
 import { useCallback, useEffect, useRef, useState } from 'preact/hooks';
 import { ChipRadioGroup } from '../components/ChipRadioGroup.js';
 import type { ChipOption } from '../components/ChipRadioGroup.js';
@@ -320,8 +321,8 @@ export function DeviceTuningPanel(): preact.JSX.Element {
       bodyId="device-tuning-body"
     >
       <p class="help-lead">
-        Applies model-wide: image settings take effect straight away, key-map and wire changes
-        reconnect the device. Screen dark? Reset or restart with <code>--no-overrides</code>.
+        Applies to every deck of this model. Screen dark? Reset, or restart with{' '}
+        <code>--no-overrides</code>. <DocsLink topic="device-tuning" />
       </p>
 
       {activeView.safeMode && (

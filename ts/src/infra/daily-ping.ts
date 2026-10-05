@@ -30,6 +30,11 @@ const MODEL_ID = /^[a-z0-9][a-z0-9_-]{0,31}$/;
  *  a bare distro id on a rolling release. */
 const OS_VERSION = /^[a-z][a-z0-9_]{0,15}(?:-[a-z0-9.]{1,12})?$/;
 
+/** Docs topic ids opened from the WebUI; same closed shape as `docsSeen` in
+ *  settings.ts, re-checked because the payload is the last line of defence. */
+const DOCS_TOPIC = /^[a-z0-9-]{1,32}$/;
+const MAX_DOCS_TOPICS = 32;
+
 /** Windows 11 reports itself as `10.0.x` — only the build tells it from 10.
  *  https://learn.microsoft.com/windows/release-health/ */
 const WIN11_MIN_BUILD = 22000;
@@ -44,6 +49,8 @@ export interface DailyPingPayload {
   dv: string;
   tz: string;
   country: string;
+  /** Docs topics opened since the last ping, comma-joined; omitted when none. */
+  dc?: string;
 }
 
 // pure
@@ -142,6 +149,7 @@ export interface PayloadInput {
   now: Date;
   locale?: string;
   timeZone?: string;
+  docsTopics?: readonly string[];
 }
 
 /** Deduped + sorted so two docks of one model count once and the same hardware
@@ -151,6 +159,9 @@ export function buildPayload(input: PayloadInput): DailyPingPayload {
   const ids = [...new Set(input.modelIds.filter((id) => MODEL_ID.test(id)))]
     .toSorted((a, b) => a.localeCompare(b))
     .slice(0, MAX_DEVICE_IDS);
+  const topics = [...new Set((input.docsTopics ?? []).filter((t) => DOCS_TOPIC.test(t)))]
+    .toSorted((a, b) => a.localeCompare(b))
+    .slice(0, MAX_DOCS_TOPICS);
   return {
     os: normalizeOs(input.platform),
     ov: OS_VERSION.test(input.osVersion) ? input.osVersion : 'unknown',
@@ -158,6 +169,7 @@ export function buildPayload(input: PayloadInput): DailyPingPayload {
     dv: ids.length > 0 ? ids.join(',') : 'none',
     tz: normalizeTimeZone(input.timeZone) ?? tzOffset(input.now),
     country: normalizeLocale(input.locale ?? ''),
+    ...(topics.length > 0 ? { dc: topics.join(',') } : {}),
   };
 }
 
@@ -304,6 +316,8 @@ export interface DailyPingDeps {
   setLastPingDay: (day: string) => void;
   /** Model ids of the currently open devices. */
   modelIds: () => readonly string[];
+  /** Docs topics opened since the last ping. Read before `setLastPingDay`, which clears them. */
+  docsSeen?: () => readonly string[];
   /** Injected so tests never spawn curl — production passes sendBeacon. */
   send: (encoded: string, version: string) => Promise<void>;
   now?: () => Date;
@@ -364,6 +378,8 @@ export function createDailyPing(deps: DailyPingDeps): DailyPing {
       today,
     };
     if (!shouldPing(gate)) return;
+    // Copied first: setLastPingDay clears the live set.
+    const docsTopics = [...(deps.docsSeen?.() ?? [])];
     // Marked before the send, not after: a collector that hangs or 500s must not
     // turn the 24 h timer into a per-tick retry.
     deps.setLastPingDay(today);
@@ -400,6 +416,7 @@ export function createDailyPing(deps: DailyPingDeps): DailyPing {
       now: at,
       locale,
       timeZone,
+      docsTopics,
     });
     log('debug', 'dailyPing', `payload ${JSON.stringify(payload)}`);
     await deps.send(encodePayload(payload), deps.currentVersion);

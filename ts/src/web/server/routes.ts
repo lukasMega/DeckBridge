@@ -2,7 +2,8 @@ import { assets } from './assets.js';
 import { checkRequirements } from './requirements.js';
 import { get, post, postJson } from './router.js';
 import type { Route, RouteContext } from './router.js';
-import { badRequest, css, html, js, json, noContent, readJson, text } from './http.js';
+import { badRequest, css, html, js, json, noContent, notFound, readJson, text } from './http.js';
+import { docsTrackingAllowed, docsUrl, isDocsTopic, isOwnNavigation } from './docs-links.js';
 import type { RawMockInput } from './mock-input.js';
 import { pushAdminRoutes } from './push-routes.js';
 import { virtualDeckRoutes } from './virtual-deck/virtual-deck-routes.js';
@@ -36,6 +37,22 @@ export const routes: Route[] = [
   get('/ui.css', () => css(assets.css)),
   get('/ui.js', () => js(assets.js)),
   get('/requirements', () => html(assets.requirementsHtml)),
+  // Counts the docs open, then hands off to the docs site (see docs-links.ts).
+  get('/go/docs/:topic', ({ params, req, settings }) => {
+    const topic = params.topic ?? '';
+    if (!isDocsTopic(topic)) return notFound();
+    if (isOwnNavigation(req.headers) && docsTrackingAllowed(settings.a7s, tjs.env)) {
+      settings.addDocsSeen(topic);
+    }
+    return new Response(null, {
+      status: 302,
+      headers: {
+        Location: docsUrl(topic),
+        'Cache-Control': 'no-store',
+        'Referrer-Policy': 'no-referrer',
+      },
+    });
+  }),
   get('/api/requirements', async () => json(await checkRequirements())),
   get('/api/state', ({ ui }) => json(ui.fullState())),
   get('/api/plugins', async ({ extraKeys }) => json(await extraKeys.pluginsInfo())),

@@ -32,6 +32,34 @@ test.describe('the controls a user touches first', () => {
     await expect(popover).toHaveCount(0);
   });
 
+  test('About links to the docs through the local /go/docs redirect', async ({
+    page,
+    app,
+    request,
+  }) => {
+    await gotoApp(page, `${app.baseURL}/`);
+    await click(page.locator('#aboutBtn'));
+    const link = page.locator('.popover a[href^="/go/docs/"]');
+    await expect(link).toHaveAttribute('href', '/go/docs/home');
+    await expect(link).toHaveAttribute('target', '_blank');
+
+    // Mock mode suppresses recording, so only the redirect is observable here.
+    const res = await request.get(`${app.baseURL}/go/docs/home`, { maxRedirects: 0 });
+    expect(res.status()).toBe(302);
+    expect(res.headers().location).toContain('utm_campaign=home');
+    expect((await request.get(`${app.baseURL}/go/docs/nope`, { maxRedirects: 0 })).status()).toBe(
+      404,
+    );
+  });
+
+  test('help topic links the docs, keeping the external guide', async ({ page, app }) => {
+    await gotoApp(page, `${app.baseURL}/`);
+    await click(page.getByRole('button', { name: 'No', exact: true }));
+    await click(page.locator('button[data-help="network-device"]'));
+    await expect(page.locator('.help a[href="/go/docs/pairing"]')).toHaveCount(1);
+    await expect(page.locator('.help a[href^="https://www.elgato.com/"]')).toHaveCount(1);
+  });
+
   test('Settings page opens and backs out', async ({ page, app }) => {
     await gotoApp(page, `${app.baseURL}/`);
     await click(page.locator('#settingsBtn'));

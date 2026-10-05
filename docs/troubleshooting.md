@@ -152,12 +152,25 @@ tuning** fixes them at runtime:
 - **Copy overrides as JSON** — please send working values back, see
   [Adding a device](./adding-a-device.md).
 
-Tuning is stored per model id under `modelOverrides` in `settings.json`. Image settings
+Tuning is stored per model id under `modelOverrides` in `settings.json`, so it applies to
+every deck of that model. Image settings
 (rotation, flip, fit, quality, size, sharpen/blur/crop, crop region) are swapped into the running
 session and the deck repaints straight away; key-map, wire and splash changes reconnect
 the device, because the driver reads those when it opens the device. If it leaves the panel dark: **Reset to defaults**, or start with
 `./deckbridge run --no-overrides` to ignore all tuning for one session. Active tuning is
 flagged at the top of the diagnostics report.
+
+### Image fit
+
+Image fit decides what happens when the Elgato app's key image is not the size the device
+key expects. The panel greys out a mode that would not change the output for the current
+sizes.
+
+- **resize** scales the image to the key. It always works and adds slight blur.
+- **pad** keeps the pixels 1:1 and fills the border around them. It only applies when the
+  image is smaller than the key.
+- **crop** keeps the pixels 1:1 and trims the centre to the key size; an axis that is smaller
+  than the key is padded. It only applies when the image is larger than the key.
 
 ## Filing a good report
 
