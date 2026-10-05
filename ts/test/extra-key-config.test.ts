@@ -22,6 +22,7 @@ const FULL: ExtraKeyTextStyle = {
   valign: 'bottom',
   padding: 16,
   lineGap: 8,
+  tightLines: true,
   bold: true,
   outline: '#101014',
   ellipsis: false,
@@ -30,6 +31,9 @@ const FULL: ExtraKeyTextStyle = {
 test('every valid field is accepted', () => {
   assert.equal(textStyleError(FULL), null);
   assert.equal(textStyleError({}), null);
+  assert.equal(textStyleError({ font: 'slim' }), null);
+  assert.equal(textStyleError({ tightLines: false }), null);
+  for (const lineGap of [-8, -1, 0, 8]) assert.equal(textStyleError({ lineGap }), null);
   for (const textSize of ['fit', -2, -1, 0, 1, 2] as const) {
     assert.equal(textStyleError({ textSize }), null, String(textSize));
   }
@@ -40,7 +44,9 @@ test('each bad field is rejected with a message naming it', () => {
   const cases: Array<[Record<string, unknown>, string]> = [
     [{ textSize: 3 }, 'style.textSize must be one of: fit, -2, -1, 0, 1, 2'],
     [{ wrap: 'lines' }, 'style.wrap must be one of: words, chars'],
-    [{ font: 'bold' }, 'style.font must be one of: regular, narrow'],
+    [{ font: 'bold' }, 'style.font must be one of: regular, narrow, slim'],
+    [{ font: 'Slim ' }, 'style.font must be one of: regular, narrow, slim'],
+    [{ font: 'thin' }, 'style.font must be one of: regular, narrow, slim'],
     [{ color: 'red' }, 'style.color must be a #rrggbb colour'],
     [{ background: '#fff' }, 'style.background must be a #rrggbb colour'],
     [{ outline: '#12345g' }, 'style.outline must be a #rrggbb colour'],
@@ -48,8 +54,11 @@ test('each bad field is rejected with a message naming it', () => {
     [{ valign: 'center' }, 'style.valign must be one of: top, middle, bottom'],
     [{ padding: 17 }, 'style.padding must be an integer 0..16'],
     [{ padding: 1.5 }, 'style.padding must be an integer 0..16'],
-    [{ lineGap: -1 }, 'style.lineGap must be an integer 0..8'],
+    [{ lineGap: -9 }, 'style.lineGap must be an integer -8..8'],
+    [{ lineGap: 9 }, 'style.lineGap must be an integer -8..8'],
+    [{ lineGap: 0.5 }, 'style.lineGap must be an integer -8..8'],
     [{ bold: 1 }, 'style.bold must be true or false'],
+    [{ tightLines: 'yes' }, 'style.tightLines must be true or false'],
     [{ ellipsis: 'no' }, 'style.ellipsis must be true or false'],
     [{ size: 2 }, 'style.size is not a text style field'],
   ];
@@ -72,6 +81,7 @@ test('defaults are dropped, colours lower-cased', () => {
       valign: 'middle',
       padding: 0,
       lineGap: 0,
+      tightLines: false,
       bold: false,
       ellipsis: true,
       wrap: undefined,

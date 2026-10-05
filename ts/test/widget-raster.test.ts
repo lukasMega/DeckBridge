@@ -189,4 +189,112 @@ test('outline of one glyph never covers its neighbor', () => {
   assert.equal(pixelsOf(composeWidgetBmp(lines, SIZE, SIZE, style), FG).length, plain);
 });
 
+const slim: ExtraKeyTextStyle = { font: 'slim' };
+
+/** Every pixel differing from the background colour. */
+function inked(bmp: Uint8Array): Array<[number, number]> {
+  const b = Buffer.from(bmp);
+  const [w, h] = [b.readUInt32LE(18), b.readUInt32LE(22)];
+  const out: Array<[number, number]> = [];
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const p = pixel(bmp, x, y);
+      if (p[0] !== BG[0] || p[1] !== BG[1] || p[2] !== BG[2]) out.push([x, y]);
+    }
+  }
+  return out;
+}
+
+const between = (v: number, i: number): boolean =>
+  Math.min(BG[i]!, FG[i]!) < v && v < Math.max(BG[i]!, FG[i]!);
+
+test('slim text is anti-aliased: partial pixels strictly between bg and fg, full ones exact', () => {
+  for (const big of [true, false]) {
+    const bmp = composeWidgetBmp([{ text: 'Slim 8%', big }], SIZE, SIZE, slim);
+    const mid = inked(bmp).filter(([x, y]) => pixel(bmp, x, y).every((v, i) => between(v, i)));
+    assert.ok(mid.length > 10, `AA pixels (big ${big}): ${mid.length}`);
+    assert.ok(pixelsOf(bmp, FG).length > 0, `fully covered pixels equal fg (big ${big})`);
+  }
+});
+
+test('slim blend never leaves the bg..fg range', () => {
+  const bmp = composeWidgetBmp([{ text: 'Wg@', big: true }], SIZE, SIZE, { ...slim, bold: true });
+  for (const [x, y] of inked(bmp)) {
+    pixel(bmp, x, y).forEach((v, i) => {
+      assert.ok(v >= Math.min(BG[i]!, FG[i]!) && v <= Math.max(BG[i]!, FG[i]!), `${x},${y}`);
+    });
+  }
+});
+
+/** Horizontal extent of the inked pixels. */
+function span(bmp: Uint8Array): number {
+  const xs = inked(bmp).map(([x]) => x);
+  return Math.max(...xs) - Math.min(...xs) + 1;
+}
+
+test('slim bold widens a glyph by 1 px', () => {
+  const lines: WidgetLine[] = [{ text: 'H', big: true }];
+  const plain = span(composeWidgetBmp(lines, SIZE, SIZE, slim));
+  assert.equal(span(composeWidgetBmp(lines, SIZE, SIZE, { ...slim, bold: true })), plain + 1);
+});
+
+test('slim outline never covers a neighboring glyph', () => {
+  const lines: WidgetLine[] = [{ text: 'WW', big: true }];
+  const plain = pixelsOf(composeWidgetBmp(lines, SIZE, SIZE, slim), FG).length;
+  const ringed = composeWidgetBmp(lines, SIZE, SIZE, { ...slim, outline: '#ff0000' });
+  assert.equal(pixelsOf(ringed, FG).length, plain);
+  assert.ok(pixelsOf(ringed, [0x00, 0x00, 0xff]).length > 0, 'ring drawn');
+});
+
+/** First and last image row holding a non-background pixel. */
+function inkRows(bmp: Uint8Array): [number, number] {
+  const b = Buffer.from(bmp);
+  const [w, h] = [b.readUInt32LE(18), b.readUInt32LE(22)];
+  const rows: number[] = [];
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const p = pixel(bmp, x, y);
+      if (p[0] !== BG[0] || p[1] !== BG[1] || p[2] !== BG[2]) {
+        rows.push(y);
+        break;
+      }
+    }
+  }
+  return [rows[0]!, rows.at(-1)!];
+}
+
+test('tightLines off is byte-identical to the default style', () => {
+  const lines = [
+    { text: 'Åg|', big: false },
+    { text: '12:34', big: true },
+  ];
+  for (const font of ['regular', 'narrow', 'slim'] as const) {
+    const a = composeWidgetBmp(lines, SIZE, SIZE, { font });
+    const b = composeWidgetBmp(lines, SIZE, SIZE, { font, tightLines: false });
+    assert.deepEqual(Array.from(b), Array.from(a), font);
+  }
+});
+
+test('tightLines lands the ASCII ink exactly on the packed row', () => {
+  const ascii = Array.from({ length: 94 }, (_, i) => String.fromCharCode(0x21 + i)).join('');
+  for (const font of ['regular', 'narrow', 'slim'] as const) {
+    const style: ExtraKeyTextStyle = { font, tightLines: true, valign: 'top', ellipsis: false };
+    const layout = layoutWidget([{ text: ascii, big: false }], 3200, 90, style);
+    const [first, last] = inkRows(composeLayout(layout, 3200, 90));
+    const f = layout.lines[0]!.font;
+    assert.deepEqual([first, last], [0, f.inkHeight - 1], `${font} ink rows`);
+  }
+});
+
+test('slim scaled rung (64 px, x2) renders and clips at the canvas edge', () => {
+  const huge = composeWidgetBmp([{ text: 'W', big: true }], SIZE, SIZE, { ...slim, textSize: 2 });
+  assert.ok(inked(huge).length > 100, 'x2 glyph has ink');
+  const clipped = composeWidgetBmp([{ text: 'WWWWWW', big: true }], 40, 40, {
+    ...slim,
+    textSize: 2,
+    align: 'left',
+  });
+  assert.equal(Buffer.from(clipped).readUInt32LE(18), 40);
+});
+
 summary();

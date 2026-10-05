@@ -1,12 +1,14 @@
-// Regenerates ts/src/assets/font-atlas.ts from two bitmap font families:
+// Regenerates ts/src/assets/font-atlas.ts from three font families:
 //   regular — Spleen (BSD 2-Clause, https://github.com/fcambus/spleen), monospace;
-//   narrow  — X11 Adobe Helvetica helvR (xorg font-adobe-75dpi, Adobe/DEC notice), proportional.
+//   narrow  — X11 Adobe Helvetica helvR (xorg font-adobe-75dpi, Adobe/DEC notice), proportional;
+//   slim    — Barlow Condensed TTF (OFL-1.1), rasterized anti-aliased by ttf.mjs, proportional.
 // Run manually when changing fonts/glyph set: node scripts/gen-font-atlas.mjs
-// Downloads the BDF sources (they are not vendored).
+// Downloads the BDF/TTF sources (they are not vendored; TTFs are cached in $TMPDIR).
 import { writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { parseBdf } from './bdf.mjs';
+import { fetchCached, fitPxForHeight, loadFace, loadOpentype, rasterizeAA } from './ttf.mjs';
 
 const SPLEEN_RAW = 'https://raw.githubusercontent.com/fcambus/spleen/master';
 const HELV_RAW = 'https://gitlab.freedesktop.org/xorg/font/adobe-75dpi/-/raw/master';
@@ -28,6 +30,15 @@ const NARROW = [
   { name: 'NARROW_18', url: `${HELV_RAW}/helvR18.bdf` },
   { name: 'NARROW_24', url: `${HELV_RAW}/helvR24.bdf` },
   { name: 'NARROW_24X2', url: `${HELV_RAW}/helvR24.bdf`, scale: 2 },
+];
+// Barlow Condensed: Regular where thin strokes would wash out (≤ 16 px), Light above.
+// The 8 px rung reuses NARROW_8 (a 6 px AA face is unreadable); 64 is the 32 rung ×2.
+const BARLOW_RAW = 'https://raw.githubusercontent.com/google/fonts/main/ofl/barlowcondensed';
+const SLIM = [
+  { name: 'SLIM_12', line: 12, weight: 'Regular' },
+  { name: 'SLIM_16', line: 16, weight: 'Regular' },
+  { name: 'SLIM_24', line: 24, weight: 'Light' },
+  { name: 'SLIM_32', line: 32, weight: 'Light' },
 ];
 
 // ASCII printable, Latin-1 (U+00A0–U+00FF), then U+2026 (…) — fontGlyphIndex() order.
@@ -73,6 +84,35 @@ function cellOf(font, mono) {
   return { w: Math.max(...gl.map((g) => g.x + g.w)) - originX, h: top - bottom, originX, top };
 }
 
+/** ASCII ink extent (U+0021..U+007E) in cell rows from the cell top, for tight line packing. */
+function inkOfBits(font, cell) {
+  let lo = Infinity;
+  let hi = -Infinity;
+  for (let cp = 0x21; cp <= 0x7e; cp++) {
+    const g = font.glyphs.get(cp);
+    const y0 = cell.top - (g.y + g.h);
+    g.rows.forEach((row, r) => {
+      if (!row.some(Boolean)) return;
+      lo = Math.min(lo, y0 + r);
+      hi = Math.max(hi, y0 + r);
+    });
+  }
+  return { inkTop: lo, inkHeight: hi - lo + 1 };
+}
+
+/** Same extent from alpha boxes: rows covered by ink-bearing ASCII glyphs. */
+function inkOfBoxes(boxes) {
+  let lo = Infinity;
+  let hi = -Infinity;
+  for (let i = 1; i < 95; i++) {
+    const [, top, , h] = boxes.slice(i * 4, i * 4 + 4);
+    if (h === 0) continue;
+    lo = Math.min(lo, top);
+    hi = Math.max(hi, top + h - 1);
+  }
+  return { inkTop: lo, inkHeight: hi - lo + 1 };
+}
+
 /** Pack the codepoints: per glyph ceil(w/8) bytes per row, MSB-first, h rows. */
 function packFont(font, cell) {
   const rowBytes = Math.ceil(cell.w / 8);
@@ -112,9 +152,12 @@ async function emit({ name, url, scale = 1 }, mono) {
   const font = parseBdf(text);
   fillGaps(font.glyphs, url);
   const cell = cellOf(font, mono);
+  const ink = inkOfBits(font, cell);
   const fields = [
     `  width: ${cell.w * scale},`,
     `  height: ${cell.h * scale},`,
+    `  inkTop: ${ink.inkTop * scale},`,
+    `  inkHeight: ${ink.inkHeight * scale},`,
     `  bits:\n    ${wrapB64(packFont(font, cell))},`,
   ];
   if (!mono) {
@@ -126,6 +169,60 @@ async function emit({ name, url, scale = 1 }, mono) {
   return { text, src: `const ${name}: BitmapFont = {\n${fields.join('\n')}\n};\n` };
 }
 
+/** Tight-box 4-bit atlas of one TTF rung. Per glyph: `alpha` = ceil(w/2) bytes per row, high
+ *  nibble first, h rows; `boxes` = x (int8, from the pen), top (rows below the cell top), w, h. */
+async function emitAlpha({ name, line, weight }, opentype) {
+  const url = `${BARLOW_RAW}/BarlowCondensed-${weight}.ttf`;
+  const face = loadFace(opentype, await fetchCached(url));
+  const px = fitPxForHeight(face, line);
+  const raster = new Map(
+    CODEPOINTS.map((cp) => [cp, rasterizeAA(face, px, cp, { missing: 'null' })]),
+  );
+  // NBSP draws as a space.
+  if (!raster.get(0xa0)) raster.set(0xa0, raster.get(32));
+  for (const [cp, g] of raster) {
+    if (!g) throw new Error(`${url}: missing glyph U+${cp.toString(16)}`);
+  }
+  const glyphs = CODEPOINTS.map((cp) => raster.get(cp));
+  const baseline = Math.max(...glyphs.map((g) => g.top));
+  const below = Math.max(...glyphs.map((g) => g.h - g.top));
+  if (baseline + below > line) throw new Error(`${name}: ink ${baseline + below} > ${line} rows`);
+  const alpha = [];
+  const boxes = [];
+  for (const g of glyphs) {
+    boxes.push(g.x & 0xff, baseline - g.top, g.w, g.h);
+    const rowBytes = Math.ceil(g.w / 2);
+    for (let r = 0; r < g.h; r++) {
+      for (let b = 0; b < rowBytes; b++) {
+        const hi = g.alpha[r * g.w + b * 2];
+        const lo = b * 2 + 1 < g.w ? g.alpha[r * g.w + b * 2 + 1] : 0;
+        alpha.push((hi << 4) | lo);
+      }
+    }
+  }
+  const adv = glyphs.map((g) => g.advance);
+  const width = Math.max(...adv);
+  const ink = inkOfBoxes(boxes);
+  const src =
+    `const ${name}: AlphaFont = {\n  kind: 'alpha',\n  width: ${width},\n  height: ${line},\n` +
+    `  inkTop: ${ink.inkTop},\n  inkHeight: ${ink.inkHeight},\n` +
+    `  alpha:\n    ${wrapB64(Buffer.from(alpha).toString('base64'))},\n` +
+    `  boxes: ${wrapB64(Buffer.from(boxes).toString('base64'))},\n` +
+    `  advances: ${wrapB64(Buffer.from(adv).toString('base64'))},\n};\n`;
+  return { src, adv, width, ink, alphaBytes: alpha.length };
+}
+
+/** Same glyph data as `base`, blitted ×scale (like NARROW_24X2): no second copy of the atlas. */
+function emitAlphaScaled(name, base, adv, line, ink, scale) {
+  const scaled = adv.map((a) => a * scale);
+  if (Math.max(...scaled) > 255) throw new Error(`${name}: advance exceeds one byte`);
+  return (
+    `const ${name}: AlphaFont = {\n  kind: 'alpha',\n  width: ${Math.max(...scaled)},\n` +
+    `  height: ${line * scale},\n  inkTop: ${ink.inkTop * scale},\n  inkHeight: ${ink.inkHeight * scale},\n  alpha: ${base}.alpha,\n  boxes: ${base}.boxes,\n` +
+    `  advances: ${wrapB64(Buffer.from(scaled).toString('base64'))},\n  scale: ${scale},\n};\n`
+  );
+}
+
 const parts = [];
 let spleenVersion = '';
 for (const f of REGULAR) {
@@ -134,6 +231,13 @@ for (const f of REGULAR) {
   parts.push(src);
 }
 for (const f of NARROW) parts.push((await emit(f, false)).src);
+const opentype = loadOpentype();
+let top = null;
+for (const f of SLIM) {
+  top = await emitAlpha(f, opentype);
+  parts.push(top.src);
+}
+parts.push(emitAlphaScaled('SLIM_32X2', 'SLIM_32', top.adv, SLIM.at(-1).line, top.ink, 2));
 
 const header = `// AUTO-GENERATED by scripts/gen-font-atlas.mjs — DO NOT EDIT
 // Regular: Spleen ${spleenVersion} (c) 2018-2026 Frederic Cambus — BSD 2-Clause license.
@@ -142,10 +246,15 @@ const header = `// AUTO-GENERATED by scripts/gen-font-atlas.mjs — DO NOT EDIT
 // Copyright 1984-1989, 1994 Adobe Systems Incorporated.
 // Copyright 1988, 1994 Digital Equipment Corporation.
 // Permission notice: see LICENSE-helvetica.txt (repo scripts/).
+// Slim: Barlow Condensed Light/Regular (c) 2017 The Barlow Project Authors
+// (https://github.com/jpt/barlow), SIL Open Font License 1.1, no Reserved Font Name.
+// OFL-1.1, license text: see LICENSE-barlow.txt (repo scripts/). Rasterized anti-aliased
+// (4-bit coverage) by scripts/ttf.mjs; the 8 px rung reuses NARROW_8, the 64 px rung is 32 ×2.
 // U+2026 in Spleen 5x8/6x12 is synthesized from three '.' glyphs; U+00A0 copies space.
-// Packed monochrome cells for codepoints 32..126, 0xA0..0xFF, 0x2026, in that order:
-// per glyph ceil(cellWidth/8) bytes per row (MSB-first), cell height rows top→bottom,
+// Bits fonts: packed monochrome cells for codepoints 32..126, 0xA0..0xFF, 0x2026, in that
+// order: per glyph ceil(cellWidth/8) bytes per row (MSB-first), cell height rows top→bottom,
 // cellWidth/height = width/height ÷ scale.
+// Alpha fonts: same glyph order, tight per-glyph boxes (see AlphaFont).
 
 /** Index of a codepoint in every packed atlas, or -1 if not covered. */
 export function fontGlyphIndex(codepoint: number): number {
@@ -154,19 +263,41 @@ export function fontGlyphIndex(codepoint: number): number {
   return codepoint === 0x2026 ? ${CODEPOINTS.length - 1} : -1;
 }
 
-export interface BitmapFont {
-  /** Cell size in device pixels (after \`scale\`). */
+interface FontMetrics {
+  /** Cell size in device pixels (after \`scale\`); width = max advance for alpha fonts. */
   readonly width: number;
   readonly height: number;
-  /** base64 of the packed glyph bitmaps, stored at 1/scale. */
-  readonly bits: string;
+  /** ASCII (U+0021..U+007E) ink top, rows below the cell top; for tight line packing. */
+  readonly inkTop: number;
+  /** ASCII ink height in rows (after \`scale\`); tight rows are this tall instead of \`height\`. */
+  readonly inkHeight: number;
   /** base64, one byte per glyph: advance width in px. Absent = monospace (= width). */
   readonly advances?: string;
-  /** Cell left edge relative to the pen, ≤ 0. Absent = 0. */
+  /** Cell left edge relative to the pen, ≤ 0. Absent = 0. Bits fonts only. */
   readonly originX?: number;
+}
+
+/** 1-bit cells. */
+export interface BitsFont extends FontMetrics {
+  readonly kind?: 'bits';
+  /** base64 of the packed glyph bitmaps, stored at 1/scale. */
+  readonly bits: string;
   /** Nearest-neighbor upscale of the stored bits. Absent = 1. */
   readonly scale?: number;
 }
+
+/** Anti-aliased glyphs in tight boxes. Box values are stored at 1/scale like \`bits\`. */
+export interface AlphaFont extends FontMetrics {
+  readonly kind: 'alpha';
+  /** base64, 4-bit coverage (0..15), 2 px per byte high nibble first; per glyph h rows of ceil(w/2) bytes. */
+  readonly alpha: string;
+  /** base64, 4 bytes per glyph: x (int8, from the pen), top (rows below the cell top), w, h. */
+  readonly boxes: string;
+  /** Nearest-neighbor upscale of the stored alpha. Absent = 1. */
+  readonly scale?: number;
+}
+
+export type BitmapFont = BitsFont | AlphaFont;
 
 `;
 
@@ -178,6 +309,7 @@ writeFileSync(
   header +
     parts.join('\n') +
     ladder('Spleen sizes, smallest → largest.', 'FONT_LADDER', REGULAR) +
-    ladder('Helvetica sizes, one per FONT_LADDER rung.', 'NARROW_LADDER', NARROW),
+    ladder('Helvetica sizes, one per FONT_LADDER rung.', 'NARROW_LADDER', NARROW) +
+    `\n/** Barlow Condensed sizes, one per FONT_LADDER rung. */\nexport const SLIM_LADDER: readonly BitmapFont[] = [NARROW_8, ${[...SLIM.map((f) => f.name), 'SLIM_32X2'].join(', ')}];\n`,
 );
 console.log(`wrote ${outPath}`);

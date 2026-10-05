@@ -1,6 +1,11 @@
 import assert from 'tjs:assert';
 import type { BitmapFont } from '../src/assets/font-atlas.js';
-import { FONT_LADDER, fontGlyphIndex, NARROW_LADDER } from '../src/assets/font-atlas.js';
+import {
+  FONT_LADDER,
+  fontGlyphIndex,
+  NARROW_LADDER,
+  SLIM_LADDER,
+} from '../src/assets/font-atlas.js';
 import {
   glyphAdvance,
   layoutWidget,
@@ -157,6 +162,66 @@ test('lineGap separates rows and counts toward the height', () => {
   assert.equal(layoutWidget(DATE, 112, 112, { textSize: 1, lineGap: 1 }).clipped, true);
 });
 
+test('tightLines packs rows to ink height; off is unchanged', () => {
+  const font = FONT_LADDER[2]!;
+  const tight = layoutWidget(THREE, 85, 85, { tightLines: true, valign: 'top' }).lines;
+  assert.deepEqual(
+    tight.map((l) => l.y),
+    [-font.inkTop, font.inkHeight - font.inkTop, 2 * font.inkHeight - font.inkTop],
+    'row pitch = inkHeight, ink starts at the packed row top',
+  );
+  const gapped = layoutWidget(THREE, 85, 85, { tightLines: true, lineGap: 3, valign: 'top' });
+  assert.equal(gapped.lines[1]!.y - gapped.lines[0]!.y, font.inkHeight + 3);
+  assert.deepEqual(place({ tightLines: false }), place({}), 'false behaves like absent');
+  // 3 rows: tight block is 3 * inkHeight, centred on ink.
+  const block = 3 * font.inkHeight;
+  const middle = layoutWidget(THREE, 85, 85, { tightLines: true }).lines;
+  assert.equal(middle[0]!.y + font.inkTop, Math.floor((85 - block) / 2));
+});
+
+const fitRung = (lines: WidgetLine[], s: ExtraKeyTextStyle): number =>
+  FONT_LADDER.indexOf(layoutWidget(lines, 85, 70, s).lines[0]!.font);
+
+test('a negative lineGap pulls rows closer by exactly |gap|, and the pitch clamps at 1 px', () => {
+  const pitch = (style: ExtraKeyTextStyle, lines = THREE): number => {
+    const l = layoutWidget(lines, 85, 85, { valign: 'top', ...style }).lines;
+    return l[1]!.y - l[0]!.y;
+  };
+  assert.equal(pitch({ lineGap: -3 }), 16 - 3);
+  assert.equal(pitch({ lineGap: -3, tightLines: true }), FONT_LADDER[2]!.inkHeight - 3);
+  const eight = { textSize: -2 as const, lineGap: -8, tightLines: true };
+  assert.equal(pitch(eight), 1, '8 px rung: 8 - 8 = 0 clamps to 1');
+  const block = layoutWidget(THREE, 85, 85, { ...eight, valign: 'top' });
+  assert.equal(block.clipped, false);
+  const gapped = layoutWidget(THREE, 85, 85, { lineGap: -4, valign: 'bottom' }).lines;
+  assert.equal(gapped[2]!.y + 16, 85, 'alignment uses the overlapped block height');
+});
+
+test('tightLines shrinks the block: Fit picks a bigger size and a tall stack stops clipping', () => {
+  const style = { textSize: 'fit' as const };
+  assert.ok(fitRung(THREE, { ...style, tightLines: true }) > fitRung(THREE, style));
+  const rows: WidgetLine[] = [
+    { text: 'a', big: false },
+    { text: 'b', big: false },
+    { text: 'c', big: false },
+    { text: 'd', big: false },
+    { text: 'e', big: false },
+  ];
+  const h = 5 * FONT_LADDER[2]!.inkHeight;
+  assert.equal(layoutWidget(rows, 85, h, { tightLines: true }).clipped, false);
+  assert.equal(layoutWidget(rows, 85, h).clipped, true);
+});
+
+test('tightLines adds the outline ring on top of the ink height', () => {
+  const font = FONT_LADDER[2]!;
+  const lines = layoutWidget(THREE, 85, 85, {
+    tightLines: true,
+    outline: '#000000',
+    valign: 'top',
+  }).lines;
+  assert.equal(lines[1]!.y - lines[0]!.y, font.inkHeight + 2);
+});
+
 // wrapping
 
 console.log('\nlayoutWidget wrap');
@@ -215,7 +280,14 @@ function fakeFont(): BitmapFont {
   adv[fontGlyphIndex(0x69)] = 2;
   adv[fontGlyphIndex(0x6d)] = 6;
   adv[fontGlyphIndex(0x20)] = 3;
-  return { width: 7, height: 10, bits: '', advances: Buffer.from(adv).toString('base64') };
+  return {
+    width: 7,
+    height: 10,
+    inkTop: 0,
+    inkHeight: 10,
+    bits: '',
+    advances: Buffer.from(adv).toString('base64'),
+  };
 }
 
 test('glyphAdvance / textWidth use per-glyph advances; bold adds 1 px per glyph', () => {
@@ -225,7 +297,7 @@ test('glyphAdvance / textWidth use per-glyph advances; bold adds 1 px per glyph'
   assert.equal(glyphAdvance(f, 0x4e00), 7, 'uncovered glyph: cell width');
   assert.equal(textWidth(f, Array.from('im im')), 2 + 6 + 3 + 2 + 6);
   assert.equal(textWidth(f, Array.from('im'), true), 2 + 6 + 2);
-  const mono = { width: 8, height: 16, bits: '' };
+  const mono = { width: 8, height: 16, inkTop: 0, inkHeight: 16, bits: '' };
   assert.equal(textWidth(mono, Array.from('im')), 16, 'monospace: cell width');
 });
 
@@ -262,6 +334,19 @@ test('narrow wrap + fit measure pixels too', () => {
   const rung = NARROW_LADDER.indexOf(layout.lines[0]!.font);
   const reg = layoutWidget(SENTENCE, 85, 85, { textSize: 'fit', wrap: 'words' }).lines[0]!.font;
   assert.ok(rung >= FONT_LADDER.indexOf(reg), `narrow rung ${rung}`);
+});
+
+test("'slim' selects SLIM_LADDER and fits at least as many characters as narrow", () => {
+  const style: ExtraKeyTextStyle = { font: 'slim', ...CUT };
+  const [row] = layoutWidget(LONG, 85, 85, style).lines;
+  assert.ok(SLIM_LADDER.includes(row!.font));
+  assert.ok(textWidth(row!.font, row!.chars) <= 85);
+  const slimChars = row!.chars.length;
+  const narrowChars = layoutWidget(LONG, 85, 85, { ...narrow, ...CUT }).lines[0]!.chars.length;
+  assert.ok(slimChars >= narrowChars, `${slimChars} >= ${narrowChars}`);
+  const fit = layoutWidget(SENTENCE, 85, 85, { font: 'slim', textSize: 'fit', wrap: 'words' });
+  assert.equal(fit.clipped, false);
+  for (const l of fit.lines) assert.ok(textWidth(l.font, l.chars) <= 85, l.chars.join(''));
 });
 
 test('bold and outline widen rows; outline shifts the pen 1 px in', () => {

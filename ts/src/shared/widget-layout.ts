@@ -1,7 +1,7 @@
 // Pure text layout for DeckBridge display widgets (side keys, touch-strip zones), in
 // pixels so the proportional Narrow font works. Shared so the WebUI server renders
 // size previews with the code the widget scheduler (extra-keys.ts) paints with.
-import { FONT_LADDER, NARROW_LADDER, fontGlyphIndex } from '../assets/font-atlas.js';
+import { FONT_LADDER, NARROW_LADDER, SLIM_LADDER, fontGlyphIndex } from '../assets/font-atlas.js';
 import type { BitmapFont } from '../assets/font-atlas.js';
 import type { ExtraKeyTextStyle, ExtraKeyWrap } from '../web/contract.js';
 
@@ -58,6 +58,8 @@ interface Metrics {
   bold: boolean;
   /** 1-px outline ring: every row grows by 2 px each way. */
   ring: number;
+  /** Rows are as tall as the ASCII ink, not the full line height. */
+  tight: boolean;
 }
 
 const decodedAdvances = new Map<BitmapFont, Uint8Array>();
@@ -85,7 +87,8 @@ const rowWidth = (row: Row, m: Metrics): number =>
   textWidth(row.font, row.chars, m.bold) + 2 * m.ring;
 
 function ladderFor(style: ExtraKeyTextStyle): readonly BitmapFont[] {
-  return style.font === 'narrow' ? NARROW_LADDER : FONT_LADDER;
+  if (style.font === 'narrow') return NARROW_LADDER;
+  return style.font === 'slim' ? SLIM_LADDER : FONT_LADDER;
 }
 
 function fontFor(ladder: readonly BitmapFont[], line: WidgetLine, step: number): BitmapFont {
@@ -168,9 +171,17 @@ function rowsAt(
   });
 }
 
+/** Distance from a row's top to the next row's top, ring included. A negative gap lets
+ *  rows overlap, but never below 1 px so the block keeps a positive height. */
+const rowPitch = (font: BitmapFont, gap: number, m: Metrics): number =>
+  Math.max(1, (m.tight ? font.inkHeight : font.height) + 2 * m.ring + gap);
+
 function blockHeight(rows: readonly Row[], lineGap: number, m: Metrics): number {
-  const gaps = Math.max(0, rows.length - 1) * lineGap;
-  return rows.reduce((h, row) => h + row.font.height + 2 * m.ring, gaps);
+  const last = rows.at(-1);
+  if (!last) return 0;
+  // The last row has no gap after it, so it keeps its own full height.
+  const lastH = rowPitch(last.font, 0, m);
+  return rows.slice(0, -1).reduce((h, row) => h + rowPitch(row.font, lineGap, m), lastH);
 }
 
 function fits(rows: readonly Row[], boxW: number, boxH: number, lineGap: number, m: Metrics) {
@@ -228,7 +239,11 @@ export function layoutWidget(
   height: number,
   style: ExtraKeyTextStyle = {},
 ): WidgetLayout {
-  const m: Metrics = { bold: style.bold === true, ring: style.outline ? 1 : 0 };
+  const m: Metrics = {
+    bold: style.bold === true,
+    ring: style.outline ? 1 : 0,
+    tight: style.tightLines === true,
+  };
   const pad = style.padding ?? 0;
   const gap = style.lineGap ?? 0;
   const boxW = Math.max(0, width - 2 * pad);
@@ -242,8 +257,10 @@ export function layoutWidget(
     const { chars, cut } = truncate(row, boxW, style.ellipsis !== false, m);
     if (cut) clipped = true;
     const x = alignedX(style.align, pad, boxW, rowWidth({ chars, font: row.font }, m));
-    const out = { chars, font: row.font, x: x + m.ring, y: y + m.ring };
-    y += row.font.height + 2 * m.ring + gap;
+    // Draw so the ink, not the cell, starts at the packed row top.
+    const inkShift = m.tight ? row.font.inkTop : 0;
+    const out = { chars, font: row.font, x: x + m.ring, y: y + m.ring - inkShift };
+    y += rowPitch(row.font, gap, m);
     return out;
   });
   return { lines: placed, clipped, style };

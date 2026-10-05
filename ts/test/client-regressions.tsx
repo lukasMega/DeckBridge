@@ -1929,6 +1929,7 @@ async function checkTextStyle(stub: Stub, card: Element): Promise<void> {
 
   const cases: Array<[string, Record<string, unknown>]> = [
     ['[aria-label="Font"] button:nth-child(2)', { font: 'narrow' }],
+    ['[aria-label="Font"] button:nth-child(3)', { font: 'slim' }],
     ['[aria-label="Align"] button:nth-child(1)', { align: 'left' }],
     ['[aria-label="Vertical"] button:nth-child(3)', { valign: 'bottom' }],
     ['button[aria-label="Text colour #ffd60a"]', { color: '#ffd60a' }],
@@ -1955,12 +1956,25 @@ async function checkTextStyle(stub: Stub, card: Element): Promise<void> {
     padding.dispatchEvent(new Event('change'));
   });
   check(keeps({ padding: 4 }), 'Out-of-range padding is not posted');
+  const gap = pop()!.querySelectorAll<HTMLInputElement>('.xkey-popover-field input')[1]!;
+  gap.value = '-3';
+  await act(() => {
+    gap.dispatchEvent(new Event('change'));
+  });
+  check(keeps({ lineGap: -3 }), 'Line gap accepts a negative value');
+  gap.value = '-9';
+  await act(() => {
+    gap.dispatchEvent(new Event('change'));
+  });
+  check(keeps({ lineGap: -3 }), 'Line gap below -8 is not posted');
   const boxes = [...pop()!.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')];
   await act(() => boxes[0]!.click());
-  check(keeps({ bold: true }), 'Bold posts bold');
+  check(keeps({ tightLines: true }), 'Tight lines posts tightLines');
   await act(() => boxes[1]!.click());
-  check(keeps({ outline: '#000000' }), 'Outline posts a black outline');
+  check(keeps({ bold: true }), 'Bold posts bold');
   await act(() => boxes[2]!.click());
+  check(keeps({ outline: '#000000' }), 'Outline posts a black outline');
+  await act(() => boxes[3]!.click());
   check(keeps({ ellipsis: false }), 'Ellipsis off posts false');
   const reset = [...pop()!.querySelectorAll('button')].find(
     (b) => b.textContent === 'Reset style',

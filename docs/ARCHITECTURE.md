@@ -533,15 +533,17 @@ the WebUI assign each one a **widget**: `clock`, `date`, `text`, `weather` (Open
 plain HTTP since the slim runtime has no TLS), `command` (runs a user-supplied shell command and
 shows its stdout — full trust, same tradeoff as a build script), `plugin` (below), or `none`.
 `renderWidgetLines()` picks the text; [widget-layout.ts](../ts/src/shared/widget-layout.ts) (`shared`) lays it
-out in pixels on one of two six-rung bitmap-font ladders (`assets/font-atlas.ts`: Spleen monospace, or
-proportional X11 Helvetica with per-glyph advances) per the key's `style` (`ExtraKeyTextStyle`: size
-step or `'fit'`, wrap, font, alignment, padding, line gap, bold/outline, ellipsis), and
-[widget-raster.ts](../ts/src/shared/widget-raster.ts) rasterizes it into a 24-bit BMP in the style's colours,
+out in pixels on one of three six-rung font ladders (`assets/font-atlas.ts`: Spleen monospace, proportional
+X11 Helvetica with per-glyph advances, or **Slim** = Barlow Condensed, OFL-1.1, rasterized anti-aliased at
+generate time into a 4-bit alpha atlas with tight per-glyph boxes) per the key's `style` (`ExtraKeyTextStyle`: size
+step or `'fit'`, wrap, font, alignment, padding, line gap −8..8 px, tight lines, bold/outline, ellipsis), and
+[widget-raster.ts](../ts/src/shared/widget-raster.ts) rasterizes it into a 24-bit BMP in the style's colours
+(1-bit glyphs are stamped; alpha glyphs are blended over what is already on the canvas),
 pushed through the existing splash path — so the worker's transform, not the main thread, does the
 FFI JPEG encode. Each paint (bitmap, lines, style, clipped flag) is mirrored to the WebUI;
 `POST /api/extra-key/preview` re-lays the last painted lines at every size in that style for the size
-picker, which is exact because the lines don't depend on the size. Both atlases hold ASCII, Latin-1
-and `…`; `scripts/gen-font-atlas.mjs` regenerates them from the upstream BDFs. A per-dock `ExtraKeyWidgets` scheduler
+picker, which is exact because the lines don't depend on the size. All atlases hold ASCII, Latin-1
+and `…`; `scripts/gen-font-atlas.mjs` regenerates them from the upstream BDFs and TTFs. A per-dock `ExtraKeyWidgets` scheduler
 (one instance per `Dock` with a driver attached) ticks every second
 and repaints a key only when its content changed.
 

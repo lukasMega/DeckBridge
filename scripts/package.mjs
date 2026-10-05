@@ -114,7 +114,7 @@ if (includeTray) {
 
 // Bundle third-party licenses: hidapi and the widget fonts are embedded in the binary,
 // and the Helvetica notice must travel with every copy.
-for (const name of ['LICENSE-hidapi.txt', 'LICENSE-spleen.txt', 'LICENSE-helvetica.txt']) {
+for (const name of ['LICENSE-hidapi.txt', 'LICENSE-spleen.txt', 'LICENSE-helvetica.txt', 'LICENSE-barlow.txt']) {
   const licenseSrc = join(scriptDir, name);
   if (existsSync(licenseSrc)) copyFileSync(licenseSrc, join(distDir, name));
 }
