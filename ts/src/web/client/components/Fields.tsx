@@ -149,6 +149,28 @@ export function CheckField({
   );
 }
 
+/** Bare `.input` text box reporting its string value. */
+export function TextInput({
+  onChange,
+  ...rest
+}: Readonly<{
+  value: string;
+  placeholder?: string;
+  'aria-label'?: string;
+  maxLength?: number;
+  disabled?: boolean;
+  onChange: (v: string) => void;
+}>): preact.JSX.Element {
+  return (
+    <input
+      {...rest}
+      class="input"
+      type="text"
+      onInput={(e) => onChange((e.target as HTMLInputElement).value)}
+    />
+  );
+}
+
 export function ToggleRow({
   id,
   label,

@@ -1,13 +1,12 @@
 // Settings-page block for producing a bug report: the debug-logging toggle, the
 // log-file location, and the two diagnostics-report actions.
-//
-// Kept out of overlays.tsx to stay under the 500-line check-loc gate.
 import { DocsLink } from '../components/DocsLink.js';
 import { useState } from 'preact/hooks';
 import { Collapsible } from '../components/Collapsible.js';
 import { CheckField } from '../components/Fields.js';
+import { GhostButton } from '../components/GhostButton.js';
 import { IdentityRow } from '../components/IdentityRow.js';
-import { postJson } from '../lib/ui-api.js';
+import { download, postJson } from '../lib/ui-api.js';
 import { Feedback, useAsyncAction } from '../lib/ui-async.js';
 
 /** Shown next to both report buttons and repeated as the report's own first line
@@ -40,17 +39,15 @@ export function DiagnosticsPanel({
         : 'Debug logging off.';
     });
 
-  const download = (): Promise<void> =>
+  const createReport = (): Promise<void> =>
     action.run(async () => {
-      const r = await fetch(`/api/diagnostics${redact ? '?redactCommands=1' : ''}`);
-      if (!r.ok) throw new Error(`Report failed (${r.status})`);
-      const body = await r.text();
-      const url = URL.createObjectURL(new Blob([body], { type: 'text/plain' }));
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = 'deckbridge-diagnostics.txt';
-      a.click();
-      URL.revokeObjectURL(url);
+      const query = redact ? '?redactCommands=1' : '';
+      await download(
+        `/api/diagnostics${query}`,
+        'deckbridge-diagnostics.txt',
+        'text/plain',
+        'Report failed',
+      );
       return 'Report downloaded.';
     });
 
@@ -82,42 +79,22 @@ export function DiagnosticsPanel({
         <DocsLink topic="troubleshooting" label="Troubleshooting" />
       </p>
       <div class="settings-actions">
-        <button
+        <GhostButton
           id="toggle-debug-logging"
-          class="ghostbtn"
-          type="button"
           disabled={action.busy || logLevel === null}
-          onClick={() => void toggleDebug()}
+          onClick={toggleDebug}
         >
           {debugOn ? 'Debug logging: on' : 'Debug logging: off'}
-        </button>
-        <button
-          id="open-logs-folder"
-          class="ghostbtn"
-          type="button"
-          disabled={action.busy}
-          onClick={() => void openLogs()}
-        >
+        </GhostButton>
+        <GhostButton id="open-logs-folder" disabled={action.busy} onClick={openLogs}>
           Open logs folder
-        </button>
-        <button
-          id="create-diagnostics"
-          class="ghostbtn"
-          type="button"
-          disabled={action.busy}
-          onClick={() => void download()}
-        >
+        </GhostButton>
+        <GhostButton id="create-diagnostics" disabled={action.busy} onClick={createReport}>
           Create report
-        </button>
-        <button
-          id="save-diagnostics"
-          class="ghostbtn"
-          type="button"
-          disabled={action.busy}
-          onClick={() => void saveAndReveal()}
-        >
+        </GhostButton>
+        <GhostButton id="save-diagnostics" disabled={action.busy} onClick={saveAndReveal}>
           Save &amp; reveal
-        </button>
+        </GhostButton>
       </div>
       <CheckField
         id="redact-commands"
@@ -128,12 +105,8 @@ export function DiagnosticsPanel({
       <p class="fine small">{PRIVACY_NOTE}</p>
       {logFilePath !== '' && (
         <ul class="identity-list panel-inset">
-          <IdentityRow label="Log file">
-            <code class="identity-value">{logFilePath}</code>
-          </IdentityRow>
-          <IdentityRow label="Log level">
-            <code class="identity-value">{level}</code>
-          </IdentityRow>
+          <IdentityRow label="Log file" value={logFilePath} />
+          <IdentityRow label="Log level" value={level} />
         </ul>
       )}
       <Feedback error={action.error} status={action.status} />

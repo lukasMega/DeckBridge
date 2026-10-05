@@ -6,6 +6,7 @@ import { ICON, Icon } from '../components/Icon.js';
 import { HELP } from '../ui-help.js';
 import { Collapsible } from '../components/Collapsible.js';
 import { IdentityRow } from '../components/IdentityRow.js';
+import { TextInput } from '../components/Fields.js';
 import { DiagnosticsPanel } from './diagnostics-panel.js';
 import { PushApiPanel } from './push-api-panel.js';
 import { MultiDeckPanel } from './multi-deck-panel.js';
@@ -16,7 +17,8 @@ import { ElgatoAppPanel } from './elgato-app-panel.js';
 import { DeviceTuningPanel } from './device-tuning.js';
 import { StandbyPanel } from './standby-panel.js';
 import { SettingsGroup, SettingsSearch } from './settings-search.js';
-import { postJson, useFetched } from '../lib/ui-api.js';
+import { GhostButton } from '../components/GhostButton.js';
+import { download, postJson, useFetched } from '../lib/ui-api.js';
 import { Feedback, useAsyncAction, type AsyncAction } from '../lib/ui-async.js';
 import { useDismiss } from '../lib/ui-hooks.js';
 import type {
@@ -50,24 +52,6 @@ function isSensitiveIdentityKey(key: ReadOnlyIdentityKey): boolean {
   return key === 'serialNumber' || key === 'childSerialNumber' || key === 'macAddress';
 }
 
-/** Blur is cosmetic (shoulder-surfing/screenshots) — the value stays in the DOM,
- *  so the hidden state says so rather than reading the value out. */
-function SensitiveValue({ value }: Readonly<{ value: string }>): preact.JSX.Element {
-  const [revealed, setRevealed] = useState(false);
-  return (
-    <button
-      class={`identity-value identity-sensitive${revealed ? ' revealed' : ''}`}
-      type="button"
-      aria-pressed={revealed}
-      aria-label={revealed ? value : 'Hidden — activate to show value'}
-      title={revealed ? 'Hide sensitive value' : 'Show sensitive value'}
-      onClick={() => setRevealed(!revealed)}
-    >
-      {value}
-    </button>
-  );
-}
-
 /** mDNS service name row: editable when the identity has a `deviceKey` (a
  *  real dock with a persisted per-device identity — see device-identity.ts);
  *  otherwise (mock mode) rendered read-only like the other identity fields. */
@@ -82,11 +66,7 @@ function MdnsNameEditor({
   const save = useAsyncAction();
 
   if (!identity.deviceKey) {
-    return (
-      <IdentityRow label="mDNS service name">
-        <code class="identity-value">{identity.mdnsServiceName}</code>
-      </IdentityRow>
-    );
+    return <IdentityRow label="mDNS service name" value={identity.mdnsServiceName} />;
   }
 
   const deviceKey = identity.deviceKey;
@@ -107,21 +87,10 @@ function MdnsNameEditor({
     <>
       <IdentityRow class="identity-editable" label="mDNS service name">
         <span class="identity-edit-row">
-          <input
-            class="input"
-            type="text"
-            value={value}
-            disabled={save.busy}
-            onInput={(e) => setValue((e.target as HTMLInputElement).value)}
-          />
-          <button
-            class="ghostbtn"
-            type="button"
-            disabled={!dirty || save.busy}
-            onClick={() => void handleSave()}
-          >
+          <TextInput value={value} disabled={save.busy} onChange={setValue} />
+          <GhostButton disabled={!dirty || save.busy} onClick={handleSave}>
             {save.busy ? 'Saving…' : 'Save'}
-          </button>
+          </GhostButton>
         </span>
       </IdentityRow>
       {save.error && (
@@ -221,60 +190,30 @@ function RealIdentityList({
 
   return (
     <ul class="identity-list panel-inset">
-      <IdentityRow label="Model">
-        <code class="identity-value">{realIdentity.modelName}</code>
-      </IdentityRow>
-      <IdentityRow label="Serial number">
-        {realIdentity.serialNumber ? (
-          <SensitiveValue value={realIdentity.serialNumber} />
-        ) : (
-          <code class="identity-value">Unavailable</code>
-        )}
-      </IdentityRow>
-      <IdentityRow label="Firmware version">
-        <code class="identity-value">{realIdentity.firmwareVersion ?? 'Unavailable'}</code>
-      </IdentityRow>
+      <IdentityRow label="Model" value={realIdentity.modelName} />
+      <IdentityRow label="Serial number" value={realIdentity.serialNumber} sensitive />
+      <IdentityRow label="Firmware version" value={realIdentity.firmwareVersion} />
     </ul>
   );
 }
 
-/** The settings.json file actions (export / import / open-in-OS), kept out of
- *  SettingsPage so that component stays within the complexity ceiling. */
-function useSettingsFileActions(
-  action: AsyncAction,
-  reloadSettings: () => Promise<void>,
-): {
-  fileInputRef: { current: HTMLInputElement | null };
-  handleExport: () => Promise<void>;
-  handleImportClick: () => void;
-  handleOpenInOS: () => Promise<void>;
-  handleFileChange: (e: Event) => Promise<void>;
-} {
+/** Export / import of settings.json; reports through the page-level action. */
+function SettingsFileActions({
+  action,
+  reloadSettings,
+}: Readonly<{ action: AsyncAction; reloadSettings: () => Promise<void> }>): preact.JSX.Element {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const handleExport = (): Promise<void> =>
     action.run(async () => {
-      const r = await fetch('/api/settings');
-      if (!r.ok) throw new Error(`Export failed (${r.status})`);
-      const text = await r.text();
-      const url = URL.createObjectURL(new Blob([text], { type: 'application/json' }));
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = 'deckbridge-settings.json';
-      a.click();
-      URL.revokeObjectURL(url);
+      await download(
+        '/api/settings',
+        'deckbridge-settings.json',
+        'application/json',
+        'Export failed',
+      );
       return 'Settings exported.';
     }, 'Export failed.');
-
-  const handleImportClick = (): void => {
-    fileInputRef.current?.click();
-  };
-
-  const handleOpenInOS = (): Promise<void> =>
-    action.run(async () => {
-      await postJson('/api/settings/open-in-os', undefined, 'Open failed');
-      return 'Opened settings.json.';
-    }, 'Open failed.');
 
   const handleFileChange = async (e: Event): Promise<void> => {
     const input = e.target as HTMLInputElement;
@@ -288,7 +227,19 @@ function useSettingsFileActions(
     }, 'Import failed.');
   };
 
-  return { fileInputRef, handleExport, handleImportClick, handleOpenInOS, handleFileChange };
+  return (
+    <div class="settings-actions">
+      <GhostButton onClick={handleExport}>Export settings</GhostButton>
+      <GhostButton onClick={() => fileInputRef.current?.click()}>Import settings</GhostButton>
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="application/json"
+        class="settings-file-input"
+        onChange={(e) => void handleFileChange(e)}
+      />
+    </div>
+  );
 }
 
 /** Identity fields sent to the Elgato app; collapsed because they only matter when troubleshooting. */
@@ -316,13 +267,12 @@ function ConnectionDetails({
             onSaved={onRenamed}
           />
           {IDENTITY_FIELDS.map(({ key, label }) => (
-            <IdentityRow key={key} label={label}>
-              {isSensitiveIdentityKey(key) ? (
-                <SensitiveValue value={formatIdentityValue(key, identity[key])} />
-              ) : (
-                <code class="identity-value">{formatIdentityValue(key, identity[key])}</code>
-              )}
-            </IdentityRow>
+            <IdentityRow
+              key={key}
+              label={label}
+              value={formatIdentityValue(key, identity[key])}
+              sensitive={isSensitiveIdentityKey(key)}
+            />
           ))}
         </ul>
       ) : (
@@ -346,8 +296,11 @@ export function SettingsPage({ onBack }: Readonly<{ onBack: () => void }>): prea
 
   useDismiss(onBack);
 
-  const { fileInputRef, handleExport, handleImportClick, handleOpenInOS, handleFileChange } =
-    useSettingsFileActions(action, settings.reload);
+  const handleOpenInOS = (): Promise<void> =>
+    action.run(async () => {
+      await postJson('/api/settings/open-in-os', undefined, 'Open failed');
+      return 'Opened settings.json.';
+    }, 'Open failed.');
 
   const settingsText = settings.data === null ? null : JSON.stringify(settings.data, null, 2);
   const fetchedIdentity = state.data?.deviceIdentity ?? null;
@@ -383,21 +336,7 @@ export function SettingsPage({ onBack }: Readonly<{ onBack: () => void }>): prea
         <SettingsGroup title="Maintenance">
           <UpdatePanel info={updateInfoFor(state.data)} />
           <DiagnosticsPanel {...diagnosticsProps(state.data)} />
-          <div class="settings-actions">
-            <button class="ghostbtn" type="button" onClick={() => void handleExport()}>
-              Export settings
-            </button>
-            <button class="ghostbtn" type="button" onClick={handleImportClick}>
-              Import settings
-            </button>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="application/json"
-              class="settings-file-input"
-              onChange={(e) => void handleFileChange(e)}
-            />
-          </div>
+          <SettingsFileActions action={action} reloadSettings={settings.reload} />
         </SettingsGroup>
         <Feedback error={action.error} status={action.status} />
 
@@ -421,9 +360,7 @@ export function SettingsPage({ onBack }: Readonly<{ onBack: () => void }>): prea
           >
             <pre class="settings-json-preview panel-inset">{settingsText ?? 'Loading…'}</pre>
             <div class="settings-actions">
-              <button class="ghostbtn" type="button" onClick={() => void handleOpenInOS()}>
-                Open settings.json
-              </button>
+              <GhostButton onClick={handleOpenInOS}>Open settings.json</GhostButton>
             </div>
           </Collapsible>
         </SettingsGroup>

@@ -1,9 +1,8 @@
 // Settings-page block for the Elgato-app auto-restart feature (see
-// infra/elgato-app.ts, main/elgato-auto-restart.ts, §4.4 of the plan). Kept out
-// of overlays.tsx to stay under the 500-line check-loc gate, same reason as
-// UpdatePanel.
+// infra/elgato-app.ts, main/elgato-auto-restart.ts, §4.4 of the plan).
 import { useState } from 'preact/hooks';
 import { Collapsible } from '../components/Collapsible.js';
+import { GhostButton } from '../components/GhostButton.js';
 import { NumberField, ToggleRow } from '../components/Fields.js';
 import { postJson } from '../lib/ui-api.js';
 import { Feedback, useAsyncAction } from '../lib/ui-async.js';
@@ -30,25 +29,14 @@ export function ElgatoAppPanel({
   const supported = current?.supported ?? true;
   const restartStatus = current === null ? null : enabled;
 
-  const toggle = (next: boolean): Promise<void> =>
+  const save = (body: { enabled: boolean; delayS?: number }): Promise<void> =>
     action.run(async () => {
       const reply = await postJson<{ enabled: boolean; delayS: number }>(
         '/api/elgato-auto-restart',
-        { enabled: next },
+        body,
       );
       setLive({ ...(current as ElgatoAutoRestartState), ...reply });
     });
-
-  const changeDelay = (next: number | undefined): Promise<void> => {
-    if (next === undefined) return Promise.resolve();
-    return action.run(async () => {
-      const reply = await postJson<{ enabled: boolean; delayS: number }>(
-        '/api/elgato-auto-restart',
-        { enabled, delayS: next },
-      );
-      setLive({ ...(current as ElgatoAutoRestartState), ...reply });
-    });
-  };
 
   const restartNow = (): Promise<void> =>
     action.run(async () => {
@@ -75,7 +63,7 @@ export function ElgatoAppPanel({
         label="Restart the Elgato app when a paired deck connects"
         checked={enabled}
         disabled={!supported}
-        onChange={(next) => void toggle(next)}
+        onChange={(next) => void save({ enabled: next })}
       />
       <NumberField
         label="Wait before restarting (seconds)"
@@ -83,16 +71,11 @@ export function ElgatoAppPanel({
         min={3}
         max={120}
         disabled={!supported || !enabled}
-        onChange={(next) => void changeDelay(next)}
+        onChange={(next) => next !== undefined && void save({ enabled, delayS: next })}
       />
-      <button
-        class="ghostbtn"
-        type="button"
-        disabled={!supported || action.busy}
-        onClick={() => void restartNow()}
-      >
+      <GhostButton disabled={!supported || action.busy} onClick={restartNow}>
         {action.busy ? 'Restarting…' : 'Restart Elgato app now'}
-      </button>
+      </GhostButton>
       <Feedback error={action.error} status={action.status} />
     </Collapsible>
   );

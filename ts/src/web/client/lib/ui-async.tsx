@@ -1,6 +1,7 @@
 // The busy/status/error triple every settings-page action needs, plus the footer
 // that renders it. `settings-error` / `settings-status` are styled in ui-simple.css.
 import { useCallback, useState } from 'preact/hooks';
+import { postJson } from './ui-api.js';
 
 export interface AsyncAction {
   /** True while `run` is in flight — wire it to the buttons' `disabled`. */
@@ -45,6 +46,24 @@ export function useAsyncAction(): AsyncAction {
   );
 
   return { busy, status, error, reset, setStatus, run };
+}
+
+/** An on/off setting saved by POSTing `{ enabled }` to `url`. `initial` null = not read
+ *  yet. `onSaved` returns the status line for the new value. */
+export function useServerToggle(
+  url: string,
+  initial: boolean | null,
+  onSaved: (next: boolean) => string,
+): { value: boolean | null; action: AsyncAction; toggle: (next: boolean) => Promise<void> } {
+  const [toggled, setToggled] = useState<boolean | null>(null);
+  const action = useAsyncAction();
+  const toggle = (next: boolean): Promise<void> =>
+    action.run(async () => {
+      await postJson(url, { enabled: next });
+      setToggled(next);
+      return onSaved(next);
+    });
+  return { value: toggled ?? initial, action, toggle };
 }
 
 /** Standard action footer: the error wins, so a stale status can't sit under it. */
