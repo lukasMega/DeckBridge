@@ -15,6 +15,28 @@ pnpm run serve      # serve the built site
 pnpm run typecheck  # tsc
 ```
 
+## Dependency security fixes
+
+The `fast-uri` override requires `^3.1.8`, fixing percent-encoded host case
+normalization (CVE-2026-86472) with an upstream release.
+
+`pnpm-workspace.yaml` applies version-specific patches from `../patches/`:
+
+- `braces@3.0.3` (CVE-2026-93687): reject patterns exceeding 100 nested
+  brace/parenthesis blocks before recursive AST walkers run. The TypeScript
+  workspace shares this patch for ESLint's transitive copy.
+- `http-cache-semantics@4.2.0` (CVE-2026-93748): prevent `max-stale` and other
+  stale-response paths from bypassing existing cache security restrictions.
+  Normal expiry and explicitly permitted caching retain their behavior.
+
+`pnpm run test:security` checks both mitigations against Docusaurus's actual
+transitive dependencies and runs as part of `pnpm test` in CI.
+
+These are local mitigations, not upstream releases. Dependabot may continue
+reporting the affected package versions. Remove each patch registration and
+file when an upstream release passes the regression tests, then regenerate
+the lockfiles. HTTP cache 4.3.0 still reproduces the `max-stale` issue.
+
 ## Refresh screenshots
 
 From repository root:

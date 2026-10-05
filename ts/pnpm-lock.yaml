@@ -8,6 +8,9 @@ overrides:
   browserslist: ^4.28.7
   baseline-browser-mapping: ^2.11.0
 
+patchedDependencies:
+  braces@3.0.3: a36c55af0dcac53cbedc7e4a235cfbe5ebeb025db5d41cf63028ad61098f5cdb
+
 importers:
 
   .:
@@ -3159,7 +3162,7 @@ snapshots:
     dependencies:
       balanced-match: 4.0.4
 
-  braces@3.0.3:
+  braces@3.0.3(patch_hash=a36c55af0dcac53cbedc7e4a235cfbe5ebeb025db5d41cf63028ad61098f5cdb):
     dependencies:
       fill-range: 7.1.1
 
@@ -3713,7 +3716,7 @@ snapshots:
 
   micromatch@4.0.8:
     dependencies:
-      braces: 3.0.3
+      braces: 3.0.3(patch_hash=a36c55af0dcac53cbedc7e4a235cfbe5ebeb025db5d41cf63028ad61098f5cdb)
       picomatch: 2.3.2
 
   minimatch@10.2.6:
