@@ -168,7 +168,7 @@ html[data-mode='advanced'] #simple-view {
   gap: 10px;
 }
 :is(.app-version, .strip-zone-title, .side-keys-legend, .manual-add-head, .manual-add-docs),
-:is(.addr-port-chip, .settings-json-preview, .input, .side-keys-flow-caption),
+:is(.addr-port-chip, .settings-json-preview, .input),
 .warnrow code,
 .xkeys-compact .input.xkey-select,
 :is(.help-steps .num, .tuning-checkboxes .settings-checkbox) {
@@ -222,7 +222,6 @@ select.input {
   box-shadow: var(--shadow-1);
 }
 :is(.wordmark, .stage-title, .b-val, .manual-add-head, .help-section-label),
-.side-keys-flow-heading,
 :is(.conflict h1, .help h1, .popover h2, .about-notice h3),
 .help-steps li b {
   font-weight: 650;
@@ -235,7 +234,7 @@ select.input {
 :is(.brightness .b-ico, .key-cell .kidx) {
   color: var(--fg-dim);
 }
-:is(.dock-pairing-note, .xkey-pos, .multi-deck-note, .side-keys-flow-note),
+:is(.dock-pairing-note, .xkey-pos, .multi-deck-note),
 .crop-preview figcaption {
   font-size: 12px;
   color: var(--fg-muted);
@@ -368,7 +367,7 @@ select.input {
   display: grid;
   gap: 8px;
 }
-:is(.strip-zone-canvas, .side-keys-sankey),
+.strip-zone-canvas,
 :is(.help-stage svg, .xkey-tile img, .crop-key img) {
   width: 100%;
   display: block;
@@ -426,8 +425,7 @@ select.input {
   font-size: 13px;
   color: var(--fg);
 }
-:is(.conflict-body, .help-lead, .ctabtn, .side-keys-flow-heading),
-.side-keys-flow-label,
+:is(.conflict-body, .help-lead, .ctabtn),
 .popover .about-intro {
   font-size: 14px;
 }
