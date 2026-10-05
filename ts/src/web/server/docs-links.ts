@@ -34,13 +34,13 @@ export function docsUrl(topic: DocsTopic): string {
   return `${DOCS_BASE}${path}?${utm}${hash}`;
 }
 
-/** Only a real top-level navigation from our own page counts; an <img>/prefetch from a LAN page must not. */
+/** Only document/iframe navigation from our own page counts; an <img>/prefetch from a LAN page must not. */
 export function isOwnNavigation(headers: Headers): boolean {
   const site = headers.get('sec-fetch-site');
   if (site !== null) {
     if (site !== 'same-origin' && site !== 'none') return false;
     const dest = headers.get('sec-fetch-dest');
-    return dest === null || dest === 'document';
+    return dest === null || dest === 'document' || dest === 'iframe';
   }
   const referer = headers.get('referer');
   const host = headers.get('host');

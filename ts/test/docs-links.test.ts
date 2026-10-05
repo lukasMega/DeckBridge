@@ -43,6 +43,14 @@ test('isOwnNavigation uses Sec-Fetch-* when present', () => {
     isOwnNavigation(h({ 'sec-fetch-site': 'none', 'sec-fetch-dest': 'document' })),
     true,
   );
+  assert.equal(
+    isOwnNavigation(h({ 'sec-fetch-site': 'same-origin', 'sec-fetch-dest': 'iframe' })),
+    true,
+  );
+  assert.equal(
+    isOwnNavigation(h({ 'sec-fetch-site': 'cross-site', 'sec-fetch-dest': 'iframe' })),
+    false,
+  );
   assert.equal(isOwnNavigation(h({ 'sec-fetch-site': 'cross-site' })), false);
   assert.equal(
     isOwnNavigation(h({ 'sec-fetch-site': 'same-origin', 'sec-fetch-dest': 'image' })),
