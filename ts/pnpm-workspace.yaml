@@ -9,3 +9,7 @@ allowBuilds:
 overrides:
   browserslist: "^4.28.7"
   baseline-browser-mapping: "^2.11.0"
+
+# Share the docs build's nesting guard with ESLint's transitive braces copy.
+patchedDependencies:
+  braces@3.0.3: ../patches/braces@3.0.3.patch

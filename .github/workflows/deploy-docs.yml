@@ -6,12 +6,14 @@ on:
     paths:
       - 'docs/**'
       - 'docs-site/**'
+      - 'patches/**'
       - '.github/workflows/deploy-docs.yml'
   # Build + test docs changes before merge. The deploy job is skipped on PRs.
   pull_request:
     paths:
       - 'docs/**'
       - 'docs-site/**'
+      - 'patches/**'
       - '.github/workflows/deploy-docs.yml'
   workflow_dispatch:
 
