@@ -1,5 +1,6 @@
 import type { ComponentChildren } from 'preact';
 import { useLayoutEffect, useRef, useState } from 'preact/hooks';
+import { GhostButton } from '../components/GhostButton.js';
 
 function matches(element: HTMLElement, terms: string[], group: string): boolean {
   const labels = Array.from(
@@ -95,9 +96,7 @@ export function SettingsSearch({
           }}
         />
         {query !== '' && (
-          <button
-            class="ghostbtn"
-            type="button"
+          <GhostButton
             aria-label="Clear search"
             onClick={() => {
               setQuery('');
@@ -105,7 +104,7 @@ export function SettingsSearch({
             }}
           >
             Clear
-          </button>
+          </GhostButton>
         )}
       </div>
       <p ref={statusRef} class="visually-hidden" role="status" />

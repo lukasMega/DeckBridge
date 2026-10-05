@@ -36,6 +36,23 @@ export async function getJson<T>(url: string, signal?: AbortSignal): Promise<T> 
   return (await r.json()) as T;
 }
 
+/** GET a URL and save the reply as a file. Throws `${what} (${status})` on failure. */
+export async function download(
+  url: string,
+  filename: string,
+  type: string,
+  what: string,
+): Promise<void> {
+  const r = await fetch(url);
+  if (!r.ok) throw new Error(`${what} (${r.status})`);
+  const href = URL.createObjectURL(new Blob([await r.text()], { type }));
+  const a = document.createElement('a');
+  a.href = href;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(href);
+}
+
 export interface Fetched<T> {
   data: T | null;
   error: string | null;

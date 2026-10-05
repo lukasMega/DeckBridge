@@ -1,8 +1,8 @@
 // Settings-page block for the GitHub-release update check (see update-check.ts).
-// Notify only — no download/self-update. Kept out of overlays.tsx to stay under
-// the 500-line check-loc gate, same reason as MultiDeckPanel.
+// Notify only — no download/self-update.
 import { useState } from 'preact/hooks';
 import { Collapsible } from '../components/Collapsible.js';
+import { GhostButton } from '../components/GhostButton.js';
 import { ToggleRow } from '../components/Fields.js';
 import { postJson } from '../lib/ui-api.js';
 import { Feedback, useAsyncAction } from '../lib/ui-async.js';
@@ -39,14 +39,9 @@ export function UpdatePanel({ info }: Readonly<{ info: UpdateInfo | null }>): pr
         checked={enabled}
         onChange={(next) => void toggle(next)}
       >
-        <button
-          class="ghostbtn"
-          type="button"
-          disabled={!enabled || action.busy}
-          onClick={() => void check()}
-        >
+        <GhostButton disabled={!enabled || action.busy} onClick={check}>
           {action.busy ? 'Checking…' : 'Check now'}
-        </button>
+        </GhostButton>
       </ToggleRow>
       {current?.updateAvailable && (
         <p class="multi-deck-note">

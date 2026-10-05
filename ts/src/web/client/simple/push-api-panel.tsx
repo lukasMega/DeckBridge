@@ -3,6 +3,8 @@
 import { DocsLink } from '../components/DocsLink.js';
 import { useEffect, useState } from 'preact/hooks';
 import { Collapsible } from '../components/Collapsible.js';
+import { TextInput } from '../components/Fields.js';
+import { GhostButton } from '../components/GhostButton.js';
 import { copyLabel, useCopyText } from '../lib/use-copy-text.js';
 import { getJson, postJson } from '../lib/ui-api.js';
 import { Feedback, useAsyncAction } from '../lib/ui-async.js';
@@ -26,12 +28,10 @@ function TokenReveal({
     <div class="push-reveal panel-inset">
       <p class="settings-status">Shown once — copy it now.</p>
       <code class="push-token">{created.token}</code>
-      <button class="ghostbtn" type="button" onClick={() => void copy.copy(created.token)}>
+      <GhostButton onClick={() => copy.copy(created.token)}>
         {copyLabel(copy.status, 'Copy')}
-      </button>
-      <button class="ghostbtn" type="button" onClick={onClose}>
-        Done
-      </button>
+      </GhostButton>
+      <GhostButton onClick={onClose}>Done</GhostButton>
     </div>
   );
 }
@@ -72,22 +72,12 @@ function TokenList({
                 ? `last used ${new Date(t.lastUsedAt).toLocaleTimeString()} (since start)`
                 : 'unused'}
             </span>
-            <button
-              class="ghostbtn"
-              type="button"
-              disabled={action.busy}
-              onClick={() => void rotate(t)}
-            >
+            <GhostButton disabled={action.busy} onClick={() => rotate(t)}>
               Rotate
-            </button>
-            <button
-              class="ghostbtn"
-              type="button"
-              disabled={action.busy}
-              onClick={() => void revoke(t)}
-            >
+            </GhostButton>
+            <GhostButton disabled={action.busy} onClick={() => revoke(t)}>
               Revoke
-            </button>
+            </GhostButton>
           </li>
         ))}
       </ul>
@@ -136,9 +126,7 @@ function ChannelTable({ channels }: Readonly<{ channels: PushChannelView[] }>): 
                 <td>{c.bound} bound</td>
                 <td>{expiresIn(c, now)}</td>
                 <td>
-                  <button class="ghostbtn" type="button" onClick={() => void clear(c.channel)}>
-                    Clear
-                  </button>
+                  <GhostButton onClick={() => clear(c.channel)}>Clear</GhostButton>
                 </td>
               </tr>
             ))}
@@ -146,31 +134,22 @@ function ChannelTable({ channels }: Readonly<{ channels: PushChannelView[] }>): 
         </table>
       )}
       <div class="push-test">
-        <input
-          class="input"
-          type="text"
+        <TextInput
           placeholder="channel"
           aria-label="Push test channel"
           maxLength={32}
           value={test.channel}
-          onInput={(e) => setTest({ ...test, channel: (e.target as HTMLInputElement).value })}
+          onChange={(channel) => setTest({ ...test, channel })}
         />
-        <input
-          class="input"
-          type="text"
+        <TextInput
           placeholder="text"
           aria-label="Push test text"
           value={test.text}
-          onInput={(e) => setTest({ ...test, text: (e.target as HTMLInputElement).value })}
+          onChange={(text) => setTest({ ...test, text })}
         />
-        <button
-          class="ghostbtn"
-          type="button"
-          disabled={action.busy || !test.channel}
-          onClick={() => void send()}
-        >
+        <GhostButton disabled={action.busy || !test.channel} onClick={send}>
           Send test
-        </button>
+        </GhostButton>
       </div>
       <Feedback error={action.error} status={action.status} />
     </>
@@ -215,23 +194,16 @@ export function PushApiPanel(): preact.JSX.Element {
       {created && <TokenReveal created={created} onClose={() => setCreated(null)} />}
       <TokenList tokens={tokens ?? []} onChanged={loadTokens} onCreated={setCreated} />
       <div class="push-test">
-        <input
-          class="input"
-          type="text"
+        <TextInput
           placeholder="token name"
           aria-label="New push token name"
           maxLength={NAME_MAX}
           value={name}
-          onInput={(e) => setName((e.target as HTMLInputElement).value)}
+          onChange={setName}
         />
-        <button
-          class="ghostbtn"
-          type="button"
-          disabled={action.busy || !name.trim()}
-          onClick={() => void create()}
-        >
+        <GhostButton disabled={action.busy || !name.trim()} onClick={create}>
           Create token
-        </button>
+        </GhostButton>
       </div>
       <Feedback error={action.error} status={action.status} />
       <ChannelTable channels={channels} />

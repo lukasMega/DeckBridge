@@ -6,6 +6,7 @@ import { useCallback, useEffect, useRef, useState } from 'preact/hooks';
 import { ChipRadioGroup } from '../components/ChipRadioGroup.js';
 import type { ChipOption } from '../components/ChipRadioGroup.js';
 import { Collapsible } from '../components/Collapsible.js';
+import { GhostButton } from '../components/GhostButton.js';
 import { CheckField, NumberField, SelectField } from '../components/Fields.js';
 import { useStore } from '../lib/store.js';
 import type { StoreState } from '../lib/store.js';
@@ -78,14 +79,16 @@ function padFillChips(
 
 /** Numeric fields rendered as a plain number input, with their bounds. Bounds
  *  mirror devices/model-overrides.ts — the server re-validates regardless. */
-const NUMBER_FIELDS: ReadonlyArray<{
+interface NumberFieldSpec {
   key: keyof DeviceImageOverride;
   label: string;
   min: number;
   max?: number;
   step?: number;
   advanced?: boolean;
-}> = [
+}
+
+const NUMBER_FIELDS: readonly NumberFieldSpec[] = [
   { key: 'width', label: 'Width (px)', min: 8, max: 1024 },
   { key: 'height', label: 'Height (px)', min: 8, max: 1024 },
   { key: 'quality', label: 'JPEG quality (0.05–1)', min: 0.05, max: 1, step: 0.05 },
@@ -305,6 +308,18 @@ export function DeviceTuningPanel(): preact.JSX.Element {
   if (!activeView) return <EmptyDeviceTuningPanel />;
 
   const patch = (p: Partial<DeviceImageOverride>): void => setImage({ ...image, ...p });
+  const numberField = (f: NumberFieldSpec, labelHidden?: boolean): preact.JSX.Element => (
+    <NumberField
+      key={f.key}
+      label={f.label}
+      labelHidden={labelHidden}
+      value={image[f.key] as number | undefined}
+      min={f.min}
+      max={f.max}
+      step={f.step}
+      onChange={(v) => patch({ [f.key]: v })}
+    />
+  );
   const dimensions = NUMBER_FIELDS.filter((f) => f.key === 'width' || f.key === 'height');
   const basic = NUMBER_FIELDS.filter((f) => !f.advanced && f.key !== 'width' && f.key !== 'height');
   const advanced = NUMBER_FIELDS.filter((f) => f.advanced);
@@ -379,32 +394,9 @@ export function DeviceTuningPanel(): preact.JSX.Element {
           <p class="tuning-group-label">Image</p>
           <div class="tuning-field" role="group" aria-labelledby="tuning-dimensions-label">
             <span id="tuning-dimensions-label">Width/Height (px)</span>
-            <div class="tuning-dimensions">
-              {dimensions.map((f) => (
-                <NumberField
-                  key={f.key}
-                  label={f.label}
-                  labelHidden
-                  value={image[f.key] as number | undefined}
-                  min={f.min}
-                  max={f.max}
-                  step={f.step}
-                  onChange={(v) => patch({ [f.key]: v })}
-                />
-              ))}
-            </div>
+            <div class="tuning-dimensions">{dimensions.map((f) => numberField(f, true))}</div>
           </div>
-          {basic.map((f) => (
-            <NumberField
-              key={f.key}
-              label={f.label}
-              value={image[f.key] as number | undefined}
-              min={f.min}
-              max={f.max}
-              step={f.step}
-              onChange={(v) => patch({ [f.key]: v })}
-            />
-          ))}
+          {basic.map((f) => numberField(f))}
           <div class="tuning-checkboxes">
             <CheckField
               label="Flip horizontal"
@@ -432,17 +424,7 @@ export function DeviceTuningPanel(): preact.JSX.Element {
 
       <Collapsible title="Advanced" status={advancedTuningStatus(activeView.overrides.image)}>
         <div class="tuning-grid">
-          {advanced.map((f) => (
-            <NumberField
-              key={f.key}
-              label={f.label}
-              value={image[f.key] as number | undefined}
-              min={f.min}
-              max={f.max}
-              step={f.step}
-              onChange={(v) => patch({ [f.key]: v })}
-            />
-          ))}
+          {advanced.map((f) => numberField(f))}
           <div class="tuning-field" role="group" aria-labelledby="tuning-crop-rect-label">
             <span id="tuning-crop-rect-label">Crop region (source px, blank = whole image)</span>
             <div class="tuning-dimensions tuning-crop-rect">
@@ -468,34 +450,20 @@ export function DeviceTuningPanel(): preact.JSX.Element {
       </Collapsible>
 
       <div class="settings-actions">
-        <button
-          id="tuning-apply"
-          class="ghostbtn"
-          type="button"
-          disabled={action.busy}
-          onClick={() => void apply()}
-        >
+        <GhostButton id="tuning-apply" disabled={action.busy} onClick={apply}>
           Apply
-        </button>
-        <button
-          id="tuning-reset"
-          class="ghostbtn"
-          type="button"
-          disabled={action.busy}
-          onClick={() => void resetDefaults()}
-        >
+        </GhostButton>
+        <GhostButton id="tuning-reset" disabled={action.busy} onClick={resetDefaults}>
           Reset
-        </button>
-        <button
+        </GhostButton>
+        <GhostButton
           id="tuning-copy"
-          class="ghostbtn"
-          type="button"
           onClick={() =>
-            void copy.copy(JSON.stringify({ [activeView.modelId]: activeView.overrides }, null, 2))
+            copy.copy(JSON.stringify({ [activeView.modelId]: activeView.overrides }, null, 2))
           }
         >
           {copyLabel(copy.status, 'Copy JSON')}
-        </button>
+        </GhostButton>
       </div>
       <Feedback error={action.error} status={action.status} />
 
