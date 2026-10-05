@@ -4,6 +4,7 @@ import { useEffect, useState } from 'preact/hooks';
 import { Collapsible } from '../components/Collapsible.js';
 import { ToggleRow } from '../components/Fields.js';
 import { DocsLink } from '../components/DocsLink.js';
+import { GhostButton } from '../components/GhostButton.js';
 import { useStore } from '../lib/store.js';
 import { getJson, postJson } from '../lib/ui-api.js';
 import { Feedback, useAsyncAction } from '../lib/ui-async.js';
@@ -69,7 +70,7 @@ function Offer({
 }: Readonly<{
   offer: PairingOffer;
   now: number;
-  onCancel: () => void;
+  onCancel: () => Promise<void>;
   loadQr?: QrLoader;
 }>): preact.JSX.Element {
   return (
@@ -89,9 +90,9 @@ function Offer({
       </div>
       <PairingQr text={offer.qrUrl} load={loadQr} />
       <p class="multi-deck-note">Expires in {secondsLeft(offer.expiresAt, now)} s.</p>
-      <button class="ghostbtn" id="deck-offer-cancel" type="button" onClick={onCancel}>
+      <GhostButton id="deck-offer-cancel" onClick={onCancel}>
         Cancel
-      </button>
+      </GhostButton>
     </div>
   );
 }
@@ -104,8 +105,8 @@ function DeviceList({
 }: Readonly<{
   state: VirtualDeckState;
   busy: boolean;
-  onRevoke: (id: string, name: string) => void;
-  onRevokeAll: () => void;
+  onRevoke: (id: string, name: string) => Promise<void>;
+  onRevokeAll: () => Promise<void>;
 }>): preact.JSX.Element {
   if (state.devices.length === 0) {
     return <p class="multi-deck-note">No paired devices.</p>;
@@ -120,26 +121,15 @@ function DeviceList({
               {' '}
               added {new Date(d.createdAt).toLocaleDateString()} · {deviceStatus(d)}
             </span>
-            <button
-              class="ghostbtn"
-              type="button"
-              disabled={busy}
-              onClick={() => onRevoke(d.id, d.name)}
-            >
+            <GhostButton disabled={busy} onClick={() => onRevoke(d.id, d.name)}>
               Revoke
-            </button>
+            </GhostButton>
           </li>
         ))}
       </ul>
-      <button
-        class="ghostbtn"
-        id="deck-revoke-all"
-        type="button"
-        disabled={busy}
-        onClick={onRevokeAll}
-      >
+      <GhostButton id="deck-revoke-all" disabled={busy} onClick={onRevokeAll}>
         Revoke all
-      </button>
+      </GhostButton>
     </>
   );
 }
@@ -192,10 +182,10 @@ function DeckDetails({
   now: number;
   busy: boolean;
   loadQr?: QrLoader;
-  onPair: () => void;
-  onCancel: () => void;
-  onRevoke: (id: string, name: string) => void;
-  onRevokeAll: () => void;
+  onPair: () => Promise<void>;
+  onCancel: () => Promise<void>;
+  onRevoke: (id: string, name: string) => Promise<void>;
+  onRevokeAll: () => Promise<void>;
 }>): preact.JSX.Element {
   const appPaired = useStore(
     (s) => s.status.docks.find((d) => d.index === VIRTUAL_DOCK_INDEX)?.elgatoConnected,
@@ -220,15 +210,9 @@ function DeckDetails({
       )}
       {!offer && (
         <div class="settings-actions">
-          <button
-            class="ghostbtn"
-            id="deck-pair"
-            type="button"
-            disabled={busy || !state.listening}
-            onClick={onPair}
-          >
+          <GhostButton id="deck-pair" disabled={busy || !state.listening} onClick={onPair}>
             Pair a device
-          </button>
+          </GhostButton>
         </div>
       )}
       {offer && <Offer offer={offer} now={now} onCancel={onCancel} loadQr={loadQr} />}
@@ -318,10 +302,10 @@ function VirtualDeckBody({
           now={now}
           busy={action.busy}
           loadQr={loadQr}
-          onPair={() => void pair()}
-          onCancel={() => void cancel()}
-          onRevoke={(id, name) => void revoke(id, name)}
-          onRevokeAll={() => void revokeAll()}
+          onPair={pair}
+          onCancel={cancel}
+          onRevoke={revoke}
+          onRevokeAll={revokeAll}
         />
       )}
       <Feedback error={action.error} status={action.status} />
