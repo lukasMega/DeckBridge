@@ -306,6 +306,10 @@ select.input {
   color: var(--accent);
   font-weight: 600;
 }
+.docs-link {
+  font-size: 13px;
+  line-height: 1.5;
+}
 :is(.disclaimer, .step-sub, .settings-json-preview),
 :is(.popover p, .help-steps li) {
   line-height: 1.5;

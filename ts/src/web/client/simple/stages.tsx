@@ -1,4 +1,5 @@
 // Stage renderers — one per device state (see deriveState in ui-helpers).
+import { useState } from 'preact/hooks';
 import { OwnershipDiagram } from '../components/OwnershipDiagram.js';
 import { useStore } from '../lib/store.js';
 import { useFetched } from '../lib/ui-api.js';
@@ -18,6 +19,38 @@ import {
   selectedTouchStripSize,
 } from '../ui-helpers.js';
 
+function ReadyStatus({
+  title,
+  deviceName,
+}: Readonly<{ title: string; deviceName?: string }>): preact.JSX.Element | null {
+  const [hidden, setHidden] = useState(false);
+  if (hidden) return null;
+  return (
+    <div class="ready-status">
+      <span class="ready-status-icon" aria-hidden="true">
+        <Icon html={ICON.check} />
+      </span>
+      <h1 class="stage-title" title={title}>
+        {title}
+      </h1>
+      {deviceName && (
+        <span class="ready-status-device" title={deviceName}>
+          {deviceName}
+        </span>
+      )}
+      <button
+        class="iconbtn circle ready-status-dismiss"
+        type="button"
+        aria-label="Hide connection status"
+        title="Hide connection status"
+        onClick={() => setHidden(true)}
+      >
+        <Icon html={ICON.close} />
+      </button>
+    </div>
+  );
+}
+
 export function StageReady({
   docks,
   onHelp,
@@ -36,16 +69,12 @@ export function StageReady({
   if (docks !== undefined && isMultiDockView(docks) && onHelp !== undefined) {
     const sel = docks.find((d) => d.index === selectedDock) ?? docks[0]!;
     const many = docks.length > 1;
+    const title = many ? `All ${docks.length} decks connected` : 'Connected';
     return (
       <>
-        <h1 class="stage-title">
-          {many ? `All ${docks.length} decks connected` : 'Connected'}
-          {appName}
-        </h1>
-        {!many && <ConnectionPath device="done" app="done" deviceName={sel.modelName} />}
+        <ReadyStatus title={`${title}${appName}`} deviceName={many ? undefined : sel.modelName} />
         <DockList docks={docks} onHelp={onHelp} />
         {many && <p class="step-sub">Select a deck for its live preview and brightness.</p>}
-        <Brightness dock={sel.index} level={sel.brightness} deviceName={sel.modelName} />
         <ExtraKeysPanel />
       </>
     );
@@ -53,8 +82,7 @@ export function StageReady({
 
   return (
     <>
-      <h1 class="stage-title">Connected{appName}</h1>
-      <ConnectionPath device="done" app="done" deviceName={modelName} />
+      <ReadyStatus title={`Connected${appName}`} deviceName={modelName} />
       <KeyGridPreview
         keyCount={keyCount}
         columns={columns}
@@ -66,8 +94,8 @@ export function StageReady({
         gesture="dblclick"
         clickable={keyPressEnabled && paired}
         clickTitle={keyPressTitle(keyPressEnabled, paired)}
+        footer={<Brightness compact />}
       />
-      <Brightness />
       <ExtraKeysPanel />
     </>
   );

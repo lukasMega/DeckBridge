@@ -105,6 +105,7 @@ let _brightnessDebounce: ReturnType<typeof setTimeout> | null = null;
 export function Brightness({
   dock = 0,
   level,
+  compact = false,
 }: Readonly<{
   /** Dock index the slider drives (0 = primary). */
   dock?: number;
@@ -112,6 +113,8 @@ export function Brightness({
   level?: number;
   /** Shown in the label when set (multi-device: the selected dock's model). */
   deviceName?: string;
+  /** Compact row for the live preview footer. */
+  compact?: boolean;
 }> = {}): preact.JSX.Element {
   const storeBrightness = useStore((s) => s.brightness);
   const brightnessOverride = useStore((s) => s.brightnessOverride);
@@ -143,18 +146,22 @@ export function Brightness({
     draggingRef.current = false;
   };
 
+  const sourceSelect = (
+    <select
+      class="b-mode-select"
+      value={brightnessOverride ? 'ignore' : 'control'}
+      aria-label="Brightness source"
+      onChange={postBrightnessOverride}
+    >
+      <option value="ignore">{compact ? 'Manual' : '🔆 Manual'}</option>
+      <option value="control">{compact ? 'Elgato app' : '🔗 Elgato app'}</option>
+    </select>
+  );
+
   return (
     <div class="brightness-block">
-      <div class="brightness">
-        <select
-          class="b-mode-select"
-          value={brightnessOverride ? 'ignore' : 'control'}
-          aria-label="Brightness source"
-          onChange={postBrightnessOverride}
-        >
-          <option value="ignore">🔆 Manual</option>
-          <option value="control">🔗 Elgato app</option>
-        </select>
+      <div class={compact ? 'brightness brightness-footer' : 'brightness'}>
+        {!compact && sourceSelect}
         <Icon class="b-ico" html={ICON.sun} />
         <div class="fader">
           <input
@@ -176,6 +183,7 @@ export function Brightness({
         <span class="b-val" id="simple-brightness-val">
           {localVal}%
         </span>
+        {compact && sourceSelect}
       </div>
     </div>
   );

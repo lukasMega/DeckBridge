@@ -226,8 +226,8 @@ async function runReadyStage(root: HTMLElement, check: Check): Promise<void> {
     'Ready: one status line names the app',
   );
   check(
-    root.querySelectorAll('.conn-node.done').length === 3,
-    'Ready: every node of the path is connected',
+    root.querySelector('.ready-status-device')?.textContent === 'Mirabox 293S',
+    'Ready: compact summary identifies the connected device',
   );
   check(root.querySelector('.hero') === null, 'Ready: no hero block');
   await runSinglePress(root, check);

@@ -86,6 +86,46 @@ later per-class rules keep only size/background/placement deltas */
 }
 
 /* ---- Simple view — READY state ---- */
+.ready-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+  min-height: 28px;
+}
+.ready-status-icon {
+  flex: none;
+  display: flex;
+  color: var(--ok);
+}
+.ready-status-icon svg {
+  display: block;
+  width: 16px;
+  height: 16px;
+}
+.ready-status .stage-title,
+.ready-status-device {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ready-status .stage-title {
+  margin: 0;
+  font-size: 13px;
+  text-wrap: nowrap;
+}
+.ready-status-device {
+  flex: 1;
+  padding-left: 8px;
+  border-left: 1px solid var(--border);
+  color: var(--fg-muted);
+  font-size: 12px;
+}
+.ready-status-dismiss {
+  flex: none;
+  margin-left: auto;
+}
 .conflict-badge {
   animation: rise 0.35s ease;
 }
@@ -236,6 +276,58 @@ input[type='range'].range:disabled {
 .b-val {
   font-variant-numeric: tabular-nums;
   width: 42px;
+}
+.brightness.brightness-footer {
+  margin-top: 10px;
+  padding-top: 0;
+  border-top: 0;
+  gap: 8px;
+  min-height: 32px;
+}
+.brightness-footer .b-mode-select {
+  padding: 3px 26px 3px 6px;
+  font-size: 12px;
+  font-weight: 500;
+}
+.brightness-footer .b-val {
+  width: 35px;
+  font-size: 12px;
+  font-weight: 500;
+}
+.brightness-footer .fader {
+  min-width: 32px;
+  height: 32px;
+}
+.brightness-footer .range {
+  height: 32px;
+  border: 0;
+  box-shadow: none;
+  background:
+    linear-gradient(var(--accent), var(--accent)) left center / var(--fill, 80%) 6px no-repeat,
+    linear-gradient(var(--inset), var(--inset)) left center / 100% 6px no-repeat;
+}
+@media (max-width: 380px) {
+  .brightness-footer .b-ico {
+    display: none;
+  }
+}
+@media (pointer: coarse) {
+  .brightness.brightness-footer {
+    min-height: 44px;
+    gap: 6px;
+  }
+  .brightness-footer .b-ico {
+    display: none;
+  }
+  .brightness-footer .b-mode-select {
+    min-height: 44px;
+    font-size: 16px;
+    padding-right: 24px;
+  }
+  .brightness-footer .fader,
+  .brightness-footer .range {
+    height: 44px;
+  }
 }
 
 /* ---- side keys + touch strip (ConfigSection, simple/config-section.tsx) ---- */
@@ -957,6 +1049,66 @@ input[type='range'].range:disabled {
 .settings-actions,
 .address-tabs {
   margin-bottom: 8px;
+}
+.settings-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 16px;
+}
+.settings-search h1 {
+  margin: 0;
+}
+.settings-search .input {
+  flex: 1;
+  min-width: 0;
+  min-height: 36px;
+  font: inherit;
+}
+.settings-group {
+  padding: 12px 0;
+  border-top: 1px solid var(--border);
+}
+.settings-group > .help-section-label {
+  margin: 0 0 4px;
+}
+.settings-group .collapsible {
+  margin: 0;
+}
+.settings-group .collapse-header {
+  padding: 8px 0;
+  margin: 0;
+  font-size: 13px;
+  letter-spacing: normal;
+  text-transform: none;
+  color: var(--fg);
+}
+.settings-page .diag-section {
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+.settings-page .diag-section .collapse-arrow {
+  position: static;
+}
+.settings-page [hidden] {
+  display: none !important;
+}
+.settings-group .collapse-body:not(.open) {
+  padding: 0;
+}
+.settings-page [data-search-match] > .collapse-body {
+  max-height: none;
+  opacity: 1;
+  padding: 8px 0 12px 12px;
+  border-left: 2px dashed var(--border-strong);
+  transition: none;
+}
+.settings-page [data-search-match] > .collapse-header .collapse-arrow {
+  transform: none;
+}
+.settings-page [data-search-match] > .collapse-header .collapse-status {
+  display: none;
 }
 .settings-page .collapse-body > * + *,
 .address-modal p + *,

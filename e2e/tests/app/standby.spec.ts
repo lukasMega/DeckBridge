@@ -180,6 +180,7 @@ test.describe('standby and burn-in care (mock, fast timing)', () => {
     await expect(page.locator('.help h1')).toHaveText('Settings');
     const header = page.locator('.collapse-header', { hasText: 'Standby & burn-in care' });
     await expect(header).toContainText('Active');
+    await click(header);
     await expect(page.locator('#standby-body')).toContainText('DeckBridge time now');
 
     const posted = page.waitForRequest(
