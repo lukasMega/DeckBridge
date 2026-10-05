@@ -309,6 +309,74 @@ select.input {
   font-size: 13px;
   line-height: 1.5;
 }
+.docs-link-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  vertical-align: baseline;
+}
+.docs-link-block {
+  margin-top: 11px;
+}
+.docs-link-block .manual-add-docs {
+  margin-top: 0;
+}
+.docs-modal-open,
+.docs-modal-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  background: var(--surface);
+  color: var(--accent);
+}
+.docs-modal-open:hover,
+.docs-modal-close:hover {
+  background: var(--accent-soft);
+}
+.docs-modal {
+  width: min(1100px, calc(100vw - 32px));
+  height: calc(100dvh - 32px);
+  max-width: none;
+  max-height: none;
+  margin: auto;
+  padding: 0;
+  color: var(--fg);
+  overflow: hidden;
+}
+.docs-modal[open] {
+  display: flex;
+  flex-direction: column;
+}
+.docs-modal::backdrop {
+  background: oklch(0.2 0.02 60 / 0.42);
+  backdrop-filter: blur(3px);
+}
+.docs-modal-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+}
+.docs-modal-header h2 {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  font-size: 16px;
+}
+.docs-modal iframe {
+  flex: 1;
+  width: 100%;
+  min-height: 0;
+  border: 0;
+  background: var(--surface);
+}
 :is(.disclaimer, .step-sub, .settings-json-preview),
 :is(.popover p, .help-steps li) {
   line-height: 1.5;

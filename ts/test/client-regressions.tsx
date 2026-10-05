@@ -23,6 +23,7 @@ import { UpdatePanel } from '../src/web/client/simple/update-panel.js';
 import { Collapsible } from '../src/web/client/components/Collapsible.js';
 import { runDeckPage } from './client-deck.js';
 import { runPairingFlow } from './client-pairing.js';
+import { runDocsLinks } from './client-docs.js';
 import { StandbyPanel } from '../src/web/client/simple/standby-panel.js';
 import type { StandbyView } from '../src/web/contract-standby.js';
 import { ElgatoAppPanel } from '../src/web/client/simple/elgato-app-panel.js';
@@ -252,6 +253,7 @@ async function run(): Promise<void> {
   else delete (navigator as { clipboard?: unknown }).clipboard;
 
   await runSettingsPanels();
+  await runDocsLinks(root, check);
   await runKeymapAndDiagnosticsPanels();
   await runMultiDockCards();
   await runSideKeysPanel();
@@ -1729,6 +1731,13 @@ async function checkSideKeysHelp(): Promise<void> {
       '5 by 2 device grid; 4 by 2 Elgato grid, with 2 side keys in right column',
     'Plus mode shows four Elgato columns and one side-key column',
   );
+  await click('.side-keys-help .docs-modal-open');
+  check(
+    root.querySelector<HTMLDialogElement>('.docs-modal')?.matches(':modal') === true,
+    'Docs opens above native side-keys dialog',
+  );
+  await click('.docs-modal-close');
+  check(help?.open === true, 'Closing docs preserves native side-keys dialog');
   await click('button[aria-label="Close side keys help"]');
   check(root.querySelector('dialog.side-keys-help') === null, 'Side keys help closes');
 }

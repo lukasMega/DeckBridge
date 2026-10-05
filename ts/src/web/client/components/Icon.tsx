@@ -1,6 +1,8 @@
 // Inline SVG icons and the leaf widgets that render them — one home so the
 // dangerouslySetInnerHTML boilerplate is written once.
 export const ICON = {
+  window:
+    '<svg width="14" height="14" viewBox="0 0 16 16" fill="none"><rect x="2" y="2.5" width="12" height="11" rx="1.5" stroke="currentColor" stroke-width="1.3"/><path d="M2 6h12M4.5 4.3h.1M6.5 4.3h.1" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>',
   check:
     '<svg viewBox="0 0 16 16" fill="none"><path d="M3.5 8.5l3 3 6-7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
   sun: '<svg width="17" height="17" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="4" stroke="currentColor" stroke-width="1.7"/><path d="M12 2.5v2.5M12 19v2.5M2.5 12H5M19 12h2.5M5 5l1.8 1.8M17.2 17.2L19 19M19 5l-1.8 1.8M6.8 17.2L5 19" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>',
