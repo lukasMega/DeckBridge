@@ -238,7 +238,7 @@ test('slim bold widens a glyph by 1 px', () => {
   assert.equal(span(composeWidgetBmp(lines, SIZE, SIZE, { ...slim, bold: true })), plain + 1);
 });
 
-test('slim outline never covers a neighbouring glyph', () => {
+test('slim outline never covers a neighboring glyph', () => {
   const lines: WidgetLine[] = [{ text: 'WW', big: true }];
   const plain = pixelsOf(composeWidgetBmp(lines, SIZE, SIZE, slim), FG).length;
   const ringed = composeWidgetBmp(lines, SIZE, SIZE, { ...slim, outline: '#ff0000' });
