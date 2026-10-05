@@ -2,15 +2,18 @@
 // downloads each candidate font, renders sample strings at every design size and writes
 // one HTML page with coverage + width stats. Never bundled.
 //   node scripts/font-sheet.mjs [out.html]      (default: $TMPDIR/deckbridge-font-sheet/sheet.html)
+//   node scripts/font-sheet.mjs --slim [out.html]  AA slim-font spike (plan 2026-10-05_slim-widget-font),
+//                                                  default: $TMPDIR/deckbridge-font-sheet/slim-sheet.html
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { createRequire } from 'node:module';
-import { tmpdir } from 'node:os';
+import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { parseBdf } from './bdf.mjs';
+import { CACHE, fetchCached, inside, loadOpentype } from './ttf.mjs';
 
-const CACHE = join(tmpdir(), 'deckbridge-font-sheet');
-const OUT = process.argv[2] ?? join(CACHE, 'sheet.html');
+const SLIM = process.argv[2] === '--slim';
+const OUT =
+  process.argv.slice(2).find((a) => !a.startsWith('--')) ??
+  join(CACHE, SLIM ? 'slim-sheet.html' : 'sheet.html');
 const ARK = 'https://github.com/TakWolf/ark-pixel-font/releases/download';
 const XORG = 'https://gitlab.freedesktop.org/xorg/font';
 const PIXOP = 'https://raw.githubusercontent.com/bauripalash/ttf-pixeloperator-fork/master/ttf';
@@ -73,41 +76,6 @@ const CANDIDATES = [
     ],
   },
 ];
-
-async function fetchCached(url) {
-  mkdirSync(CACHE, { recursive: true });
-  const file = join(CACHE, url.replace(/[^\w.-]+/g, '_'));
-  if (!existsSync(file)) {
-    const res = await fetch(url);
-    if (!res.ok) throw new Error(`${url}: HTTP ${res.status}`);
-    writeFileSync(file, Buffer.from(await res.arrayBuffer()));
-  }
-  return file;
-}
-
-function loadOpentype() {
-  const dir = join(CACHE, 'npm');
-  if (!existsSync(join(dir, 'node_modules/opentype.js'))) {
-    mkdirSync(dir, { recursive: true });
-    execFileSync('npm', ['i', '--silent', '--prefix', dir, 'opentype.js@1'], { stdio: 'inherit' });
-  }
-  return createRequire(join(dir, 'x.js'))('opentype.js');
-}
-
-/** Nonzero-winding point-in-polygon over flattened contours. */
-function inside(contours, px, py) {
-  let wn = 0;
-  for (const pts of contours) {
-    for (let i = 0; i < pts.length; i++) {
-      const [x0, y0] = pts[i];
-      const [x1, y1] = pts[(i + 1) % pts.length];
-      const cross = (x1 - x0) * (py - y0) - (px - x0) * (y1 - y0);
-      if (y0 <= py && y1 > py && cross > 0) wn++;
-      else if (y0 > py && y1 <= py && cross < 0) wn--;
-    }
-  }
-  return wn !== 0;
-}
 
 /** Rasterize a pixel TTF at its design size by sampling pixel centres — exact for
  *  pixel fonts, whose outlines are axis-aligned squares on the pixel grid. */
@@ -219,42 +187,60 @@ function stats(font) {
     mean: mean.toFixed(2),
     ratio: (mean / lineH).toFixed(2),
     fit: KEYS.map((k) => Math.floor(k / mean)),
-    missing: missing.map((cp) => String.fromCodePoint(cp).replace('\xa0', 'NBSP').replace('\xad', 'SHY')),
+    missing: missing.map((cp) =>
+      String.fromCodePoint(cp).replace('\xa0', 'NBSP').replace('\xad', 'SHY'),
+    ),
     ellipsis: font.glyphs.has(0x2026),
   };
 }
 
-const esc = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;');
-let opentype;
-const sections = [];
-const summary = [];
-for (const cand of CANDIDATES) {
-  const blocks = [];
-  for (const size of cand.sizes) {
-    if (size.kind === 'ttf') opentype ??= loadOpentype();
-    const font = await loadSize(size, opentype);
-    const s = stats(font);
-    summary.push({ font: `${cand.family.split(' (')[0]} ${size.label}`, ...s });
-    const imgs = SAMPLES.map((t) => {
-      const rows = renderText(font, t);
-      return `<img src="${bmpUrl(rows)}" style="width:${rows[0].length * 4}px" alt="${esc(t)}">`;
-    }).join('<br>');
-    blocks.push(
-      `<h3>${esc(size.label)} — line ${s.lineH}px, mean advance ${s.mean}px ` +
-        `(×${s.ratio} of height), ${s.fit[0]} chars @85px, ${s.fit[1]} chars @112px, ` +
-        `U+2026 ${s.ellipsis ? 'yes' : 'NO'}, Latin-1 missing: ${s.missing.length ? esc(s.missing.join(' ')) : 'none'}</h3>${imgs}`,
-    );
+async function writeSheet() {
+  const esc = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;');
+  let opentype;
+  const sections = [];
+  const summary = [];
+  for (const cand of CANDIDATES) {
+    const blocks = [];
+    for (const size of cand.sizes) {
+      if (size.kind === 'ttf') opentype ??= loadOpentype();
+      const font = await loadSize(size, opentype);
+      const s = stats(font);
+      summary.push({ font: `${cand.family.split(' (')[0]} ${size.label}`, ...s });
+      const imgs = SAMPLES.map((t) => {
+        const rows = renderText(font, t);
+        return `<img src="${bmpUrl(rows)}" style="width:${rows[0].length * 4}px" alt="${esc(t)}">`;
+      }).join('<br>');
+      blocks.push(
+        `<h3>${esc(size.label)} — line ${s.lineH}px, mean advance ${s.mean}px ` +
+          `(×${s.ratio} of height), ${s.fit[0]} chars @85px, ${s.fit[1]} chars @112px, ` +
+          `U+2026 ${s.ellipsis ? 'yes' : 'NO'}, Latin-1 missing: ${s.missing.length ? esc(s.missing.join(' ')) : 'none'}</h3>${imgs}`,
+      );
+    }
+    sections.push(`<h2>${esc(cand.family)} — ${esc(cand.license)}</h2>${blocks.join('\n')}`);
   }
-  sections.push(`<h2>${esc(cand.family)} — ${esc(cand.license)}</h2>${blocks.join('\n')}`);
+
+  writeFileSync(
+    OUT,
+    `<!doctype html><meta charset="utf-8"><title>DeckBridge font spike</title>
+  <style>body{background:#222;color:#ddd;font:13px system-ui;margin:24px}
+  img{image-rendering:pixelated;margin:4px 0}h3{font-weight:500;margin:18px 0 4px}</style>
+  <p>Samples scaled ×4. Red boxes = glyph missing from the font. Mean advance over
+  "${MEASURE}".</p>${sections.join('\n')}`,
+  );
+  console.table(
+    summary.map(({ missing, fit, ...r }) => ({
+      ...r,
+      fit85: fit[0],
+      fit112: fit[1],
+      latin1Missing: missing.length,
+    })),
+  );
+  console.log(`wrote ${OUT}`);
 }
 
-writeFileSync(
-  OUT,
-  `<!doctype html><meta charset="utf-8"><title>DeckBridge font spike</title>
-<style>body{background:#222;color:#ddd;font:13px system-ui;margin:24px}
-img{image-rendering:pixelated;margin:4px 0}h3{font-weight:500;margin:18px 0 4px}</style>
-<p>Samples scaled ×4. Red boxes = glyph missing from the font. Mean advance over
-"${MEASURE}".</p>${sections.join('\n')}`,
-);
-console.table(summary.map(({ missing, fit, ...r }) => ({ ...r, fit85: fit[0], fit112: fit[1], latin1Missing: missing.length })));
-console.log(`wrote ${OUT}`);
+if (SLIM) {
+  const { writeSlimSheet } = await import('./font-sheet-slim.mjs');
+  await writeSlimSheet(OUT, { samples: SAMPLES, measure: MEASURE });
+} else {
+  await writeSheet();
+}

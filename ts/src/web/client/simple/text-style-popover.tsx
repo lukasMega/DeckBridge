@@ -1,5 +1,5 @@
 // "Aa" Text style popover of one widget: font, colours, alignment, padding, line gap,
-// bold/outline, ellipsis. Each change posts at once; the server repaints the key.
+// tight lines, bold/outline, ellipsis. Each change posts at once; the server repaints the key.
 import { useRef, useState } from 'preact/hooks';
 import type { ExtraKeyCfg, ExtraKeyTextStyle } from '../ui-types.js';
 import { useDismiss, useKeepInApp } from '../lib/ui-hooks.js';
@@ -7,10 +7,11 @@ import { CheckField } from '../components/Fields.js';
 import { postExtraKey } from './extra-keys-popovers.js';
 
 // Mirror DEFAULT_TEXT_COLOR / DEFAULT_TEXT_BACKGROUND / TEXT_PADDING_MAX /
-// TEXT_LINE_GAP_MAX (extra-key-config.ts).
+// TEXT_LINE_GAP_MIN/MAX (extra-key-config.ts).
 const DEFAULT_COLOR = '#e8e8ec';
 const DEFAULT_BACKGROUND = '#101014';
 const PADDING_MAX = 16;
+const LINE_GAP_MIN = -8;
 const LINE_GAP_MAX = 8;
 const DEFAULT_OUTLINE = '#000000';
 const SWATCHES = [
@@ -92,23 +93,32 @@ function ColorRow({
 /** Integer px input; out-of-range values are ignored, not clamped (see SecondsField). */
 function PxField({
   label,
+  min = 0,
   max,
   value,
   onCommit,
 }: Readonly<{
   label: string;
+  min?: number;
   max: number;
   value: number;
   onCommit: (px: number) => void;
 }>): preact.JSX.Element {
   const handleChange = (e: Event): void => {
     const n = Number((e.target as HTMLInputElement).value);
-    if (Number.isInteger(n) && n >= 0 && n <= max) onCommit(n);
+    if (Number.isInteger(n) && n >= min && n <= max) onCommit(n);
   };
   return (
     <label class="xkey-popover-field">
       <span>{label}</span>
-      <input class="input" type="number" min={0} max={max} value={value} onChange={handleChange} />
+      <input
+        class="input"
+        type="number"
+        min={min}
+        max={max}
+        value={value}
+        onChange={handleChange}
+      />
     </label>
   );
 }
@@ -145,6 +155,7 @@ function TextStylePopover({
         options={[
           ['regular', 'Regular'],
           ['narrow', 'Narrow'],
+          ['slim', 'Slim'],
         ]}
         onPick={(font) => update({ font })}
       />
@@ -186,9 +197,15 @@ function TextStylePopover({
       />
       <PxField
         label="Line gap (px)"
+        min={LINE_GAP_MIN}
         max={LINE_GAP_MAX}
         value={style.lineGap ?? 0}
         onCommit={(lineGap) => update({ lineGap })}
+      />
+      <CheckField
+        label="Tight lines"
+        checked={style.tightLines === true}
+        onChange={(tightLines) => update({ tightLines })}
       />
       <CheckField
         label="Bold"

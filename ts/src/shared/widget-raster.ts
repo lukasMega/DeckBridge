@@ -1,6 +1,6 @@
 // Draws a widget layout (widget-layout.ts) into a 24-bit BMP: colours, bold, outline.
 import { fontGlyphIndex } from '../assets/font-atlas.js';
-import type { BitmapFont } from '../assets/font-atlas.js';
+import type { AlphaFont, BitmapFont, BitsFont } from '../assets/font-atlas.js';
 import { DEFAULT_TEXT_BACKGROUND, DEFAULT_TEXT_COLOR } from './extra-key-config.js';
 import type { ExtraKeyTextStyle } from '../web/contract.js';
 import { glyphAdvance, layoutWidget, type WidgetLayout, type WidgetLine } from './widget-layout.js';
@@ -13,14 +13,38 @@ function bgr(hex: string): Bgr {
   return [n & 0xff, (n >> 8) & 0xff, n >> 16];
 }
 
-const decodedFonts = new Map<BitmapFont, Uint8Array>();
-function fontBits(font: BitmapFont): Uint8Array {
+const decodedFonts = new Map<BitsFont, Uint8Array>();
+function fontBits(font: BitsFont): Uint8Array {
   let bits = decodedFonts.get(font);
   if (!bits) {
     bits = new Uint8Array(Buffer.from(font.bits, 'base64'));
     decodedFonts.set(font, bits);
   }
   return bits;
+}
+
+interface DecodedAlpha {
+  alpha: Uint8Array;
+  boxes: Uint8Array;
+  /** Byte offset of each glyph in `alpha` (prefix sum over the box sizes). */
+  offsets: Uint32Array;
+}
+
+const decodedAlpha = new Map<AlphaFont, DecodedAlpha>();
+function fontAlpha(font: AlphaFont): DecodedAlpha {
+  let d = decodedAlpha.get(font);
+  if (!d) {
+    const boxes = new Uint8Array(Buffer.from(font.boxes, 'base64'));
+    const offsets = new Uint32Array(boxes.length / 4);
+    let at = 0;
+    for (let i = 0; i < offsets.length; i++) {
+      offsets[i] = at;
+      at += Math.ceil(boxes[i * 4 + 2]! / 2) * boxes[i * 4 + 3]!;
+    }
+    d = { alpha: new Uint8Array(Buffer.from(font.alpha, 'base64')), boxes, offsets };
+    decodedAlpha.set(font, d);
+  }
+  return d;
 }
 
 interface Canvas {
@@ -40,6 +64,11 @@ function blitGlyph(
 ) {
   const idx = fontGlyphIndex(codepoint);
   if (idx < 0) return;
+  if (font.kind === 'alpha') blitAlpha(c, font, idx, x0, y0, color);
+  else blitBits(c, font, idx, x0, y0, color);
+}
+
+function blitBits(c: Canvas, font: BitsFont, idx: number, x0: number, y0: number, color: Bgr) {
   const scale = font.scale ?? 1;
   const cellW = font.width / scale;
   const cellH = font.height / scale;
@@ -61,6 +90,49 @@ function blitGlyph(
       c.px[o + 1] = color[1];
       c.px[o + 2] = color[2];
     }
+  }
+}
+
+/** Integer blend of one channel; a = 0..15 → ×17 maps to 0..255, so a = 15 is exactly `fg`. */
+const mix = (bg: number, fg: number, a: number): number =>
+  bg + Math.floor(((fg - bg) * a * 17 + 127) / 255);
+
+function blitAlpha(c: Canvas, font: AlphaFont, idx: number, x0: number, y0: number, color: Bgr) {
+  const { alpha, boxes, offsets } = fontAlpha(font);
+  const scale = font.scale ?? 1;
+  const w = boxes[idx * 4 + 2]!;
+  const h = boxes[idx * 4 + 3]!;
+  if (w === 0 || h === 0) return;
+  const gx = (boxes[idx * 4]! << 24) >> 24; // int8
+  const left = x0 + gx * scale;
+  const top = y0 + boxes[idx * 4 + 1]! * scale;
+  const rowBytes = Math.ceil(w / 2);
+  for (let y = 0; y < h * scale; y++) {
+    const py = top + y;
+    if (py < 0 || py >= c.height) continue;
+    const row = offsets[idx]! + Math.floor(y / scale) * rowBytes;
+    blendRow(c, alpha, row, { left, py, width: w * scale, scale }, color);
+  }
+}
+
+function blendRow(
+  c: Canvas,
+  alpha: Uint8Array,
+  row: number,
+  at: { left: number; py: number; width: number; scale: number },
+  color: Bgr,
+) {
+  for (let x = 0; x < at.width; x++) {
+    const pxX = at.left + x;
+    if (pxX < 0 || pxX >= c.width) continue;
+    const sx = Math.floor(x / at.scale);
+    const byte = alpha[row + (sx >> 1)]!;
+    const a = sx & 1 ? byte & 0x0f : byte >> 4;
+    if (a === 0) continue;
+    const o = (at.py * c.width + pxX) * 3;
+    c.px[o] = mix(c.px[o]!, color[0], a);
+    c.px[o + 1] = mix(c.px[o + 1]!, color[1], a);
+    c.px[o + 2] = mix(c.px[o + 2]!, color[2], a);
   }
 }
 

@@ -53,7 +53,11 @@ export const EXTRA_KEY_TEXT_SIZES = [
 
 export const EXTRA_KEY_WRAPS = ['words', 'chars'] as const satisfies readonly ExtraKeyWrap[];
 
-export const EXTRA_KEY_FONTS = ['regular', 'narrow'] as const satisfies readonly ExtraKeyFont[];
+export const EXTRA_KEY_FONTS = [
+  'regular',
+  'narrow',
+  'slim',
+] as const satisfies readonly ExtraKeyFont[];
 export const EXTRA_KEY_ALIGNS = [
   'left',
   'center',
@@ -65,6 +69,7 @@ export const EXTRA_KEY_VALIGNS = [
   'bottom',
 ] as const satisfies readonly ExtraKeyVAlign[];
 export const TEXT_PADDING_MAX = 16;
+export const TEXT_LINE_GAP_MIN = -8;
 export const TEXT_LINE_GAP_MAX = 8;
 /** Key panel colours — match the WebUI's former canvas icons. */
 export const DEFAULT_TEXT_COLOR = '#e8e8ec';
@@ -126,12 +131,12 @@ const oneOf =
     allowed.includes(v) ? null : `${field} must be one of: ${allowed.join(', ')}`;
 const color: StyleCheck = (v, field) =>
   typeof v === 'string' && HEX_COLOR.test(v) ? null : `${field} must be a #rrggbb colour`;
-const intUpTo =
-  (max: number): StyleCheck =>
+const intInRange =
+  (min: number, max: number): StyleCheck =>
   (v, field) =>
-    Number.isInteger(v) && inRange(v as number, 0, max)
+    Number.isInteger(v) && inRange(v as number, min, max)
       ? null
-      : `${field} must be an integer 0..${max}`;
+      : `${field} must be an integer ${min}..${max}`;
 const bool: StyleCheck = (v, field) =>
   typeof v === 'boolean' ? null : `${field} must be true or false`;
 
@@ -143,8 +148,9 @@ const STYLE_CHECKS: Record<keyof ExtraKeyTextStyle, StyleCheck> = {
   background: color,
   align: oneOf(EXTRA_KEY_ALIGNS),
   valign: oneOf(EXTRA_KEY_VALIGNS),
-  padding: intUpTo(TEXT_PADDING_MAX),
-  lineGap: intUpTo(TEXT_LINE_GAP_MAX),
+  padding: intInRange(0, TEXT_PADDING_MAX),
+  lineGap: intInRange(TEXT_LINE_GAP_MIN, TEXT_LINE_GAP_MAX),
+  tightLines: bool,
   bold: bool,
   outline: color,
   ellipsis: bool,
@@ -174,6 +180,7 @@ const STYLE_DEFAULTS: Readonly<Record<string, unknown>> = {
   valign: 'middle',
   padding: 0,
   lineGap: 0,
+  tightLines: false,
   bold: false,
   ellipsis: true,
 };

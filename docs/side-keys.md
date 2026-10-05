@@ -62,7 +62,7 @@ Select **Aa** beside size controls. Choose font, colours, alignment, padding, bo
 <details>
 <summary>Font and style details</summary>
 
-**Regular** uses a monospace font. **Narrow** fits more characters on each line. Choose preset colours or a custom colour. **Ellipsis on cut text** adds `…` to lines that do not fit. Both fonts cover ASCII and Latin-1 characters.
+**Regular** uses a monospace font. **Narrow** fits more characters on each line. **Slim** is thin and condensed with smooth edges, and looks best at larger sizes. **Line gap** adds space between lines, or pulls them closer when negative (down to -8 px, so lines may overlap). **Tight lines** packs lines to the height of the glyphs instead of the full line height, which also combines with Line gap. Choose preset colours or a custom colour. **Ellipsis on cut text** adds `…` to lines that do not fit. All fonts cover ASCII and Latin-1 characters.
 
 </details>
 

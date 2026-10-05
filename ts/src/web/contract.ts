@@ -37,8 +37,9 @@ export type ExtraKeyTextSize = 'fit' | -2 | -1 | 0 | 1 | 2;
  *  over-long word is split mid-word) or at any character. Absent = no wrapping. */
 export type ExtraKeyWrap = 'words' | 'chars';
 
-/** Widget font family: Spleen (monospace) or X11 Helvetica (proportional, narrower). */
-export type ExtraKeyFont = 'regular' | 'narrow';
+/** Widget font family: Spleen (monospace), X11 Helvetica (proportional, narrower), or
+ *  Barlow Condensed (proportional, thin, anti-aliased). */
+export type ExtraKeyFont = 'regular' | 'narrow' | 'slim';
 export type ExtraKeyAlign = 'left' | 'center' | 'right';
 export type ExtraKeyVAlign = 'top' | 'middle' | 'bottom';
 
@@ -53,7 +54,8 @@ export interface ExtraKeyTextStyle {
   align?: ExtraKeyAlign; // default 'center'
   valign?: ExtraKeyVAlign; // default 'middle'
   padding?: number; // px each side, 0..16, default 0
-  lineGap?: number; // px between rows, 0..8, default 0
+  lineGap?: number; // px between rows, -8..8, default 0
+  tightLines?: boolean; // pack rows to glyph ink instead of line height; default false
   bold?: boolean; // default false
   outline?: string; // '#rrggbb' 1-px outline colour; absent = none
   ellipsis?: boolean; // default true — stored only when false
