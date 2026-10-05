@@ -15,6 +15,7 @@ import { UpdatePanel } from './update-panel.js';
 import { ElgatoAppPanel } from './elgato-app-panel.js';
 import { DeviceTuningPanel } from './device-tuning.js';
 import { StandbyPanel } from './standby-panel.js';
+import { SettingsGroup, SettingsSearch } from './settings-search.js';
 import { postJson, useFetched } from '../lib/ui-api.js';
 import { Feedback, useAsyncAction, type AsyncAction } from '../lib/ui-async.js';
 import { useDismiss } from '../lib/ui-hooks.js';
@@ -361,66 +362,72 @@ export function SettingsPage({ onBack }: Readonly<{ onBack: () => void }>): prea
 
   return (
     <div class="help settings-page">
-      <h1>Settings</h1>
+      <SettingsSearch>
+        <SettingsGroup title="Devices">
+          <MultiDeckPanel enabled={state.data ? state.data.multiDeck : null} />
+          <KeyPressPanel enabled={state.data ? state.data.keyPressEnabled : null} />
+          <VirtualDeckPanel />
+        </SettingsGroup>
 
-      <p class="help-section-label">Devices</p>
-      <MultiDeckPanel enabled={state.data ? state.data.multiDeck : null} />
-      <KeyPressPanel enabled={state.data ? state.data.keyPressEnabled : null} />
-      <VirtualDeckPanel />
+        <SettingsGroup
+          title={deviceName === undefined ? 'Selected device' : `Selected device — ${deviceName}`}
+        >
+          <StandbyPanel />
+          <DeviceTuningPanel />
+        </SettingsGroup>
 
-      <p class="help-section-label">
-        {deviceName === undefined ? 'Selected device' : `Selected device — ${deviceName}`}
-      </p>
-      <StandbyPanel />
-      <DeviceTuningPanel />
+        <SettingsGroup title="App connection">
+          <ElgatoAppPanel state={elgatoAutoRestartFor(state.data)} />
+        </SettingsGroup>
 
-      <p class="help-section-label">App connection</p>
-      <ElgatoAppPanel state={elgatoAutoRestartFor(state.data)} />
+        <SettingsGroup title="Maintenance">
+          <UpdatePanel info={updateInfoFor(state.data)} />
+          <DiagnosticsPanel {...diagnosticsProps(state.data)} />
+          <div class="settings-actions">
+            <button class="ghostbtn" type="button" onClick={() => void handleExport()}>
+              Export settings
+            </button>
+            <button class="ghostbtn" type="button" onClick={handleImportClick}>
+              Import settings
+            </button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="application/json"
+              class="settings-file-input"
+              onChange={(e) => void handleFileChange(e)}
+            />
+          </div>
+        </SettingsGroup>
+        <Feedback error={action.error} status={action.status} />
 
-      <p class="help-section-label">Maintenance</p>
-      <UpdatePanel info={updateInfoFor(state.data)} />
-      <DiagnosticsPanel {...diagnosticsProps(state.data)} />
-      <div class="settings-actions">
-        <button class="ghostbtn" type="button" onClick={() => void handleExport()}>
-          Export settings
-        </button>
-        <button class="ghostbtn" type="button" onClick={handleImportClick}>
-          Import settings
-        </button>
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept="application/json"
-          class="settings-file-input"
-          onChange={(e) => void handleFileChange(e)}
-        />
-      </div>
-      <Feedback error={action.error} status={action.status} />
+        <SettingsGroup title="Integrations">
+          <PushApiPanel />
+        </SettingsGroup>
 
-      <p class="help-section-label">Integrations</p>
-      <PushApiPanel />
+        <SettingsGroup title="Advanced details">
+          <ConnectionDetails
+            identity={identity}
+            realIdentity={realIdentity}
+            onRenamed={(name) => {
+              setRenamed(name);
+              void settings.reload();
+            }}
+          />
 
-      <p class="help-section-label">Advanced details</p>
-      <ConnectionDetails
-        identity={identity}
-        realIdentity={realIdentity}
-        onRenamed={(name) => {
-          setRenamed(name);
-          void settings.reload();
-        }}
-      />
-
-      <Collapsible
-        title="Saved settings (JSON)"
-        status={settingsText === null ? 'Loading…' : 'Loaded'}
-      >
-        <pre class="settings-json-preview panel-inset">{settingsText ?? 'Loading…'}</pre>
-        <div class="settings-actions">
-          <button class="ghostbtn" type="button" onClick={() => void handleOpenInOS()}>
-            Open settings.json
-          </button>
-        </div>
-      </Collapsible>
+          <Collapsible
+            title="Saved settings (JSON)"
+            status={settingsText === null ? 'Loading…' : 'Loaded'}
+          >
+            <pre class="settings-json-preview panel-inset">{settingsText ?? 'Loading…'}</pre>
+            <div class="settings-actions">
+              <button class="ghostbtn" type="button" onClick={() => void handleOpenInOS()}>
+                Open settings.json
+              </button>
+            </div>
+          </Collapsible>
+        </SettingsGroup>
+      </SettingsSearch>
     </div>
   );
 }

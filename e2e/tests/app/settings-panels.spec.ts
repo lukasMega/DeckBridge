@@ -28,6 +28,9 @@ interface UpdateInfo {
 async function openSettings(page: import('@playwright/test').Page): Promise<void> {
   await click(page.locator('#settingsBtn'));
   await expect(page.locator('.help h1')).toHaveText('Settings');
+  for (const title of ['Multiple decks', 'Logging & diagnostics', 'Connection details']) {
+    await click(page.getByRole('heading', { name: new RegExp(`^${title}`) }));
+  }
 }
 
 // Device-independent panels, all on MK.2. Mock mode never runs the GitHub update check

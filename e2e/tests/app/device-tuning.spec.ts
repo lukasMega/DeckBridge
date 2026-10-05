@@ -82,9 +82,7 @@ test.describe('device tuning applies without a reconnect', () => {
     await gotoApp(page, `${app.baseURL}/`);
     await click(page.locator('#settingsBtn'));
 
-    // The collapsible renders its body whether or not it is expanded, and
-    // Lightpanda has no layout — so the controls are reachable without the
-    // header click (which needs a real pointer to toggle).
+    await click(page.locator('#device-tuning > .collapse-header'));
     await expect(page.locator('#device-tuning-body .tuning-grid').first()).toBeAttached();
 
     // Rotation is an image field, so Apply must not announce a reconnect.

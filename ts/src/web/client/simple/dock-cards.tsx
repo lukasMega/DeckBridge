@@ -11,6 +11,7 @@ import { KeyGridPreview } from '../components/KeyGridPreview.js';
 import { StatusChip } from '../components/StatusChip.js';
 import { PairingAddressLink } from './pairing-address-modal.js';
 import { pressKey } from './handlers.js';
+import { Brightness } from './controls.js';
 
 function postSelectDock(index: number): void {
   fire('/api/select-dock', { index });
@@ -100,6 +101,11 @@ export function DockCard({
           gesture="dblclick"
           clickable={keyPressEnabled && dock.elgatoConnected}
           clickTitle={keyPressTitle(keyPressEnabled, dock.elgatoConnected)}
+          footer={
+            dock.elgatoConnected ? (
+              <Brightness compact dock={dock.index} level={dock.brightness} />
+            ) : undefined
+          }
         />
       ) : (
         <KeyGridPreview

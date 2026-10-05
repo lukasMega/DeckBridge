@@ -6,6 +6,7 @@
 // `live={false}` renders the same card chrome with inert cells and no renderer:
 // the server mirrors only the selected dock's images, so unselected dock cards
 // need the shell but not a KeyPreview instance.
+import type { ComponentChildren } from 'preact';
 import { useEffect, useRef } from 'preact/hooks';
 import { KeyPreview } from '../key-preview.js';
 import { attachTouchCanvas } from '../touch-strip-preview.js';
@@ -51,6 +52,7 @@ export function KeyGridPreview({
   clickable,
   clickTitle,
   touchStrip,
+  footer,
 }: Readonly<{
   keyCount: number;
   columns: number;
@@ -78,6 +80,8 @@ export function KeyGridPreview({
   clickTitle?: string;
   /** Advertised touch-strip size; shows the live strip under the keys. */
   touchStrip?: TouchStripSize;
+  /** Controls displayed below the keys and touch strip. */
+  footer?: ComponentChildren;
 }>): preact.JSX.Element {
   const isCompact = keyCount === 6;
   const gridRef = useRef<HTMLDivElement>(null);
@@ -126,6 +130,7 @@ export function KeyGridPreview({
           ))}
         </div>
       )}
+      {footer}
     </div>
   );
 }
