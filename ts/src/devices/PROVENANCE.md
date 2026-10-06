@@ -5,7 +5,7 @@ Moved out of the source headers so the model files stay readable; this is the
 authoritative record — update it when a device is tested on real hardware.
 
 Not published to the docs site. `docs/devices.mdx` and `docs/device-specs.mdx` are
-generated from `DEVICE_MODELS` by `mise run docs-devices` and carry the _values_,
+generated from `DEVICE_MODELS` by `mise run devices-generate` and carry the _values_,
 not their pedigree.
 
 ---

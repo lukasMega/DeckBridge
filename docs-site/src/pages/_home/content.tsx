@@ -12,7 +12,7 @@ export const BRANDS: ReactNode[] = [
 ];
 
 /** Tested decks first, then untested — order generated from DEVICE_MODELS by
- *  ts/scripts/gen-device-docs.mjs. Run `mise run docs-devices` after adding a device. */
+ *  ts/scripts/gen-device-docs.mjs. Run `mise run devices-generate` after adding a device. */
 export const DEVICES = deviceData.homepageOrder;
 
 export const HIGHLIGHTS = [
