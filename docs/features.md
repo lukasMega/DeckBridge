@@ -282,6 +282,7 @@ On Linux, add a udev rule (once), then unplug/replug the device:
 
 ```bash
 sudo tee /etc/udev/rules.d/99-mirabox.rules <<'EOF'
+SUBSYSTEM=="hidraw", ATTRS{idVendor}=="0fd9", MODE="0666"
 SUBSYSTEM=="hidraw", ATTRS{idVendor}=="6603", MODE="0666"
 SUBSYSTEM=="hidraw", ATTRS{idVendor}=="5548", MODE="0666"
 SUBSYSTEM=="hidraw", ATTRS{idVendor}=="0300", MODE="0666"
@@ -294,8 +295,8 @@ EOF
 sudo udevadm control --reload-rules && sudo udevadm trigger
 ```
 
-(`6603` = Mirabox 293V3 / HSV293SV3 / K1 Pro, `5548` = Mirabox 293S / Ajazz AKP153,
-`0300` = Ajazz AKP153E/R (rev. 1 and rev. 2), `0b00` = Mars Gaming MSD-ONE, `0c00` = Mad
+(`0fd9` = Elgato Stream Deck MK.2 / Mini, `6603` = Mirabox 293V3 / HSV293SV3 / K1 Pro, `5548` = Mirabox 293S / Ajazz AKP153,
+`0300` = Ajazz AKP153E/R (rev. 1 and rev. 2) and AKP05/AKP05E, `0b00` = Mars Gaming MSD-ONE, `0c00` = Mad
 Dog GK150K, `0a00` = Risemode Vision 01, `0500` = TMICE Stream Controller, `3142` =
 Fifine AmpliGame D6 (rev. 1 and rev. 2).)
 
@@ -365,8 +366,8 @@ ports and the Web UI. The Web UI binds `127.0.0.1` unless you pass `--bind`.
   (click its card); the others stay static.
 - **Keys and dials only** — DeckBridge drives keys plus the AJAZZ AKP05E's four rotary
   encoders and its touch strip (as widget displays, or a Stream Deck + window image).
-  Dials and strip swipes and taps reach the Elgato app only when the AKP05E is re-paired
-  as a Stream Deck + (Device tuning → Emulation profile); a strip tap lands on the centre
+  The AKP05E and AKP05 pair as a Stream Deck + by default, so dials and strip swipes and taps
+  reach the Elgato app; pick another pairing under Device tuning → Emulation profile. A strip tap lands on the centre
   of its zone (the strip reports four zones, not coordinates), and other Stream Deck +/Plus/Neo-style LCD strips remain out of scope.
 - **Fixed ports** — CORA is hard-wired to **5343 / 5344** (extra decks add a fixed +2
   offset per device); conflicts with a real Elgato Network Dock or a second DeckBridge
