@@ -1151,7 +1151,7 @@ function makePageSetup() {
 await test('the layout follows the Elgato page: saved page -> its layout, unknown page -> default', async () => {
   const { dock, driver, pages, paints, sendPage } = makePageSetup();
   await dock.start(driver);
-  assert.equal(paints.at(-1), 'DEF', 'default layout before any page is recognised');
+  assert.equal(paints.at(-1), 'DEF', 'default layout before any page is recognized');
   sendPage(pages[0]!);
   await wait(PAGE_SETTLE_WAIT_MS);
   assert.equal(paints.at(-1), 'PAGE', 'the saved page shows its own layout');

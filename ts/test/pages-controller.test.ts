@@ -94,7 +94,7 @@ test('notifyObservation: selected dock broadcasts pageState once; duplicates and
   assert.equal(last.activePageId, 'p1', 'selecting a dock sends its own state');
 });
 
-test('snapshot is refused until the page is stable and recognisable', () => {
+test('snapshot is refused until the page is stable and recognizable', () => {
   const { ui, stored } = setup();
   assert.equal(status(ui.pages.trySnapshot({ name: 'Main' })), 409, 'no observation yet');
   ui.pages.notifyObservation(0, observation({ settling: true }));
