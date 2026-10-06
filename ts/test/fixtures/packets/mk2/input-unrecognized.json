@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "model": "mk2",
+  "pid": "0x0080",
+  "firmware": null,
+  "interface": null,
+  "source": "synthetic",
+  "assumeOpen": true,
+  "note": "Input type 0x02 and a foreign report id are not button reports.",
+  "steps": [
+    {
+      "op": "read",
+      "dir": "in",
+      "hex": "01020f00010101010101010101010101010101",
+      "expect": []
+    },
+    {
+      "op": "read",
+      "dir": "in",
+      "hex": "09000f00010101010101010101010101010101",
+      "expect": []
+    }
+  ]
+}

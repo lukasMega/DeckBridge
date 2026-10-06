@@ -1,0 +1,30 @@
+{
+  "version": 1,
+  "model": "mirabox-293s",
+  "pid": "0x6670",
+  "firmware": null,
+  "interface": {
+    "usagePage": 65440,
+    "usage": 1
+  },
+  "source": "synthetic",
+  "assumeOpen": true,
+  "note": "v1 firmware reports key-down only; the driver synthesizes the key-up (synthesizeKeyUp).",
+  "steps": [
+    {
+      "op": "read",
+      "dir": "in",
+      "hex": "41434b00004f4b000002010000000000",
+      "expect": [
+        {
+          "type": "press",
+          "key": 2
+        },
+        {
+          "type": "release",
+          "key": 2
+        }
+      ]
+    }
+  ]
+}

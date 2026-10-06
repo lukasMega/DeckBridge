@@ -3,15 +3,14 @@
 ```
 Date:   2026-09-11
 Scope:  Vector illustrations + reference photos for every supported device
-Status: Complete — 16/16 SVGs, 48 verified reference photos across 12 product families
+Status: Complete — 18/18 SVGs, 48 verified reference photos across 12 product families
 ```
 
-Inventory reviewed: 2026-10-03.
-Registry now contains eighteen USB models.
-Eighteen committed SVG files exist.
-Generator inventory still contains sixteen models.
-AKP05 and AKP05E SVGs exist separately.
-Its `--check` cannot validate missing entries.
+Inventory reviewed: 2026-10-06.
+Registry contains eighteen USB models, with eighteen committed SVG files.
+The generator covers all eighteen: `--check` fails on a missing registry model's
+file or an orphan SVG, and a model with no `DEVICES` row gets generic artwork
+rendered from registry geometry until a tuned row is added.
 Historical photo research below remains unchanged.
 
 Preview sheet for the device artwork.

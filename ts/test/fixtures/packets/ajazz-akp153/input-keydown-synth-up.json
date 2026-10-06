@@ -1,0 +1,30 @@
+{
+  "version": 1,
+  "model": "ajazz-akp153",
+  "pid": "0x6674",
+  "firmware": null,
+  "interface": {
+    "usagePage": 65440,
+    "usage": 1
+  },
+  "source": "synthetic",
+  "assumeOpen": true,
+  "note": "A rebadge of the 293S board: inherits (and pins) the synthesized key-up.",
+  "steps": [
+    {
+      "op": "read",
+      "dir": "in",
+      "hex": "41434b00004f4b000007010000000000",
+      "expect": [
+        {
+          "type": "press",
+          "key": 7
+        },
+        {
+          "type": "release",
+          "key": 7
+        }
+      ]
+    }
+  ]
+}

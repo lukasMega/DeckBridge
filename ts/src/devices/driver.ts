@@ -1,23 +1,16 @@
 import type { EventEmitter } from 'node:events';
 import type { TouchStripOptions, TouchWindowRegion } from '../shared/types.js';
+import { PROTOCOLS, WIRE_OVERRIDE_KEYS, type WireOverrideKey } from './protocol-metadata.js';
 
-export type DeviceVendor =
-  | 'mirabox'
-  | 'ajazz'
-  | 'elgato'
-  | 'mars-gaming'
-  | 'mad-dog'
-  | 'risemode'
-  | 'tmice'
-  | 'fifine';
+// Re-exported so importers keep reading it from driver.ts.
+export { WIRE_OVERRIDE_KEYS };
 
-/** Wire protocol — closed; adding a new model almost always reuses an existing one. */
-export type DeviceProtocol =
-  | 'mirabox-cora' // v3, 1024-byte packets, press+release
-  | 'mirabox-cora-v1' // v1, 512-byte packets, keydown-only
-  | 'ajazz-akp05' // 1024-byte CRT BAT uploads, ULEND commit
-  | 'elgato-gen1' // BMP, 16-byte header, key+1, feature 0x05/0x0B (Mini, original)
-  | 'elgato-gen2'; // JPEG, 8-byte header, feature 0x03 (MK.2, XL)
+/** Kebab-case slug (checked by validate-model.ts); a new vendor needs no type edit. */
+// eslint-disable-next-line sonarjs/redundant-type-aliases
+export type DeviceVendor = string;
+
+/** Wire protocol — closed; the table is PROTOCOLS in protocol-metadata.ts. */
+export type DeviceProtocol = keyof typeof PROTOCOLS;
 
 /** Stable kebab-case slug used as cache key, UI label, logs. */
 // eslint-disable-next-line sonarjs/redundant-type-aliases
@@ -222,7 +215,7 @@ export interface DeviceModel {
 
 /** Elgato's own HID protocol (MK.2/Mini/…), as opposed to a Mirabox-family board. */
 export function isElgatoHid(model: DeviceModel): boolean {
-  return model.protocol === 'elgato-gen1' || model.protocol === 'elgato-gen2';
+  return PROTOCOLS[model.protocol].family === 'elgato';
 }
 
 // The tunable field names, listed once: they type DeviceModelOverride below and drive
@@ -245,49 +238,15 @@ export const IMAGE_OVERRIDE_KEYS = [
   'transform',
 ] as const;
 
-export const WIRE_OVERRIDE_KEYS = [
-  'packetSize',
-  'inSize',
-  'heartbeatMs',
-  'reportId',
-  'chunkDelayMs',
-  'chunkPadByte',
-  'synthesizeKeyUp',
-  'sendStpAfterImage',
-  'batchImageTransfers',
-] as const;
-
-type WireOverrideKey = (typeof WIRE_OVERRIDE_KEYS)[number];
-
-const MIRABOX_WIRE_KEYS = [
-  'packetSize',
-  'inSize',
-  'heartbeatMs',
-  'reportId',
-  'chunkDelayMs',
-  'chunkPadByte',
-  'synthesizeKeyUp',
-  'sendStpAfterImage',
-] as const satisfies readonly WireOverrideKey[];
-
-/** The wire fields each protocol's driver actually reads, so the only ones a user
- *  may tune. Kept here, not beside USB_DRIVERS (usb-drivers.ts), because the main
- *  thread validates overrides and must not import the FFI drivers. Elgato sizes are
- *  protocol facts: a wrong packetSize makes gen1/gen2 chunk short and the firmware
- *  drops it silently. AKP05 hardcodes its 1024-byte framing and report id 0. */
-export const TUNABLE_WIRE_KEYS: Record<DeviceProtocol, readonly WireOverrideKey[]> = {
-  'elgato-gen1': [],
-  'elgato-gen2': [],
-  'mirabox-cora': MIRABOX_WIRE_KEYS,
-  // Only the 512-byte, keydown-only 293S board family batches image uploads.
-  'mirabox-cora-v1': [...MIRABOX_WIRE_KEYS, 'batchImageTransfers'],
-  'ajazz-akp05': ['inSize'],
-};
+/** Per-protocol tunable wire fields, read from PROTOCOLS (protocol-metadata.ts). */
+export function tunableWireKeys(protocol: DeviceProtocol): readonly WireOverrideKey[] {
+  return PROTOCOLS[protocol].tunableWireKeys;
+}
 
 /** One STP per image batch: decided here once for the worker queue and the driver. */
 export function imageBatchingEnabled(model: DeviceModel): boolean {
   return (
-    TUNABLE_WIRE_KEYS[model.protocol].includes('batchImageTransfers') &&
+    tunableWireKeys(model.protocol).includes('batchImageTransfers') &&
     model.wire.batchImageTransfers === true
   );
 }

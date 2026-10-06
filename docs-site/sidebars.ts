@@ -30,6 +30,7 @@ const sidebars: SidebarsConfig = {
   technicalSidebar: [
     'device-specs',
     'adding-a-device',
+    'new-protocol',
     'side-keys',
     'plugin-widgets',
     'push-api',

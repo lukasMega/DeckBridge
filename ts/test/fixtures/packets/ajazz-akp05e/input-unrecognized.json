@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "model": "ajazz-akp05e",
+  "pid": "0x3004",
+  "firmware": null,
+  "interface": {
+    "usagePage": 65440,
+    "usage": 1
+  },
+  "source": "synthetic",
+  "assumeOpen": true,
+  "steps": [
+    {
+      "op": "read",
+      "dir": "in",
+      "hex": "deadbeef",
+      "expect": []
+    }
+  ]
+}

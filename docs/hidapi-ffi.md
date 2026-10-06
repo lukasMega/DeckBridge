@@ -145,4 +145,4 @@ Discovery reset runs on its scan thread.
 
 - [ARCHITECTURE.md](./ARCHITECTURE.md) → **libhidapi loading** / **HID path enumeration** sections (the canonical reference; a deep-dive page, not listed in the sidebar).
 - `rust/README.md` → how `DECKBRIDGE_NATIVE_LIB` is wired and the path-based open flow.
-- [Adding a Device](./adding-a-device.md) → a new device driver on `HidDeviceBase`.
+- [Adding a new protocol](./new-protocol.md) → a new device driver on `HidDeviceBase`.
