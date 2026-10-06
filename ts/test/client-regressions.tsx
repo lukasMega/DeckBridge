@@ -10,6 +10,7 @@ import {
   patch,
   useStore,
   EMPTY_STATUS,
+  EMPTY_PAGE_STATE,
 } from '../src/web/client/lib/store.js';
 import { DOCK_IDENTITY } from './helpers/dock-fixture.js';
 import { hydrate } from '../src/web/client/lib/hydrate.js';
@@ -24,6 +25,7 @@ import { Collapsible } from '../src/web/client/components/Collapsible.js';
 import { runDeckPage } from './client-deck.js';
 import { runPairingFlow } from './client-pairing.js';
 import { runDocsLinks } from './client-docs.js';
+import { runPagesPanel } from './client-pages.js';
 import { StandbyPanel } from '../src/web/client/simple/standby-panel.js';
 import type { StandbyView } from '../src/web/contract-standby.js';
 import { ElgatoAppPanel } from '../src/web/client/simple/elgato-app-panel.js';
@@ -286,6 +288,8 @@ function runHydrateRegression(): void {
     deviceModels: [],
     deviceIdentity: { ...DOCK_IDENTITY },
     extraKeys: { '11': { widget: 'command', param: 'date' } },
+    pages: [],
+    pageState: EMPTY_PAGE_STATE,
     touchStripMode: 'deckbridge-repaint',
     touchStripRepaintMs: 5000,
     encoders: {},
@@ -1191,6 +1195,7 @@ async function runKeymapAndDiagnosticsPanels(): Promise<void> {
   await runElgatoAutoRestartPanel();
   await runElgatoAutoRestartUnsupported();
   await runStandbyPanel();
+  await runPagesPanel(root, check);
 }
 
 async function runCollapsedHeaderStatuses(): Promise<void> {

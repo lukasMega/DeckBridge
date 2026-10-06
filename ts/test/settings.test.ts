@@ -2,6 +2,7 @@ import assert from 'tjs:assert';
 import { PersistedSettings } from '../src/infra/settings.js';
 import { settingsPath, loadSettings, saveSettings } from '../src/infra/settings-store.js';
 import { testAsync as test, summary } from './helpers/harness.js';
+import { makePage } from './helpers/pages.js';
 
 const ROOT = `${tjs.tmpDir}/settings-test-${tjs.pid}`;
 
@@ -275,6 +276,100 @@ await test('setDailyPingDay clears docsSeen on disk too', async () => {
   const onDisk = await loadSettings(dir);
   assert.equal(onDisk.docsSeen, undefined);
   assert.equal(onDisk.a7sDay, '2026-10-04');
+});
+
+console.log('\nPersistedSettings — saved pages');
+
+const pagesDevice = (key: string, pages: unknown) => ({
+  deviceKey: key,
+  mdnsServiceName: 'Dock',
+  macAddress: '00:11:22:33:44:55',
+  dockSerial: 'A',
+  childSerial: 'B',
+  pages,
+});
+
+await test('load() round-trips valid pages and folds legacy text fields in page layouts', async () => {
+  const dir = `${ROOT}/pages-valid`;
+  const layout = { '16': { widget: 'text', param: 'Hi', textSize: 'fit' } };
+  const pages = [makePage('p1', 'A', { extraKeys: layout as never }), makePage('p2', 'B')];
+  await saveSettings({ devices: [pagesDevice('usb:PG1', pages)] } as never, dir);
+  const settings = new PersistedSettings(dir);
+  await settings.load();
+  const loaded = settings.entryFor('usb:PG1')?.pages;
+  assert.equal(loaded?.length, 2);
+  assert.deepEqual(loaded?.[0]?.extraKeys, {
+    '16': { widget: 'text', param: 'Hi', style: { textSize: 'fit' } },
+  });
+  assert.deepEqual(loaded?.[1], pages[1]);
+});
+
+await test('load() drops one invalid page and keeps the rest and the identity', async () => {
+  const dir = `${ROOT}/pages-one-bad`;
+  const bad = { ...makePage('p2', 'B'), hashes: ['nothex'] };
+  await saveSettings(
+    { devices: [pagesDevice('usb:PG2', [makePage('p1', 'A'), bad])] } as never,
+    dir,
+  );
+  const settings = new PersistedSettings(dir);
+  await settings.load();
+  const entry = settings.entryFor('usb:PG2');
+  assert.deepEqual(
+    entry?.pages?.map((p) => p.id),
+    ['p1'],
+  );
+  assert.equal(entry?.dockSerial, 'A');
+});
+
+await test('load() deletes a non-array pages field but keeps the identity', async () => {
+  const dir = `${ROOT}/pages-not-array`;
+  await saveSettings({ devices: [pagesDevice('usb:PG3', 'nope')] } as never, dir);
+  const settings = new PersistedSettings(dir);
+  await settings.load();
+  const entry = settings.entryFor('usb:PG3');
+  assert.ok(entry, 'identity kept');
+  assert.ok(!('pages' in entry!));
+});
+
+await test('importDevices() salvages valid pages and keeps the first duplicate', async () => {
+  const settings = new PersistedSettings(`${ROOT}/pages-import`);
+  assert.ok(settings.importDevices([pagesDevice('usb:PG4', [makePage('p1', 'A')])]));
+  assert.equal(settings.entryFor('usb:PG4')?.pages?.length, 1);
+  const valid = makePage('p1', 'A');
+  assert.ok(
+    settings.importDevices([pagesDevice('usb:PG5', [valid, { id: 'x' }, makePage('p1', 'B')])]),
+  );
+  assert.deepEqual(settings.entryFor('usb:PG5')?.pages, [valid]);
+  await settings.flush();
+});
+
+await test('setPages() needs an entry, persists, and an empty list clears the field', async () => {
+  const dir = `${ROOT}/pages-set`;
+  const settings = new PersistedSettings(dir);
+  assert.equal(settings.for('usb:NOPE').setPages([makePage('p1', 'A')]), false);
+  settings.getOrCreateIdentity('usb:PG6', 'Dock');
+  const prefs = settings.for('usb:PG6');
+  assert.deepEqual(prefs.pages(), []);
+  assert.ok(prefs.setPages([makePage('p1', 'A')]));
+  assert.equal(prefs.pages().length, 1);
+  await settings.flush();
+  assert.equal((await loadSettings(dir)).devices?.[0]?.pages?.length, 1);
+  assert.ok(prefs.setPages([]));
+  assert.ok(!('pages' in settings.entryFor('usb:PG6')!));
+  await settings.flush();
+});
+
+await test('an unknown device field survives load + persist', async () => {
+  const dir = `${ROOT}/unknown-field`;
+  await saveSettings(
+    { devices: [{ ...pagesDevice('usb:PG7', undefined), futureField: 7 }] } as never,
+    dir,
+  );
+  const settings = new PersistedSettings(dir);
+  await settings.load();
+  settings.persist();
+  await settings.flush();
+  assert.equal((await loadSettings(dir)).devices?.[0]?.['futureField' as never], 7);
 });
 
 summary();

@@ -1,4 +1,5 @@
 import type { ExtraKeyConfig, DockStatus } from '../../shared/types.js';
+import type { PageDefinition } from '../../shared/page-config.js';
 import type {
   ExtraKeyPressAction,
   MockDeviceConfig,
@@ -13,6 +14,7 @@ import type { StandbyController } from './standby-controller.js';
 import type { DevicePrefsController } from './device-prefs-controller.js';
 import type { EncodersController } from './encoders-controller.js';
 import type { ExtraKeysController } from './extra-keys-controller.js';
+import type { PagesController } from './pages-controller.js';
 import type { ModelOverridesController } from './model-overrides-controller.js';
 import type { LoggingController } from './logging-controller.js';
 import type { PushController } from './push-controller.js';
@@ -36,6 +38,15 @@ export type ExtraKeyUpdate = ExtraKeyConfig | ExtraKeyPressUpdate;
 export interface ExtraKeyPressUpdate {
   pressCommand?: string;
   pressAction?: ExtraKeyPressAction;
+}
+
+/** What ExtraKeysController needs from PagesController (no controller-to-controller import). */
+export interface PageLayoutPort {
+  selectedActivePage(): PageDefinition | undefined;
+  tryEditLayout(
+    pageId: string,
+    edit: (map: Record<string, ExtraKeyConfig>) => Record<string, ExtraKeyConfig>,
+  ): ReqError | null;
 }
 
 /** A rejected request: the message the WebUI shows, plus its HTTP status. */
@@ -88,6 +99,8 @@ export type {
   StatusSnapshot,
   StateResponse,
   ElgatoAutoRestartState,
+  PageStateMsg,
+  PageSummary,
 } from '../contract.js';
 
 export type { LogLevel };
@@ -98,6 +111,7 @@ export interface WebUIControllers {
   readonly devicePrefs: DevicePrefsController;
   readonly encoders: EncodersController;
   readonly extraKeys: ExtraKeysController;
+  readonly pages: PagesController;
   readonly modelOverrides: ModelOverridesController;
   readonly logging: LoggingController;
   readonly updates: UpdateController;

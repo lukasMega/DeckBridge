@@ -8,6 +8,7 @@ import type { RawMockInput } from './mock-input.js';
 import { pushAdminRoutes } from './push-routes.js';
 import { virtualDeckRoutes } from './virtual-deck/virtual-deck-routes.js';
 import { pairingAddressRoutes } from './pairing-address-routes.js';
+import { pageRoutes } from './page-routes.js';
 import type { ExternalExpire } from '../contract.js';
 import { isNonNegInt, nonNegIntMessage } from './types.js';
 import type { MockDeviceConfig } from './types.js';
@@ -86,6 +87,7 @@ export const routes: Route[] = [
   postJson('/api/extra-key/run', runExtraKeyNow),
   postJson('/api/extra-key/preview', previewExtraKey),
   postJson('/api/extra-key/press', setExtraKeyPress),
+  ...pageRoutes,
   ...pushAdminRoutes,
   ...virtualDeckRoutes,
   ...pairingAddressRoutes,
@@ -274,11 +276,14 @@ interface ExtraKeyBody {
   expire?: unknown;
   fallbackText?: unknown;
   style?: unknown;
+  pageId?: unknown;
 }
 
 /** Field validation for POST /api/extra-key; returns an error message or null. */
 function extraKeyBodyError(body: ExtraKeyBody): string | null {
   if (!isNonNegInt(body.wireId)) return nonNegIntMessage('wireId');
+  if (body.pageId !== undefined && typeof body.pageId !== 'string')
+    return 'pageId must be a string';
   return extraKeyConfigError(body);
 }
 
@@ -299,7 +304,7 @@ function setExtraKey(body: ExtraKeyBody, { extraKeys }: RouteContext): Response 
     ...(typeof fallbackText === 'string' && fallbackText ? { fallbackText } : {}),
     ...(Object.keys(style).length > 0 ? { style } : {}),
   };
-  const err = extraKeys.trySet(wireId as number, cfg);
+  const err = extraKeys.trySet(wireId as number, cfg, body.pageId as string | undefined);
   return err ? json({ error: err.error }, err.status) : json({ ok: true, wireId, widget });
 }
 
@@ -325,10 +330,17 @@ function previewExtraKey({ wireId }: RunExtraKeyBody, { extraKeys }: RouteContex
  *  its action (refresh / command / both); an omitted field is kept. Separate from the
  *  widget POST so neither overwrites the other. */
 function setExtraKeyPress(
-  { wireId, command, action }: { wireId: unknown; command: unknown; action: unknown },
+  {
+    wireId,
+    command,
+    action,
+    pageId,
+  }: { wireId: unknown; command: unknown; action: unknown; pageId?: unknown },
   { extraKeys }: RouteContext,
 ): Response {
   if (!isNonNegInt(wireId)) return badRequest(nonNegIntMessage('wireId'));
+  if (pageId !== undefined && typeof pageId !== 'string')
+    return badRequest('pageId must be a string');
   if (command === undefined && action === undefined) {
     return badRequest('command or action is required');
   }
@@ -341,10 +353,14 @@ function setExtraKeyPress(
   if (action !== undefined && !isOneOf(EXTRA_KEY_PRESS_ACTIONS, action)) {
     return badRequest(`action must be one of: ${EXTRA_KEY_PRESS_ACTIONS.join(', ')}`);
   }
-  const err = extraKeys.trySet(wireId, {
-    ...(command !== undefined ? { pressCommand: command } : {}),
-    ...(action !== undefined ? { pressAction: action } : {}),
-  });
+  const err = extraKeys.trySet(
+    wireId,
+    {
+      ...(command !== undefined ? { pressCommand: command } : {}),
+      ...(action !== undefined ? { pressAction: action } : {}),
+    },
+    pageId,
+  );
   return err ? json({ error: err.error }, err.status) : json({ ok: true });
 }
 

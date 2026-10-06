@@ -348,6 +348,8 @@ const SELECTED_DEVICE_EVENTS = [
   'touchStripMode',
   'touchStripRepaint',
   'encoders',
+  'pages',
+  'pageState',
 ];
 
 test('notifyDocks broadcasts status + selected-device state to a connected WS client', () => {
@@ -483,7 +485,7 @@ test('encoders: merges per knob, trims blanks, persists and broadcasts', () => {
   assert.deepEqual(saved.devices[0]!.encoders, expected, 'persisted per device');
 });
 
-test('applySettingsJson: bad touchStripMode / encoders fail the device-entry guard', () => {
+test('applySettingsJson: invalid optional settings are stripped while identity survives', () => {
   const ui = new WebUIServer(undefined, [], 'real', new PersistedSettings(TEST_SETTINGS_ROOT));
   ui.notifyDocks([fakeDockStatus(0)]);
   const entry = (extra: Parameters<typeof deviceEntry>[1]): string =>
@@ -492,17 +494,21 @@ test('applySettingsJson: bad touchStripMode / encoders fail the device-entry gua
     (JSON.parse(ui.settings.json()) as { devices?: unknown[] }).devices ?? [];
 
   ui.settingsFile.applyJson(entry({ touchStripMode: 'sometimes' }));
-  assert.equal(stored().length, 0, 'unknown mode rejected');
+  assert.deepEqual(stored(), [deviceEntry('fake-device-0', {})], 'unknown mode stripped');
   ui.settingsFile.applyJson(entry({ touchStripRepaintMs: 10 }));
-  assert.equal(stored().length, 0, 'repaint interval below 1 s rejected');
+  assert.deepEqual(
+    stored(),
+    [deviceEntry('fake-device-0', {})],
+    'invalid repaint interval stripped',
+  );
   ui.settingsFile.applyJson(entry({ touchStripZoneFit: 'stretch' }));
-  assert.equal(stored().length, 0, 'unknown zone fit rejected');
+  assert.deepEqual(stored(), [deviceEntry('fake-device-0', {})], 'unknown zone fit stripped');
   ui.settingsFile.applyJson(entry({ touchStripUpload: 'never' }));
-  assert.equal(stored().length, 0, 'unknown upload policy rejected');
+  assert.deepEqual(stored(), [deviceEntry('fake-device-0', {})], 'unknown upload policy stripped');
   ui.settingsFile.applyJson(entry({ encoders: { commands: { '7': { press: 'x' } } } }));
-  assert.equal(stored().length, 0, 'knob index out of range rejected');
+  assert.deepEqual(stored(), [deviceEntry('fake-device-0', {})], 'out-of-range knob stripped');
   ui.settingsFile.applyJson(entry({ encoders: { commands: { '0': { press: 'x'.repeat(513) } } } }));
-  assert.equal(stored().length, 0, 'over-long command rejected');
+  assert.deepEqual(stored(), [deviceEntry('fake-device-0', {})], 'over-long command stripped');
 
   ui.settingsFile.applyJson(
     entry({ touchStripMode: 'deckbridge-ignore', encoders: { connectToApp: false } }),
@@ -557,7 +563,8 @@ test('extra-key press command: pressable keys only, widget and command replace i
   assert.deepEqual(cfg(), { widget: 'none', pressAction: 'refresh' });
 
   ui.settingsFile.applyJson(extraKeyEntry({ '15': { widget: 'none', pressAction: 'always' } }));
-  assert.deepEqual(cfg(), { widget: 'none', pressAction: 'refresh' }, 'bad action import ignored');
+  assert.equal(cfg(), undefined, 'invalid optional extraKeys stripped on import');
+  assert.ok(ui.settings.entryFor('fake-device-0'), 'device identity survives');
   ui.settingsFile.applyJson(extraKeyEntry({}));
   ui.settingsFile.applyJson(
     extraKeyEntry({ '15': { widget: 'none', pressCommand: 'x'.repeat(513) } }),
@@ -1057,7 +1064,7 @@ test('applySettingsJson: devices[] import applies per-device override to selecte
   assert.equal(ui.fullState().brightnessOverride, true, "selected dock's override resolved");
 });
 
-test('applySettingsJson: a device entry with an invalid touchStripMode is rejected (guard), state unchanged', () => {
+test('applySettingsJson: an invalid touchStripMode is stripped without dropping the device', () => {
   const ui = new WebUIServer(undefined, [], 'real', new PersistedSettings(TEST_SETTINGS_ROOT));
   ui.notifyDocks([fakeDockStatus(0)]);
   ui.settingsFile.applyJson(
@@ -1066,7 +1073,11 @@ test('applySettingsJson: a device entry with an invalid touchStripMode is reject
     }),
   );
   const parsed = JSON.parse(ui.settings.json()) as { devices?: unknown[] };
-  assert.ok(!parsed.devices || parsed.devices.length === 0, 'malformed entry not stored');
+  assert.deepEqual(
+    parsed.devices,
+    [deviceEntry('fake-device-0', {})],
+    'identity stored without invalid mode',
+  );
 });
 
 test('applySettingsJson throws on malformed JSON, state unchanged', () => {

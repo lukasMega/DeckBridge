@@ -330,6 +330,10 @@ if (__MOCK_BUILD__) {
 webui.on('extraKeyChanged', (dock: number) => {
   driverManager.dock(dock)?.repaintWidgets();
 });
+// Saved Elgato pages changed (WebUI edit or import): re-match; no index = every dock.
+webui.on('pagesChanged', (dock?: number) =>
+  dock === undefined ? driverManager.reloadAllPages() : driverManager.dock(dock)?.pages.reload(),
+);
 webui.on('standbyChanged', (dock?: number) =>
   dock === undefined ? driverManager.reloadAllStandby() : driverManager.dock(dock)?.reloadStandby(),
 );

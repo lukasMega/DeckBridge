@@ -294,7 +294,8 @@ export interface DeviceDriver extends EventEmitter {
  *  or `MockDriver`, whose versions of the worker-only calls are no-ops. */
 export interface DockDriver extends DeviceDriver {
   /** Transform (resize/rotate/encode), cache and write a raw CORA image, off the
-   *  main thread; the in-worker drivers take native bytes via their own `sendImage`. */
+   *  main thread; the in-worker drivers take native bytes via their own `sendImage`.
+   *  Emits `'frameHash'(coraKey, hash)` once the frame is rendered. */
   renderCoraImage(keyIndex: number, coraBytes: Uint8Array, format: 'jpeg' | 'bmp'): void;
   /** Send a splash source image, transformed with `spec` (which may differ from
    *  model.image — splash sources are upright), keeping the FFI transform and

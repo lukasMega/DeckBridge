@@ -13,7 +13,7 @@ import type { DockHooks, DockSettings } from '../src/main/dock.js';
 import type { ElgatoServer } from '../src/cora/primary-server.js';
 import type { ElgatoChildServer } from '../src/cora/child-server.js';
 import { generateDeviceIdentity } from '../src/infra/device-identity.js';
-import { DEFAULT_MODEL } from '../src/devices/registry.js';
+import { DEFAULT_MODEL, advertisedModel } from '../src/devices/registry.js';
 import { MIRABOX_293S_MODEL } from '../src/devices/mirabox/mirabox-293s.js';
 import { AJAZZ_AKP05E_MODEL } from '../src/devices/ajazz/akp05e.js';
 import { NATIVE_AKP05E_MODEL } from './helpers/native-akp05e.js';
@@ -48,6 +48,9 @@ import { testAsync as test, summaryExit } from './helpers/harness.js';
 import { FakeClock } from './helpers/fake-standby-clock.js';
 import { StubDockDriver } from './helpers/stub-dock-driver.js';
 import { SOLID_RED_16X16_JPEG } from './helpers/fixtures.js';
+import { makePage } from './helpers/pages.js';
+import type { PageObservation } from '../src/shared/page-match.js';
+import type { WidgetPaint } from '../src/shared/widget-layout.js';
 
 const noop = (): void => {};
 
@@ -1098,6 +1101,113 @@ await test('click-to-press: stop() drops a pending release; a stopped dock refus
   await new Promise((r) => setTimeout(r, MOCK_KEY_PRESS_DURATION_MS + 60));
   assert.deepEqual(childServer.sendKeyEventCalls, [{ keyIndex: 4, state: 'down' }]);
   assert.equal(dock.simulateKeyPress(5), false);
+});
+
+// Page-following side-key layouts (main/dock-pages.ts)
+
+const PAGE_SETTLE_WAIT_MS = 260;
+const wait = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
+const textOf = (paint: WidgetPaint | null | undefined): string =>
+  (paint?.lines ?? []).map((l) => l.text).join('');
+
+/** A 293S dock: default side key 16 says DEF; saved page p1 says PAGE, p2 has no layout. */
+function makePageSetup() {
+  const model = MIRABOX_293S_MODEL;
+  const profile = advertisedModel(model).id;
+  const pages = [
+    makePage('p1', 'A', {
+      profile,
+      extraKeys: { '16': { widget: 'text', param: 'PAGE', pressCommand: 'echo page' } },
+    }),
+    makePage('p2', 'B', { profile }),
+  ];
+  const paints: string[] = [];
+  const observations: PageObservation[] = [];
+  const server = new FakeServer();
+  const childServer = new FakeChildServer();
+  const driver = new FakeDriver(model);
+  const { prefs } = prefsWith({
+    extraKeys: { '16': { widget: 'text', param: 'DEF' } },
+    pages,
+  });
+  const dock = makeTestDock({
+    identity: dockSlot(1, testIdentity(model)),
+    cora: makeDock(server, childServer),
+    model,
+    prefs,
+    hooks: {
+      widgetPaint: (wireId, paint) => {
+        if (wireId === 16) paints.push(textOf(paint));
+      },
+      pageObservation: (obs) => observations.push(obs),
+    },
+  });
+  const sendPage = (page: (typeof pages)[number]): void => {
+    page.hashes.forEach((hash, key) => driver.emit('frameHash', key, hash));
+  };
+  return { dock, driver, childServer, pages, paints, observations, sendPage, prefs };
+}
+
+await test('the layout follows the Elgato page: saved page -> its layout, unknown page -> default', async () => {
+  const { dock, driver, pages, paints, sendPage } = makePageSetup();
+  await dock.start(driver);
+  assert.equal(paints.at(-1), 'DEF', 'default layout before any page is recognised');
+  sendPage(pages[0]!);
+  await wait(PAGE_SETTLE_WAIT_MS);
+  assert.equal(paints.at(-1), 'PAGE', 'the saved page shows its own layout');
+  assert.equal(dock.pages.layoutConfig(16)?.pressCommand, 'echo page', 'press actions follow too');
+  sendPage(
+    makePage('p9', 'Z', {
+      hashes: pages[0]!.hashes.map((_, i) => (0xabc00 + i).toString(16).padStart(8, '0')),
+    }),
+  );
+  await wait(1500); // frames this close to the last page look animated: two forced evaluations
+  assert.equal(paints.at(-1), 'DEF', 'an unsaved page falls back to the default layout');
+  await dock.stop();
+});
+
+await test('a page without its own layout keeps the default one', async () => {
+  const { dock, driver, pages, paints, sendPage, observations } = makePageSetup();
+  await dock.start(driver);
+  sendPage(pages[1]!);
+  await wait(PAGE_SETTLE_WAIT_MS);
+  assert.equal(observations.at(-1)?.activePageId, 'p2');
+  assert.equal(paints.at(-1), 'DEF');
+  await dock.stop();
+});
+
+await test('the Elgato client disconnecting holds the layout', async () => {
+  const { dock, driver, childServer, pages, paints, sendPage, observations } = makePageSetup();
+  await dock.start(driver);
+  sendPage(pages[0]!);
+  await wait(PAGE_SETTLE_WAIT_MS);
+  childServer.emit('clientDisconnected');
+  await wait(PAGE_SETTLE_WAIT_MS);
+  assert.equal(paints.at(-1), 'PAGE', 'still the page layout');
+  assert.equal(observations.at(-1)?.held, true);
+  assert.equal(observations.at(-1)?.activePageId, 'p1');
+  await dock.stop();
+});
+
+await test('reloading the pages repaints and re-matches (a deleted page reverts to default)', async () => {
+  const { dock, driver, pages, paints, sendPage, prefs } = makePageSetup();
+  await dock.start(driver);
+  sendPage(pages[0]!);
+  await wait(PAGE_SETTLE_WAIT_MS);
+  prefs.setPages([pages[1]!]);
+  paints.length = 0;
+  dock.pages.reload();
+  assert.deepEqual(paints, ['DEF'], 'delete and reload repaint exactly once');
+  await dock.stop();
+});
+
+await test('a mock-mode driver still feeds the page tracker', async () => {
+  const { dock, driver, pages, observations, sendPage } = makePageSetup();
+  dock.attach(driver, true);
+  sendPage(pages[0]!);
+  await wait(PAGE_SETTLE_WAIT_MS);
+  assert.equal(observations.at(-1)?.activePageId, 'p1');
+  await dock.stop();
 });
 
 // Summary

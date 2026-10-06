@@ -120,6 +120,31 @@ Taps on widget zones refresh them. Other taps, holds, and swipes reach the Elgat
 
 </details>
 
+## Layouts that follow the Elgato page
+
+Give a profile, page, or folder in the Elgato app its own side-key and touch strip layout. DeckBridge sees every key image the app sends, so it can tell which page is on screen.
+
+1. Show the page in the Elgato app. Under **Follow Elgato pages**, choose **Save current page…**, name it, and save.
+2. Keys that change on their own (a clock, an animated GIF, a counter) are ticked **ignore** by default. Untick or tick keys to match your page. Blank keys are ignored too.
+3. Choose **Edit layout** on the saved page. It starts as a copy of the default layout. Pick which layout the editor changes with the **Default** and page chips above the side keys.
+
+When the app shows a saved page, its layout appears on the deck. Any other page shows the default layout, the one you edit under **Default**.
+
+<details>
+<summary>Matching, strictness, and limits</summary>
+
+A page matches when enough of its keys show the same images as when you saved it. **Strictness** sets how many: **Strict** 100%, **Normal** 80%, **Loose** 60%. Keep at least one key that is different on each page, or two pages cannot be told apart. The key grid marks keys that differ from a saved page right now.
+
+A page that has its own layout never falls back to the default per key: a key it does not configure shows nothing on that page. Later edits to the default layout do not reach pages that already have their own.
+
+Only side keys and touch strip zone widgets, including their press commands, follow the page. The touch strip mode and knob commands stay per device. In **Repaint** mode, a zone with no widget on a page shows the app's strip. In **Ignore** mode it stays blank.
+
+The layout switches about 0.2 seconds after the page finishes changing. While the Elgato app is gone or showing blank keys, the current layout stays. Pages are saved per device, so each deck of a multi-deck setup follows its own page.
+
+DeckBridge compares exact images. An Elgato app update or a new key theme can change them, so a saved page stops matching until you press **Re-capture**. A page saved for another deck layout is marked **Recorded for another layout**.
+
+</details>
+
 ## Security
 
 Command widgets and press actions run shell commands on your host. The Web UI has no authentication. Use these features only on a trusted personal network.

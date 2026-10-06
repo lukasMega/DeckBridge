@@ -3,7 +3,7 @@
 import { render } from 'preact';
 import { act } from 'preact/test-utils';
 import { DOCK_IDENTITY } from './helpers/dock-fixture.js';
-import { EMPTY_STATUS, getSnapshot, patch } from '../src/web/client/lib/store.js';
+import { EMPTY_PAGE_STATE, EMPTY_STATUS, getSnapshot, patch } from '../src/web/client/lib/store.js';
 import { connectWS } from '../src/web/client/lib/ui-ws.js';
 import { BootScreen } from '../src/web/client/simple/boot-screen.js';
 import { ConnectionPath } from '../src/web/client/components/ConnectionPath.js';
@@ -53,6 +53,8 @@ const STATE = {
   brightnessOverride: true,
   deviceModels: [],
   extraKeys: {},
+  pages: [],
+  pageState: EMPTY_PAGE_STATE,
   touchStripMode: 'elgato',
   touchStripRepaintMs: 0,
   encoders: {},

@@ -10,6 +10,8 @@ import type {
   KeyEventEntry,
   LogEntry,
   MockDeviceConfig,
+  PageStateMsg,
+  PageSummary,
   StateResponse,
   Stats,
   StatusSnapshot,
@@ -36,6 +38,8 @@ export interface StateResponseInputs {
   deviceIdentity: DeviceIdentity;
   realDeviceIdentity?: RealDeviceIdentity;
   extraKeys: Record<string, ExtraKeyConfig>;
+  pages: PageSummary[];
+  pageState: PageStateMsg;
   touchStripMode: TouchStripMode;
   touchStripRepaintMs: number;
   encoders: EncoderSettings;

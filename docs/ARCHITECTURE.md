@@ -425,6 +425,19 @@ brightness re-push). Everything a Dock reports goes through optional `DockHooks`
 disconnect, key activity, WebUI mirrors, …), so the WebUI mirror is just the hook set the caller
 passes.
 
+**Page-following layouts.** The side keys and strip zones can show a different layout per Elgato
+page. The USB worker already hashes every CORA frame for the image cache; it sends that hash to the main
+thread on the existing `imageSent` message (re-emitted as `frameHash`), so no hashing happens there. Each Dock owns a `DockPages`
+([dock-pages.ts](../ts/src/main/dock-pages.ts)) wrapping a `PageTracker`
+([page-tracker.ts](../ts/src/main/page-tracker.ts)): `noteFrame()` stores the hash and arms a
+settle timer, and once the key burst is quiet the pure matcher
+([page-match.ts](../ts/src/shared/page-match.ts)) scores the saved pages
+([page-config.ts](../ts/src/shared/page-config.ts)). A commit repaints the widgets, whose
+`configFor` resolves through `DockPages.layoutConfig()`. A blank vector or a disconnected app holds
+the current layout. The WebUI's `PagesController` ([pages-controller.ts](../ts/src/web/server/pages-controller.ts))
+caches each dock's latest observation, owns the snapshot/edit routes and tells the Dock to
+re-match (`pagesChanged`).
+
 <details>
 <summary>Standby and brightness (DockStandby)</summary>
 
@@ -518,7 +531,8 @@ legacy-API check).
 
 ## Settings persistence
 
-Per-device settings (brightness, brightness override, extra-key widget config) and device
+Per-device settings (brightness, brightness override, extra-key widget config, saved Elgato
+`pages` with their own layouts) and device
 identity (a stable MAC/serial pair, so the Elgato desktop doesn't see a "new" device on every
 reconnect) persist to `<cacheRoot>/settings.json` (same cache root as the extracted native libs;
 see [Build pipeline](#build-pipeline)):

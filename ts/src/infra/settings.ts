@@ -11,7 +11,7 @@ import { findModelById } from '../devices/registry.js';
 import type { DeviceModelOverride } from '../devices/driver.js';
 import { log } from '../shared/logger.js';
 import {
-  isExtraKeyConfig,
+  isExtraKeysRecord,
   isOneOf,
   isTouchStripRepaintMs,
   normalizeExtraKeyConfig,
@@ -22,6 +22,7 @@ import {
 import type { DockStatus, ExtraKeyConfig } from '../shared/types.js';
 import type { UpdateState } from './update-check.js';
 import { encoderSettingsError } from '../shared/encoder-settings.js';
+import { isPageDefinition, MAX_PAGES, sanitizePages } from '../shared/page-config.js';
 import { standbySettingsError } from '../shared/standby-settings.js';
 import {
   DEFAULT_BROWSER_DECK_PROFILE,
@@ -49,12 +50,6 @@ function clampAutoRestartDelayS(delayS: number): number {
   );
 }
 
-/** Shape guard for a persisted/imported extraKeys map (wire id → config). */
-function isExtraKeysRecord(v: unknown): v is Record<string, ExtraKeyConfig> {
-  if (typeof v !== 'object' || v === null || Array.isArray(v)) return false;
-  return Object.values(v).every(isExtraKeyConfig);
-}
-
 /** Optional per-device fields shared by stripInvalidDeviceSettings and
  *  hasValidDeviceSettings — one table so both stay in sync and neither trips
  *  the complexity limit on a long if-chain. */
@@ -70,7 +65,21 @@ const OPTIONAL_DEVICE_FIELDS: ReadonlyArray<{ key: string; isValid: (v: unknown)
   { key: 'tapFeedback', isValid: isTapFeedback },
   { key: 'pairedAt', isValid: (v) => typeof v === 'string' },
   { key: 'standby', isValid: (v) => standbySettingsError(v) === null },
+  {
+    key: 'pages',
+    isValid: (v) => Array.isArray(v) && v.length <= MAX_PAGES && v.every(isPageDefinition),
+  },
 ];
+
+/** A hand-edited bad page drops only itself, not the rest of the list. */
+function dropInvalidPages(r: Record<string, unknown>): void {
+  if (r.pages === undefined) return;
+  const kept = sanitizePages(r.pages);
+  if (!kept) return;
+  const dropped = (r.pages as unknown[]).length - kept.length;
+  if (dropped > 0) log('warn', 'settings', `settings: dropped ${dropped} invalid saved page(s)`);
+  r.pages = kept;
+}
 
 /** Strip bad optional per-device fields so they can't fail isDeviceIdentitySettings
  *  and drop the whole identity entry — that would regenerate MAC/serial and force an
@@ -80,6 +89,7 @@ const OPTIONAL_DEVICE_FIELDS: ReadonlyArray<{ key: string; isValid: (v: unknown)
 function stripInvalidDeviceSettings(d: unknown): void {
   if (typeof d !== 'object' || d === null) return;
   const r = d as Record<string, unknown>;
+  dropInvalidPages(r);
   for (const { key, isValid } of OPTIONAL_DEVICE_FIELDS) {
     if (r[key] !== undefined && !isValid(r[key])) delete r[key];
   }
@@ -87,13 +97,19 @@ function stripInvalidDeviceSettings(d: unknown): void {
   delete r.imageModeOverride;
 }
 
-/** Fold pre-`style` text fields of a valid entry's extraKeys into `style`. */
-function normalizeDeviceExtraKeys(d: DeviceIdentitySettings): DeviceIdentitySettings {
-  if (!d.extraKeys) return d;
-  const extraKeys = Object.fromEntries(
-    Object.entries(d.extraKeys).map(([wireId, cfg]) => [wireId, normalizeExtraKeyConfig(cfg)]),
+const normalizeLayout = (map: Record<string, ExtraKeyConfig>): Record<string, ExtraKeyConfig> =>
+  Object.fromEntries(
+    Object.entries(map).map(([wireId, cfg]) => [wireId, normalizeExtraKeyConfig(cfg)]),
   );
-  return { ...d, extraKeys };
+
+/** Fold pre-`style` text fields of a valid entry's extraKeys (and its pages') into `style`. */
+function normalizeDeviceExtraKeys(d: DeviceIdentitySettings): DeviceIdentitySettings {
+  const out = d.extraKeys ? { ...d, extraKeys: normalizeLayout(d.extraKeys) } : d;
+  if (!out.pages?.some((p) => p.extraKeys)) return out;
+  const pages = out.pages.map((p) =>
+    p.extraKeys ? { ...p, extraKeys: normalizeLayout(p.extraKeys) } : p,
+  );
+  return { ...out, pages };
 }
 
 /** The optional per-device settings half of isDeviceIdentitySettings. */
@@ -341,7 +357,9 @@ export class PersistedSettings implements DockPrefsStore {
   /** Replace devices[] from a raw-JSON import; false (and ignored, not thrown)
    *  if malformed. */
   importDevices(devices: unknown): boolean {
-    if (!Array.isArray(devices) || !devices.every(isDeviceIdentitySettings)) return false;
+    if (!Array.isArray(devices)) return false;
+    devices.forEach(stripInvalidDeviceSettings);
+    if (!devices.every(isDeviceIdentitySettings)) return false;
     this.devices = devices.map(normalizeDeviceExtraKeys);
     this.persist();
     return true;

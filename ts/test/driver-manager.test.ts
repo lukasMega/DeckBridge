@@ -118,7 +118,14 @@ function pushFrames(childServer: EventEmitter, keys: Array<[number, 'jpeg' | 'bm
 }
 
 function makeFakeWebUI() {
+  const pageObservations: { dock: number; hashes: readonly (string | null)[] }[] = [];
   return {
+    pageObservations,
+    pages: {
+      notifyObservation: (dock: number, obs: { hashes: readonly (string | null)[] }) => {
+        pageObservations.push({ dock, hashes: obs.hashes });
+      },
+    },
     notifyDeviceModelCalls: [] as {
       id: string;
       name: string;

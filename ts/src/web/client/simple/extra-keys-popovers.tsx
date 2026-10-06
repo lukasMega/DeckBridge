@@ -3,6 +3,8 @@ import type { ExternalExpire, ExtraKeyCfg, ExtraKeyWidget, PluginStatus } from '
 import { copyLabel, useCopyText } from '../lib/use-copy-text.js';
 import { ICON, Icon } from '../components/Icon.js';
 import { fire } from '../lib/ui-api.js';
+import { getSnapshot, useStore } from '../lib/store.js';
+import { scopeIsLive } from './layout-scope.js';
 import { useDismiss } from '../lib/ui-hooks.js';
 import { SecondsField } from '../components/Fields.js';
 
@@ -33,8 +35,10 @@ export type DisplayPrefs = Pick<ExtraKeyCfg, 'style'>;
 export function postExtraKey(wireId: number, next: WidgetCfg, prefs: DisplayPrefs = {}): void {
   const { widget, param, intervalMs, timeoutMs, pluginArg, expire, fallbackText } = next;
   const { style } = prefs;
+  const { layoutScope } = getSnapshot();
   fire('/api/extra-key', {
     wireId,
+    ...(layoutScope !== null ? { pageId: layoutScope } : {}),
     widget,
     ...(param ? { param } : {}),
     ...(intervalMs !== undefined ? { intervalMs } : {}),
@@ -43,6 +47,19 @@ export function postExtraKey(wireId: number, next: WidgetCfg, prefs: DisplayPref
     ...(expire !== undefined ? { expire } : {}),
     ...(fallbackText ? { fallbackText } : {}),
     ...(style && Object.keys(style).length > 0 ? { style } : {}),
+  });
+}
+
+/** A press-side post (action / command); edits the scoped page's layout like postExtraKey. */
+export function postExtraKeyPress(body: {
+  wireId: number;
+  action?: string;
+  command?: string;
+}): void {
+  const { layoutScope } = getSnapshot();
+  fire('/api/extra-key/press', {
+    ...body,
+    ...(layoutScope !== null ? { pageId: layoutScope } : {}),
   });
 }
 
@@ -72,6 +89,8 @@ function CommandConfigPopover({
   useDismiss(onClose, anchorRef);
 
   const [ran, setRan] = useState(false);
+  // Run now acts on the key as painted on the deck: only the live layout has one.
+  const live = useStore((s) => scopeIsLive(s));
   const intervalS = Math.round((cfg?.intervalMs ?? INTERVAL_DEFAULT_S * 1000) / 1000);
   const timeoutS = Math.round((cfg?.timeoutMs ?? TIMEOUT_DEFAULT_S * 1000) / 1000);
 
@@ -108,7 +127,13 @@ function CommandConfigPopover({
           )
         }
       />
-      <button class="ghostbtn xkey-popover-run" type="button" onClick={handleRunNow}>
+      <button
+        class="ghostbtn xkey-popover-run"
+        type="button"
+        disabled={!live}
+        title={live ? undefined : 'This layout is not on the deck right now'}
+        onClick={handleRunNow}
+      >
         {ran ? 'Ran ✓' : 'Run now'}
       </button>
     </div>

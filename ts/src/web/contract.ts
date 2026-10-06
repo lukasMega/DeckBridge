@@ -133,6 +133,8 @@ export interface PluginsInfo {
   dir: string;
   files: string[];
   status: Record<string, PluginStatus>;
+  /** Own-layout status by saved page id, then wire id. */
+  pageStatus?: Record<string, Record<string, PluginStatus>>;
 }
 
 export interface Stats {
@@ -262,6 +264,38 @@ export interface ExtraKeyConfig {
   fallbackText?: string;
 }
 
+/** One saved Elgato page of the SELECTED dock (hashes stay server-side). */
+export interface PageSummary {
+  id: string;
+  name: string;
+  keyCount: number;
+  ignore: number[]; // CORA key indices excluded from matching
+  minMatch: number; // effective fraction of considered keys that must match, 0.5..1
+  considered: number; // keys the match uses: captured, minus `ignore`
+  extraKeys?: Record<string, ExtraKeyConfig>; // own layout; absent = default layout
+  stale?: true; // captured under another CORA profile / key count: never matches
+}
+
+/** How well one saved page matches the keys the deck shows now. */
+export interface PageScoreMsg {
+  pageId: string;
+  matched: number;
+  considered: number;
+  mismatched: number[]; // considered keys whose image differs now (ignore candidates)
+}
+
+/** WS `pageState` / StateResponse.pageState: the SELECTED dock's page recognition. */
+export interface PageStateMsg {
+  activePageId: string | null; // page whose layout the side keys show; null = default
+  source: 'fingerprint'; // reserved for a later 'marker' source
+  keyCount: number; // advertised CORA grid the key indices below address
+  columns: number;
+  scores: PageScoreMsg[]; // non-stale saved pages, best first
+  suggestedIgnore: number[]; // keys a snapshot would ignore by default (blank + animated)
+  settling: boolean; // a key burst is still arriving: a snapshot now could be half old
+  held: boolean; // too few distinct images (no app, blank transition): layout held
+}
+
 /** Why the panel is not at the requested level (see main/standby-policy.ts). */
 export type DisplayState = 'active' | 'dimmed' | 'night' | 'standby' | 'off';
 
@@ -361,6 +395,9 @@ export interface StateResponse extends StatusSnapshot {
   realDeviceIdentity?: RealDeviceIdentity;
   // The SELECTED dock's extra-key assignments, keyed by device wire id.
   extraKeys: Record<string, ExtraKeyConfig>;
+  /** The SELECTED dock's saved Elgato pages and what the deck shows now. */
+  pages: PageSummary[];
+  pageState: PageStateMsg;
   /** The SELECTED dock's touch-strip mode + knob override (AKP05E). */
   touchStripMode: TouchStripMode;
   touchStripRepaintMs: number;
@@ -479,6 +516,8 @@ export interface WsEvents {
   mockConfig: MockDeviceConfig;
   update: UpdateInfo;
   pushChannels: { channels: PushChannelView[] };
+  pages: { pages: PageSummary[] };
+  pageState: PageStateMsg;
 }
 
 /** Docs sections the WebUI links to; the id is the `/go/docs/:topic` path segment. */

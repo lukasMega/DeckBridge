@@ -1,4 +1,5 @@
 import assert from 'tjs:assert';
+import { hashJpeg } from '../src/shared/image-hash.js';
 import { renderImage, TouchStripCanvas } from '../src/transform/image-render.js';
 import { blitImage, canvasSliceToBmp } from '../src/transform/translator.js';
 import { AJAZZ_AKP05E_MODEL } from '../src/devices/ajazz/akp05e.js';
@@ -66,6 +67,14 @@ await test('second identical image is a cache hit (same bytes)', () => {
     Array.from(firstBytes),
     'cache hit must yield byte-identical output to the first transform',
   );
+});
+
+await test('returns the raw frame hash on a miss, a hit and a skipped key', () => {
+  const fake = makeFakeDriver();
+  const expected = hashJpeg(SOLID_RED_16X16_JPEG);
+  assert.equal(renderImage(fake, MIRABOX_293_MODEL, 0, SOLID_RED_16X16_JPEG, 'jpeg'), expected);
+  assert.equal(renderImage(fake, MIRABOX_293_MODEL, 0, SOLID_RED_16X16_JPEG, 'jpeg'), expected);
+  assert.equal(renderImage(fake, MIRABOX_293_MODEL, 99, SOLID_RED_16X16_JPEG, 'jpeg'), expected);
 });
 
 // 3. key remap: sendImage keyIndex equals coraToWireImage[0] (NOT 0).

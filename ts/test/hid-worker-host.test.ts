@@ -175,6 +175,16 @@ await runTest('a stalled worker never has more than the posted budget outstandin
   assert.equal(driver.workQueue.pendingCount, 0);
 });
 
+await runTest("an 'imageSent' hash becomes a 'frameHash' event before 'imageSent'", () => {
+  const { driver, send } = attached();
+  const seen: string[] = [];
+  driver.on('frameHash', (key: number, hash: string) => seen.push(`hash ${key} ${hash}`));
+  driver.on('imageSent', (key: number) => seen.push(`sent ${key}`));
+  send({ type: 'imageSent', keyIndex: 3, hash: 'deadbeef' });
+  send({ type: 'imageSent', keyIndex: 4 });
+  assert.deepEqual(seen, ['hash 3 deadbeef', 'sent 3', 'sent 4']);
+});
+
 await runTest(
   'overload: one event, images refused until a fresh session, patches need a base',
   () => {

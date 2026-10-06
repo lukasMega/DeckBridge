@@ -9,6 +9,7 @@ import type {
 } from '../shared/types.js';
 import { DEFAULT_TOUCH_STRIP_OPTIONS, MOCK_KEY_PRESS_DURATION_MS } from '../shared/types.js';
 import { composeWidgetBmp } from '../shared/widget-raster.js';
+import { hashJpeg } from '../shared/image-hash.js';
 import { transformImageForDevice } from '../transform/translator.js';
 
 /** A virtual deck: no USB writes, but strip widgets still feed the WebUI preview. */
@@ -44,7 +45,10 @@ export class MockDriver extends EventEmitter implements DockDriver {
     if (!this.model.widgetDisplays?.some((d) => d.wireId === keyIndex)) return;
     this.emit('stripWrite', keyIndex, transformImageForDevice(bytes, spec), false);
   }
-  renderCoraImage(_keyIndex: number, _bytes: Uint8Array, _format: 'jpeg' | 'bmp'): void {}
+  // Hashed on main: mock mode is dev/test only, real drivers hash in the worker.
+  renderCoraImage(keyIndex: number, bytes: Uint8Array, _format: 'jpeg' | 'bmp'): void {
+    this.emit('frameHash', keyIndex, hashJpeg(bytes));
+  }
   renderTouchImage(): void {}
   setTouchStripMask(): void {}
   restoreTouchSegments(): void {}

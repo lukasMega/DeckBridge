@@ -274,3 +274,9 @@ export function extraKeyConfigError(v: unknown): string | null {
 
 export const isExtraKeyConfig = (v: unknown): v is ExtraKeyConfig =>
   extraKeyConfigError(v) === null;
+
+/** Shape guard for a persisted/imported extraKeys map (wire id → config). */
+export function isExtraKeysRecord(v: unknown): v is Record<string, ExtraKeyConfig> {
+  if (typeof v !== 'object' || v === null || Array.isArray(v)) return false;
+  return Object.values(v).every(isExtraKeyConfig);
+}

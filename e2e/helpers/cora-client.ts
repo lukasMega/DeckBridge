@@ -5,6 +5,9 @@ import { waitForState } from './api.js';
 export interface ElgatoClient {
   /** Bytes the app has sent us (keepalives, key/dial events). */
   received(): Buffer;
+  /** Send one key image the way the Elgato app does (Stream Deck gen2 image report, a
+   *  single final chunk). The mock deck hashes the bytes, so they need not be a real JPEG. */
+  sendKeyImage(key: number, body: Buffer): void;
   /** Disconnect and wait until /api/state reports `elgatoConnected: false`. */
   close(): Promise<void>;
 }
@@ -35,8 +38,20 @@ export async function connectElgato(
   });
   await waitForState(request, baseURL, (s) => s.elgatoConnected);
 
+  let messageId = 1;
   return {
     received: () => Buffer.concat(chunks),
+    sendKeyImage: (key, body) => {
+      // [output report, IMG_CMD_WRITE, key, last chunk, len LE16, page LE16, ...body].
+      const payload = Buffer.concat([Buffer.from([0x02, 0x07, key, 0x01, 0, 0, 0, 0]), body]);
+      payload.writeUInt16LE(body.length, 4);
+      // CORA header: magic, flags, hidOp, messageId, payload length (ts/src/cora/frame.ts).
+      const header = Buffer.alloc(16);
+      Buffer.from([0x43, 0x93, 0x8a, 0x41]).copy(header, 0);
+      header.writeUInt32LE(messageId++, 8);
+      header.writeUInt32LE(payload.length, 12);
+      sock.write(Buffer.concat([header, payload]));
+    },
     close: async () => {
       if (!sock.destroyed) {
         await new Promise<void>((resolve) => {

@@ -18,7 +18,12 @@ const handlers: Partial<Handlers> = {
       resetPreviews();
       resetTouchStrip();
       resetStripZones();
-      store.patch({ status: next, extraKeyImages: {}, extraKeyClipped: {} });
+      store.patch({
+        status: next,
+        extraKeyImages: {},
+        extraKeyClipped: {},
+        layoutScope: null,
+      });
       return;
     }
     store.patch({ status: next });
@@ -49,6 +54,10 @@ const handlers: Partial<Handlers> = {
   brightnessOverride: ({ enabled }) => store.patch({ brightnessOverride: enabled }),
   brightness: ({ level }) => store.patch({ brightness: level }),
   extraKeys: ({ configs }) => store.patch({ extraKeys: configs }),
+  pages: ({ pages }) => {
+    store.patch({ pages, layoutScope: store.validLayoutScope(pages) });
+  },
+  pageState: (pageState) => store.patch({ pageState }),
   touchStripMode: ({ mode }) => store.patch({ touchStripMode: mode }),
   touchStripRepaint: ({ ms }) => store.patch({ touchStripRepaintMs: ms }),
   encoders: ({ encoders }) => store.patch({ encoders }),

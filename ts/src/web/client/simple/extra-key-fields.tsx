@@ -12,11 +12,11 @@ import {
   ConfigButton,
   paramPlaceholder,
   postExtraKey,
+  postExtraKeyPress,
   PARAM_MAX,
   CHANNEL_MAX,
 } from './extra-keys-popovers.js';
 import { CommandInput } from './command-input.js';
-import { fire } from '../lib/ui-api.js';
 
 const WIDGET_OPTIONS: ReadonlyArray<{ value: ExtraKeyWidget; label: string }> = [
   { value: 'none', label: 'Empty' },
@@ -293,10 +293,7 @@ export function PressControls({
         title="What a press on this key does"
         value={action}
         onChange={(e) =>
-          fire('/api/extra-key/press', {
-            wireId,
-            action: (e.target as HTMLSelectElement).value,
-          })
+          postExtraKeyPress({ wireId, action: (e.target as HTMLSelectElement).value })
         }
       >
         {PRESS_ACTIONS.map(({ value, label: text }) => (
@@ -311,7 +308,7 @@ export function PressControls({
         placeholder="shell command"
         title="Shell command run on press"
         disabled={action === 'refresh'}
-        onCommit={(command) => fire('/api/extra-key/press', { wireId, command })}
+        onCommit={(command) => postExtraKeyPress({ wireId, command })}
       />
     </div>
   );

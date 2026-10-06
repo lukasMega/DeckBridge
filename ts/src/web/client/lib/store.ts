@@ -9,6 +9,8 @@ import type {
   DeviceModel,
   EncoderSettings,
   ExtraKeyCfg,
+  PageStateMsg,
+  PageSummary,
   PushChannelView,
   TouchStripMode,
   UpdateInfo,
@@ -38,6 +40,11 @@ export interface StoreState {
   deviceModels: DeviceModel[];
   /** SELECTED dock's extra-key assignments, keyed by device wire id. */
   extraKeys: Record<string, ExtraKeyCfg>;
+  /** SELECTED dock's saved Elgato pages and what the deck shows now. */
+  pages: PageSummary[];
+  pageState: PageStateMsg;
+  /** Which layout the side-key editor edits: null = default, else a page id (UI-only). */
+  layoutScope: string | null;
   /** SELECTED dock's side-key widget images (base64 BMP), keyed by wire id. */
   extraKeyImages: Record<string, string>;
   /** SELECTED dock's widgets (side keys + strip zones) whose text does not fit, by wire id. */
@@ -55,6 +62,18 @@ export interface StoreState {
   /** 'stale' = WebSocket closed: every status field above may be out of date. */
   connection: 'live' | 'stale';
 }
+
+/** Before the first observation: nothing known, nothing to snapshot. */
+export const EMPTY_PAGE_STATE: PageStateMsg = {
+  activePageId: null,
+  source: 'fingerprint',
+  keyCount: 0,
+  columns: 0,
+  scores: [],
+  suggestedIgnore: [],
+  settling: false,
+  held: true,
+};
 
 /** Placeholder until the first hydrate(); ui-entry.ts mounts nothing before it. */
 export const EMPTY_STATUS: Status = {
@@ -91,6 +110,9 @@ let state: StoreState = {
   deviceTestMode: false,
   deviceModels: [],
   extraKeys: {},
+  pages: [],
+  pageState: EMPTY_PAGE_STATE,
+  layoutScope: null,
   extraKeyImages: {},
   extraKeyClipped: {},
   touchStripMode: 'elgato',
@@ -124,6 +146,12 @@ export function subscribe(fn: () => void): () => void {
 export function patch(partial: Partial<StoreState>): void {
   state = { ...state, ...partial };
   notify();
+}
+
+/** Reconnects and page updates must discard scopes whose own layout disappeared. */
+export function validLayoutScope(pages: readonly PageSummary[]): string | null {
+  const scope = state.layoutScope;
+  return pages.some((p) => p.id === scope && p.extraKeys) ? scope : null;
 }
 
 /** Append `entries` keeping the newest LOG_MAX: one copy for the whole batch. */

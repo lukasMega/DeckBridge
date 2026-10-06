@@ -13,6 +13,7 @@ import {
 } from '../../devices/virtual/browser-deck-profiles.js';
 import type { KeyState, TouchStripOptions } from '../../shared/types.js';
 import { DEFAULT_BRIGHTNESS, DEFAULT_TOUCH_STRIP_OPTIONS } from '../../shared/types.js';
+import { hashJpeg } from '../../shared/image-hash.js';
 import type { DeckLayout } from '../../web/server/virtual-deck/deck-hub.js';
 
 export type DeckFrame = { data: Uint8Array; format: 'jpeg' | 'bmp' };
@@ -34,6 +35,8 @@ export class VirtualDeckDriver extends EventEmitter implements DockDriver {
   private readonly screen = new Map<number, DeckFrame>();
   private level = DEFAULT_BRIGHTNESS;
   private sink: VirtualDeckSink | null = null;
+  private readonly unhashed = new Set<number>();
+  private hashTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(profile: BrowserDeckProfile) {
     super();
@@ -74,17 +77,34 @@ export class VirtualDeckDriver extends EventEmitter implements DockDriver {
   async open(_hidPath?: string): Promise<void> {}
   close(): Promise<void> {
     this.sink = null;
+    if (this.hashTimer !== null) clearTimeout(this.hashTimer);
+    this.hashTimer = null;
+    this.unhashed.clear();
     return Promise.resolve();
   }
 
-  // Runs on the CORA ACK path: keep it O(1) plus the sink's async socket writes.
+  // No USB worker exists here, so the page fingerprint is hashed on the main thread. One key
+  // per macrotask, latest frame only: the ACK-paced CORA path never waits on a burst's hashing.
   renderCoraImage(keyIndex: number, bytes: Uint8Array, format: 'jpeg' | 'bmp'): void {
     this.screen.set(keyIndex, { data: bytes, format });
     this.sink?.frame(keyIndex, bytes, format);
+    this.unhashed.add(keyIndex);
+    this.hashTimer ??= setTimeout(() => this.hashNext(), 0);
+  }
+
+  private hashNext(): void {
+    this.hashTimer = null;
+    const [key] = this.unhashed;
+    if (key === undefined) return;
+    this.unhashed.delete(key);
+    const frame = this.screen.get(key);
+    if (frame) this.emit('frameHash', key, hashJpeg(frame.data));
+    if (this.unhashed.size > 0) this.hashTimer = setTimeout(() => this.hashNext(), 0);
   }
 
   clearKey(keyIndex: number): void {
     this.screen.delete(keyIndex);
+    this.unhashed.delete(keyIndex);
     this.sink?.clear(keyIndex);
   }
 

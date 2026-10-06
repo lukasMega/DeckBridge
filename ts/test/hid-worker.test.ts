@@ -3,6 +3,7 @@ import { Akp05Driver } from '../src/devices/ajazz/akp05-driver.js';
 import type { MainToWorker, WorkerToMain } from '../src/worker/hid-worker-protocol.js';
 import { testAsync as test, summaryExit } from './helpers/harness.js';
 import { SOLID_RED_16X16_JPEG } from './helpers/fixtures.js';
+import { hashJpeg } from '../src/shared/image-hash.js';
 
 type Io = { op: 'send'; wireId: number; bytes: Uint8Array } | { op: 'clear'; wireId: number };
 /** SOF0 width of a baseline JPEG: 800 = a full-strip upload, 176 = one slot. */
@@ -161,6 +162,18 @@ await test('after close, releasing masked zones does no device I/O', async () =>
   send({ type: 'setTouchStripMask', wireIds: [] });
   await wait(5);
   assert.deepEqual(ops(), []);
+});
+
+console.log('\nhid-worker: frame hash');
+
+await test("an 'image' message carries the frame hash on imageSent", async () => {
+  await openAkp05e();
+  send({ type: 'image', keyIndex: 2, bytes: SOLID_RED_16X16_JPEG, format: 'jpeg' });
+  await wait(20);
+  const sent = messages.filter((m) => m.type === 'imageSent');
+  assert.deepEqual(sent, [
+    { type: 'imageSent', keyIndex: 2, hash: hashJpeg(SOLID_RED_16X16_JPEG) },
+  ]);
 });
 
 summaryExit();

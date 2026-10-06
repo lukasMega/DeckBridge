@@ -1,5 +1,6 @@
 import assert from 'tjs:assert';
 import { VirtualDeckDriver } from '../src/main/virtual-deck/virtual-deck-driver.js';
+import { hashJpeg } from '../src/shared/image-hash.js';
 import { test, testAsync, summary } from './helpers/harness.js';
 
 function rig(): {
@@ -23,6 +24,48 @@ function rig(): {
 }
 
 console.log('\nvirtual deck driver');
+
+const tick = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 5));
+
+await testAsync('CORA images emit the raw frame hash off the ACK path, sink or not', async () => {
+  const driver = new VirtualDeckDriver('mk2');
+  const hashes: unknown[][] = [];
+  driver.on('frameHash', (...args: unknown[]) => hashes.push(args));
+  const bytes = new Uint8Array([1, 2, 3, 4, 5]);
+  driver.renderCoraImage(3, bytes, 'jpeg');
+  assert.deepEqual(hashes, [], 'nothing is hashed inside renderCoraImage');
+  await tick();
+  assert.deepEqual(hashes, [[3, hashJpeg(bytes)]]);
+});
+
+await testAsync('a burst hashes only the latest frame per key, one key per tick', async () => {
+  const driver = new VirtualDeckDriver('mk2');
+  const hashes: [number, string][] = [];
+  driver.on('frameHash', (k: number, h: string) => hashes.push([k, h]));
+  const first = new Uint8Array([1, 1, 1, 1]);
+  const second = new Uint8Array([2, 2, 2, 2]);
+  driver.renderCoraImage(0, first, 'jpeg');
+  driver.renderCoraImage(0, second, 'jpeg');
+  driver.renderCoraImage(1, first, 'jpeg');
+  await tick();
+  await tick();
+  assert.deepEqual(hashes, [
+    [0, hashJpeg(second)],
+    [1, hashJpeg(first)],
+  ]);
+});
+
+await testAsync('clearKey and close drop pending hashes', async () => {
+  const driver = new VirtualDeckDriver('mk2');
+  const hashes: unknown[] = [];
+  driver.on('frameHash', (...args: unknown[]) => hashes.push(args));
+  driver.renderCoraImage(0, new Uint8Array(8), 'jpeg');
+  driver.clearKey(0);
+  driver.renderCoraImage(1, new Uint8Array(8), 'jpeg');
+  await driver.close();
+  await tick();
+  assert.deepEqual(hashes, []);
+});
 
 test('layout is the MK.2 grid with the 180° display rotation', () => {
   const { driver } = rig();

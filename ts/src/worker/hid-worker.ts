@@ -107,10 +107,11 @@ function handleImage(
   bytes: Uint8Array,
   format: 'jpeg' | 'bmp',
   deferNotification: boolean,
-): void {
-  if (!driver || !currentModel) return;
-  renderImage(driver, currentModel, keyIndex, bytes, format);
-  if (!deferNotification) post({ type: 'imageSent', keyIndex });
+): string | undefined {
+  if (!driver || !currentModel) return undefined;
+  const hash = renderImage(driver, currentModel, keyIndex, bytes, format);
+  if (!deferNotification) post({ type: 'imageSent', keyIndex, hash });
+  return hash;
 }
 
 /** Transform the splash source image with the caller-supplied spec (which may
@@ -162,6 +163,17 @@ function handleSetting(msg: Extract<MainToWorker, { type: 'setOverrides' | 'setL
   else setLogLevel(msg.level);
 }
 
+/** Frame hashes of a batch's images, held until the batch's imageSent notifications. */
+const deferredHashes = new WeakMap<object, string>();
+
+function handleImageMsg(
+  msg: Extract<MainToWorker, { type: 'image' }>,
+  deferNotification: boolean,
+): void {
+  const hash = handleImage(msg.keyIndex, msg.bytes, msg.format, deferNotification);
+  if (deferNotification && hash !== undefined) deferredHashes.set(msg, hash);
+}
+
 async function handle(msg: MainToWorker, deferNotification: boolean): Promise<void> {
   // Device path, not handleSetting: releasing/restoring a zone writes to the device.
   if (isTouchStripMsg(msg)) {
@@ -173,7 +185,7 @@ async function handle(msg: MainToWorker, deferNotification: boolean): Promise<vo
       await handleOpen(msg.modelId, msg.hidPath, msg.overrides);
       break;
     case 'image':
-      handleImage(msg.keyIndex, msg.bytes, msg.format, deferNotification);
+      handleImageMsg(msg, deferNotification);
       break;
     case 'imageWithSpec':
       handleSplashImage(msg.keyIndex, msg.bytes, msg.spec);
@@ -224,7 +236,9 @@ async function handleImageBatch(images: WorkMessage[]): Promise<void> {
       for (const msg of images) await handle(msg, true);
     });
     for (const msg of images) {
-      if (msg.type === 'image') post({ type: 'imageSent', keyIndex: msg.keyIndex });
+      if (msg.type === 'image') {
+        post({ type: 'imageSent', keyIndex: msg.keyIndex, hash: deferredHashes.get(msg) });
+      }
     }
   } finally {
     workDone(images);
