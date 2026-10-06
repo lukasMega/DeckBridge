@@ -43,13 +43,24 @@ async function acceptingServer(): Promise<{
 }> {
   const queue: NodeLikeSocket[] = [];
   const waiters: Array<(s: NodeLikeSocket) => void> = [];
-  const srv = createServer((s) => {
+  const handler = (s: NodeLikeSocket): void => {
     const w = waiters.shift();
     if (w) w(s);
     else queue.push(s);
-  });
-  const p = port();
-  await listen(srv, p);
+  };
+  // 47xxx sits in Linux's ephemeral range: a client socket from an earlier test can own the port.
+  let srv = createServer(handler);
+  let p = port();
+  for (let attempt = 0; ; attempt++) {
+    try {
+      await listen(srv, p);
+      break;
+    } catch (e) {
+      if (attempt >= 20 || !String(e).includes('EADDRINUSE')) throw e;
+      srv = createServer(handler);
+      p = port();
+    }
+  }
   const next = (): Promise<NodeLikeSocket> => {
     const s = queue.shift();
     if (s) return Promise.resolve(s);
