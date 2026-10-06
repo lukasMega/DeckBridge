@@ -1,5 +1,5 @@
 {
-  "_generated": "by ts/scripts/gen-device-docs.mjs — do not edit. Run 'mise run docs-devices'.",
+  "_generated": "by ts/scripts/gen-device-docs.mjs — do not edit. Run 'mise run devices-generate'.",
   "tables": {
     "identity": {
       "columns": [
@@ -240,7 +240,7 @@
           "key": "heartbeatMs",
           "label": "Heartbeat ms",
           "numeric": true,
-          "description": "How often to send the keep-alive packet. Dash = this board needs no heartbeat.",
+          "description": "How often to send the keep-alive packet. Dash = no wire.heartbeatMs set; the AKP05 keepalive is driver-owned, so a dash there does not mean no keepalive.",
           "defaultVisible": true
         },
         {
@@ -287,7 +287,7 @@
           "defaultVisible": false
         }
       ],
-      "legend": "— = optional field omitted — reportId 0x00 · heartbeat none · synthesizeKeyUp false · sendStpAfterImage false · chunkPadByte false · chunkDelayMs 0 · sharedSerial false · packetSizeCandidates none, so packetSize is used as written."
+      "legend": "— = optional field omitted — reportId 0x00 · heartbeat none (no wire.heartbeatMs; the AKP05 keepalive is driver-owned, so this is not \"no keepalive\") · synthesizeKeyUp false · sendStpAfterImage false · chunkPadByte false · chunkDelayMs 0 · sharedSerial false · packetSizeCandidates none, so packetSize is used as written."
     }
   },
   "models": [

@@ -1,6 +1,12 @@
 /** Shared plumbing for the manual hardware probes (dev-entry tier). */
 import { closeImageProc } from '../ffi/image-proc.js';
-import { IS_MACOS, listHidPaths } from '../ffi/hidapi.js';
+import { IS_MACOS, listAllHidDevices, listHidPaths, matchesHidQuery } from '../ffi/hidapi.js';
+import {
+  buildFixtureSkeleton,
+  pidLabel,
+  serializeFixture,
+  type PacketFixture,
+} from './packet-fixture.js';
 import { setupNativeLibs } from '../infra/native-libs.js';
 import { MiraboxDriver } from '../devices/mirabox/driver.js';
 import { AJAZZ_AKP05E_MODEL } from '../devices/ajazz/akp05e.js';
@@ -10,7 +16,7 @@ import type { KeyEvent } from '../shared/types.js';
 
 /** Probes are run by hand, so a raw ENOENT/FFI stack is worse than one line naming
  *  the fix. Prints under the probe's own prefix and stops. */
-function fail(prefix: string, ...lines: string[]): never {
+export function fail(prefix: string, ...lines: string[]): never {
   for (const line of lines) console.log(`${prefix} ${line}`);
   return tjs.exit(1);
 }
@@ -151,4 +157,59 @@ export function logKeyEvents(driver: MiraboxDriver, prefix = '[key] '): void {
   driver.on('key', (e: KeyEvent) => {
     console.log(`${prefix}code=0x${e.keyIndex.toString(16).padStart(2, '0')} state=${e.state}`);
   });
+}
+
+export interface CaptureCandidate {
+  model: DeviceModel;
+  pid: number;
+  /** Interface the enumeration reported, null for a model with no usage filter. */
+  iface: { usagePage: number; usage: number } | null;
+  path: string;
+  serial: string;
+}
+
+/** Which of `models` are plugged in. Enumeration only: never hid_open, never init, so it
+ *  cannot claim the interface or send anything (macOS SIGBUSes on a bad trial open). */
+export function captureInventory(models: readonly DeviceModel[]): CaptureCandidate[] {
+  const found: CaptureCandidate[] = [];
+  for (const d of listAllHidDevices()) {
+    for (const model of models) {
+      const query = {
+        vendorId: model.usbVendorId,
+        productIds: model.usbProductIds,
+        usagePage: model.usagePage,
+        usage: model.usage,
+      };
+      if (!matchesHidQuery(d, query)) continue;
+      const iface =
+        model.usagePage === undefined ? null : { usagePage: d.usagePage, usage: d.usage };
+      found.push({ model, pid: d.productId, iface, path: d.path, serial: d.serial });
+    }
+  }
+  return found;
+}
+
+/** Write an empty fixture for `candidate` under `dir/<model-id>/`. Refuses to overwrite:
+ *  a hand-edited capture must never be replaced by a fresh skeleton. Returns the path. */
+export async function writeFixtureSkeleton(
+  candidate: CaptureCandidate,
+  dir: string,
+  prefix: string,
+): Promise<string> {
+  const modelDir = `${dir}/${candidate.model.id}`;
+  const file = `${modelDir}/captured-${pidLabel(candidate.pid)}.json`;
+  const exists = await tjs.stat(file).then(
+    () => true,
+    () => false,
+  );
+  if (exists) fail(prefix, `${file} already exists; move it away first.`);
+  const fixture: PacketFixture = buildFixtureSkeleton(
+    candidate.model,
+    candidate.pid,
+    candidate.iface,
+    `capture:${file}`,
+  );
+  await tjs.makeDir(modelDir, { recursive: true });
+  await tjs.writeFile(file, new TextEncoder().encode(serializeFixture(fixture)));
+  return file;
 }

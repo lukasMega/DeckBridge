@@ -4,7 +4,7 @@
 import {
   CORA_OVERRIDE_KEYS,
   IMAGE_OVERRIDE_KEYS,
-  TUNABLE_WIRE_KEYS,
+  tunableWireKeys,
   WIRE_OVERRIDE_KEYS,
   type DeviceCoraSpec,
   type DeviceImageSpec,
@@ -275,7 +275,7 @@ function validateImage(raw: unknown, model: DeviceModel, errors: Errors): void {
 
 function validateWire(raw: unknown, model: DeviceModel, errors: Errors): void {
   if (!validateSection(raw, WIRE_FIELDS, 'wire', model, errors)) return;
-  const tunable = TUNABLE_WIRE_KEYS[model.protocol];
+  const tunable = tunableWireKeys(model.protocol);
   for (const key of WIRE_OVERRIDE_KEYS) {
     if (raw[key] !== undefined && !tunable.includes(key)) {
       errors.push(
@@ -443,7 +443,7 @@ export function tunableDefaults(model: DeviceModel): DeviceModelOverride {
   return {
     image: project(image, IMAGE_OVERRIDE_KEYS),
     keyMap: project(keyMap, KEYMAP_KEYS),
-    wire: project(wire, TUNABLE_WIRE_KEYS[model.protocol]),
+    wire: project(wire, tunableWireKeys(model.protocol)),
     ...(splash ? { splash } : {}),
     cora: project(cora, CORA_OVERRIDE_KEYS),
   };

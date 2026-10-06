@@ -1,0 +1,37 @@
+{
+  "version": 1,
+  "model": "mirabox-k1pro",
+  "pid": "0x1015",
+  "firmware": null,
+  "interface": {
+    "usagePage": 65440,
+    "usage": 1
+  },
+  "source": "synthetic",
+  "assumeOpen": true,
+  "note": "hidapi keeps the report id (0x04) at byte 0 for numbered reports, shifting the ACK by one.",
+  "steps": [
+    {
+      "op": "read",
+      "dir": "in",
+      "hex": "0441434b00004f4b0000050100000000",
+      "expect": [
+        {
+          "type": "press",
+          "key": 5
+        }
+      ]
+    },
+    {
+      "op": "read",
+      "dir": "in",
+      "hex": "0441434b00004f4b0000050000000000",
+      "expect": [
+        {
+          "type": "release",
+          "key": 5
+        }
+      ]
+    }
+  ]
+}

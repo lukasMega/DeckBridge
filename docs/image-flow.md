@@ -130,7 +130,7 @@ Rust crops source pixels first.
 Padding operates before rotation and flips.
 Ordinary resizing operates after those transforms.
 EXIF auto-rotation is disabled.
-See [hardware calibration](./adding-a-device.md#phase-4--measure-image-orientation-on-hardware).
+See [hardware calibration](./adding-a-device.md#6-calibrate-on-hardware).
 
 ### Web preview orientation
 

@@ -282,23 +282,31 @@ dir = "ts"
 run = "node scripts/check-loc.mjs && echo '✔ check-loc'"
 
 
-[tasks.docs-devices]
-description = "Regenerate the device comparison docs from DEVICE_MODELS"
+[tasks.devices-generate]
+description = "Regenerate device docs, device SVGs and the Linux udev rules from DEVICE_MODELS"
+alias = ["docs-devices"]
 dir = "ts"
 depends = ["ts-install"]
-run = "node scripts/gen-device-docs.mjs"
+run = "node scripts/gen-device-docs.mjs && node scripts/gen-device-svgs.mjs && node scripts/gen-udev-rules.mjs"
 
-[tasks.docs-devices-check]
-description = "Fail if the generated device docs or device SVGs are stale vs DEVICE_MODELS"
+[tasks.devices-check]
+description = "Fail if the generated device docs, device SVGs or udev rules are stale vs DEVICE_MODELS"
+alias = ["docs-devices-check"]
 quiet = true
 dir = "ts"
 depends = ["ts-install"]
-run = "node ../scripts/quiet.mjs --fail-only --ok=docs-devices -- node scripts/gen-device-docs.mjs --check && node ../scripts/quiet.mjs --fail-only --ok=device-svgs -- node scripts/gen-device-svgs.mjs --check"
+run = "node ../scripts/quiet.mjs --fail-only --ok=docs-devices -- node scripts/gen-device-docs.mjs --check && node ../scripts/quiet.mjs --fail-only --ok=device-svgs -- node scripts/gen-device-svgs.mjs --check && node ../scripts/quiet.mjs --fail-only --ok=udev-rules -- node scripts/gen-udev-rules.mjs --check"
+
+[tasks.device-new]
+description = "Scaffold a known-family device: model file + notes stub, prints the registry lines (see docs/adding-a-device.md)"
+dir = "ts"
+depends = ["ts-install"]
+run = "node scripts/device-new.mjs"
 
 [tasks.ci-checks]
 description = "Lint, typecheck, core/browser tests, knip, check-loc, and generated device docs in parallel"
 quiet = true
-depends = ["lint", "types", "test", "test-client", "knip", "check-loc", "docs-devices-check"]
+depends = ["lint", "types", "test", "test-client", "knip", "check-loc", "devices-check"]
 run = "echo '✔ ci-checks'"
 timeout = "120s"
 
@@ -347,6 +355,15 @@ dir = "ts"
 run = """
   node build.mjs --probe akp05-capture
   DECKBRIDGE_NATIVE_LIB=$DECKBRIDGE_NATIVE_LIB $TJS run dist/akp05-capture.js
+"""
+
+[tasks.device-capture]
+description = "Write a packet-fixture skeleton for a connected device (enumeration only, never opens or writes). Usage: mise run device-capture -- --model <id> [--out <dir>]; exits non-zero with no hardware"
+depends = ["tjs-setup", "deckbridge-native"]
+dir = "ts"
+run = """
+  node build.mjs --probe device-capture
+  DECKBRIDGE_NATIVE_LIB=$DECKBRIDGE_NATIVE_LIB $TJS run dist/device-capture.js "$@"
 """
 
 [tasks.akp05-strip-probe]

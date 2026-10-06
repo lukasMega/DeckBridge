@@ -31,7 +31,7 @@ export interface DeviceCase {
   coraProfile?: string;
   /** CORA emulation profiles device tuning may pick (`cora.emulations`). */
   emulations?: readonly string[];
-  /** Wire sizes the protocol fixes (TUNABLE_WIRE_KEYS): never offered for tuning. */
+  /** Wire sizes the protocol fixes (tunableWireKeys): never offered for tuning. */
   fixedWireSizes: readonly ('packetSize' | 'inSize')[];
 }
 
@@ -134,7 +134,7 @@ export const PLAIN_DEVICES = DEVICES.filter(
   (d) => !d.extraKeys && !d.encoderCount && !d.stripZones,
 );
 
-/** AKP05E re-paired as a Stream Deck + (device tuning `cora.advertiseAs`). */
+/** AKP05E's default pairing, the Stream Deck + (`cora.advertiseAs` in the model). */
 export const PLUS_PROFILE = {
   advertiseAs: 'stream-deck-plus',
   /** ELGATO_PLUS_PID — `cora.productId` must match the profile. */

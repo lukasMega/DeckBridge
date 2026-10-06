@@ -17,16 +17,14 @@
 // drives. Where the physical product has more surface than DeckBridge exposes (the
 // Ajazz rev. 2 boards), the illustration follows the registry, not the retail box.
 
-import { mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync, existsSync } from 'node:fs';
+import { mkdirSync, readFileSync, readdirSync, writeFileSync, existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { tmpdir } from 'node:os';
-import * as esbuild from 'esbuild';
+import { loadRegistry } from './registry-loader.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const OUT_DIR = join(HERE, '..', '..', 'docs-site', 'static', 'img', 'devices');
 const OUT_REL = 'docs-site/static/img/devices';
-const REGISTRY = join(HERE, '..', 'src', 'devices', 'registry.ts');
 
 // Style constants — the single source of the "same style for all devices" rule.
 
@@ -313,42 +311,42 @@ function render(d) {
 
 const check = process.argv.includes('--check');
 
-/** Registry model ids, via a throwaway esbuild bundle (the registry is pure data). */
-async function loadModelIds() {
-  const tmp = join(tmpdir(), `deckbridge-svg-registry-${process.pid}.mjs`);
-  try {
-    await esbuild.build({
-      entryPoints: [REGISTRY],
-      bundle: true,
-      format: 'esm',
-      platform: 'neutral',
-      outfile: tmp,
-      logLevel: 'silent',
-    });
-    // .mjs matters: `await import()` of a .js outside a type:module package parses as CJS.
-    const mod = await import(`file://${tmp}`);
-    return mod.DEVICE_MODELS.map((m) => m.id);
-  } finally {
-    rmSync(tmp, { force: true });
-  }
+/** Generic artwork for a registry model that has no hand-tuned DEVICES row yet. */
+function fallbackDevice(m) {
+  return {
+    id: m.id,
+    name: m.name,
+    brand: m.vendor.toUpperCase(),
+    cols: m.columns,
+    rows: m.rows,
+    knobs: m.encoderCount ?? 0,
+    gap: 0.28,
+    bodyR: 14,
+    label: 'top',
+    stand: 'wedge',
+    chassis: 'graphite',
+    accent: '#868e96',
+  };
 }
 
 /** Problems that make the SVG set disagree with the registry or with itself. */
 function coverageProblems(registryIds, files) {
   const mapped = new Set(DEVICES.map((d) => d.id));
   const problems = [];
-  for (const id of registryIds)
-    if (!mapped.has(id)) problems.push(`registry model with no DEVICES entry: ${id}`);
   for (const id of mapped)
     if (!registryIds.includes(id)) problems.push(`DEVICES entry with no registry model: ${id}`);
   if (mapped.size !== DEVICES.length) problems.push('duplicate id in DEVICES');
+  // Orphans are judged against the registry, so a generated fallback file is not one.
   for (const f of files)
-    if (!mapped.has(f.replace(/\.svg$/, ''))) problems.push(`unexpected file: ${OUT_REL}/${f}`);
+    if (!registryIds.includes(f.replace(/\.svg$/, '')))
+      problems.push(`unexpected file: ${OUT_REL}/${f}`);
   return problems;
 }
 
+const { DEVICE_MODELS } = await loadRegistry();
+const registryIds = DEVICE_MODELS.map((m) => m.id);
 const problems = coverageProblems(
-  await loadModelIds(),
+  registryIds,
   existsSync(OUT_DIR) ? readdirSync(OUT_DIR).filter((f) => f.endsWith('.svg')) : [],
 );
 // A stray file only fails --check; a plain run reports it but still regenerates.
@@ -356,10 +354,16 @@ const fatal = problems.filter((p) => !p.startsWith('unexpected file'));
 for (const p of problems) console.error(p);
 if (fatal.length || (check && problems.length)) process.exit(1);
 
+const authored = new Set(DEVICES.map((d) => d.id));
+const generic = DEVICE_MODELS.filter((m) => !authored.has(m.id));
+for (const m of generic)
+  console.log(`notice: no DEVICES row for ${m.id}; rendering generic artwork from registry geometry`);
+const ALL_DEVICES = [...DEVICES, ...generic.map(fallbackDevice)];
+
 mkdirSync(OUT_DIR, { recursive: true });
 
 let stale = 0;
-for (const d of DEVICES) {
+for (const d of ALL_DEVICES) {
   const file = join(OUT_DIR, `${d.id}.svg`);
   const svg = render(d);
   if (check) {
@@ -380,9 +384,9 @@ if (check) {
     );
     process.exit(1);
   }
-  console.log(`device SVGs up to date (${DEVICES.length})`);
+  console.log(`device SVGs up to date (${ALL_DEVICES.length})`);
 } else {
-  console.log(`wrote ${DEVICES.length} device SVGs -> ${OUT_REL}/`);
+  console.log(`wrote ${ALL_DEVICES.length} device SVGs -> ${OUT_REL}/`);
 }
 
 export { DEVICES };

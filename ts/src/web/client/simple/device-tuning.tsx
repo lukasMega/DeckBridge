@@ -8,11 +8,12 @@ import type { ChipOption } from '../components/ChipRadioGroup.js';
 import { Collapsible } from '../components/Collapsible.js';
 import { GhostButton } from '../components/GhostButton.js';
 import { CheckField, NumberField, SelectField } from '../components/Fields.js';
-import { useStore } from '../lib/store.js';
+import { getSnapshot, useStore } from '../lib/store.js';
 import type { StoreState } from '../lib/store.js';
 import { copyLabel, useCopyText } from '../lib/use-copy-text.js';
 import { postJson } from '../lib/ui-api.js';
 import { Feedback, useAsyncAction } from '../lib/ui-async.js';
+import { buildBugReport } from './bug-report-export.js';
 import { KeymapLearn } from './keymap-learn.js';
 import { ImageCropEditor } from './image-crop-editor.js';
 import { ImageFitHelp, fitApplicability, padFillApplies } from './image-fit-help.js';
@@ -149,6 +150,12 @@ function matchingView(
   return view && (!selectedModelId || view.modelId === selectedModelId) ? view : null;
 }
 
+// Key events are read at click time: subscribing would re-render the form per press.
+function bugReportText(view: DeviceOverridesView): string {
+  const { keyEvents, status } = getSnapshot();
+  return JSON.stringify(buildBugReport(view, __VERSION__, keyEvents, status.modelId), null, 2);
+}
+
 function advancedTuningStatus(image: DeviceImageOverride | undefined): 'Custom' | 'Defaults' {
   return NUMBER_FIELDS.some((field) => field.advanced && image?.[field.key] !== undefined) ||
     image?.cropRect !== undefined ||
@@ -215,6 +222,7 @@ export function DeviceTuningPanel(): preact.JSX.Element {
   const action = useAsyncAction();
   const resetFeedback = action.reset;
   const copy = useCopyText();
+  const reportCopy = useCopyText();
 
   const load = useCallback(
     async (signal?: AbortSignal): Promise<void> => {
@@ -463,6 +471,12 @@ export function DeviceTuningPanel(): preact.JSX.Element {
           }
         >
           {copyLabel(copy.status, 'Copy JSON')}
+        </GhostButton>
+        <GhostButton
+          id="tuning-copy-report"
+          onClick={() => reportCopy.copy(bugReportText(activeView))}
+        >
+          {copyLabel(reportCopy.status, 'Copy for bug report')}
         </GhostButton>
       </div>
       <Feedback error={action.error} status={action.status} />

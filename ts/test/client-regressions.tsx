@@ -733,6 +733,48 @@ async function checkBatchImageTransferTuning(): Promise<void> {
   }
 }
 
+// "Copy for bug report" puts a JSON report on the clipboard: model, app version, the saved
+// overrides and recent raw wire ids. The pure shape is covered by bug-report-export.test.ts.
+async function checkBugReportCopy(): Promise<void> {
+  const view: DeviceOverridesView = { ...OVERRIDES_VIEW, overrides: { image: { quality: 0.6 } } };
+  const stub = stubFetch(() => ({ payload: view }));
+  const original = Object.getOwnPropertyDescriptor(navigator, 'clipboard');
+  let copied = '';
+  Object.defineProperty(navigator, 'clipboard', {
+    configurable: true,
+    value: { writeText: (text: string) => ((copied = text), Promise.resolve()) },
+  });
+  try {
+    await act(() => patch({ status: { ...baseStatus, modelId: view.modelId } }));
+    await act(() => render(<DeviceTuningPanel />, root));
+    await settle();
+    await act(() => {
+      addKeyEvent({ ts: 1, mk2Index: 3, state: 'down', wireId: 4 });
+    });
+    await click('#tuning-copy-report');
+    await settle();
+    const report = JSON.parse(copied) as Record<string, unknown>;
+    check(report.modelId === 'mirabox-293', 'Bug report names the model');
+    check(report.appVersion === 'test', 'Bug report carries the app version');
+    check(
+      JSON.stringify(report.overrides) === JSON.stringify(view.overrides),
+      'Bug report carries the saved overrides verbatim',
+    );
+    check(
+      JSON.stringify(report.rawInputSamples) ===
+        JSON.stringify([{ state: 'down', wireId: 4, mk2Index: 3 }]),
+      'Bug report carries recent raw wire ids',
+    );
+    check(elementText('#tuning-copy-report') === 'Copied', 'Bug report button confirms the copy');
+  } finally {
+    stub.restore();
+    if (original) Object.defineProperty(navigator, 'clipboard', original);
+    else Reflect.deleteProperty(navigator, 'clipboard');
+    await act(() => render(null, root));
+    await act(() => patch({ status: baseStatus, keyEvents: [] }));
+  }
+}
+
 // Picking an emulation profile must not post the old grid's image draft: an explicit
 // image override wins over the profile's transform (it undid the Plus 180° rotation).
 async function checkEmulationProfileSwitch(): Promise<void> {
@@ -942,6 +984,7 @@ async function runSettingsPanels(): Promise<void> {
   }
 
   await checkBatchImageTransferTuning();
+  await checkBugReportCopy();
   await checkEmulationProfileSwitch();
   await checkImageFitApplicability();
   await checkCropEditor();

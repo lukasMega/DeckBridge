@@ -1,6 +1,7 @@
 /** USB-worker driver table: one factory per wire protocol. Worker side only — it
- *  imports the FFI drivers; the matching tunable wire keys live in driver.ts
- *  (TUNABLE_WIRE_KEYS) because the main thread validates overrides too. */
+ *  imports the FFI drivers; the matching tunable wire keys live in
+ *  protocol-metadata.ts because the main thread validates overrides too. Typed over
+ *  DeviceProtocol, so a protocol added there without a factory here fails `types`. */
 import type { DeviceDriver, DeviceModel, DeviceProtocol } from './driver.js';
 import { ElgatoHidDriver } from './elgato/driver.js';
 import { MiraboxDriver } from './mirabox/driver.js';

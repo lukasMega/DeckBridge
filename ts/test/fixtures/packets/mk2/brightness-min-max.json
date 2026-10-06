@@ -1,0 +1,35 @@
+{
+  "version": 1,
+  "model": "mk2",
+  "pid": "0x0080",
+  "firmware": null,
+  "interface": null,
+  "source": "synthetic",
+  "assumeOpen": true,
+  "steps": [
+    {
+      "op": "call",
+      "call": "setBrightness",
+      "args": {
+        "level": 0
+      }
+    },
+    {
+      "op": "feature",
+      "dir": "out",
+      "hex": "0308000000000000000000000000000000000000000000000000000000000000"
+    },
+    {
+      "op": "call",
+      "call": "setBrightness",
+      "args": {
+        "level": 100
+      }
+    },
+    {
+      "op": "feature",
+      "dir": "out",
+      "hex": "0308640000000000000000000000000000000000000000000000000000000000"
+    }
+  ]
+}
