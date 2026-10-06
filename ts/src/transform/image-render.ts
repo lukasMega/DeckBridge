@@ -7,7 +7,8 @@ import { debug, info, warn } from '../shared/logger.js';
 import { blitImage, canvasSliceToBmp, transformImageForDevice } from './translator.js';
 import { mk2IndexToDeviceImgId } from '../shared/key-map.js';
 import { DumpDir, DumpQueue, newDumpTag } from './image-dump.js';
-import { imageCache, hashJpeg, makeCacheKey, specRevision } from './image-cache.js';
+import { hashJpeg } from '../shared/image-hash.js';
+import { imageCache, makeCacheKey, specRevision } from './image-cache.js';
 import type { DeviceImageSpec, DeviceModel } from '../devices/driver.js';
 import type { TouchStripOptions, TouchWindowRegion } from '../shared/types.js';
 import {
@@ -131,22 +132,23 @@ function revisionFor(model: DeviceModel): string {
 }
 
 /** Transform (if needed), cache, key-remap, and write one CORA image to the
- *  device. Returns once the device write has been dispatched; throws on a
- *  transform failure (the worker turns that into an 'error' message). */
+ *  device. Returns the raw-frame hash once the device write has been dispatched;
+ *  throws on a transform failure (the worker turns that into an 'error' message). */
 export function renderImage(
   driver: RenderTarget,
   model: DeviceModel,
   keyIndex: number,
   coraBytes: Uint8Array,
   format: 'jpeg' | 'bmp',
-): void {
+): string {
   // Capture the raw input first so it's saved even if the transform throws.
   const rawDump = dumpRawReceived(keyIndex, coraBytes, format);
 
   // Effective image spec is the model's own (device tuning already merged in
   // at open()/'setOverrides' time — see devices/model-overrides.ts).
   const eff = model.image;
-  const hash = makeCacheKey(model.id, hashJpeg(coraBytes), 'def', revisionFor(model));
+  const frameHash = hashJpeg(coraBytes);
+  const hash = makeCacheKey(model.id, frameHash, 'def', revisionFor(model));
   let entry = imageCache.get(hash);
 
   if (!entry) {
@@ -186,10 +188,11 @@ export function renderImage(
   const deviceKeyIndex = mk2IndexToDeviceImgId(keyIndex, model);
   if (deviceKeyIndex < 0) {
     warn('image', `skipping image for out-of-range key ${keyIndex}`);
-    return;
+    return frameHash;
   }
 
   driver.sendImage(deviceKeyIndex, entry.nativeBytes);
+  return frameHash;
 }
 
 /** Every strip zone a region touches: the Elgato app's 200-px zones, the same split

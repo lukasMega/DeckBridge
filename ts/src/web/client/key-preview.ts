@@ -21,6 +21,17 @@ const KEY_FLASH_MS = 200;
 
 const imageStore = new Map<number, ImageEntry>();
 const instances = new Set<KeyPreview>();
+const imageListeners = new Set<() => void>();
+
+/** Preact grids that show live key images re-render through this (the store is imperative). */
+export function subscribeImages(listener: () => void): () => void {
+  imageListeners.add(listener);
+  return () => imageListeners.delete(listener);
+}
+
+function notifyImages(): void {
+  for (const listener of imageListeners) listener();
+}
 
 /** data: URL with the frame's MIME type. */
 export function imageSrc(entry: ImageEntry): string {
@@ -35,10 +46,12 @@ export function getImageEntry(index: number): ImageEntry | undefined {
 export function applyImage(index: number, entry: ImageEntry): void {
   imageStore.set(index, entry);
   broadcast((p) => p.refreshKey(index));
+  notifyImages();
 }
 
 export function clearImageStore(): void {
   imageStore.clear();
+  notifyImages();
 }
 
 /** Wipe every cached image and blank all mounted grids — used when the
@@ -47,6 +60,7 @@ export function clearImageStore(): void {
 export function resetPreviews(): void {
   imageStore.clear();
   broadcast((p) => p.refreshAll());
+  notifyImages();
 }
 
 export function flashKey(index: number): void {

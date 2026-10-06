@@ -4,6 +4,7 @@ import { matchRoute } from './router.js';
 import { routes } from './routes.js';
 import { forbidden, json, notFound } from './http.js';
 import { ExtraKeysController } from './extra-keys-controller.js';
+import { PagesController } from './pages-controller.js';
 import { ImageChannel } from './image-channel.js';
 import type { ImageFormat } from './image-channel.js';
 import { SettingsFileController } from './settings-file-controller.js';
@@ -62,6 +63,7 @@ export class WebUIServer extends EventEmitter implements WebUIController, WebUIC
   readonly devicePrefs: DevicePrefsController;
   readonly encoders: EncodersController;
   readonly extraKeys: ExtraKeysController;
+  readonly pages: PagesController;
   readonly modelOverrides: ModelOverridesController;
   readonly logging: LoggingController;
   readonly updates: UpdateController;
@@ -132,7 +134,8 @@ export class WebUIServer extends EventEmitter implements WebUIController, WebUIC
     this.devicePrefs = new DevicePrefsController(host, () =>
       this.dockRegistry.selectedBrightness(),
     );
-    this.extraKeys = new ExtraKeysController(host, (wireId) =>
+    this.pages = new PagesController(host);
+    this.extraKeys = new ExtraKeysController(host, this.pages, (wireId) =>
       this.imageChannel.selectedWidgetPaint(wireId),
     );
     this.encoders = new EncodersController(host);
@@ -164,6 +167,7 @@ export class WebUIServer extends EventEmitter implements WebUIController, WebUIC
       devicePrefs: this.devicePrefs,
       encoders: this.encoders,
       extraKeys: this.extraKeys,
+      pages: this.pages,
       modelOverrides: this.modelOverrides,
       logging: this.logging,
       updates: this.updates,
@@ -311,6 +315,7 @@ export class WebUIServer extends EventEmitter implements WebUIController, WebUIC
     // Drop image caches of vanished docks; fall back to the primary when the selected dock was unplugged.
     const live = new Set(docks.map((d) => d.index));
     this.imageChannel.pruneDeadDocks(live);
+    this.pages.pruneDeadDocks(live);
     this.settings.syncDockBrightness(docks);
     this.status.publish();
     // Re-push per-device values after a replug (the selected deviceKey may have changed); selectDock(0) covers it too.
@@ -341,6 +346,7 @@ export class WebUIServer extends EventEmitter implements WebUIController, WebUIC
   private broadcastSelectedDeviceState(): void {
     this.devicePrefs.broadcastSelected(this.extraKeys.selectedConfigs());
     this.encoders.broadcastSelected();
+    this.pages.broadcastSelected();
   }
 
   private handleRequest(
@@ -384,6 +390,8 @@ export class WebUIServer extends EventEmitter implements WebUIController, WebUIC
       ),
       realDeviceIdentity: selected?.realDeviceIdentity,
       extraKeys: this.extraKeys.selectedConfigs(),
+      pages: this.pages.selectedPages(),
+      pageState: this.pages.selectedState(),
       ...this.devicePrefs.touchStripState(),
       encoders: this.encoders.selected(),
       logLevel: this.logging.level(),

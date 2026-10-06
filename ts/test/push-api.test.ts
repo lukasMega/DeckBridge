@@ -1,6 +1,7 @@
 import assert from 'tjs:assert';
 import { WebUIServer } from '../src/web/server/web-ui-server.js';
 import { PersistedSettings } from '../src/infra/settings.js';
+import { makePage } from './helpers/pages.js';
 import { PushChannels, pushChannels } from '../src/shared/push-channels.js';
 import { isAllowedOrigin } from '../src/web/server/web-request-guard.js';
 import type { DockStatus } from '../src/shared/types.js';
@@ -216,6 +217,24 @@ try {
     for (let i = 0; i < 5; i++) await push('burst', { text: String(i) });
     await new Promise((r) => setTimeout(r, 150));
     assert.equal(n, 1);
+  });
+
+  await test('bound includes page-only channels and counts each physical key once', async () => {
+    const prefs = settings.for('fake-device-0');
+    prefs.setPages([
+      makePage('p1', 'A', {
+        extraKeys: {
+          '16': { widget: 'external', param: 'page-only' },
+          '99': { widget: 'external', param: 'page-only' },
+        },
+      }),
+      makePage('p2', 'B', {
+        extraKeys: { '16': { widget: 'external', param: 'page-only' } },
+      }),
+    ]);
+    const result = (await (await push('page-only', { text: 'page' })).json()) as { bound: number };
+    assert.equal(result.bound, 1);
+    prefs.setPages([]);
   });
 
   await test('rate limit: 21 rapid posts → 429 with Retry-After', async () => {

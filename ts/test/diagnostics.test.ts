@@ -251,6 +251,29 @@ test('--redact-commands replaces param, pluginArg and pressCommand only', () => 
   assert.ok(report.includes('"widget": "clock"'), 'the widget itself is untouched');
 });
 
+test('--redact-commands also covers commands inside saved-page layouts', () => {
+  const settingsJson = JSON.stringify({
+    devices: [
+      {
+        deviceKey: 'usb:ABC123:mirabox-293s',
+        pages: [
+          {
+            id: 'p1',
+            extraKeys: {
+              '16': { widget: 'command', param: 'page-secret', pressCommand: 'page-press' },
+            },
+          },
+        ],
+      },
+    ],
+  });
+  const plain = buildDiagnostics({ ...fullSources(), settingsJson });
+  assert.ok(plain.includes('page-secret'), 'verbatim by default');
+  const report = buildDiagnostics({ ...fullSources(), settingsJson }, { redactCommands: true });
+  assert.ok(!report.includes('page-secret') && !report.includes('page-press'));
+  assert.ok(report.includes('"widget": "command"'), 'the widget itself is untouched');
+});
+
 test('unparsable settings redact to (unavailable) rather than leaking', () => {
   const report = buildDiagnostics(
     { ...fullSources(), settingsJson: 'not json{{{' },

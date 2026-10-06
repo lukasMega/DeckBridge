@@ -5,6 +5,7 @@ import { pluginsDir } from '../../infra/settings-store.js';
 import { listPluginFiles, pluginKeyStatus } from '../../plugin/plugin-host.js';
 import type { PluginStatus } from '../../plugin/plugin-host.js';
 import type { ExtraKeyConfig } from '../../shared/types.js';
+import { layoutConfigFor } from '../../shared/page-config.js';
 import type { WidgetPaint } from '../../shared/widget-layout.js';
 import type { ExtraKeyPreviewResponse } from '../contract.js';
 import { widgetPreviews } from './widget-preview.js';
@@ -13,6 +14,7 @@ import type {
   ControllerHost,
   ExtraKeyPressUpdate,
   ExtraKeyUpdate,
+  PageLayoutPort,
   PluginsInfo,
   ReqError,
 } from './types.js';
@@ -43,9 +45,32 @@ function mergeExtraKey(
   };
 }
 
+/** `map` with the update for `wireId` applied (a cleared key is removed). */
+function applyExtraKeyUpdate(
+  map: Record<string, ExtraKeyConfig>,
+  wireId: number,
+  update: ExtraKeyUpdate,
+): Record<string, ExtraKeyConfig> {
+  const out = { ...map };
+  const next = mergeExtraKey(out[String(wireId)], update);
+  if (next) out[String(wireId)] = next;
+  else delete out[String(wireId)];
+  return out;
+}
+
+function pluginStatuses(layout: Record<string, ExtraKeyConfig>): Record<string, PluginStatus> {
+  const status: Record<string, PluginStatus> = {};
+  for (const [wireId, cfg] of Object.entries(layout)) {
+    if (cfg.widget === 'plugin' && cfg.param)
+      status[wireId] = pluginKeyStatus(cfg.param, cfg.pluginArg);
+  }
+  return status;
+}
+
 export class ExtraKeysController {
   constructor(
     private readonly host: ControllerHost,
+    private readonly pages: PageLayoutPort,
     /** The selected dock's last paint of a widget (image-channel.ts). */
     private readonly selectedPaint: (wireId: number) => WidgetPaint | undefined,
   ) {}
@@ -75,19 +100,19 @@ export class ExtraKeysController {
   /** Assign (or clear, with widget 'none') a widget, or set the press command, on the SELECTED
    *  dock. The two are independent: a widget change keeps the press command and vice versa.
    *  Persists, pushes the new map to WS clients, and on a widget change emits 'extraKeyChanged'
-   *  so app.ts repaints that dock's widgets (a press command resolves per press). */
-  trySet(wireId: number, update: ExtraKeyUpdate): ReqError | null {
+   *  so app.ts repaints that dock's widgets (a press command resolves per press).
+   *  With `pageId` the update edits that page's own layout instead of the default map. */
+  trySet(wireId: number, update: ExtraKeyUpdate, pageId?: string): ReqError | null {
     if (!this.onSelectedDock(wireId)) return this.noKeyError(wireId);
     const isWidget = 'widget' in update;
     if (!isWidget && !this.host.selectedDockStatus()?.pressableExtraKeys?.includes(wireId)) {
       return { error: `extra key ${wireId} has no switch`, status: 400 };
     }
+    if (pageId !== undefined) {
+      return this.pages.tryEditLayout(pageId, (map) => applyExtraKeyUpdate(map, wireId, update));
+    }
     const prefs = this.prefs;
-    const map = { ...prefs.extraKeyConfigs() };
-    const next = mergeExtraKey(map[String(wireId)], update);
-    if (next) map[String(wireId)] = next;
-    else delete map[String(wireId)];
-    if (!prefs.setExtraKeyConfigs(map)) {
+    if (!prefs.setExtraKeyConfigs(applyExtraKeyUpdate(prefs.extraKeyConfigs(), wireId, update))) {
       return { error: 'no connected device to configure', status: 409 };
     }
     this.host.broadcast('extraKeys', { configs: this.selectedConfigs() });
@@ -98,7 +123,12 @@ export class ExtraKeysController {
   /** WebUI "Run now" — immediate re-run of a command-widget extra key, bypassing its interval. */
   tryRunNow(wireId: number): ReqError | null {
     if (!this.onSelectedDock(wireId)) return this.noKeyError(wireId);
-    const cfg = this.prefs.extraKeyConfig(wireId);
+    // What is on the key now: the active page's layout, not the default one.
+    const cfg = layoutConfigFor(
+      this.pages.selectedActivePage(),
+      this.prefs.extraKeyConfigs(),
+      wireId,
+    );
     if (cfg?.widget !== 'command') {
       return { error: `extra key ${wireId} is not configured as a command widget`, status: 400 };
     }
@@ -119,11 +149,9 @@ export class ExtraKeysController {
   async pluginsInfo(): Promise<PluginsInfo> {
     const dir = pluginsDir();
     const files = await listPluginFiles(dir);
-    const status: Record<string, PluginStatus> = {};
-    for (const [wireId, cfg] of Object.entries(this.selectedConfigs())) {
-      if (cfg.widget === 'plugin' && cfg.param)
-        status[wireId] = pluginKeyStatus(cfg.param, cfg.pluginArg);
-    }
-    return { dir, files, status };
+    const pageStatus = Object.fromEntries(
+      this.prefs.pages().map((p) => [p.id, pluginStatuses(p.extraKeys ?? {})]),
+    );
+    return { dir, files, status: pluginStatuses(this.selectedConfigs()), pageStatus };
   }
 }

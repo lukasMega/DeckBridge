@@ -158,6 +158,15 @@ await test('CORA image completion notifications follow final STP', async () => {
   assert.equal(stpCount(), 1);
   assert.equal(notificationTags.length, 15);
   assert.ok(notificationTags.every((value) => value === 'STP'));
+  // The hash rides on imageSent: no second message per frame.
+  assert.ok(messages.every((m) => (m.type as string) !== 'frameHash'));
+  const hashed = messages.flatMap((m) =>
+    m.type === 'imageSent' && m.hash !== undefined ? [m.keyIndex] : [],
+  );
+  assert.deepEqual(
+    hashed.toSorted((a, b) => a - b),
+    Array.from({ length: 15 }, (_, i) => i),
+  );
 });
 
 await test('workDone returns every batched id once, after imageSent and the final STP', async () => {

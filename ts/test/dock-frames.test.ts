@@ -2,6 +2,7 @@ import assert from 'tjs:assert';
 import { LastFrames, wireDockImages } from '../src/main/dock-frames.js';
 import { EventEmitter } from '../src/platform/events-shim.js';
 import type { DockDriver, DeviceModel } from '../src/devices/driver.js';
+import { hashJpeg } from '../src/shared/image-hash.js';
 import { MockDriver } from '../src/devices/mock.js';
 import { StubDockDriver } from './helpers/stub-dock-driver.js';
 import type { ElgatoChildServer } from '../src/cora/child-server.js';
@@ -171,6 +172,16 @@ await test('the mock driver (no-op renderCoraImage) does not throw', () => {
     'notifyImageUpdate still fires for the mock',
   );
   assert.equal(webui.notifyImageUpdateCalls[0]!.keyIndex, 2, 'keyIndex should be 2');
+});
+
+await test('the mock driver emits frameHash for each rendered image', () => {
+  const childServer = new EventEmitter();
+  const mockDriver = makeFakeMockDriver(makePassthroughModel());
+  const seen: [number, string][] = [];
+  mockDriver.on('frameHash', (key: number, hash: string) => seen.push([key, hash]));
+  setupImageHandler(childServer, makeFakeWebUI(), () => mockDriver);
+  childServer.emit('image', { keyIndex: 2, data: SOLID_RED_16X16_JPEG, format: 'jpeg' });
+  assert.deepEqual(seen, [[2, hashJpeg(SOLID_RED_16X16_JPEG)]]);
 });
 
 // 4. getDriver() returning null does NOT throw; webui still fires.

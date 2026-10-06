@@ -183,10 +183,17 @@ export class PushController {
         ...(d.extraKeys ?? []),
         ...(d.widgetDisplays ?? []).map((w) => w.wireId),
       ]);
-      const configs = this.host.settings.for(d.deviceKey).extraKeyConfigs();
-      for (const [wire, cfg] of Object.entries(configs)) {
-        if (cfg.widget === 'external' && cfg.param === channel && wireIds.has(Number(wire))) n++;
+      const prefs = this.host.settings.for(d.deviceKey);
+      const layouts = [prefs.extraKeyConfigs(), ...prefs.pages().map((p) => p.extraKeys ?? {})];
+      const bound = new Set<number>();
+      for (const layout of layouts) {
+        for (const [wire, cfg] of Object.entries(layout)) {
+          if (cfg.widget === 'external' && cfg.param === channel && wireIds.has(Number(wire))) {
+            bound.add(Number(wire));
+          }
+        }
       }
+      n += bound.size;
     }
     return n;
   }

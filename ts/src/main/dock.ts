@@ -28,8 +28,10 @@ import type { CoraDock } from './cora-dock.js';
 import { begin, settleAll } from './settle.js';
 import { LastFrames, wireDockImages } from './dock-frames.js';
 import type { ImageFormat } from './dock-frames.js';
+import { DockPages } from './dock-pages.js';
 import { createDockStandby, dialInput } from './dock-standby.js';
 import type { DockStandby } from './dock-standby.js';
+import type { PageObservation } from '../shared/page-match.js';
 import type { StandbyClock, StandbyTiming } from './standby-policy.js';
 import {
   buildDockStatus,
@@ -62,6 +64,8 @@ export interface DockHooks {
   imageSent?: () => void;
   /** The Elgato app's child client attached (after markPaired). */
   elgatoAttached?: () => void;
+  /** The Elgato page recognition changed (the WebUI mirrors it). */
+  pageObservation?: (obs: PageObservation) => void;
 }
 
 export type DockSettings = Pick<PersistedSettings, 'for' | 'getOrCreateIdentity' | 'markPaired'>;
@@ -110,6 +114,8 @@ export class Dock {
   private readonly encoders: EncoderActions;
   private readonly extraKeyActions: ExtraKeyActions;
   private readonly standby: DockStandby;
+  /** Page-following side-key layouts: which saved Elgato page the deck shows. */
+  readonly pages: DockPages;
   private resendTimer: ReturnType<typeof setTimeout> | null = null;
   private stopped = false;
   /** Click-to-press releases still pending, by key: one virtual press per key at a time. */
@@ -138,8 +144,15 @@ export class Dock {
       undefined,
       (index) => knobRefresh(this.widgets, this.model, index),
     );
+    this.pages = new DockPages({
+      index: this.index,
+      model: () => this.model,
+      prefs: () => this.identityPrefs(),
+      repaint: () => this.widgets?.repaint(),
+      onObservation: (obs) => this.hooks.pageObservation?.(obs),
+    });
     this.extraKeyActions = new ExtraKeyActions(
-      (wireId) => this.identityPrefs()?.extraKeyConfig(wireId),
+      (wireId) => this.pages.layoutConfig(wireId),
       undefined,
       (wireId) => this.widgets?.refresh(wireId),
     );
@@ -209,6 +222,7 @@ export class Dock {
     // A different model on a live driver: the old frames no longer fit the panel.
     if (this.driver) this.frames.clear();
     this.cora.applyModel(model, deviceInfo);
+    this.pages.reset();
   }
 
   /** Take over an opened driver: wire it, seed the persisted prefs, splash, replay the
@@ -221,6 +235,7 @@ export class Dock {
     }
     if (this.driver) this.detach();
     this.driver = driver;
+    this.pages.reset(); // frames replay below; this also publishes the geometry
     const real = !__MOCK_BUILD__ || !mock;
     this.wireDriver(driver, real);
     this.seed(driver);
@@ -276,6 +291,7 @@ export class Dock {
     this.stopped = true;
     this.resendTimer = clearTimer(this.resendTimer);
     this.standby.stop();
+    this.pages.stop();
     this.encoders.stop();
     this.extraKeyActions.stop();
     for (const t of this.virtualPresses.values()) clearTimeout(t);
@@ -397,6 +413,7 @@ export class Dock {
     child.on('brightness', (level: number) => this.onAppBrightness(level));
     child.on('clientConnected', () => this.onElgatoAttached());
     child.on('clientDisconnected', () => {
+      this.pages.reset();
       this.standby.onAppDetached();
       this.changed();
     });
@@ -436,6 +453,8 @@ export class Dock {
 
   private wireDriver(driver: DockDriver, real: boolean): void {
     const child = this.cora.childServer;
+    // Before the mock branch: mock docks are tracked too.
+    driver.on('frameHash', (key: number, hash: string) => this.pages.noteFrame(key, hash));
     const sinks: DriverEventSinks = {
       onAction: this.hooks.action,
       onKey: (index, state, wireId) => {
@@ -517,7 +536,7 @@ export class Dock {
     if (!prefs) return;
     this.widgets = new ExtraKeyWidgets(
       driver,
-      (wireId) => prefs.extraKeyConfig(wireId),
+      (wireId) => this.pages.layoutConfig(wireId),
       prefs.stripMode(),
       () => prefs.repaintMs(),
       this.hooks.widgetPaint,

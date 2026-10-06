@@ -1286,3 +1286,46 @@ select.input.xkey-select {
 .address-link {
   margin: 6px 0;
 }
+
+/* ---- page-following layouts (reuses .crop-keys / .dock-chip / .chip-radio-group) ---- */
+.pages-list {
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.page-row {
+  padding: 10px 0;
+  border-top: 1px solid var(--border);
+}
+.page-form {
+  margin-top: 8px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.page-name {
+  flex: 1;
+  min-width: 0;
+}
+.page-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+}
+.layout-scope {
+  margin: 0 0 10px;
+}
+.crop-key.page-key--ignored {
+  opacity: 0.45;
+}
+.crop-key.page-key--changed {
+  border-color: var(--warn);
+}
+.page-form .crop-keys {
+  margin: 8px 0;
+}
+.page-row .crop-keys {
+  margin-top: 8px;
+}

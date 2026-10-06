@@ -99,6 +99,9 @@ a regular **Network device** at `localhost`; the deck behaves like Elgato hardwa
 - **Side-key widgets** — decks with display-only keys outside the grid (e.g. the 293S
   sixth column) show server-rendered clock / date / text / weather / command / plugin
   widgets; see [Side-key widgets](./side-keys.md).
+- **Page-following layouts** — save an Elgato page once, give it its own side-key and touch
+  strip layout, and the deck switches layouts when the app changes page; see
+  [Layouts that follow the Elgato page](./side-keys.md#layouts-that-follow-the-elgato-page).
 - **Push API** — other tools (OBS, Home Assistant, scripts, `deckbridge push`) write text
   onto side keys and AKP05/AKP05E strip zones over token-authenticated HTTP, with a TTL;
   see [Push API](./push-api.md).

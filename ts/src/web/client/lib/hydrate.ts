@@ -15,6 +15,12 @@ export function hydrate(st: StateResponse): void {
     brightnessOverride: st.brightnessOverride,
     deviceModels: st.deviceModels,
     extraKeys: st.extraKeys,
+    pages: st.pages,
+    layoutScope:
+      st.selectedDock === store.getSnapshot().status.selectedDock
+        ? store.validLayoutScope(st.pages)
+        : null,
+    pageState: st.pageState,
     touchStripMode: st.touchStripMode,
     touchStripRepaintMs: st.touchStripRepaintMs,
     encoders: st.encoders,

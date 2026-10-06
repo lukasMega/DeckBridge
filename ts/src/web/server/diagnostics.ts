@@ -231,11 +231,16 @@ function redactKeys(obj: object | undefined, keys: readonly string[]): void {
 function redactSettings(settingsJson: string): string {
   try {
     const parsed = JSON.parse(settingsJson) as {
-      devices?: Array<{ extraKeys?: Record<string, object>; standby?: object }>;
+      devices?: Array<{
+        extraKeys?: Record<string, object>;
+        pages?: Array<{ extraKeys?: Record<string, object> }>;
+        standby?: object;
+      }>;
     };
     for (const device of parsed.devices ?? []) {
       redactKeys(device.standby, ['sleepCommand', 'wakeCommand']);
-      for (const cfg of Object.values(device.extraKeys ?? {})) {
+      const layouts = [device.extraKeys, ...(device.pages ?? []).map((page) => page.extraKeys)];
+      for (const cfg of layouts.flatMap((layout) => Object.values(layout ?? {}))) {
         redactKeys(cfg, ['param', 'pluginArg', 'pressCommand']);
       }
     }

@@ -187,7 +187,7 @@ Source: `worker/hid-work-queue-host.ts`, `worker/hid-worker.ts`,
 
 ### Image-cache hash
 
-`hashJpeg()` (`ts/src/transform/image-cache.ts`) runs on the USB worker for **every** image, hit or
+`hashJpeg()` (`ts/src/shared/image-hash.ts`) runs on the USB worker for **every** image, hit or
 miss, *before* the cache lookup — so a cache hit pays it in full. Three constraints shaped
 it, and each one has already been violated once:
 
@@ -213,10 +213,13 @@ bijection, so by then the collisions have already happened. A `rotl13` variant p
 identically; a full murmur3 body also fixes it but is only 1.7× (3 multiplies + 2 rotates
 per word) and was rejected.
 
-Two accepted properties: an **unaligned** `byteOffset` falls back to the byte path and
-digests differently from the same bytes aligned — that can only cause a cache *miss*
-(a re-transform), never a false hit. And the digest is **platform-endian**, which is fine
-because it is an in-process cache key, never persisted or sent over the wire.
+Unaligned views are copied into aligned storage before hashing. The same bytes now
+produce the same fingerprint at every buffer offset, including pooled CORA frames.
+Aligned input retains its existing cache digest; previously unaligned cache entries
+are only in memory and may miss once. Page fingerprints reuse this digest and are
+persisted in settings. Words remain platform-endian; supported platforms use
+little-endian words. Mock and browser decks hash on the main thread because they
+have no USB worker.
 
 Regression tests for all of the above (including the lane-3 family by name) are in
 `ts/test/image-cache.test.ts`.
@@ -263,7 +266,7 @@ the server's `broadcast<K>` and the client's handler table are both typed by it.
 | `ts/src/transform/image-render.ts` | `renderImage(driver, model, keyIndex, coraBytes, format)` (worker) — transform (deckbridge-native FFI) + LRU cache + CORA→wire remap + `sendImage` to the device |
 | `ts/src/cora/image-assembler.ts` | `assembleImageChunk()` (gen2 JPEG) · `assembleGen1ImageChunk()` (gen1 BMP, BMP `bfSize` trim) |
 | `ts/src/cora/child-server.ts` | `ElgatoChildServer.handleCoraPacket` — dispatches `IMG_CMD_WRITE` / `GEN1_IMG_CMD`, emits `'image'` |
-| `ts/src/transform/image-cache.ts` | `LruCache` (`IMAGE_CACHE_SIZE` = 100; 32 MiB) · `hashJpeg()` (full-buffer FNV-1a 32-bit) · `makeCacheKey(modelId, hash)` |
+| `ts/src/transform/image-cache.ts` | `LruCache` (`IMAGE_CACHE_SIZE` = 100; 32 MiB) · `makeCacheKey(modelId, hash)` |
 | `ts/src/transform/translator.ts` | `transformImageForDevice(jpeg, spec)`; native blit and BMP helpers |
 | `ts/src/shared/key-map.ts` | Pure input/image index mappings |
 | `rust/deckbridge-native/src/transform.rs` | Native transforms; EXIF auto-rotation disabled |

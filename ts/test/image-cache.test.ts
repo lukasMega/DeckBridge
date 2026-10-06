@@ -1,11 +1,6 @@
 import assert from 'tjs:assert';
-import {
-  hashJpeg,
-  makeCacheKey,
-  imageCache,
-  specRevision,
-  LruCache,
-} from '../src/transform/image-cache.js';
+import { hashJpeg } from '../src/shared/image-hash.js';
+import { makeCacheKey, imageCache, specRevision, LruCache } from '../src/transform/image-cache.js';
 import type { DeviceImageSpec } from '../src/devices/driver.js';
 import { IMAGE_CACHE_SIZE } from '../src/shared/types.js';
 import { test, summaryExit } from './helpers/harness.js';
@@ -20,6 +15,22 @@ test('deterministic: same buffer → same hash', () => {
   const h1 = hashJpeg(buf);
   const h2 = hashJpeg(buf);
   assert.equal(h1, h2);
+});
+
+test('identical bytes at offsets 0..3 have one digest, including every tail length', () => {
+  for (const size of [0, 1, 2, 3, 4, 5, 6, 7, 4096, 4097, 4098, 4099]) {
+    const bytes = Uint8Array.from({ length: size }, (_, i) => (i * 31 + 17) & 0xff);
+    const expected = hashJpeg(bytes);
+    for (let offset = 0; offset < 4; offset++) {
+      const backing = new Uint8Array(size + offset + 4);
+      backing.set(bytes, offset);
+      assert.equal(
+        hashJpeg(backing.subarray(offset, offset + size)),
+        expected,
+        `size=${size}, offset=${offset}`,
+      );
+    }
+  }
 });
 
 test('distinct: different buffers → different hashes', () => {

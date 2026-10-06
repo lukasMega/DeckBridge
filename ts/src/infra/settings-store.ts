@@ -20,6 +20,7 @@ import type {
   TouchStripZoneFit,
 } from '../shared/types.js';
 import { DEFAULT_TOUCH_STRIP_OPTIONS } from '../shared/types.js';
+import type { PageDefinition } from '../shared/page-config.js';
 import type { DeviceModelId, DeviceModelOverride } from '../devices/driver.js';
 import type { UpdateState } from './update-check.js';
 
@@ -40,6 +41,8 @@ export interface DeviceIdentitySettings {
   /** DeckBridge-native actions for keys outside the emulated grid (293S 6th
    *  column), keyed by device wire id — see extra-keys.ts. */
   extraKeys?: Record<string, ExtraKeyConfig>;
+  /** Saved Elgato pages, each with its own side-key layout — see main/page-tracker.ts. */
+  pages?: PageDefinition[];
   /** Touch-strip display mode (AKP05E). Default 'elgato' = the app only. */
   touchStripMode?: TouchStripMode;
   /** 'deckbridge-repaint' hold-off after an Elgato frame; default TOUCH_STRIP_REPAINT_DEFAULT_MS. */

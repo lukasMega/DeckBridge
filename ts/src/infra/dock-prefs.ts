@@ -10,6 +10,7 @@ import type {
   StandbySettings,
   TouchStripMode,
 } from '../shared/types.js';
+import type { PageDefinition } from '../shared/page-config.js';
 import { resolveStandby } from '../shared/standby-settings.js';
 
 export const DEFAULT_BRIGHTNESS_OVERRIDE = true;
@@ -71,6 +72,10 @@ export class DockPrefs {
 
   extraKeyConfigs(): Record<string, ExtraKeyConfig> {
     return this.entry()?.extraKeys ?? {};
+  }
+
+  pages(): readonly PageDefinition[] {
+    return this.entry()?.pages ?? [];
   }
 
   stripMode(): TouchStripMode {
@@ -155,6 +160,16 @@ export class DockPrefs {
     if (!e) return false;
     if (Object.keys(map).length > 0) e.extraKeys = map;
     else delete e.extraKeys;
+    this.store.persist();
+    return true;
+  }
+
+  /** Persist-only like setExtraKeyConfigs; an empty list clears the field. */
+  setPages(list: readonly PageDefinition[]): boolean {
+    const e = this.entry();
+    if (!e) return false;
+    if (list.length > 0) e.pages = [...list];
+    else delete e.pages;
     this.store.persist();
     return true;
   }

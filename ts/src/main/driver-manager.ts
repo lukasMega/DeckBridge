@@ -185,6 +185,7 @@ export class DriverManager extends EventEmitter {
         webui.imageChannel.notifyDockWidgetPaint(index, wireId, paint),
       stripWrite: (...args) => webui.imageChannel.notifyDockStripWrite(index, ...args),
       elgatoAttached: () => this.deps.onElgatoAttached?.(index),
+      pageObservation: (obs) => webui.pages.notifyObservation(index, obs),
     };
   }
 
@@ -215,6 +216,11 @@ export class DriverManager extends EventEmitter {
   /** A settings import may change any dock's standby settings. */
   reloadAllStandby(): void {
     for (const dock of this.docks.values()) dock.reloadStandby();
+  }
+
+  /** A settings import may change any dock's saved pages. */
+  reloadAllPages(): void {
+    for (const dock of this.docks.values()) dock.pages.reload();
   }
 
   /** The live dock serving `deviceKey`, if any. */

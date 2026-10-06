@@ -14,6 +14,8 @@ import { ConfigSection } from './config-section.js';
 import { SideKeysHelp } from './side-keys-help.js';
 import { SideKeyCard } from './side-key-card.js';
 import { StripZones } from './strip-zones.js';
+import { PagesSection } from './pages-panel.js';
+import { LayoutScopeBar, scopedConfigs } from './layout-scope.js';
 
 const POSITION_LABELS: Readonly<Record<number, readonly string[]>> = {
   2: ['Top', 'Bottom'],
@@ -75,11 +77,14 @@ function widgetSections(dock: DockUi | undefined): WidgetSection[] {
 // resolve a `mock:<modelId>` identity, so their assignments persist like a real one's.
 export function ExtraKeysPanel(): preact.JSX.Element | null {
   const status = useStore((s) => s.status);
-  const configs = useStore((s) => s.extraKeys);
+  const configs = useStore((s) => scopedConfigs(s));
+  const scope = useStore((s) => s.layoutScope);
   const stripMode = useStore((s) => s.touchStripMode);
 
   // Fetch plugin file list + live per-key status; re-poll while any key runs a plugin.
   const [plugins, setPlugins] = useState<PluginsInfo>({ dir: '', files: [], status: {} });
+  const scopedPlugins =
+    scope === null ? plugins : { ...plugins, status: plugins.pageStatus?.[scope] ?? {} };
   const hasPlugin = Object.values(configs).some((c) => c.widget === 'plugin');
   useEffect(() => {
     let alive = true;
@@ -107,6 +112,8 @@ export function ExtraKeysPanel(): preact.JSX.Element | null {
 
   return (
     <>
+      <PagesSection />
+      <LayoutScopeBar />
       {sections.map((section) => {
         // Knob commands are only DeckBridge's in an override mode.
         const knobOverride = stripMode !== 'elgato';
@@ -130,7 +137,7 @@ export function ExtraKeysPanel(): preact.JSX.Element | null {
                 displays={section.displays}
                 mode={stripMode}
                 configs={configs}
-                plugins={plugins}
+                plugins={scopedPlugins}
               />
             )}
             {!section.touchStrip &&
@@ -140,8 +147,8 @@ export function ExtraKeysPanel(): preact.JSX.Element | null {
                   wireId={wireId}
                   label={section.labels.get(wireId) ?? `Key ${wireId}`}
                   cfg={configs[String(wireId)]}
-                  plugins={plugins}
-                  pluginStatus={plugins.status[String(wireId)]}
+                  plugins={scopedPlugins}
+                  pluginStatus={scopedPlugins.status[String(wireId)]}
                   pressable={section.pressable.has(wireId)}
                 />
               ))}
