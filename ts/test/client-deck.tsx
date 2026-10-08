@@ -537,6 +537,32 @@ async function runPairingAddressModal(root: HTMLElement, check: Check): Promise<
     );
     await act(() => root.querySelector<HTMLButtonElement>('#address-close')!.click());
     check(root.querySelector('#address-modal') === null, 'Close dismisses the modal');
+
+    // The link's wrapper keeps keys from the dock card, but Escape must still reach the modal.
+    const openModal = async (): Promise<void> => {
+      await act(() => root.querySelector<HTMLButtonElement>('.address-link')!.click());
+      await settleAll();
+    };
+    const keyFromModal = (name: string): void => {
+      root
+        .querySelector('#address-pick')!
+        .dispatchEvent(new KeyboardEvent('keydown', { key: name, bubbles: true }));
+    };
+    await openModal();
+    let leaked = 0;
+    const onLeak = (): void => {
+      leaked++;
+    };
+    document.addEventListener('keydown', onLeak);
+    await act(() => keyFromModal('Enter'));
+    document.removeEventListener('keydown', onLeak);
+    check(leaked === 0, 'A key pressed inside the modal does not reach the dock card');
+    check(root.querySelector('#address-modal') !== null, 'Other keys keep the modal open');
+    await act(() => keyFromModal('Escape'));
+    check(
+      root.querySelector('#address-modal') === null,
+      'Escape closes the modal while focus is inside it',
+    );
     await act(() => render(null, root));
   } finally {
     globalThis.fetch = original;

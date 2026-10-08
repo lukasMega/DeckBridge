@@ -13,7 +13,7 @@ import type {
   ExtraKeyWrap,
 } from '../ui-types.js';
 import { postJson } from '../lib/ui-api.js';
-import { useDismiss, useKeepInApp } from '../lib/ui-hooks.js';
+import { AnchoredPopover } from '../components/AnchoredPopover.js';
 import { postExtraKey } from './extra-keys-popovers.js';
 import { TextStyleButton } from './text-style-popover.js';
 
@@ -54,10 +54,7 @@ function SizePicker({
   anchorRef: { current: HTMLDivElement | null };
   onClose: () => void;
 }>): preact.JSX.Element {
-  useDismiss(onClose, anchorRef);
-  const popRef = useRef<HTMLDivElement | null>(null);
   const [previews, setPreviews] = useState<ExtraKeyPreview[] | null | 'loading'>('loading');
-  useKeepInApp(popRef, previews);
   // Refetch when the config or the painted content changes while open.
   const cfgKey = JSON.stringify(cfg);
   const image = useStore((s) => s.extraKeyImages[String(wireId)]);
@@ -85,11 +82,13 @@ function SizePicker({
   };
 
   return (
-    <div
-      ref={popRef}
-      class="xkey-popover xkey-size-picker floating-surface"
-      role="dialog"
-      aria-label={`${label} text sizes`}
+    <AnchoredPopover
+      anchorRef={anchorRef}
+      onClose={onClose}
+      class="xkey-size-picker"
+      label={`${label} text sizes`}
+      keepInApp
+      content={previews}
     >
       {previews === 'loading' && <span class="xkey-size-note">Rendering…</span>}
       {previews === null && <span class="xkey-size-note">Nothing to preview yet</span>}
@@ -113,7 +112,7 @@ function SizePicker({
           ))}
         </div>
       )}
-    </div>
+    </AnchoredPopover>
   );
 }
 

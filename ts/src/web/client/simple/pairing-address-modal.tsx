@@ -4,6 +4,8 @@
 // sudo. The test checks that the address exists locally and that DeckBridge can bind and answer
 // on it; it does not connect to the CORA ports.
 import { useEffect, useState } from 'preact/hooks';
+import { GhostButton } from '../components/GhostButton.js';
+import { Modal } from '../components/Modal.js';
 import type {
   AddressTestRequest,
   AddressTestResult,
@@ -39,16 +41,14 @@ function StepOne({
       <h4>1. Run this once</h4>
       <div class="address-tabs" role="tablist">
         {OS_TABS.map((t) => (
-          <button
+          <GhostButton
             key={t.id}
-            class="ghostbtn"
-            type="button"
             role="tab"
             aria-selected={t.id === tab}
             onClick={() => onTab(t.id)}
           >
             {t.label}
-          </button>
+          </GhostButton>
         ))}
       </div>
       {steps.command && <CopyChip label="Command" value={steps.command} cls="addr-chip" />}
@@ -86,15 +86,9 @@ function StepTwo({
   return (
     <section>
       <h4>2. Test</h4>
-      <button
-        class="ghostbtn"
-        id="address-test"
-        type="button"
-        disabled={action.busy}
-        onClick={() => void test()}
-      >
+      <GhostButton id="address-test" disabled={action.busy} onClick={test}>
         Test {ip}
-      </button>
+      </GhostButton>
       {result && (
         <p class={result.ok ? 'settings-status' : 'settings-error'} id="address-test-result">
           {result.ok ? '✓ ' : '✗ '}
@@ -207,46 +201,23 @@ export function PairingAddressModal({
       live = false;
     };
   }, []);
-  useEffect(
-    function closeOnEscape() {
-      const onKey = (e: KeyboardEvent): void => {
-        if (e.key === 'Escape') onClose();
-      };
-      document.addEventListener('keydown', onKey);
-      return function unbind(): void {
-        document.removeEventListener('keydown', onKey);
-      };
-    },
-    [onClose],
-  );
   return (
-    <div class="address-backdrop" onClick={onClose}>
-      <div
-        class="popover floating-surface address-modal"
-        id="address-modal"
-        role="dialog"
-        aria-modal="true"
-        aria-label="Pairing address"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <button
-          class="pop-close circle"
-          id="address-close"
-          type="button"
-          aria-label="Close pairing address"
-          onClick={onClose}
-        >
-          ×
-        </button>
-        <h2>Need another address?</h2>
-        <p class="multi-deck-note">
-          The Elgato app pairs one dock per IP address of this computer. Give each dock its own.
-        </p>
-        {error && <p class="settings-error">{error}</p>}
-        {!info && !error && <p class="multi-deck-note">Loading…</p>}
-        {info && <ModalBody info={info} initialDock={initialDock} />}
-      </div>
-    </div>
+    <Modal
+      id="address-modal"
+      class="address-modal"
+      title="Need another address?"
+      label="Pairing address"
+      closeId="address-close"
+      closeLabel="Close pairing address"
+      onClose={onClose}
+    >
+      <p class="multi-deck-note">
+        The Elgato app pairs one dock per IP address of this computer. Give each dock its own.
+      </p>
+      {error && <p class="settings-error">{error}</p>}
+      {!info && !error && <p class="multi-deck-note">Loading…</p>}
+      {info && <ModalBody info={info} initialDock={initialDock} />}
+    </Modal>
   );
 }
 
@@ -255,16 +226,21 @@ function stopBubbling(e: Event): void {
   e.stopPropagation();
 }
 
+// Escape still has to reach the modal's window listener from inside it.
+function stopKeyBubbling(e: KeyboardEvent): void {
+  if (e.key !== 'Escape') e.stopPropagation();
+}
+
 /** The "Need another address?" entry point; owns the open state of its modal. */
 export function PairingAddressLink({
   initialDock,
 }: Readonly<{ initialDock?: number }>): preact.JSX.Element {
   const [open, setOpen] = useState(false);
   return (
-    <span class="address-link-wrap" onClick={stopBubbling} onKeyDown={stopBubbling}>
-      <button class="ghostbtn address-link" type="button" onClick={() => setOpen(true)}>
+    <span onClick={stopBubbling} onKeyDown={stopKeyBubbling}>
+      <GhostButton class="address-link" onClick={() => setOpen(true)}>
         Need another address?
-      </button>
+      </GhostButton>
       {open && <PairingAddressModal initialDock={initialDock} onClose={() => setOpen(false)} />}
     </span>
   );

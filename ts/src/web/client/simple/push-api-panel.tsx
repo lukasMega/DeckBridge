@@ -66,7 +66,7 @@ function TokenList({
       <ul class="push-tokens">
         {tokens.map((t) => (
           <li key={t.id}>
-            <span class="push-token-name">{t.name}</span> <code>dbp_{t.prefix}…</code>
+            <span>{t.name}</span> <code>dbp_{t.prefix}…</code>
             <span class="multi-deck-note">
               {' '}
               {t.lastUsedAt

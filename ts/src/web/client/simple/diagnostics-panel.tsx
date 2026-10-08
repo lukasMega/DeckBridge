@@ -102,7 +102,7 @@ export function DiagnosticsPanel({
         checked={redact}
         onChange={setRedact}
       />
-      <p class="fine small">{PRIVACY_NOTE}</p>
+      <p class="fine">{PRIVACY_NOTE}</p>
       {logFilePath !== '' && (
         <ul class="identity-list panel-inset">
           <IdentityRow label="Log file" value={logFilePath} />

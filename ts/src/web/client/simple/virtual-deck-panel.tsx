@@ -116,7 +116,7 @@ function DeviceList({
       <ul class="push-tokens" id="deck-devices">
         {state.devices.map((d) => (
           <li key={d.id}>
-            <span class="push-token-name">{d.name}</span>
+            <span>{d.name}</span>
             <span class="multi-deck-note">
               {' '}
               added {new Date(d.createdAt).toLocaleDateString()} · {deviceStatus(d)}

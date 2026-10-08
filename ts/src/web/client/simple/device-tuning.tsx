@@ -7,7 +7,7 @@ import { ChipRadioGroup } from '../components/ChipRadioGroup.js';
 import type { ChipOption } from '../components/ChipRadioGroup.js';
 import { Collapsible } from '../components/Collapsible.js';
 import { GhostButton } from '../components/GhostButton.js';
-import { CheckField, NumberField, SelectField } from '../components/Fields.js';
+import { CheckField, NumberField, SelectField, TuningGroup } from '../components/Fields.js';
 import { getSnapshot, useStore } from '../lib/store.js';
 import type { StoreState } from '../lib/store.js';
 import { copyLabel, useCopyText } from '../lib/use-copy-text.js';
@@ -188,25 +188,19 @@ function ProfileField({
   readonly onChange: (value: string) => void;
 }): preact.JSX.Element | null {
   if (view.profiles.length === 0) return null;
+  const names = new Map([
+    ['', view.defaults.cora?.advertiseAs ? 'Default (Stream Deck +)' : 'Native (default)'],
+    ...view.profiles.map((p): [string, string] => [p.id, p.name]),
+  ]);
   return (
-    <label class="tuning-field">
-      <span>Emulation profile</span>
-      <select
-        id="tuning-emulation-profile"
-        class="input"
-        value={coraProfile}
-        onChange={(e) => onChange((e.target as HTMLSelectElement).value)}
-      >
-        <option value="">
-          {view.defaults.cora?.advertiseAs ? 'Default (Stream Deck +)' : 'Native (default)'}
-        </option>
-        {view.profiles.map((p) => (
-          <option key={p.id} value={p.id}>
-            {p.name}
-          </option>
-        ))}
-      </select>
-    </label>
+    <SelectField
+      id="tuning-emulation-profile"
+      label="Emulation profile"
+      value={coraProfile}
+      options={[...names.keys()]}
+      optionLabel={(id) => names.get(id) ?? id}
+      onChange={onChange}
+    />
   );
 }
 
@@ -355,14 +349,13 @@ export function DeviceTuningPanel(): preact.JSX.Element {
       )}
 
       <div class="tuning-grid">
-        <div class="tuning-group">
-          <p class="tuning-group-label">Layout</p>
+        <TuningGroup title="Layout">
           <div class="tuning-field">
             <span>Rotation</span>
             <ChipRadioGroup
               name="rotation"
               label="Rotation"
-              class="rotation-options"
+
               value={image.rotate ?? 0}
               options={ROTATION_CHIPS}
               onChange={(rotate) => patch({ rotate })}
@@ -397,9 +390,8 @@ export function DeviceTuningPanel(): preact.JSX.Element {
               onChange={(padFill) => patch({ padFill })}
             />
           </div>
-        </div>
-        <div class="tuning-group">
-          <p class="tuning-group-label">Image</p>
+        </TuningGroup>
+        <TuningGroup title="Image">
           <div class="tuning-field" role="group" aria-labelledby="tuning-dimensions-label">
             <span id="tuning-dimensions-label">Width/Height (px)</span>
             <div class="tuning-dimensions">{dimensions.map((f) => numberField(f, true))}</div>
@@ -417,7 +409,7 @@ export function DeviceTuningPanel(): preact.JSX.Element {
               onChange={(flipV) => patch({ flipV })}
             />
           </div>
-        </div>
+        </TuningGroup>
       </div>
       {typeof activeView.tunable.wire?.batchImageTransfers === 'boolean' && (
         <CheckField

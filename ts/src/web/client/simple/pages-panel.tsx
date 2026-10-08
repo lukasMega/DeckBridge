@@ -8,6 +8,7 @@ import type { PageStateMsg, PageSummary } from '../ui-types.js';
 import { ConfigSection } from './config-section.js';
 import { PageKeyGrid } from './page-key-grid.js';
 import { PageRow, useAction } from './page-row.js';
+import { GhostButton } from '../components/GhostButton.js';
 
 function statusText(pages: readonly PageSummary[], state: PageStateMsg): string {
   const active = pages.find((p) => p.id === state.activePageId);
@@ -92,16 +93,15 @@ function PageSnapshotForm({
         disabled={saving}
         onInput={(e) => setName((e.target as HTMLInputElement).value)}
       />
-      <button
-        class="ghostbtn page-disclosure"
+      <GhostButton
+        class="page-disclosure"
         id="pageIgnoreToggle"
-        type="button"
         aria-expanded={showKeys}
         aria-controls="pageSnapshotKeys"
         onClick={() => setShowKeys(!showKeys)}
       >
         Ignored keys ({ignored.size})
-      </button>
+      </GhostButton>
       {showKeys && (
         <div id="pageSnapshotKeys">
           <p class="xkeys-sub">Exclude keys that change, such as clocks or animations.</p>
@@ -124,18 +124,16 @@ function PageSnapshotForm({
         </p>
       )}
       <div class="page-actions">
-        <button
-          class="ghostbtn"
+        <GhostButton
           id="pageSaveBtn"
-          type="button"
           disabled={saving || name.trim() === '' || state.settling || state.held}
           onClick={save}
         >
           {saving ? 'Saving…' : 'Save'}
-        </button>
-        <button class="ghostbtn" type="button" disabled={saving} onClick={onCancel}>
+        </GhostButton>
+        <GhostButton disabled={saving} onClick={onCancel}>
           Cancel
-        </button>
+        </GhostButton>
       </div>
     </div>
   );
@@ -159,16 +157,14 @@ export function PagesSection(): preact.JSX.Element {
       toggleId="pagesToggle"
       aside={
         !adding && (
-          <button
-            class="ghostbtn"
+          <GhostButton
             id="pageSnapshotBtn"
-            type="button"
             disabled={!canCapture || full}
             title={reason}
             onClick={() => setAdding(true)}
           >
             Save current page…
-          </button>
+          </GhostButton>
         )
       }
     >
@@ -176,16 +172,15 @@ export function PagesSection(): preact.JSX.Element {
         {statusText(pages, state)}
       </p>
       {pages.length > 0 && (
-        <button
-          class="ghostbtn page-disclosure"
+        <GhostButton
+          class="page-disclosure"
           id="pageManageBtn"
-          type="button"
           aria-expanded={managing}
           aria-controls="savedPagesList"
           onClick={() => setManaging(!managing)}
         >
           Saved pages ({pages.length})
-        </button>
+        </GhostButton>
       )}
       {adding && (
         <PageSnapshotForm

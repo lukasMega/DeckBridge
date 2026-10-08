@@ -291,10 +291,14 @@ async function settle(page) {
   });
 }
 
-async function shoot(page, name, theme, width, { full = true } = {}) {
+async function shoot(page, name, theme, width, { full = true, element } = {}) {
   await settle(page);
   const file = `${name}.${theme}.${width}.png`;
-  const png = await page.screenshot({ animations: 'disabled', caret: 'hide', fullPage: full });
+  // `element`: for blocks whose surroundings carry random values (pairing codes, ports).
+  const shot = { animations: 'disabled', caret: 'hide' };
+  const png = element
+    ? await element.screenshot(shot)
+    : await page.screenshot({ ...shot, fullPage: full });
   writeFileSync(join(writeDir, file), png);
   results.push(file);
 }
@@ -493,6 +497,55 @@ const phases = [
         await page.locator('.deck-key').first().waitFor();
         await shot();
         await post('/api/virtual-deck/revoke-all');
+      },
+      // The offer's URLs, code and countdown are random: only the consent block is shot.
+      'qr-consent': async (page, shot) => {
+        await openSettings(page);
+        await page.locator('#stage .collapse-header', { hasText: 'Browser deck' }).click();
+        await page.locator('#deck-pair').click();
+        await page.locator('#qr-consent').waitFor();
+        await shot({ element: page.locator('#qr-consent') });
+        await post('/api/virtual-deck/pairing/cancel');
+      },
+    },
+  },
+  {
+    name: 'Mirabox 293S paired, push + plugin side keys',
+    arrange: async () => {
+      await post('/api/virtual-deck', { enabled: false });
+      await waitFor(async () => (await state()).docks.every((d) => d.index !== 3), {
+        timeoutMs: 10000,
+        what: 'browser deck dock removed',
+      });
+      await unpairAll();
+      await useDevice('mirabox-293s');
+      await post('/api/extra-key', { wireId: 16, widget: 'plugin', param: 'demo.js' });
+      await post('/api/extra-key', { wireId: 17, widget: 'external', param: 'obs-rec' });
+      await pair(cora + 1);
+    },
+    screens: {
+      'xkey-plugin-popover': async (page, shot) => {
+        // Plugin status depends on the plugin worker: pinned.
+        await page.route('**/api/plugins', (route) =>
+          route.fulfill({ json: { dir: '/plugins', files: ['demo.js'], status: { 16: 'ok' } } }),
+        );
+        await open(page, FRAMES_ALL);
+        await page.getByRole('button', { name: /plugin settings/ }).click();
+        await page.locator('.xkey-popover').waitFor();
+        await shot({ full: false });
+      },
+      'xkey-push-popover': async (page, shot) => {
+        await open(page, FRAMES_ALL);
+        await page.getByRole('button', { name: /external settings/ }).click();
+        await page.locator('.xkey-popover-curl').waitFor();
+        // The curl line carries this run's random web port.
+        await page.locator('.xkey-popover-curl').evaluate((el) => {
+          el.textContent = el.textContent.replace(
+            /localhost:\d+|127\.0\.0\.1:\d+/,
+            '127.0.0.1:41234',
+          );
+        });
+        await shot({ full: false });
       },
     },
   },

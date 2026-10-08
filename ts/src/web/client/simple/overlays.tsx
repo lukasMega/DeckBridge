@@ -3,6 +3,7 @@
 import { DocsLink } from '../components/DocsLink.js';
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { ICON, Icon } from '../components/Icon.js';
+import { Modal } from '../components/Modal.js';
 import { HELP } from '../ui-help.js';
 import { Collapsible } from '../components/Collapsible.js';
 import { IdentityRow } from '../components/IdentityRow.js';
@@ -103,50 +104,28 @@ function MdnsNameEditor({
 }
 
 export function AboutPopover({ onClose }: Readonly<{ onClose: () => void }>): preact.JSX.Element {
-  useDismiss(onClose);
-
-  const handleScrimClick = (e: MouseEvent): void => {
-    if (e.target === e.currentTarget) onClose();
-  };
-
   return (
-    <div class="scrim" onClick={handleScrimClick}>
-      <div
-        class="popover floating-surface"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="about-title"
-      >
-        <button
-          class="pop-close circle"
-          aria-label="Close"
-          type="button"
-          onClick={onClose}
-          // eslint-disable-next-line @eslint-react/dom-no-dangerously-set-innerhtml -- static trusted SVG icon markup
-          dangerouslySetInnerHTML={{ __html: ICON.close }}
-        />
-        <h2 id="about-title">What is DeckBridge?</h2>
-        <p class="about-intro">
-          Use a USB Stream Deck with the Elgato Stream Deck app over your local network. DeckBridge
-          runs on your computer and appears as a network device.
+    <Modal title="What is DeckBridge?" titleId="about-title" onClose={onClose}>
+      <p class="about-intro">
+        Use a USB Stream Deck with the Elgato Stream Deck app over your local network. DeckBridge
+        runs on your computer and appears as a network device.
+      </p>
+      <p class="about-usage">Free, community-built software for personal and hobby use.</p>
+      <DocsLink topic="home" block label="Documentation" />
+      <div class="about-notice">
+        <h3>Independent project</h3>
+        <p>
+          DeckBridge is not affiliated with, endorsed by, or supported by Elgato or Corsair.
+          &ldquo;Stream Deck&rdquo; and &ldquo;Elgato&rdquo; are trademarks of their respective
+          owners.
         </p>
-        <p class="about-usage">Free, community-built software for personal and hobby use.</p>
-        <DocsLink topic="home" block label="Documentation" />
-        <div class="about-notice">
-          <h3>Independent project</h3>
-          <p>
-            DeckBridge is not affiliated with, endorsed by, or supported by Elgato or Corsair.
-            &ldquo;Stream Deck&rdquo; and &ldquo;Elgato&rdquo; are trademarks of their respective
-            owners.
-          </p>
-          <p>
-            For personal and hobby use only. Not for professional use. Does not replace the Elgato
-            Network Dock. For reliable setups, use officially supported Elgato hardware.
-          </p>
-        </div>
-        <p class="about-version">DeckBridge v{__VERSION__}</p>
+        <p>
+          For personal and hobby use only. Not for professional use. Does not replace the Elgato
+          Network Dock. For reliable setups, use officially supported Elgato hardware.
+        </p>
       </div>
-    </div>
+      <p class="about-version">DeckBridge v{__VERSION__}</p>
+    </Modal>
   );
 }
 

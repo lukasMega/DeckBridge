@@ -3,7 +3,7 @@
 // per dock so a dock switch re-reads that dock's settings.
 import { useState } from 'preact/hooks';
 import { Collapsible } from '../components/Collapsible.js';
-import { NumberField, SelectField, ToggleRow } from '../components/Fields.js';
+import { NumberField, SelectField, ToggleRow, TuningGroup } from '../components/Fields.js';
 import { useStore } from '../lib/store.js';
 import { postJson, useFetched } from '../lib/ui-api.js';
 import { Feedback, useAsyncAction } from '../lib/ui-async.js';
@@ -114,8 +114,7 @@ function IdleGroups({
   const s = view.settings;
   return (
     <>
-      <div class="tuning-group">
-        <p class="tuning-group-label">Dim when idle</p>
+      <TuningGroup title="Dim when idle">
         <ToggleRow
           id="toggle-standby-idle-dim"
           label="Dim the deck when idle"
@@ -137,9 +136,8 @@ function IdleGroups({
           disabled={!s.idleDim}
           save={save}
         />
-      </div>
-      <div class="tuning-group">
-        <p class="tuning-group-label">Screen off</p>
+      </TuningGroup>
+      <TuningGroup title="Screen off">
         <ToggleRow
           id="toggle-standby-off"
           label="Turn the screen off when idle"
@@ -165,9 +163,8 @@ function IdleGroups({
         <p class="multi-deck-note">
           {view.canSleep ? 'This device: sleep mode' : 'This device: brightness 0 (no sleep mode)'}
         </p>
-      </div>
-      <div class="tuning-group">
-        <p class="tuning-group-label">Wake press</p>
+      </TuningGroup>
+      <TuningGroup title="Wake press">
         <SelectField
           label="First press on a dimmed or dark deck"
           value={s.wakePress}
@@ -178,7 +175,7 @@ function IdleGroups({
         {view.hasCommands && (
           <p class="multi-deck-note">Sleep/wake commands are set in settings.json</p>
         )}
-      </div>
+      </TuningGroup>
     </>
   );
 }
@@ -193,8 +190,7 @@ function AwayGroups({
     : ['none', 'off'];
   return (
     <>
-      <div class="tuning-group">
-        <p class="tuning-group-label">When the Elgato app is away</p>
+      <TuningGroup title="When the Elgato app is away">
         <SelectField
           label="Deck shows"
           value={s.appGoneAction}
@@ -209,9 +205,8 @@ function AwayGroups({
           disabled={s.appGoneAction !== 'clock'}
           save={save}
         />
-      </div>
-      <div class="tuning-group">
-        <p class="tuning-group-label">Night mode</p>
+      </TuningGroup>
+      <TuningGroup title="Night mode">
         <ToggleRow
           id="toggle-standby-night"
           label="Night mode"
@@ -245,16 +240,15 @@ function AwayGroups({
           disabled={!s.night}
           onChange={(nightOffWhenIdle) => save({ nightOffWhenIdle })}
         />
-      </div>
-      <div class="tuning-group">
-        <p class="tuning-group-label">Pixel shift</p>
+      </TuningGroup>
+      <TuningGroup title="Pixel shift">
         <ToggleRow
           id="toggle-standby-pixel-shift"
           label="Shift DeckBridge widgets by 1 px (reduces image retention)"
           checked={s.pixelShift}
           onChange={(pixelShift) => save({ pixelShift })}
         />
-      </div>
+      </TuningGroup>
     </>
   );
 }

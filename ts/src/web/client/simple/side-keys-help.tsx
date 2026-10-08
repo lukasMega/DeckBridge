@@ -1,4 +1,5 @@
 import { DocsLink } from '../components/DocsLink.js';
+import { isBackdropClick } from '../components/Modal.js';
 import { useEffect, useRef, useState } from 'preact/hooks';
 import type { DockUi } from '../ui-types.js';
 
@@ -28,16 +29,7 @@ function SideKeysDialog({
       aria-labelledby="side-keys-help-title"
       onClose={onClose}
       onClick={(event) => {
-        if (event.target === event.currentTarget) {
-          const bounds = event.currentTarget.getBoundingClientRect();
-          if (
-            event.clientX < bounds.left ||
-            event.clientX > bounds.right ||
-            event.clientY < bounds.top ||
-            event.clientY > bounds.bottom
-          )
-            onClose();
-        }
+        if (isBackdropClick(event)) onClose();
       }}
     >
       <button
