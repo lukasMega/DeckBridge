@@ -70,7 +70,7 @@ function minifyHtml(src) {
     return ` HTMLPROTECT${protectedBlocks.length - 1} `;
   });
   // Repeat until stable so nested comment fragments cannot reassemble.
-  for (let prev = ''; prev !== html; ) {
+  for (let prev = ''; prev !== html;) {
     prev = html;
     html = html.replace(/<!--[\s\S]*?-->/g, '');
   }
@@ -261,14 +261,36 @@ function measureNativeLibs() {
   const libs = cands.map((p) => {
     const raw = readFileSync(p);
     const g = gzipSync(raw, { level: 9 });
+    const b64 = g.toString('base64');
     return {
       name: p.split(/[/\\]/).pop(),
       raw: raw.length,
       gzip: g.length,
-      b64: Math.ceil(g.length / 3) * 4,
+      b64: b64.length,
+      b64Gzip: gz(b64), // what the compiled bytecode deflate makes of the embedded string
     };
   });
   return libs.length ? libs : null;
+}
+
+// Generated assets built alone, so their embedded-string cost shows even where a bundle
+// tree-shakes part of them.
+function measureAssets() {
+  const dir = join(TS, 'src/assets');
+  return Promise.all(
+    readdirSync(dir)
+      .filter((f) => f.endsWith('.ts'))
+      .map(async (f) => {
+        const r = await bundle({
+          entryPoints: [join(dir, f)],
+          bundle: true,
+          format: 'esm',
+          platform: 'neutral',
+          target: 'esnext',
+        });
+        return { name: f, raw: r.raw, gzip: r.gzip };
+      }),
+  );
 }
 
 export async function measure() {
@@ -317,6 +339,7 @@ export async function measure() {
     workersRaw: workers.reduce((s, w) => s + w.raw, 0),
     workersGzip: workers.reduce((s, w) => s + w.gzip, 0),
     binary: measureBinary(),
+    assets: await measureAssets(),
     nativeLibs: measureNativeLibs(),
   };
 }
@@ -378,10 +401,15 @@ function print(m, top) {
   );
   console.log(`  CSS declarations, deck: ${n(css.files[2].declarations)}`);
 
+  console.log('\nGenerated assets, built alone (src/assets, never hand-edit):');
+  for (const a of m.assets)
+    console.log(`  ${a.name.padEnd(22)}${col(n(a.raw), 11)}${col(n(a.gzip), 11)}`);
   if (m.nativeLibs) {
-    console.log('\nNative libs (info, embedded as gzip+base64):');
+    console.log('\nNative libs (info), embedded as gzip+base64 strings:');
     for (const l of m.nativeLibs)
-      console.log(`  ${l.name.padEnd(28)} raw ${n(l.raw)}  gzip ${n(l.gzip)}  base64 ${n(l.b64)}`);
+      console.log(
+        `  ${l.name.padEnd(28)} raw ${n(l.raw)}  gzip ${n(l.gzip)}  base64 ${n(l.b64)}  base64 gzipped ${n(l.b64Gzip)}`,
+      );
   }
   if (m.binary) {
     console.log(`\nBinary: ./deckbridge ${n(m.binary.binary)} B`);

@@ -1,11 +1,7 @@
 import assert from 'tjs:assert';
 import type { BitmapFont } from '../src/assets/font-atlas.js';
-import {
-  FONT_LADDER,
-  fontGlyphIndex,
-  NARROW_LADDER,
-  SLIM_LADDER,
-} from '../src/assets/font-atlas.js';
+import { FONT_LADDER, NARROW_LADDER, SLIM_LADDER } from '../src/assets/font-atlas.js';
+import { fontGlyphIndex } from '../src/assets/font-glyph-index.js';
 import {
   glyphAdvance,
   layoutWidget,

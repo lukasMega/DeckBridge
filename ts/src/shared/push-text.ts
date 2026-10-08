@@ -1,6 +1,6 @@
 // Push API text rules: channel names, body validation and the glyph-safe sanitizer.
 // Pure (no tjs), so the CLI and the web server share it.
-import { fontGlyphIndex } from '../assets/font-atlas.js';
+import { fontGlyphIndex } from '../assets/font-glyph-index.js';
 
 export const PUSH_CHANNEL_RE = /^[a-z0-9][a-z0-9._-]{0,31}$/;
 export const isPushChannel = (v: unknown): v is string =>

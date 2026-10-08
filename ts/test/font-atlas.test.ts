@@ -1,11 +1,7 @@
 import assert from 'tjs:assert';
-import {
-  FONT_LADDER,
-  NARROW_LADDER,
-  SLIM_LADDER,
-  fontGlyphIndex,
-} from '../src/assets/font-atlas.js';
+import { FONT_LADDER, NARROW_LADDER, SLIM_LADDER } from '../src/assets/font-atlas.js';
 import type { BitmapFont } from '../src/assets/font-atlas.js';
+import { fontGlyphIndex } from '../src/assets/font-glyph-index.js';
 import { composeWidgetBmp } from '../src/shared/widget-raster.js';
 import { layoutWidget } from '../src/shared/widget-layout.js';
 import { test, summary } from './helpers/harness.js';

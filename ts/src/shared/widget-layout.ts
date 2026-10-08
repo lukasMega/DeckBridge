@@ -1,8 +1,9 @@
 // Pure text layout for DeckBridge display widgets (side keys, touch-strip zones), in
 // pixels so the proportional Narrow font works. Shared so the WebUI server renders
 // size previews with the code the widget scheduler (extra-keys.ts) paints with.
-import { FONT_LADDER, NARROW_LADDER, SLIM_LADDER, fontGlyphIndex } from '../assets/font-atlas.js';
+import { FONT_LADDER, NARROW_LADDER, SLIM_LADDER } from '../assets/font-atlas.js';
 import type { BitmapFont } from '../assets/font-atlas.js';
+import { fontGlyphIndex } from '../assets/font-glyph-index.js';
 import type { ExtraKeyTextStyle, ExtraKeyWrap } from '../web/contract.js';
 
 /** Ladder index of each line role at step 0 — 8×16 and 16×32, the pre-ladder fonts. */

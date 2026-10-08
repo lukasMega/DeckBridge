@@ -140,7 +140,9 @@ const intInRange =
 const bool: StyleCheck = (v, field) =>
   typeof v === 'boolean' ? null : `${field} must be true or false`;
 
-const STYLE_CHECKS: Record<keyof ExtraKeyTextStyle, StyleCheck> = {
+// The PURE-annotated wrappers keep these tables tree-shakeable: types.ts re-exports this module, so workers
+// that only need a constant would otherwise bundle the validators too.
+const STYLE_CHECKS: Record<keyof ExtraKeyTextStyle, StyleCheck> = /* @__PURE__ */ (() => ({
   textSize: oneOf(EXTRA_KEY_TEXT_SIZES),
   wrap: oneOf(EXTRA_KEY_WRAPS),
   font: oneOf(EXTRA_KEY_FONTS),
@@ -154,7 +156,7 @@ const STYLE_CHECKS: Record<keyof ExtraKeyTextStyle, StyleCheck> = {
   bold: bool,
   outline: color,
   ellipsis: bool,
-};
+}))();
 
 /** null when `v` is a valid text style; else a message naming the bad field
  *  (`style.padding must be an integer 0..16`). Unknown fields are rejected. */
@@ -234,7 +236,7 @@ const numberIn =
       : `${field} must be a number between ${min} and ${max}`;
 
 /** Every optional config field; unknown fields are ignored. */
-const CONFIG_CHECKS: ReadonlyArray<[string, StyleCheck]> = [
+const CONFIG_CHECKS: ReadonlyArray<[string, StyleCheck]> = /* @__PURE__ */ (() => [
   ['param', optional(stringUpTo(EXTRA_KEY_PARAM_MAX))],
   ['pluginArg', optional(stringUpTo(EXTRA_KEY_PARAM_MAX))],
   ['style', optional((v) => textStyleError(v))],
@@ -247,7 +249,7 @@ const CONFIG_CHECKS: ReadonlyArray<[string, StyleCheck]> = [
   // Legacy top-level fields — folded into style by normalizeExtraKeyConfig.
   ['textSize', optional(oneOf(EXTRA_KEY_TEXT_SIZES))],
   ['wrap', optional(oneOf(EXTRA_KEY_WRAPS))],
-];
+])();
 
 /** `v` is one of `allowed` — the enum guard shared by route bodies and settings.json. */
 export const isOneOf = <T>(allowed: readonly T[], v: unknown): v is T =>
