@@ -69,8 +69,12 @@ function minifyHtml(src) {
     protectedBlocks.push(m);
     return ` HTMLPROTECT${protectedBlocks.length - 1} `;
   });
+  // Repeat until stable so nested comment fragments cannot reassemble.
+  for (let prev = ''; prev !== html; ) {
+    prev = html;
+    html = html.replace(/<!--[\s\S]*?-->/g, '');
+  }
   html = html
-    .replace(/<!--[\s\S]*?-->/g, '')
     .replace(/>\s+</g, '><')
     .replace(/\s{2,}/g, ' ')
     .trim();
