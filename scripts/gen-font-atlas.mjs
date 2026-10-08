@@ -136,7 +136,7 @@ function packFont(font, cell) {
       }
     }
   }
-  return Buffer.from(bytes).toString('base64');
+  return Buffer.from(bytes);
 }
 
 async function load(url) {
@@ -145,7 +145,17 @@ async function load(url) {
   return res.text();
 }
 
-const wrapB64 = (b64) => `'${b64}'`;
+/** Latin-1 string literal (one char per byte). Printable ASCII stays readable, everything else is
+ *  an escape, so the generated file is plain ASCII and survives any editor or formatter. */
+function latin1Literal(bytes) {
+  let out = "'";
+  for (const b of Buffer.from(bytes)) {
+    if (b === 0x27 || b === 0x5c) out += `\\${String.fromCharCode(b)}`;
+    else if (b >= 0x20 && b < 0x7f) out += String.fromCharCode(b);
+    else out += `\\x${b.toString(16).padStart(2, '0')}`;
+  }
+  return `${out}'`;
+}
 
 async function emit({ name, url, scale = 1 }, mono) {
   const text = await load(url);
@@ -158,11 +168,11 @@ async function emit({ name, url, scale = 1 }, mono) {
     `  height: ${cell.h * scale},`,
     `  inkTop: ${ink.inkTop * scale},`,
     `  inkHeight: ${ink.inkHeight * scale},`,
-    `  bits:\n    ${wrapB64(packFont(font, cell))},`,
+    `  bits:\n    ${latin1Literal(packFont(font, cell))},`,
   ];
   if (!mono) {
     const adv = CODEPOINTS.map((cp) => font.glyphs.get(cp).advance * scale);
-    fields.push(`  advances: ${wrapB64(Buffer.from(adv).toString('base64'))},`);
+    fields.push(`  advances: ${latin1Literal(adv)},`);
     if (cell.originX) fields.push(`  originX: ${cell.originX * scale},`);
   }
   if (scale > 1) fields.push(`  scale: ${scale},`);
@@ -206,9 +216,9 @@ async function emitAlpha({ name, line, weight }, opentype) {
   const src =
     `const ${name}: AlphaFont = {\n  kind: 'alpha',\n  width: ${width},\n  height: ${line},\n` +
     `  inkTop: ${ink.inkTop},\n  inkHeight: ${ink.inkHeight},\n` +
-    `  alpha:\n    ${wrapB64(Buffer.from(alpha).toString('base64'))},\n` +
-    `  boxes: ${wrapB64(Buffer.from(boxes).toString('base64'))},\n` +
-    `  advances: ${wrapB64(Buffer.from(adv).toString('base64'))},\n};\n`;
+    `  alpha:\n    ${latin1Literal(alpha)},\n` +
+    `  boxes: ${latin1Literal(boxes)},\n` +
+    `  advances: ${latin1Literal(adv)},\n};\n`;
   return { src, adv, width, ink, alphaBytes: alpha.length };
 }
 
@@ -219,7 +229,7 @@ function emitAlphaScaled(name, base, adv, line, ink, scale) {
   return (
     `const ${name}: AlphaFont = {\n  kind: 'alpha',\n  width: ${Math.max(...scaled)},\n` +
     `  height: ${line * scale},\n  inkTop: ${ink.inkTop * scale},\n  inkHeight: ${ink.inkHeight * scale},\n  alpha: ${base}.alpha,\n  boxes: ${base}.boxes,\n` +
-    `  advances: ${wrapB64(Buffer.from(scaled).toString('base64'))},\n  scale: ${scale},\n};\n`
+    `  advances: ${latin1Literal(scaled)},\n  scale: ${scale},\n};\n`
   );
 }
 
@@ -267,7 +277,7 @@ interface FontMetrics {
   readonly inkTop: number;
   /** ASCII ink height in rows (after \`scale\`); tight rows are this tall instead of \`height\`. */
   readonly inkHeight: number;
-  /** base64, one byte per glyph: advance width in px. Absent = monospace (= width). */
+  /** Latin-1 string, one char (= byte) per glyph: advance width in px. Absent = monospace (= width). */
   readonly advances?: string;
   /** Cell left edge relative to the pen, ≤ 0. Absent = 0. Bits fonts only. */
   readonly originX?: number;
@@ -276,7 +286,7 @@ interface FontMetrics {
 /** 1-bit cells. */
 export interface BitsFont extends FontMetrics {
   readonly kind?: 'bits';
-  /** base64 of the packed glyph bitmaps, stored at 1/scale. */
+  /** Latin-1 string (one char per byte) of the packed glyph bitmaps, stored at 1/scale. */
   readonly bits: string;
   /** Nearest-neighbor upscale of the stored bits. Absent = 1. */
   readonly scale?: number;
@@ -285,9 +295,9 @@ export interface BitsFont extends FontMetrics {
 /** Anti-aliased glyphs in tight boxes. Box values are stored at 1/scale like \`bits\`. */
 export interface AlphaFont extends FontMetrics {
   readonly kind: 'alpha';
-  /** base64, 4-bit coverage (0..15), 2 px per byte high nibble first; per glyph h rows of ceil(w/2) bytes. */
+  /** Latin-1 string, 4-bit coverage (0..15), 2 px per byte high nibble first; per glyph h rows of ceil(w/2) bytes. */
   readonly alpha: string;
-  /** base64, 4 bytes per glyph: x (int8, from the pen), top (rows below the cell top), w, h. */
+  /** Latin-1 string, 4 bytes per glyph: x (int8, from the pen), top (rows below the cell top), w, h. */
   readonly boxes: string;
   /** Nearest-neighbor upscale of the stored alpha. Absent = 1. */
   readonly scale?: number;

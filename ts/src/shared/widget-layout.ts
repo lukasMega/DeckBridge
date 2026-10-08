@@ -70,7 +70,7 @@ export function glyphAdvance(font: BitmapFont, codepoint: number): number {
   if (!font.advances) return font.width;
   let adv = decodedAdvances.get(font);
   if (!adv) {
-    adv = new Uint8Array(Buffer.from(font.advances, 'base64'));
+    adv = new Uint8Array(Buffer.from(font.advances, 'latin1'));
     decodedAdvances.set(font, adv);
   }
   const idx = fontGlyphIndex(codepoint);

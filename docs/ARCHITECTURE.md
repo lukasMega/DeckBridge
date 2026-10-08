@@ -53,8 +53,8 @@ assets.
 ## Running a packaged release
 
 The standalone `deckbridge` binary is self-contained. Native dylibs (`libdeckbridge_native`,
-`libhidapi`) are embedded (gzip+base64) and auto-extracted to a per-version cache dir on first
-run (paths: [Build pipeline](#build-pipeline)). A `deckbridge-tray` sidecar next to the binary
+`libhidapi`) are embedded (raw bytes as latin1 strings) and auto-extracted to a per-version cache
+dir on first run (paths: [Build pipeline](#build-pipeline)). A `deckbridge-tray` sidecar next to the binary
 is launched if present; the tray is optional.
 
 ## Data flow
@@ -657,6 +657,7 @@ glyphs and blends alpha glyphs over the canvas. `POST /api/extra-key/preview` re
 painted lines at every size in that style for the size picker; that is exact because the lines
 don't depend on the size. All atlases hold ASCII, Latin-1 and `…`; their shared glyph index is
 `assets/font-glyph-index.ts`, kept out of the atlas so the workers don't bundle it.
+The atlas data are latin1 strings (one char per byte), decoded with `Buffer.from(s, 'latin1')`.
 `scripts/gen-font-atlas.mjs` regenerates both files from the upstream BDFs and TTFs.
 
 </details>
@@ -744,9 +745,10 @@ and embedded into the main bundle through a virtual module:
 The browser-side `ui-entry.ts` subtree is bundled the same way and embedded as text via the
 `ui-ts-as-text` plugin.
 
-Native dylibs (`libdeckbridge_native`, `libhidapi`) are **gzip+base64-encoded** into
-`bundle.js` at build time (default on; `EMBED_NATIVE_LIBS=0` / `--no-embed` disables), making
-the bundle **platform-specific**. On first run they extract to
+Native dylibs (`libdeckbridge_native`, `libhidapi`) are embedded into `bundle.js` at build time
+as **latin1 strings** (one char per byte; QuickJS keeps them 8-bit, and the compiled bytecode
+deflates raw bytes smaller than base64 or gzip+base64). Default on; `EMBED_NATIVE_LIBS=0` /
+`--no-embed` disables. This makes the bundle **platform-specific**. On first run they extract to
 `~/Library/Caches/deckbridge/native-<hash>/` (macOS) or
 `${XDG_CACHE_HOME:-~/.cache}/deckbridge/native-<hash>/` (Linux). `DECKBRIDGE_NATIVE_LIB` /
 `HIDAPI_LIB` take precedence when set (dev: `mise run build` populates them from the just-built
@@ -768,7 +770,7 @@ flowchart LR
     SWSTR["scan worker ESM string"]
     PWSTR["plugin worker ESM string"]
     EB2["esbuild pass 4<br/>bundle main"]
-    BUNDLE["ts/dist/bundle.js<br/>~560 kB ESM<br/>(worker strings + native dylibs inlined)"]
+    BUNDLE["ts/dist/bundle.js<br/>~2.2 MB ESM<br/>(worker strings + native dylibs inlined)"]
     TJSC["tjs compile<br/>QuickJS bytecode"]
     BIN["./deckbridge<br/>standalone binary"]
 
@@ -781,7 +783,7 @@ flowchart LR
     TS --> EB2 --> BUNDLE
     BUNDLE -->|"embed bytecode"| TJSC --> BIN
 
-    subgraph "native dylibs (gzip+base64 embedded, default)"
+    subgraph "native dylibs (latin1 strings embedded, default)"
         IMG_DL["libdeckbridge_native.*<br/>libhidapi.*"]
     end
     IMG_DL --> EB2
@@ -1038,7 +1040,7 @@ deckbridge/
 │   │   ├── dev/          ← hardware probes + probe-utils
 │   │   ├── ffi/ platform/ assets/    ← FFI bindings · txiki shims · generated blobs
 │   │   └── web/          ← contract*.ts (wire DTOs) · server/ · client/ (browser UI)
-│   └── dist/             ← bundle.js (~560 kB, workers + native dylibs inlined)
+│   └── dist/             ← bundle.js (~2.2 MB, workers + native dylibs inlined)
 │                            · hid-worker.js · hid-scan-worker.js · plugin-worker.js (debug copies)
 ├── rust/
 │   ├── deckbridge-native/   ← JPEG resize/rotate + HID path-enum cdylib (FFI via DECKBRIDGE_NATIVE_LIB);

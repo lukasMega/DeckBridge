@@ -1,4 +1,4 @@
-// Extracts bundle-embedded native libs (gzip+base64) into a cache dir named
+// Extracts bundle-embedded native libs (raw bytes as latin1 strings) into a cache dir named
 // native-<build hash> — so an upgrade can never reuse stale libs — then points
 // DECKBRIDGE_NATIVE_LIB / HIDAPI_LIB at them. A pre-set env var wins and skips
 // that lib entirely. Writes are <name>.tmp-<pid> + atomic rename.
@@ -16,52 +16,6 @@ const ENV_BY_PREFIX: Array<[string, string]> = [
 export function envVarFor(name: string): string | undefined {
   return ENV_BY_PREFIX.find(([prefix]) => name.startsWith(prefix))?.[1];
 }
-
-export function b64ToBytes(b64: string): Uint8Array {
-  return Buffer.from(b64, 'base64');
-}
-
-export async function gunzip(data: Uint8Array): Promise<Uint8Array> {
-  const ds = new DecompressionStream('gzip');
-  const writer = ds.writable.getWriter();
-  const reader = ds.readable.getReader();
-  const writeDone = writer.write(data as BufferSource).then(() => writer.close());
-  // Observed up front so a failure that wins the race can't surface as unhandled.
-  const writeSettled = writeDone.then(
-    () => undefined,
-    (e: unknown) => e,
-  );
-  const chunks: Uint8Array[] = [];
-  let total = 0;
-  try {
-    for (;;) {
-      const { value, done } = await reader.read();
-      if (done) break;
-      chunks.push(value);
-      total += value.length;
-    }
-    await writeDone;
-  } catch (e) {
-    void reader.cancel(e).catch(() => undefined);
-    void writer.abort(e).catch(() => undefined);
-    await writeSettled;
-    throw e;
-  } finally {
-    reader.releaseLock();
-    writer.releaseLock();
-  }
-  // Drain chunks as they are copied so decoded data and output never fully coexist.
-  const out = new Uint8Array(total);
-  let off = 0;
-  for (let i = 0; i < chunks.length; i++) {
-    out.set(chunks[i]!, off);
-    off += chunks[i]!.length;
-    chunks[i] = EMPTY;
-  }
-  return out;
-}
-
-const EMPTY = new Uint8Array(0);
 
 // `platform` defaults to the real platformName() — tests pass it explicitly so
 // each branch is exercised deterministically regardless of the host OS running
@@ -103,7 +57,11 @@ export async function extractLibs(
   for (const lib of libs) {
     const target = `${dir}/${lib.name}`;
     if (!(await fileHasSize(target, lib.rawSize))) {
-      const raw = await gunzip(b64ToBytes(lib.gzB64));
+      // Stands in for the CRC the old gzip embed had: never write a truncated library.
+      if (lib.data.length !== lib.rawSize) {
+        throw new Error(`${lib.name}: embedded ${lib.data.length} bytes, expected ${lib.rawSize}`);
+      }
+      const raw = Buffer.from(lib.data, 'latin1');
       const tmp = `${target}.tmp-${tjs.pid}`;
       await tjs.writeFile(tmp, raw, { mode: 0o755 });
       try {

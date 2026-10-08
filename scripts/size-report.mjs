@@ -271,7 +271,8 @@ function measureBinary() {
   return { binary: b, runtime: r, runtimePath: runtime, payload: b - r };
 }
 
-// Informational: the libs build.mjs embeds as gzip+base64 (needs a native build to exist).
+// Informational: the libs build.mjs embeds as raw latin1 strings (needs a native build to exist).
+// The bytecode deflate is what costs binary bytes, so gzip -9 of the raw file is the proxy.
 function measureNativeLibs() {
   const ext = { darwin: 'dylib', win32: 'dll' }[process.platform] ?? 'so';
   const cands = [
@@ -281,15 +282,7 @@ function measureNativeLibs() {
   ].filter(existsSync);
   const libs = cands.map((p) => {
     const raw = readFileSync(p);
-    const g = gzipSync(raw, { level: 9 });
-    const b64 = g.toString('base64');
-    return {
-      name: p.split(/[/\\]/).pop(),
-      raw: raw.length,
-      gzip: g.length,
-      b64: b64.length,
-      b64Gzip: gz(b64), // what the compiled bytecode deflate makes of the embedded string
-    };
+    return { name: p.split(/[/\\]/).pop(), raw: raw.length, gzip: gz(raw) };
   });
   return libs.length ? libs : null;
 }
@@ -308,6 +301,7 @@ function measureAssets() {
           format: 'esm',
           platform: 'neutral',
           target: 'esnext',
+          charset: 'utf8',
         });
         return { name: f, raw: r.raw, gzip: r.gzip };
       }),
@@ -330,6 +324,8 @@ export async function measure({ mangle = true } = {}) {
     }),
     bundle({
       ...shared,
+      // As in build.mjs: the latin1 atlas strings stay raw UTF-8 instead of \xNN escapes.
+      charset: 'utf8',
       entryPoints: [join(TS, 'src/main/app.ts')],
       external: [...shared.external, 'virtual:*'],
       plugins: [clientStubs, noMockDriver, textAssets(true)],
@@ -449,10 +445,10 @@ function print(m, top) {
   for (const a of m.assets)
     console.log(`  ${a.name.padEnd(22)}${col(n(a.raw), 11)}${col(n(a.gzip), 11)}`);
   if (m.nativeLibs) {
-    console.log('\nNative libs (info), embedded as gzip+base64 strings:');
+    console.log('\nNative libs (info), embedded as raw latin1 strings:');
     for (const l of m.nativeLibs)
       console.log(
-        `  ${l.name.padEnd(28)} raw ${n(l.raw)}  gzip ${n(l.gzip)}  base64 ${n(l.b64)}  base64 gzipped ${n(l.b64Gzip)}`,
+        `  ${l.name.padEnd(28)} raw ${n(l.raw)}  gzip ${n(l.gzip)} (~ cost in the binary)`,
       );
   }
   if (m.binary) {

@@ -17,7 +17,7 @@ const decodedFonts = new Map<BitsFont, Uint8Array>();
 function fontBits(font: BitsFont): Uint8Array {
   let bits = decodedFonts.get(font);
   if (!bits) {
-    bits = new Uint8Array(Buffer.from(font.bits, 'base64'));
+    bits = new Uint8Array(Buffer.from(font.bits, 'latin1'));
     decodedFonts.set(font, bits);
   }
   return bits;
@@ -34,14 +34,14 @@ const decodedAlpha = new Map<AlphaFont, DecodedAlpha>();
 function fontAlpha(font: AlphaFont): DecodedAlpha {
   let d = decodedAlpha.get(font);
   if (!d) {
-    const boxes = new Uint8Array(Buffer.from(font.boxes, 'base64'));
+    const boxes = new Uint8Array(Buffer.from(font.boxes, 'latin1'));
     const offsets = new Uint32Array(boxes.length / 4);
     let at = 0;
     for (let i = 0; i < offsets.length; i++) {
       offsets[i] = at;
       at += Math.ceil(boxes[i * 4 + 2]! / 2) * boxes[i * 4 + 3]!;
     }
-    d = { alpha: new Uint8Array(Buffer.from(font.alpha, 'base64')), boxes, offsets };
+    d = { alpha: new Uint8Array(Buffer.from(font.alpha, 'latin1')), boxes, offsets };
     decodedAlpha.set(font, d);
   }
   return d;
