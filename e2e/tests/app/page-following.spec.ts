@@ -95,14 +95,24 @@ test.describe('layouts that follow the Elgato page (293S, advertised as MK.2)', 
 
     await gotoApp(page, `${base}/`);
     await expect(page.locator('#pagesStatus')).toContainText('Showing "A"');
+    await expect(page.locator('#savedPagesList')).toHaveAttribute('hidden', '');
+    await click(page.locator('#pageManageBtn'));
     await expect(page.locator('.page-row .dock-chip--paired')).toHaveText('Active');
-    await expect(page.locator('input[name="layoutScope"]')).toHaveCount(2);
+    await expect(page.locator('.page-row .page-options')).toHaveCount(0);
+    await click(page.locator('.page-options-toggle'));
+    await expect(page.locator('.page-row .page-name')).toHaveValue('A');
+    await click(page.locator('#pageManageBtn'));
+    await expect(page.locator('#layoutScopeSelect option')).toHaveCount(2);
 
     // Saving through the UI posts the name and the ignored keys.
     const posted = page.waitForRequest((r) => r.url().endsWith('/api/pages/snapshot'));
     await click(page.locator('#pageSnapshotBtn'));
+    await expect(page.locator('.page-form .crop-key')).toHaveCount(0);
     await typeInto(page.locator('#pageNameInput'), 'Copy of A');
     await click(page.locator('#pageSaveBtn'));
     expect((await posted).postDataJSON()).toMatchObject({ name: 'Copy of A' });
+    await expect(page.locator('.page-form')).toHaveCount(0);
+    await expect(page.locator('.page-row')).toHaveCount(2);
+    await expect(page.locator('#pageManageBtn')).toHaveAttribute('aria-expanded', 'true');
   });
 });

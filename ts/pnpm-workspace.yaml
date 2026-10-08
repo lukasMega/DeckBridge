@@ -4,6 +4,9 @@ allowBuilds:
   "esbuild": true
   "unrs-resolver": true
 
+minimumReleaseAgeExclude:
+  - preact@11.0.1
+
 # Keep transitive browser data tooling above security-fix floors.
 # Drop these once all direct parents resolve fixed releases themselves.
 overrides:

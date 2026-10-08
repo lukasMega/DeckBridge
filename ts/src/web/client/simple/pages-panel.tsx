@@ -35,12 +35,24 @@ function captureBlocker(full: boolean, state: PageStateMsg): string | undefined 
 function PageSnapshotForm({
   state,
   activeName,
-  onDone,
-}: Readonly<{ state: PageStateMsg; activeName?: string; onDone: () => void }>): preact.JSX.Element {
+  onCancel,
+  onSaved,
+}: Readonly<{
+  state: PageStateMsg;
+  activeName?: string;
+  onCancel: () => void;
+  onSaved: () => void;
+}>): preact.JSX.Element {
   const [name, setName] = useState('');
   const [ignored, setIgnored] = useState<ReadonlySet<number>>(() => new Set(state.suggestedIgnore));
   const touchedRef = useRef(false);
+  const nameInputRef = useRef<HTMLInputElement | null>(null);
+  const [showKeys, setShowKeys] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [error, run] = useAction();
+  useEffect(function focusPageName() {
+    nameInputRef.current?.focus();
+  }, []);
   // The deck can change page or reveal an animated key while the form is open: follow the
   // suggestion until the user picks keys themselves.
   const suggested = state.suggestedIgnore.join(',');
@@ -59,33 +71,52 @@ function PageSnapshotForm({
   };
   const save = (): void => {
     const ignore = [...ignored].toSorted((a, b) => a - b);
-    run(postJson('/api/pages/snapshot', { name: name.trim(), ignore }).then(onDone));
+    setSaving(true);
+    run(
+      postJson('/api/pages/snapshot', { name: name.trim(), ignore })
+        .then(onSaved)
+        .finally(() => setSaving(false)),
+    );
   };
   return (
     <div class="page-form">
       <input
         id="pageNameInput"
+        ref={nameInputRef}
         class="input"
         type="text"
         maxLength={PAGE_NAME_MAX}
         placeholder="Page name"
         aria-label="Page name"
         value={name}
+        disabled={saving}
         onInput={(e) => setName((e.target as HTMLInputElement).value)}
       />
-      <p class="xkeys-sub">Ignore keys that change on their own (clock, GIF, counters).</p>
-      <PageKeyGrid
-        label="Keys to ignore"
-        keyCount={state.keyCount}
-        columns={state.columns}
-        ignored={ignored}
-        liveImages
-        onToggle={toggle}
-      />
+      <button
+        class="ghostbtn page-disclosure"
+        id="pageIgnoreToggle"
+        type="button"
+        aria-expanded={showKeys}
+        aria-controls="pageSnapshotKeys"
+        onClick={() => setShowKeys(!showKeys)}
+      >
+        Ignored keys ({ignored.size})
+      </button>
+      {showKeys && (
+        <div id="pageSnapshotKeys">
+          <p class="xkeys-sub">Exclude keys that change, such as clocks or animations.</p>
+          <PageKeyGrid
+            label="Keys to ignore"
+            keyCount={state.keyCount}
+            columns={state.columns}
+            ignored={ignored}
+            liveImages
+            onToggle={toggle}
+          />
+        </div>
+      )}
       {activeName !== undefined && (
-        <p class="xkeys-sub">
-          Looks like saved page "{activeName}" — save anyway or re-capture "{activeName}".
-        </p>
+        <p class="xkeys-sub">Already matches "{activeName}". Save creates another page.</p>
       )}
       {error !== '' && (
         <p class="xkeys-sub" role="alert">
@@ -97,12 +128,12 @@ function PageSnapshotForm({
           class="ghostbtn"
           id="pageSaveBtn"
           type="button"
-          disabled={name.trim() === '' || state.settling || state.held}
+          disabled={saving || name.trim() === '' || state.settling || state.held}
           onClick={save}
         >
-          Save
+          {saving ? 'Saving…' : 'Save'}
         </button>
-        <button class="ghostbtn" type="button" onClick={onDone}>
+        <button class="ghostbtn" type="button" disabled={saving} onClick={onCancel}>
           Cancel
         </button>
       </div>
@@ -114,43 +145,71 @@ export function PagesSection(): preact.JSX.Element {
   const pages = useStore((s) => s.pages);
   const state = useStore((s) => s.pageState);
   const [adding, setAdding] = useState(false);
+  const [managing, setManaging] = useState(false);
   const full = pages.length >= MAX_PAGES;
   const canCapture = !state.settling && !state.held;
   const reason = captureBlocker(full, state);
   const scores = new Map(state.scores.map((s) => [s.pageId, s]));
   const active = pages.find((p) => p.id === state.activePageId);
   return (
-    <ConfigSection title="Follow Elgato pages" compact>
+    <ConfigSection
+      title="Follow Elgato pages"
+      compact
+      aside={
+        !adding && (
+          <button
+            class="ghostbtn"
+            id="pageSnapshotBtn"
+            type="button"
+            disabled={!canCapture || full}
+            title={reason}
+            onClick={() => setAdding(true)}
+          >
+            Save current page…
+          </button>
+        )
+      }
+    >
       <p class="xkeys-sub" id="pagesStatus">
         {statusText(pages, state)}
       </p>
-      <div class="page-actions">
+      {pages.length > 0 && (
         <button
-          class="ghostbtn"
-          id="pageSnapshotBtn"
+          class="ghostbtn page-disclosure"
+          id="pageManageBtn"
           type="button"
-          disabled={!canCapture || full}
-          title={reason}
-          onClick={() => setAdding(true)}
+          aria-expanded={managing}
+          aria-controls="savedPagesList"
+          onClick={() => setManaging(!managing)}
         >
-          Save current page…
+          Saved pages ({pages.length})
         </button>
-      </div>
-      {adding && (
-        <PageSnapshotForm state={state} activeName={active?.name} onDone={() => setAdding(false)} />
       )}
-      <ul class="pages-list">
-        {pages.map((page) => (
-          <PageRow
-            key={page.id}
-            page={page}
-            columns={state.columns}
-            score={scores.get(page.id)}
-            active={page.id === state.activePageId}
-            canCapture={canCapture}
-          />
-        ))}
-      </ul>
+      {adding && (
+        <PageSnapshotForm
+          state={state}
+          activeName={active?.name}
+          onCancel={() => setAdding(false)}
+          onSaved={() => {
+            setAdding(false);
+            setManaging(true);
+          }}
+        />
+      )}
+      {pages.length > 0 && (
+        <ul class="pages-list" id="savedPagesList" hidden={!managing}>
+          {pages.map((page) => (
+            <PageRow
+              key={page.id}
+              page={page}
+              columns={state.columns}
+              score={scores.get(page.id)}
+              active={page.id === state.activePageId}
+              canCapture={canCapture}
+            />
+          ))}
+        </ul>
+      )}
     </ConfigSection>
   );
 }

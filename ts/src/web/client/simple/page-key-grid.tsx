@@ -32,10 +32,13 @@ export function PageKeyGrid({
   const keys = Array.from({ length: keyCount }, (_, i) => i);
   return (
     <div
-      class="crop-keys"
+      class="crop-keys page-keys"
       role="group"
       aria-label={label}
-      style={{ display: 'grid', gridTemplateColumns: `repeat(${Math.max(1, columns)}, 40px)` }}
+      style={{
+        display: 'grid',
+        gridTemplateColumns: `repeat(${Math.max(1, columns)}, minmax(0, 40px))`,
+      }}
     >
       {keys.map((i) => {
         const entry = liveImages ? getImageEntry(i) : undefined;

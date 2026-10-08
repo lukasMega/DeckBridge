@@ -34,6 +34,7 @@ export function PageRow({
   canCapture: boolean;
 }>): preact.JSX.Element {
   const [error, run] = useAction();
+  const [showOptions, setShowOptions] = useState(false);
   const [showKeys, setShowKeys] = useState(false);
   const [confirming, setConfirming] = useState(false);
   // Local edit in progress; null shows the saved name.
@@ -83,90 +84,121 @@ export function PageRow({
 
   return (
     <li class="page-row" data-page-id={page.id}>
-      <div class="preview-head">
-        <input
-          class="input page-name"
-          type="text"
-          maxLength={PAGE_NAME_MAX}
-          value={name}
-          disabled={savingName}
-          aria-label={`Name of page ${page.name}`}
-          onInput={(e) => setDraft((e.target as HTMLInputElement).value)}
-          onBlur={commitName}
-          onKeyDown={(e) => {
-            if (e.key === 'Escape') {
-              e.preventDefault();
-              cancelledNameRef.current = true;
-              setDraft(null);
-              (e.target as HTMLInputElement).blur();
-            } else if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
-          }}
-        />
+      <div class="page-row-head">
+        <span class="page-title" title={page.name}>
+          {page.name}
+        </span>
         {active && <span class="dock-chip dock-chip--paired">Active</span>}
-        <span class="dock-chip">{page.extraKeys ? 'Own layout' : 'Default layout'}</span>
-        {page.stale && (
-          <span class="dock-chip dock-chip--waiting">Recorded for another layout</span>
-        )}
-        {score && !page.stale && (
-          <span class="xkeys-sub">
-            {score.matched}/{score.considered} keys
-          </span>
-        )}
-      </div>
-      <div class="page-actions">
-        <ChipRadioGroup
-          name={`pageStrictness-${page.id}`}
-          label={`Strictness of page ${page.name}`}
-          value={nearestStrictness(page.minMatch)}
-          options={STRICTNESS.map(({ value, label }) => ({
-            value,
-            label,
-            title: `${Math.round(value * 100)}% of keys must match`,
-          }))}
-          onChange={(minMatch) => run(post('/api/pages/update', { minMatch }))}
-        />
-        {!page.stale && (
-          <button class="ghostbtn" type="button" onClick={() => setShowKeys(!showKeys)}>
-            Keys…
-          </button>
-        )}
         <button class="ghostbtn" type="button" onClick={editLayout}>
           Edit layout
         </button>
-        {page.extraKeys && (
-          <button
-            class="ghostbtn"
-            type="button"
-            onClick={() => run(post('/api/pages/layout', { mode: 'default' }))}
-          >
-            Use default layout
-          </button>
-        )}
         <button
-          class="ghostbtn"
+          class="ghostbtn page-options-toggle"
           type="button"
-          disabled={!canCapture}
-          onClick={() => run(post('/api/pages/recapture', {}))}
+          title="Page options"
+          aria-label={`Options for page ${page.name}`}
+          aria-expanded={showOptions}
+          aria-controls={`page-options-${page.id}`}
+          onClick={() => setShowOptions(!showOptions)}
         >
-          Re-capture
-        </button>
-        <button
-          class="ghostbtn"
-          type="button"
-          onClick={() => (confirming ? run(post('/api/pages/delete', {})) : setConfirming(true))}
-        >
-          {confirming ? 'Confirm delete' : 'Delete'}
+          <span aria-hidden="true">⋯</span>
         </button>
       </div>
-      {showKeys && !page.stale && (
-        <PageKeyGrid
-          label={`Keys ignored for page ${page.name}`}
-          keyCount={page.keyCount}
-          columns={columns}
-          ignored={new Set(page.ignore)}
-          changed={new Set(score?.mismatched)}
-          onToggle={toggleKey}
-        />
+      {page.stale && <span class="dock-chip dock-chip--waiting">Recorded for another layout</span>}
+      {showOptions && (
+        <div class="page-options" id={`page-options-${page.id}`}>
+          <label class="page-actions">
+            <span class="preview-label">Page name</span>
+            <input
+              class="input page-name"
+              type="text"
+              maxLength={PAGE_NAME_MAX}
+              value={name}
+              disabled={savingName}
+              aria-label={`Name of page ${page.name}`}
+              onInput={(e) => setDraft((e.target as HTMLInputElement).value)}
+              onBlur={commitName}
+              onKeyDown={(e) => {
+                if (e.key === 'Escape') {
+                  e.preventDefault();
+                  cancelledNameRef.current = true;
+                  setDraft(null);
+                  (e.target as HTMLInputElement).blur();
+                } else if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
+              }}
+            />
+          </label>
+          <p class="xkeys-sub">
+            {page.extraKeys ? 'Own layout' : 'Default layout'}
+            {score && ` · ${score.matched}/${score.considered} keys match`}
+          </p>
+          <div class="page-actions">
+            <span class="preview-label">Matching</span>
+            <ChipRadioGroup
+              name={`pageStrictness-${page.id}`}
+              label={`Strictness of page ${page.name}`}
+              value={nearestStrictness(page.minMatch)}
+              options={STRICTNESS.map(({ value, label }) => ({
+                value,
+                label,
+                title: `${Math.round(value * 100)}% of keys must match`,
+              }))}
+              onChange={(minMatch) => run(post('/api/pages/update', { minMatch }))}
+            />
+          </div>
+          {!page.stale && (
+            <button
+              class="ghostbtn page-disclosure"
+              type="button"
+              aria-expanded={showKeys}
+              aria-controls={`page-keys-${page.id}`}
+              onClick={() => setShowKeys(!showKeys)}
+            >
+              Ignored keys ({page.ignore.length})
+            </button>
+          )}
+          {showKeys && !page.stale && (
+            <div id={`page-keys-${page.id}`}>
+              <p class="xkeys-sub">Exclude keys that change, such as clocks or animations.</p>
+              <PageKeyGrid
+                label={`Keys ignored for page ${page.name}`}
+                keyCount={page.keyCount}
+                columns={columns}
+                ignored={new Set(page.ignore)}
+                changed={new Set(score?.mismatched)}
+                onToggle={toggleKey}
+              />
+            </div>
+          )}
+          <div class="page-actions">
+            {page.extraKeys && (
+              <button
+                class="ghostbtn"
+                type="button"
+                onClick={() => run(post('/api/pages/layout', { mode: 'default' }))}
+              >
+                Use default layout
+              </button>
+            )}
+            <button
+              class="ghostbtn"
+              type="button"
+              disabled={!canCapture}
+              onClick={() => run(post('/api/pages/recapture', {}))}
+            >
+              Re-capture
+            </button>
+            <button
+              class="ghostbtn"
+              type="button"
+              onClick={() =>
+                confirming ? run(post('/api/pages/delete', {})) : setConfirming(true)
+              }
+            >
+              {confirming ? 'Confirm delete' : 'Delete'}
+            </button>
+          </div>
+        </div>
       )}
       {error !== '' && (
         <p class="xkeys-sub" role="alert">

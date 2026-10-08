@@ -2,7 +2,6 @@
 import { patch, useStore } from '../lib/store.js';
 import type { StoreState } from '../lib/store.js';
 import type { ExtraKeyCfg } from '../ui-types.js';
-import { ChipRadioGroup } from '../components/ChipRadioGroup.js';
 
 type ScopeState = Pick<StoreState, 'extraKeys' | 'pages' | 'pageState' | 'layoutScope'>;
 
@@ -29,16 +28,26 @@ export function LayoutScopeBar(): preact.JSX.Element | null {
   if (own.length === 0) return null;
   return (
     <div class="layout-scope">
-      <ChipRadioGroup
-        name="layoutScope"
-        label="Layout to edit"
-        value={scope ?? DEFAULT_SCOPE}
-        options={[
-          { value: DEFAULT_SCOPE, label: 'Default' },
-          ...own.map((p) => ({ value: p.id, label: p.name })),
-        ]}
-        onChange={(value) => patch({ layoutScope: value === DEFAULT_SCOPE ? null : value })}
-      />
+      <label class="layout-scope-picker">
+        <span class="preview-label">Editing layout</span>
+        <select
+          class="input xkey-select"
+          id="layoutScopeSelect"
+          name="layoutScope"
+          value={scope ?? DEFAULT_SCOPE}
+          onChange={(e) => {
+            const value = (e.target as HTMLSelectElement).value;
+            patch({ layoutScope: value === DEFAULT_SCOPE ? null : value });
+          }}
+        >
+          <option value={DEFAULT_SCOPE}>Default layout</option>
+          {own.map((p) => (
+            <option key={p.id} value={p.id}>
+              {p.name}
+            </option>
+          ))}
+        </select>
+      </label>
       {!live && (
         <p class="xkeys-sub">Not on the deck right now — previews show the active layout.</p>
       )}
