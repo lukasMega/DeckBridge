@@ -1,11 +1,12 @@
 import { useRef, useState } from 'preact/hooks';
 import type { ExternalExpire, ExtraKeyCfg, ExtraKeyWidget, PluginStatus } from '../ui-types.js';
 import { copyLabel, useCopyText } from '../lib/use-copy-text.js';
+import { AnchoredPopover } from '../components/AnchoredPopover.js';
+import { GhostButton } from '../components/GhostButton.js';
 import { ICON, Icon } from '../components/Icon.js';
 import { fire } from '../lib/ui-api.js';
 import { getSnapshot, useStore } from '../lib/store.js';
 import { scopeIsLive } from './layout-scope.js';
-import { useDismiss } from '../lib/ui-hooks.js';
 import { SecondsField } from '../components/Fields.js';
 
 // Interval/timeout bounds mirror types.ts, in seconds for UI.
@@ -74,20 +75,11 @@ export function paramPlaceholder(widget: ExtraKeyWidget): string {
   return 'text (\\n = new line)';
 }
 
-/** Popup to edit command re-run interval, kill-timeout, and force an immediate run. */
-function CommandConfigPopover({
+/** Popup body to edit command re-run interval, kill-timeout, and force an immediate run. */
+function CommandConfig({
   wireId,
   cfg,
-  anchorRef,
-  onClose,
-}: Readonly<{
-  wireId: number;
-  cfg?: ExtraKeyCfg;
-  anchorRef: { current: HTMLDivElement | null };
-  onClose: () => void;
-}>): preact.JSX.Element {
-  useDismiss(onClose, anchorRef);
-
+}: Readonly<{ wireId: number; cfg?: ExtraKeyCfg }>): preact.JSX.Element {
   const [ran, setRan] = useState(false);
   // Run now acts on the key as painted on the deck: only the live layout has one.
   const live = useStore((s) => scopeIsLive(s));
@@ -98,83 +90,72 @@ function CommandConfigPopover({
     runExtraKeyNow(wireId);
     setRan(true);
   };
+  const post = (patch: Partial<WidgetCfg>): void =>
+    postExtraKey(
+      wireId,
+      {
+        widget: 'command',
+        param: cfg?.param,
+        intervalMs: cfg?.intervalMs,
+        timeoutMs: cfg?.timeoutMs,
+        ...patch,
+      },
+      cfg,
+    );
 
   return (
-    <div class="xkey-popover floating-surface">
+    <>
       <SecondsField
         label="Run every (s)"
         min={INTERVAL_MIN_S}
         max={INTERVAL_MAX_S}
         value={intervalS}
-        onCommit={(ms) =>
-          postExtraKey(
-            wireId,
-            { widget: 'command', param: cfg?.param, intervalMs: ms, timeoutMs: cfg?.timeoutMs },
-            cfg,
-          )
-        }
+        onCommit={(intervalMs) => post({ intervalMs })}
       />
       <SecondsField
         label="Timeout (s)"
         min={TIMEOUT_MIN_S}
         max={TIMEOUT_MAX_S}
         value={timeoutS}
-        onCommit={(ms) =>
-          postExtraKey(
-            wireId,
-            { widget: 'command', param: cfg?.param, intervalMs: cfg?.intervalMs, timeoutMs: ms },
-            cfg,
-          )
-        }
+        onCommit={(timeoutMs) => post({ timeoutMs })}
       />
-      <button
-        class="ghostbtn xkey-popover-run"
-        type="button"
+      <GhostButton
+        class="xkey-popover-run"
         disabled={!live}
         title={live ? undefined : 'This layout is not on the deck right now'}
         onClick={handleRunNow}
       >
         {ran ? 'Ran ✓' : 'Run now'}
-      </button>
-    </div>
+      </GhostButton>
+    </>
   );
 }
 
-/** Popup for plugin widget: per-key argument, re-poll interval, live status line. */
-function PluginConfigPopover({
+/** Popup body for plugin widget: per-key argument, re-poll interval, live status line. */
+function PluginConfig({
   wireId,
   cfg,
   status,
-  anchorRef,
-  onClose,
-}: Readonly<{
-  wireId: number;
-  cfg?: ExtraKeyCfg;
-  status?: PluginStatus;
-  anchorRef: { current: HTMLDivElement | null };
-  onClose: () => void;
-}>): preact.JSX.Element {
-  useDismiss(onClose, anchorRef);
-
+}: Readonly<{ wireId: number; cfg?: ExtraKeyCfg; status?: PluginStatus }>): preact.JSX.Element {
   const intervalS = Math.round((cfg?.intervalMs ?? PLUGIN_INTERVAL_DEFAULT_S * 1000) / 1000);
   // Local state owns arg field — polling re-renders would clobber a controlled value.
   const [arg, setArg] = useState(cfg?.pluginArg ?? '');
-  const handleArg = (e: Event): void => {
+  const post = (patch: Partial<WidgetCfg>): void =>
     postExtraKey(
       wireId,
       {
         widget: 'plugin',
         param: cfg?.param,
         intervalMs: cfg?.intervalMs,
-        pluginArg: (e.target as HTMLInputElement).value,
+        pluginArg: cfg?.pluginArg,
+        ...patch,
       },
       cfg,
     );
-  };
   const st = status ?? 'pending';
 
   return (
-    <div class="xkey-popover floating-surface">
+    <>
       <label class="xkey-popover-field xkey-popover-arg">
         <span>Argument</span>
         <input
@@ -184,7 +165,7 @@ function PluginConfigPopover({
           value={arg}
           placeholder="passed as ctx.param"
           onInput={(e) => setArg((e.target as HTMLInputElement).value)}
-          onChange={handleArg}
+          onChange={(e) => post({ pluginArg: (e.target as HTMLInputElement).value })}
         />
       </label>
       <SecondsField
@@ -192,18 +173,12 @@ function PluginConfigPopover({
         min={INTERVAL_MIN_S}
         max={INTERVAL_MAX_S}
         value={intervalS}
-        onCommit={(ms) =>
-          postExtraKey(
-            wireId,
-            { widget: 'plugin', param: cfg?.param, intervalMs: ms, pluginArg: cfg?.pluginArg },
-            cfg,
-          )
-        }
+        onCommit={(intervalMs) => post({ intervalMs })}
       />
       <div class="xkey-popover-status">
         Status: <span class={`xkey-status xkey-status-${st}`}>{STATUS_LABEL[st]}</span>
       </div>
-    </div>
+    </>
   );
 }
 
@@ -213,19 +188,11 @@ const EXPIRE_OPTIONS: ReadonlyArray<{ value: ExternalExpire; label: string }> = 
   { value: 'text', label: 'Show text' },
 ];
 
-/** Popup for the push (external) widget: what an expired value shows, plus a ready curl line. */
-function ExternalConfigPopover({
+/** Popup body for the push (external) widget: what an expired value shows, plus a ready curl line. */
+function ExternalConfig({
   wireId,
   cfg,
-  anchorRef,
-  onClose,
-}: Readonly<{
-  wireId: number;
-  cfg?: ExtraKeyCfg;
-  anchorRef: { current: HTMLDivElement | null };
-  onClose: () => void;
-}>): preact.JSX.Element {
-  useDismiss(onClose, anchorRef);
+}: Readonly<{ wireId: number; cfg?: ExtraKeyCfg }>): preact.JSX.Element {
   const copy = useCopyText();
   const expire = cfg?.expire ?? 'dim';
   const [fallback, setFallback] = useState(cfg?.fallbackText ?? '');
@@ -241,7 +208,7 @@ function ExternalConfigPopover({
     `-d '{"text":"hello","ttl":60}'`;
 
   return (
-    <div class="xkey-popover floating-surface">
+    <>
       <label class="xkey-popover-field">
         <span>When the value expires</span>
         <select
@@ -273,10 +240,10 @@ function ExternalConfigPopover({
         </label>
       )}
       <code class="xkey-popover-curl">{curl}</code>
-      <button class="ghostbtn xkey-popover-run" type="button" onClick={() => void copy.copy(curl)}>
+      <GhostButton class="xkey-popover-run" onClick={() => copy.copy(curl)}>
         {copyLabel(copy.status, 'Copy curl')}
-      </button>
-    </div>
+      </GhostButton>
+    </>
   );
 }
 
@@ -295,6 +262,11 @@ export function ConfigButton({
 }>): preact.JSX.Element {
   const [showConfig, setShowConfig] = useState(false);
   const anchorRef = useRef<HTMLDivElement | null>(null);
+  let body: preact.JSX.Element | null = null;
+  if (widget === 'command') body = <CommandConfig wireId={wireId} cfg={cfg} />;
+  else if (widget === 'plugin')
+    body = <PluginConfig wireId={wireId} cfg={cfg} status={pluginStatus} />;
+  else if (widget === 'external') body = <ExternalConfig wireId={wireId} cfg={cfg} />;
   return (
     <div class="xkey-config-anchor" ref={anchorRef}>
       <button
@@ -305,30 +277,15 @@ export function ConfigButton({
       >
         <Icon html={ICON.gear} />
       </button>
-      {showConfig && widget === 'command' && (
-        <CommandConfigPopover
-          wireId={wireId}
-          cfg={cfg}
+      {showConfig && body && (
+        <AnchoredPopover
           anchorRef={anchorRef}
           onClose={() => setShowConfig(false)}
-        />
-      )}
-      {showConfig && widget === 'plugin' && (
-        <PluginConfigPopover
-          wireId={wireId}
-          cfg={cfg}
-          status={pluginStatus}
-          anchorRef={anchorRef}
-          onClose={() => setShowConfig(false)}
-        />
-      )}
-      {showConfig && widget === 'external' && (
-        <ExternalConfigPopover
-          wireId={wireId}
-          cfg={cfg}
-          anchorRef={anchorRef}
-          onClose={() => setShowConfig(false)}
-        />
+          label={`${label} ${widget} settings`}
+          keepInApp
+        >
+          {body}
+        </AnchoredPopover>
       )}
     </div>
   );

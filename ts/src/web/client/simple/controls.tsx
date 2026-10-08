@@ -8,14 +8,15 @@ import { ICON, Icon, HelpButton } from '../components/Icon.js';
 import { CORA_PORT } from '../ui-help.js';
 import { fire } from '../lib/ui-api.js';
 import { postBrightnessOverride } from './handlers.js';
+import { GhostButton } from '../components/GhostButton.js';
 
 /** "Back" pill used by the settings and help screens. */
 export function BackButton({ onClick }: Readonly<{ onClick: () => void }>): preact.JSX.Element {
   return (
-    <button class="ghostbtn help-back" type="button" onClick={onClick}>
+    <GhostButton class="help-back" onClick={onClick}>
       <Icon html={ICON.back} />
       <span>Back</span>
-    </button>
+    </GhostButton>
   );
 }
 
@@ -159,7 +160,7 @@ export function Brightness({
   );
 
   return (
-    <div class="brightness-block">
+    <div>
       <div class={compact ? 'brightness brightness-footer' : 'brightness'}>
         {!compact && sourceSelect}
         <Icon class="b-ico" html={ICON.sun} />

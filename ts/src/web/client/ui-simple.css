@@ -60,9 +60,6 @@ later per-class rules keep only size/background/placement deltas */
   text-decoration: underline;
   text-underline-offset: 2px;
 }
-:is(.linkbtn:hover, .linkbtn.accent) {
-  color: var(--accent);
-}
 
 /* grid-centered containers (icon buttons, badges, step/done icons) */
 :is(.circle, .mark, .step-ico, .b-ico, .w-ico, .addr-copy, .help-stage, .xkey-config-btn),
@@ -71,15 +68,12 @@ later per-class rules keep only size/background/placement deltas */
 }
 
 /* Shared wrapping rows; segmented controls keep joined edges. */
+.pairing-controls,
 :is(.settings-actions, .addr-row, .chip-radio-group, .push-reveal, .push-test, .crop-keys),
 :is(.crop-tools, .address-tabs, .xkey-display, .xkey-swatches, .xkey-style-outline),
 :is(.device-test-option, .side-keys-legend, .tuning-checkboxes, .crop-stage),
 .push-tokens li {
   flex-wrap: wrap;
-}
-.strip-zone-canvas,
-.help-stage svg {
-  height: auto;
 }
 :is(.xkey-tile img, .crop-key img) {
   height: 100%;
@@ -126,9 +120,6 @@ later per-class rules keep only size/background/placement deltas */
   flex: none;
   margin-left: auto;
 }
-.conflict-badge {
-  animation: rise 0.35s ease;
-}
 .conflict-badge svg {
   height: 28px;
 }
@@ -141,9 +132,6 @@ later per-class rules keep only size/background/placement deltas */
 }
 
 /* ---- live key preview ---- */
-.stage > .preview:first-child {
-  margin-top: 0;
-}
 :is(.preview-label, .addr-label) {
   letter-spacing: 0.06em;
 }
@@ -172,9 +160,6 @@ later per-class rules keep only size/background/placement deltas */
   min-width: 0;
   text-align: left;
   padding: 10px;
-}
-.dock-tabs {
-  display: flex;
 }
 .dock-tab .dock-card-name {
   white-space: normal;
@@ -230,23 +215,18 @@ later per-class rules keep only size/background/placement deltas */
 .xkeys-sub {
   line-height: 1.45;
 }
-.dock-pairing-note {
+.dock-pairing-note,
+.addr-row {
   margin-top: 10px;
 }
 .dock-card {
   padding: 13px;
-  .preview {
-    margin: 0;
-  }
   .preview.dimmed {
     margin: 0 auto;
   }
   .manual-add {
     margin-top: 10px;
     padding: 10px;
-  }
-  .addr-row {
-    margin-top: 8px;
   }
   :is(.addr-chip, .addr-port-chip) {
     padding: 7px 9px;
@@ -333,18 +313,14 @@ input[type='range'].range:disabled {
   min-width: 32px;
   height: 32px;
 }
-.brightness-footer .range {
+/* `input.range` ties with input[type='range'].range above and wins by order. */
+.brightness-footer input.range {
   height: 32px;
   border: 0;
   box-shadow: none;
   background:
     linear-gradient(var(--accent), var(--accent)) left center / var(--fill, 80%) 6px no-repeat,
     linear-gradient(var(--inset), var(--inset)) left center / 100% 6px no-repeat;
-}
-@media (max-width: 380px) {
-  .brightness-footer .b-ico {
-    display: none;
-  }
 }
 @media (pointer: coarse) {
   .brightness.brightness-footer {
@@ -360,7 +336,7 @@ input[type='range'].range:disabled {
     padding-right: 24px;
   }
   .brightness-footer .fader,
-  .brightness-footer .range {
+  .brightness-footer input.range {
     height: 44px;
   }
 }
@@ -393,9 +369,6 @@ input[type='range'].range:disabled {
   grid-column: 1;
 }
 /* side key card: live preview tile left, its settings on the .xkey-row grid right */
-.xkey-card {
-  margin-top: 8px;
-}
 .xkey-tile {
   width: 64px;
   aspect-ratio: 1;
@@ -411,7 +384,8 @@ input[type='range'].range:disabled {
   grid-template-columns: 52px minmax(0, 1fr) 28px;
   gap: 3px 6px;
 }
-.xkey-press .input:disabled {
+.xkey-press .input:disabled,
+.help-stage svg > rect {
   opacity: 0.5;
 }
 /* touch strip: one row of zone previews (tabs) that shrink together, never wrap */
@@ -425,14 +399,12 @@ input[type='range'].range:disabled {
 .strip-zone-tab[aria-selected='true'] .strip-zone-canvas {
   box-shadow: 0 0 0 2px var(--accent);
 }
-.strip-zone-tab[aria-selected='true'] .strip-zone-type {
-  color: var(--fg);
-}
 .strip-zone-panel {
   margin-top: 10px;
   padding: 10px 12px;
 }
-.strip-zone-title .xkey-clipped {
+.strip-zone-title .xkey-clipped,
+:is(.step-sub, .addr-row) > .step-help {
   margin-left: 6px;
 }
 .strip-zone-panel .xkey-card-fields {
@@ -471,7 +443,8 @@ input[type='range'].range:disabled {
   border: 1px solid;
   border-radius: 3px;
 }
-.xkeys-knobs {
+.xkeys-knobs,
+.pairing-flow {
   margin-top: 20px;
 }
 .xkeys-option {
@@ -482,6 +455,7 @@ input[type='range'].range:disabled {
 }
 /* one grid per row, same tracks everywhere, so cells line up across rows */
 .xkey-row {
+  align-items: center;
   grid-template-columns: 52px 150px minmax(0, 1fr) 30px;
   gap: 6px 8px;
   margin-top: 8px;
@@ -491,7 +465,6 @@ input[type='range'].range:disabled {
 }
 /* captions start where the control text does (.input padding + border) */
 .xkey-grid-head {
-  margin-top: 0;
   .preview-label + .preview-label {
     padding-left: 9px;
   }
@@ -540,11 +513,13 @@ input[type='range'].range:disabled {
   justify-content: center;
 }
 .xkey-popover-arg {
+  flex-direction: column;
   align-items: stretch;
 }
 
 /* text size: A− / A / A+ / Fit / picker as one segmented control */
 .xkey-size {
+  display: inline-flex;
   justify-self: start;
 }
 .input.xkey-wrap {
@@ -562,9 +537,6 @@ input[type='range'].range:disabled {
 .xkey-size-btn:last-of-type {
   border-right: 0;
   border-radius: 0 7px 7px 0;
-}
-.xkey-size-btn:hover:not(:disabled) {
-  color: var(--fg);
 }
 .xkey-size-btn[aria-pressed='true'] {
   color: var(--fg);
@@ -615,6 +587,7 @@ input[type='range'].range:disabled {
 }
 /* Over tile's corner; inline after strip zone's label. */
 .xkey-clipped {
+  text-transform: uppercase;
   padding: 1px 4px;
   border-radius: 4px;
   background: var(--wait);
@@ -685,9 +658,6 @@ input[type='range'].range:disabled {
 }
 
 /* manual "Add Network Device" fallback */
-.pairing-flow {
-  margin-top: 20px;
-}
 .pairing-auto {
   padding: 12px 14px;
   background: var(--accent-soft);
@@ -699,23 +669,19 @@ input[type='range'].range:disabled {
   margin: 0 0 10px;
   font-weight: 600;
 }
-.pairing-controls {
-  flex-wrap: wrap;
-}
 .pairing-answers [aria-pressed='true'],
 .ctabtn.pairing-action {
   background: var(--accent);
   color: var(--accent-ink);
 }
-.pairing-controls .pairing-action-row {
-  margin-top: 0;
-}
-.pairing-feedback {
+.pairing-feedback,
+.addr-row > .step-sub {
   flex-basis: 100%;
 }
-.pairing-feedback:empty {
-  display: none;
-}
+.docs-link-block .manual-add-docs,
+.stage > .preview:first-child,
+.xkey-grid-head,
+.pairing-controls .pairing-action-row,
 .ctabtn.pairing-action {
   margin-top: 0;
 }
@@ -726,10 +692,14 @@ input[type='range'].range:disabled {
 .manual-add-head {
   margin-bottom: 5px;
 }
-:is(.help-steps, .identity-list, .push-tokens) {
+:is(.help-steps, .identity-list, .push-tokens),
+.manual-add > summary {
   list-style: none;
 }
 .help-steps .num {
+  width: 21px;
+  height: 21px;
+  margin-top: 1px;
   border-radius: 50%;
   display: grid;
   place-items: center;
@@ -742,21 +712,12 @@ input[type='range'].range:disabled {
   border-bottom: 1px solid color-mix(in oklab, var(--accent), transparent 60%);
   transition: border-color 0.14s;
 }
-.manual-add-docs {
-  margin-top: 11px;
-}
 .manual-add-docs:hover {
   border-bottom-color: var(--accent);
-}
-.addr-row {
-  margin-top: 10px;
 }
 .addr-row > .addr-chip,
 .topbar .help-back {
   margin-bottom: 0;
-}
-.addr-row > .step-sub {
-  flex-basis: 100%;
 }
 :is(.addr-chip, .addr-port-chip) {
   max-width: 100%;
@@ -765,10 +726,6 @@ input[type='range'].range:disabled {
   padding: 9px 11px;
   letter-spacing: 0.01em;
   margin-bottom: 12px;
-}
-:is(.addr-chip:hover, .addr-port-chip:hover),
-.crop-key[aria-pressed='true'] {
-  border-color: var(--accent);
 }
 .addr-label {
   font-weight: 500;
@@ -791,6 +748,7 @@ input[type='range'].range:disabled {
 }
 
 /* entrance animation */
+.conflict-badge,
 .stage > * {
   animation: rise 0.35s ease;
 }
@@ -865,9 +823,6 @@ input[type='range'].range:disabled {
 }
 .help-stage svg {
   max-width: 320px;
-  & > rect {
-    opacity: 0.5;
-  }
 }
 .help h1 {
   margin: 0 0 7px;
@@ -886,11 +841,6 @@ input[type='range'].range:disabled {
 }
 .help-steps li {
   gap: 11px;
-}
-.help-steps .num {
-  width: 21px;
-  height: 21px;
-  margin-top: 1px;
 }
 .help-steps .num.you {
   background: var(--wait-soft);
@@ -996,12 +946,6 @@ input[type='range'].range:disabled {
 .conn-node.pending {
   opacity: 0.66;
 }
-:is(.manual-add, .addr-other) > summary {
-  cursor: pointer;
-}
-.manual-add > summary {
-  list-style: none;
-}
 .manual-add > summary::-webkit-details-marker {
   display: none;
 }
@@ -1018,12 +962,6 @@ input[type='range'].range:disabled {
 }
 .manual-add[open] > summary::after {
   transform: rotate(225deg);
-}
-:is(.manual-add, .addr-other)[open] > summary {
-  margin-bottom: 8px;
-}
-:is(.step-sub, .addr-row) > .step-help {
-  margin-left: 6px;
 }
 .stage[inert] {
   opacity: 0.55;
@@ -1043,7 +981,8 @@ input[type='range'].range:disabled {
   .xkeys-compact .xkey-card-fields {
     flex-basis: 100%;
   }
-  .app-version {
+  .app-version,
+  .brightness-footer .b-ico {
     display: none;
   }
 }
@@ -1069,16 +1008,6 @@ input[type='range'].range:disabled {
 }
 
 /* ---- About popover ---- */
-:is(.scrim, .address-backdrop),
-.side-keys-help::backdrop {
-  background: oklch(0.2 0.02 60 / 0.42);
-  backdrop-filter: blur(3px);
-}
-:is(.scrim, .address-backdrop) {
-  inset: 0;
-  place-items: center;
-  padding: 24px;
-}
 .popover .about-intro {
   margin: 0 0 12px;
 }
@@ -1101,7 +1030,8 @@ input[type='range'].range:disabled {
   border-top: 1px solid var(--border);
 }
 .settings-actions,
-.address-tabs {
+.address-tabs,
+:is(.manual-add, .addr-other)[open] > summary {
   margin-bottom: 8px;
 }
 .settings-search {
@@ -1125,9 +1055,6 @@ input[type='range'].range:disabled {
 }
 .settings-group > .help-section-label {
   margin: 0 0 4px;
-}
-.settings-group .collapsible {
-  margin: 0;
 }
 .settings-group .collapse-header {
   padding: 8px 0;
@@ -1161,6 +1088,7 @@ input[type='range'].range:disabled {
 .settings-page [data-search-match] > .collapse-header .collapse-arrow {
   transform: none;
 }
+.pairing-feedback:empty,
 .settings-page [data-search-match] > .collapse-header .collapse-status {
   display: none;
 }
@@ -1184,9 +1112,6 @@ input[type='range'].range:disabled {
 
 /* Device tuning form (simple/device-tuning.tsx) */
 
-.tuning-section > .collapse-header:hover {
-  color: var(--accent);
-}
 :is(.tuning-section > .collapse-body.open, .diag-section > .collapse-body.open) {
   padding-top: 12px;
 }
@@ -1222,15 +1147,9 @@ select.input.xkey-select {
 /* Logging & diagnostics — orange so a reporter can spot it on the settings page */
 .diag-section {
   border: 1px solid color-mix(in oklab, var(--warn), transparent 70%);
-  & .fine {
-    font-size: 12px;
-  }
 }
 .diag-section > .collapse-header .collapse-arrow {
   right: -8px;
-}
-.diag-section > .collapse-header:hover {
-  color: var(--warn);
 }
 .toast.show {
   opacity: 1;
@@ -1322,9 +1241,6 @@ select.input.xkey-select {
 }
 
 /* ---- pairing-address helper modal ---- */
-.address-backdrop {
-  z-index: 50;
-}
 .address-modal {
   max-width: 520px;
 }
@@ -1346,7 +1262,8 @@ select.input.xkey-select {
   border-top: 1px solid var(--border);
 }
 .page-row-head,
-.layout-scope-picker {
+.layout-scope-picker,
+.page-actions {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -1365,11 +1282,9 @@ select.input.xkey-select {
   border-left: 2px solid var(--border);
 }
 .page-options .xkeys-sub,
-.page-form .xkeys-sub {
+.page-form .xkeys-sub,
+.page-form .crop-keys {
   margin: 8px 0;
-}
-.page-disclosure {
-  margin-top: 8px;
 }
 .page-disclosure::before {
   content: '›';
@@ -1389,35 +1304,14 @@ select.input.xkey-select {
   border: 1px solid var(--border);
   border-radius: 8px;
 }
-.page-name {
-  flex: 1;
-  min-width: 0;
-}
-.page-actions {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
-  margin-top: 8px;
-}
 .layout-scope {
   margin: 12px 0 10px;
-}
-.layout-scope-picker select {
-  flex: 1;
-  min-width: 0;
-}
-.layout-scope .xkeys-sub {
-  margin-top: 8px;
 }
 .crop-key.page-key--ignored {
   opacity: 0.45;
 }
 .crop-key.page-key--changed {
   border-color: var(--warn);
-}
-.page-keys {
-  gap: 6px;
 }
 .page-keys .crop-key {
   width: 100%;
@@ -1426,9 +1320,11 @@ select.input.xkey-select {
   min-width: 0;
   padding: 0;
 }
-.page-form .crop-keys {
-  margin: 8px 0;
-}
-.page-row .crop-keys {
+.dock-card .addr-row,
+.xkey-card,
+.page-disclosure,
+.layout-scope .xkeys-sub,
+.page-row .crop-keys,
+.page-actions {
   margin-top: 8px;
 }

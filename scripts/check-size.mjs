@@ -4,12 +4,12 @@
 // Usage: node scripts/check-size.mjs [--verbose]
 import { measure } from './size-report.mjs';
 
-// Measured after P1 (2026-10-08) + 1 %. Ratcheted down at the end of each phase of
+// Measured after P2b (2026-10-08) + 1 %. Ratcheted down at the end of each phase of
 // .claude/plans/2026-10-08_release-size-webui-css.md.
 const BUDGETS = {
-  'ui.js': 153_074,
+  'ui.js': 150_205,
   'deck.js': 30_106,
-  'css total': 42_451,
+  'css total': 41_447,
   'hid-worker': 50_581,
   'hid-scan-worker': 10_002,
   'plugin-worker': 2_733,

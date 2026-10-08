@@ -2,11 +2,12 @@
 // The preview is upright: rotate/flip only compensate how the panel is mounted.
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { NumberField } from '../components/Fields.js';
+import { GhostButton } from '../components/GhostButton.js';
+import { Modal } from '../components/Modal.js';
 import { getImageEntry, imageSrc } from '../key-preview.js';
 import { useStore } from '../lib/store.js';
 import { postJson } from '../lib/ui-api.js';
-import { useDismiss } from '../lib/ui-hooks.js';
-import { ICON } from '../components/Icon.js';
+import { useAsyncAction } from '../lib/ui-async.js';
 import type { DeviceCropRect, DeviceImageOverride, DeviceOverridesView } from '../ui-types.js';
 import {
   centredRect,
@@ -121,8 +122,7 @@ function CropDialog({
   const [rect, setRect] = useState(() => initialRect(image.cropRect, keySize, src));
   const [aspectLock, setAspectLock] = useState(true);
   const [tried, setTried] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState('');
+  const { busy, error, run } = useAsyncAction();
   const dragRef = useRef<Drag | null>(null);
   const sourceCanvasRef = useRef<HTMLCanvasElement>(null);
   const previewCanvasRef = useRef<HTMLCanvasElement>(null);
@@ -139,35 +139,24 @@ function CropDialog({
     [img, rect, keySize, mode, scale],
   );
 
-  const post = async (overrides: unknown): Promise<void> => {
-    setBusy(true);
-    setError('');
-    try {
-      await postJson('/api/device-overrides', { modelId: view.modelId, overrides }, 'Save failed');
-    } finally {
-      setBusy(false);
-    }
-  };
-  const run = (fn: () => Promise<void>): void => {
-    fn().catch((e: unknown) => setError(e instanceof Error ? e.message : String(e)));
-  };
-  const tryOnDevice = (): void =>
+  const post = (overrides: unknown): Promise<unknown> =>
+    postJson('/api/device-overrides', { modelId: view.modelId, overrides }, 'Save failed');
+  const tryOnDevice = (): Promise<void> =>
     run(async () => {
       await post(overridesWith(view, image, rect));
       setTried(true);
     });
-  const save = (): void =>
+  const save = (): Promise<void> =>
     run(async () => {
       await post(overridesWith(view, image, rect));
       onSaved();
       onClose();
     });
-  const cancel = (): void =>
+  const cancel = (): Promise<void> =>
     run(async () => {
       if (tried) await post(view.overrides);
       onClose();
     });
-  useDismiss(cancel);
 
   const startDrag = (e: PointerEvent, corner?: Corner): void => {
     e.stopPropagation();
@@ -216,172 +205,129 @@ function CropDialog({
     );
   };
 
-  const handleScrimClick = (e: MouseEvent): void => {
-    if (e.target === e.currentTarget) cancel();
-  };
-
   return (
-    <div class="scrim" onClick={handleScrimClick}>
-      <div
-        class="popover floating-surface crop-editor"
-        id="image-crop-editor"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="image-crop-title"
-      >
-        <button
-          class="pop-close circle"
-          aria-label="Close"
-          type="button"
-          onClick={cancel}
-          // eslint-disable-next-line @eslint-react/dom-no-dangerously-set-innerhtml -- static trusted SVG icon markup
-          dangerouslySetInnerHTML={{ __html: ICON.close }}
-        />
-        <h2 id="image-crop-title">Crop key image</h2>
-        {keys.length === 0 ? (
-          <p id="crop-no-frames">
-            No key image yet. Open a profile in the Stream Deck app, then try again.
-          </p>
-        ) : (
-          <>
-            <div class="crop-keys" role="group" aria-label="Key image to crop on">
-              {keys.map((i) => (
-                <button
-                  key={i}
-                  type="button"
-                  class="crop-key"
-                  aria-pressed={i === key}
-                  aria-label={`Key ${i + 1}`}
-                  onClick={() => setKey(i)}
-                >
-                  <img src={imageSrc(getImageEntry(i)!)} alt="" />
-                </button>
-              ))}
-            </div>
-            <div class="crop-stage">
-              <div class="crop-source" onPointerMove={onPointerMove} onPointerUp={endDrag}>
-                <canvas
-                  ref={sourceCanvasRef}
-                  width={src.width * scale}
-                  height={src.height * scale}
-                />
-                <div
-                  class="crop-rect"
-                  id="crop-rect"
-                  tabIndex={0}
-                  role="application"
-                  aria-label="Crop region: drag to move, arrow keys move 1 px, Shift+arrow 10 px"
-                  style={{
-                    left: `${rect.x * scale}px`,
-                    top: `${rect.y * scale}px`,
-                    width: `${rect.width * scale}px`,
-                    height: `${rect.height * scale}px`,
-                  }}
-                  onPointerDown={(e) => startDrag(e)}
-                  onKeyDown={onKeyDown}
-                >
-                  {CORNERS.map((c) => (
-                    <span
-                      key={c}
-                      class={`crop-handle crop-handle-${c}`}
-                      onPointerDown={(e) => startDrag(e, c)}
-                    />
-                  ))}
-                </div>
-              </div>
-              <figure class="crop-preview">
-                <canvas
-                  ref={previewCanvasRef}
-                  width={keySize.width}
-                  height={keySize.height}
-                  style={{
-                    width: `${keySize.width * PREVIEW_SCALE}px`,
-                    height: `${keySize.height * PREVIEW_SCALE}px`,
-                  }}
-                />
-                <figcaption>
-                  Key preview, {keySize.width}×{keySize.height} px — approximate. Use Try on device
-                  for the exact result.
-                </figcaption>
-              </figure>
-            </div>
-            <div class="tuning-dimensions tuning-crop-rect crop-fields">
-              {RECT_FIELDS.map((f) => (
-                <NumberField
-                  key={f.key}
-                  label={f.label}
-                  value={rect[f.key]}
-                  min={0}
-                  onChange={(v) => setField(f.key, v)}
-                />
-              ))}
-            </div>
-            <div class="crop-tools">
-              <label class="settings-checkbox">
-                <input
-                  type="checkbox"
-                  checked={aspectLock}
-                  onChange={(e) => setAspectLock((e.target as HTMLInputElement).checked)}
-                />
-                Keep key shape
-              </label>
+    <Modal
+      id="image-crop-editor"
+      class="crop-editor"
+      title="Crop key image"
+      titleId="image-crop-title"
+      onClose={() => void cancel()}
+    >
+      {keys.length === 0 ? (
+        <p id="crop-no-frames">
+          No key image yet. Open a profile in the Stream Deck app, then try again.
+        </p>
+      ) : (
+        <>
+          <div class="crop-keys" role="group" aria-label="Key image to crop on">
+            {keys.map((i) => (
               <button
+                key={i}
                 type="button"
-                class="ghostbtn"
-                onClick={() => setRect(centredRect(rect, src))}
+                class="crop-key"
+                aria-pressed={i === key}
+                aria-label={`Key ${i + 1}`}
+                onClick={() => setKey(i)}
               >
-                Centre
+                <img src={imageSrc(getImageEntry(i)!)} alt="" />
               </button>
-              <button
-                type="button"
-                class="ghostbtn"
-                onClick={() => setRect(centredRect(keySize, src))}
-              >
-                Key size 1:1
-              </button>
-              <button
-                type="button"
-                class="ghostbtn"
-                onClick={() => {
-                  setAspectLock(false);
-                  setRect(wholeImage(src));
+            ))}
+          </div>
+          <div class="crop-stage">
+            <div class="crop-source" onPointerMove={onPointerMove} onPointerUp={endDrag}>
+              <canvas ref={sourceCanvasRef} width={src.width * scale} height={src.height * scale} />
+              <div
+                class="crop-rect"
+                id="crop-rect"
+                tabIndex={0}
+                role="application"
+                aria-label="Crop region: drag to move, arrow keys move 1 px, Shift+arrow 10 px"
+                style={{
+                  left: `${rect.x * scale}px`,
+                  top: `${rect.y * scale}px`,
+                  width: `${rect.width * scale}px`,
+                  height: `${rect.height * scale}px`,
                 }}
+                onPointerDown={(e) => startDrag(e)}
+                onKeyDown={onKeyDown}
               >
-                Whole image
-              </button>
+                {CORNERS.map((c) => (
+                  <span
+                    key={c}
+                    class={`crop-handle crop-handle-${c}`}
+                    onPointerDown={(e) => startDrag(e, c)}
+                  />
+                ))}
+              </div>
             </div>
-            {(image.crop ?? 0) > 0 && <p>Replaces Crop ({image.crop} px per side).</p>}
-            {(image.transform ?? view.effective.image.transform) === 'passthrough' && (
-              <p>Switches Transform to sidecar: passthrough sends the image unchanged.</p>
-            )}
-          </>
-        )}
-        {error && <p class="settings-error">{error}</p>}
-        <div class="settings-actions">
-          <button
-            id="crop-try"
-            type="button"
-            class="ghostbtn"
-            disabled={busy || keys.length === 0}
-            onClick={tryOnDevice}
-          >
-            Try on device
-          </button>
-          <button
-            id="crop-save"
-            type="button"
-            class="ghostbtn"
-            disabled={busy || keys.length === 0}
-            onClick={save}
-          >
-            Save
-          </button>
-          <button id="crop-cancel" type="button" class="ghostbtn" disabled={busy} onClick={cancel}>
-            Cancel
-          </button>
-        </div>
+            <figure class="crop-preview">
+              <canvas
+                ref={previewCanvasRef}
+                width={keySize.width}
+                height={keySize.height}
+                style={{
+                  width: `${keySize.width * PREVIEW_SCALE}px`,
+                  height: `${keySize.height * PREVIEW_SCALE}px`,
+                }}
+              />
+              <figcaption>
+                Key preview, {keySize.width}×{keySize.height} px — approximate. Use Try on device
+                for the exact result.
+              </figcaption>
+            </figure>
+          </div>
+          <div class="tuning-dimensions tuning-crop-rect crop-fields">
+            {RECT_FIELDS.map((f) => (
+              <NumberField
+                key={f.key}
+                label={f.label}
+                value={rect[f.key]}
+                min={0}
+                onChange={(v) => setField(f.key, v)}
+              />
+            ))}
+          </div>
+          <div class="crop-tools">
+            <label class="settings-checkbox">
+              <input
+                type="checkbox"
+                checked={aspectLock}
+                onChange={(e) => setAspectLock((e.target as HTMLInputElement).checked)}
+              />
+              Keep key shape
+            </label>
+            <GhostButton onClick={() => setRect(centredRect(rect, src))}>Centre</GhostButton>
+            <GhostButton onClick={() => setRect(centredRect(keySize, src))}>
+              Key size 1:1
+            </GhostButton>
+            <GhostButton
+              onClick={() => {
+                setAspectLock(false);
+                setRect(wholeImage(src));
+              }}
+            >
+              Whole image
+            </GhostButton>
+          </div>
+          {(image.crop ?? 0) > 0 && <p>Replaces Crop ({image.crop} px per side).</p>}
+          {(image.transform ?? view.effective.image.transform) === 'passthrough' && (
+            <p>Switches Transform to sidecar: passthrough sends the image unchanged.</p>
+          )}
+        </>
+      )}
+      {error && <p class="settings-error">{error}</p>}
+      <div class="settings-actions">
+        <GhostButton id="crop-try" disabled={busy || keys.length === 0} onClick={tryOnDevice}>
+          Try on device
+        </GhostButton>
+        <GhostButton id="crop-save" disabled={busy || keys.length === 0} onClick={save}>
+          Save
+        </GhostButton>
+        <GhostButton id="crop-cancel" disabled={busy} onClick={cancel}>
+          Cancel
+        </GhostButton>
       </div>
-    </div>
+    </Modal>
   );
 }
 
@@ -390,9 +336,9 @@ export function ImageCropEditor(props: Readonly<EditorProps>): preact.JSX.Elemen
   const [open, setOpen] = useState(false);
   return (
     <>
-      <button id="crop-open" type="button" class="ghostbtn crop-open" onClick={() => setOpen(true)}>
+      <GhostButton class="crop-open" id="crop-open" onClick={() => setOpen(true)}>
         Crop…
-      </button>
+      </GhostButton>
       {open && <CropDialog {...props} onClose={() => setOpen(false)} />}
     </>
   );

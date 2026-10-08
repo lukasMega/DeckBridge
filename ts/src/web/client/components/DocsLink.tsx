@@ -1,6 +1,7 @@
 import type { DocsTopic } from '../../contract.js';
 import { useId, useLayoutEffect, useRef, useState } from 'preact/hooks';
 import { ICON, Icon } from './Icon.js';
+import { isBackdropClick } from './Modal.js';
 
 interface Props {
   topic: DocsTopic;
@@ -37,15 +38,7 @@ function DocsDialog({
       }}
       onClick={(event) => {
         event.stopPropagation();
-        if (event.target !== event.currentTarget) return;
-        const bounds = event.currentTarget.getBoundingClientRect();
-        if (
-          event.clientX < bounds.left ||
-          event.clientX > bounds.right ||
-          event.clientY < bounds.top ||
-          event.clientY > bounds.bottom
-        )
-          onClose();
+        if (isBackdropClick(event)) onClose();
       }}
     >
       <header class="docs-modal-header">

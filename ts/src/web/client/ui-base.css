@@ -140,6 +140,7 @@ html[data-mode='advanced'] #simple-view {
   overflow: hidden;
 }
 :is(.side-keys-legend, .tuning-checkboxes, .crop-stage, .xkey-card, .xkey-card-span),
+.dock-tabs,
 .xkey-value,
 .help-steps li {
   display: flex;
@@ -153,7 +154,8 @@ html[data-mode='advanced'] #simple-view {
   align-items: center;
 }
 :is(.app, .help, .strip-zone, .tuning-field, .tuning-group),
-:is(.help-steps, .identity-list, .push-tokens) {
+:is(.help-steps, .identity-list, .push-tokens),
+.docs-modal[open] {
   display: flex;
   flex-direction: column;
 }
@@ -162,9 +164,6 @@ html[data-mode='advanced'] #simple-view {
   gap: 10px;
   align-items: center;
 }
-.xkey-popover-arg {
-  flex-direction: column;
-}
 :is(.xkey-card, .addr-chip) {
   gap: 10px;
 }
@@ -172,7 +171,7 @@ html[data-mode='advanced'] #simple-view {
 :is(.addr-port-chip, .settings-json-preview, .input),
 .warnrow code,
 .xkeys-compact .input.xkey-select,
-:is(.help-steps .num, .tuning-checkboxes .settings-checkbox) {
+:is(.help-steps .num, .tuning-checkboxes .settings-checkbox, .diag-section .fine) {
   font-size: 12px;
 }
 :is(.disclaimer, .xkeys-sub, .xkey-press-label, .device-test-option),
@@ -208,7 +207,8 @@ html[data-mode='advanced'] #simple-view {
   color: var(--fg-dim);
 }
 :is(.xkey-size-thumb, .xkey-swatch, .chip-radio, .collapse-header, .crop-key),
-.key-grid .key-cell.clickable {
+.key-grid .key-cell.clickable,
+:is(.manual-add, .addr-other) > summary {
   cursor: pointer;
 }
 :is(.ghostbtn, .ctabtn, .addr-chip, .linkbtn, .b-mode-select, .tuning-help),
@@ -232,16 +232,14 @@ select.input {
 }
 :is(.preview-label, .addr-label, .addr-copy, .conflict-after, .collapse-header),
 .cfg-subtitle-hdr,
-:is(.brightness .b-ico, .key-cell .kidx) {
+:is(.brightness .b-ico, .key-cell .kidx),
+.preview.dimmed .live-dot {
   color: var(--fg-dim);
 }
 :is(.dock-pairing-note, .xkey-pos, .multi-deck-note),
 .crop-preview figcaption {
   font-size: 12px;
   color: var(--fg-muted);
-}
-.xkey-row {
-  align-items: center;
 }
 :is(.xkey-config-btn, .linkbtn, .conflict-body, .help-lead, .strip-zone-type),
 :is(.xkey-size-btn, .xkey-size-thumb, .pop-close, .identity-label, .chip-radio),
@@ -259,6 +257,7 @@ select.input {
 }
 :is(.ghostbtn, .b-mode-select, .xkey-config-btn, .surface-card, .xkey-size, .addr-chip),
 :is(.floating-surface, .app),
+.step-help:hover,
 .xkeys-option input,
 .input.xkey-select {
   background: var(--surface);
@@ -274,6 +273,9 @@ select.input {
 :is(.dock-card-name, .side-keys-help-button, .conflict-after, .settings-error),
 :is(.settings-status, .image-fit-sizes, .toast),
 :is(.xkeys-option input, .identity-list li),
+:is(.b-val, .warnrow),
+.help-steps li,
+.docs-link,
 .input.xkey-select {
   font-size: 13px;
 }
@@ -297,7 +299,10 @@ select.input {
   border-radius: var(--r-sm);
 }
 .stage-title .accent,
-:is(.help-section-label, .tuning-group-label) {
+:is(.help-section-label, .tuning-group-label),
+:is(.linkbtn:hover, .linkbtn.accent),
+:is(.step-help:hover, .tuning-help:hover),
+.tuning-section > .collapse-header:hover {
   color: var(--accent);
 }
 .step-sub a,
@@ -306,21 +311,15 @@ select.input {
   color: var(--accent);
   font-weight: 600;
 }
-.docs-link {
-  font-size: 13px;
-  line-height: 1.5;
-}
 .docs-link-group {
   display: inline-flex;
   align-items: center;
   gap: 5px;
   vertical-align: baseline;
 }
-.docs-link-block {
+.docs-link-block,
+.manual-add-docs {
   margin-top: 11px;
-}
-.docs-link-block .manual-add-docs {
-  margin-top: 0;
 }
 .docs-modal-open,
 .docs-modal-close {
@@ -350,10 +349,8 @@ select.input {
   color: var(--fg);
   overflow: hidden;
 }
-.docs-modal[open] {
-  display: flex;
-  flex-direction: column;
-}
+.scrim,
+.side-keys-help::backdrop,
 .docs-modal::backdrop {
   background: oklch(0.2 0.02 60 / 0.42);
   backdrop-filter: blur(3px);
@@ -368,7 +365,6 @@ select.input {
 .docs-modal-header h2 {
   flex: 1;
   min-width: 0;
-  margin: 0;
   font-size: 16px;
 }
 .docs-modal iframe {
@@ -379,7 +375,8 @@ select.input {
   background: var(--surface);
 }
 :is(.disclaimer, .step-sub, .settings-json-preview),
-:is(.popover p, .help-steps li) {
+:is(.popover p, .help-steps li),
+.docs-link {
   line-height: 1.5;
 }
 :is(.disclaimer, .strip-zone-type, .conflict, .toast) {
@@ -407,7 +404,8 @@ select.input {
   gap: 12px;
 }
 .side-keys-legend span,
-:is(.tuning-label-row, .xkey-press, .strip-zones, .side-keys-device, .xkey-display) {
+:is(.tuning-label-row, .xkey-press, .strip-zones, .side-keys-device, .xkey-display),
+.page-keys {
   gap: 6px;
 }
 :is(.dock-card-head, .manual-add-head, .toggle-row, .settings-checkbox),
@@ -415,9 +413,6 @@ select.input {
   display: flex;
   align-items: center;
   gap: 8px;
-}
-.xkey-size {
-  display: inline-flex;
 }
 :is(.ghostbtn, .ctabtn, .addr-chip, .addr-port-chip, .dock-chip, .live-dot),
 :is(.manual-add-docs, .tuning-help) {
@@ -430,7 +425,7 @@ select.input {
 }
 :is(.circle, .b-ico, .w-ico, .help-stage, .side-keys-device-key, .dock-list),
 :is(.strip-zones, .side-keys-device, .xkey-row, .xkey-size-thumb, .xkey-style-popover),
-:is(.scrim, .address-backdrop, .tuning-grid, .image-fit-sizes, .key-grid) {
+:is(.scrim, .tuning-grid, .image-fit-sizes, .key-grid) {
   display: grid;
 }
 :is(.xkey-size-grid, .xkey-style-row, .tuning-dimensions) {
@@ -487,17 +482,15 @@ select.input {
 :is(.settings-actions .address-link, .identity-error-row .settings-error),
 :is(.toggle-row .settings-checkbox, .tuning-checkboxes .settings-checkbox),
 :is(.tuning-section > .collapse-header, .diag-section > .collapse-header),
-.device-test-option .settings-checkbox {
+.device-test-option .settings-checkbox,
+.dock-card .preview,
+.settings-group .collapsible {
   margin: 0;
 }
 :is(.live-dot, .xkey-status-ok, .settings-status),
 :is(.addr-chip, .addr-port-chip).copied,
 .addr-chip.copied :is(.addr-text, .addr-copy) {
   color: var(--ok);
-}
-:is(.b-val, .warnrow),
-.help-steps li {
-  font-size: 13px;
 }
 :is(.addr-chip, .identity-value) {
   font-size: 13px;
@@ -506,9 +499,6 @@ select.input {
 :is(.conflict-body, .help-lead, .ctabtn),
 .popover .about-intro {
   font-size: 14px;
-}
-.xkey-clipped {
-  text-transform: uppercase;
 }
 :is(.preview-label, .addr-label, .help-section-label, .tuning-group-label, .collapse-header) {
   text-transform: uppercase;
@@ -527,7 +517,9 @@ select.input {
   min-width: 0;
 }
 :is(.addr-text, .xkey-param),
-:is(.xkeys-compact .xkey-card-fields, .xkey-card-span .input) {
+:is(.xkeys-compact .xkey-card-fields, .xkey-card-span .input),
+.page-name,
+.layout-scope-picker select {
   min-width: 0;
   flex: 1;
 }
@@ -545,7 +537,11 @@ select.input {
   height: 26px;
 }
 :is(.floating-surface, .input),
-:is(.popover.side-keys-help, .popover .about-intro) {
+:is(.popover.side-keys-help, .popover .about-intro),
+.ghostbtn:hover,
+.collapse-header:hover,
+.strip-zone-tab[aria-selected='true'] .strip-zone-type,
+.xkey-size-btn:hover:not(:disabled) {
   color: var(--fg);
 }
 :is(.b-val, .xkey-press-label, .identity-value) {
@@ -564,7 +560,7 @@ select.input {
   gap: 4px;
 }
 .popover.side-keys-help,
-:is(.scrim, .address-backdrop, .toast) {
+:is(.scrim, .toast) {
   position: fixed;
 }
 :is(.side-keys-legend i, .manual-add-docs svg),
@@ -596,7 +592,8 @@ select.input {
   font-family: var(--mono);
 }
 :is(.conflict-badge, .xkey-status-err, .xkey-status-disabled, .settings-error),
-:is(.warnrow .w-ico, .diag-section > .collapse-header) {
+:is(.warnrow .w-ico, .diag-section > .collapse-header),
+.diag-section > .collapse-header:hover {
   color: var(--warn);
 }
 .conflict h1,
@@ -616,11 +613,10 @@ select.input {
 }
 .ghostbtn:hover,
 .step-help:hover,
-.tuning-help:hover {
+.tuning-help:hover,
+:is(.addr-chip:hover, .addr-port-chip:hover),
+.crop-key[aria-pressed='true'] {
   border-color: var(--accent);
-}
-.ghostbtn:hover {
-  color: var(--fg);
 }
 /* toggled-on state (header toggles, selected tabs; same recipe as .tab-btn.active) */
 :is(.ghostbtn.active, .ghostbtn[aria-selected='true']) {
@@ -689,9 +685,6 @@ select.input {
     filter: saturate(0.4) brightness(0.92);
     opacity: 0.55;
   }
-  &.dimmed .live-dot {
-    color: var(--fg-dim);
-  }
   &.dimmed .live-dot::before {
     background: var(--fg-dim);
     animation: none;
@@ -739,13 +732,6 @@ select.input {
   height: 19px;
   margin-left: auto;
 }
-.step-help:hover,
-.tuning-help:hover {
-  color: var(--accent);
-}
-.step-help:hover {
-  background: var(--surface);
-}
 .step-help:active {
   transform: translateY(1px) scale(0.96);
 }
@@ -760,6 +746,9 @@ select.input {
 .scrim {
   z-index: 40;
   animation: fade 0.18s ease both;
+  inset: 0;
+  place-items: center;
+  padding: 24px;
 }
 @keyframes fade {
   from {
@@ -875,9 +864,6 @@ select.input {
 .collapse-header {
   letter-spacing: 1px;
   user-select: none;
-}
-.collapse-header:hover {
-  color: var(--fg);
 }
 .collapse-arrow {
   transition: transform 0.2s ease;

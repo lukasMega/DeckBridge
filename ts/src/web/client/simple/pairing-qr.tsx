@@ -4,6 +4,7 @@
 // The frame gets text and returns a boolean matrix; nothing else crosses the boundary.
 import { DocsLink } from '../components/DocsLink.js';
 import { useEffect, useState } from 'preact/hooks';
+import { GhostButton } from '../components/GhostButton.js';
 
 export const QR_LIB = {
   name: 'qrcode-generator',
@@ -149,7 +150,7 @@ export function PairingQr({
 
   if (state.kind === 'ask' || state.kind === 'failed') {
     return (
-      <div class="panel-inset pairing-qr-consent" id="qr-consent">
+      <div class="panel-inset" id="qr-consent">
         {state.kind === 'failed' && <p class="settings-error">{state.message}</p>}
         <p>
           Show a QR code? DeckBridge ships no QR library. This downloads{' '}
@@ -163,9 +164,9 @@ export function PairingQr({
           The request leaves this computer; the file is checked and sandboxed. Or use the 6-digit
           code. <DocsLink topic="qr-code" />
         </p>
-        <button class="ghostbtn" id="qr-load" type="button" onClick={confirm}>
+        <GhostButton id="qr-load" onClick={confirm}>
           {state.kind === 'failed' ? 'Try again' : 'Load QR code'}
-        </button>
+        </GhostButton>
       </div>
     );
   }

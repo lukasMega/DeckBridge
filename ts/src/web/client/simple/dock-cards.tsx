@@ -12,6 +12,7 @@ import { pressKey } from './handlers.js';
 import { Brightness } from './controls.js';
 import { ExtraKeysPanel } from './extra-keys-panel.js';
 import { rovingTabKey } from '../lib/roving-tabs.js';
+import { GhostButton } from '../components/GhostButton.js';
 
 function postSelectDock(index: number): void {
   fire('/api/select-dock', { index });
@@ -128,10 +129,9 @@ export function DockList({
       {many && (
         <div class="dock-tabs" role="tablist" aria-label="Decks">
           {docks.map((item, position) => (
-            <button
+            <GhostButton
+              class="dock-tab"
               key={item.index}
-              class="ghostbtn dock-tab"
-              type="button"
               role="tab"
               id={`dock-tab-${item.index}`}
               aria-selected={item.index === dock.index}
@@ -160,7 +160,7 @@ export function DockList({
                   </>
                 )}
               </span>
-            </button>
+            </GhostButton>
           ))}
         </div>
       )}

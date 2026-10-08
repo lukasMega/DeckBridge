@@ -11,6 +11,7 @@ import { copyLabel, useCopyText } from '../lib/use-copy-text.js';
 import { postJson } from '../lib/ui-api.js';
 import { Feedback } from '../lib/ui-async.js';
 import type { DeviceOverridesView, KeyEvent } from '../ui-types.js';
+import { GhostButton } from '../components/GhostButton.js';
 
 /** Grid geometry for the prompts. The server advertises rows/columns on the
  *  status snapshot; fall back to a single row if it is missing. */
@@ -133,15 +134,9 @@ export function KeymapLearn({
 
       {!learning && (
         <div class="settings-actions">
-          <button
-            id="keymap-learn-start"
-            class="ghostbtn"
-            type="button"
-            disabled={keyCount === 0}
-            onClick={start}
-          >
+          <GhostButton id="keymap-learn-start" disabled={keyCount === 0} onClick={start}>
             Start learn mode
-          </button>
+          </GhostButton>
         </div>
       )}
 
@@ -153,18 +148,13 @@ export function KeymapLearn({
 
       {learning && (
         <div class="settings-actions">
-          <button id="keymap-learn-cancel" class="ghostbtn" type="button" onClick={cancel}>
+          <GhostButton id="keymap-learn-cancel" onClick={cancel}>
             Cancel
-          </button>
+          </GhostButton>
           {done && (
-            <button
-              id="keymap-learn-save"
-              class="ghostbtn"
-              type="button"
-              onClick={() => void save()}
-            >
+            <GhostButton id="keymap-learn-save" onClick={save}>
               Save this map
-            </button>
+            </GhostButton>
           )}
         </div>
       )}
@@ -175,9 +165,9 @@ export function KeymapLearn({
             {derivedJson}
           </pre>
           <div class="settings-actions">
-            <button class="ghostbtn" type="button" onClick={() => void copy.copy(derivedJson)}>
+            <GhostButton onClick={() => copy.copy(derivedJson)}>
               {copyLabel(copy.status, 'Copy for a registry PR')}
-            </button>
+            </GhostButton>
           </div>
         </>
       )}

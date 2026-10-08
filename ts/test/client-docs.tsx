@@ -48,10 +48,12 @@ export async function runDocsLinks(
     dialog.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
     dialog.requestClose();
   });
-  // Native close events are queued separately from requestClose().
-  await act(async () => {
-    await new Promise((resolve) => setTimeout(resolve, 0));
-  });
+  // The native close event is queued after requestClose(), and how late it lands depends on load.
+  for (let i = 0; i < 200 && root.querySelector('.docs-modal') !== null; i++) {
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    });
+  }
   check(root.querySelector('.docs-modal') === null, 'Docs dismisses through native Escape path');
   check(!parentClosed, 'Docs Escape preserves underlying About overlay');
   await act(() => trigger.click());

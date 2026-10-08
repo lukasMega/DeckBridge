@@ -2,8 +2,9 @@
 // tight lines, bold/outline, ellipsis. Each change posts at once; the server repaints the key.
 import { useRef, useState } from 'preact/hooks';
 import type { ExtraKeyCfg, ExtraKeyTextStyle } from '../ui-types.js';
-import { useDismiss, useKeepInApp } from '../lib/ui-hooks.js';
+import { AnchoredPopover } from '../components/AnchoredPopover.js';
 import { CheckField } from '../components/Fields.js';
+import { GhostButton } from '../components/GhostButton.js';
 import { postExtraKey } from './extra-keys-popovers.js';
 
 // Mirror DEFAULT_TEXT_COLOR / DEFAULT_TEXT_BACKGROUND / TEXT_PADDING_MAX /
@@ -64,7 +65,7 @@ function ColorRow({
   onPick,
 }: Readonly<{ label: string; value: string; onPick: (hex: string) => void }>): preact.JSX.Element {
   return (
-    <div class="xkey-style-row xkey-style-colors" role="group" aria-label={label}>
+    <div class="xkey-style-row" role="group" aria-label={label}>
       <span>{label}</span>
       <div class="xkey-swatches">
         {SWATCHES.map((hex) => (
@@ -136,18 +137,16 @@ function TextStylePopover({
   anchorRef: { current: HTMLDivElement | null };
   onClose: () => void;
 }>): preact.JSX.Element {
-  useDismiss(onClose, anchorRef);
-  const popRef = useRef<HTMLDivElement | null>(null);
-  useKeepInApp(popRef);
   const style = cfg.style ?? {};
   const update = (patch: ExtraKeyTextStyle): void =>
     postExtraKey(wireId, cfg, { style: { ...style, ...patch } });
   return (
-    <div
-      ref={popRef}
-      class="xkey-popover xkey-style-popover floating-surface"
-      role="dialog"
-      aria-label={`${label} text style`}
+    <AnchoredPopover
+      anchorRef={anchorRef}
+      onClose={onClose}
+      class="xkey-style-popover"
+      label={`${label} text style`}
+      keepInApp
     >
       <Segmented
         label="Font"
@@ -235,14 +234,13 @@ function TextStylePopover({
         checked={style.ellipsis !== false}
         onChange={(ellipsis) => update({ ellipsis })}
       />
-      <button
-        class="ghostbtn xkey-popover-run"
-        type="button"
+      <GhostButton
+        class="xkey-popover-run"
         onClick={() => postExtraKey(wireId, cfg, { style: {} })}
       >
         Reset style
-      </button>
-    </div>
+      </GhostButton>
+    </AnchoredPopover>
   );
 }
 

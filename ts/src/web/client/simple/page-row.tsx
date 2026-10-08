@@ -6,6 +6,7 @@ import type { PageScoreMsg, PageSummary } from '../ui-types.js';
 import { ChipRadioGroup } from '../components/ChipRadioGroup.js';
 import { nearestStrictness, PAGE_NAME_MAX, STRICTNESS } from '../lib/page-limits.js';
 import { PageKeyGrid } from './page-key-grid.js';
+import { GhostButton } from '../components/GhostButton.js';
 
 const DELETE_CONFIRM_MS = 4000;
 
@@ -89,12 +90,9 @@ export function PageRow({
           {page.name}
         </span>
         {active && <span class="dock-chip dock-chip--paired">Active</span>}
-        <button class="ghostbtn" type="button" onClick={editLayout}>
-          Edit layout
-        </button>
-        <button
-          class="ghostbtn page-options-toggle"
-          type="button"
+        <GhostButton onClick={editLayout}>Edit layout</GhostButton>
+        <GhostButton
+          class="page-options-toggle"
           title="Page options"
           aria-label={`Options for page ${page.name}`}
           aria-expanded={showOptions}
@@ -102,7 +100,7 @@ export function PageRow({
           onClick={() => setShowOptions(!showOptions)}
         >
           <span aria-hidden="true">⋯</span>
-        </button>
+        </GhostButton>
       </div>
       {page.stale && <span class="dock-chip dock-chip--waiting">Recorded for another layout</span>}
       {showOptions && (
@@ -147,15 +145,14 @@ export function PageRow({
             />
           </div>
           {!page.stale && (
-            <button
-              class="ghostbtn page-disclosure"
-              type="button"
+            <GhostButton
+              class="page-disclosure"
               aria-expanded={showKeys}
               aria-controls={`page-keys-${page.id}`}
               onClick={() => setShowKeys(!showKeys)}
             >
               Ignored keys ({page.ignore.length})
-            </button>
+            </GhostButton>
           )}
           {showKeys && !page.stale && (
             <div id={`page-keys-${page.id}`}>
@@ -172,31 +169,23 @@ export function PageRow({
           )}
           <div class="page-actions">
             {page.extraKeys && (
-              <button
-                class="ghostbtn"
-                type="button"
-                onClick={() => run(post('/api/pages/layout', { mode: 'default' }))}
-              >
+              <GhostButton onClick={() => run(post('/api/pages/layout', { mode: 'default' }))}>
                 Use default layout
-              </button>
+              </GhostButton>
             )}
-            <button
-              class="ghostbtn"
-              type="button"
+            <GhostButton
               disabled={!canCapture}
               onClick={() => run(post('/api/pages/recapture', {}))}
             >
               Re-capture
-            </button>
-            <button
-              class="ghostbtn"
-              type="button"
+            </GhostButton>
+            <GhostButton
               onClick={() =>
                 confirming ? run(post('/api/pages/delete', {})) : setConfirming(true)
               }
             >
               {confirming ? 'Confirm delete' : 'Delete'}
-            </button>
+            </GhostButton>
           </div>
         </div>
       )}

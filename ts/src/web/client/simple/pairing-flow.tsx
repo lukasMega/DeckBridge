@@ -7,6 +7,7 @@ import { useNow } from '../lib/ui-hooks.js';
 import type { ElgatoAppStatus, Status } from '../ui-types.js';
 import { ManualAddPanel } from './controls.js';
 import { StatusChip } from '../components/StatusChip.js';
+import { GhostButton } from '../components/GhostButton.js';
 
 type AutoRestartPending = NonNullable<Status['elgatoAutoRestartPending']>;
 
@@ -110,9 +111,7 @@ function PairedAppAction({
     <>
       <div class="addr-row pairing-action-row">
         {error ? (
-          <button class="ghostbtn" type="button" onClick={() => void load()}>
-            Retry
-          </button>
+          <GhostButton onClick={load}>Retry</GhostButton>
         ) : (
           <button
             class="ctabtn pairing-action"
@@ -168,22 +167,12 @@ export function PairingFlow({
       <p class="pairing-question">Already paired?</p>
       <div class="pairing-controls">
         <div class="pairing-answers" role="group" aria-label="Already paired?">
-          <button
-            class="ghostbtn"
-            type="button"
-            aria-pressed={paired === true}
-            onClick={() => setPaired(true)}
-          >
+          <GhostButton aria-pressed={paired === true} onClick={() => setPaired(true)}>
             Yes
-          </button>
-          <button
-            class="ghostbtn"
-            type="button"
-            aria-pressed={paired === false}
-            onClick={() => setPaired(false)}
-          >
+          </GhostButton>
+          <GhostButton aria-pressed={paired === false} onClick={() => setPaired(false)}>
             No
-          </button>
+          </GhostButton>
         </div>
         {paired === true && <PairedAppAction onHelp={onHelp} />}
       </div>

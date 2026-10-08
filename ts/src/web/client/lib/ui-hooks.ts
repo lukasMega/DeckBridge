@@ -57,12 +57,16 @@ export function popoverShift(pop: Box, anchor: Box, bounds: Box): { dx: number; 
  * clips with overflow:hidden — an anchor near the left edge would push it out of view.
  * Pass `content` when the popover's size changes after mount (e.g. loaded previews).
  */
-export function useKeepInApp(ref: { current: HTMLElement | null }, content?: unknown): void {
+export function useKeepInApp(
+  ref: { current: HTMLElement | null },
+  content?: unknown,
+  enabled = true,
+): void {
   useLayoutEffect(
     function keepInApp() {
       const el = ref.current;
       const anchor = el?.parentElement;
-      if (!el || !anchor) return;
+      if (!enabled || !el || !anchor) return;
       // Measure from the stylesheet position: `content` re-runs this as the size changes.
       el.style.right = '';
       el.style.top = '';
@@ -85,7 +89,7 @@ export function useKeepInApp(ref: { current: HTMLElement | null }, content?: unk
         el.style.top = 'calc(100% + 6px)';
       }
     },
-    [ref, content],
+    [ref, content, enabled],
   );
 }
 

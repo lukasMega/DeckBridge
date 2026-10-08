@@ -84,6 +84,7 @@ export function NumberField({
 }
 
 export function SelectField<T extends string | number>({
+  id,
   label,
   value,
   options,
@@ -91,6 +92,7 @@ export function SelectField<T extends string | number>({
   disabled,
   onChange,
 }: Readonly<{
+  id?: string;
   label: string;
   value: T | undefined;
   options: readonly T[];
@@ -103,6 +105,7 @@ export function SelectField<T extends string | number>({
     <label class="tuning-field">
       <span>{label}</span>
       <select
+        id={id}
         class="input"
         value={String(value ?? '')}
         disabled={disabled}
@@ -189,6 +192,19 @@ export function ToggleRow({
   return (
     <div class="toggle-row">
       <CheckField id={id} label={label} checked={checked} disabled={disabled} onChange={onChange} />
+      {children}
+    </div>
+  );
+}
+
+/** A titled block of fields (device tuning, standby). */
+export function TuningGroup({
+  title,
+  children,
+}: Readonly<{ title: string; children: preact.ComponentChildren }>): preact.JSX.Element {
+  return (
+    <div class="tuning-group">
+      <p class="tuning-group-label">{title}</p>
       {children}
     </div>
   );

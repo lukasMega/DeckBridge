@@ -2,7 +2,7 @@
 import { DocsLink } from '../components/DocsLink.js';
 import { useState } from 'preact/hooks';
 import { ICON } from '../components/Icon.js';
-import { useDismiss } from '../lib/ui-hooks.js';
+import { Modal } from '../components/Modal.js';
 import type { DeviceImageOverride } from '../ui-types.js';
 
 export interface Size {
@@ -69,52 +69,29 @@ function ImageFitDialog({
   fit,
   onClose,
 }: Readonly<{ fit: FitApplicability; onClose: () => void }>): preact.JSX.Element {
-  useDismiss(onClose);
-
-  const handleScrimClick = (e: MouseEvent): void => {
-    if (e.target === e.currentTarget) onClose();
-  };
-
   return (
-    <div class="scrim" onClick={handleScrimClick}>
-      <div
-        class="popover floating-surface"
-        id="image-fit-help"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="image-fit-help-title"
-      >
-        <button
-          class="pop-close circle"
-          aria-label="Close"
-          type="button"
-          onClick={onClose}
-          // eslint-disable-next-line @eslint-react/dom-no-dangerously-set-innerhtml -- static trusted SVG icon markup
-          dangerouslySetInnerHTML={{ __html: ICON.close }}
-        />
-        <h2 id="image-fit-help-title">Image fit</h2>
-        <dl class="image-fit-sizes">
-          <dt>Image from Elgato app</dt>
-          <dd id="image-fit-source">{px(fit.source)}</dd>
-          <dt>Device key expects</dt>
-          <dd id="image-fit-target">{px(fit.target)}</dd>
-        </dl>
-        <p>
-          <strong>resize</strong> scales to the key; slight blur.
-        </p>
-        <p>
-          <strong>pad</strong> keeps pixels 1:1 and fills the border. Needs an image smaller than
-          the key{fit.padApplies ? '.' : ' — not the case here.'}
-        </p>
-        <p>
-          <strong>crop</strong> keeps pixels 1:1 and trims the centre. Needs an image larger than
-          the key{fit.cropApplies ? '.' : ' — not the case here.'}
-        </p>
-        <p>
-          <DocsLink topic="image-fit" />
-        </p>
-      </div>
-    </div>
+    <Modal id="image-fit-help" title="Image fit" titleId="image-fit-help-title" onClose={onClose}>
+      <dl class="image-fit-sizes">
+        <dt>Image from Elgato app</dt>
+        <dd id="image-fit-source">{px(fit.source)}</dd>
+        <dt>Device key expects</dt>
+        <dd id="image-fit-target">{px(fit.target)}</dd>
+      </dl>
+      <p>
+        <strong>resize</strong> scales to the key; slight blur.
+      </p>
+      <p>
+        <strong>pad</strong> keeps pixels 1:1 and fills the border. Needs an image smaller than the
+        key{fit.padApplies ? '.' : ' — not the case here.'}
+      </p>
+      <p>
+        <strong>crop</strong> keeps pixels 1:1 and trims the centre. Needs an image larger than the
+        key{fit.cropApplies ? '.' : ' — not the case here.'}
+      </p>
+      <p>
+        <DocsLink topic="image-fit" />
+      </p>
+    </Modal>
   );
 }
 

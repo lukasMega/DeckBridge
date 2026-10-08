@@ -25,6 +25,7 @@ import { Collapsible } from '../src/web/client/components/Collapsible.js';
 import { runDeckPage } from './client-deck.js';
 import { runPairingFlow } from './client-pairing.js';
 import { runDocsLinks } from './client-docs.js';
+import { runModalShells } from './client-modal.js';
 import { runPagesPanel } from './client-pages.js';
 import { StandbyPanel } from '../src/web/client/simple/standby-panel.js';
 import type { StandbyView } from '../src/web/contract-standby.js';
@@ -260,6 +261,7 @@ async function run(): Promise<void> {
 
   await runSettingsPanels();
   await runDocsLinks(root, check);
+  await runModalShells(root, check);
   await runKeymapAndDiagnosticsPanels();
   await runMultiDockCards();
   await runMultiDockConfiguration();
@@ -2101,6 +2103,12 @@ async function checkTextSize(stub: Stub): Promise<void> {
     patch({ extraKeys: { '10': { widget: 'command', param: 'date', style: { textSize: -1 } } } }),
   );
   await click('button[aria-label="Bottom side key command settings"]');
+  const configPop = root.querySelector('.xkey-popover');
+  check(
+    configPop?.getAttribute('role') === 'dialog' &&
+      configPop.getAttribute('aria-label') === 'Bottom command settings',
+    'The side-key config popover is a named dialog',
+  );
   const interval = root.querySelector<HTMLInputElement>('.xkey-popover input')!;
   interval.value = '30';
   await act(() => {
