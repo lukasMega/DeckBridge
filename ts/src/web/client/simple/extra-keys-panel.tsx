@@ -112,7 +112,6 @@ export function ExtraKeysPanel(): preact.JSX.Element | null {
 
   return (
     <>
-      <PagesSection />
       <LayoutScopeBar />
       {sections.map((section) => {
         // Knob commands are only DeckBridge's in an override mode.
@@ -158,6 +157,7 @@ export function ExtraKeysPanel(): preact.JSX.Element | null {
           </ConfigSection>
         );
       })}
+      <PagesSection />
     </>
   );
 }

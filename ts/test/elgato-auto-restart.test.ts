@@ -7,6 +7,9 @@ import { testAsync as test, summary } from './helpers/harness.js';
 /** In-memory fake of every injected dep, plus a manually-fired timer (no real
  *  setTimeout — the design has at most one shared timer live at a time, so
  *  tracking a single pending callback is enough to drive every test). */
+/** Let the async app-running check (and anything it chains) settle. */
+const settle = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0));
+
 function fakeDeps(overrides: { enabled?: boolean; delayS?: number; mock?: boolean } = {}) {
   const calls: string[] = [];
   const progress: Array<AutoRestartPending | null> = [];
@@ -133,6 +136,7 @@ await test('progress keeps one deadline until failed restart finishes', async ()
   const scheduler = new ElgatoAutoRestart(deps);
   const started = Date.now();
   scheduler.onDockConnected(0, 'dock-a');
+  await settle();
   scheduler.onDockConnected(1, 'dock-b');
   assert.equal(progress.length, 2, 'initial publish + one re-publish when dock 1 joins');
   const first = progress[0]!;
@@ -145,12 +149,13 @@ await test('progress keeps one deadline until failed restart finishes', async ()
   assert.equal(progress.at(-1), null, 'failure unlocks controls');
 });
 
-await test('pending docks: a later-joining dock is added; repeats do not re-publish', () => {
+await test('pending docks: a later-joining dock is added; repeats do not re-publish', async () => {
   const { deps, state, progress } = fakeDeps();
   state.paired.add('dock-a');
   state.paired.add('dock-b');
   const scheduler = new ElgatoAutoRestart(deps);
   scheduler.onDockConnected(0, 'dock-a');
+  await settle();
   assert.deepEqual(progress.at(-1)!.docks, [0]);
   scheduler.onDockConnected(1, 'dock-b');
   assert.deepEqual(progress.at(-1)!.docks, [0, 1]);
@@ -159,12 +164,39 @@ await test('pending docks: a later-joining dock is added; repeats do not re-publ
   assert.equal(progress.length, count, 'same dock again is not a new publish');
 });
 
-await test('pending docks: a never-paired dock is never included', () => {
+await test('pending docks: a never-paired dock is never included', async () => {
   const { deps, state, progress } = fakeDeps();
   state.paired.add('dock-a');
   const scheduler = new ElgatoAutoRestart(deps);
   scheduler.onDockConnected(0, 'dock-a');
   scheduler.onDockConnected(1, 'dock-new');
+  await settle();
+  assert.deepEqual(progress.at(-1)!.docks, [0]);
+});
+
+await test('app not running at connect — no countdown published, timer dropped', async () => {
+  const { deps, state, calls, progress, hasPendingTimer } = fakeDeps();
+  state.paired.add('dock-a');
+  state.paired.add('dock-b');
+  state.running = false;
+  const scheduler = new ElgatoAutoRestart(deps);
+  scheduler.onDockConnected(0, 'dock-a');
+  scheduler.onDockConnected(1, 'dock-b');
+  await settle();
+
+  assert.equal(progress.length, 0, 'the pairing controls stay available');
+  assert.ok(!hasPendingTimer(), 'the round is dropped');
+  assert.ok(!calls.includes('restart'));
+});
+
+await test('app-running check fails — countdown still published', async () => {
+  const { deps, state, progress } = fakeDeps();
+  state.paired.add('dock-a');
+  deps.app.isRunning = () => Promise.reject(new Error('spawn failed'));
+  const scheduler = new ElgatoAutoRestart(deps);
+  scheduler.onDockConnected(0, 'dock-a');
+  await settle();
+
   assert.deepEqual(progress.at(-1)!.docks, [0]);
 });
 
@@ -193,12 +225,13 @@ await test('outcome: Elgato app conflict — restart skipped', async () => {
   assert.ok(!calls.includes('restart'), 'restart must not run during a conflict');
 });
 
-await test('outcome: Elgato app not running here — restart skipped', async () => {
+await test('outcome: Elgato app quit during the grace period — restart skipped', async () => {
   const { deps, state, calls, fireTimer } = fakeDeps();
   state.paired.add('dock-a');
-  state.running = false;
   const scheduler = new ElgatoAutoRestart(deps);
   scheduler.onDockConnected(0, 'dock-a');
+  await settle();
+  state.running = false;
 
   await fireTimer();
 

@@ -55,6 +55,10 @@ export class ElgatoAutoRestart {
   private fired = false;
   private timer: ReturnType<typeof setTimeout> | null = null;
   private restartAt = 0;
+  /** Bumped per round so a late `isRunning()` answer can't touch a newer round. */
+  private round = 0;
+  /** This round's app-running check passed; nothing is published before that. */
+  private appConfirmed = false;
   /** Docks that passed every gating rule and are waiting for either the grace
    *  timer to fire or the Elgato app to attach to them on its own. */
   private readonly pendingDocks = new Set<number>();
@@ -89,7 +93,7 @@ export class ElgatoAutoRestart {
     const joined = !this.pendingDocks.has(dockIndex);
     this.pendingDocks.add(dockIndex);
     if (this.timer !== null) {
-      if (joined) this.publishPending();
+      if (joined && this.appConfirmed) this.publishPending();
     } else {
       const delayS = this.deps.settings.delayS();
       log('info', COMPONENT, `dock ${dockIndex}: paired before — grace timer started (${delayS}s)`);
@@ -100,8 +104,29 @@ export class ElgatoAutoRestart {
         });
       }, delayS * 1000);
       this.restartAt = Date.now() + delayS * 1000;
-      this.publishPending();
+      void this.confirmAppRunning(++this.round);
     }
+  }
+
+  /** No countdown for an app that isn't running: it dials docks on its own launch,
+   *  so the round is dropped. A failed check keeps the round (grace end re-checks). */
+  private async confirmAppRunning(round: number): Promise<void> {
+    this.appConfirmed = false;
+    const running = await this.deps.app.isRunning().catch(() => true);
+    if (round !== this.round || this.timer === null) return;
+    if (!running) {
+      log(
+        'info',
+        COMPONENT,
+        'skip — Elgato app not running here (it dials docks on its own launch)',
+      );
+      this.clearTimer(this.timer);
+      this.timer = null;
+      this.pendingDocks.clear();
+      return;
+    }
+    this.appConfirmed = true;
+    this.publishPending();
   }
 
   private publishPending(): void {

@@ -281,6 +281,16 @@ quiet = true
 dir = "ts"
 run = "node scripts/check-loc.mjs && echo '✔ check-loc'"
 
+[tasks.size-report]
+description = "Minified/gzip size per bundle, shipped CSS, web/client LOC, worker leak detector, binary minus runtime (no native build needed; `-- --json` for JSON)"
+depends = ["ts-install"]
+run = "node scripts/size-report.mjs"
+
+[tasks.check-size]
+description = "Fail (exit 1) if ui.js, deck.js, the shipped CSS or any worker exceeds its minified size budget (scripts/check-size.mjs)"
+quiet = true
+depends = ["ts-install"]
+run = "node scripts/check-size.mjs && echo '✔ check-size'"
 
 [tasks.devices-generate]
 description = "Regenerate device docs, device SVGs and the Linux udev rules from DEVICE_MODELS"
@@ -304,9 +314,9 @@ depends = ["ts-install"]
 run = "node scripts/device-new.mjs"
 
 [tasks.ci-checks]
-description = "Lint, typecheck, core/browser tests, knip, check-loc, and generated device docs in parallel"
+description = "Lint, typecheck, core/browser tests, knip, check-loc, check-size, and generated device docs in parallel"
 quiet = true
-depends = ["lint", "types", "test", "test-client", "knip", "check-loc", "devices-check"]
+depends = ["lint", "types", "test", "test-client", "knip", "check-loc", "check-size", "devices-check"]
 run = "echo '✔ ci-checks'"
 timeout = "120s"
 
