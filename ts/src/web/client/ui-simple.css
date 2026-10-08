@@ -213,7 +213,7 @@ later per-class rules keep only size/background/placement deltas */
   text-overflow: ellipsis;
 }
 .dock-chip .ico-spin,
-:is(.step-help svg, .multi-deck-help svg, .tuning-help svg) {
+:is(.step-help svg, .tuning-help svg) {
   width: 11px;
   height: 11px;
 }
@@ -1190,7 +1190,7 @@ input[type='range'].range:disabled {
 :is(.tuning-section > .collapse-body.open, .diag-section > .collapse-body.open) {
   padding-top: 12px;
 }
-:is(.multi-deck-help, .tuning-help) {
+.tuning-help {
   justify-content: center;
   width: 16px;
   height: 16px;

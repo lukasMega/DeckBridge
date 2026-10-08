@@ -8,8 +8,9 @@
 
 type Encoding = 'utf8' | 'utf-8' | 'ascii' | 'latin1' | 'binary' | 'hex' | 'base64';
 
-const td = new TextDecoder();
-const te = new TextEncoder();
+// PURE: workers that never use Buffer (plugin, hid-scan) then tree-shake the whole shim.
+const td = /* @__PURE__ */ new TextDecoder();
+const te = /* @__PURE__ */ new TextEncoder();
 
 function bytesFromString(s: string, enc: Encoding): Uint8Array {
   switch (enc) {
@@ -264,7 +265,7 @@ export type Buffer = BufferClass;
 // The runtime value: constructor + static factories. Object.assign shadows Uint8Array's inherited
 // static `from`/`of` with ours at runtime; the cast narrows to the public shape and sidesteps the
 // Uint8Array static-side mismatch.
-export const Buffer = Object.assign(BufferClass, {
+export const Buffer = /* @__PURE__ */ Object.assign(BufferClass, {
   alloc,
   from,
   concat,

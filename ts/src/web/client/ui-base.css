@@ -245,7 +245,7 @@ select.input {
 }
 :is(.xkey-config-btn, .linkbtn, .conflict-body, .help-lead, .strip-zone-type),
 :is(.xkey-size-btn, .xkey-size-thumb, .pop-close, .identity-label, .chip-radio),
-:is(.multi-deck-help, .tuning-help),
+.tuning-help,
 .image-fit-sizes dt {
   color: var(--fg-muted);
 }
@@ -394,7 +394,7 @@ select.input {
   background: none;
 }
 :is(.preview-label, .dock-chip, .live-dot, .dock-card-name, .xkey-pos, .b-mode-select),
-:is(.xkey-tile-empty, .strip-zone-title, .side-keys-device-key, .step-title, .addr-text),
+:is(.xkey-tile-empty, .strip-zone-title, .side-keys-device-key, .addr-text),
 :is(.ctabtn, .collapse-header) {
   font-weight: 600;
 }
@@ -410,7 +410,7 @@ select.input {
 :is(.tuning-label-row, .xkey-press, .strip-zones, .side-keys-device, .xkey-display) {
   gap: 6px;
 }
-:is(.dock-card-head, .manual-add-head, .step-title, .toggle-row, .settings-checkbox),
+:is(.dock-card-head, .manual-add-head, .toggle-row, .settings-checkbox),
 :is(.pairing-auto-head, .pairing-controls, .pairing-answers) {
   display: flex;
   align-items: center;
@@ -420,7 +420,7 @@ select.input {
   display: inline-flex;
 }
 :is(.ghostbtn, .ctabtn, .addr-chip, .addr-port-chip, .dock-chip, .live-dot),
-:is(.manual-add-docs, .multi-deck-help, .tuning-help) {
+:is(.manual-add-docs, .tuning-help) {
   display: inline-flex;
   align-items: center;
 }
@@ -472,7 +472,7 @@ select.input {
   .tuning-group,
   .pairing-auto
 ),
-:is(.chip-radio, .multi-deck-help, .tuning-help, .floating-surface, .app),
+:is(.chip-radio, .tuning-help, .floating-surface, .app),
 :is(.crop-source canvas, .crop-preview canvas) {
   border: 1px solid var(--border);
 }
@@ -522,7 +522,7 @@ select.input {
   padding: 12px;
 }
 :is(.dock-card-name, .xkey-card-span, .strip-zone, .side-keys-device-key, .xkey-value),
-:is(.xkey-mode, .xkey-display, .step-body, .identity-edit-row),
+:is(.xkey-mode, .xkey-display, .identity-edit-row),
 .identity-edit-row .input {
   min-width: 0;
 }
@@ -531,7 +531,7 @@ select.input {
   min-width: 0;
   flex: 1;
 }
-:is(.dock-chip, .help-back, .multi-deck-help, .tuning-help, .toast) {
+:is(.dock-chip, .help-back, .tuning-help, .toast) {
   border-radius: 99px;
 }
 :is(.b-mode-select, .addr-port-chip, .chip-radio, .crop-key) {

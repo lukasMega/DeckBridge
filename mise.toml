@@ -484,6 +484,13 @@ depends = ["build-mock", "e2e-install"]
 run = "pnpm run screenshots:docs"
 timeout = "120s"
 
+[tasks.ui-screens]
+description = "Visual baseline of the WebUI + browser deck in real Chrome (mock mode): `-- --baseline` captures, no flag captures and pixel-compares (e2e/scripts/ui-screens.mjs)"
+dir = "e2e"
+depends = ["build-mock", "e2e-install"]
+run = "node scripts/ui-screens.mjs"
+timeout = "900s"
+
 [tasks.docs-check]
 description = "docs-site: typecheck + tests (build/links/content/output)"
 quiet = true

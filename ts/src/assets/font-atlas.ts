@@ -15,12 +15,8 @@
 // cellWidth/height = width/height ÷ scale.
 // Alpha fonts: same glyph order, tight per-glyph boxes (see AlphaFont).
 
-/** Index of a codepoint in every packed atlas, or -1 if not covered. */
-export function fontGlyphIndex(codepoint: number): number {
-  if (codepoint >= 32 && codepoint <= 126) return codepoint - 32;
-  if (codepoint >= 0xa0 && codepoint <= 0xff) return codepoint - 0xa0 + 95;
-  return codepoint === 0x2026 ? 191 : -1;
-}
+// fontGlyphIndex() lives in font-glyph-index.ts: it carries no atlas data, so workers that
+// only validate text do not bundle the atlas.
 
 interface FontMetrics {
   /** Cell size in device pixels (after `scale`); width = max advance for alpha fonts. */

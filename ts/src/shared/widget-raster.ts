@@ -1,6 +1,6 @@
 // Draws a widget layout (widget-layout.ts) into a 24-bit BMP: colours, bold, outline.
-import { fontGlyphIndex } from '../assets/font-atlas.js';
 import type { AlphaFont, BitmapFont, BitsFont } from '../assets/font-atlas.js';
+import { fontGlyphIndex } from '../assets/font-glyph-index.js';
 import { DEFAULT_TEXT_BACKGROUND, DEFAULT_TEXT_COLOR } from './extra-key-config.js';
 import type { ExtraKeyTextStyle } from '../web/contract.js';
 import { glyphAdvance, layoutWidget, type WidgetLayout, type WidgetLine } from './widget-layout.js';

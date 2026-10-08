@@ -655,8 +655,9 @@ per the key's `style` (`ExtraKeyTextStyle`: size step or `'fit'`, wrap, font, al
 padding, line gap −8..8 px, tight lines, bold/outline, ellipsis). Rasterization stamps 1-bit
 glyphs and blends alpha glyphs over the canvas. `POST /api/extra-key/preview` re-lays the last
 painted lines at every size in that style for the size picker; that is exact because the lines
-don't depend on the size. All atlases hold ASCII, Latin-1 and `…`;
-`scripts/gen-font-atlas.mjs` regenerates them from the upstream BDFs and TTFs.
+don't depend on the size. All atlases hold ASCII, Latin-1 and `…`; their shared glyph index is
+`assets/font-glyph-index.ts`, kept out of the atlas so the workers don't bundle it.
+`scripts/gen-font-atlas.mjs` regenerates both files from the upstream BDFs and TTFs.
 
 </details>
 
