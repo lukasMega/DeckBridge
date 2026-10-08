@@ -65,8 +65,8 @@ depends = ["build-mock"]
 run = "node scripts/mock-akp05.mjs"
 
 [tasks.d]
-description = "Rebuild at debug log level and run"
-run = "LOG_LEVEL=debug mise run build && $TJS run ts/dist/bundle.js"
+description = "Rebuild at debug log level (readable WebUI class names) and run"
+run = "LOG_LEVEL=debug DECKBRIDGE_NO_MANGLE=1 mise run build && $TJS run ts/dist/bundle.js"
 
 [tasks.gen-splash]
 description = "Regenerate on-connect splash JPEG assets (run once after design changes)"

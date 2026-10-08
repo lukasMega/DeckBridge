@@ -87,7 +87,6 @@ function SizePicker({
       onClose={onClose}
       class="xkey-size-picker"
       label={`${label} text sizes`}
-      keepInApp
       content={previews}
     >
       {previews === 'loading' && <span class="xkey-size-note">Rendering…</span>}

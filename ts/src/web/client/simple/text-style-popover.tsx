@@ -146,7 +146,6 @@ function TextStylePopover({
       onClose={onClose}
       class="xkey-style-popover"
       label={`${label} text style`}
-      keepInApp
     >
       <Segmented
         label="Font"

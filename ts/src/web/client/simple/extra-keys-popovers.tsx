@@ -282,7 +282,6 @@ export function ConfigButton({
           anchorRef={anchorRef}
           onClose={() => setShowConfig(false)}
           label={`${label} ${widget} settings`}
-          keepInApp
         >
           {body}
         </AnchoredPopover>

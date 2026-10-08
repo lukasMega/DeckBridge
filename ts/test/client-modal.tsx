@@ -15,7 +15,7 @@ function pressEscape(): void {
 function Anchored({
   onClose,
   label,
-}: Readonly<{ onClose: () => void; label?: string }>): preact.JSX.Element {
+}: Readonly<{ onClose: () => void; label: string }>): preact.JSX.Element {
   const ref = useRef<HTMLDivElement | null>(null);
   return (
     <div id="anchor" ref={ref}>
@@ -121,11 +121,5 @@ export async function runModalShells(
   await act(pressEscape);
   check(popClosed === 2, 'Escape closes the popover');
 
-  await act(() => render(<Anchored onClose={onPopClose} />, root));
-  const plain = root.querySelector<HTMLElement>('.xkey-popover')!;
-  check(
-    !plain.hasAttribute('role') && !plain.hasAttribute('aria-label'),
-    'An AnchoredPopover without a label stays a plain box',
-  );
   await act(() => render(null, root));
 }
