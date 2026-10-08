@@ -1297,6 +1297,44 @@ select.input.xkey-select {
   padding: 10px 0;
   border-top: 1px solid var(--border);
 }
+.page-row-head,
+.layout-scope-picker {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.page-title {
+  flex: 1 1 80px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.page-options {
+  padding: 2px 10px 10px;
+  margin-top: 8px;
+  border-left: 2px solid var(--border);
+}
+.page-options .xkeys-sub,
+.page-form .xkeys-sub {
+  margin: 8px 0;
+}
+.page-disclosure {
+  margin-top: 8px;
+}
+.page-disclosure::before {
+  content: '›';
+  display: inline-block;
+  margin-right: 6px;
+}
+.page-disclosure[aria-expanded='true']::before {
+  transform: rotate(90deg);
+}
+.page-options-toggle {
+  font-size: 18px;
+  line-height: 1;
+}
 .page-form {
   margin-top: 8px;
   padding: 10px;
@@ -1315,13 +1353,30 @@ select.input.xkey-select {
   margin-top: 8px;
 }
 .layout-scope {
-  margin: 0 0 10px;
+  margin: 12px 0 10px;
+}
+.layout-scope-picker select {
+  flex: 1;
+  min-width: 0;
+}
+.layout-scope .xkeys-sub {
+  margin-top: 8px;
 }
 .crop-key.page-key--ignored {
   opacity: 0.45;
 }
 .crop-key.page-key--changed {
   border-color: var(--warn);
+}
+.page-keys {
+  gap: 6px;
+}
+.page-keys .crop-key {
+  width: 100%;
+  height: auto;
+  aspect-ratio: 1;
+  min-width: 0;
+  padding: 0;
 }
 .page-form .crop-keys {
   margin: 8px 0;

@@ -67,6 +67,33 @@ async function settle(): Promise<void> {
   });
 }
 
+async function runPageDisclosures(root: HTMLElement, check: Check): Promise<void> {
+  await show([page('p1', 'Main')], state());
+  const manage = (): HTMLButtonElement => root.querySelector('#pageManageBtn')!;
+  check(
+    root.querySelector<HTMLUListElement>('#savedPagesList')!.hidden &&
+      manage().getAttribute('aria-expanded') === 'false',
+    'Saved pages start collapsed',
+  );
+  await act(() => manage().click());
+  check(
+    !root.querySelector<HTMLUListElement>('#savedPagesList')!.hidden &&
+      root.querySelector('.page-name') === null,
+    'Opening saved pages keeps occasional controls hidden',
+  );
+  const options = root.querySelector<HTMLButtonElement>('.page-options-toggle')!;
+  await act(() => options.click());
+  check(root.querySelector('.page-name') !== null, 'Options exposes rename and matching controls');
+  await act(() => options.click());
+  check(root.querySelector('.page-name') === null, 'Options can collapse again');
+  await act(() => manage().click());
+  check(
+    root.querySelector<HTMLUListElement>('#savedPagesList')!.hidden === true,
+    'Saved pages can collapse again',
+  );
+  await show([], state({ held: true }));
+}
+
 async function runScopeHydrate(main: PageSummary, check: Check): Promise<void> {
   const snapshot = (pages: PageSummary[]): StateResponse => {
     const current = getSnapshot();
@@ -98,6 +125,7 @@ async function runScopeHydrate(main: PageSummary, check: Check): Promise<void> {
 
 async function runPageRename(root: HTMLElement, calls: Call[], check: Check): Promise<void> {
   const text = (selector: string): string => root.querySelector(selector)?.textContent ?? '';
+  await act(() => root.querySelector<HTMLButtonElement>('.page-options-toggle')!.click());
   const rename = root.querySelector<HTMLInputElement>('.page-name')!;
   await act(() => {
     rename.focus();
@@ -144,6 +172,13 @@ async function runPageRename(root: HTMLElement, calls: Call[], check: Check): Pr
     rename.value === 'Keep draft' && text('.page-row [role="alert"]') === 'Rename rejected',
     'Rejected rename retains the draft and reports the error',
   );
+  const manage = root.querySelector<HTMLButtonElement>('#pageManageBtn')!;
+  await act(() => manage.click());
+  await act(() => manage.click());
+  check(
+    root.querySelector<HTMLInputElement>('.page-name')?.value === 'Keep draft',
+    'Collapsing saved pages preserves a rejected rename draft',
+  );
   globalThis.fetch = normalFetch;
 }
 
@@ -156,6 +191,8 @@ async function runSnapshotFollow(
   await show([], state({ suggestedIgnore: [1] }));
   await act(() => root.querySelector<HTMLButtonElement>('#pageSnapshotBtn')!.click());
   await show([], state({ suggestedIgnore: [7] }));
+  check(keys().length === 0, 'Ignore suggestions update while their grid stays hidden');
+  await act(() => root.querySelector<HTMLButtonElement>('#pageIgnoreToggle')!.click());
   check(pressed(7) && !pressed(1), 'The open form follows a changed ignore suggestion');
   await act(() => {
     clearImageStore();
@@ -178,6 +215,63 @@ async function runSnapshotFollow(
   await act(() =>
     root.querySelector<HTMLButtonElement>('.page-form .page-actions .ghostbtn:last-child')!.click(),
   );
+}
+
+async function runSnapshotSave(
+  root: HTMLElement,
+  calls: Call[],
+  check: Check,
+  keys: () => HTMLButtonElement[],
+): Promise<void> {
+  await act(() => root.querySelector<HTMLButtonElement>('#pageSnapshotBtn')!.click());
+  check(
+    keys().length === 0 && document.activeElement?.id === 'pageNameInput',
+    'Saving starts with a focused name and a collapsed key grid',
+  );
+  await act(() => root.querySelector<HTMLButtonElement>('#pageIgnoreToggle')!.click());
+  check(
+    keys().length === 15 &&
+      keys()[3]!.getAttribute('aria-pressed') === 'true' &&
+      keys()[4]!.getAttribute('aria-pressed') === 'true' &&
+      keys()[0]!.getAttribute('aria-pressed') === 'false',
+    'The snapshot form pre-ticks the suggested ignored keys',
+  );
+  const input = root.querySelector<HTMLInputElement>('#pageNameInput')!;
+  await act(() => {
+    input.value = 'Main';
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+  const normalFetch = globalThis.fetch;
+  let finishSave!: () => void;
+  globalThis.fetch = ((url: string, init?: RequestInit) => {
+    const response = normalFetch(url, init);
+    if (url !== '/api/pages/snapshot') return response;
+    return new Promise<Response>((resolve) => {
+      finishSave = () => {
+        void response.then(resolve);
+      };
+    });
+  }) as typeof fetch;
+  try {
+    const save = root.querySelector<HTMLButtonElement>('#pageSaveBtn')!;
+    await act(() => save.click());
+    check(save.disabled && input.disabled, 'A pending save blocks repeated submissions');
+    await act(() => save.click());
+    check(
+      calls.filter((c) => c.url === '/api/pages/snapshot').length === 1,
+      'Clicking Save again does not create another snapshot',
+    );
+    await act(() => finishSave());
+    await settle();
+    const snap = calls.findLast((c) => c.url === '/api/pages/snapshot');
+    check(
+      JSON.stringify(snap?.body) === JSON.stringify({ name: 'Main', ignore: [3, 4] }),
+      'Save posts the name and the ignored keys',
+    );
+    check(root.querySelector('.page-form') === null, 'The form closes after saving');
+  } finally {
+    globalThis.fetch = normalFetch;
+  }
 }
 
 export async function runPagesPanel(root: HTMLElement, check: Check): Promise<void> {
@@ -203,6 +297,7 @@ export async function runPagesPanel(root: HTMLElement, check: Check): Promise<vo
     await show([], state({ held: true }));
     await act(() => render(<ExtraKeysPanel />, root));
     await settle();
+    await runPageDisclosures(root, check);
     check(
       text('#pagesStatus').startsWith('Waiting for the Elgato app') && snapshotBtn().disabled,
       'No page yet: status waits for the app and Save is disabled',
@@ -215,27 +310,7 @@ export async function runPagesPanel(root: HTMLElement, check: Check): Promise<vo
       'A settled page enables Save',
     );
 
-    await act(() => snapshotBtn().click());
-    check(
-      keys().length === 15 &&
-        keys()[3]!.getAttribute('aria-pressed') === 'true' &&
-        keys()[4]!.getAttribute('aria-pressed') === 'true' &&
-        keys()[0]!.getAttribute('aria-pressed') === 'false',
-      'The snapshot form pre-ticks the suggested ignored keys',
-    );
-    const input = root.querySelector<HTMLInputElement>('#pageNameInput')!;
-    await act(() => {
-      input.value = 'Main';
-      input.dispatchEvent(new Event('input', { bubbles: true }));
-    });
-    await act(() => root.querySelector<HTMLButtonElement>('#pageSaveBtn')!.click());
-    await settle();
-    const snap = calls.findLast((c) => c.url === '/api/pages/snapshot');
-    check(
-      JSON.stringify(snap?.body) === JSON.stringify({ name: 'Main', ignore: [3, 4] }),
-      'Save posts the name and the ignored keys',
-    );
-    check(root.querySelector('.page-form') === null, 'The form closes after saving');
+    await runSnapshotSave(root, calls, check, keys);
     await runSnapshotFollow(root, check, keys);
 
     const main = page('p1', 'Main', { extraKeys: { '16': { widget: 'text', param: 'on Main' } } });
@@ -248,13 +323,18 @@ export async function runPagesPanel(root: HTMLElement, check: Check): Promise<vo
       }),
     );
     check(
+      root.querySelector<HTMLButtonElement>('#pageManageBtn')?.getAttribute('aria-expanded') ===
+        'true',
+      'Saving reveals saved pages so their layout action is discoverable',
+    );
+    check(
       text('#pagesStatus') === 'Showing "Main" — side keys use its layout' &&
         text('.page-row .dock-chip--paired') === 'Active',
       'The active page is named in the status and badged',
     );
     await runPageRename(root, calls, check);
-    const keysBtn = [...root.querySelectorAll<HTMLButtonElement>('.page-row .ghostbtn')].find(
-      (b) => b.textContent === 'Keys…',
+    const keysBtn = [...root.querySelectorAll<HTMLButtonElement>('.page-row .ghostbtn')].find((b) =>
+      b.textContent.startsWith('Ignored keys'),
     )!;
     await act(() => keysBtn.click());
     const grid = root.querySelectorAll('.page-row .crop-key');
@@ -279,10 +359,12 @@ export async function runPagesPanel(root: HTMLElement, check: Check): Promise<vo
 
     // Layout scope: edits go to the scoped page's own layout.
     await show([main], state({ activePageId: 'p1' }));
-    await act(() =>
-      root.querySelector<HTMLInputElement>('input[name="layoutScope"][value="p1"]')!.click(),
-    );
-    check(getSnapshot().layoutScope === 'p1', 'Choosing a page chip scopes the editor to it');
+    const scope = root.querySelector<HTMLSelectElement>('#layoutScopeSelect')!;
+    await act(() => {
+      scope.value = 'p1';
+      scope.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+    check(getSnapshot().layoutScope === 'p1', 'Choosing a page scopes the editor to it');
     const widget = root.querySelector<HTMLSelectElement>('.xkey-card select.xkey-select')!;
     check(widget.value === 'text', 'The scoped side key shows the page layout, not the default');
     widget.value = 'clock';
