@@ -1,29 +1,51 @@
 // Ready-stage settings block (side keys, touch strip): brightness-style divider,
 // live-preview-style uppercase head, then rows on the shared .xkey-grid columns.
 import type { ComponentChildren } from 'preact';
+import { useState } from 'preact/hooks';
 
 export function ConfigSection({
   title,
   compact = false,
+  collapsible = false,
+  toggleId,
   subtitle,
   aside,
   children,
 }: Readonly<{
   title: string;
   compact?: boolean;
+  /** Title becomes a disclosure button; starts collapsed, hiding aside + body. */
+  collapsible?: boolean;
+  toggleId?: string;
   subtitle?: ComponentChildren;
   /** Right end of the head row (e.g. a mode select). */
   aside?: ComponentChildren;
   children?: ComponentChildren;
 }>): preact.JSX.Element {
+  const [open, setOpen] = useState(!collapsible);
   return (
     <div class={compact ? 'xkeys xkeys-compact' : 'xkeys'} role="group" aria-label={title}>
       <div class="preview-head xkeys-head">
-        <span class="preview-label">{title}</span>
-        {aside}
+        {collapsible ? (
+          <button
+            id={toggleId}
+            class="xkeys-toggle"
+            type="button"
+            aria-expanded={open}
+            onClick={() => setOpen(!open)}
+          >
+            <span class="preview-label">{title}</span>
+            <span class="collapse-arrow" aria-hidden="true">
+              ▼
+            </span>
+          </button>
+        ) : (
+          <span class="preview-label">{title}</span>
+        )}
+        {open && aside}
       </div>
-      {subtitle !== undefined && <p class="xkeys-sub">{subtitle}</p>}
-      {children}
+      {open && subtitle !== undefined && <p class="xkeys-sub">{subtitle}</p>}
+      {open && children}
     </div>
   );
 }

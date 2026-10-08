@@ -155,6 +155,8 @@ export function PagesSection(): preact.JSX.Element {
     <ConfigSection
       title="Follow Elgato pages"
       compact
+      collapsible
+      toggleId="pagesToggle"
       aside={
         !adding && (
           <button

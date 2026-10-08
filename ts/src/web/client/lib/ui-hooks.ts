@@ -1,6 +1,6 @@
 // Shared browser-UI hooks. Keep this a leaf: web/client may import only
 // web/client (boundaries G1), and nothing here may reach the server tier.
-import { useEffect, useLayoutEffect } from 'preact/hooks';
+import { useEffect, useLayoutEffect, useState } from 'preact/hooks';
 
 /**
  * Closes an overlay on Escape, and — when `anchorRef` is given — on a pointer
@@ -87,4 +87,18 @@ export function useKeepInApp(ref: { current: HTMLElement | null }, content?: unk
     },
     [ref, content],
   );
+}
+
+/** Wall-clock time that re-renders every second while `active` (countdowns). */
+export function useNow(active = true): number {
+  const [now, setNow] = useState(Date.now);
+  useEffect(
+    function tickNow() {
+      if (!active) return undefined;
+      const id = window.setInterval(() => setNow(Date.now()), 1000);
+      return () => window.clearInterval(id);
+    },
+    [active],
+  );
+  return now;
 }

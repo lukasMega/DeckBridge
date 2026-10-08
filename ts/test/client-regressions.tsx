@@ -31,6 +31,10 @@ import type { StandbyView } from '../src/web/contract-standby.js';
 import { ElgatoAppPanel } from '../src/web/client/simple/elgato-app-panel.js';
 import { KeymapLearn } from '../src/web/client/simple/keymap-learn.js';
 import { DockList } from '../src/web/client/simple/dock-cards.js';
+import { SimpleApp } from '../src/web/client/simple/SimpleApp.js';
+import { DEVICE_MODELS, advertisedTouchStrip } from '../src/devices/registry.js';
+import { emulationProfiles } from '../src/devices/model-overrides.js';
+import { BROWSER_DECK_MK2_MODEL } from '../src/devices/virtual/browser-deck-profiles.js';
 import { showDeviceAction } from '../src/web/client/device-test-mode.js';
 import { ExtraKeysPanel } from '../src/web/client/simple/extra-keys-panel.js';
 import { ChipRadioGroup } from '../src/web/client/components/ChipRadioGroup.js';
@@ -258,6 +262,7 @@ async function run(): Promise<void> {
   await runDocsLinks(root, check);
   await runKeymapAndDiagnosticsPanels();
   await runMultiDockCards();
+  await runMultiDockConfiguration();
   await runSideKeysPanel();
   await runChipRadioGroup();
   await runTouchStripPreview();
@@ -1592,10 +1597,7 @@ async function runElgatoAutoRestartUnsupported(): Promise<void> {
   }
 }
 
-// Multi-dock cards (simple/dock-cards.tsx). Mock mode only ever produces one
-// dock, so this is the only CI coverage of the selected/unselected branch — the
-// branch that shipped B1 (missing `compact` class) and nearly shipped B4 (empty
-// grid after selection).
+// Multi-dock tabs: selection mounts only the active deck’s live controls.
 const DOCKS: DockUi[] = [
   {
     index: 0,
@@ -1626,7 +1628,7 @@ const DOCKS: DockUi[] = [
 ];
 
 function dockCard(index: number): HTMLElement {
-  const card = root.querySelectorAll<HTMLElement>('.dock-card')[index];
+  const card = root.querySelector<HTMLElement>(`[aria-labelledby="dock-tab-${index}"] .dock-card`);
   if (!card) throw new Error(`Missing dock card ${index}`);
   return card;
 }
@@ -1681,40 +1683,86 @@ async function runMultiDockCards(): Promise<void> {
     await act(() => patch({ status: { ...baseStatus, docks: DOCKS, selectedDock: 0 } }));
     await act(() => render(<DockList docks={DOCKS} onHelp={noop} />, root));
     await settle();
-    check(root.querySelectorAll('.dock-card').length === 2, 'Both dock cards render');
+    const tabs = root.querySelectorAll<HTMLButtonElement>('[role="tab"]');
+    check(tabs.length === 2, 'Both deck tabs render');
+    check(root.querySelectorAll('.dock-card').length === 1, 'Only the selected deck panel renders');
     check(
       cellCounts(dockCard(0)).live === 15 && cellCounts(dockCard(0)).inert === 0,
-      'The selected dock card renders a live grid',
+      'The selected deck panel renders a live grid',
     );
     check(
-      cellCounts(dockCard(1)).inert === 6 && cellCounts(dockCard(1)).live === 0,
-      'An unselected dock card renders the static grid',
+      tabs[0]!.querySelectorAll('.key-cell').length === 15 &&
+        tabs[1]!.querySelectorAll('.key-cell').length === 6,
+      'Tab previews reflect each deck’s key layout',
     );
-    // B1: the 6-key compact class must be computed for the static branch too.
     check(
-      dockCard(1).querySelector('.preview')?.classList.contains('compact') === true,
-      'An unselected 6-key dock card is sized compact',
+      root.querySelector('.dock-tabs button button') === null,
+      'Tab previews contain no nested interactive keys',
     );
-
-    await act(() => dockCard(1).click());
+    check(
+      tabs[0]!.tabIndex === 0 && tabs[1]!.tabIndex === -1,
+      'Only the selected tab is in the tab order',
+    );
+    await act(() => tabs[1]!.click());
     await settle();
     const post = stub.calls.find((c) => c.url === '/api/select-dock');
     check(
       (post?.body as { index?: number } | undefined)?.index === 1,
-      'Clicking an unselected dock card posts its index',
+      'Clicking an unselected tab posts its dock index',
     );
 
-    // B4: both branches are the same component type and KeyPreview is built in a
-    // mount-only effect, so the grid is populated only if selection remounts it.
     await act(() => patch({ status: { ...baseStatus, docks: DOCKS, selectedDock: 1 } }));
     await settle();
+    check(cellCounts(dockCard(1)).live === 6, 'Switching decks builds the new live grid');
     check(
-      cellCounts(dockCard(1)).live === 6,
-      'Selecting a previously-unselected dock card rebuilds its live grid',
+      dockCard(1).querySelector('.preview')?.classList.contains('compact') === true,
+      'The selected 6-key preview keeps its compact layout',
     );
     check(
-      cellCounts(dockCard(0)).inert === 15 && cellCounts(dockCard(0)).live === 0,
-      'Deselecting a dock card falls back to the static grid',
+      root.querySelector('[aria-labelledby="dock-tab-0"]') === null,
+      'The previous deck panel is unmounted',
+    );
+    check(tabs[0]!.tabIndex === -1 && tabs[1]!.tabIndex === 0, 'Switching updates the tab order');
+
+    await act(() => {
+      tabs[1]!.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true, cancelable: true }),
+      );
+    });
+    check(document.activeElement?.id === tabs[0]!.id, 'ArrowRight wraps focus to the first tab');
+    check(
+      (
+        stub.calls.filter((c) => c.url === '/api/select-dock').at(-1)?.body as
+          | { index: number }
+          | undefined
+      )?.index === 0,
+      'ArrowRight selects the focused deck',
+    );
+    await act(() => {
+      tabs[1]!.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'Home', bubbles: true, cancelable: true }),
+      );
+    });
+    check(document.activeElement?.id === tabs[0]!.id, 'Home focuses the first tab');
+    await act(() => {
+      tabs[0]!.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'End', bubbles: true, cancelable: true }),
+      );
+    });
+    check(document.activeElement?.id === tabs[1]!.id, 'End focuses the last tab');
+    await act(() => {
+      tabs[0]!.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'ArrowLeft', bubbles: true, cancelable: true }),
+      );
+    });
+    check(document.activeElement?.id === tabs[1]!.id, 'ArrowLeft wraps focus to the last tab');
+
+    await act(() => render(<DockList docks={[DOCKS[0]!]} onHelp={noop} />, root));
+    await settle();
+    check(root.querySelector('[role="tablist"]') === null, 'Single decks need no tabs');
+    check(
+      root.querySelectorAll('button.key-cell').length === 15,
+      'A missing selection falls back to the remaining deck',
     );
   } finally {
     stub.restore();
@@ -1751,6 +1799,204 @@ const AKP05E_DOCK: DockUi = {
   })),
   encoderCount: 4,
 };
+
+function checkTabBadges(docks: DockUi[], label: string): void {
+  for (const dock of docks) {
+    const badge = root.querySelector(`#dock-tab-${dock.index} .dock-chip--waiting`);
+    check((badge !== null) === !dock.elgatoConnected, `${label}: only unpaired tabs have badges`);
+    if (badge) check(badge.textContent.includes('Unpaired'), `${label}: badge says Unpaired`);
+  }
+}
+
+async function checkDockPreview(
+  panel: Element,
+  selected: DockUi,
+  docks: DockUi[],
+  label: string,
+  secondRow: string[],
+): Promise<void> {
+  const plus = selected.modelId === 'ajazz-akp05' || selected.modelId === 'ajazz-akp05e';
+  const expectedKeys = plus ? 8 : selected.keyCount;
+  const expectedColumns = plus ? 4 : selected.columns;
+  const grid = panel.querySelector<HTMLElement>('.preview .key-grid')!;
+  if (docks.length > 1) {
+    check(root.querySelector('.stage-title') === null, `${label}: no multi-deck heading`);
+    checkTabBadges(docks, label);
+  }
+  check(
+    grid.children.length === expectedKeys &&
+      grid.style.gridTemplateColumns === `repeat(${expectedColumns}, 1fr)`,
+    `${label}: live preview uses Elgato key layout`,
+  );
+  const tabGrid = root.querySelector<HTMLElement>(`#dock-tab-${selected.index} .key-grid`);
+  check(
+    tabGrid === null ||
+      (tabGrid.children.length === expectedKeys &&
+        tabGrid.style.gridTemplateColumns === `repeat(${expectedColumns}, 1fr)`),
+    `${label}: tab preview matches live key layout`,
+  );
+  if (plus) {
+    await act(() =>
+      secondRow.forEach((frame, i) => applyImage(4 + i, { data: frame, format: 'jpeg' })),
+    );
+    check(
+      secondRow.every(
+        (frame, i) =>
+          grid.children[4 + i]?.querySelector('img')?.getAttribute('src') ===
+          `data:image/jpeg;base64,${frame}`,
+      ),
+      `${label}: second row keeps black key before screenshot and recording keys`,
+    );
+  }
+}
+
+async function runMultiDockConfiguration(): Promise<void> {
+  const before = getSnapshot();
+  const stub = stubFetch(() => ({ payload: { dir: '', files: [], status: {} } }));
+  const peer = { ...DOCKS[1]!, index: 0 };
+  const models = [...DEVICE_MODELS, BROWSER_DECK_MK2_MODEL];
+  const secondRow = ['#000000', '#4499ff', '#dd77cc', '#000000'].map((color) =>
+    solidJpeg(72, 72, color),
+  );
+  try {
+    for (const [index, model] of models.entries()) {
+      const extraKeys = model.keyMap.extraKeys ?? [];
+      const dock: DockUi = {
+        ...DOCK_IDENTITY,
+        index: index + 1,
+        modelId: model.id,
+        modelName: model.name,
+        keyCount: model.keyCount,
+        columns: model.columns,
+        rows: model.rows,
+        primaryPort: 5343 + (index + 1) * 2,
+        primaryConnected: true,
+        elgatoConnected: true,
+        brightness: 75,
+        extraKeys,
+        pressableExtraKeys: extraKeys.filter(
+          (_, i) => model.keyMap.extraKeyInputs?.[i] !== undefined,
+        ),
+        widgetDisplays: model.widgetDisplays?.map((display) => ({
+          wireId: display.wireId,
+          label: display.label,
+          width: display.image.width,
+          height: display.image.height,
+          stripX: display.stripX,
+          rotate: display.image.rotate,
+          flipH: display.image.flipH,
+          flipV: display.image.flipV,
+        })),
+        encoderCount: Math.max(
+          model.encoderCount ?? 0,
+          ...emulationProfiles(model).map((profile) => profile.encoderCount ?? 0),
+        ),
+        coraProfile: model.cora.advertiseAs,
+        ...advertisedTouchStrip(model),
+      };
+      const primary = { ...dock, index: 0 };
+      const views = [
+        { name: 'single primary', selected: primary, docks: [primary] },
+        { name: 'single secondary', selected: dock, docks: [dock] },
+        { name: 'fully paired', selected: dock, docks: [peer, dock] },
+        {
+          name: 'mixed pairing',
+          selected: dock,
+          docks: [{ ...peer, elgatoConnected: false }, dock],
+        },
+      ];
+      for (const view of views) {
+        await act(() => {
+          patch({
+            status: {
+              ...baseStatus,
+              ...view.selected,
+              docks: view.docks,
+              selectedDock: view.selected.index,
+            },
+            extraKeys: {},
+            pages: [],
+            layoutScope: null,
+            touchStripMode: 'elgato',
+            encoders: { connectToApp: true },
+          });
+          render(<SimpleApp />, root);
+        });
+        await settle();
+        const panel = root.querySelector('#dock-panel') ?? root.querySelector('#stage')!;
+        const label = `${model.id} (${view.name})`;
+        await checkDockPreview(panel, view.selected, view.docks, label, secondRow);
+        check(
+          panel.querySelector('input[aria-label="Screen brightness"]') !== null,
+          `${label}: selected paired deck has brightness controls`,
+        );
+        check(
+          panel.querySelectorAll('.xkey-card').length === extraKeys.length,
+          `${label}: selected deck owns every available side-key control`,
+        );
+        check(
+          panel.querySelectorAll('select[aria-label="Touch strip mode"]').length ===
+            (dock.widgetDisplays?.length ? 1 : 0),
+          `${label}: touch-strip controls match device capabilities`,
+        );
+        check(
+          panel.querySelectorAll('.xkeys-knobs').length === (dock.encoderCount ? 1 : 0),
+          `${label}: knob controls match device capabilities`,
+        );
+        check(
+          panel.querySelectorAll('select[aria-label$="side key press action"]').length ===
+            dock.pressableExtraKeys!.length,
+          `${label}: press actions appear only for side keys with switches`,
+        );
+        check(
+          root.querySelectorAll('.xkey-card').length === extraKeys.length &&
+            root.querySelectorAll('select[aria-label="Touch strip mode"]').length ===
+              (dock.widgetDisplays?.length ? 1 : 0),
+          `${label}: controls are not duplicated outside the selected panel`,
+        );
+      }
+    }
+    await act(() =>
+      patch({
+        status: {
+          ...baseStatus,
+          docks: [peer, { ...AKP05E_DOCK, index: 1, elgatoConnected: false }],
+          selectedDock: 1,
+        },
+      }),
+    );
+    await settle();
+    check(
+      root.querySelector('.xkey-card, select[aria-label="Touch strip mode"], .xkeys-knobs') ===
+        null,
+      'Unpaired selected decks show pairing instead of configuration controls',
+    );
+    check(
+      root.querySelector('.dock-pairing-note') !== null,
+      'Unpaired selected decks retain connection guidance',
+    );
+    checkTabBadges(getSnapshot().status.docks, 'Unpaired selected deck');
+    await act(() =>
+      patch({
+        status: {
+          ...getSnapshot().status,
+          docks: [peer, { ...AKP05E_DOCK, index: 1, elgatoConnected: true }],
+        },
+      }),
+    );
+    await settle();
+    checkTabBadges(getSnapshot().status.docks, 'Newly paired selected deck');
+    check(
+      root.querySelector('.stage-title') === null,
+      'Pairing preserves hidden multi-deck heading',
+    );
+  } finally {
+    clearImageStore();
+    stub.restore();
+    await act(() => render(null, root));
+    await act(() => patch(before));
+  }
+}
 
 async function checkSideKeysHelp(): Promise<void> {
   await click('button[aria-label="Side keys help"]');

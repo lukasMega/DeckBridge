@@ -297,6 +297,8 @@ export async function runPagesPanel(root: HTMLElement, check: Check): Promise<vo
     await show([], state({ held: true }));
     await act(() => render(<ExtraKeysPanel />, root));
     await settle();
+    check(root.querySelector('#pageSnapshotBtn') === null, 'Follow Elgato pages starts collapsed');
+    await act(() => root.querySelector<HTMLButtonElement>('#pagesToggle')!.click());
     await runPageDisclosures(root, check);
     check(
       text('#pagesStatus').startsWith('Waiting for the Elgato app') && snapshotBtn().disabled,

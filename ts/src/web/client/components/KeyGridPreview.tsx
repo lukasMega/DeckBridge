@@ -2,15 +2,12 @@
 // advanced grid section. Wraps the imperative KeyPreview renderer; the extra
 // options (showIndex/flash/onKeyClick/clickable) default off so the simple
 // view's behavior is unchanged.
-//
-// `live={false}` renders the same card chrome with inert cells and no renderer:
-// the server mirrors only the selected dock's images, so unselected dock cards
-// need the shell but not a KeyPreview instance.
 import type { ComponentChildren } from 'preact';
 import { useEffect, useRef } from 'preact/hooks';
 import { KeyPreview } from '../key-preview.js';
 import { attachTouchCanvas } from '../touch-strip-preview.js';
 import type { TouchStripSize } from '../ui-types.js';
+import { previewLayout } from '../ui-helpers.js';
 
 /** Live strip under the keys; the canvas keeps the app's native pixel size and
  *  CSS scales it, so frame regions map 1:1. */
@@ -37,14 +34,12 @@ function TouchStripPreview({ width, height }: Readonly<TouchStripSize>): preact.
 }
 
 export function KeyGridPreview({
-  keyCount,
-  columns,
+  keyCount: deviceKeyCount,
+  columns: deviceColumns,
   dimmed,
   modelId,
   coraProfile,
   label = 'Live preview',
-  live = true,
-  badge,
   showIndex,
   flash,
   onKeyClick,
@@ -62,10 +57,6 @@ export function KeyGridPreview({
   coraProfile?: string;
   /** Header label (left side of the card head). */
   label?: string;
-  /** false = inert cells, no KeyPreview instance (unselected dock cards). */
-  live?: boolean;
-  /** Overrides the default Live/Paused head badge. */
-  badge?: string;
   /** Render the key index in each cell (advanced grid). */
   showIndex?: boolean;
   /** Flash a cell border on key press (advanced grid). */
@@ -83,6 +74,7 @@ export function KeyGridPreview({
   /** Controls displayed below the keys and touch strip. */
   footer?: ComponentChildren;
 }>): preact.JSX.Element {
+  const { keyCount, columns } = previewLayout(deviceKeyCount, deviceColumns, modelId);
   const isCompact = keyCount === 6;
   const gridRef = useRef<HTMLDivElement>(null);
   const previewRef = useRef<KeyPreview | null>(null);
@@ -90,7 +82,7 @@ export function KeyGridPreview({
   /* eslint-disable @eslint-react/exhaustive-deps -- intentional mount-only: creates KeyPreview once; prop changes handled by the effect below */
   useEffect(() => {
     const el = gridRef.current;
-    if (!el || !live) return;
+    if (!el) return;
     // Create the KeyPreview instance once; broadcast() auto-prunes on disconnect
     const kp = new KeyPreview(el, { showIndex, flash, onKeyClick, gesture });
     previewRef.current = kp;
@@ -116,21 +108,27 @@ export function KeyGridPreview({
     <div class={cls}>
       <div class="preview-head">
         <span class="preview-label">{label}</span>
-        <span class="live-dot">{badge ?? (dimmed ? 'Paused' : 'Live')}</span>
+        <span class="live-dot">{dimmed ? 'Paused' : 'Live'}</span>
       </div>
-      {live ? (
-        <>
-          <div ref={gridRef} />
-          {touchStrip && <TouchStripPreview width={touchStrip.width} height={touchStrip.height} />}
-        </>
-      ) : (
-        <div class="key-grid" style={`grid-template-columns:repeat(${columns},1fr)`}>
-          {Array.from({ length: keyCount }, (_, i) => (
-            <div class="key-cell" key={i} />
-          ))}
-        </div>
-      )}
+      <div ref={gridRef} />
+      {touchStrip && <TouchStripPreview width={touchStrip.width} height={touchStrip.height} />}
       {footer}
     </div>
+  );
+}
+
+/** Inert grid of the device's key layout: a thumbnail with no live images. */
+export function KeyGridSkeleton({
+  keyCount,
+  columns,
+  modelId,
+}: Readonly<{ keyCount: number; columns: number; modelId?: string }>): preact.JSX.Element {
+  const layout = previewLayout(keyCount, columns, modelId);
+  return (
+    <span class="key-grid" style={`grid-template-columns:repeat(${layout.columns},1fr)`}>
+      {Array.from({ length: layout.keyCount }, (_, i) => (
+        <span class="key-cell" key={i} />
+      ))}
+    </span>
   );
 }

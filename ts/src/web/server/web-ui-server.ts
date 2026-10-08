@@ -331,6 +331,10 @@ export class WebUIServer extends EventEmitter implements WebUIController, WebUIC
     this.status.setFlag('elgatoDevicePresent', present);
   }
 
+  notifyElgatoAutoRestart(pending: { at: number; docks: readonly number[] } | null): void {
+    this.status.setAutoRestart(pending);
+  }
+
   notifyStats(delta: Partial<Stats>): void {
     Object.assign(this.stats, delta);
   }

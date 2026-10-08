@@ -13,6 +13,12 @@ import type { DriverManager } from './driver-manager.js';
 
 const COMPONENT = 'auto-restart';
 
+export interface AutoRestartPending {
+  /** Epoch ms of the grace deadline (server clock; never sent to browsers as-is). */
+  at: number;
+  docks: number[];
+}
+
 export interface ElgatoAutoRestartDeps {
   app: Pick<ElgatoAppControl, 'isRunning' | 'restart'>;
   settings: {
@@ -27,6 +33,9 @@ export interface ElgatoAutoRestartDeps {
   conflict(): boolean;
   /** DECKBRIDGE_MOCK / mock driver mode — there is no real app to restart for. */
   mock?(): boolean;
+  /** Publish the shared grace deadline + the docks it covers; null releases the
+   *  manual pairing controls. Re-called when a further dock joins the set. */
+  onPending?: (pending: AutoRestartPending | null) => void;
   /** Defaults to the real setTimeout/clearTimeout; overridden by tests. */
   setTimer?: (fn: () => void, ms: number) => ReturnType<typeof setTimeout>;
   clearTimer?: (id: ReturnType<typeof setTimeout>) => void;
@@ -45,6 +54,7 @@ export class ElgatoAutoRestart {
 
   private fired = false;
   private timer: ReturnType<typeof setTimeout> | null = null;
+  private restartAt = 0;
   /** Docks that passed every gating rule and are waiting for either the grace
    *  timer to fire or the Elgato app to attach to them on its own. */
   private readonly pendingDocks = new Set<number>();
@@ -74,15 +84,28 @@ export class ElgatoAutoRestart {
       return;
     }
 
+    // A new round starts clean so docks from an earlier skipped round aren't published.
+    if (this.timer === null) this.pendingDocks.clear();
+    const joined = !this.pendingDocks.has(dockIndex);
     this.pendingDocks.add(dockIndex);
-    if (this.timer === null) {
+    if (this.timer !== null) {
+      if (joined) this.publishPending();
+    } else {
       const delayS = this.deps.settings.delayS();
       log('info', COMPONENT, `dock ${dockIndex}: paired before — grace timer started (${delayS}s)`);
       this.timer = this.setTimer(() => {
         this.timer = null;
-        void this.onGraceElapsed();
+        void this.onGraceElapsed().finally(() => {
+          if (this.timer === null) this.deps.onPending?.(null);
+        });
       }, delayS * 1000);
+      this.restartAt = Date.now() + delayS * 1000;
+      this.publishPending();
     }
+  }
+
+  private publishPending(): void {
+    this.deps.onPending?.({ at: this.restartAt, docks: [...this.pendingDocks] });
   }
 
   /** The Elgato child client attached to `dockIndex` — on its own, or via a
@@ -130,6 +153,7 @@ export class ElgatoAutoRestart {
       this.clearTimer(this.timer);
       this.timer = null;
     }
+    this.deps.onPending?.(null);
   }
 }
 
@@ -152,6 +176,7 @@ export function createElgatoAutoRestartDeps(opts: {
     isAttached: (dockIndex) =>
       driverManager.getDockStatuses().find((d) => d.index === dockIndex)?.elgatoConnected ?? false,
     conflict: () => webui.snapshot().elgatoAppConflict,
+    onPending: (pending) => webui.notifyElgatoAutoRestart(pending),
     ...(__MOCK_BUILD__ ? { mock: () => driverManager.getDriverMode() === 'mock' } : {}),
   };
 }

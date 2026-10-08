@@ -94,6 +94,8 @@ test.describe('layouts that follow the Elgato page (293S, advertised as MK.2)', 
     expect((await pageState()).activePageId).toBe(id);
 
     await gotoApp(page, `${base}/`);
+    await expect(page.locator('#pagesToggle')).toHaveAttribute('aria-expanded', 'false');
+    await click(page.locator('#pagesToggle'));
     await expect(page.locator('#pagesStatus')).toContainText('Showing "A"');
     await expect(page.locator('#savedPagesList')).toHaveAttribute('hidden', '');
     await click(page.locator('#pageManageBtn'));

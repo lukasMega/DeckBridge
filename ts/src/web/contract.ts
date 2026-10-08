@@ -378,6 +378,11 @@ export interface StatusSnapshot {
   localIp: string;
   docks: DockStatus[];
   selectedDock: number;
+  /** Scheduled automatic Elgato restart; stays set until skipped or completed.
+   *  `remainingMs` is relative to when this snapshot was serialized (the client
+   *  anchors it to its own receipt time); `docks` are the dock indices the restart
+   *  is waiting on, so only those lock their pairing controls. */
+  elgatoAutoRestartPending?: { remainingMs: number; docks: number[] } | null;
 }
 
 /** GET /api/state: the status snapshot plus everything a freshly loaded page needs.

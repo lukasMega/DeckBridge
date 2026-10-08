@@ -328,6 +328,38 @@ test('snapshot.docks defaults to empty array', () => {
   assert.deepEqual(ui.fullState().docks, []);
 });
 
+test('automatic restart is published as relative remainingMs + pending docks, and survives reloads', () => {
+  const ui = new WebUIServer(undefined, [], 'real', new PersistedSettings(TEST_SETTINGS_ROOT));
+  const { sent } = connectMockClient(ui);
+  const at = Date.now() + 4000;
+  ui.notifyElgatoAutoRestart({ at, docks: [0] });
+  const pending = ui.fullState().elgatoAutoRestartPending!;
+  assert.deepEqual(pending.docks, [0]);
+  assert.ok(pending.remainingMs > 0 && pending.remainingMs <= 4000, 'relative, not an epoch');
+  const lastPending = (): StatusSnapshot['elgatoAutoRestartPending'] =>
+    (JSON.parse(sent.at(-1)!) as { data: StatusSnapshot }).data.elgatoAutoRestartPending;
+  assert.deepEqual(lastPending()!.docks, [0]);
+  const reloaded = JSON.parse(connectMockClient(ui).sent[0]!) as { data: StatusSnapshot };
+  assert.deepEqual(reloaded.data.elgatoAutoRestartPending!.docks, [0]);
+  assert.ok(reloaded.data.elgatoAutoRestartPending!.remainingMs <= 4000);
+  ui.notifyElgatoAutoRestart(null);
+  assert.equal(lastPending(), null);
+});
+
+test('a later-joining dock is published in docks; an identical notify does not rebroadcast', () => {
+  const ui = new WebUIServer(undefined, [], 'real', new PersistedSettings(TEST_SETTINGS_ROOT));
+  const { sent } = connectMockClient(ui);
+  const at = Date.now() + 4000;
+  ui.notifyElgatoAutoRestart({ at, docks: [0] });
+  ui.notifyElgatoAutoRestart({ at, docks: [0] });
+  const afterDup = sent.length;
+  ui.notifyElgatoAutoRestart({ at, docks: [0, 2] });
+  assert.equal(sent.length, afterDup + 1, 'joining dock rebroadcasts');
+  const data = (JSON.parse(sent.at(-1)!) as { data: StatusSnapshot }).data;
+  assert.deepEqual(data.elgatoAutoRestartPending!.docks, [0, 2]);
+  assert.deepEqual(ui.fullState().elgatoAutoRestartPending!.docks, [0, 2]);
+});
+
 test('fullState exposes selected dock real device identity', () => {
   const ui = new WebUIServer(undefined, [], 'real', new PersistedSettings(TEST_SETTINGS_ROOT));
   const realDeviceIdentity = {
