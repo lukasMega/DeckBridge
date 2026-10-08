@@ -69,13 +69,11 @@ export function StageReady({
   if (docks !== undefined && isMultiDockView(docks) && onHelp !== undefined) {
     const sel = docks.find((d) => d.index === selectedDock) ?? docks[0]!;
     const many = docks.length > 1;
-    const title = many ? `All ${docks.length} decks connected` : 'Connected';
     return (
       <>
-        <ReadyStatus title={`${title}${appName}`} deviceName={many ? undefined : sel.modelName} />
+        {!many && <ReadyStatus title={`Connected${appName}`} deviceName={sel.modelName} />}
         <DockList docks={docks} onHelp={onHelp} />
         {many && <p class="step-sub">Select a deck for its live preview and brightness.</p>}
-        <ExtraKeysPanel />
       </>
     );
   }
@@ -105,15 +103,13 @@ export function StageMultiPairing({
   docks,
   onHelp,
 }: Readonly<{ docks: DockUi[]; onHelp: (id: string) => void }>): preact.JSX.Element {
-  const left = docks.filter((d) => !d.elgatoConnected).length;
-
   return (
     <>
-      <h1 class="stage-title">
-        {docks.length} decks connected — {left} left to pair
-      </h1>
+      {docks.length === 1 && <h1 class="stage-title">Deck connected — not paired yet</h1>}
       <DockList docks={docks} onHelp={onHelp} />
-      <p class="step-sub">Each deck pairs as its own Network Dock. Select one to pair it.</p>
+      {docks.length > 1 && (
+        <p class="step-sub">Each deck pairs as its own Network Dock. Select one to pair it.</p>
+      )}
     </>
   );
 }

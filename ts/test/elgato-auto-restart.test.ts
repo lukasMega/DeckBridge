@@ -1,6 +1,6 @@
 import assert from 'tjs:assert';
 import { ElgatoAutoRestart } from '../src/main/elgato-auto-restart.js';
-import type { ElgatoAutoRestartDeps } from '../src/main/elgato-auto-restart.js';
+import type { AutoRestartPending, ElgatoAutoRestartDeps } from '../src/main/elgato-auto-restart.js';
 import type { RestartResult } from '../src/infra/elgato-app.js';
 import { testAsync as test, summary } from './helpers/harness.js';
 
@@ -9,6 +9,7 @@ import { testAsync as test, summary } from './helpers/harness.js';
  *  tracking a single pending callback is enough to drive every test). */
 function fakeDeps(overrides: { enabled?: boolean; delayS?: number; mock?: boolean } = {}) {
   const calls: string[] = [];
+  const progress: Array<AutoRestartPending | null> = [];
   const state = {
     enabled: overrides.enabled ?? true,
     delayS: overrides.delayS ?? 10,
@@ -42,6 +43,7 @@ function fakeDeps(overrides: { enabled?: boolean; delayS?: number; mock?: boolea
     isAttached: (dock: number) => state.attached.has(dock),
     conflict: () => state.conflict,
     mock: () => state.mock,
+    onPending: (pending) => progress.push(pending),
     setTimer: (fn, _ms) => {
       timerCount++;
       timerFn = fn;
@@ -57,6 +59,7 @@ function fakeDeps(overrides: { enabled?: boolean; delayS?: number; mock?: boolea
   return {
     deps,
     calls,
+    progress,
     state,
     timerCount: () => timerCount,
     hasPendingTimer: () => timerFn !== null && !timerCleared,
@@ -118,8 +121,55 @@ await test('rule: a qualifying dock starts exactly one shared timer', () => {
 
 console.log('\ngrace-period outcomes');
 
+await test('progress keeps one deadline until failed restart finishes', async () => {
+  const { deps, state, progress, fireTimer } = fakeDeps({ delayS: 4 });
+  state.paired.add('dock-a');
+  state.paired.add('dock-b');
+  let finishRestart!: (result: RestartResult) => void;
+  deps.app.restart = () =>
+    new Promise((resolve) => {
+      finishRestart = resolve;
+    });
+  const scheduler = new ElgatoAutoRestart(deps);
+  const started = Date.now();
+  scheduler.onDockConnected(0, 'dock-a');
+  scheduler.onDockConnected(1, 'dock-b');
+  assert.equal(progress.length, 2, 'initial publish + one re-publish when dock 1 joins');
+  const first = progress[0]!;
+  assert.ok(first.at >= started + 4000 && first.at <= Date.now() + 4000);
+  assert.equal(progress[1]!.at, first.at, 'a joining dock keeps the same deadline');
+  await fireTimer();
+  assert.equal(progress.length, 2, 'controls remain locked during the restart');
+  finishRestart({ ok: false, reason: 'launch-failed' });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.equal(progress.at(-1), null, 'failure unlocks controls');
+});
+
+await test('pending docks: a later-joining dock is added; repeats do not re-publish', () => {
+  const { deps, state, progress } = fakeDeps();
+  state.paired.add('dock-a');
+  state.paired.add('dock-b');
+  const scheduler = new ElgatoAutoRestart(deps);
+  scheduler.onDockConnected(0, 'dock-a');
+  assert.deepEqual(progress.at(-1)!.docks, [0]);
+  scheduler.onDockConnected(1, 'dock-b');
+  assert.deepEqual(progress.at(-1)!.docks, [0, 1]);
+  const count = progress.length;
+  scheduler.onDockConnected(1, 'dock-b');
+  assert.equal(progress.length, count, 'same dock again is not a new publish');
+});
+
+await test('pending docks: a never-paired dock is never included', () => {
+  const { deps, state, progress } = fakeDeps();
+  state.paired.add('dock-a');
+  const scheduler = new ElgatoAutoRestart(deps);
+  scheduler.onDockConnected(0, 'dock-a');
+  scheduler.onDockConnected(1, 'dock-new');
+  assert.deepEqual(progress.at(-1)!.docks, [0]);
+});
+
 await test('outcome: every paired dock already attached — restart skipped', async () => {
-  const { deps, state, calls, fireTimer } = fakeDeps();
+  const { deps, state, calls, progress, fireTimer } = fakeDeps();
   state.paired.add('dock-a');
   state.attached.add(0);
   const scheduler = new ElgatoAutoRestart(deps);
@@ -128,6 +178,7 @@ await test('outcome: every paired dock already attached — restart skipped', as
   await fireTimer();
 
   assert.ok(!calls.includes('restart'), 'restart must not run when the app already attached');
+  assert.equal(progress.at(-1), null, 'skipping unlocks controls');
 });
 
 await test('outcome: Elgato app conflict — restart skipped', async () => {
@@ -155,7 +206,7 @@ await test('outcome: Elgato app not running here — restart skipped', async () 
 });
 
 await test('outcome: qualifying dock, no conflict, app running — restart fires', async () => {
-  const { deps, state, calls, fireTimer } = fakeDeps();
+  const { deps, state, calls, progress, fireTimer } = fakeDeps();
   state.paired.add('dock-a');
   const scheduler = new ElgatoAutoRestart(deps);
   scheduler.onDockConnected(0, 'dock-a');
@@ -163,6 +214,7 @@ await test('outcome: qualifying dock, no conflict, app running — restart fires
   await fireTimer();
 
   assert.ok(calls.includes('restart'), 'restart should run');
+  assert.equal(progress.at(-1), null, 'completion unlocks controls');
 });
 
 console.log('\nonElgatoAttached() defers to the grace-end check');
@@ -242,7 +294,7 @@ await test('a restart already fired this process — further connects are skippe
 console.log('\ndispose()');
 
 await test('dispose() cancels a pending timer', () => {
-  const { deps, state, hasPendingTimer } = fakeDeps();
+  const { deps, state, hasPendingTimer, progress } = fakeDeps();
   state.paired.add('dock-a');
   const scheduler = new ElgatoAutoRestart(deps);
   scheduler.onDockConnected(0, 'dock-a');
@@ -251,6 +303,7 @@ await test('dispose() cancels a pending timer', () => {
   scheduler.dispose();
 
   assert.ok(!hasPendingTimer());
+  assert.equal(progress.at(-1), null, 'shutdown clears pending progress');
 });
 
 summary();

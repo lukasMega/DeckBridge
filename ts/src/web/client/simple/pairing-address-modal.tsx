@@ -41,7 +41,7 @@ function StepOne({
         {OS_TABS.map((t) => (
           <button
             key={t.id}
-            class={t.id === tab ? 'ghostbtn active' : 'ghostbtn'}
+            class="ghostbtn"
             type="button"
             role="tab"
             aria-selected={t.id === tab}

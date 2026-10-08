@@ -9,6 +9,7 @@ import { copyLabel, useCopyText } from '../lib/use-copy-text.js';
 import { getJson, postJson } from '../lib/ui-api.js';
 import { Feedback, useAsyncAction } from '../lib/ui-async.js';
 import { patch, useStore } from '../lib/store.js';
+import { useNow } from '../lib/ui-hooks.js';
 import type { PushChannelView, PushTokenCreated, PushTokenView } from '../ui-types.js';
 
 const NAME_MAX = 40;
@@ -87,18 +88,9 @@ function TokenList({
 }
 
 function ChannelTable({ channels }: Readonly<{ channels: PushChannelView[] }>): preact.JSX.Element {
-  const [now, setNow] = useState(() => Date.now());
+  const now = useNow(channels.length > 0);
   const action = useAsyncAction();
   const [test, setTest] = useState({ channel: '', text: '' });
-  const ticking = channels.length > 0;
-  useEffect(
-    function tickCountdown() {
-      if (!ticking) return undefined;
-      const id = setInterval(() => setNow(Date.now()), 1000);
-      return () => clearInterval(id);
-    },
-    [ticking],
-  );
   const clear = (c: string): Promise<void> =>
     action.run(async () => {
       await postJson(`/api/push-channels/${encodeURIComponent(c)}/clear`);

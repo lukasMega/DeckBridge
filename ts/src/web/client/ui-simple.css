@@ -21,7 +21,7 @@
   height: 7px;
   background: var(--accent);
 }
-:is(.brand-home, .strip-zone-tab) {
+:is(.brand-home, .strip-zone-tab, .xkeys-toggle) {
   color: inherit;
   font: inherit;
 }
@@ -156,23 +156,55 @@ later per-class rules keep only size/background/placement deltas */
     var(--shadow-1);
 }
 
-/* ---- multi-dock cards ---- */
+/* ---- deck tabs and selected panel ---- */
 .dock-list {
   margin: 18px 0 4px;
   grid-template-columns: 1fr;
 }
 /* .chip-radio: the radio itself is visually hidden, so it cannot carry the focus ring */
-:is(.dock-card:focus-visible, .strip-zone-tab:focus-visible),
+:is(.dock-tab:focus-visible, .strip-zone-tab:focus-visible),
 .chip-radio:has(input:focus-visible) {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
-.dock-card--selected {
-  border-color: var(--accent);
-  box-shadow:
-    0 0 0 1px var(--accent),
-    var(--shadow-1);
-  cursor: default;
+.dock-tab {
+  flex: 1;
+  min-width: 0;
+  text-align: left;
+  padding: 10px;
+}
+.dock-tabs {
+  display: flex;
+}
+.dock-tab .dock-card-name {
+  white-space: normal;
+  overflow-wrap: anywhere;
+  max-width: 100%;
+}
+.dock-tab-preview {
+  display: grid;
+  gap: 4px;
+  flex: none;
+  width: 50px;
+  padding: 6px;
+  border-radius: var(--r-sm);
+}
+.dock-tab-preview .key-grid {
+  gap: 3px;
+}
+.dock-tab-preview .key-cell,
+.dock-tab-strip {
+  border-radius: 2px;
+  background: var(--fg-dim);
+}
+.dock-tab-strip {
+  height: 4px;
+}
+@media (max-width: 480px) {
+  .dock-tab {
+    flex-direction: column;
+    text-align: center;
+  }
 }
 .dock-card-head {
   margin-bottom: 10px;
@@ -342,6 +374,10 @@ input[type='range'].range:disabled {
 .xkeys-compact {
   margin-top: 16px;
   padding-top: 12px;
+}
+.xkeys-toggle {
+  padding: 0;
+  gap: 8px;
 }
 .xkeys-compact .xkeys-head {
   justify-content: flex-start;
@@ -652,21 +688,33 @@ input[type='range'].range:disabled {
 .pairing-flow {
   margin-top: 20px;
 }
+.pairing-auto {
+  padding: 12px 14px;
+  background: var(--accent-soft);
+}
+.pairing-auto strong {
+  margin-right: auto;
+}
 .pairing-question {
   margin: 0 0 10px;
   font-weight: 600;
 }
-.pairing-answers {
-  display: flex;
-  gap: 8px;
+.pairing-controls {
+  flex-wrap: wrap;
 }
 .pairing-answers [aria-pressed='true'],
 .ctabtn.pairing-action {
   background: var(--accent);
   color: var(--accent-ink);
 }
-.pairing-action-row {
-  margin-top: 14px;
+.pairing-controls .pairing-action-row {
+  margin-top: 0;
+}
+.pairing-feedback {
+  flex-basis: 100%;
+}
+.pairing-feedback:empty {
+  display: none;
 }
 .ctabtn.pairing-action {
   margin-top: 0;

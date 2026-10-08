@@ -33,6 +33,9 @@ export class StatusPublisher {
     localIp: '127.0.0.1',
   };
 
+  /** Server-epoch deadline; only ever sent as `remainingMs` (see snapshot()). */
+  private autoRestart: { at: number; docks: number[] } | null = null;
+
   constructor(
     private readonly extras: () => SnapshotExtras,
     private readonly broadcast: WsBroadcast,
@@ -54,7 +57,16 @@ export class StatusPublisher {
   }
 
   snapshot(): StatusSnapshot {
-    return { ...this.status, ...this.extras() };
+    // Relative, computed at serialization: a browser with a skewed clock must
+    // never compare a server epoch to its own Date.now().
+    const pending = this.autoRestart;
+    return {
+      ...this.status,
+      ...this.extras(),
+      elgatoAutoRestartPending: pending
+        ? { remainingMs: Math.max(0, pending.at - Date.now()), docks: [...pending.docks] }
+        : null,
+    };
   }
 
   publish(): void {
@@ -82,6 +94,21 @@ export class StatusPublisher {
   setFlag<K extends StatusFlag>(key: K, value: (typeof this.status)[K]): void {
     if (this.status[key] === value) return;
     this.status[key] = value;
+    this.publish();
+  }
+
+  /** Dedupes on deadline + dock set; a joining dock re-publishes the same deadline. */
+  setAutoRestart(next: { at: number; docks: readonly number[] } | null): void {
+    const prev = this.autoRestart;
+    const same =
+      prev === next ||
+      (prev !== null &&
+        next !== null &&
+        prev.at === next.at &&
+        prev.docks.length === next.docks.length &&
+        prev.docks.every((d, i) => d === next.docks[i]));
+    if (same) return;
+    this.autoRestart = next && { at: next.at, docks: [...next.docks] };
     this.publish();
   }
 

@@ -270,38 +270,35 @@ async function runPairingDockCards(root: HTMLElement, check: Check): Promise<voi
     );
     await act(() => render(<DockList docks={docks} onHelp={() => {}} />, root));
     await settle();
-    const cards = root.querySelectorAll<HTMLElement>('.dock-card');
+    const card = root.querySelector<HTMLElement>('.dock-card')!;
+    const tabs = root.querySelectorAll<HTMLButtonElement>('[role="tab"]');
+    check(tabs.length === 2, 'Dock pairing: both decks have tabs');
     check(
-      cards[0]!.querySelector('.pairing-flow') !== null,
-      'Dock pairing: the selected card shows the pairing choice',
+      root.querySelectorAll('.dock-card').length === 1 &&
+        card.querySelector('.pairing-flow') !== null,
+      'Dock pairing: only the selected panel shows pairing controls',
     );
     check(
-      cards[1]!.querySelector('.pairing-flow') === null,
-      'Dock pairing: other pending cards do not repeat it',
+      tabs[0]!.getAttribute('aria-selected') === 'true' &&
+        tabs[1]!.getAttribute('aria-selected') === 'false',
+      'Dock pairing: tabs expose the selection',
     );
     check(
-      cards[0]!.querySelector('.dock-card-name')!.getAttribute('aria-pressed') === 'true' &&
-        cards[1]!.querySelector('.dock-card-name')!.getAttribute('aria-pressed') === 'false',
-      'Dock pairing: the name button exposes the selection',
+      root.querySelector('[role="tabpanel"]')?.getAttribute('aria-labelledby') === tabs[0]!.id,
+      'Dock pairing: the panel is labelled by its tab',
     );
-    check(
-      cards[0]!.getAttribute('role') === null,
-      'Dock pairing: the card is not a button wrapping buttons',
-    );
+    check(card.getAttribute('role') === null, 'Dock pairing: controls have no wrapping button');
 
     await act(() =>
-      cards[0]!.querySelectorAll<HTMLButtonElement>('.pairing-answers button')[1]!.click(),
+      card.querySelectorAll<HTMLButtonElement>('.pairing-answers button')[1]!.click(),
     );
     check(
-      cards[0]!.querySelector<HTMLDetailsElement>('.manual-add')?.open === true,
+      card.querySelector<HTMLDetailsElement>('.manual-add')?.open === true,
       'Dock pairing: No opens manual pairing on the selected dock',
     );
-    check(
-      cards[0]!.textContent.includes('5343'),
-      'Dock pairing: manual pairing uses this dock’s port',
-    );
+    check(card.textContent.includes('5343'), 'Dock pairing: manual pairing uses this dock’s port');
 
-    const chip = cards[0]!.querySelector<HTMLButtonElement>('.addr-port-chip')!;
+    const chip = card.querySelector<HTMLButtonElement>('.addr-port-chip')!;
     const enter = new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true });
     chip.dispatchEvent(enter);
     check(!enter.defaultPrevented, 'Dock pairing: Enter on a copy chip keeps its own activation');
@@ -311,10 +308,67 @@ async function runPairingDockCards(root: HTMLElement, check: Check): Promise<voi
       'Dock pairing: a nested control click does not select',
     );
 
-    await act(() => cards[1]!.querySelector<HTMLButtonElement>('.dock-card-name')!.click());
+    await act(() => tabs[1]!.click());
     check(
       posts.some((p) => p.url === '/api/select-dock' && (p.body as { index: number }).index === 1),
-      'Dock pairing: the name button selects its dock',
+      'Dock pairing: the tab selects its dock',
+    );
+    await act(() =>
+      patch({ status: { ...EMPTY_STATUS, driverConnected: true, docks, selectedDock: 1 } }),
+    );
+    await settle();
+    check(
+      root.querySelector('[role="tabpanel"]')?.getAttribute('aria-labelledby') === tabs[1]!.id,
+      'Dock pairing: switching updates the panel label',
+    );
+    check(
+      root.querySelector('.manual-add') === null,
+      'Dock pairing: switching resets pairing instructions',
+    );
+    await act(() =>
+      root.querySelectorAll<HTMLButtonElement>('.pairing-answers button')[1]!.click(),
+    );
+    check(
+      root.querySelector('.manual-add')!.textContent.includes('5344'),
+      'Dock pairing: switched instructions use the new port',
+    );
+    await act(() =>
+      patch({
+        status: {
+          ...EMPTY_STATUS,
+          driverConnected: true,
+          docks: docks.map((dock) => ({ ...dock, primaryConnected: true })),
+          selectedDock: 1,
+          elgatoAutoRestartPending: { remainingMs: 4000, docks: [1] },
+        },
+      }),
+    );
+    await settle();
+    check(
+      root
+        .querySelector('.pairing-flow [role="status"]')
+        ?.textContent.includes('Reconnecting your deck') === true &&
+        root.querySelector('.pairing-controls') === null &&
+        root.querySelector('.address-link') === null,
+      'Dock pairing: automatic restart replaces pairing choices with focused status',
+    );
+    await act(() =>
+      patch({
+        status: {
+          ...EMPTY_STATUS,
+          driverConnected: true,
+          docks,
+          selectedDock: 0,
+          elgatoAutoRestartPending: { remainingMs: 4000, docks: [1] },
+        },
+      }),
+    );
+    await settle();
+    check(
+      root.querySelector('.pairing-question') !== null &&
+        root.querySelector('.pairing-auto') === null &&
+        root.querySelector('.address-link') !== null,
+      'Dock pairing: a dock outside the pending restart keeps its pairing controls',
     );
   } finally {
     globalThis.fetch = original;
@@ -325,6 +379,15 @@ async function runPairingDockCards(root: HTMLElement, check: Check): Promise<voi
 
 async function runPairingChoices(root: HTMLElement, check: Check): Promise<void> {
   const original = globalThis.fetch;
+  const originalSetTimeout = globalThis.setTimeout;
+  let finishMinimumWait: (() => void) | undefined;
+  globalThis.setTimeout = ((handler: TimerHandler, delay?: number, ...args: unknown[]): number => {
+    if (delay === 5000 && typeof handler === 'function') {
+      finishMinimumWait = () => (handler as (...values: unknown[]) => void)(...args);
+      return 1_000_000;
+    }
+    return originalSetTimeout(handler, delay, ...args);
+  }) as typeof globalThis.setTimeout;
   const storeBefore = getSnapshot();
   const requests: Array<{ url: string; method: string }> = [];
   let running = false;
@@ -408,6 +471,13 @@ async function runPairingChoices(root: HTMLElement, check: Check): Promise<void>
     await act(() => finishAction!());
     await settle();
     check(
+      open.disabled && open.textContent === 'Please wait…',
+      'Pairing: fast launch keeps Please wait until five seconds pass',
+    );
+    check(finishMinimumWait !== undefined, 'Pairing: opening starts a five-second minimum wait');
+    await act(() => finishMinimumWait!());
+    await settle();
+    check(
       root.querySelector('.pairing-action')?.textContent === 'Restart Elgato app',
       'Pairing: running process shows Restart after launch',
     );
@@ -418,6 +488,16 @@ async function runPairingChoices(root: HTMLElement, check: Check): Promise<void>
       root.querySelector('.pairing-action')?.textContent === 'Open Elgato app',
       'Pairing: focus refresh detects an app that quit',
     );
+    await act(() => open.click());
+    await act(() => finishMinimumWait!());
+    await settle();
+    check(
+      open.disabled && open.textContent === 'Please wait…',
+      'Pairing: slow launch stays busy after five seconds while request is pending',
+    );
+    await act(() => finishAction!());
+    await settle();
+    check(!open.disabled, 'Pairing: slow launch becomes available when request finishes');
     running = true;
     await choose(false);
     await choose(true);
@@ -475,8 +555,105 @@ async function runPairingChoices(root: HTMLElement, check: Check): Promise<void>
     );
   } finally {
     await act(() => render(null, root));
+    globalThis.setTimeout = originalSetTimeout;
     globalThis.fetch = original;
     await act(() => patch(storeBefore));
+  }
+}
+
+async function runPairingAutoRestart(root: HTMLElement, check: Check): Promise<void> {
+  const before = getSnapshot();
+  const originalFetch = globalThis.fetch;
+  const originalNow = Date.now;
+  let now = originalNow();
+  Date.now = () => now;
+  let launches = 0;
+  globalThis.fetch = ((url: string, init?: RequestInit) => {
+    if (init?.method === 'POST') launches++;
+    return Promise.resolve({
+      ok: true,
+      json: () => Promise.resolve({ running: true, supported: true }),
+    });
+  }) as unknown as typeof fetch;
+  const paused = (): boolean =>
+    root.querySelector('.pairing-controls, .manual-add, .pairing-action') === null;
+  const advance = async (ms: number): Promise<void> => {
+    now += ms;
+    await act(() => new Promise<void>((resolve) => window.setTimeout(resolve, 1100)));
+  };
+  try {
+    await act(() => {
+      patch({ status: { ...EMPTY_STATUS, driverConnected: true } });
+      render(<StageDeviceNoElgato onHelp={() => {}} />, root);
+    });
+    await act(() =>
+      root.querySelectorAll<HTMLButtonElement>('.pairing-answers button')[1]!.click(),
+    );
+    check(
+      root.querySelector('.manual-add') !== null,
+      'Auto-restart: manual pairing initially available',
+    );
+    await act(() =>
+      patch({
+        status: {
+          ...getSnapshot().status,
+          elgatoAutoRestartPending: { remainingMs: 4000, docks: [0] },
+        },
+      }),
+    );
+    await settle();
+    check(paused(), 'Auto-restart: pairing choices pause during grace period');
+    check(
+      root.querySelector('.pairing-question') === null,
+      'Auto-restart: no redundant pairing question',
+    );
+    check(root.querySelector('.manual-add') === null, 'Auto-restart: manual instructions paused');
+    check(
+      root.querySelector('.pairing-auto .dock-chip')?.textContent === '4s',
+      'Auto-restart: shows server countdown',
+    );
+    await advance(1000);
+    check(
+      root.querySelector('.pairing-auto .dock-chip')?.textContent === '3s',
+      'Auto-restart: countdown decreases',
+    );
+    await advance(3000);
+    check(
+      paused() &&
+        root.textContent.includes('Restarting Elgato app…') &&
+        root.querySelector('.pairing-auto .ico-spin') !== null,
+      'Auto-restart: active restart keeps spinner and paused pairing',
+    );
+    await act(() => patch({ status: { ...getSnapshot().status, elgatoAutoRestartPending: null } }));
+    check(
+      !paused() && root.querySelector('.manual-add') !== null,
+      'Auto-restart: completion restores manual pairing',
+    );
+    await act(() =>
+      root.querySelectorAll<HTMLButtonElement>('.pairing-answers button')[0]!.click(),
+    );
+    await settle();
+    await act(() =>
+      patch({
+        status: {
+          ...getSnapshot().status,
+          elgatoAutoRestartPending: { remainingMs: 4000, docks: [0] },
+        },
+      }),
+    );
+    check(paused(), 'Auto-restart: existing app action pauses too');
+    check(launches === 0, 'Auto-restart: manual app control cannot race automatic restart');
+    await act(() => patch({ status: { ...getSnapshot().status, elgatoAutoRestartPending: null } }));
+    await settle();
+    check(
+      root.querySelector('.pairing-action') !== null,
+      'Auto-restart: previous Yes choice resumes afterward',
+    );
+  } finally {
+    await act(() => render(null, root));
+    Date.now = originalNow;
+    globalThis.fetch = originalFetch;
+    await act(() => patch(before));
   }
 }
 
@@ -487,4 +664,5 @@ export async function runPairingFlow(root: HTMLElement, check: Check): Promise<v
   await runReadyStage(root, check);
   await runPairingChoices(root, check);
   await runPairingDockCards(root, check);
+  await runPairingAutoRestart(root, check);
 }

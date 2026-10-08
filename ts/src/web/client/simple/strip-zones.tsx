@@ -11,6 +11,7 @@ import type {
 import { attachZoneCanvas } from '../strip-zone-preview.js';
 import { hasWidgetValue, WidgetSelect, WidgetValue } from './extra-key-fields.js';
 import { ClippedBadge, TextSizeControl } from './text-size-control.js';
+import { rovingTabKey } from '../lib/roving-tabs.js';
 
 // Under an override mode 'none' decides what an unassigned strip zone shows.
 const NONE_LABEL: Partial<Record<TouchStripMode, string>> = {
@@ -120,15 +121,6 @@ function ZonePanel({
   );
 }
 
-const NAV_KEYS: Readonly<Record<string, (index: number, count: number) => number>> = {
-  ArrowRight: (i, n) => (i + 1) % n,
-  ArrowDown: (i, n) => (i + 1) % n,
-  ArrowLeft: (i, n) => (i - 1 + n) % n,
-  ArrowUp: (i, n) => (i - 1 + n) % n,
-  Home: () => 0,
-  End: (_i, n) => n - 1,
-};
-
 /** `displays` sorted by wireId. Remount per dock (key) so selection resets on a switch. */
 export function StripZones({
   displays,
@@ -162,12 +154,8 @@ export function StripZones({
   // A zone that vanished (model change) falls back to the first one.
   const selected = displays.find((zone) => zone.wireId === picked) ?? displays[0]!;
   const handleKeyDown = (e: KeyboardEvent): void => {
-    const next = NAV_KEYS[e.key];
-    if (!next) return;
-    e.preventDefault();
-    const zone = displays[next(displays.indexOf(selected), displays.length)]!;
-    setPicked(zone.wireId);
-    (e.currentTarget as HTMLElement).querySelector<HTMLElement>(`#${tabId(zone.wireId)}`)?.focus();
+    const next = rovingTabKey(e, displays.indexOf(selected), displays.length);
+    if (next !== undefined) setPicked(displays[next]!.wireId);
   };
 
   return (

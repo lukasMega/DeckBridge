@@ -55,6 +55,17 @@ export function selectedTouchStripSize(s: Status): TouchStripSize | undefined {
   return s.docks.find((d) => d.index === selected)?.touchStripSize;
 }
 
+/** Key frames use Elgato indices; AKP05/AKP05E side keys have separate controls. */
+export function previewLayout(
+  keyCount: number,
+  columns: number,
+  modelId?: string,
+): { keyCount: number; columns: number } {
+  return modelId === 'ajazz-akp05' || modelId === 'ajazz-akp05e'
+    ? { keyCount: 8, columns: 4 }
+    : { keyCount, columns };
+}
+
 export function deeplink(url: string): void {
   const f = document.createElement('iframe');
   f.style.display = 'none';

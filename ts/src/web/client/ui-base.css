@@ -147,6 +147,7 @@ html[data-mode='advanced'] #simple-view {
 :is(.topbar, .brightness, .fader, .status-line, .tuning-label-row, .chip-radio),
 :is(.device-test-option, .xkey-display, .xkey-swatches, .xkey-style-outline),
 .collapse-header,
+.xkeys-toggle,
 .side-keys-legend span {
   display: flex;
   align-items: center;
@@ -193,11 +194,11 @@ html[data-mode='advanced'] #simple-view {
 .manual-add-docs svg {
   flex: none;
 }
-:is(.brand-home, .strip-zone-tab, .xkey-size-btn, .identity-sensitive) {
+:is(.brand-home, .strip-zone-tab, .xkey-size-btn, .identity-sensitive, .xkeys-toggle) {
   border: 0;
   cursor: pointer;
 }
-:is(.brand-home, .strip-zone-tab, .identity-sensitive, .tuning-help) {
+:is(.brand-home, .strip-zone-tab, .identity-sensitive, .tuning-help, .xkeys-toggle) {
   background: transparent;
 }
 :is(.iconbtn, .pop-close, .step-help, .xkey-config-btn, .addr-port-chip) {
@@ -206,7 +207,7 @@ html[data-mode='advanced'] #simple-view {
   appearance: none;
   color: var(--fg-dim);
 }
-:is(.dock-card, .xkey-size-thumb, .xkey-swatch, .chip-radio, .collapse-header, .crop-key),
+:is(.xkey-size-thumb, .xkey-swatch, .chip-radio, .collapse-header, .crop-key),
 .key-grid .key-cell.clickable {
   cursor: pointer;
 }
@@ -409,7 +410,8 @@ select.input {
 :is(.tuning-label-row, .xkey-press, .strip-zones, .side-keys-device, .xkey-display) {
   gap: 6px;
 }
-:is(.dock-card-head, .manual-add-head, .step-title, .toggle-row, .settings-checkbox) {
+:is(.dock-card-head, .manual-add-head, .step-title, .toggle-row, .settings-checkbox),
+:is(.pairing-auto-head, .pairing-controls, .pairing-answers) {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -449,7 +451,7 @@ select.input {
   width: 22px;
   height: 22px;
 }
-:is(.tuning-field, .xkey-value, .addr-port-chip, .identity-list) {
+:is(.tuning-field, .xkey-value, .addr-port-chip, .identity-list, .dock-tabs, .dock-tab) {
   gap: 8px;
 }
 .xkey-popover-curl,
@@ -461,12 +463,20 @@ select.input {
 .pop-close {
   background: var(--inset);
 }
-:is(.panel-inset, .surface-card, .xkey-size, .xkey-swatch, .step-help, .tuning-group),
+:is(
+  .panel-inset,
+  .surface-card,
+  .xkey-size,
+  .xkey-swatch,
+  .step-help,
+  .tuning-group,
+  .pairing-auto
+),
 :is(.chip-radio, .multi-deck-help, .tuning-help, .floating-surface, .app),
 :is(.crop-source canvas, .crop-preview canvas) {
   border: 1px solid var(--border);
 }
-:is(.panel-inset, .surface-card, .side-keys-device, .diag-section) {
+:is(.panel-inset, .surface-card, .side-keys-device, .diag-section, .pairing-auto) {
   border-radius: var(--r-md);
 }
 :is(.xkeys-compact .xkey-press-label, .strip-zone-panel .xkey-press-label) {
@@ -612,8 +622,8 @@ select.input {
 .ghostbtn:hover {
   color: var(--fg);
 }
-/* toggled-on state (advanced header toggles; same recipe as .tab-btn.active) */
-.ghostbtn.active {
+/* toggled-on state (header toggles, selected tabs; same recipe as .tab-btn.active) */
+:is(.ghostbtn.active, .ghostbtn[aria-selected='true']) {
   color: var(--accent);
   border-color: var(--accent);
   background: var(--accent-soft);
@@ -872,7 +882,8 @@ select.input {
 .collapse-arrow {
   transition: transform 0.2s ease;
 }
-.collapse-header.collapsed .collapse-arrow {
+.collapse-header.collapsed .collapse-arrow,
+.xkeys-toggle[aria-expanded='false'] .collapse-arrow {
   transform: rotate(-90deg);
 }
 .collapse-body {
