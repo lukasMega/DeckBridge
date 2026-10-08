@@ -4,7 +4,7 @@ import type { BitmapFont } from '../src/assets/font-atlas.js';
 import { fontGlyphIndex } from '../src/assets/font-glyph-index.js';
 import { composeWidgetBmp } from '../src/shared/widget-raster.js';
 import { layoutWidget } from '../src/shared/widget-layout.js';
-import { test, summary } from './helpers/harness.js';
+import { test, testAsync, summary } from './helpers/harness.js';
 
 console.log('\nfont atlas');
 
@@ -25,7 +25,7 @@ test('fontGlyphIndex covers ASCII, Latin-1 and U+2026 in one run', () => {
 
 function checkAlpha(font: BitmapFont & { kind: 'alpha' }): void {
   const scale = font.scale ?? 1;
-  const boxes = Buffer.from(font.boxes, 'base64');
+  const boxes = Buffer.from(font.boxes, 'latin1');
   assert.equal(boxes.length, GLYPHS * 4, 'boxes: 4 bytes per glyph');
   let bytes = 0;
   for (let i = 0; i < GLYPHS; i++) {
@@ -33,7 +33,7 @@ function checkAlpha(font: BitmapFont & { kind: 'alpha' }): void {
     bytes += Math.ceil(w / 2) * h;
     assert.ok((top + h) * scale <= font.height, `glyph ${i} fits ${font.height} rows`);
   }
-  assert.equal(Buffer.from(font.alpha, 'base64').length, bytes, 'alpha = sum of box sizes');
+  assert.equal(Buffer.from(font.alpha, 'latin1').length, bytes, 'alpha = sum of box sizes');
 }
 
 function checkDecodes(font: BitmapFont): void {
@@ -41,7 +41,7 @@ function checkDecodes(font: BitmapFont): void {
   if (font.kind === 'alpha') checkAlpha(font);
   else checkBits(font, scale);
   if (font.advances) {
-    const adv = Buffer.from(font.advances, 'base64');
+    const adv = Buffer.from(font.advances, 'latin1');
     assert.equal(adv.length, GLYPHS);
     assert.ok(
       [...adv].every((a) => a > 0 && a <= font.width + 1),
@@ -53,7 +53,7 @@ function checkDecodes(font: BitmapFont): void {
 function checkBits(font: BitmapFont & { bits: string }, scale: number): void {
   const perGlyph = Math.ceil(font.width / scale / 8) * (font.height / scale);
   assert.equal(
-    Buffer.from(font.bits, 'base64').length,
+    Buffer.from(font.bits, 'latin1').length,
     GLYPHS * perGlyph,
     `${font.width}x${font.height}`,
   );
@@ -66,13 +66,13 @@ test('every glyph of every ladder decodes', () => {
 /** [top, bottom] cell rows of ink per glyph (U+0021..U+007E), (none for an empty glyph). */
 function glyphRows(font: BitmapFont, i: number): Array<[number, number]> {
   if (font.kind === 'alpha') {
-    const boxes = Buffer.from(font.boxes, 'base64');
+    const boxes = Buffer.from(font.boxes, 'latin1');
     const [top, h] = [boxes[i * 4 + 1]!, boxes[i * 4 + 3]!];
     return h > 0 ? [[top, top + h - 1]] : [];
   }
   const rows = font.height / (font.scale ?? 1);
   const rowBytes = Math.ceil(font.width / (font.scale ?? 1) / 8);
-  const bits = Buffer.from(font.bits, 'base64');
+  const bits = Buffer.from(font.bits, 'latin1');
   const out: Array<[number, number]> = [];
   for (let r = 0; r < rows; r++) {
     const base = (i * rows + r) * rowBytes;
@@ -160,6 +160,56 @@ test('the … placeholder renders in every font (it was blank before)', () => {
     }
   }
   assert.equal(layoutWidget([{ text: '…', big: true }], 85, 85).clipped, false);
+});
+
+// Golden fingerprints taken from the base64 atlas, before the data moved to latin1 strings:
+// the decoded bytes, and every glyph drawn from them, must not drift.
+const ATLAS_SHA256 = '97b9723d9268150bc0f85f0115702524e00bf089ec2969f39a5343d274a5f05b';
+const RENDER_SHA256 = '334b4845bdc25600e65f2420fc80085e8cb210cc6de72c87a8b6aa3f63acdfe5';
+
+async function sha256Hex(parts: Uint8Array[]): Promise<string> {
+  const all = new Uint8Array(parts.reduce((n, p) => n + p.length, 0));
+  let at = 0;
+  for (const p of parts) {
+    all.set(p, at);
+    at += p.length;
+  }
+  const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', all));
+  return Array.from(digest, (b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+await testAsync('decoded atlas bytes are unchanged', async () => {
+  const fonts = [...new Set([...FONT_LADDER, ...NARROW_LADDER, ...SLIM_LADDER])];
+  assert.equal(fonts.length, 17);
+  const parts: Uint8Array[] = [];
+  for (const f of fonts) {
+    for (const field of ['bits', 'alpha', 'boxes', 'advances'] as const) {
+      const data = (f as unknown as Partial<Record<typeof field, string>>)[field];
+      if (data === undefined) continue;
+      let wide = false;
+      for (let i = 0; i < data.length; i++) wide ||= data.charCodeAt(i) > 0xff;
+      assert.ok(!wide, `${field} holds only latin1 chars`);
+      const bytes = Buffer.from(data, 'latin1');
+      assert.equal(bytes.length, data.length, 'one byte per char');
+      parts.push(new Uint8Array([field.length, bytes.length & 0xff, bytes.length >> 8]), bytes);
+    }
+  }
+  assert.equal(await sha256Hex(parts), ATLAS_SHA256);
+});
+
+await testAsync('widgets render the same pixels in every family and size', async () => {
+  const lines = [
+    { text: 'Hé…W', big: true },
+    { text: 'gjpq ÿÀ 019', big: false },
+  ];
+  const bmps: Uint8Array[] = [];
+  for (const font of ['regular', 'narrow', 'slim'] as const) {
+    for (const textSize of [-2, -1, 0, 1, 2] as const) {
+      bmps.push(composeWidgetBmp(lines, 85, 85, { font, textSize }));
+      bmps.push(composeWidgetBmp(lines, 85, 85, { font, textSize, bold: true }));
+    }
+  }
+  assert.equal(await sha256Hex(bmps), RENDER_SHA256);
 });
 
 summary();

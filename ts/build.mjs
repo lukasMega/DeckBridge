@@ -9,7 +9,6 @@ import {
   readFileSync,
   realpathSync,
 } from 'fs';
-import { gzipSync } from 'zlib';
 import { createHash } from 'crypto';
 import { readFile } from 'fs/promises';
 import * as path from 'path';
@@ -398,10 +397,11 @@ const NATIVE_LIB_ARTIFACT =
   process.platform === 'win32' ? 'deckbridge_native.dll' : `libdeckbridge_native.${LIB_EXT}`;
 
 // ── virtual:native-libs ──────────────────────────────────────────────────────
-// Emits a module exporting the gzipped+base64 native libraries so the runtime
-// can extract them to a cache dir (ts/src/infra/native-libs.ts). Same virtual-module
-// shape as virtual:hid-worker below. Empty list when noEmbed (dev/test builds:
-// env vars from mise point at the real files instead).
+// Emits a module exporting the native libraries as latin1 strings (one char per byte) so the
+// runtime can extract them to a cache dir (ts/src/infra/native-libs.ts). `tjs compile` deflates
+// the bytecode anyway, and raw bytes end up smaller there than base64 or gzip+base64 (and need no
+// runtime decode). Same virtual-module shape as virtual:hid-worker below. Empty list when noEmbed
+// (dev/test builds: env vars from mise point at the real files instead).
 function resolveNativeLibFiles() {
   const isWin = process.platform === 'win32';
   const ext = LIB_EXT;
@@ -469,13 +469,12 @@ function buildNativeLibsModuleSource() {
   const entries = files.map(({ name, path: p }) => {
     const raw = readFileSync(realpathSync(p)); // realpath: brew libhidapi.dylib is a symlink
     hash.update(raw);
-    const gz = gzipSync(raw, { level: 9 });
-    return { name, rawSize: raw.length, gzB64: gz.toString('base64') };
+    return { name, rawSize: raw.length, data: raw.toString('latin1') };
   });
   const h = hash.digest('hex').slice(0, 16);
   const lines = entries.map(
     (e) =>
-      `  { name: ${JSON.stringify(e.name)}, rawSize: ${e.rawSize}, gzB64: ${JSON.stringify(e.gzB64)} },`,
+      `  { name: ${JSON.stringify(e.name)}, rawSize: ${e.rawSize}, data: ${JSON.stringify(e.data)} },`,
   );
   const summary = entries.map((e) => `${e.name} ${(e.rawSize / 1024).toFixed(0)}K`).join(', ');
   console.log(`embed native libs (hash ${h}): ${summary}`);
@@ -540,6 +539,9 @@ const isCoverageTest = isTest && isCoverage;
 const mainResult = await build({
   ...shared,
   metafile: true,
+  // Raw UTF-8 instead of \xNN escapes: the embedded latin1 strings (native libs, font atlas) would
+  // otherwise grow bundle.js by ~0.5 MB. The bytecode `tjs compile` writes is the same either way.
+  charset: 'utf8',
   ...(isCoverageTest ? { minifySyntax: false } : {}),
   entryPoints: [entryPoint],
   outfile,

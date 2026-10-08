@@ -16,7 +16,8 @@ declare module 'virtual:native-libs' {
   export interface EmbeddedNativeLib {
     name: string;
     rawSize: number;
-    gzB64: string;
+    /** The raw bytes, one latin1 char (U+0000..U+00FF) per byte. */
+    data: string;
   }
   export const NATIVE_LIBS: EmbeddedNativeLib[];
   export const NATIVE_LIBS_HASH: string;

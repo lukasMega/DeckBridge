@@ -1,7 +1,5 @@
 import assert from 'tjs:assert';
 import {
-  b64ToBytes,
-  gunzip,
   extractLibs,
   cleanupOldHashDirs,
   envVarFor,
@@ -10,39 +8,15 @@ import {
 import type { EmbeddedNativeLib } from 'virtual:native-libs';
 import { testAsync as test, summary } from './helpers/harness.js';
 
-async function gzipBytes(data: Uint8Array): Promise<Uint8Array> {
-  const cs = new CompressionStream('gzip');
-  const writer = cs.writable.getWriter();
-  const writeDone = writer.write(data as BufferSource).then(() => writer.close());
-  const chunks: Uint8Array[] = [];
-  const reader = cs.readable.getReader();
-  for (;;) {
-    const { value, done } = await reader.read();
-    if (done) break;
-    chunks.push(value);
-  }
-  await writeDone;
-  let total = 0;
-  for (const c of chunks) total += c.length;
-  const out = new Uint8Array(total);
-  let off = 0;
-  for (const c of chunks) {
-    out.set(c, off);
-    off += c.length;
-  }
-  return out;
+function bytesToLatin1(data: Uint8Array): string {
+  let s = '';
+  for (const b of data) s += String.fromCharCode(b);
+  return s;
 }
 
-function bytesToB64(data: Uint8Array): string {
-  let bin = '';
-  for (const b of data) bin += String.fromCharCode(b);
-  return btoa(bin);
-}
-
-async function makeFixtureLib(name: string, content: string): Promise<EmbeddedNativeLib> {
-  const raw = new TextEncoder().encode(content);
-  const gz = await gzipBytes(raw);
-  return { name, rawSize: raw.length, gzB64: bytesToB64(gz) };
+function makeFixtureLib(name: string, content: string | Uint8Array): EmbeddedNativeLib {
+  const raw = typeof content === 'string' ? new TextEncoder().encode(content) : content;
+  return { name, rawSize: raw.length, data: bytesToLatin1(raw) };
 }
 
 const ROOT = `${tjs.tmpDir}/native-libs-test-${tjs.pid}`;
@@ -120,43 +94,12 @@ await test('Windows branch falls back to home/AppData/Local when LOCALAPPDATA un
   }
 });
 
-// gzip roundtrip
-
-console.log('\ngunzip');
-
-await test('gunzip(b64ToBytes(...)) roundtrips', async () => {
-  const original = 'hello native libs '.repeat(100);
-  const lib = await makeFixtureLib('libdeckbridge_native.dylib', original);
-  const restored = await gunzip(b64ToBytes(lib.gzB64));
-  assert.equal(new TextDecoder().decode(restored), original);
-  assert.equal(restored.length, lib.rawSize);
-});
-
-async function assertGunzipRejects(data: Uint8Array): Promise<void> {
-  let err: unknown = null;
-  try {
-    await gunzip(data);
-  } catch (e) {
-    err = e;
-  }
-  assert.ok(err, 'gunzip rejected');
-}
-
-await test('gunzip rejects malformed input and leaves nothing unhandled', async () => {
-  const bad = new TextEncoder().encode('definitely not gzip data, just text');
-  await assertGunzipRejects(bad);
-  const lib = await makeFixtureLib('libdeckbridge_native.dylib', 'x'.repeat(5000));
-  // Still usable afterwards
-  const ok = await gunzip(b64ToBytes(lib.gzB64));
-  assert.equal(ok.length, lib.rawSize);
-});
-
 // extractLibs
 
 console.log('\nextractLibs');
 
 await test('extracts to native-<hash>/ with correct content', async () => {
-  const lib = await makeFixtureLib('libdeckbridge_native.dylib', 'payload-A');
+  const lib = makeFixtureLib('libdeckbridge_native.dylib', 'payload-A');
   const paths = await extractLibs([lib], 'hash0001', ROOT);
   assert.equal(
     paths['libdeckbridge_native.dylib'],
@@ -171,8 +114,21 @@ await test('extracted file is executable (mode 0o755)', async () => {
   assert.equal(st.mode & 0o777, 0o755);
 });
 
+await test('every byte value survives the latin1 round trip (NUL, C0, C1, 0xFF)', async () => {
+  const all = Uint8Array.from({ length: 512 }, (_, i) => i & 0xff);
+  const lib = makeFixtureLib('libhidapi.dylib', all);
+  assert.equal(lib.data.length, lib.rawSize, 'one char per byte');
+  const paths = await extractLibs([lib], 'hash0001', ROOT);
+  const data = await tjs.readFile(paths['libhidapi.dylib']!);
+  assert.equal(data.length, 512);
+  assert.ok(
+    data.every((b, i) => b === i % 256),
+    'bytes identical',
+  );
+});
+
 await test('idempotent: second call keeps the existing file (size check, no rewrite)', async () => {
-  const lib = await makeFixtureLib('libdeckbridge_native.dylib', 'payload-A');
+  const lib = makeFixtureLib('libdeckbridge_native.dylib', 'payload-A');
   // Overwrite the extracted file with same-size different content, then re-extract:
   // the size check must consider it valid and NOT rewrite it.
   const target = `${ROOT}/native-hash0001/libdeckbridge_native.dylib`;
@@ -183,7 +139,7 @@ await test('idempotent: second call keeps the existing file (size check, no rewr
 });
 
 await test('wrong-size file is re-extracted', async () => {
-  const lib = await makeFixtureLib('libdeckbridge_native.dylib', 'payload-A');
+  const lib = makeFixtureLib('libdeckbridge_native.dylib', 'payload-A');
   const target = `${ROOT}/native-hash0001/libdeckbridge_native.dylib`;
   await tjs.writeFile(target, 'short');
   await extractLibs([lib], 'hash0001', ROOT);
@@ -191,12 +147,30 @@ await test('wrong-size file is re-extracted', async () => {
   assert.equal(new TextDecoder().decode(data), 'payload-A');
 });
 
+await test('truncated embed throws and writes nothing', async () => {
+  const lib = { ...makeFixtureLib('libtruncated.dylib', 'payload-A'), rawSize: 10 };
+  let error: Error | undefined;
+  try {
+    await extractLibs([lib], 'hash0001', ROOT);
+  } catch (e) {
+    error = e as Error;
+  }
+  assert.ok(error?.message.includes('expected 10'), `unexpected: ${error?.message}`);
+  let exists = true;
+  try {
+    await tjs.stat(`${ROOT}/native-hash0001/libtruncated.dylib`);
+  } catch {
+    exists = false;
+  }
+  assert.ok(!exists, 'no file written');
+});
+
 // cleanupOldHashDirs
 
 console.log('\ncleanupOldHashDirs');
 
 await test('removes other native-* dirs, keeps current', async () => {
-  const lib = await makeFixtureLib('libdeckbridge_native.dylib', 'x');
+  const lib = makeFixtureLib('libdeckbridge_native.dylib', 'x');
   await extractLibs([lib], 'hash0002', ROOT);
   await cleanupOldHashDirs(ROOT, 'hash0002');
   let oldExists = true;

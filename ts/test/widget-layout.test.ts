@@ -282,7 +282,7 @@ function fakeFont(): BitmapFont {
     inkTop: 0,
     inkHeight: 10,
     bits: '',
-    advances: Buffer.from(adv).toString('base64'),
+    advances: Buffer.from(adv).toString('latin1'),
   };
 }
 
