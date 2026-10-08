@@ -140,7 +140,7 @@ const intInRange =
 const bool: StyleCheck = (v, field) =>
   typeof v === 'boolean' ? null : `${field} must be true or false`;
 
-// The PURE IIFEs keep these tables tree-shakeable: types.ts re-exports this module, so workers
+// The PURE-annotated wrappers keep these tables tree-shakeable: types.ts re-exports this module, so workers
 // that only need a constant would otherwise bundle the validators too.
 const STYLE_CHECKS: Record<keyof ExtraKeyTextStyle, StyleCheck> = /* @__PURE__ */ (() => ({
   textSize: oneOf(EXTRA_KEY_TEXT_SIZES),
