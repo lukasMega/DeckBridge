@@ -68,6 +68,20 @@ function PairedAppAction({
     [load],
   );
 
+  // Pairing may leave this page out of date; after a while, suggest a reload.
+  const [showRefreshHint, setShowRefreshHint] = useState(false);
+  useEffect(
+    function refreshHintAfterDelay() {
+      if (action.status === null) return undefined;
+      const timer = window.setTimeout(() => setShowRefreshHint(true), 10_000);
+      return () => {
+        window.clearTimeout(timer);
+        setShowRefreshHint(false);
+      };
+    },
+    [action.status],
+  );
+
   const label = app?.running ? 'Restart Elgato app' : 'Open Elgato app';
   let buttonLabel = app ? label : 'Checking Elgato app…';
   if (action.busy) buttonLabel = 'Please wait…';
@@ -119,6 +133,11 @@ function PairedAppAction({
       </div>
       <div class="pairing-feedback" aria-live="polite">
         <Feedback error={error ?? action.error} status={action.status} />
+        {showRefreshHint && !error && (
+          <p class="step-sub">
+            Refresh the page if this WebUI is not reflecting current state of connected device.
+          </p>
+        )}
       </div>
     </>
   );
