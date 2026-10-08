@@ -2,15 +2,18 @@
 // Size report for the release payload: esbuild metafile per bundle, minified CSS, web/client
 // LOC, and (when built) the compiled binary minus the runtime. Needs no native build.
 // `tjs compile` stores the bundle as deflate-compressed bytecode, so gzip -9 is the proxy
-// for binary cost. Usage: node scripts/size-report.mjs [--json] [--top=N]
+// for binary cost. Usage: node scripts/size-report.mjs [--json] [--top=N] [--unmangled]
 //
-// The esbuild options below mirror ts/build.mjs (simple-only, non-mock release config).
-// Keep them in sync when build.mjs changes (e.g. P4's CSS minifier spike).
+// The esbuild options below mirror ts/build.mjs (simple-only, non-mock release config), and the
+// ui.js / ui CSS numbers are the SHIPPED form, class names mangled by the same module build.mjs
+// uses (ts/scripts/class-mangle.mjs); `--unmangled` reports the readable form instead.
+// Keep the options in sync when build.mjs changes.
 import { createRequire } from 'node:module';
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { gzipSync } from 'node:zlib';
+import { mangleClasses } from '../ts/scripts/class-mangle.mjs';
 
 const ROOT = join(import.meta.dirname, '..');
 const TS = join(ROOT, 'ts');
@@ -133,7 +136,7 @@ async function bundle(opts) {
   for (const [k, v] of Object.entries(meta.inputs)) {
     if (v.bytesInOutput > 0) inputs[inputKey(k)] = (inputs[inputKey(k)] ?? 0) + v.bytesInOutput;
   }
-  return { raw: out.length, gzip: gz(out), inputs };
+  return { raw: out.length, gzip: gz(out), inputs, text: r.outputFiles[0].text };
 }
 
 // pnpm's nested paths collapse to "node_modules/preact/..."; repo paths lose the "src/" prefix.
@@ -185,22 +188,37 @@ function cssDeclarations(css) {
   return out;
 }
 
-async function measureCss() {
+// `uiText` is the built ui.js; with `mangle` the ui CSS files are returned in their shipped,
+// class-mangled form (`mangled` holds the matching ui.js and the stats).
+async function measureCss(uiText, mangle) {
   const files = [];
-  const minified = {};
+  const plain = {};
+  const srcs = {};
   for (const name of CSS_FILES) {
-    const src = readFileSync(join(CLIENT, name), 'utf8');
-    const { code } = await transform(src, {
+    srcs[name] = readFileSync(join(CLIENT, name), 'utf8');
+    const { code } = await transform(srcs[name], {
       loader: 'css',
       minify: true,
       ...(name.startsWith('deck/') ? { target: DECK_CSS_TARGETS } : {}),
     });
-    minified[name] = code;
+    plain[name] = code;
+  }
+  const uiNames = CSS_FILES.slice(0, 2);
+  const mangled = mangle
+    ? mangleClasses(
+        uiNames.map((name) => plain[name]),
+        uiText,
+      )
+    : null;
+  const minified = { ...plain };
+  if (mangled) uiNames.forEach((name, i) => (minified[name] = mangled.css[i]));
+  for (const name of CSS_FILES) {
+    const code = minified[name];
     const decls = cssDeclarations(code);
     files.push({
       name,
-      srcBytes: Buffer.byteLength(src),
-      srcLines: src.split('\n').length - 1,
+      srcBytes: Buffer.byteLength(srcs[name]),
+      srcLines: srcs[name].split('\n').length - 1,
       raw: Buffer.byteLength(code),
       gzip: gz(code),
       declarations: decls.length,
@@ -208,10 +226,13 @@ async function measureCss() {
     });
   }
   // assets.ts serves base + simple as one /ui.css, so they gzip together.
-  const ui = CSS_FILES.slice(0, 2).map((name) => minified[name]);
+  const ui = uiNames.map((name) => minified[name]);
   const uiDecls = ui.flatMap(cssDeclarations);
+  const plainUi = uiNames.map((name) => plain[name]).join('');
   return {
     files,
+    mangled,
+    unmangledUi: { raw: Buffer.byteLength(plainUi), gzip: gz(plainUi) },
     raw: files.reduce((s, f) => s + f.raw, 0),
     gzip: files.reduce((s, f) => s + f.gzip, 0),
     uiServedGzip: gz(ui.join('')),
@@ -293,13 +314,15 @@ function measureAssets() {
   );
 }
 
-export async function measure() {
-  const [ui, deck, main, css, ...workers] = await Promise.all([
-    bundle({
-      ...clientBase,
-      entryPoints: [join(CLIENT, 'ui-entry.ts')],
-      target: 'esnext',
-    }),
+// `mangle` (default) reports the shipped form: ui.js and the ui CSS with mangled class names.
+export async function measure({ mangle = true } = {}) {
+  // The mangler needs the ui.js text and the CSS, so it is built before the rest.
+  const ui = await bundle({
+    ...clientBase,
+    entryPoints: [join(CLIENT, 'ui-entry.ts')],
+    target: 'esnext',
+  });
+  const [deck, main, css, ...workers] = await Promise.all([
     bundle({
       ...clientBase,
       entryPoints: [join(CLIENT, 'deck/deck-entry.ts')],
@@ -311,7 +334,7 @@ export async function measure() {
       external: [...shared.external, 'virtual:*'],
       plugins: [clientStubs, noMockDriver, textAssets(true)],
     }),
-    measureCss(),
+    measureCss(ui.text, mangle),
     ...Object.values(WORKERS).map((entry) =>
       bundle({
         ...shared,
@@ -320,7 +343,13 @@ export async function measure() {
       }),
     ),
   ]);
+  const unmangledUiJs = { raw: ui.raw, gzip: ui.gzip };
+  if (css.mangled) {
+    ui.raw = Buffer.byteLength(css.mangled.js);
+    ui.gzip = gz(css.mangled.js);
+  }
   const bundles = { 'ui.js': ui, 'deck.js': deck };
+  for (const b of Object.values(bundles)) delete b.text;
   Object.keys(WORKERS).forEach((name, i) => (bundles[name] = workers[i]));
   bundles.main = main;
   const leaks = {};
@@ -332,8 +361,11 @@ export async function measure() {
   }
   return {
     version,
+    mangle: css.mangled
+      ? { ...css.mangled.stats, unmangledUiJs, unmangledUiCss: css.unmangledUi }
+      : null,
     bundles,
-    css,
+    css: (({ mangled, unmangledUi, ...rest }) => rest)(css),
     loc: measureLoc(),
     workerSharedWithMain: leaks,
     workersRaw: workers.reduce((s, w) => s + w.raw, 0),
@@ -350,17 +382,28 @@ const col = (v, w) => String(v).padStart(w);
 function print(m, top) {
   const { bundles, css } = m;
   const row = (label, raw, gzip) => `  ${label.padEnd(34)}${col(n(raw), 11)}${col(n(gzip), 11)}`;
-  console.log(`DeckBridge size report (v${m.version}, simple-only release config)\n`);
+  const form = m.mangle ? 'shipped form: ui class names mangled' : 'class names NOT mangled';
+  console.log(`DeckBridge size report (v${m.version}, simple-only release config, ${form})\n`);
   console.log(`  ${'part'.padEnd(34)}${col('raw (min)', 11)}${col('gzip -9', 11)}`);
-  for (const name of ['ui.js', 'deck.js'])
-    console.log(row(name, bundles[name].raw, bundles[name].gzip));
+  const tag = m.mangle ? ' (shipped, mangled)' : '';
+  console.log(row(`ui.js${tag}`, bundles['ui.js'].raw, bundles['ui.js'].gzip));
+  console.log(row('deck.js', bundles['deck.js'].raw, bundles['deck.js'].gzip));
   for (const name of Object.keys(WORKERS))
     console.log(row(name, bundles[name].raw, bundles[name].gzip));
   console.log(row('workers total', m.workersRaw, m.workersGzip));
   console.log(row('main (excl. workers/client/CSS)', bundles.main.raw, bundles.main.gzip));
-  for (const f of css.files) console.log(row(`css ${f.name}`, f.raw, f.gzip));
+  for (const [i, f] of css.files.entries())
+    console.log(row(`css ${f.name}${m.mangle && i < 2 ? ' (mangled)' : ''}`, f.raw, f.gzip));
   console.log(row('css total', css.raw, css.gzip));
   console.log(`  (ui.css as served, base+simple gzipped together: ${n(css.uiServedGzip)})`);
+  if (m.mangle) {
+    const { classes, mangled, kept, stray, prefix, unmangledUiJs, unmangledUiCss } = m.mangle;
+    console.log(
+      `  class mangling: ${classes} classes, ${mangled} renamed, ${kept} kept (${stray} stray, ${prefix} dynamic)`,
+    );
+    console.log(row('  ui.js unmangled', unmangledUiJs.raw, unmangledUiJs.gzip));
+    console.log(row('  ui CSS unmangled (base+simple)', unmangledUiCss.raw, unmangledUiCss.gzip));
+  }
 
   console.log('\nWorker inputs also bundled into main (leak detector):');
   for (const [name, l] of Object.entries(m.workerSharedWithMain)) {
@@ -370,7 +413,8 @@ function print(m, top) {
 
   for (const name of ['ui.js', 'deck.js', ...Object.keys(WORKERS), 'main']) {
     const inputs = Object.entries(bundles[name].inputs).sort((a, b) => b[1] - a[1]);
-    console.log(`\nTop ${top} inputs, ${name} (minified bytes):`);
+    const note = name === 'ui.js' && m.mangle ? ', before class mangling' : '';
+    console.log(`\nTop ${top} inputs, ${name} (minified bytes${note}):`);
     for (const [k, b] of inputs.slice(0, top)) console.log(`  ${col(n(b), 9)}  ${k}`);
     if (name === 'ui.js' || name === 'deck.js') {
       const groups = {};
@@ -423,7 +467,7 @@ function print(m, top) {
 if (import.meta.url === pathToFileURL(process.argv[1]).href) {
   const args = process.argv.slice(2);
   const top = Number(args.find((a) => a.startsWith('--top='))?.slice(6) ?? 10);
-  const m = await measure();
+  const m = await measure({ mangle: !args.includes('--unmangled') });
   if (args.includes('--json')) console.log(JSON.stringify(m, null, 2));
   else print(m, top);
 }
