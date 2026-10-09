@@ -5,12 +5,17 @@ import { getSnapshot, patch, EMPTY_STATUS } from '../src/web/client/lib/store.js
 import { SurveyModal } from '../src/web/client/simple/survey-modal.js';
 import { SURVEY_QUESTIONS, SURVEY_VERSION } from '../src/web/server/survey-questions.js';
 import type { SurveyDefinition } from '../src/web/contract-survey.js';
+import { runSurveyShort } from './client-survey-short.js';
 
 type Check = (condition: boolean, message: string) => void;
 const settle = async (): Promise<void> => {
   await act(async () => {
     for (let i = 0; i < 10; i++) await Promise.resolve();
   });
+};
+const waitAdvance = async (): Promise<void> => {
+  await act(() => new Promise((r) => setTimeout(r, 350)));
+  await settle();
 };
 
 export async function runSurvey(root: HTMLElement, check: Check): Promise<void> {
@@ -21,6 +26,7 @@ export async function runSurvey(root: HTMLElement, check: Check): Promise<void> 
   const definition: SurveyDefinition = {
     sv: SURVEY_VERSION,
     questions: SURVEY_QUESTIONS,
+    short: ['rating', 'nps', 'want'],
     context: { v: '0.20.0', os: 'macos', ov: 'macos-26', dv: 'mirabox-293s' },
     prefill: { features: ['pages'] },
     nudge: true,
@@ -63,10 +69,6 @@ export async function runSurvey(root: HTMLElement, check: Check): Promise<void> 
         .querySelector<HTMLInputElement>(`input[name="survey-${name}"][value="${value}"]`)!
         .click(),
     );
-    await settle();
-  };
-  const waitAdvance = async (): Promise<void> => {
-    await act(() => new Promise((r) => setTimeout(r, 350)));
     await settle();
   };
   const title = (): string | null => root.querySelector('.survey-q')?.textContent ?? null;
@@ -324,25 +326,33 @@ export async function runSurvey(root: HTMLElement, check: Check): Promise<void> 
   }
   await runSurveyDraft(root, check);
   await runSurveyNudge(root, check);
+  await runSurveyShort(root, check);
 }
 
 const DRAFT_KEY = 'deckbridge.surveyDraft';
+
+const stored = (): { step: number; answers: Record<string, unknown> } | null =>
+  JSON.parse(localStorage.getItem(DRAFT_KEY) ?? 'null') as {
+    step: number;
+    answers: Record<string, unknown>;
+  } | null;
 
 async function runSurveyDraft(root: HTMLElement, check: Check): Promise<void> {
   const original = globalThis.fetch;
   const definition: SurveyDefinition = {
     sv: SURVEY_VERSION,
     questions: SURVEY_QUESTIONS,
+    short: ['rating', 'nps', 'want'],
     context: { v: '0.20.0', os: 'macos', ov: 'macos-26', dv: 'mirabox-293s' },
     prefill: { features: ['pages'] },
     nudge: false,
     state: {},
   };
-  globalThis.fetch = (() =>
+  globalThis.fetch = () =>
     Promise.resolve({
       ok: true,
       json: () => Promise.resolve({ sent: true }),
-    } as Response)) as typeof fetch;
+    } as Response);
   const mount = async (): Promise<void> => {
     await act(() => {
       render(null, root);
@@ -369,11 +379,6 @@ async function runSurveyDraft(root: HTMLElement, check: Check): Promise<void> {
   };
   const title = (): string | null => root.querySelector('.survey-q')?.textContent ?? null;
   const banner = (): boolean => root.textContent.includes('Continue your unfinished feedback?');
-  const stored = (): { step: number; answers: Record<string, unknown> } | null =>
-    JSON.parse(localStorage.getItem(DRAFT_KEY) ?? 'null') as {
-      step: number;
-      answers: Record<string, unknown>;
-    } | null;
   try {
     localStorage.removeItem(DRAFT_KEY);
     await mount();
@@ -482,6 +487,7 @@ async function runSurveyNudge(root: HTMLElement, check: Check): Promise<void> {
   const definition: SurveyDefinition = {
     sv: SURVEY_VERSION,
     questions: SURVEY_QUESTIONS,
+    short: ['rating', 'nps', 'want'],
     context: { v: 'test', os: 'unknown', ov: 'unknown', dv: 'none' },
     prefill: { features: ['pages'] },
     nudge: true,
@@ -516,17 +522,6 @@ async function runSurveyNudge(root: HTMLElement, check: Check): Promise<void> {
     await act(() => patch({ status: { ...EMPTY_STATUS, driverConnected: true } }));
     await settle();
     check(root.querySelector('.survey-nudge') === null, 'Pairing stage never shows nudge');
-    await act(() => patch({ status: ready }));
-    await settle();
-    await act(() => button('Not now').click());
-    await settle();
-    check(
-      root.querySelector('.survey-nudge') === null &&
-        calls.some(
-          (c) => c.url === '/api/survey/dismiss' && JSON.stringify(c.body) === '{"never":false}',
-        ),
-      'Not now dismisses with snooze request',
-    );
     await mount();
     await act(() => button("Don't ask again").click());
     await settle();

@@ -11,8 +11,17 @@ export interface TrayState {
   version: string;
 }
 
+/** Native OS notification the tray shows; a click opens `url`. */
+export interface TrayNotify {
+  title: string;
+  body: string;
+  url: string;
+}
+
 export interface TrayHandle {
   push(state: TrayState): void;
+  /** Best-effort: rides on the next state line, so it needs one `push` first. */
+  notify(notification: TrayNotify): void;
   /** Close the socket and stop the sidecar; resolves once it has exited (or did not
    *  exit even after SIGKILL within the grace). */
   close(): Promise<void>;
@@ -74,14 +83,18 @@ export function buildTrayState(input: {
 
 const enc = new TextEncoder();
 
-export function serializeTrayState(state: TrayState): string {
-  return JSON.stringify(state) + '\n';
+/** `notify` is an extra field on a normal state line, not a new line shape: an older
+ *  tray ignores the unknown key and still applies the state it carries. */
+export function serializeTrayState(state: TrayState, notify?: TrayNotify): string {
+  return JSON.stringify(notify ? { ...state, notify } : state) + '\n';
 }
 
 class TrayProcess implements TrayHandle {
   private writer: WritableStreamDefaultWriter<Uint8Array> | null = null;
   private socket: TjsTCPSocket | null = null;
   private pending: TrayState | null = null;
+  private lastState: TrayState | null = null;
+  private queuedNotify: TrayNotify | null = null;
   private closed = false;
   private sending = false;
   private proc: TjsProcess | null = null;
@@ -164,8 +177,10 @@ class TrayProcess implements TrayHandle {
       let next: TrayState | null = state;
       while (next && this.writer) {
         this.pending = null;
+        const notify = this.queuedNotify ?? undefined;
+        this.queuedNotify = null;
         try {
-          await this.writer.write(enc.encode(serializeTrayState(next)));
+          await this.writer.write(enc.encode(serializeTrayState(next, notify)));
         } catch (e) {
           warn('tray', `send error: ${e instanceof Error ? e.message : String(e)}`);
         }
@@ -177,9 +192,16 @@ class TrayProcess implements TrayHandle {
   }
 
   push(state: TrayState): void {
+    this.lastState = state;
     this.pending = state;
     if (!this.writer || this.sending) return;
     void this._send(state);
+  }
+
+  notify(notification: TrayNotify): void {
+    if (!this.lastState) return;
+    this.queuedNotify = notification;
+    this.push(this.lastState);
   }
 
   async close(): Promise<void> {

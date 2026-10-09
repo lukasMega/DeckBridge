@@ -71,8 +71,19 @@ struct TrayState {
     icon: String,               // "full" | "usb_only" | "disconnected"
     status: String,             // human-readable label for menu item
     reconnect_attempts: u32,    // informational only; Rust ignores it
+    notify: Option<Notify>,     // optional: show one OS notification (see below)
 }
 ```
+
+`notify` (`{ title, body, url }`) is an extra key on a normal state line, not a separate
+line shape. An older tray ignores the unknown key and still applies the state; a newer tray
+parses older lines (no key) as before. The notification runs on a spawned thread so the
+event loop never blocks, and a click opens `url` (only `http://localhost:` or
+`http://127.0.0.1:` URLs are accepted). Library: `notify-rust` (libdbus on Linux, already
+linked by `tao`). Sender identity comes from `DECKBRIDGE_APP_ID`, which the Tauri shell sets
+to the bundle identifier; without it macOS shows "Finder" and Windows "Windows PowerShell".
+Click handling: macOS and Windows deliver the body click; on Linux it needs a server that
+supports the `default` action. With no notification service the tray stays silent.
 
 | `icon` | Icon file | Condition |
 |---|---|---|

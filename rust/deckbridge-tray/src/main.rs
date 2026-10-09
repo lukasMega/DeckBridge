@@ -4,6 +4,8 @@
 // present, so it's cfg_attr'd instead. No-op on macOS/Linux.
 #![cfg_attr(windows, windows_subsystem = "windows")]
 
+mod notify;
+
 use image::{Rgba, RgbaImage};
 use serde::{Deserialize, Serialize};
 use std::io::{BufRead, BufReader, Write};
@@ -39,6 +41,9 @@ struct TrayState {
     update_text: String,
     #[serde(default)]
     version: String,
+    // Optional so a line from an older app (no key) still parses.
+    #[serde(default)]
+    notify: Option<notify::Notify>,
 }
 
 fn default_update_text() -> String {
@@ -66,6 +71,10 @@ fn debug_log_enabled() -> bool {
     std::env::var("DECKBRIDGE_LOG")
         .map(|v| v.eq_ignore_ascii_case("debug"))
         .unwrap_or(false)
+}
+
+fn parse_state(line: &str) -> serde_json::Result<TrayState> {
+    serde_json::from_str(line)
 }
 
 fn emit(event: &'static str, port: Option<u16>) {
@@ -316,7 +325,7 @@ fn main() {
                 for line in reader.lines() {
                     match line {
                         Err(_) => break,
-                        Ok(l) => match serde_json::from_str::<TrayState>(&l) {
+                        Ok(l) => match parse_state(&l) {
                             Ok(state) => {
                                 let _ = proxy_accept.send_event(UserEvent::State(state));
                             }
@@ -357,7 +366,10 @@ fn main() {
                 emit("ready", Some(port));
             }
 
-            Event::UserEvent(UserEvent::State(state)) => {
+            Event::UserEvent(UserEvent::State(mut state)) => {
+                if let Some(n) = state.notify.take() {
+                    notify::show(n);
+                }
                 if let Some(handles) = &tray_handles {
                     let icon = icons.for_name(&state.icon, state.update_available);
                     let _ = handles.tray.set_icon(Some(icon.clone()));
@@ -409,4 +421,39 @@ fn main() {
             _ => {}
         }
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn old_state_line_has_no_notification() {
+        let line = r#"{"icon":"full","status":"ok","reconnectAttempts":0,"updateAvailable":false,"updateText":"x","version":"1.0.0"}"#;
+        let state = parse_state(line).unwrap();
+        assert_eq!(state.icon, "full");
+        assert!(state.notify.is_none());
+    }
+
+    #[test]
+    fn new_state_line_carries_notification() {
+        let line = r#"{"icon":"full","status":"ok","reconnectAttempts":0,"updateAvailable":false,"updateText":"x","version":"1.0.0","notify":{"title":"DeckBridge","body":"b","url":"http://localhost:3000/?survey=1"}}"#;
+        let state = parse_state(line).unwrap();
+        assert_eq!(state.status, "ok");
+        assert_eq!(
+            state.notify,
+            Some(notify::Notify {
+                title: "DeckBridge".into(),
+                body: "b".into(),
+                url: "http://localhost:3000/?survey=1".into(),
+            })
+        );
+    }
+
+    #[test]
+    fn unknown_keys_are_ignored() {
+        let state = parse_state(r#"{"icon":"usb_only","future":{"a":1}}"#).unwrap();
+        assert_eq!(state.icon, "usb_only");
+        assert!(state.notify.is_none());
+    }
 }

@@ -2,6 +2,8 @@ import type { SurveyOption, SurveyQuestion } from '../contract-survey.js';
 
 export const SURVEY_VERSION = 2;
 
+export const SHORT_QUESTIONS = ['rating', 'nps', 'want'];
+
 function options(entries: [string, string][]): SurveyOption[] {
   return entries.map(([id, label]) => ({ id, label }));
 }
@@ -173,6 +175,7 @@ export const SURVEY_QUESTIONS: SurveyQuestion[] = [
         ]),
       },
       ...options([
+        ['standalone', 'Standalone mode (no Elgato app or Companion)'],
         ['elgato-plugin', 'Control DeckBridge from the Elgato app'],
         ['settings-sync', 'Backup / sync'],
         ['linux-packages', 'Linux packages'],

@@ -102,6 +102,8 @@ export interface SurveySettings {
   never?: boolean;
   submittedSv?: number;
   submittedAt?: string;
+  /** Last survey version announced by the native notification (once per `sv`). */
+  notifiedSv?: number;
 }
 
 export function sanitizeSurveySettings(raw: unknown): SurveySettings {
@@ -112,12 +114,10 @@ export function sanitizeSurveySettings(raw: unknown): SurveySettings {
     if (typeof r[key] === 'string' && Number.isFinite(Date.parse(r[key]))) state[key] = r[key];
   }
   if (typeof r.never === 'boolean') state.never = r.never;
-  if (
-    typeof r.submittedSv === 'number' &&
-    Number.isSafeInteger(r.submittedSv) &&
-    r.submittedSv >= 0
-  )
-    state.submittedSv = r.submittedSv;
+  for (const key of ['submittedSv', 'notifiedSv'] as const) {
+    const n = r[key];
+    if (typeof n === 'number' && Number.isSafeInteger(n) && n >= 0) state[key] = n;
+  }
   return state;
 }
 

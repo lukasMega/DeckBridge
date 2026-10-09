@@ -9,9 +9,11 @@ import type { Settings, DeviceIdentitySettings } from '../../infra/settings-stor
 import { buildPayload } from '../../infra/daily-ping.js';
 import type { PayloadInput } from '../../infra/daily-ping.js';
 
-import { SURVEY_VERSION, SURVEY_QUESTIONS } from './survey-questions.js';
-export { SURVEY_VERSION, SURVEY_QUESTIONS } from './survey-questions.js';
-const DAY_MS = 24 * 60 * 60 * 1000;
+import { SURVEY_VERSION, SURVEY_QUESTIONS, SHORT_QUESTIONS } from './survey-questions.js';
+export { SURVEY_VERSION, SURVEY_QUESTIONS, SHORT_QUESTIONS } from './survey-questions.js';
+
+export const SURVEY_MIN_UPTIME_MS = 10 * 60 * 1000;
+export const SURVEY_NOTIFY_UPTIME_MS = 30 * 60 * 1000;
 
 function optionFor(q: SurveyQuestion, id: string): SurveyOption | undefined {
   return q.options.find((o) => o.id === id || o.options?.some((sub) => sub.id === id));
@@ -125,11 +127,41 @@ export function prefillSurvey(settings: Settings): SurveyAnswers {
     : {};
 }
 
-export function shouldNudgeSurvey(settings: Settings, now: Date): boolean {
+// The short form has no free-text field, so `other` is dropped from `want`
+// rather than rejected; an empty `want` then leaves the form incomplete.
+export function shortSurveyPayload(
+  context: SurveyContext,
+  answers: unknown,
+): SurveyPayload | undefined {
+  const input = typeof answers === 'object' && answers !== null ? answers : {};
+  const raw: Record<string, unknown> = {};
+  for (const id of SHORT_QUESTIONS) raw[id] = (input as Record<string, unknown>)[id];
+  if (Array.isArray(raw.want)) raw.want = raw.want.filter((id) => id !== 'other');
+  const { a } = validateSurvey(raw, null);
+  if (!SHORT_QUESTIONS.every((id) => a[id] !== undefined)) return undefined;
+  return { sv: SURVEY_VERSION, ...context, a, f: 'short' };
+}
+
+function surveyOpen(settings: Settings, now: Date): boolean {
   const state = settings.survey ?? {};
   if (state.never || (state.submittedSv ?? 0) >= SURVEY_VERSION) return false;
   if (Date.parse(state.snoozedUntil ?? '') > now.getTime()) return false;
-  return (settings.devices ?? []).some(
-    (d) => Date.parse(d.pairedAt ?? '') <= now.getTime() - 7 * DAY_MS,
-  );
+  return (settings.devices ?? []).some((d) => Number.isFinite(Date.parse(d.pairedAt ?? '')));
+}
+
+export function shouldNudgeSurvey(settings: Settings, now: Date, uptimeMs: number): boolean {
+  return uptimeMs >= SURVEY_MIN_UPTIME_MS && surveyOpen(settings, now);
+}
+
+/** Native OS notification: only for runs where the WebUI was never opened (the banner
+ *  covers the rest), and at most once per survey version. */
+export function shouldNotifySurvey(
+  settings: Settings,
+  now: Date,
+  uptimeMs: number,
+  webUiOpened: boolean,
+): boolean {
+  if (webUiOpened || uptimeMs < SURVEY_NOTIFY_UPTIME_MS) return false;
+  if ((settings.survey?.notifiedSv ?? 0) >= SURVEY_VERSION) return false;
+  return surveyOpen(settings, now);
 }

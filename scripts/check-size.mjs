@@ -8,8 +8,8 @@ import { measure } from './size-report.mjs';
 // .claude/plans/2026-10-08_release-size-webui-css.md. ui.js and the ui CSS are the shipped,
 // class-mangled form (the size report's default).
 const BUDGETS = {
-  // Survey UI refreshed 2026-10-09; measured size + 1% headroom.
-  'ui.js': 155_500,
+  // Survey UI + nudge banner + short form (2026-10-09); measured size + 1% headroom.
+  'ui.js': 160_326,
   'deck.js': 30_106,
   'css total': 34_951,
   'hid-worker': 47_394,

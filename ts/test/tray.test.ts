@@ -84,6 +84,24 @@ test('updateAvailable round-trips through TCP JSON', () => {
   assert.equal(state.updateText, 'Update available: v1.2.3');
 });
 
+test('notify rides on a normal state line; absent when not given', () => {
+  const state = {
+    icon: 'full' as const,
+    status: 'Connected',
+    reconnectAttempts: 0,
+    updateAvailable: false,
+    updateText: 'x',
+    version: '1.2.3',
+  };
+  const notify = { title: 'DeckBridge', body: 'b', url: 'http://localhost:3000/?survey=1' };
+  assert.equal(serializeTrayState(state).includes('notify'), false);
+  const line = serializeTrayState(state, notify);
+  assert.ok(line.endsWith('\n'));
+  const parsed = JSON.parse(line) as typeof state & { notify: typeof notify };
+  assert.equal(parsed.notify, notify);
+  assert.equal(parsed.status, 'Connected');
+});
+
 // TrayProcess.close() kills the spawned process (L1)
 // TrayProcess.proc is private and not directly reachable from a test without a
 // real tray-go binary, so this exercises the same TjsProcess.kill('SIGTERM')

@@ -40,7 +40,7 @@ function cleanAnswers(raw: Record<string, unknown>, ids: Set<string>): SurveyAns
       typeof value === 'string' ||
       (Array.isArray(value) && value.every((v) => typeof v === 'string'))
     )
-      answers[id] = value as string | string[];
+      answers[id] = value;
   }
   return answers;
 }
