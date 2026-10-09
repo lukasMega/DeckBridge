@@ -116,6 +116,14 @@ export const routes: Route[] = [
   postJson('/api/device-overrides', setDeviceOverrides),
   postJson('/api/device-overrides/reset', resetDeviceOverrides),
 
+  get('/api/survey', async ({ survey }) => json(await survey.view())),
+  postJson('/api/survey', async (body: unknown, { survey }) => json(await survey.submit(body))),
+  postJson('/api/survey/dismiss', (body: { never?: unknown }, { survey }) => {
+    if (typeof body.never !== 'boolean') return badRequest('never must be a boolean');
+    survey.dismiss(body.never);
+    return json({ ok: true });
+  }),
+
   get('/api/update', ({ updates }) => json(updates.info())),
   post('/api/update/check', async ({ updates }) => json(await updates.check(true))),
   postJson('/api/update/dismiss', dismissUpdate),

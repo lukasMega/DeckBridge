@@ -8,6 +8,7 @@ import type {
 } from '../contract.js';
 import type { OverrideChangeKind } from '../../devices/model-overrides.js';
 import type { PersistedSettings } from '../../infra/settings.js';
+import type { SurveyController } from './survey-controller.js';
 import type { UpdateController } from './update-controller.js';
 import type { ElgatoAppController } from './elgato-app-controller.js';
 import type { StandbyController } from './standby-controller.js';
@@ -115,6 +116,7 @@ export interface WebUIControllers {
   readonly modelOverrides: ModelOverridesController;
   readonly logging: LoggingController;
   readonly updates: UpdateController;
+  readonly survey: SurveyController;
   readonly settingsFile: SettingsFileController;
   readonly elgatoApp: ElgatoAppController;
   readonly standby: StandbyController;

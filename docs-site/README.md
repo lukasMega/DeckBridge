@@ -31,6 +31,11 @@ The `source-map-js` override requires `^1.2.2`, fixing indexed source-map offset
 denial of service (CVE-2026-93749). Remove these overrides once every parent
 resolves fixed releases. These dependencies process CSS during site builds.
 
+The `katex` override pins `0.18.2`, fixing inherited renderer options
+that bypass trust restrictions (CVE-2026-103923). Mermaid and its CLI still
+require v0.16; remove this override once all parents permit a fixed release.
+Security tests exercise both CommonJS and ESM copies used by these packages.
+
 `pnpm-workspace.yaml` applies version-specific patches from `../patches/`:
 
 - `braces@3.0.3` (CVE-2026-93687): reject patterns exceeding 100 nested

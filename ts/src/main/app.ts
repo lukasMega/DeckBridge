@@ -24,7 +24,15 @@ import { runDevicesCommand } from '../cli/devices.js';
 import { runPushCommand } from '../cli/push.js';
 import { runDiagnoseCommand } from '../cli/diagnose.js';
 import { PersistedSettings } from '../infra/settings.js';
-import { createDailyPing, sendBeacon } from '../infra/daily-ping.js';
+import { sendSurvey } from '../infra/survey-send.js';
+import { surveyContext } from '../web/server/survey.js';
+import {
+  normalizeOs,
+  parseOsVersion,
+  readOsVersion,
+  createDailyPing,
+  sendBeacon,
+} from '../infra/daily-ping.js';
 import { STARTUP_DELAY_MS, CHECK_INTERVAL_MS } from '../infra/update-check.js';
 import { stopCommands } from '../infra/command-runner.js';
 import { stopSpawns } from '../infra/owned-spawn.js';
@@ -183,6 +191,25 @@ webui.setHidInventory(() => driverManager.hidInventory());
 driverManager.on('changed', () => {
   webui.notifyDocks(driverManager.getDockStatuses());
   pushTrayState();
+});
+
+let surveyOsVersion: Promise<string> | undefined;
+webui.survey.configure({
+  context: async () => {
+    const platform = platformName();
+    const os = normalizeOs(platform);
+    surveyOsVersion ??= readOsVersion(os).then((raw) => parseOsVersion(os, raw));
+    return surveyContext({
+      version: __VERSION__,
+      platform,
+      osVersion: await surveyOsVersion,
+      modelIds: driverManager.getDockStatuses().map((d) => d.modelId),
+      now: new Date(),
+    });
+  },
+  isMock: () =>
+    __MOCK_BUILD__ && (driverManager.getDriverMode() === 'mock' || !!tjs.env.DECKBRIDGE_MOCK),
+  send: sendSurvey,
 });
 
 // Grace-period scheduler (main/elgato-auto-restart.ts, §4.3) — at most once per

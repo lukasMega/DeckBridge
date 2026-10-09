@@ -6,7 +6,11 @@
  * The ADVANCED view is untouched legacy code.
  */
 import { useEffect, useState } from 'preact/hooks';
-import { fire } from '../lib/ui-api.js';
+import type { SurveyDefinition } from '../../contract-survey.js';
+import { SurveyModal } from './survey-modal.js';
+import { Modal } from '../components/Modal.js';
+import { GhostButton } from '../components/GhostButton.js';
+import { fire, postJson, useFetched } from '../lib/ui-api.js';
 import { useStore } from '../lib/store.js';
 import { deriveState, isMultiDockView, updateBadgeVersion } from '../ui-helpers.js';
 import { switchToAdvanced } from './handlers.js';
@@ -40,6 +44,11 @@ export function SimpleApp(): preact.JSX.Element {
   const [activeHelp, setActiveHelp] = useState<string | null>(null);
   const [aboutOpen, setAboutOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const survey = useFetched<SurveyDefinition>('/api/survey');
+  const [surveyOpen, setSurveyOpen] = useState(false);
+  const [surveyStarted, setSurveyStarted] = useState(false);
+  const [surveyDismissed, setSurveyDismissed] = useState(false);
+  const [surveyError, setSurveyError] = useState('');
   const updateBadge = updateBadgeVersion(updateInfo);
 
   // DailyPing's fallback when the OS-level locale probe fails (see
@@ -55,6 +64,23 @@ export function SimpleApp(): preact.JSX.Element {
   const deviceState = deriveState(status);
   const docks = status.docks;
 
+  const openSurvey = async (): Promise<void> => {
+    setAboutOpen(false);
+    await survey.reload();
+    setSurveyStarted(true);
+    setSurveyOpen(true);
+  };
+  const dismissSurvey = async (never: boolean): Promise<void> => {
+    try {
+      await postJson('/api/survey/dismiss', { never });
+      setSurveyDismissed(true);
+    } catch {
+      setSurveyError('Could not save feedback preference. Try again.');
+    }
+  };
+  const ready = isMultiDockView(docks)
+    ? docks.every((d) => d.elgatoConnected)
+    : deviceState === 'ready';
   const openAbout = (): void => setAboutOpen(true);
   const closeAbout = (): void => setAboutOpen(false);
   const openSettings = (): void => setSettingsOpen(true);
@@ -71,7 +97,14 @@ export function SimpleApp(): preact.JSX.Element {
 
   let stageContent: preact.JSX.Element;
   if (settingsOpen) {
-    stageContent = <SettingsPage onBack={closeSettings} />;
+    stageContent = (
+      <SettingsPage
+        onBack={() => {
+          if (!surveyOpen) closeSettings();
+        }}
+        onFeedback={() => void openSurvey()}
+      />
+    );
   } else if (activeHelp !== null) {
     stageContent = <HelpScreen topicId={activeHelp} onBack={handleBack} />;
   } else if (isMultiDockView(docks)) {
@@ -163,16 +196,61 @@ export function SimpleApp(): preact.JSX.Element {
         {/* inert: the shown status is cached, so its controls must not act on it. */}
         <section class="stage" id="stage" aria-live="polite" inert={stale}>
           {stageContent}
+          {ready &&
+            !settingsOpen &&
+            activeHelp === null &&
+            survey.data?.nudge &&
+            !surveyDismissed && (
+              <div class="settings-actions panel-inset survey-nudge">
+                <span>Got 1 minute? Tell us what you think.</span>
+                <span class="grow" />
+                <GhostButton onClick={() => void openSurvey()}>Start</GhostButton>
+                <GhostButton onClick={() => dismissSurvey(false)}>Not now</GhostButton>
+                <GhostButton onClick={() => dismissSurvey(true)}>Don't ask again</GhostButton>
+                {surveyError && <p class="settings-error">{surveyError}</p>}
+              </div>
+            )}
         </section>
         <footer class="disclaimer">
           Unofficial hobby project ·{' '}
           <button class="linkbtn" id="footerAbout" type="button" onClick={openAbout}>
             About
+          </button>{' '}
+          ·{' '}
+          <button
+            class="linkbtn"
+            id="footerFeedback"
+            type="button"
+            onClick={() => void openSurvey()}
+          >
+            Feedback
           </button>
         </footer>
       </div>
       <div class="toast" id="toast" role="status" aria-live="polite" />
-      {aboutOpen && <AboutPopover onClose={closeAbout} />}
+      {aboutOpen && <AboutPopover onClose={closeAbout} onFeedback={() => void openSurvey()} />}
+      {surveyOpen && !survey.data && (
+        <Modal
+          title="Quick feedback"
+          titleId="survey-loading-title"
+          onClose={() => setSurveyOpen(false)}
+        >
+          <p role="status">{survey.error ?? 'Loading feedback…'}</p>
+          <GhostButton onClick={survey.reload}>Retry</GhostButton>
+        </Modal>
+      )}
+      {surveyStarted && survey.data && (
+        <SurveyModal
+          definition={survey.data}
+          open={surveyOpen}
+          onClose={() => setSurveyOpen(false)}
+          onSent={() => {
+            setSurveyDismissed(true);
+            void survey.reload();
+          }}
+          onRefresh={survey.reload}
+        />
+      )}
     </>
   );
 }

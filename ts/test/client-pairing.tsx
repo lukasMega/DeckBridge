@@ -84,11 +84,23 @@ async function runBootAndStale(root: HTMLElement, check: Check): Promise<void> {
     timeout: globalThis.setTimeout,
   };
   let stateStatus = 200;
-  globalThis.fetch = (() =>
+  globalThis.fetch = ((url: string) =>
     Promise.resolve({
       ok: stateStatus < 400,
       status: stateStatus,
-      json: () => Promise.resolve(STATE),
+      json: () =>
+        Promise.resolve(
+          url === '/api/survey'
+            ? {
+                sv: 1,
+                questions: [],
+                context: { v: 'test', os: 'unknown', ov: 'unknown', dv: 'none' },
+                prefill: {},
+                nudge: false,
+                state: {},
+              }
+            : STATE,
+        ),
     })) as unknown as typeof fetch;
   globalThis.WebSocket = FakeWs as unknown as typeof WebSocket;
   // The close handler schedules a reconnect; keep it from opening real sockets.
@@ -429,7 +441,7 @@ async function runPairingChoices(root: HTMLElement, check: Check): Promise<void>
     check(root.textContent.includes('Already paired?'), 'Pairing: starts with Already paired?');
     check(requests.length === 0, 'Pairing: choosing Yes or No never launches the app');
     check(
-      root.querySelector('.manual-add, .pairing-action') === null,
+      root.querySelector('.manual-add, .primary') === null,
       'Pairing: no branch before choosing',
     );
     await choose(false);
@@ -453,14 +465,14 @@ async function runPairingChoices(root: HTMLElement, check: Check): Promise<void>
     await choose(true);
     check(root.querySelector('.manual-add') === null, 'Pairing: Yes hides manual instructions');
     check(
-      root.querySelector('.pairing-action')?.textContent === 'Open Elgato app',
+      root.querySelector('.primary')?.textContent === 'Open Elgato app',
       'Pairing: stopped process shows Open',
     );
     check(
       requests.every((r) => r.method === 'GET'),
       'Pairing: Yes only reads process status',
     );
-    const open = root.querySelector<HTMLButtonElement>('.pairing-action')!;
+    const open = root.querySelector<HTMLButtonElement>('.primary')!;
     await act(() => open.click());
     await act(() => open.click());
     check(open.disabled, 'Pairing: action is disabled while launching');
@@ -478,14 +490,14 @@ async function runPairingChoices(root: HTMLElement, check: Check): Promise<void>
     await act(() => finishMinimumWait!());
     await settle();
     check(
-      root.querySelector('.pairing-action')?.textContent === 'Restart Elgato app',
+      root.querySelector('.primary')?.textContent === 'Restart Elgato app',
       'Pairing: running process shows Restart after launch',
     );
     check(root.textContent.includes('Elgato app opened.'), 'Pairing: launch completion is visible');
     running = false;
     await refreshAppStatus();
     check(
-      root.querySelector('.pairing-action')?.textContent === 'Open Elgato app',
+      root.querySelector('.primary')?.textContent === 'Open Elgato app',
       'Pairing: focus refresh detects an app that quit',
     );
     await act(() => open.click());
@@ -502,11 +514,11 @@ async function runPairingChoices(root: HTMLElement, check: Check): Promise<void>
     await choose(false);
     await choose(true);
     check(
-      root.querySelector('.pairing-action')?.textContent === 'Restart Elgato app',
+      root.querySelector('.primary')?.textContent === 'Restart Elgato app',
       'Pairing: Yes detects an already running app',
     );
     restartOk = false;
-    await act(() => root.querySelector<HTMLButtonElement>('.pairing-action')!.click());
+    await act(() => root.querySelector<HTMLButtonElement>('.primary')!.click());
     await act(() => finishAction!());
     await settle();
     check(
@@ -514,13 +526,13 @@ async function runPairingChoices(root: HTMLElement, check: Check): Promise<void>
       'Pairing: failed app control shows the server reason',
     );
     check(
-      !root.querySelector<HTMLButtonElement>('.pairing-action')!.disabled,
+      !root.querySelector<HTMLButtonElement>('.primary')!.disabled,
       'Pairing: failed action can be retried',
     );
     statusCode = 500;
     await refreshAppStatus();
     check(
-      root.querySelector('.pairing-action') === null,
+      root.querySelector('.primary') === null,
       'Pairing: failed detection never guesses an action',
     );
     check(
@@ -535,14 +547,13 @@ async function runPairingChoices(root: HTMLElement, check: Check): Promise<void>
     );
     await settle();
     check(
-      root.querySelector('.pairing-action')?.textContent === 'Restart Elgato app',
+      root.querySelector('.primary')?.textContent === 'Restart Elgato app',
       'Pairing: Retry restores process detection',
     );
     supported = false;
     await refreshAppStatus();
     check(
-      root.querySelector('.pairing-action') === null &&
-        root.textContent.includes('on its computer'),
+      root.querySelector('.primary') === null && root.textContent.includes('on its computer'),
       'Pairing: unsupported hosts guide users to the app’s computer',
     );
     await act(() => render(null, root));
@@ -576,7 +587,7 @@ async function runPairingAutoRestart(root: HTMLElement, check: Check): Promise<v
     });
   }) as unknown as typeof fetch;
   const paused = (): boolean =>
-    root.querySelector('.pairing-controls, .manual-add, .pairing-action') === null;
+    root.querySelector('.pairing-controls, .manual-add, .primary') === null;
   const advance = async (ms: number): Promise<void> => {
     now += ms;
     await act(() => new Promise<void>((resolve) => window.setTimeout(resolve, 1100)));
@@ -646,7 +657,7 @@ async function runPairingAutoRestart(root: HTMLElement, check: Check): Promise<v
     await act(() => patch({ status: { ...getSnapshot().status, elgatoAutoRestartPending: null } }));
     await settle();
     check(
-      root.querySelector('.pairing-action') !== null,
+      root.querySelector('.primary') !== null,
       'Auto-restart: previous Yes choice resumes afterward',
     );
   } finally {

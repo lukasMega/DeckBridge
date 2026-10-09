@@ -1,3 +1,4 @@
+import { sanitizeSurveySettings } from './settings-store.js';
 import { isTapFeedback, loadSettings, saveSettings, settingsPath } from './settings-store.js';
 import type { Settings, DeviceIdentitySettings, PersistedLogLevel } from './settings-store.js';
 import { isLogLevel } from '../shared/cli.js';
@@ -194,11 +195,10 @@ export class PersistedSettings implements DockPrefsStore {
   /** GitHub-release update check opt-out (see update-check.ts). undefined = enabled. */
   updateCheck: boolean | undefined = undefined;
   updateState: UpdateState | undefined = undefined;
-  /** Daily usage ping opt-out (see daily-ping.ts). undefined = enabled. */
   a7s: boolean | undefined = undefined;
   a7sDay: string | undefined = undefined;
-  /** Docs topics opened since the last ping (see web/server/docs-links.ts). */
-  docsSeen: string[] = [];
+  survey: Settings['survey'] = {};
+  docsSeen: string[] = []; // Docs topics opened since last ping.
   /** Elgato-app auto-restart opt-out + grace delay (see elgato-auto-restart.ts).
    *  undefined = enabled / default delay. */
   elgatoAutoRestart: boolean | undefined = undefined;
@@ -250,6 +250,7 @@ export class PersistedSettings implements DockPrefsStore {
     if (saved.updateState) this.updateState = saved.updateState;
     if (typeof saved.a7s === 'boolean') this.a7s = saved.a7s;
     if (typeof saved.a7sDay === 'string') this.a7sDay = saved.a7sDay;
+    this.survey = sanitizeSurveySettings(saved.survey);
     if (Array.isArray(saved.docsSeen)) {
       this.docsSeen = saved.docsSeen
         .filter((t): t is string => typeof t === 'string' && DOCS_TOPIC_ID.test(t))
@@ -535,6 +536,7 @@ export class PersistedSettings implements DockPrefsStore {
       ...(this.updateState ? { updateState: this.updateState } : {}),
       ...(this.a7s !== undefined ? { a7s: this.a7s } : {}),
       ...(this.a7sDay ? { a7sDay: this.a7sDay } : {}),
+      ...(Object.keys(this.survey ?? {}).length ? { survey: this.survey } : {}),
       ...(this.docsSeen.length > 0 ? { docsSeen: this.docsSeen } : {}),
       ...this.autoRestartEntries(),
       ...(this.accessTokens.length > 0 ? { accessTokens: this.accessTokens } : {}),

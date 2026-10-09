@@ -114,7 +114,7 @@ function PairedAppAction({
           <GhostButton onClick={load}>Retry</GhostButton>
         ) : (
           <button
-            class="ctabtn pairing-action"
+            class="ctabtn primary"
             type="button"
             disabled={!app || action.busy}
             title="Controls the Elgato app on the computer running DeckBridge"
