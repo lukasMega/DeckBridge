@@ -15,7 +15,7 @@ export const ICON = {
   book: '<svg viewBox="0 0 16 16" fill="none"><path d="M8 4.2C6.8 3.3 5.2 3.1 3.4 3.4a.7.7 0 0 0-.6.7v7.1c0 .43.38.74.8.68 1.6-.22 3 .02 4 .82 1-.8 2.4-1.04 4-.82.42.06.8-.25.8-.68V4.1a.7.7 0 0 0-.6-.7C9.8 3.1 8.2 3.3 8 4.2zM8 4.2v7.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>',
   close:
     '<svg width="13" height="13" viewBox="0 0 14 14" fill="none"><path d="M2 2l10 10M12 2L2 12" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>',
-  gear: '<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M6.57 1.81 h2.86 l-0.02 1.86 l1.63 0.95 l1.6 -0.95 l1.43 2.47 l-1.62 0.91 v1.9 l1.62 0.91 l-1.43 2.47 l-1.6 -0.95 l-1.63 0.95 l0.02 1.86 h-2.86 l0.02 -1.86 l-1.63 -0.95 l-1.6 0.95 l-1.43 -2.47 l1.62 -0.91 v-1.9 l-1.62 -0.91 l1.43 -2.47 l1.6 0.95 l1.63 -0.95z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/><circle cx="8" cy="8" r="2.1" stroke="currentColor" stroke-width="1.3"/></svg>',
+  gear: '<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M6.57 1.81h2.86l-.02 1.86 1.63.95 1.6-.95 1.43 2.47-1.62.91v1.9l1.62.91-1.43 2.47-1.6-.95-1.63.95.02 1.86H6.57l.02-1.86-1.63-.95-1.6.95-1.43-2.47 1.62-.91v-1.9l-1.62-.91 1.43-2.47 1.6.95 1.63-.95z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/><circle cx="8" cy="8" r="2.1" stroke="currentColor" stroke-width="1.3"/></svg>',
 };
 
 /** Inline SVG/HTML in a <span>. `title` also names it for assistive tech —
