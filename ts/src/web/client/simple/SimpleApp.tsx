@@ -54,7 +54,7 @@ export function SimpleApp(): preact.JSX.Element {
   const [surveySession, setSurveySession] = useState(0);
   const [shortOpen, setShortOpen] = useState(false);
   const [shortSeed, setShortSeed] = useState<SurveyAnswers>({});
-  const shortShown = useRef(false);
+  const shortShownRef = useRef(false);
   const [surveyError, setSurveyError] = useState('');
   const updateBadge = updateBadgeVersion(updateInfo);
 
@@ -94,9 +94,9 @@ export function SimpleApp(): preact.JSX.Element {
   // Once per page life, so declining can never loop.
   const offerShort = (answers: SurveyAnswers): void => {
     const def = survey.data;
-    if (!def || shortShown.current || def.state.never || (def.state.submittedSv ?? 0) >= def.sv)
+    if (!def || shortShownRef.current || def.state.never || (def.state.submittedSv ?? 0) >= def.sv)
       return;
-    shortShown.current = true;
+    shortShownRef.current = true;
     setShortSeed(answers);
     setShortOpen(true);
   };

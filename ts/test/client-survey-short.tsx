@@ -52,6 +52,8 @@ export async function runSurveyShort(root: HTMLElement, check: Check): Promise<v
     });
     await settle();
   };
+  // Generic narrows the DOM type at call sites.
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-parameters
   const q = <T extends Element>(sel: string): T => root.querySelector<T>(sel)!;
   const press = async (scope: string, text: string): Promise<void> => {
     await act(() =>
@@ -245,8 +247,7 @@ export async function runSurveyShort(root: HTMLElement, check: Check): Promise<v
     await pick('nudge-rating', '5');
     check(
       q('[role="progressbar"]').getAttribute('aria-valuenow') === '4' &&
-        root.querySelector('#survey-modal')!.textContent.includes('Continue your unfinished') ===
-          false,
+        !root.querySelector('#survey-modal')!.textContent.includes('Continue your unfinished'),
       'Face tap with a draft resumes at the draft step',
     );
     await closeWizard();

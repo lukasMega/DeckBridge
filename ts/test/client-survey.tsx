@@ -13,6 +13,10 @@ const settle = async (): Promise<void> => {
     for (let i = 0; i < 10; i++) await Promise.resolve();
   });
 };
+const waitAdvance = async (): Promise<void> => {
+  await act(() => new Promise((r) => setTimeout(r, 350)));
+  await settle();
+};
 
 export async function runSurvey(root: HTMLElement, check: Check): Promise<void> {
   const original = globalThis.fetch;
@@ -65,10 +69,6 @@ export async function runSurvey(root: HTMLElement, check: Check): Promise<void> 
         .querySelector<HTMLInputElement>(`input[name="survey-${name}"][value="${value}"]`)!
         .click(),
     );
-    await settle();
-  };
-  const waitAdvance = async (): Promise<void> => {
-    await act(() => new Promise((r) => setTimeout(r, 350)));
     await settle();
   };
   const title = (): string | null => root.querySelector('.survey-q')?.textContent ?? null;
@@ -331,6 +331,12 @@ export async function runSurvey(root: HTMLElement, check: Check): Promise<void> 
 
 const DRAFT_KEY = 'deckbridge.surveyDraft';
 
+const stored = (): { step: number; answers: Record<string, unknown> } | null =>
+  JSON.parse(localStorage.getItem(DRAFT_KEY) ?? 'null') as {
+    step: number;
+    answers: Record<string, unknown>;
+  } | null;
+
 async function runSurveyDraft(root: HTMLElement, check: Check): Promise<void> {
   const original = globalThis.fetch;
   const definition: SurveyDefinition = {
@@ -342,11 +348,11 @@ async function runSurveyDraft(root: HTMLElement, check: Check): Promise<void> {
     nudge: false,
     state: {},
   };
-  globalThis.fetch = (() =>
+  globalThis.fetch = () =>
     Promise.resolve({
       ok: true,
       json: () => Promise.resolve({ sent: true }),
-    } as Response)) as typeof fetch;
+    } as Response);
   const mount = async (): Promise<void> => {
     await act(() => {
       render(null, root);
@@ -373,11 +379,6 @@ async function runSurveyDraft(root: HTMLElement, check: Check): Promise<void> {
   };
   const title = (): string | null => root.querySelector('.survey-q')?.textContent ?? null;
   const banner = (): boolean => root.textContent.includes('Continue your unfinished feedback?');
-  const stored = (): { step: number; answers: Record<string, unknown> } | null =>
-    JSON.parse(localStorage.getItem(DRAFT_KEY) ?? 'null') as {
-      step: number;
-      answers: Record<string, unknown>;
-    } | null;
   try {
     localStorage.removeItem(DRAFT_KEY);
     await mount();
