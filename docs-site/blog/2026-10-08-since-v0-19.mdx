@@ -21,7 +21,7 @@ export const Side = ({ label, children }) => (
   </figure>
 );
 
-In 0.20, side keys can follow the page the Elgato app shows. Setups with more than one deck get tabs instead of a long stack of cards. When DeckBridge restarts the Elgato app for you, the Web UI now shows a countdown.
+In 0.20, side keys can follow the page the Elgato app shows. Setups with more than one deck get tabs instead of a long stack of cards. When DeckBridge restarts the Elgato app for you, the Web UI now shows a countdown. The download is also about 100 kB smaller.
 
 {/* truncate */}
 
@@ -151,3 +151,17 @@ With more than one deck, the countdown appears only on the decks the restart is 
 If the Elgato app is not running when the deck connects, there is nothing to restart. The app finds the deck when you open it. The Web UI then shows no countdown and keeps the pairing controls, including **Open Elgato app**.
 
 The toggle and the grace delay are in **Settings → Elgato app**. See [Restarting the Elgato app](/troubleshooting#restarting-the-elgato-app).
+
+## A smaller download, and a few small fixes
+
+The 0.20 binary is 104 kB (3.7%) smaller than 0.19: 2.69 MB instead of 2.79 MB on macOS arm64. Most of the txiki.js runtime inside it is out of our hands. The part DeckBridge controls, about 0.77 MB before, is 13.6% smaller. The biggest savings:
+
+- The image pipeline now works on one pixel format. This saves 35 kB.
+- The USB workers no longer carry code they never use (33 kB), and their embedded native libraries and font data are stored more compactly (26 kB).
+- Deck icons are recompressed (4 kB), and the Web UI class names are shortened in release builds (2 kB).
+
+Image conversion stays at about 1 ms. The first launch after an install or update takes about 70 ms longer, because DeckBridge unpacks its native libraries once. The size work also fixed three small Web UI problems:
+
+- **Escape** now closes the pairing address window while focus is inside it.
+- The brightness slider at the bottom of a deck panel now uses its intended compact style.
+- Popovers for command, plugin, and push side keys stay inside the window on narrow screens.
