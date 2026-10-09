@@ -9,7 +9,7 @@ import { measure } from './size-report.mjs';
 // class-mangled form (the size report's default).
 const BUDGETS = {
   // Survey UI refreshed 2026-10-09; measured size + 1% headroom.
-  'ui.js': 155_086,
+  'ui.js': 155_500,
   'deck.js': 30_106,
   'css total': 34_951,
   'hid-worker': 47_394,

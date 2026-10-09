@@ -464,7 +464,7 @@ async function runSurveyDraft(root: HTMLElement, check: Check): Promise<void> {
       root.querySelector('#survey-preview')?.textContent.includes('"standby"') === true &&
         !root.querySelector('#survey-preview')!.textContent.includes('"pages"') &&
         !root.querySelector('#survey-preview')!.textContent.includes('nope'),
-      'Draft features beat prefill; unknown ids and out-of-range steps are sanitised',
+      'Draft features beat prefill; unknown ids and out-of-range steps are sanitized',
     );
     await click('Send');
     check(stored() === null, 'Successful send clears the draft');
