@@ -1,5 +1,9 @@
 import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { test } from 'node:test';
 
 // Resolve the actual transitive copies used by Docusaurus, not test-only dependencies.
@@ -22,6 +26,142 @@ const CachePolicy = requireFrom([
   'cacheable-request',
 ])('http-cache-semantics');
 const uri = requireFrom(['@docusaurus/core', 'webpack', 'schema-utils', 'ajv'])('fast-uri');
+const tinypoolPath = requireFrom(['@docusaurus/core']).resolve('tinypool');
+const sourceMap = requireFrom(['@docusaurus/core', '@docusaurus/bundler', 'postcss'])(
+  'source-map-js',
+);
+const selectorPaths = [
+  [
+    '@docusaurus/core',
+    '@docusaurus/bundler',
+    'cssnano',
+    'cssnano-preset-default',
+    'postcss-minify-selectors',
+  ],
+  ['@docusaurus/core', '@docusaurus/bundler', 'postcss-preset-env', 'postcss-nesting'],
+].map((packages) => requireFrom(packages).resolve('postcss-selector-parser'));
+
+test('selector parsing handles large flat selectors (CVE-2026-104844)', () => {
+  for (const modulePath of new Set(selectorPaths)) {
+    // Bound a regressed parser's CPU usage without blocking the test runner.
+    execFileSync(
+      process.execPath,
+      [
+        '-e',
+        `
+      const assert = require('node:assert/strict');
+      const parser = require(process.argv[1]);
+      for (const token of ['.a', '#a']) {
+        const selector = token.repeat(200_000);
+        const ast = parser().astSync(selector);
+        assert.equal(ast.first.nodes.length, 200_000);
+        assert.equal(ast.toString(), selector);
+      }
+      const ordinary = 'a[href="x"] > .item:not(.hidden), #main';
+      assert.equal(parser().processSync(ordinary), ordinary);
+    `,
+        modulePath,
+      ],
+      { timeout: 10_000, stdio: 'pipe' },
+    );
+  }
+});
+
+test('indexed source maps reject unsafe offsets (CVE-2026-93749)', () => {
+  const map = {
+    version: 3,
+    sources: ['input.js'],
+    sourcesContent: ['x'],
+    names: [],
+    mappings: 'AAAA',
+  };
+  const indexed = (line: unknown, column: unknown, child: object = map) => ({
+    version: 3,
+    sections: [{ offset: { line, column }, map: child }],
+  });
+  for (const value of [-1, 1.5, NaN, Infinity, Number.MAX_SAFE_INTEGER + 1, '1', null]) {
+    assert.throws(
+      () => new sourceMap.SourceMapConsumer(indexed(value, 0)),
+      /non-negative integers/,
+    );
+    assert.throws(
+      () => new sourceMap.SourceMapConsumer(indexed(0, value)),
+      /non-negative integers/,
+    );
+  }
+  assert.throws(() => new sourceMap.SourceMapConsumer(indexed(10_000_001, 0)), /must not exceed/);
+  assert.throws(
+    () => new sourceMap.SourceMapConsumer(indexed(6_000_000, 0, indexed(6_000_000, 0))),
+    /including offsets of nested sections/,
+  );
+  const consumer = new sourceMap.SourceMapConsumer(indexed(2, 0));
+  assert.deepEqual(consumer.originalPositionFor({ line: 3, column: 1 }), {
+    source: 'input.js',
+    line: 1,
+    column: 0,
+    name: null,
+  });
+  const node = sourceMap.SourceNode.fromStringWithSourceMap(
+    'var x;\n',
+    new sourceMap.SourceMapConsumer(indexed(10_000_000, 0)),
+  );
+  assert.equal(node.toString(), 'var x;\n');
+  assert.ok(node.children.length < 10, 'offset past source must not allocate empty lines');
+});
+
+test('tinypool ignores inherited worker and run options (CVE-2026-104848/104849)', async (t) => {
+  const directory = mkdtempSync(join(tmpdir(), 'deckbridge-tinypool-'));
+  t.after(() => rmSync(directory, { recursive: true, force: true }));
+  const worker = join(directory, 'worker.mjs');
+  const payload = join(directory, 'payload.cjs');
+  const marker = join(directory, 'injected.txt');
+  const redirectedWorker = join(directory, 'redirected-worker.mjs');
+  const runner = join(directory, 'runner.mjs');
+  writeFileSync(worker, 'export default (n) => n * 2;');
+  writeFileSync(
+    payload,
+    `require('node:fs').writeFileSync(${JSON.stringify(marker)}, 'injected');`,
+  );
+  writeFileSync(redirectedWorker, 'export default () => -1;');
+  // Each pollution vector runs in its own process to protect the test runner.
+  writeFileSync(
+    runner,
+    `
+    import assert from 'node:assert/strict';
+    import { existsSync } from 'node:fs';
+    import { pathToFileURL } from 'node:url';
+    const [modulePath, key, worker, payload, marker, redirectedWorker] = process.argv.slice(2);
+    const { default: Tinypool } = await import(pathToFileURL(modulePath).href);
+    const values = {
+      execArgv: ['--require', payload],
+      env: { ...process.env, NODE_OPTIONS: '--require ' + payload },
+      filename: redirectedWorker,
+    };
+    Object.defineProperty(Object.prototype, key, {
+      value: values[key], writable: true, configurable: true, enumerable: true,
+    });
+    const pool = new Tinypool({ filename: worker, minThreads: 1, maxThreads: 1, isolateWorkers: false });
+    try {
+      assert.equal(await pool.run(21, {}), 42, key + ' redirected worker');
+      assert.equal(existsSync(marker), false, key + ' executed injected preload');
+      assert.equal(await pool.run(21, { filename: redirectedWorker }), -1);
+    } finally {
+      delete Object.prototype[key];
+      await pool.destroy();
+    }
+  `,
+  );
+  for (const key of ['execArgv', 'env', 'filename']) {
+    await t.test(key, () => {
+      rmSync(marker, { force: true });
+      execFileSync(
+        process.execPath,
+        [runner, tinypoolPath, key, worker, payload, marker, redirectedWorker],
+        { timeout: 10_000, stdio: 'pipe' },
+      );
+    });
+  }
+});
 
 test('fast-uri consistently normalizes encoded host case (CVE-2026-86472)', () => {
   for (const [input, canonical] of [

@@ -20,6 +20,17 @@ pnpm run typecheck  # tsc
 The `fast-uri` override requires `^3.1.8`, fixing percent-encoded host case
 normalization (CVE-2026-86472) with an upstream release.
 
+The `tinypool` override requires `^2.1.2`, fixing inherited worker options
+(CVE-2026-104848) and inherited `run()` filenames (CVE-2026-104849).
+Docusaurus still requires `^1.0.2`; remove this override once its dependency
+range permits a fixed release. Tinypool v2 supports the workspace's Node floor.
+
+The `postcss-selector-parser` override requires `^7.1.6`, fixing quadratic
+flat-selector parsing (CVE-2026-104844), including cssnano's older v6 copies.
+The `source-map-js` override requires `^1.2.2`, fixing indexed source-map offset
+denial of service (CVE-2026-93749). Remove these overrides once every parent
+resolves fixed releases. These dependencies process CSS during site builds.
+
 `pnpm-workspace.yaml` applies version-specific patches from `../patches/`:
 
 - `braces@3.0.3` (CVE-2026-93687): reject patterns exceeding 100 nested
@@ -29,8 +40,9 @@ normalization (CVE-2026-86472) with an upstream release.
   stale-response paths from bypassing existing cache security restrictions.
   Normal expiry and explicitly permitted caching retain their behavior.
 
-`pnpm run test:security` checks both mitigations against Docusaurus's actual
-transitive dependencies and runs as part of `pnpm test` in CI.
+`pnpm run test:security` checks both mitigations and upstream fixes against
+Docusaurus's actual transitive dependencies, including isolated Tinypool
+prototype-pollution checks. It runs as part of `pnpm test` in CI.
 
 These are local mitigations, not upstream releases. Dependabot may continue
 reporting the affected package versions. Remove each patch registration and
