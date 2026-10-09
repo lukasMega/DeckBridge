@@ -152,16 +152,12 @@ If the Elgato app is not running when the deck connects, there is nothing to res
 
 The toggle and the grace delay are in **Settings → Elgato app**. See [Restarting the Elgato app](/troubleshooting#restarting-the-elgato-app).
 
-## A smaller download, and a few small fixes
+## A smaller download
 
-The 0.20 binary is 104 kB (3.7%) smaller than 0.19: 2.69 MB instead of 2.79 MB on macOS arm64. Most of the txiki.js runtime inside it is out of our hands. The part DeckBridge controls, about 0.77 MB before, is 13.6% smaller. The biggest savings:
+DeckBridge 0.20 is about 0.1 MB smaller than 0.19: 2.7 MB instead of 2.8 MB. Most of that size is the runtime it is built on, so the part we control is about 14% smaller. Speed is the same. The first launch after an update takes a moment longer while DeckBridge unpacks its files.
 
-- The image pipeline now works on one pixel format. This saves 35 kB.
-- The USB workers no longer carry code they never use (33 kB), and their embedded native libraries and font data are stored more compactly (26 kB).
-- Deck icons are recompressed (4 kB), and the Web UI class names are shortened in release builds (2 kB).
+Three small Web UI fixes came along:
 
-Image conversion stays at about 1 ms. The first launch after an install or update takes about 70 ms longer, because DeckBridge unpacks its native libraries once. The size work also fixed three small Web UI problems:
-
-- **Escape** now closes the pairing address window while focus is inside it.
-- The brightness slider at the bottom of a deck panel now uses its intended compact style.
-- Popovers for command, plugin, and push side keys stay inside the window on narrow screens.
+- **Escape** closes the pairing address window.
+- The brightness slider has its intended compact look.
+- Popovers for side keys stay inside the window on narrow screens.
