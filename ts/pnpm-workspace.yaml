@@ -12,6 +12,8 @@ minimumReleaseAgeExclude:
 overrides:
   browserslist: "^4.28.7"
   baseline-browser-mapping: "^2.11.0"
+  # 4.7.10 fixes AST injection, constructor access, and inline script escaping.
+  handlebars: "^4.7.10"
 
 # Share the docs build's nesting guard with ESLint's transitive braces copy.
 patchedDependencies:

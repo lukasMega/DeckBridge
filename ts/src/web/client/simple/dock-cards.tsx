@@ -143,6 +143,7 @@ export function DockList({
               }}
               onKeyDown={(event) => selectTab(event, position)}
             >
+              <span class="dock-card-name">{item.modelName}</span>
               <span class="dock-tab-preview panel-inset" aria-hidden="true">
                 <KeyGridSkeleton
                   keyCount={item.keyCount}
@@ -151,15 +152,7 @@ export function DockList({
                 />
                 {item.touchStripSize && <span class="dock-tab-strip" />}
               </span>
-              <span class="dock-card-name">
-                {item.modelName}
-                {!item.elgatoConnected && (
-                  <>
-                    <br />
-                    <StatusChip variant="wait">Unpaired</StatusChip>
-                  </>
-                )}
-              </span>
+              {!item.elgatoConnected && <StatusChip variant="wait">Unpaired</StatusChip>}
             </GhostButton>
           ))}
         </div>

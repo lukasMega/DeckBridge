@@ -157,8 +157,9 @@ later per-class rules keep only size/background/placement deltas */
 }
 .dock-tab {
   flex: 1;
+  flex-direction: column;
   min-width: 0;
-  text-align: left;
+  text-align: center;
   padding: 10px;
 }
 .dock-tab .dock-card-name {
@@ -184,12 +185,6 @@ later per-class rules keep only size/background/placement deltas */
 }
 .dock-tab-strip {
   height: 4px;
-}
-@media (max-width: 480px) {
-  .dock-tab {
-    flex-direction: column;
-    text-align: center;
-  }
 }
 .dock-card-head {
   margin-bottom: 10px;

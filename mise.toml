@@ -316,7 +316,7 @@ run = "node scripts/device-new.mjs"
 [tasks.ci-checks]
 description = "Lint, typecheck, core/browser tests, knip, check-loc, check-size, and generated device docs in parallel"
 quiet = true
-depends = ["lint", "types", "test", "test-client", "knip", "check-loc", "check-size", "devices-check"]
+depends = ["lint", "types", "test", "test-client", "test-security", "knip", "check-loc", "check-size", "devices-check"]
 run = "echo '✔ ci-checks'"
 timeout = "120s"
 
@@ -462,6 +462,13 @@ run = "node ../scripts/quiet.mjs --fail-only --ok=test-client -- pnpm --silent r
 # The script's own browser budget is 90s; keep this clear of it so a browser timeout
 # fails with the script's diagnostic (Chrome path + stderr) instead of a bare task kill.
 timeout = "150s"
+
+[tasks.test-security]
+description = "Check dependency security regressions"
+quiet = true
+dir = "ts"
+depends = ["ts-install"]
+run = "node ../scripts/quiet.mjs --fail-only --ok=test-security -- pnpm --silent run test:security"
 
 [tasks.docs-install]
 description = "Install docs-site pnpm dependencies"

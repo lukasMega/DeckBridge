@@ -21,7 +21,7 @@ export const Side = ({ label, children }) => (
   </figure>
 );
 
-In 0.20, side keys can follow the page the Elgato app shows. Setups with more than one deck get tabs instead of a long stack of cards. When DeckBridge restarts the Elgato app for you, the Web UI now shows a countdown.
+In 0.20, side keys can follow the page the Elgato app shows. Setups with more than one deck get tabs instead of a long stack of cards. When DeckBridge restarts the Elgato app for you, the Web UI now shows a countdown. The download is also about 100 kB smaller.
 
 {/* truncate */}
 
@@ -151,3 +151,13 @@ With more than one deck, the countdown appears only on the decks the restart is 
 If the Elgato app is not running when the deck connects, there is nothing to restart. The app finds the deck when you open it. The Web UI then shows no countdown and keeps the pairing controls, including **Open Elgato app**.
 
 The toggle and the grace delay are in **Settings → Elgato app**. See [Restarting the Elgato app](/troubleshooting#restarting-the-elgato-app).
+
+## A smaller download
+
+DeckBridge 0.20 is about 0.1 MB smaller than 0.19: 2.7 MB instead of 2.8 MB. Most of that size is the runtime it is built on, so the part we control is about 14% smaller. Speed is the same. The first launch after an update takes a moment longer while DeckBridge unpacks its files.
+
+Three small Web UI fixes came along:
+
+- **Escape** closes the pairing address window.
+- The brightness slider has its intended compact look.
+- Popovers for side keys stay inside the window on narrow screens.
