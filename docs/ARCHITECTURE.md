@@ -788,12 +788,6 @@ flowchart LR
     end
     IMG_DL --> EB2
 
-    subgraph "npm polyfills (bundled inline)"
-        EE["eventemitter3<br/>EventEmitter"]
-    end
-    EE --> EB1
-    EE --> EB2
-
     subgraph "tjs externals (runtime)"
         FFI["tjs:ffi<br/>dlopen"]
     end
@@ -883,7 +877,7 @@ flowchart TD
     subgraph "Platform shims (ts/src/platform/)"
         TCP["tcp.ts<br/>NodeLikeSocket / NodeLikeServer<br/>createServer / createConnection"]
         BUF_SHIM["buffer-shim.ts<br/>Buffer = Uint8Array subclass<br/>(txiki codecs, no npm buffer)"]
-        EV_SHIM["events-shim.ts<br/>re-export EventEmitter<br/>from eventemitter3"]
+        EV_SHIM["events-shim.ts<br/>minimal EventEmitter<br/>(own, no npm dep)"]
     end
 
     subgraph "txiki.js globals"

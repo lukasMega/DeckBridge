@@ -4,14 +4,14 @@
 // Usage: node scripts/check-size.mjs [--verbose]
 import { measure } from './size-report.mjs';
 
-// Measured after P5 (2026-10-09) + 1 %. Ratcheted down at the end of each phase of
+// Measured after P8d (2026-10-09) + 1 %. Ratcheted down at the end of each phase of
 // .claude/plans/2026-10-08_release-size-webui-css.md. ui.js and the ui CSS are the shipped,
 // class-mangled form (the size report's default).
 const BUDGETS = {
   'ui.js': 144_706,
   'deck.js': 30_106,
   'css total': 30_921,
-  'hid-worker': 50_581,
+  'hid-worker': 47_394,
   'hid-scan-worker': 10_002,
   'plugin-worker': 2_733,
 };
