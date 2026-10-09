@@ -18,7 +18,7 @@
     "scripts/*.mjs"
   ],
   "project": ["src/**/*.ts", "src/**/*.tsx", "test/**/*.ts", "scripts/*.mjs"],
-  "ignoreBinaries": ["mise"],
+  "ignoreBinaries": ["mise", "oxipng"],
   "ignoreDependencies": ["tjs"],
   "ignoreExportsUsedInFile": true
 }
