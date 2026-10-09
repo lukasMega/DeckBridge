@@ -8,7 +8,7 @@
 import { build } from 'esbuild';
 import { spawn } from 'node:child_process';
 import { existsSync, mkdtempSync, writeFileSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { constants, tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import assert from 'node:assert/strict';
@@ -60,6 +60,27 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 /** @type {import('node:child_process').ChildProcess | null} */
 let browser = null;
+
+function killBrowser() {
+  if (browser === null || browser.exitCode !== null || browser.signalCode !== null) return false;
+  try {
+    if (process.platform === 'win32') browser.kill('SIGKILL');
+    else process.kill(-browser.pid, 'SIGKILL'); // whole group: browser + zygote + renderers
+  } catch {
+    browser.kill('SIGKILL');
+  }
+  return true;
+}
+
+// Chrome has its own process group, so a signal that ends this script (Ctrl-C, mise
+// cancelling the other tasks of a failed parallel run) skips `finally` and orphans it.
+for (const signal of ['SIGINT', 'SIGTERM', 'SIGHUP']) {
+  process.once(signal, () => {
+    killBrowser();
+    process.exit(128 + constants.signals[signal]);
+  });
+}
+
 try {
   const bundle = await build({
     entryPoints: [fileURLToPath(new URL('../test/client-regressions.tsx', import.meta.url))],
@@ -189,13 +210,7 @@ try {
   // Chrome is still running here — we never wait on its exit. Kill it and wait (bounded)
   // for the process to go before removing the dir it has open, or rmSync races Chrome's
   // own profile writes and throws ENOTEMPTY on a run that actually passed.
-  if (browser !== null && browser.exitCode === null && browser.signalCode === null) {
-    try {
-      if (process.platform === 'win32') browser.kill('SIGKILL');
-      else process.kill(-browser.pid, 'SIGKILL'); // whole group: browser + zygote + renderers
-    } catch {
-      browser.kill('SIGKILL');
-    }
+  if (killBrowser()) {
     await new Promise((resolve) => {
       const giveUp = setTimeout(resolve, 5000);
       browser.once('exit', () => {
