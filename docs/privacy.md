@@ -110,20 +110,22 @@ A third outbound call happens only when you press **Send** in the feedback surve
 Open it from Settings → Maintenance → **Give feedback**, About, or the footer's
 **Feedback** link. Every question can be skipped. Before sending, **What gets sent**
 shows the exact JSON body: survey version, your selected answers, an optional comment
-(trimmed and capped at 280 characters), an optional description for **Other** in
-**What do you use it for?** (trimmed and capped at 300 characters), an optional request for
-**Other** in **What should come next?** (trimmed and capped at 100 characters), DeckBridge version,
+(trimmed and capped at 280 characters), a description required when you select **Other** in
+**What do you use it for?** (trimmed and capped at 300 characters) or
+**What should come next?** (trimmed and capped at 100 characters), DeckBridge version,
 OS family and major version, and connected model ids. Nothing leaves your machine before Send.
 
 Unlike the daily ping, each survey response is **stored as one row** by the same
 self-hosted collector. Rows have no stored IP, install id, device serial, device key,
 paths, commands, locale or timezone. The collector groups responses by UTC day.
-Please do not include personal information in any optional text field.
+Please do not include personal information in any text field.
 
 Daily-ping opt-outs do not hide or block the survey: pressing Send is explicit consent.
-Mock mode never sends. Failed sends keep answers in memory for retry during the current
-session; answers and comments are never saved to disk. Only the survey version and
-submission date, a 30-day snooze, or **Don't ask again** preference are saved locally.
+Mock mode never sends. An unfinished survey is kept as a draft in your browser's local
+storage (answers, typed text and current step) so you can continue later; it never leaves
+your machine, is deleted after a successful send or 30 days, and clearing browser data
+removes it. The app itself saves only the survey version and submission date, a 30-day
+snooze, or **Don't ask again** preference.
 The Ready screen may show a small feedback prompt seven days after first pairing, once
 per survey version; passive feedback links remain available after opting out of prompts.
 

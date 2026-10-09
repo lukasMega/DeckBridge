@@ -1,4 +1,5 @@
 import type { SurveyAnswers, SurveyOption, SurveyQuestion } from '../../contract-survey.js';
+import { useCallback, useRef } from 'preact/hooks';
 import { ChipRadioGroup } from '../components/ChipRadioGroup.js';
 import { ChipCheckGroup } from '../components/ChipCheckGroup.js';
 
@@ -12,14 +13,14 @@ interface OtherDetail {
 // Caps mirror validateSurvey (web/server/survey.ts).
 const OTHER_DETAILS: Partial<Record<string, OtherDetail>> = {
   'use-for': {
-    label: 'Other use (optional)',
-    placeholder: 'Describe your other use (optional)',
+    label: 'Other use',
+    placeholder: 'Describe your other use (required)',
     max: 300,
     multiline: true,
   },
   want: {
-    label: 'Other request (optional)',
-    placeholder: 'Describe your request (optional)',
+    label: 'Other request',
+    placeholder: 'Describe your request (required)',
     max: 100,
   },
 };
@@ -61,6 +62,8 @@ export function LimitedText({
   placeholder,
   max,
   multiline = false,
+  required = false,
+  inputRef,
   value,
   onInput,
 }: Readonly<{
@@ -68,6 +71,8 @@ export function LimitedText({
   placeholder?: string;
   max: number;
   multiline?: boolean;
+  required?: boolean;
+  inputRef?: (input: HTMLInputElement | HTMLTextAreaElement | null) => void;
   value: string;
   onInput: (value: string) => void;
 }>): preact.JSX.Element {
@@ -77,26 +82,33 @@ export function LimitedText({
     <>
       {multiline ? (
         <textarea
+          ref={inputRef}
           class="input survey-comment"
           aria-label={label}
           placeholder={placeholder}
           maxLength={max}
+          required={required}
           value={value}
           onInput={input}
         />
       ) : (
         <input
+          ref={inputRef}
           type="text"
           class="input survey-detail"
           aria-label={label}
           placeholder={placeholder}
           maxLength={max}
+          required={required}
           value={value}
           onInput={input}
         />
       )}
       <p class="multi-deck-note">
-        {value.length} / {max} · Please don't include personal info.
+        {value.length} / {max} ·{' '}
+        {required && !value.trim()
+          ? 'Add a description to continue.'
+          : "Please don't include personal info."}
       </p>
     </>
   );
@@ -115,7 +127,16 @@ export function QuestionStep({
   onChange: (value: string | string[], advance: boolean) => void;
   onDraft: (text: string) => void;
 }>): preact.JSX.Element {
+  const focusDetailRef = useRef(false);
+  const detailRef = useCallback((input: HTMLInputElement | HTMLTextAreaElement | null) => {
+    if (focusDetailRef.current && input) {
+      focusDetailRef.current = false;
+      input.focus({ preventScroll: true });
+      input.scrollIntoView({ block: 'nearest' });
+    }
+  }, []);
   const picks = value === undefined ? [] : [value].flat();
+  const otherSelected = picks.includes('other');
   const parentOf = (id: string): string => parentOption(q.options, id)?.id ?? id;
   const parents = picks.map(parentOf);
   const full = q.kind === 'multi' && !!q.max && picks.length >= q.max;
@@ -132,6 +153,7 @@ export function QuestionStep({
     disabled: full && !parents.includes(o.id) && o.id !== q.exclusive,
   }));
   const choose = (id: string): void => {
+    focusDetailRef.current = id === 'other' && !otherSelected;
     if (q.kind === 'single') onChange(id, !q.options.find((o) => o.id === id)?.options);
     else if (parents.includes(id))
       onChange(
@@ -207,8 +229,14 @@ export function QuestionStep({
             />
           </div>
         ))}
-      {detail && picks.includes('other') && (
-        <LimitedText {...detail} value={draft ?? ''} onInput={onDraft} />
+      {detail && otherSelected && (
+        <LimitedText
+          {...detail}
+          required
+          inputRef={detailRef}
+          value={draft ?? ''}
+          onInput={onDraft}
+        />
       )}
     </>
   );
