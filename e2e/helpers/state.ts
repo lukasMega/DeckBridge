@@ -24,6 +24,7 @@ export interface SettingsJson {
   updateCheck?: boolean;
   devices?: DeviceEntry[];
   modelOverrides?: Record<string, unknown>;
+  survey?: { snoozedUntil?: string; never?: boolean; submittedSv?: number };
   [key: string]: unknown;
 }
 
