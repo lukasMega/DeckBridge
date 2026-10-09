@@ -1,0 +1,153 @@
+---
+slug: since-v0-19
+title: What's new in 0.20 since 0.19
+authors: [lukas]
+tags: [release]
+date: 2026-10-08
+---
+
+import ThemedImage from '@theme/ThemedImage';
+
+export const Compare = ({ children }) => (
+  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '1rem', alignItems: 'flex-start', marginBottom: '1rem' }}>
+    {children}
+  </div>
+);
+
+export const Side = ({ label, children }) => (
+  <figure style={{ flex: '1 1 260px', maxWidth: 454, margin: 0 }}>
+    {children}
+    <figcaption style={{ textAlign: 'center', fontSize: '0.875rem' }}>{label}</figcaption>
+  </figure>
+);
+
+In 0.20, side keys can follow the page the Elgato app shows. Setups with more than one deck get tabs instead of a long stack of cards. When DeckBridge restarts the Elgato app for you, the Web UI now shows a countdown.
+
+{/* truncate */}
+
+These changes ship in 0.20.0. All screenshots below come from the real Web UI in mock mode. A test client stands in for the Elgato app, and the key art is placeholder. "Before" shots come from 0.19.0. "After" shots come from 0.20.0.
+
+## Side keys that follow the Elgato page
+
+A profile, page, or folder in the Elgato app can now have its own side-key and touch-strip layout. DeckBridge sees every key image the app sends, so it can tell which page is on screen. When you switch pages in the app, the side keys switch too.
+
+1. Show the page in the Elgato app.
+2. Open **Follow Elgato pages** and choose **Save current page…**. Give the page a name.
+3. Expand **Saved pages** and choose **Edit layout**. The page starts as a copy of the default layout.
+
+Below, the deck shows the "Streaming" page. Its status displays show **LIVE**, a clock, and the date. The "Music" page has a different layout. Any page you did not save uses the default layout.
+
+<ThemedImage
+  sources={{
+    light: require('./since-0-19-pages.png').default,
+    dark: require('./since-0-19-pages-dark.png').default,
+  }}
+  alt="Follow Elgato pages section with two saved pages, Music and Streaming. Streaming is active, and its status displays show LIVE, a clock and the date."
+  width={454}
+/>
+
+A page matches when enough of its keys show the same images as when you saved it. Each page's **⋯** button holds its options:
+
+- **Matching** sets how many keys must match: **Strict** 100%, **Normal** 80%, **Loose** 60%.
+- **Ignored keys** leaves out keys that change by themselves, such as clocks or animations.
+- **Re-capture** saves the page images again, for example after an Elgato app update or a new key theme.
+
+<ThemedImage
+  sources={{
+    light: require('./since-0-19-pages-options.png').default,
+    dark: require('./since-0-19-pages-options-dark.png').default,
+  }}
+  alt="Page options for Streaming: page name, 14 of 14 keys match, matching strictness Normal, and an ignored-keys grid with the first key left out"
+  width={454}
+/>
+
+The section sits below the side-key settings and starts collapsed, so it stays out of the way until you need it. The layout switches about 0.2 seconds after the page finishes changing. Pages are saved per device, so each deck in a multi-deck setup follows its own page. See [Layouts that follow the Elgato page](/side-keys#layouts-that-follow-the-elgato-page).
+
+## Tabs for more than one deck
+
+0.19 showed one card per deck, one below the other. Only the selected card had a live preview. The others showed a grey grid with **Click to view**. With two or three decks, the page got long.
+
+In 0.20, each deck has a tab at the top, with a small outline of its key layout. Click a tab, or use the arrow keys, to show that deck's live preview, brightness, and extra buttons.
+
+<Compare>
+  <Side label="0.19">
+    <ThemedImage
+      sources={{
+        light: require('./since-0-19-multi-before.png').default,
+        dark: require('./since-0-19-multi-before-dark.png').default,
+      }}
+      alt="0.19: two stacked deck cards. The selected MK.2 card shows its live preview, the browser deck card shows a grey Click to view grid."
+      style={{ width: '100%' }}
+    />
+  </Side>
+  <Side label="0.20">
+    <ThemedImage
+      sources={{
+        light: require('./since-0-19-multi-after.png').default,
+        dark: require('./since-0-19-multi-after-dark.png').default,
+      }}
+      alt="0.20: two deck tabs at the top and one panel with the selected MK.2 live preview and brightness"
+      style={{ width: '100%' }}
+    />
+  </Side>
+</Compare>
+
+A deck that still needs pairing shows **Unpaired** on its tab. Select it, and the panel shows the pairing steps for that deck only.
+
+<Compare>
+  <Side label="0.19">
+    <ThemedImage
+      sources={{
+        light: require('./since-0-19-multipair-before.png').default,
+        dark: require('./since-0-19-multipair-before-dark.png').default,
+      }}
+      alt="0.19: heading 2 decks connected, 1 left to pair, with the paired deck card above the unpaired one"
+      style={{ width: '100%' }}
+    />
+  </Side>
+  <Side label="0.20">
+    <ThemedImage
+      sources={{
+        light: require('./since-0-19-multipair-after.png').default,
+        dark: require('./since-0-19-multipair-after-dark.png').default,
+      }}
+      alt="0.20: the browser deck tab is selected and marked Unpaired. The panel shows Already paired? for that deck."
+      style={{ width: '100%' }}
+    />
+  </Side>
+</Compare>
+
+## A countdown when the Elgato app restarts
+
+The Elgato app only looks for network docks when it starts. A deck that appears while the app is already running stays blank. DeckBridge already restarts the app for a deck that was paired before, after a short grace delay (10 seconds by default).
+
+In 0.19 this happened silently. The Web UI asked **Already paired?** at the same time, so you could press **Restart Elgato app** while DeckBridge was about to do the same thing. In 0.20, the Web UI shows the countdown and hides the manual controls until the restart is done or skipped.
+
+<Compare>
+  <Side label="0.19">
+    <ThemedImage
+      sources={{
+        light: require('./since-0-19-restart-before.png').default,
+        dark: require('./since-0-19-restart-before-dark.png').default,
+      }}
+      alt="0.19: Connect your control app with Already paired? Yes and No, while a restart is pending in the background"
+      style={{ width: '100%' }}
+    />
+  </Side>
+  <Side label="0.20">
+    <ThemedImage
+      sources={{
+        light: require('./since-0-19-restart-after.png').default,
+        dark: require('./since-0-19-restart-after-dark.png').default,
+      }}
+      alt="0.20: Reconnecting your deck, Elgato app will restart automatically, with a 6 s countdown chip"
+      style={{ width: '100%' }}
+    />
+  </Side>
+</Compare>
+
+With more than one deck, the countdown appears only on the decks the restart is waiting for. A deck that was never paired keeps its pairing controls, because a restart does not add it to the Elgato app. The countdown also stays correct when the browser runs on another device with a different clock.
+
+If the Elgato app is not running when the deck connects, there is nothing to restart. The app finds the deck when you open it. The Web UI then shows no countdown and keeps the pairing controls, including **Open Elgato app**.
+
+The toggle and the grace delay are in **Settings → Elgato app**. See [Restarting the Elgato app](/troubleshooting#restarting-the-elgato-app).

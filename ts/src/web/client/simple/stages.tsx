@@ -73,7 +73,6 @@ export function StageReady({
       <>
         {!many && <ReadyStatus title={`Connected${appName}`} deviceName={sel.modelName} />}
         <DockList docks={docks} onHelp={onHelp} />
-        {many && <p class="step-sub">Select a deck for its live preview and brightness.</p>}
       </>
     );
   }

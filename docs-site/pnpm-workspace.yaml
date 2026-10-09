@@ -25,6 +25,13 @@ allowBuilds:
 #   uuid                 — sockjs@0.3.24 (via webpack-dev-server) pins `^8.3.2`
 #                          (fix: 11.1.1). Dev server only. Drop once sockjs
 #                          depends on uuid >= 11.1.1.
+#   tinypool             — Docusaurus pins `^1.0.2`; both prototype-pollution
+#                          gadgets are fixed in 2.1.2. Node >=24.13 supports v2.
+#                          Drop once Docusaurus depends on tinypool >=2.1.2.
+#   postcss-selector-parser — cssnano's plugins still require v6 (fix: 7.1.6).
+#                          Drop once every parent permits a fixed release.
+#   source-map-js        — PostCSS allows v1 patches (fix: 1.2.2).
+#                          Drop once all parents resolve >=1.2.2 themselves.
 overrides:
   # Diagrams use CLI prerendering, not the theme's optional Mermaid 11 ELK engine.
   "@docusaurus/theme-mermaid>@mermaid-js/layout-elk": "-"
@@ -34,6 +41,9 @@ overrides:
   qs: "^6.16.0"
   serialize-javascript: "^7.0.5"
   uuid: "^11.1.1"
+  tinypool: "^2.1.2"
+  postcss-selector-parser: "^7.1.6"
+  source-map-js: "^1.2.2"
 
 # Temporary mitigations for CVE-2026-93687 and CVE-2026-93748.
 # Remove once upstream releases address these issues; see README.md.
