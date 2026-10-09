@@ -16,9 +16,9 @@ exclude = ["jpeg-encoder"]
 # it has no FFI surface.
 #
 # opt-level = 3, not "z", despite the size focus: a profile covers the whole build
-# graph, so "z" de-vectorized `image`/`zune-jpeg`/jpeg-encoder too. 3.50 ms -> 0.91 ms
-# per image for +192 KB of dylib — only +69 KB in the shipped binary, which embeds it
-# gzip+base64'd. See rust/PERF.md before reverting.
+# graph, so "z" de-vectorized `image`/`zune-jpeg`/jpeg-encoder too: 2.4-6.9x slower per
+# image to save 148 KB of dylib, which is only 57 KB in the shipped binary (it embeds the
+# dylib as raw bytes that the bundle deflates). See rust/PERF.md before reverting.
 [profile.release]
 opt-level     = 3
 lto           = true

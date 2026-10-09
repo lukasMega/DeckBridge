@@ -16,19 +16,24 @@ pub(crate) fn blit_rgb(
     if canvas.len() < needed {
         return Err(format!("canvas too small: {} < {}", canvas.len(), needed));
     }
-    let patch = decode_limited(input)?.to_rgb8();
+    let patch = decode_limited(input)?;
     if x >= cw || y >= ch {
         return Ok(());
     }
     let w = patch.width().min(cw - x) as usize;
     let h = patch.height().min(ch - y) as usize;
-    let src_stride = patch.width() as usize * 3;
+    let src_stride = patch.width() as usize * 4;
     let dst_stride = cw as usize * 3;
     let src = patch.as_raw();
     for row in 0..h {
         let s = row * src_stride;
         let d = (y as usize + row) * dst_stride + x as usize * 3;
-        canvas[d..d + w * 3].copy_from_slice(&src[s..s + w * 3]);
+        for (dst, px) in canvas[d..d + w * 3]
+            .chunks_exact_mut(3)
+            .zip(src[s..s + w * 4].chunks_exact(4))
+        {
+            dst.copy_from_slice(&px[..3]);
+        }
     }
     Ok(())
 }
@@ -84,11 +89,8 @@ mod tests {
     use image::{DynamicImage, Rgb, RgbImage};
 
     fn bmp(w: u32, h: u32, px: [u8; 3]) -> Vec<u8> {
-        encode_bmp(
-            DynamicImage::ImageRgb8(RgbImage::from_pixel(w, h, Rgb(px))),
-            0,
-        )
-        .unwrap()
+        let src = DynamicImage::ImageRgb8(RgbImage::from_pixel(w, h, Rgb(px)));
+        encode_bmp(&src.to_rgba8(), 0).unwrap()
     }
 
     #[test]
