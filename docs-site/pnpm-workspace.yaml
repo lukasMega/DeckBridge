@@ -32,6 +32,8 @@ allowBuilds:
 #                          Drop once every parent permits a fixed release.
 #   source-map-js        — PostCSS allows v1 patches (fix: 1.2.2).
 #                          Drop once all parents resolve >=1.2.2 themselves.
+#   katex                — Mermaid and its CLI require v0.16 (fix: 0.18.2).
+#                          Drop once every parent permits a fixed release.
 overrides:
   # Diagrams use CLI prerendering, not the theme's optional Mermaid 11 ELK engine.
   "@docusaurus/theme-mermaid>@mermaid-js/layout-elk": "-"
@@ -44,6 +46,7 @@ overrides:
   tinypool: "^2.1.2"
   postcss-selector-parser: "^7.1.6"
   source-map-js: "^1.2.2"
+  katex: "0.18.2"
 
 # Temporary mitigations for CVE-2026-93687 and CVE-2026-93748.
 # Remove once upstream releases address these issues; see README.md.

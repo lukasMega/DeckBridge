@@ -25,6 +25,7 @@ import { Collapsible } from '../src/web/client/components/Collapsible.js';
 import { runDeckPage } from './client-deck.js';
 import { runPairingFlow } from './client-pairing.js';
 import { runDocsLinks } from './client-docs.js';
+import { runSurvey } from './client-survey.js';
 import { runModalShells } from './client-modal.js';
 import { runPagesPanel } from './client-pages.js';
 import { StandbyPanel } from '../src/web/client/simple/standby-panel.js';
@@ -262,6 +263,7 @@ async function run(): Promise<void> {
   await runSettingsPanels();
   await runDocsLinks(root, check);
   await runModalShells(root, check);
+  await runSurvey(root, check);
   await runKeymapAndDiagnosticsPanels();
   await runMultiDockCards();
   await runMultiDockConfiguration();
@@ -1854,7 +1856,19 @@ async function checkDockPreview(
 
 async function runMultiDockConfiguration(): Promise<void> {
   const before = getSnapshot();
-  const stub = stubFetch(() => ({ payload: { dir: '', files: [], status: {} } }));
+  const stub = stubFetch((url) => ({
+    payload:
+      url === '/api/survey'
+        ? {
+            sv: 1,
+            questions: [],
+            context: { v: '0.20.0', os: 'unknown', ov: 'unknown', dv: 'none' },
+            prefill: {},
+            nudge: false,
+            state: {},
+          }
+        : { dir: '', files: [], status: {} },
+  }));
   const peer = { ...DOCKS[1]!, index: 0 };
   const models = [...DEVICE_MODELS, BROWSER_DECK_MK2_MODEL];
   const secondRow = ['#000000', '#4499ff', '#dd77cc', '#000000'].map((color) =>

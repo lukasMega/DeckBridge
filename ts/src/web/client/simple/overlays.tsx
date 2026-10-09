@@ -103,7 +103,10 @@ function MdnsNameEditor({
   );
 }
 
-export function AboutPopover({ onClose }: Readonly<{ onClose: () => void }>): preact.JSX.Element {
+export function AboutPopover({
+  onClose,
+  onFeedback,
+}: Readonly<{ onClose: () => void; onFeedback?: () => void }>): preact.JSX.Element {
   return (
     <Modal title="What is DeckBridge?" titleId="about-title" onClose={onClose}>
       <p class="about-intro">
@@ -124,6 +127,11 @@ export function AboutPopover({ onClose }: Readonly<{ onClose: () => void }>): pr
           Network Dock. For reliable setups, use officially supported Elgato hardware.
         </p>
       </div>
+      {onFeedback && (
+        <button class="linkbtn" type="button" onClick={onFeedback}>
+          Give feedback
+        </button>
+      )}
       <p class="about-version">DeckBridge v{__VERSION__}</p>
     </Modal>
   );
@@ -264,7 +272,10 @@ function ConnectionDetails({
   );
 }
 
-export function SettingsPage({ onBack }: Readonly<{ onBack: () => void }>): preact.JSX.Element {
+export function SettingsPage({
+  onBack,
+  onFeedback,
+}: Readonly<{ onBack: () => void; onFeedback?: () => void }>): preact.JSX.Element {
   const action = useAsyncAction();
   // Both reads are per-mount, so the preview and the identifiers are fresh every
   // time this page is opened. DiagnosticsPanel is fed from this one /api/state
@@ -315,6 +326,11 @@ export function SettingsPage({ onBack }: Readonly<{ onBack: () => void }>): prea
         <SettingsGroup title="Maintenance">
           <UpdatePanel info={updateInfoFor(state.data)} />
           <DiagnosticsPanel {...diagnosticsProps(state.data)} />
+          {onFeedback && (
+            <div class="settings-actions">
+              <GhostButton onClick={onFeedback}>Give feedback</GhostButton>
+            </div>
+          )}
           <SettingsFileActions action={action} reloadSettings={settings.reload} />
         </SettingsGroup>
         <Feedback error={action.error} status={action.status} />

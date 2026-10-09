@@ -1,6 +1,7 @@
 // Daily usage ping — aggregate counters only, gated once per UTC day client-side
 // (so `app` is already that day's install count). Shaped like update-check.ts:
 // pure half + a curl beacon, silent on failure. See docs/privacy.md.
+import { sendCurl } from './curl-send.js';
 import { log } from '../shared/logger.js';
 import { readText } from './os-utils.js';
 import { spawnOwned } from './owned-spawn.js';
@@ -274,37 +275,7 @@ export async function sendBeacon(
   version: string,
   timeoutMs = (CURL_TIMEOUT_S + 5) * 1000,
 ): Promise<void> {
-  let p: TjsProcess;
-  try {
-    p = spawnOwned(
-      [
-        'curl',
-        '-fsS',
-        '--max-time',
-        String(CURL_TIMEOUT_S),
-        '-o',
-        '/dev/null',
-        '-H',
-        `User-Agent: DeckBridge/${version}`,
-        beaconUrl(encoded),
-      ],
-      { stdout: 'ignore', stderr: 'ignore' },
-    );
-  } catch {
-    return;
-  }
-  const killer = setTimeout(() => {
-    try {
-      p.kill();
-    } catch {}
-  }, timeoutMs);
-  try {
-    await p.wait();
-  } catch {
-    // offline / killed — nothing to report
-  } finally {
-    clearTimeout(killer);
-  }
+  await sendCurl(beaconUrl(encoded), version, undefined, timeoutMs);
 }
 
 export interface DailyPingDeps {

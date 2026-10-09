@@ -665,7 +665,7 @@ input[type='range'].range:disabled {
   font-weight: 600;
 }
 .pairing-answers [aria-pressed='true'],
-.ctabtn.pairing-action {
+.ctabtn.primary {
   background: var(--accent);
   color: var(--accent-ink);
 }
@@ -677,7 +677,7 @@ input[type='range'].range:disabled {
 .stage > .preview:first-child,
 .xkey-grid-head,
 .pairing-controls .pairing-action-row,
-.ctabtn.pairing-action {
+.ctabtn.primary {
   margin-top: 0;
 }
 .manual-add {
@@ -1322,4 +1322,75 @@ select.input.xkey-select {
 .page-row .crop-keys,
 .page-actions {
   margin-top: 8px;
+}
+
+.popover.survey {
+  max-width: 640px;
+  height: min(600px, calc(100dvh - 48px));
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.survey-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+.survey-progress {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 16px;
+  font-size: 12px;
+  color: var(--fg-dim);
+}
+.survey-progress i {
+  width: 7px;
+  height: 7px;
+  background: var(--border-strong);
+}
+.survey-progress i.on {
+  background: var(--accent);
+}
+.popover .survey-q {
+  margin: 0 0 14px;
+  font-size: 22px;
+  font-weight: 600;
+  color: var(--fg);
+  outline: none;
+}
+.survey-faces .chip-radio {
+  height: auto;
+  padding: 4px 10px;
+  font-size: 24px;
+}
+.survey-comment {
+  min-height: 96px;
+}
+.survey-comment,
+.survey-detail {
+  width: 100%;
+  margin-top: 12px;
+}
+.survey-review li {
+  overflow-wrap: anywhere;
+  display: grid;
+  grid-template-columns: 110px minmax(0, 1fr) auto;
+  gap: 8px;
+  text-align: left;
+}
+.survey-review .dock-chip {
+  max-width: 100%;
+}
+.survey-nav {
+  margin-top: 22px;
+  flex-shrink: 0;
+  min-height: 38px;
+}
+:is(.survey-nav, .survey-nudge, .survey-progress, .survey-ends) .grow {
+  flex: 1;
+}
+.survey-nudge {
+  margin-top: 18px;
+  padding: 12px 14px;
 }

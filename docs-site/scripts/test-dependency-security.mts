@@ -3,7 +3,7 @@ import { execFileSync } from 'node:child_process';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { test } from 'node:test';
 
 // Resolve the actual transitive copies used by Docusaurus, not test-only dependencies.
@@ -40,6 +40,54 @@ const selectorPaths = [
   ],
   ['@docusaurus/core', '@docusaurus/bundler', 'postcss-preset-env', 'postcss-nesting'],
 ].map((packages) => requireFrom(packages).resolve('postcss-selector-parser'));
+
+const katexPaths = [
+  ['@docusaurus/theme-mermaid', 'mermaid'],
+  ['@mermaid-js/mermaid-cli', 'mermaid'],
+  ['@mermaid-js/mermaid-cli'],
+].map((packages) => {
+  let require = createRequire(createRequire(import.meta.url).resolve(packages[0]));
+  for (const name of packages.slice(1)) require = createRequire(require.resolve(name));
+  return require.resolve('katex');
+});
+
+test('KaTeX ignores inherited trust options (CVE-2026-103923)', () => {
+  for (const modulePath of new Set(katexPaths)) {
+    // Mermaid imports ESM; also check the CommonJS entry point in isolation.
+    for (const entry of [modulePath, join(dirname(modulePath), 'katex.mjs')]) {
+      execFileSync(
+        process.execPath,
+        [
+          '--input-type=module',
+          '-e',
+          String.raw`
+      import assert from 'node:assert/strict';
+      import { pathToFileURL } from 'node:url';
+      const { default: katex } = await import(pathToFileURL(process.argv[1]).href);
+      const expression = '\\href{https://attacker.test/}{click}';
+      const render = (options) => katex.renderToString(expression, options);
+      const baseline = render({});
+      assert.equal(baseline.includes('href='), false);
+      assert.equal(render(Object.create({ trust: true })), baseline);
+      Object.defineProperty(Object.prototype, 'trust', {
+        value: true, writable: true, configurable: true,
+      });
+      try {
+        assert.equal(render({}), baseline);
+        assert.equal(render(), baseline);
+        assert.ok(katex.renderToString('x^2').includes('katex'));
+      } finally {
+        delete Object.prototype.trust;
+      }
+      assert.ok(render({ trust: true }).includes('href="https://attacker.test/"'));
+    `,
+          entry,
+        ],
+        { timeout: 10_000, stdio: 'pipe' },
+      );
+    }
+  }
+});
 
 test('selector parsing handles large flat selectors (CVE-2026-104844)', () => {
   for (const modulePath of new Set(selectorPaths)) {

@@ -97,7 +97,32 @@ export function tapFeedbackOf(entry: DeviceIdentitySettings | undefined): TapFee
  *  single source of truth for accepted levels) so the two can't drift apart. */
 export type PersistedLogLevel = CliLogLevel;
 
+export interface SurveySettings {
+  snoozedUntil?: string;
+  never?: boolean;
+  submittedSv?: number;
+  submittedAt?: string;
+}
+
+export function sanitizeSurveySettings(raw: unknown): SurveySettings {
+  if (!raw || typeof raw !== 'object') return {};
+  const r = raw as Record<string, unknown>;
+  const state: SurveySettings = {};
+  for (const key of ['snoozedUntil', 'submittedAt'] as const) {
+    if (typeof r[key] === 'string' && Number.isFinite(Date.parse(r[key]))) state[key] = r[key];
+  }
+  if (typeof r.never === 'boolean') state.never = r.never;
+  if (
+    typeof r.submittedSv === 'number' &&
+    Number.isSafeInteger(r.submittedSv) &&
+    r.submittedSv >= 0
+  )
+    state.submittedSv = r.submittedSv;
+  return state;
+}
+
 export interface Settings {
+  survey?: SurveySettings;
   selectedDock?: number;
   logLevel?: PersistedLogLevel;
   /** Opt-in multi-deck: dock a second supported device as its own headless CORA

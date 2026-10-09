@@ -9,8 +9,9 @@ description: What this docs site measures — cookieless, first-party, no person
 # Privacy & Analytics
 
 This site uses **first-party, self-hosted analytics**: no cookies, no stored IPs, no
-fingerprinting, no third-party trackers, nothing sold or shared. Data is aggregate daily
-counts only — we cannot identify you or follow you across sites.
+fingerprinting, no third-party trackers, nothing sold or shared. Site measurements are aggregate daily
+counts only — we cannot identify you or follow you across sites. Explicit in-app survey
+responses are stored individually, as described below.
 
 ## What is measured
 
@@ -47,7 +48,7 @@ consent banner is needed, since nothing personal is stored locally or server-sid
 
 ## The DeckBridge app
 
-The binary makes two outbound network calls on its own, both on by default and each
+The binary makes two automatic outbound network calls, both on by default and each
 with its own independent opt-out. Neither sends a machine id, a device serial, a file
 path, or anything about what you press.
 
@@ -102,6 +103,29 @@ own timer rather than the update check's. A skipped ping leaves `a7sDay` untouch
 a CI job or a sandbox run cannot consume the day's ping for a real machine.
 `deckbridge diagnose` reports the current verdict on the `(daily-ping)` line of the
 environment section.
+
+### Optional feedback survey
+
+A third outbound call happens only when you press **Send** in the feedback survey.
+Open it from Settings → Maintenance → **Give feedback**, About, or the footer's
+**Feedback** link. Every question can be skipped. Before sending, **What gets sent**
+shows the exact JSON body: survey version, your selected answers, an optional comment
+(trimmed and capped at 280 characters), an optional description for **Other** in
+**What do you use it for?** (trimmed and capped at 300 characters), an optional request for
+**Other** in **What should come next?** (trimmed and capped at 100 characters), DeckBridge version,
+OS family and major version, and connected model ids. Nothing leaves your machine before Send.
+
+Unlike the daily ping, each survey response is **stored as one row** by the same
+self-hosted collector. Rows have no stored IP, install id, device serial, device key,
+paths, commands, locale or timezone. The collector groups responses by UTC day.
+Please do not include personal information in any optional text field.
+
+Daily-ping opt-outs do not hide or block the survey: pressing Send is explicit consent.
+Mock mode never sends. Failed sends keep answers in memory for retry during the current
+session; answers and comments are never saved to disk. Only the survey version and
+submission date, a 30-day snooze, or **Don't ask again** preference are saved locally.
+The Ready screen may show a small feedback prompt seven days after first pairing, once
+per survey version; passive feedback links remain available after opting out of prompts.
 
 Everything else it records stays on your machine, under the cache directory described
 in [Troubleshooting](./troubleshooting.md).

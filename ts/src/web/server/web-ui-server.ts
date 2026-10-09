@@ -35,6 +35,7 @@ import { LoggingController } from './logging-controller.js';
 import { DevicePrefsController } from './device-prefs-controller.js';
 import { EncodersController } from './encoders-controller.js';
 import { liveDiagnosticsInputs, type HidInventoryFn } from './diagnostics-sources.js';
+import { SurveyController } from './survey-controller.js';
 import { UpdateController } from './update-controller.js';
 import { PushController } from './push-controller.js';
 import { checkKeyPress } from './key-press.js';
@@ -67,6 +68,7 @@ export class WebUIServer extends EventEmitter implements WebUIController, WebUIC
   readonly modelOverrides: ModelOverridesController;
   readonly logging: LoggingController;
   readonly updates: UpdateController;
+  readonly survey: SurveyController;
   readonly settingsFile: SettingsFileController;
   readonly elgatoApp: ElgatoAppController;
   readonly standby: StandbyController;
@@ -157,6 +159,7 @@ export class WebUIServer extends EventEmitter implements WebUIController, WebUIC
       }),
     );
     this.updates = new UpdateController(host, __VERSION__);
+    this.survey = new SurveyController(settings);
     this.settingsFile = new SettingsFileController(host, this.logging);
     this.elgatoApp = new ElgatoAppController(host);
     this.standby = new StandbyController(host);
@@ -171,6 +174,7 @@ export class WebUIServer extends EventEmitter implements WebUIController, WebUIC
       modelOverrides: this.modelOverrides,
       logging: this.logging,
       updates: this.updates,
+      survey: this.survey,
       settingsFile: this.settingsFile,
       elgatoApp: this.elgatoApp,
       standby: this.standby,
