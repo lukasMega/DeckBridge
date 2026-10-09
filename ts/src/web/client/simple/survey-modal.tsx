@@ -90,6 +90,13 @@ export function SurveyModal({
     [step, open, sent],
   );
 
+  useEffect(
+    function revealSendError() {
+      if (message && bodyRef.current) bodyRef.current.scrollTop = bodyRef.current.scrollHeight;
+    },
+    [message],
+  );
+
   const move = (next: number): void => {
     clearTimeout(timerRef.current);
     setStep(next);
