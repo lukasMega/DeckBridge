@@ -13,15 +13,23 @@ test('feedback stepper submits locally but mock never sends', async ({ page, req
   await expect(modal.locator('.survey-q')).toHaveText('Did it do what you expected?');
   for (let i = 0; i < 3; i++) await click(modal.getByRole('button', { name: 'Skip', exact: true }));
   await click(modal.getByRole('checkbox', { name: 'Other', exact: true }));
-  await modal
-    .getByRole('textbox', { name: 'Other use (optional)', exact: true })
-    .fill('x'.repeat(300));
+  await expect(modal.getByRole('textbox', { name: 'Other use', exact: true })).toBeFocused();
+  await expect(modal.getByRole('button', { name: 'Next ›', exact: true })).toBeDisabled();
+  await modal.getByRole('textbox', { name: 'Other use', exact: true }).fill('x'.repeat(300));
   await click(modal.getByRole('button', { name: 'Next ›', exact: true }));
   for (let i = 0; i < 2; i++) await click(modal.getByRole('button', { name: 'Skip', exact: true }));
   await click(modal.getByRole('checkbox', { name: 'Other', exact: true }));
-  await modal
-    .getByRole('textbox', { name: 'Other request (optional)', exact: true })
-    .fill('y'.repeat(100));
+  const next = modal.getByRole('button', { name: 'Next ›', exact: true });
+  await expect(modal.getByRole('textbox', { name: 'Other request', exact: true })).toBeFocused();
+  await expect(next).toBeDisabled();
+  await modal.getByRole('textbox', { name: 'Other request', exact: true }).fill('   ');
+  await expect(next).toBeDisabled();
+  await click(modal.getByRole('button', { name: 'Skip', exact: true }));
+  await click(modal.getByRole('button', { name: 'Back', exact: true }));
+  await expect(modal.getByRole('textbox', { name: 'Other request', exact: true })).toHaveCount(0);
+  await expect(next).toBeEnabled();
+  await click(modal.getByRole('checkbox', { name: 'Other', exact: true }));
+  await modal.getByRole('textbox', { name: 'Other request', exact: true }).fill('y'.repeat(100));
   await click(modal.getByRole('button', { name: 'Next ›', exact: true }));
   for (let i = 0; i < 3; i++) await click(modal.getByRole('button', { name: 'Skip', exact: true }));
   await expect(modal.locator('.survey-q')).toHaveText('Review your feedback');

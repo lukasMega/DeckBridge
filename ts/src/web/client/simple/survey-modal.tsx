@@ -9,6 +9,7 @@ import { Modal } from '../components/Modal.js';
 import { Collapsible } from '../components/Collapsible.js';
 import { GhostButton } from '../components/GhostButton.js';
 import { postJson } from '../lib/ui-api.js';
+import { clearSurveyDraft, loadSurveyDraft, saveSurveyDraft } from './survey-draft.js';
 import {
   LimitedText,
   QuestionStep,
@@ -19,8 +20,8 @@ import {
 
 const UNSENT: Record<NonNullable<SurveySendResult['reason']>, string> = {
   mock: 'Not sent: mock mode never sends feedback.',
-  offline: 'Not sent: connection failed. Your answers are kept for retry during this session.',
-  'no-curl': 'Not sent: curl is unavailable. Your answers are kept for retry during this session.',
+  offline: 'Not sent: connection failed. Your answers are kept on this device for retry.',
+  'no-curl': 'Not sent: curl is unavailable. Your answers are kept on this device for retry.',
   rejected:
     'Not sent: response rejected or device context changed. Retry after reviewing the updated preview.',
 };
@@ -68,6 +69,8 @@ export function SurveyModal({
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [comment, setComment] = useState('');
   const [step, setStep] = useState(0);
+  const [saved, setSaved] = useState(() => loadSurveyDraft(definition));
+  const [touched, setTouched] = useState(false);
   const [busy, setBusy] = useState(false);
   const [sent, setSent] = useState(false);
   const [message, setMessage] = useState('');
@@ -78,6 +81,9 @@ export function SurveyModal({
   const question = definition.questions[step];
   const review = !sent && step === count + 1;
   const payload = surveyPayload(definition, answers, drafts, comment);
+  const missingDetails = ['use-for', 'want'].filter(
+    (id) => answers[id]?.includes('other') && !drafts[id]?.trim(),
+  );
 
   useEffect(
     function focusQuestion() {
@@ -91,6 +97,15 @@ export function SurveyModal({
   );
 
   useEffect(
+    function persistDraft() {
+      // A pending saved draft stays untouched until the user picks Continue or Start over.
+      if (touched && !sent && !saved)
+        saveSurveyDraft({ sv: definition.sv, step, answers, drafts, comment });
+    },
+    [touched, sent, saved, definition.sv, step, answers, drafts, comment],
+  );
+
+  useEffect(
     function revealSendError() {
       if (message && bodyRef.current) bodyRef.current.scrollTop = bodyRef.current.scrollHeight;
     },
@@ -99,10 +114,26 @@ export function SurveyModal({
 
   const move = (next: number): void => {
     clearTimeout(timerRef.current);
+    setTouched(true);
     setStep(next);
+  };
+  const resume = (): void => {
+    if (!saved) return;
+    // The user's own features choice beats a fresh prefill.
+    setAnswers({ ...(saved.answers.features ? {} : definition.prefill), ...saved.answers });
+    setDrafts(saved.drafts);
+    setComment(saved.comment);
+    setStep(saved.step);
+    setTouched(true);
+    setSaved(null);
+  };
+  const startOver = (): void => {
+    clearSurveyDraft();
+    setSaved(null);
   };
   const answer = (id: string, value?: string | string[], advance = false): void => {
     clearTimeout(timerRef.current);
+    setTouched(true);
     setAnswers((old) => {
       const next = { ...old };
       if (value?.length) next[id] = value;
@@ -122,6 +153,7 @@ export function SurveyModal({
     try {
       const result = await postJson<SurveySendResult>('/api/survey', payload, 'Send failed');
       if (result.sent) {
+        clearSurveyDraft();
         setSent(true);
         onSent();
       } else {
@@ -150,6 +182,13 @@ export function SurveyModal({
         <h3 class="survey-q" ref={headingRef} tabIndex={-1}>
           {sent ? 'Thanks for your feedback!' : stepTitle(definition, step)}
         </h3>
+        {!sent && saved && (
+          <div class="settings-actions panel-inset">
+            <p class="multi-deck-note">Continue your unfinished feedback?</p>
+            <GhostButton onClick={resume}>Continue</GhostButton>
+            <GhostButton onClick={startOver}>Start over</GhostButton>
+          </div>
+        )}
         {sent && <SurveyThanks />}
         {question && (
           <QuestionStep
@@ -158,7 +197,10 @@ export function SurveyModal({
             value={answers[question.id]}
             draft={drafts[question.id]}
             onChange={(value, advance) => answer(question.id, value, advance)}
-            onDraft={(text) => setDrafts((old) => ({ ...old, [question.id]: text }))}
+            onDraft={(text) => {
+              setTouched(true);
+              setDrafts((old) => ({ ...old, [question.id]: text }));
+            }}
           />
         )}
         {step === count && (
@@ -170,7 +212,10 @@ export function SurveyModal({
               max={280}
               multiline
               value={comment}
-              onInput={setComment}
+              onInput={(text) => {
+                setTouched(true);
+                setComment(text);
+              }}
             />
           </>
         )}
@@ -216,7 +261,7 @@ export function SurveyModal({
               <button
                 class="ctabtn primary"
                 type="button"
-                disabled={busy}
+                disabled={busy || missingDetails.length > 0}
                 onClick={() => void send()}
               >
                 {busy ? 'Sending…' : 'Send'}
@@ -225,7 +270,11 @@ export function SurveyModal({
           ) : (
             <>
               <GhostButton onClick={skip}>Skip</GhostButton>
-              <GhostButton class="survey-next" onClick={() => move(step + 1)}>
+              <GhostButton
+                class="survey-next"
+                disabled={missingDetails.includes(question?.id ?? '')}
+                onClick={() => move(step + 1)}
+              >
                 Next ›
               </GhostButton>
             </>

@@ -302,6 +302,37 @@ await test('changed preview context is rejected before outbound send', async () 
     reason: 'rejected',
   });
 });
+await test('Other requires non-whitespace detail before outbound send', async () => {
+  const settings = new PersistedSettings(`${ROOT}/required-details`);
+  const survey = new SurveyController(settings);
+  let calls = 0;
+  survey.configure({
+    context: () => Promise.resolve(context),
+    isMock: () => false,
+    send: () => {
+      calls++;
+      return Promise.resolve({ sent: true });
+    },
+  });
+  for (const [id, field] of [
+    ['use-for', 'useForOther'],
+    ['want', 'wantOther'],
+  ]) {
+    for (const detail of [undefined, '', ' \n ', null, 42]) {
+      assert.equal(
+        await survey.submit({
+          sv: SURVEY_VERSION,
+          ...context,
+          a: { [id!]: ['other'] },
+          [field!]: detail,
+        }),
+        { sent: false, reason: 'rejected' },
+      );
+    }
+  }
+  assert.equal(calls, 0);
+  assert.equal(settings.survey, {});
+});
 await test('dismiss persists 30-day snooze and permanent opt-out', async () => {
   const settings = new PersistedSettings(`${ROOT}/dismiss`);
   const survey = new SurveyController(settings);

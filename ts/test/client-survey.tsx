@@ -71,6 +71,7 @@ export async function runSurvey(root: HTMLElement, check: Check): Promise<void> 
   };
   const title = (): string | null => root.querySelector('.survey-q')?.textContent ?? null;
   try {
+    localStorage.removeItem('deckbridge.surveyDraft');
     await act(() => {
       render(null, root);
       draw();
@@ -111,6 +112,20 @@ export async function runSurvey(root: HTMLElement, check: Check): Promise<void> 
     await click('Skip');
     check(root.querySelector('textarea') === null, 'Other use detail starts hidden');
     await choose('use-for', 'other');
+    check(document.activeElement === root.querySelector('textarea'), 'Other use focuses its field');
+    check(root.querySelector('textarea')?.required === true, 'Other use detail is required');
+    check(button('Next ›').disabled, 'Empty Other use blocks Next');
+    await act(() => {
+      const input = root.querySelector<HTMLTextAreaElement>('textarea')!;
+      input.value = '   ';
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    await settle();
+    await click('Next ›');
+    check(
+      button('Next ›').disabled && title() === SURVEY_QUESTIONS[4]!.label,
+      'Whitespace Other use cannot advance',
+    );
     check(root.querySelector('textarea')?.maxLength === 300, 'Other use allows 300 characters');
     await act(() => {
       const input = root.querySelector<HTMLTextAreaElement>('textarea')!;
@@ -119,12 +134,22 @@ export async function runSurvey(root: HTMLElement, check: Check): Promise<void> 
     });
     await settle();
     check(root.textContent.includes('300 / 300'), 'Other use counter enforces cap');
+    check(
+      document.activeElement === root.querySelector('textarea'),
+      'Typing keeps Other use focus',
+    );
+    check(!button('Next ›').disabled, 'Other use text enables Next');
     await choose('use-for', 'other');
     check(root.querySelector('textarea') === null, 'Deselecting Other hides detail');
+    check(!button('Next ›').disabled, 'Deselecting Other removes use detail requirement');
     await choose('use-for', 'other');
     await click('Next ›');
     await click('Back');
     check(root.querySelector('textarea')?.value === 'x'.repeat(300), 'Back preserves Other draft');
+    check(
+      document.activeElement === root.querySelector('.survey-q'),
+      'Back focuses question heading',
+    );
     await click('Next ›');
     check(
       root.querySelector<HTMLInputElement>('input[value="pages"]')!.checked,
@@ -165,6 +190,21 @@ export async function runSurvey(root: HTMLElement, check: Check): Promise<void> 
     await choose('want', 'multi-host');
     await choose('want', 'other');
     const requestInput = (): HTMLInputElement | null => root.querySelector('.survey-detail');
+    check(document.activeElement === requestInput(), 'Other request focuses its field');
+    check(
+      requestInput()?.required === true && button('Next ›').disabled,
+      'Empty Other request blocks Next',
+    );
+    await act(() => {
+      requestInput()!.value = '   ';
+      requestInput()!.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    await settle();
+    await click('Next ›');
+    check(
+      button('Next ›').disabled && title() === SURVEY_QUESTIONS[7]!.label,
+      'Whitespace Other request cannot advance',
+    );
     check(requestInput()?.maxLength === 100, 'Other request allows 100 characters');
     await act(() => {
       const input = requestInput()!;
@@ -173,17 +213,25 @@ export async function runSurvey(root: HTMLElement, check: Check): Promise<void> 
     });
     await settle();
     check(root.textContent.includes('100 / 100'), 'Other request counter enforces cap');
+    check(document.activeElement === requestInput(), 'Typing keeps Other request focus');
+    check(!button('Next ›').disabled, 'Other request text enables Next');
     await choose('want', 'other');
     check(requestInput() === null, 'Deselecting Other hides request');
+    check(!button('Next ›').disabled, 'Deselecting Other removes request requirement');
     await choose('want', 'other');
     await click('Back');
     await click('Next ›');
     check(requestInput()?.value === 'y'.repeat(100), 'Back preserves Other request draft');
+    check(
+      document.activeElement === root.querySelector('.survey-q'),
+      'Return focuses question heading',
+    );
     await click('Next ›');
     await click('Skip');
     await click('Skip');
     await act(() => {
       const input = root.querySelector<HTMLTextAreaElement>('textarea')!;
+      check(!input.required, 'Final comment remains optional');
       input.value = 'x'.repeat(300);
       input.dispatchEvent(new Event('input', { bubbles: true }));
     });
@@ -270,10 +318,161 @@ export async function runSurvey(root: HTMLElement, check: Check): Promise<void> 
       'Success ends survey journey',
     );
   } finally {
+    localStorage.removeItem('deckbridge.surveyDraft');
     await act(() => render(null, root));
     globalThis.fetch = original;
   }
+  await runSurveyDraft(root, check);
   await runSurveyNudge(root, check);
+}
+
+const DRAFT_KEY = 'deckbridge.surveyDraft';
+
+async function runSurveyDraft(root: HTMLElement, check: Check): Promise<void> {
+  const original = globalThis.fetch;
+  const definition: SurveyDefinition = {
+    sv: SURVEY_VERSION,
+    questions: SURVEY_QUESTIONS,
+    context: { v: '0.20.0', os: 'macos', ov: 'macos-26', dv: 'mirabox-293s' },
+    prefill: { features: ['pages'] },
+    nudge: false,
+    state: {},
+  };
+  globalThis.fetch = (() =>
+    Promise.resolve({
+      ok: true,
+      json: () => Promise.resolve({ sent: true }),
+    } as Response)) as typeof fetch;
+  const mount = async (): Promise<void> => {
+    await act(() => {
+      render(null, root);
+      render(
+        <SurveyModal
+          definition={definition}
+          open
+          onClose={() => undefined}
+          onSent={() => undefined}
+          onRefresh={() => Promise.resolve()}
+        />,
+        root,
+      );
+    });
+    await settle();
+  };
+  const click = async (text: string): Promise<void> => {
+    await act(() =>
+      Array.from(root.querySelectorAll<HTMLButtonElement>('button'))
+        .find((el) => el.textContent === text)!
+        .click(),
+    );
+    await settle();
+  };
+  const title = (): string | null => root.querySelector('.survey-q')?.textContent ?? null;
+  const banner = (): boolean => root.textContent.includes('Continue your unfinished feedback?');
+  const stored = (): { step: number; answers: Record<string, unknown> } | null =>
+    JSON.parse(localStorage.getItem(DRAFT_KEY) ?? 'null') as {
+      step: number;
+      answers: Record<string, unknown>;
+    } | null;
+  try {
+    localStorage.removeItem(DRAFT_KEY);
+    await mount();
+    check(!banner() && stored() === null, 'Untouched survey saves no draft');
+    await act(() =>
+      root.querySelector<HTMLInputElement>('input[name="survey-rating"][value="4"]')!.click(),
+    );
+    await act(() => new Promise((r) => setTimeout(r, 350)));
+    await settle();
+    check(
+      stored()?.answers.rating === '4' && stored()?.step === 1,
+      'Answering stores a local draft with the step',
+    );
+    await mount();
+    check(banner(), 'Reopened survey offers to continue the draft');
+    check(
+      !root.querySelector<HTMLInputElement>('input[value="4"]')!.checked,
+      'Draft is not applied before the user chooses',
+    );
+    await click('Continue');
+    check(
+      !banner() && title() === SURVEY_QUESTIONS[1]!.label,
+      'Continue resumes at the saved step',
+    );
+    await click('Back');
+    check(
+      root.querySelector<HTMLInputElement>('input[value="4"]')!.checked,
+      'Continue restores answers',
+    );
+    await mount();
+    await click('Start over');
+    check(!banner() && stored() === null, 'Start over discards the draft');
+    check(title() === SURVEY_QUESTIONS[0]!.label, 'Start over begins at the first question');
+    await act(() =>
+      root.querySelector<HTMLInputElement>('input[name="survey-rating"][value="2"]')!.click(),
+    );
+    await click('Next ›');
+    await mount();
+    await click('Continue');
+    await click('Back');
+    check(
+      root.querySelector<HTMLInputElement>('input[value="2"]')!.checked,
+      'Close without sending keeps the draft',
+    );
+    localStorage.setItem(
+      DRAFT_KEY,
+      JSON.stringify({
+        sv: SURVEY_VERSION,
+        savedAt: Date.now() - 31 * 86_400_000,
+        step: 1,
+        answers: { rating: '5' },
+        drafts: {},
+        comment: '',
+      }),
+    );
+    await mount();
+    check(!banner() && stored() === null, 'Draft older than 30 days is dropped');
+    localStorage.setItem(
+      DRAFT_KEY,
+      JSON.stringify({
+        sv: SURVEY_VERSION + 1,
+        savedAt: Date.now(),
+        step: 1,
+        answers: { rating: '5' },
+        drafts: {},
+        comment: '',
+      }),
+    );
+    await mount();
+    check(!banner() && stored() === null, 'Draft from another survey version is dropped');
+    localStorage.setItem(DRAFT_KEY, '{broken');
+    await mount();
+    check(!banner() && stored() === null, 'Corrupt draft is dropped');
+    localStorage.setItem(
+      DRAFT_KEY,
+      JSON.stringify({
+        sv: SURVEY_VERSION,
+        savedAt: Date.now(),
+        step: 99,
+        answers: { rating: '3', features: ['standby'], nope: 'x' },
+        drafts: {},
+        comment: 'hi',
+      }),
+    );
+    await mount();
+    await click('Continue');
+    check(
+      root.querySelector('#survey-preview')?.textContent.includes('"standby"') === true &&
+        !root.querySelector('#survey-preview')!.textContent.includes('"pages"') &&
+        !root.querySelector('#survey-preview')!.textContent.includes('nope'),
+      'Draft features beat prefill; unknown ids and out-of-range steps are sanitised',
+    );
+    await click('Send');
+    check(stored() === null, 'Successful send clears the draft');
+  } finally {
+    localStorage.removeItem(DRAFT_KEY);
+    await act(() => render(null, root));
+    globalThis.fetch = original;
+  }
 }
 
 async function runSurveyNudge(root: HTMLElement, check: Check): Promise<void> {
@@ -355,6 +554,7 @@ async function runSurveyNudge(root: HTMLElement, check: Check): Promise<void> {
       'First open refreshes feature suggestions after settings changes',
     );
   } finally {
+    localStorage.removeItem(DRAFT_KEY);
     await act(() => render(null, root));
     await act(() => patch(before));
     globalThis.fetch = original;

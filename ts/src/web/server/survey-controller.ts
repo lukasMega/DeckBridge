@@ -74,6 +74,11 @@ export class SurveyController {
       )
         return { sent: false, reason: 'rejected' };
       const payload = surveyPayload(context, input.a, input.c, input.useForOther, input.wantOther);
+      if (
+        (payload.a['use-for']?.includes('other') && !payload.useForOther) ||
+        (payload.a.want?.includes('other') && !payload.wantOther)
+      )
+        return { sent: false, reason: 'rejected' };
       const result = await this.deps.send(JSON.stringify(payload), context.v);
       if (result.sent) {
         this.settings.survey = {
