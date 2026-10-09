@@ -5,9 +5,11 @@
  * the stages, overlays, and controls live under ./simple/.
  * The ADVANCED view is untouched legacy code.
  */
-import { useEffect, useState } from 'preact/hooks';
-import type { SurveyDefinition } from '../../contract-survey.js';
+import { useEffect, useRef, useState } from 'preact/hooks';
+import type { SurveyAnswers, SurveyDefinition } from '../../contract-survey.js';
 import { SurveyModal } from './survey-modal.js';
+import { SurveyNudge } from './survey-nudge.js';
+import { SurveyShort } from './survey-short.js';
 import { Modal } from '../components/Modal.js';
 import { GhostButton } from '../components/GhostButton.js';
 import { fire, postJson, useFetched } from '../lib/ui-api.js';
@@ -48,6 +50,11 @@ export function SimpleApp(): preact.JSX.Element {
   const [surveyOpen, setSurveyOpen] = useState(false);
   const [surveyStarted, setSurveyStarted] = useState(false);
   const [surveyDismissed, setSurveyDismissed] = useState(false);
+  const [surveyRating, setSurveyRating] = useState<string | undefined>(undefined);
+  const [surveySession, setSurveySession] = useState(0);
+  const [shortOpen, setShortOpen] = useState(false);
+  const [shortSeed, setShortSeed] = useState<SurveyAnswers>({});
+  const shortShown = useRef(false);
   const [surveyError, setSurveyError] = useState('');
   const updateBadge = updateBadgeVersion(updateInfo);
 
@@ -70,17 +77,63 @@ export function SimpleApp(): preact.JSX.Element {
     setSurveyStarted(true);
     setSurveyOpen(true);
   };
-  const dismissSurvey = async (never: boolean): Promise<void> => {
+  const rateFromBanner = (rating: string): void => {
+    setSurveyRating(rating);
+    setSurveySession((n) => n + 1);
+    setSurveyStarted(true);
+    setSurveyOpen(true);
+  };
+  const neverAsk = async (): Promise<void> => {
     try {
-      await postJson('/api/survey/dismiss', { never });
+      await postJson('/api/survey/dismiss', { never: true });
       setSurveyDismissed(true);
     } catch {
       setSurveyError('Could not save feedback preference. Try again.');
     }
   };
+  // Once per page life, so declining can never loop.
+  const offerShort = (answers: SurveyAnswers): void => {
+    const def = survey.data;
+    if (!def || shortShown.current || def.state.never || (def.state.submittedSv ?? 0) >= def.sv)
+      return;
+    shortShown.current = true;
+    setShortSeed(answers);
+    setShortOpen(true);
+  };
   const ready = isMultiDockView(docks)
     ? docks.every((d) => d.elgatoConnected)
     : deviceState === 'ready';
+  const showNudge =
+    ready && !settingsOpen && activeHelp === null && !!survey.data?.nudge && !surveyDismissed;
+
+  // The gate is uptime-based, so a tab opened early only learns it may nudge on return.
+  const reloadRef = useRef(survey.reload);
+  reloadRef.current = survey.reload;
+  useEffect(
+    function refetchOnReturn() {
+      if (showNudge || surveyDismissed || surveyOpen || shortOpen) return;
+      const onVisible = (): void => {
+        if (document.visibilityState === 'visible') void reloadRef.current();
+      };
+      document.addEventListener('visibilitychange', onVisible);
+      return () => document.removeEventListener('visibilitychange', onVisible);
+    },
+    [showNudge, surveyDismissed, surveyOpen, shortOpen],
+  );
+  // Native-notification deep link: open the wizard once, then drop the param so a
+  // reload does not reopen it.
+  useEffect(function openSurveyFromLink() {
+    const url = new URL(location.href);
+    if (url.searchParams.get('survey') !== '1') return;
+    url.searchParams.delete('survey');
+    history.replaceState(history.state, '', url.pathname + url.search + url.hash);
+    async function open(): Promise<void> {
+      await reloadRef.current();
+      setSurveyStarted(true);
+      setSurveyOpen(true);
+    }
+    void open();
+  }, []);
   const openAbout = (): void => setAboutOpen(true);
   const closeAbout = (): void => setAboutOpen(false);
   const openSettings = (): void => setSettingsOpen(true);
@@ -100,7 +153,7 @@ export function SimpleApp(): preact.JSX.Element {
     stageContent = (
       <SettingsPage
         onBack={() => {
-          if (!surveyOpen) closeSettings();
+          if (!surveyOpen && !shortOpen) closeSettings();
         }}
         onFeedback={() => void openSurvey()}
       />
@@ -193,23 +246,21 @@ export function SimpleApp(): preact.JSX.Element {
           </div>
         </div>
         <StaleBanner />
+        {showNudge && (
+          <SurveyNudge
+            rating={survey.data?.questions.find((q) => q.id === 'rating')}
+            error={surveyError}
+            onRate={rateFromBanner}
+            onNotNow={() => {
+              setSurveyDismissed(true);
+              offerShort({});
+            }}
+            onNever={() => void neverAsk()}
+          />
+        )}
         {/* inert: the shown status is cached, so its controls must not act on it. */}
         <section class="stage" id="stage" aria-live="polite" inert={stale}>
           {stageContent}
-          {ready &&
-            !settingsOpen &&
-            activeHelp === null &&
-            survey.data?.nudge &&
-            !surveyDismissed && (
-              <div class="settings-actions panel-inset survey-nudge">
-                <span>Got 1 minute? Tell us what you think.</span>
-                <span class="grow" />
-                <GhostButton onClick={() => void openSurvey()}>Start</GhostButton>
-                <GhostButton onClick={() => dismissSurvey(false)}>Not now</GhostButton>
-                <GhostButton onClick={() => dismissSurvey(true)}>Don't ask again</GhostButton>
-                {surveyError && <p class="settings-error">{surveyError}</p>}
-              </div>
-            )}
         </section>
         <footer class="disclaimer">
           Unofficial hobby project ·{' '}
@@ -224,6 +275,7 @@ export function SimpleApp(): preact.JSX.Element {
             onClick={() => void openSurvey()}
           >
             Feedback
+            {showNudge && <span class="update-dot" />}
           </button>
         </footer>
       </div>
@@ -242,8 +294,28 @@ export function SimpleApp(): preact.JSX.Element {
       {surveyStarted && survey.data && (
         <SurveyModal
           definition={survey.data}
+          key={surveySession}
           open={surveyOpen}
-          onClose={() => setSurveyOpen(false)}
+          initialRating={surveyRating}
+          onClose={(answers, sent) => {
+            setSurveyOpen(false);
+            if (!sent) offerShort(answers);
+          }}
+          onSent={() => {
+            setSurveyDismissed(true);
+            void survey.reload();
+          }}
+          onRefresh={survey.reload}
+        />
+      )}
+      {shortOpen && survey.data && (
+        <SurveyShort
+          definition={survey.data}
+          seed={shortSeed}
+          onClose={() => {
+            setShortOpen(false);
+            setSurveyDismissed(true);
+          }}
           onSent={() => {
             setSurveyDismissed(true);
             void survey.reload();

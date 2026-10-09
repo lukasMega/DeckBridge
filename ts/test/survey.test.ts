@@ -4,6 +4,10 @@ import {
   SURVEY_QUESTIONS,
   validateSurvey,
   prefillSurvey,
+  SHORT_QUESTIONS,
+  SURVEY_MIN_UPTIME_MS,
+  SURVEY_NOTIFY_UPTIME_MS,
+  shouldNotifySurvey,
   shouldNudgeSurvey,
   surveyContext,
   surveyPayload,
@@ -12,6 +16,7 @@ import { SurveyController } from '../src/web/server/survey-controller.js';
 import { PersistedSettings } from '../src/infra/settings.js';
 import { loadSettings, saveSettings, sanitizeSurveySettings } from '../src/infra/settings-store.js';
 import type { Settings } from '../src/infra/settings-store.js';
+import { surveyNotification } from '../src/main/survey-wiring.js';
 import { makePage } from './helpers/pages.js';
 import { testAsync as test, summary } from './helpers/harness.js';
 
@@ -173,21 +178,30 @@ await test('pages, saved page widgets and encoder evidence prefill features', ()
     ['side-keys', 'pages', 'touch-strip', 'plugin-widgets'],
   );
 });
-await test('nudge gates pairing age, snooze, never and survey version', () => {
-  assert.equal(shouldNudgeSurvey({}, now), false);
-  assert.equal(shouldNudgeSurvey({ devices: [{ ...paired, pairedAt: 'invalid' }] }, now), false);
+const up = SURVEY_MIN_UPTIME_MS;
+await test('nudge gates uptime, any paired device, snooze, never and survey version', () => {
+  assert.equal(shouldNudgeSurvey({}, now, up), false);
   assert.equal(
-    shouldNudgeSurvey({ devices: [{ ...paired, pairedAt: '2026-10-03T12:00:00Z' }] }, now),
+    shouldNudgeSurvey({ devices: [{ ...paired, pairedAt: 'invalid' }] }, now, up),
+    false,
+  );
+  assert.equal(
+    shouldNudgeSurvey({ devices: [{ ...paired, pairedAt: undefined }] }, now, up),
     false,
   );
   const base = { devices: [paired], a7s: false };
-  assert.equal(shouldNudgeSurvey(base, now), true);
+  assert.equal(shouldNudgeSurvey(base, now, up - 1), false);
+  assert.equal(shouldNudgeSurvey(base, now, up), true);
+  assert.equal(
+    shouldNudgeSurvey({ devices: [{ ...paired, pairedAt: '2026-10-09T11:59:00Z' }] }, now, up),
+    true,
+  );
   for (const survey of [
     { never: true },
     { submittedSv: SURVEY_VERSION },
     { snoozedUntil: '2026-10-10T00:00:00Z' },
   ])
-    assert.equal(shouldNudgeSurvey({ ...base, survey }, now), false);
+    assert.equal(shouldNudgeSurvey({ ...base, survey }, now, up), false);
   assert.equal(
     shouldNudgeSurvey(
       {
@@ -195,9 +209,81 @@ await test('nudge gates pairing age, snooze, never and survey version', () => {
         survey: { submittedSv: SURVEY_VERSION - 1, snoozedUntil: '2026-10-08T00:00:00Z' },
       },
       now,
+      up,
     ),
     true,
   );
+});
+const notifyUp = SURVEY_NOTIFY_UPTIME_MS;
+await test('notify gates uptime, WebUI visit, notifiedSv and the nudge gate', () => {
+  const base = { devices: [paired], a7s: false };
+  assert.equal(notifyUp, 30 * 60 * 1000);
+  assert.equal(shouldNotifySurvey(base, now, notifyUp - 1000, false), false);
+  assert.equal(shouldNotifySurvey(base, now, notifyUp, false), true);
+  assert.equal(shouldNotifySurvey(base, now, notifyUp, true), false);
+  assert.equal(shouldNotifySurvey({}, now, notifyUp, false), false);
+  assert.equal(
+    shouldNotifySurvey({ devices: [{ ...paired, pairedAt: undefined }] }, now, notifyUp, false),
+    false,
+  );
+  for (const survey of [
+    { notifiedSv: SURVEY_VERSION },
+    { never: true },
+    { submittedSv: SURVEY_VERSION },
+    { snoozedUntil: '2026-10-10T00:00:00Z' },
+  ])
+    assert.equal(shouldNotifySurvey({ ...base, survey }, now, notifyUp, false), false);
+  assert.equal(
+    shouldNotifySurvey(
+      { ...base, survey: { notifiedSv: SURVEY_VERSION - 1 } },
+      now,
+      notifyUp,
+      false,
+    ),
+    true,
+  );
+});
+await test('notification text and link are fixed; notifiedSv is sanitized', () => {
+  assert.equal(surveyNotification(3001), {
+    title: 'DeckBridge',
+    body: 'Enjoying DeckBridge? 3 quick taps help shape what comes next.',
+    url: 'http://localhost:3001/?survey=1',
+  });
+  assert.equal(sanitizeSurveySettings({ notifiedSv: 2, submittedSv: 1 }), {
+    notifiedSv: 2,
+    submittedSv: 1,
+  });
+  for (const bad of [-1, 1.5, '2', null])
+    assert.equal(sanitizeSurveySettings({ notifiedSv: bad }), {});
+});
+await test('takeNotification fires once, persists notifiedSv, and never in mock', async () => {
+  const dir = `${ROOT}/notify`;
+  await saveSettings({ devices: [paired], a7s: false }, dir);
+  const settings = new PersistedSettings(dir);
+  await settings.load();
+  const survey = new SurveyController(settings);
+  let mock = true;
+  let uptime = notifyUp - 1;
+  survey.configure({
+    context: () => Promise.resolve(context),
+    isMock: () => mock,
+    now: () => now,
+    uptimeMs: () => uptime,
+    send: () => Promise.resolve({ sent: false, reason: 'mock' }),
+  });
+  assert.equal(survey.takeNotification(false), false);
+  mock = false;
+  assert.equal(survey.takeNotification(false), false);
+  uptime = notifyUp;
+  assert.equal(survey.takeNotification(true), false);
+  assert.equal(settings.survey, {});
+  assert.equal(survey.takeNotification(false), true);
+  assert.equal(settings.survey?.notifiedSv, SURVEY_VERSION);
+  assert.equal(survey.takeNotification(false), false);
+  await settings.close();
+  const reloaded = new PersistedSettings(dir);
+  await reloaded.load();
+  assert.equal(reloaded.survey?.notifiedSv, SURVEY_VERSION);
 });
 await test('context filters models and excludes locale/timezone', () => {
   assert.equal(
@@ -233,6 +319,7 @@ await test('mock bypasses sender and leaves saved state untouched', async () => 
     context: () => Promise.resolve(context),
     isMock: () => true,
     now: () => now,
+    uptimeMs: () => 0,
     send: () => {
       calls++;
       return Promise.resolve({ sent: true });
@@ -257,6 +344,7 @@ await test('failed sends preserve nudge; success validates and persists only sta
     context: () => Promise.resolve(context),
     isMock: () => false,
     now: () => now,
+    uptimeMs: () => SURVEY_MIN_UPTIME_MS,
     send: (body) => {
       sentBody = body;
       return Promise.resolve(success ? { sent: true } : { sent: false, reason: 'offline' });
@@ -293,6 +381,7 @@ await test('changed preview context is rejected before outbound send', async () 
   survey.configure({
     context: () => Promise.resolve(context),
     isMock: () => false,
+    uptimeMs: () => 0,
     send: () => {
       throw new Error('must not send');
     },
@@ -309,6 +398,7 @@ await test('Other requires non-whitespace detail before outbound send', async ()
   survey.configure({
     context: () => Promise.resolve(context),
     isMock: () => false,
+    uptimeMs: () => 0,
     send: () => {
       calls++;
       return Promise.resolve({ sent: true });
@@ -333,6 +423,90 @@ await test('Other requires non-whitespace detail before outbound send', async ()
   assert.equal(calls, 0);
   assert.equal(settings.survey, {});
 });
+await test('view exposes short ids and gates the nudge on uptime', async () => {
+  const dir = `${ROOT}/view`;
+  await saveSettings({ devices: [paired], a7s: false }, dir);
+  const settings = new PersistedSettings(dir);
+  await settings.load();
+  const survey = new SurveyController(settings);
+  let uptime = up - 1;
+  survey.configure({
+    context: () => Promise.resolve(context),
+    isMock: () => false,
+    now: () => now,
+    uptimeMs: () => uptime,
+    send: () => Promise.resolve({ sent: true }),
+  });
+  assert.equal(SHORT_QUESTIONS, ['rating', 'nps', 'want']);
+  const early = await survey.view();
+  assert.equal(early.short, SHORT_QUESTIONS);
+  assert.equal(early.nudge, false);
+  uptime = up;
+  assert.equal((await survey.view()).nudge, true);
+});
+await test('short form sends only its 3 answers and strips other from want', async () => {
+  const settings = new PersistedSettings(`${ROOT}/short`);
+  const survey = new SurveyController(settings);
+  const bodies: string[] = [];
+  survey.configure({
+    context: () => Promise.resolve(context),
+    isMock: () => false,
+    now: () => now,
+    uptimeMs: () => up,
+    send: (body) => {
+      bodies.push(body);
+      return Promise.resolve({ sent: true });
+    },
+  });
+  const base = { sv: SURVEY_VERSION, ...context, f: 'short' };
+  const answers = { rating: '4', nps: '9', want: ['widgets', 'other'] };
+  assert.equal(await survey.submit({ ...base, a: answers }), { sent: true });
+  assert.equal(JSON.parse(bodies[0]!), {
+    sv: SURVEY_VERSION,
+    ...context,
+    a: { rating: '4', nps: '9', want: ['widgets'] },
+    f: 'short',
+  });
+  assert.equal(settings.survey?.submittedSv, SURVEY_VERSION);
+  const rejected = { sent: false, reason: 'rejected' };
+  for (const bad of [
+    { ...base, a: { rating: '4', nps: '9' } },
+    { ...base, a: { ...answers, want: ['other'] } },
+    { ...base, a: { ...answers, nps: '11' } },
+    { ...base, a: { ...answers, found: 'friend' } },
+    { ...base, a: answers, c: 'hello' },
+    { ...base, a: answers, wantOther: 'MIDI' },
+    { ...base, a: answers, useForOther: 'x' },
+    { ...base, f: 'full', a: answers },
+    { ...base, f: 1, a: answers },
+  ])
+    assert.equal(await survey.submit(bad), rejected);
+  assert.equal(bodies.length, 1);
+});
+await test('payload without f keeps the full-survey path', async () => {
+  const survey = new SurveyController(new PersistedSettings(`${ROOT}/full`));
+  const bodies: string[] = [];
+  survey.configure({
+    context: () => Promise.resolve(context),
+    isMock: () => false,
+    now: () => now,
+    uptimeMs: () => up,
+    send: (body) => {
+      bodies.push(body);
+      return Promise.resolve({ sent: true });
+    },
+  });
+  assert.equal(
+    await survey.submit({ ...surveyPayload(context, { rating: '4' }, 'hello'), found: 'x' }),
+    { sent: true },
+  );
+  assert.equal(JSON.parse(bodies[0]!), {
+    sv: SURVEY_VERSION,
+    ...context,
+    a: { rating: '4' },
+    c: 'hello',
+  });
+});
 await test('dismiss persists 30-day snooze and permanent opt-out', async () => {
   const settings = new PersistedSettings(`${ROOT}/dismiss`);
   const survey = new SurveyController(settings);
@@ -340,6 +514,7 @@ await test('dismiss persists 30-day snooze and permanent opt-out', async () => {
     context: () => Promise.resolve(context),
     isMock: () => true,
     now: () => now,
+    uptimeMs: () => 0,
     send: () => Promise.resolve({ sent: false }),
   });
   survey.dismiss(false);

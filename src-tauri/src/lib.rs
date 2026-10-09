@@ -54,7 +54,12 @@ pub fn run() {
                 .ok()
                 .and_then(|p| p.parent().map(|d| d.join(TRAY_BIN_FILENAME)));
 
-            let mut command = handle.shell().sidecar(SIDECAR_NAME)?;
+            // The tray's native notifications use this as the sender identity
+            // (macOS bundle id / Windows AUMID), so they read as DeckBridge.
+            let mut command = handle
+                .shell()
+                .sidecar(SIDECAR_NAME)?
+                .env("DECKBRIDGE_APP_ID", handle.config().identifier.clone());
             if let Some(tray) = tray_bin {
                 command = command.env("DECKBRIDGE_TRAY_BIN", tray.to_string_lossy().to_string());
             }

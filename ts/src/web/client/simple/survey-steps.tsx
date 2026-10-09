@@ -33,7 +33,7 @@ const LINKS: [string, string][] = [
 
 const RATINGS = ['Rough', 'Not great', 'Okay', 'Good', 'Love it'];
 const HINTS: Record<string, string> = {
-  rating: 'Pick a face. We’ll move on.',
+  rating: 'Pick the face that fits.',
   expect: 'Think back to your first try.',
   found: 'Choose a channel, then narrow it down.',
   why: 'What made DeckBridge worth trying?',
@@ -44,6 +44,18 @@ const HINTS: Record<string, string> = {
   nps: 'Would you tell a friend about it?',
   support: 'No commitment. Pick what feels right.',
 };
+
+export function FaceLabel({
+  face,
+  index,
+}: Readonly<{ face: string; index: number }>): preact.JSX.Element {
+  return (
+    <>
+      <span aria-hidden="true">{face}</span>
+      <small>{RATINGS[index]}</small>
+    </>
+  );
+}
 
 function parentOption(options: SurveyOption[], value: string): SurveyOption | undefined {
   return options.find((o) => o.id === value || o.options?.some((sub) => sub.id === value));
@@ -120,12 +132,15 @@ export function QuestionStep({
   draft,
   onChange,
   onDraft,
+  compact = false,
 }: Readonly<{
   question: SurveyQuestion;
   value: string | string[] | undefined;
   draft: string | undefined;
   onChange: (value: string | string[], advance: boolean) => void;
   onDraft: (text: string) => void;
+  /** Drops the invite card so several questions fit one screen. */
+  compact?: boolean;
 }>): preact.JSX.Element {
   const focusDetailRef = useRef(false);
   const detailRef = useCallback((input: HTMLInputElement | HTMLTextAreaElement | null) => {
@@ -142,14 +157,7 @@ export function QuestionStep({
   const full = q.kind === 'multi' && !!q.max && picks.length >= q.max;
   const chipOptions = q.options.map((o, i) => ({
     value: o.id,
-    label: q.faces ? (
-      <>
-        <span aria-hidden="true">{o.label}</span>
-        <small>{RATINGS[i]}</small>
-      </>
-    ) : (
-      o.label
-    ),
+    label: q.faces ? <FaceLabel face={o.label} index={i} /> : o.label,
     disabled: full && !parents.includes(o.id) && o.id !== q.exclusive,
   }));
   const choose = (id: string): void => {
@@ -198,7 +206,7 @@ export function QuestionStep({
           {picks.length} of {q.max} picked{full ? ' · Tap a choice to change it.' : ''}
         </p>
       )}
-      {q.faces && (
+      {q.faces && !compact && (
         <div class="survey-invite">
           <span aria-hidden="true">✦</span>
           <div>

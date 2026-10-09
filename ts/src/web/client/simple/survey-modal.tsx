@@ -1,14 +1,9 @@
 import { useEffect, useRef, useState } from 'preact/hooks';
-import type {
-  SurveyAnswers,
-  SurveyDefinition,
-  SurveyPayload,
-  SurveySendResult,
-} from '../../contract-survey.js';
+import type { SurveyAnswers, SurveyDefinition, SurveyPayload } from '../../contract-survey.js';
 import { Modal } from '../components/Modal.js';
 import { Collapsible } from '../components/Collapsible.js';
 import { GhostButton } from '../components/GhostButton.js';
-import { postJson } from '../lib/ui-api.js';
+import { UNSENT, submitSurvey } from './survey-send.js';
 import { clearSurveyDraft, loadSurveyDraft, saveSurveyDraft } from './survey-draft.js';
 import {
   LimitedText,
@@ -17,14 +12,6 @@ import {
   SurveyProgress,
   SurveyThanks,
 } from './survey-steps.js';
-
-const UNSENT: Record<NonNullable<SurveySendResult['reason']>, string> = {
-  mock: 'Not sent: mock mode never sends feedback.',
-  offline: 'Not sent: connection failed. Your answers are kept on this device for retry.',
-  'no-curl': 'Not sent: curl is unavailable. Your answers are kept on this device for retry.',
-  rejected:
-    'Not sent: response rejected or device context changed. Retry after reviewing the updated preview.',
-};
 
 function surveyPayload(
   definition: SurveyDefinition,
@@ -47,6 +34,31 @@ function surveyPayload(
   };
 }
 
+/** A banner face tap lands after `rating`; a saved draft is merged in, never overwritten. */
+function startState(definition: SurveyDefinition, rating: string | undefined) {
+  const saved = loadSurveyDraft(definition);
+  if (rating === undefined)
+    return {
+      saved,
+      step: 0,
+      answers: { ...definition.prefill },
+      drafts: {} as Record<string, string>,
+      comment: '',
+    };
+  const next = definition.questions.findIndex((q) => q.id === 'rating') + 1;
+  return {
+    saved: null,
+    step: Math.max(saved?.step ?? 0, next),
+    answers: {
+      ...(saved?.answers.features ? {} : definition.prefill),
+      ...saved?.answers,
+      rating,
+    },
+    drafts: saved?.drafts ?? {},
+    comment: saved?.comment ?? '',
+  };
+}
+
 function stepTitle({ questions }: SurveyDefinition, step: number): string {
   if (step === questions.length) return 'Anything else?';
   return questions[step]?.label ?? 'Review your feedback';
@@ -55,22 +67,27 @@ function stepTitle({ questions }: SurveyDefinition, step: number): string {
 export function SurveyModal({
   definition,
   open,
+  initialRating,
   onClose,
   onSent,
   onRefresh,
 }: Readonly<{
   definition: SurveyDefinition;
   open: boolean;
-  onClose: () => void;
+  /** Rating picked in the banner; used on mount only. */
+  initialRating?: string;
+  /** Gets the answers so far, so an unsent close can prefill the short form. */
+  onClose: (answers: SurveyAnswers, sent: boolean) => void;
   onSent: () => void;
   onRefresh: () => Promise<void>;
 }>): preact.JSX.Element | null {
-  const [answers, setAnswers] = useState<SurveyAnswers>(() => ({ ...definition.prefill }));
-  const [drafts, setDrafts] = useState<Record<string, string>>({});
-  const [comment, setComment] = useState('');
-  const [step, setStep] = useState(0);
-  const [saved, setSaved] = useState(() => loadSurveyDraft(definition));
-  const [touched, setTouched] = useState(false);
+  const [start] = useState(() => startState(definition, initialRating));
+  const [answers, setAnswers] = useState<SurveyAnswers>(start.answers);
+  const [drafts, setDrafts] = useState<Record<string, string>>(start.drafts);
+  const [comment, setComment] = useState(start.comment);
+  const [step, setStep] = useState(start.step);
+  const [saved, setSaved] = useState(start.saved);
+  const [touched, setTouched] = useState(initialRating !== undefined);
   const [busy, setBusy] = useState(false);
   const [sent, setSent] = useState(false);
   const [message, setMessage] = useState('');
@@ -150,22 +167,18 @@ export function SurveyModal({
   const send = async (): Promise<void> => {
     setBusy(true);
     setMessage('');
-    try {
-      const result = await postJson<SurveySendResult>('/api/survey', payload, 'Send failed');
-      if (result.sent) {
-        clearSurveyDraft();
-        setSent(true);
-        onSent();
-      } else {
-        setMessage(UNSENT[result.reason ?? 'offline']);
-        if (result.reason === 'rejected') await onRefresh();
-      }
-    } catch {
-      setMessage(UNSENT.offline);
-    } finally {
-      setBusy(false);
+    const result = await submitSurvey(payload);
+    if (result.sent) {
+      clearSurveyDraft();
+      setSent(true);
+      onSent();
+    } else {
+      setMessage(UNSENT[result.reason ?? 'offline']);
+      if (result.reason === 'rejected') await onRefresh();
     }
+    setBusy(false);
   };
+  const close = (): void => onClose({ ...saved?.answers, ...answers }, sent);
 
   if (!open) return null;
   return (
@@ -174,7 +187,7 @@ export function SurveyModal({
       class="survey"
       title="Quick feedback"
       titleId="survey-title"
-      onClose={onClose}
+      onClose={close}
     >
       {!sent && <p class="survey-intro">A few taps to help shape what comes next.</p>}
       {!sent && <SurveyProgress step={step} total={count + 2} />}
@@ -255,7 +268,7 @@ export function SurveyModal({
           <span class="grow" />
           {review ? (
             <>
-              <GhostButton disabled={busy} onClick={onClose}>
+              <GhostButton disabled={busy} onClick={close}>
                 Don't send
               </GhostButton>
               <button

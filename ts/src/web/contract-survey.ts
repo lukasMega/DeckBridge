@@ -31,6 +31,8 @@ export interface SurveyPayload extends SurveyContext {
   c?: string;
   useForOther?: string;
   wantOther?: string;
+  /** Marks the 3-question fallback form; absent for the full survey. */
+  f?: 'short';
 }
 
 export interface SurveyState {
@@ -43,6 +45,8 @@ export interface SurveyState {
 export interface SurveyDefinition {
   sv: number;
   questions: SurveyQuestion[];
+  /** Question ids of the 3-question fallback form. */
+  short: string[];
   context: SurveyContext;
   prefill: SurveyAnswers;
   nudge: boolean;

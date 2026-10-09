@@ -1549,8 +1549,21 @@ select.input.xkey-select {
   flex: 1;
 }
 .survey-nudge {
-  margin-top: 18px;
-  padding: 12px 14px;
+  margin: 12px 22px 0;
+  flex-wrap: wrap;
+  background: var(--accent-soft);
+  border-color: color-mix(in oklab, var(--accent), transparent 60%);
+}
+.survey-nudge .chip-radio span {
+  font-size: 20px;
+}
+.survey-nudge .chip-radio small {
+  font-size: 11px;
+}
+.linkbtn .update-dot {
+  display: inline-block;
+  margin-left: 6px;
+  vertical-align: middle;
 }
 @media (max-width: 480px) {
   .survey-invite {

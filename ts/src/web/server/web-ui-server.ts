@@ -82,6 +82,14 @@ export class WebUIServer extends EventEmitter implements WebUIController, WebUIC
   private readonly status: StatusPublisher;
   private readonly stats: Stats = { uptimeMs: 0, elgatoRxPkts: 0, elgatoTxPkts: 0, imagesSent: 0 };
   private readonly startTime = Date.now();
+  uptimeMs(): number {
+    return Date.now() - this.startTime;
+  }
+  private opened = false;
+  /** True once any browser page load or WebSocket reached this server (survey notification gate). */
+  get uiOpened(): boolean {
+    return this.opened;
+  }
   setLocalIp(ip: string): void {
     this.status.setLocalIp(ip);
   }
@@ -222,6 +230,7 @@ export class WebUIServer extends EventEmitter implements WebUIController, WebUIC
       listenIp: webuiBindAddr(),
       fetch: (req, extra) => this.handleRequest(req, extra),
       websocket: this.bus.websocketHandlers((ws) => {
+        this.opened = true;
         this.bus.sendTo(ws, 'status', this.snapshot());
         this.imageChannel.sendSnapshot(ws);
       }),
@@ -369,6 +378,8 @@ export class WebUIServer extends EventEmitter implements WebUIController, WebUIC
     if (!isAllowedWebRequest(req.headers.get('Host'), req.headers.get('Origin'), this._port)) {
       return forbidden();
     }
+    // Page loads and their assets; /api/* also serves scripts and the tray.
+    if (req.method === 'GET' && !url.pathname.startsWith('/api/')) this.opened = true;
     if (req.headers.get('Upgrade') === 'websocket' && url.pathname === '/api/ws') {
       extra.server.upgrade(req);
       return;
