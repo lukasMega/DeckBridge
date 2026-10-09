@@ -16,6 +16,8 @@ const settle = async (): Promise<void> => {
 export async function runSurvey(root: HTMLElement, check: Check): Promise<void> {
   const original = globalThis.fetch;
   const bodies: unknown[] = [];
+  let succeeds = false;
+  let notifications = 0;
   const definition: SurveyDefinition = {
     sv: SURVEY_VERSION,
     questions: SURVEY_QUESTIONS,
@@ -29,7 +31,7 @@ export async function runSurvey(root: HTMLElement, check: Check): Promise<void> 
     bodies.push(JSON.parse(init.body));
     return Promise.resolve({
       ok: true,
-      json: () => Promise.resolve({ sent: false, reason: 'mock' }),
+      json: () => Promise.resolve(succeeds ? { sent: true } : { sent: false, reason: 'mock' }),
     } as Response);
   }) as typeof fetch;
   let open = true;
@@ -42,7 +44,7 @@ export async function runSurvey(root: HTMLElement, check: Check): Promise<void> 
           open = false;
           draw();
         }}
-        onSent={() => undefined}
+        onSent={() => notifications++}
         onRefresh={() => Promise.resolve()}
       />,
       root,
@@ -78,6 +80,10 @@ export async function runSurvey(root: HTMLElement, check: Check): Promise<void> 
       document.activeElement === root.querySelector('.survey-q'),
       'Survey focuses question rather than first chip',
     );
+    check(
+      root.querySelector('[role="progressbar"]')?.getAttribute('aria-valuenow') === '1',
+      'Progress starts at first step',
+    );
     await choose('rating', '4');
     check(
       title() === SURVEY_QUESTIONS[0]!.label,
@@ -85,6 +91,10 @@ export async function runSurvey(root: HTMLElement, check: Check): Promise<void> 
     );
     await waitAdvance();
     check(title() === SURVEY_QUESTIONS[1]!.label, 'Single pick auto-advances');
+    check(
+      root.querySelector('[role="progressbar"]')?.getAttribute('aria-valuenow') === '2',
+      'Progress follows auto-advance',
+    );
     await click('Back');
     check(
       root.querySelector<HTMLInputElement>('input[value="4"]')!.checked,
@@ -186,6 +196,10 @@ export async function runSurvey(root: HTMLElement, check: Check): Promise<void> 
       wantOther?: string;
     };
     check(
+      root.querySelector('[role="progressbar"]')?.getAttribute('aria-valuenow') === '12',
+      'Skipped questions still advance progress',
+    );
+    check(
       !('rating' in preview.a) && !('features' in preview.a),
       'Skip and cleared features are omitted',
     );
@@ -203,6 +217,10 @@ export async function runSurvey(root: HTMLElement, check: Check): Promise<void> 
     await click('Send');
     check(JSON.stringify(bodies[0]) === JSON.stringify(preview), 'Preview equals exact POST body');
     check(root.textContent.includes('mock mode never sends'), 'Mock failure is explicit');
+    check(
+      root.querySelector('.survey-celebrate') === null && notifications === 0,
+      'Unsent review never celebrates submission',
+    );
     await click("Don't send");
     open = true;
     await act(draw);
@@ -239,6 +257,17 @@ export async function runSurvey(root: HTMLElement, check: Check): Promise<void> 
     check(
       !root.querySelector('#survey-preview')!.textContent.includes('wantOther'),
       'Skipping wishes omits request detail',
+    );
+    succeeds = true;
+    await click('Send');
+    check(
+      root.querySelector('.survey-celebrate') !== null && notifications === 1,
+      'Successful sending celebrates once',
+    );
+    check(
+      root.querySelector('[role="progressbar"]') === null &&
+        title() === 'Thanks for your feedback!',
+      'Success ends survey journey',
     );
   } finally {
     await act(() => render(null, root));

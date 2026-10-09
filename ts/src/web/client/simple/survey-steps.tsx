@@ -30,6 +30,20 @@ const LINKS: [string, string][] = [
   ['Sponsor', 'https://github.com/sponsors/lukasMega'],
 ];
 
+const RATINGS = ['Rough', 'Not great', 'Okay', 'Good', 'Love it'];
+const HINTS: Record<string, string> = {
+  rating: 'Pick a face. We’ll move on.',
+  expect: 'Think back to your first try.',
+  found: 'Choose a channel, then narrow it down.',
+  why: 'What made DeckBridge worth trying?',
+  'use-for': 'Choose everything that fits your day.',
+  features: 'Suggested from your settings. Keep what fits.',
+  pain: 'Pick up to three. Small frustrations count too.',
+  want: 'Pick up to three ideas you would use.',
+  nps: 'Would you tell a friend about it?',
+  support: 'No commitment. Pick what feels right.',
+};
+
 function parentOption(options: SurveyOption[], value: string): SurveyOption | undefined {
   return options.find((o) => o.id === value || o.options?.some((sub) => sub.id === value));
 }
@@ -105,9 +119,16 @@ export function QuestionStep({
   const parentOf = (id: string): string => parentOption(q.options, id)?.id ?? id;
   const parents = picks.map(parentOf);
   const full = q.kind === 'multi' && !!q.max && picks.length >= q.max;
-  const chipOptions = q.options.map((o) => ({
+  const chipOptions = q.options.map((o, i) => ({
     value: o.id,
-    label: o.label,
+    label: q.faces ? (
+      <>
+        <span aria-hidden="true">{o.label}</span>
+        <small>{RATINGS[i]}</small>
+      </>
+    ) : (
+      o.label
+    ),
     disabled: full && !parents.includes(o.id) && o.id !== q.exclusive,
   }));
   const choose = (id: string): void => {
@@ -121,15 +142,17 @@ export function QuestionStep({
     else onChange([...picks.filter((v) => v !== q.exclusive), id], false);
   };
   const detail = OTHER_DETAILS[q.id];
+  const singleClass = q.faces ? 'survey-faces' : undefined;
   return (
     <>
+      <p class="survey-hint">{HINTS[q.id]}</p>
       {q.kind === 'single' ? (
         <ChipRadioGroup
           name={`survey-${q.id}`}
           label={q.label}
           value={parents[0] ?? ''}
           options={chipOptions}
-          class={q.faces ? 'survey-faces' : undefined}
+          class={singleClass ?? (q.ends ? 'survey-score' : undefined)}
           onChange={choose}
         />
       ) : (
@@ -149,12 +172,19 @@ export function QuestionStep({
         </div>
       )}
       {q.max && (
-        <p class="multi-deck-note">
-          {picks.length} of {q.max}
+        <p class="multi-deck-note" aria-live="polite">
+          {picks.length} of {q.max} picked{full ? ' · Tap a choice to change it.' : ''}
         </p>
       )}
-      {q.id === 'features' && (
-        <p class="multi-deck-note">Suggested from settings. Change freely.</p>
+      {q.faces && (
+        <div class="survey-invite">
+          <span aria-hidden="true">✦</span>
+          <div>
+            <strong>Your voice, next release.</strong>
+            <p>Tell us what works and what could feel better. Your ideas help guide DeckBridge.</p>
+            <small>Skip freely. Nothing is sent until you press Send.</small>
+          </div>
+        </div>
       )}
       {q.options
         .filter((o) => o.options && parents.includes(o.id))
@@ -246,23 +276,57 @@ export function SurveyProgress({
   step,
   total,
 }: Readonly<{ step: number; total: number }>): preact.JSX.Element {
+  const chapter = [4, 6, total - 2, total].findIndex((end) => step < end);
+  const names = ['Your experience', 'Your workflow', 'Looking ahead', 'Finishing touches'];
+  const notes = [
+    'Every question is optional.',
+    'First stretch done. Onto your setup.',
+    'Next up: help shape the roadmap.',
+    'Home stretch. Review before sending.',
+  ];
   return (
-    <div class="survey-progress" aria-label={`Step ${step + 1} of ${total}`}>
-      {Array.from({ length: total }, (_, i) => (
-        <i key={String(i)} class={i <= step ? 'on' : ''} aria-hidden="true" />
-      ))}
-      <span class="grow" />
-      <span>
-        {step + 1} / {total}
-      </span>
+    <div class="survey-progress">
+      <div class="survey-deck" aria-hidden="true">
+        {Array.from({ length: total }, (_, i) => {
+          const current = i === step ? 'current' : '';
+          return (
+            <i key={String(i)} class={i < step ? 'on' : current}>
+              {i < step ? '✓' : ''}
+            </i>
+          );
+        })}
+      </div>
+      <div class="survey-progress-info">
+        <div class="survey-progress-label">
+          <strong>{names[chapter]}</strong>
+          <span>
+            {step + 1} / {total}
+          </span>
+        </div>
+        <div
+          class="survey-track"
+          role="progressbar"
+          aria-label="Survey progress"
+          aria-valuemin={1}
+          aria-valuemax={total}
+          aria-valuenow={step + 1}
+          aria-valuetext={`Step ${step + 1} of ${total}: ${names[chapter]}`}
+        >
+          <span style={{ width: `${((step + 1) / total) * 100}%` }} />
+        </div>
+        <small>{notes[chapter]}</small>
+      </div>
     </div>
   );
 }
 
 export function SurveyThanks(): preact.JSX.Element {
   return (
-    <>
-      <p class="help-lead">Your response was sent.</p>
+    <div class="survey-thanks">
+      <div class="survey-celebrate" aria-hidden="true">
+        ✦
+      </div>
+      <p class="help-lead">Your response was sent. You helped shape what comes next.</p>
       <div class="settings-actions">
         {LINKS.map(([label, href]) => (
           <a key={href} href={href} target="_blank" rel="noopener">
@@ -270,6 +334,6 @@ export function SurveyThanks(): preact.JSX.Element {
           </a>
         ))}
       </div>
-    </>
+    </div>
   );
 }

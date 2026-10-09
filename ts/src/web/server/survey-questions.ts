@@ -1,6 +1,6 @@
 import type { SurveyOption, SurveyQuestion } from '../contract-survey.js';
 
-export const SURVEY_VERSION = 1;
+export const SURVEY_VERSION = 2;
 
 function options(entries: [string, string][]): SurveyOption[] {
   return entries.map(([id, label]) => ({ id, label }));

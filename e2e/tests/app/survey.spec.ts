@@ -9,7 +9,7 @@ test('feedback stepper submits locally but mock never sends', async ({ page, req
   await click(page.getByRole('button', { name: 'Give feedback', exact: true }));
   const modal = page.locator('#survey-modal');
   await expect(modal).toHaveCount(1);
-  await click(modal.getByRole('radio', { name: '🙂', exact: true }));
+  await click(modal.getByRole('radio', { name: 'Good', exact: true }));
   await expect(modal.locator('.survey-q')).toHaveText('Did it do what you expected?');
   for (let i = 0; i < 3; i++) await click(modal.getByRole('button', { name: 'Skip', exact: true }));
   await click(modal.getByRole('checkbox', { name: 'Other', exact: true }));

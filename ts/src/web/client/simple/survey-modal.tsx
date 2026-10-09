@@ -90,6 +90,13 @@ export function SurveyModal({
     [step, open, sent],
   );
 
+  useEffect(
+    function revealSendError() {
+      if (message && bodyRef.current) bodyRef.current.scrollTop = bodyRef.current.scrollHeight;
+    },
+    [message],
+  );
+
   const move = (next: number): void => {
     clearTimeout(timerRef.current);
     setStep(next);
@@ -137,6 +144,7 @@ export function SurveyModal({
       titleId="survey-title"
       onClose={onClose}
     >
+      {!sent && <p class="survey-intro">A few taps to help shape what comes next.</p>}
       {!sent && <SurveyProgress step={step} total={count + 2} />}
       <div class="survey-body" ref={bodyRef}>
         <h3 class="survey-q" ref={headingRef} tabIndex={-1}>
@@ -145,6 +153,7 @@ export function SurveyModal({
         {sent && <SurveyThanks />}
         {question && (
           <QuestionStep
+            key={question.id}
             question={question}
             value={answers[question.id]}
             draft={drafts[question.id]}
@@ -153,16 +162,21 @@ export function SurveyModal({
           />
         )}
         {step === count && (
-          <LimitedText
-            label="Anything else?"
-            max={280}
-            multiline
-            value={comment}
-            onInput={setComment}
-          />
+          <>
+            <p class="survey-hint">Anything we missed? Small ideas welcome.</p>
+            <LimitedText
+              label="Anything else?"
+              placeholder="An idea, a rough edge, or something you love…"
+              max={280}
+              multiline
+              value={comment}
+              onInput={setComment}
+            />
+          </>
         )}
         {review && (
           <>
+            <p class="survey-hint">Ready when you are. Edit anything before sending.</p>
             <ReviewList
               questions={definition.questions}
               answers={answers}
@@ -211,7 +225,9 @@ export function SurveyModal({
           ) : (
             <>
               <GhostButton onClick={skip}>Skip</GhostButton>
-              <GhostButton onClick={() => move(step + 1)}>Next ›</GhostButton>
+              <GhostButton class="survey-next" onClick={() => move(step + 1)}>
+                Next ›
+              </GhostButton>
             </>
           )}
         </div>
