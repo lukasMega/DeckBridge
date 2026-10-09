@@ -2,12 +2,18 @@ use crate::bmp::encode_bmp;
 use crate::jpeg::encode_jpeg;
 use crate::pad::pad_to_canvas;
 use crate::util::{ffi_guard, write_err};
-use image::imageops::FilterType;
+use image::imageops::{self, FilterType};
+use image::{DynamicImage, RgbaImage};
 use std::io::Cursor;
 
 /// Decode with decompression-bomb limits (S3) — bytes arrive from the LAN
 /// unauthenticated. Shared by `transform` and the touch-strip blit.
-pub(crate) fn decode_limited(input: &[u8]) -> Result<image::DynamicImage, String> {
+///
+/// Returns RGBA8 whatever the source: the whole pipeline then runs on one concrete
+/// pixel type, so the `image` ops are instantiated once instead of once per
+/// `DynamicImage` variant (about 70 KB of code, and faster). Resize, rotate, flip, crop
+/// and blur treat channels independently, so RGB output is bit-identical.
+pub(crate) fn decode_limited(input: &[u8]) -> Result<RgbaImage, String> {
     let mut reader = image::ImageReader::new(Cursor::new(input))
         .with_guessed_format()
         .map_err(|e| format!("Image format error: {}", e))?;
@@ -18,9 +24,41 @@ pub(crate) fn decode_limited(input: &[u8]) -> Result<image::DynamicImage, String
     limits.max_image_height = Some(500);
     limits.max_alloc = Some(900 * 1024);
     reader.limits(limits);
-    reader
+    let img = reader
         .decode()
-        .map_err(|e| format!("Image load error: {}", e))
+        .map_err(|e| format!("Image load error: {}", e))?;
+    // JPEG and BMP are the only codecs enabled and both decode to 8-bit. Matching these
+    // four instead of `into_rgba8()` keeps the 16-bit/float conversions out of the build.
+    match img {
+        DynamicImage::ImageRgba8(b) => Ok(b),
+        DynamicImage::ImageRgb8(b) => widen(b.width(), b.height(), b.as_raw(), 3, |d, p| {
+            d[..3].copy_from_slice(p)
+        }),
+        DynamicImage::ImageLuma8(b) => widen(b.width(), b.height(), b.as_raw(), 1, |d, p| {
+            d[..3].fill(p[0])
+        }),
+        DynamicImage::ImageLumaA8(b) => widen(b.width(), b.height(), b.as_raw(), 2, |d, p| {
+            d[..3].fill(p[0]);
+            d[3] = p[1];
+        }),
+        _ => Err("Image load error: unsupported pixel format".to_string()),
+    }
+}
+
+/// Expand `step`-byte pixels to RGBA. Alpha starts at 255; `fill` overwrites it only
+/// for sources that carry their own.
+fn widen(
+    w: u32,
+    h: u32,
+    raw: &[u8],
+    step: usize,
+    fill: impl Fn(&mut [u8], &[u8]),
+) -> Result<RgbaImage, String> {
+    let mut out = vec![255u8; raw.len() / step * 4];
+    for (d, p) in out.chunks_exact_mut(4).zip(raw.chunks_exact(step)) {
+        fill(d, p);
+    }
+    RgbaImage::from_raw(w, h, out).ok_or_else(|| "Image load error: bad buffer size".to_string())
 }
 
 /// Private transform helper: decode, rotate/flip, resize, encode (JPEG or BMP).
@@ -59,14 +97,15 @@ pub(crate) fn transform(
         let y = crop_y.min(h.saturating_sub(1));
         let rw = crop_w.min(w - x);
         let rh = crop_h.min(h - y);
-        img = img.crop_imm(x, y, rw, rh);
+        img = imageops::crop_imm(&img, x, y, rw, rh).to_image();
     } else if crop_px > 0 {
         // Crop the source frame symmetrically before any rotate/flip/resize (the K1 Pro
         // is fed an 80×80 Mini BMP whose outer ~10 px is dead border). Skip when the crop
         // would leave nothing — guards tiny inputs and the no-op (crop_px == 0) case.
         let (w, h) = (img.width(), img.height());
         if w > 2 * crop_px && h > 2 * crop_px {
-            img = img.crop_imm(crop_px, crop_px, w - 2 * crop_px, h - 2 * crop_px);
+            img = imageops::crop_imm(&img, crop_px, crop_px, w - 2 * crop_px, h - 2 * crop_px)
+                .to_image();
         }
     }
 
@@ -82,33 +121,33 @@ pub(crate) fn transform(
     }
 
     img = match rotate {
-        90 => img.rotate90(),
-        180 => img.rotate180(),
-        270 => img.rotate270(),
+        90 => imageops::rotate90(&img),
+        180 => imageops::rotate180(&img),
+        270 => imageops::rotate270(&img),
         _ => img,
     };
     if flip_h {
-        img = img.fliph();
+        img = imageops::flip_horizontal(&img);
     }
     if flip_v {
-        img = img.flipv();
+        img = imageops::flip_vertical(&img);
     }
 
     // Resize only in fill_mode 0 — a pad already produced a width×height canvas.
     if fill_mode == 0 && !skip_resize {
-        img = img.resize_exact(width, height, filter);
+        img = imageops::resize(&img, width, height, filter);
     }
 
     if blur_sigma_tenths > 0 {
         let sigma = blur_sigma_tenths as f32 / 10.0;
-        img = image::DynamicImage::ImageRgba8(image::imageops::blur(&img, sigma));
+        img = imageops::blur(&img, sigma);
     }
 
     // Unsharp mask after resize to recover crispness lost to upscaling (e.g. the
     // 293S's 72→85 enlarge). threshold 0 = sharpen every pixel.
     if sharpen_sigma_tenths > 0 {
         let sigma = sharpen_sigma_tenths as f32 / 10.0;
-        img = image::DynamicImage::ImageRgba8(image::imageops::unsharpen(&img, sigma, 0));
+        img = imageops::unsharpen(&img, sigma, 0);
     }
 
     // Only true passthrough (skip_resize with no padding) is exempt from max_bytes
@@ -116,8 +155,8 @@ pub(crate) fn transform(
     // rarely triggers).
     let lenient = skip_resize && fill_mode == 0;
     match format {
-        1 => encode_bmp(img, bmp_ppm),
-        _ => encode_jpeg(img, quality, max_bytes, lenient),
+        1 => encode_bmp(&img, bmp_ppm),
+        _ => encode_jpeg(&img, quality, max_bytes, lenient),
     }
 }
 

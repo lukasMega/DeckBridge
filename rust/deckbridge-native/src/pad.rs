@@ -1,4 +1,4 @@
-use image::{imageops::FilterType, DynamicImage};
+use image::{imageops::FilterType, RgbaImage};
 
 /// `fill_mode` bit: centre-crop axes where the source is larger than the canvas
 /// instead of falling back to a resize (resizeMode 'crop').
@@ -12,23 +12,22 @@ pub(crate) const FILL_CROP_OVERSIZE: u32 = 4;
 /// than the canvas in either axis cannot be padded without cropping, so it falls back
 /// to a resize with `filter`; with it, the oversize axes are centre-cropped.
 pub(crate) fn pad_to_canvas(
-    src: &DynamicImage,
+    s: &RgbaImage,
     w: u32,
     h: u32,
     fill_mode: u32,
     filter: FilterType,
-) -> DynamicImage {
-    let s = src.to_rgba8();
+) -> RgbaImage {
     let (sw, sh) = (s.width(), s.height());
     let crop = fill_mode & FILL_CROP_OVERSIZE != 0;
     if !crop && (sw > w || sh > h) {
-        return src.resize_exact(w, h, filter);
+        return image::imageops::resize(s, w, h, filter);
     }
     // Negative offset = centre-crop on that axis.
     let off_x = (w as i64 - sw as i64).div_euclid(2);
     let off_y = (h as i64 - sh as i64).div_euclid(2);
     let fill = match fill_mode & !FILL_CROP_OVERSIZE {
-        2 => Some(average_rgba(&s)),
+        2 => Some(average_rgba(s)),
         3 => None,
         _ => Some(image::Rgba([0, 0, 0, 255])),
     };
@@ -49,7 +48,7 @@ pub(crate) fn pad_to_canvas(
             out.put_pixel(x, y, px);
         }
     }
-    DynamicImage::ImageRgba8(out)
+    out
 }
 
 /// Mean RGB colour of an RGBA image, alpha forced to 255.

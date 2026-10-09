@@ -1,7 +1,7 @@
-use image::DynamicImage;
+use image::RgbaImage;
 
 pub(crate) fn encode_jpeg(
-    img: DynamicImage,
+    img: &RgbaImage,
     quality: u32,
     max_bytes: usize,
     skip_resize: bool,
@@ -16,8 +16,12 @@ pub(crate) fn encode_jpeg(
     // interleaved (~20% smaller files; upstream would switch to one scan per
     // component, which the device can't decode) — see
     // .claude/plans/K1Pro/jpeg-artifact-findings.md.
-    let rgb = img.to_rgb8();
-    let (w, h) = (rgb.width(), rgb.height());
+    let (w, h) = (img.width(), img.height());
+    // Packed RGB (the encoder's Rgba path measured slower); alpha is dropped, not blended.
+    let mut rgb = vec![0u8; img.as_raw().len() / 4 * 3];
+    for (d, p) in rgb.chunks_exact_mut(3).zip(img.as_raw().chunks_exact(4)) {
+        d.copy_from_slice(&p[..3]);
+    }
     let w16 = u16::try_from(w).map_err(|_| format!("image width {} exceeds u16", w))?;
     let h16 = u16::try_from(h).map_err(|_| format!("image height {} exceeds u16", h))?;
 
@@ -28,7 +32,7 @@ pub(crate) fn encode_jpeg(
                                                                           // Fork only: upstream would emit non-interleaved scans here (device-fatal).
         #[cfg(feature = "jpeg-fork")]
         encoder.set_optimized_huffman_tables(true);
-        if let Err(e) = encoder.encode(rgb.as_raw(), w16, h16, jpeg_encoder::ColorType::Rgb) {
+        if let Err(e) = encoder.encode(&rgb, w16, h16, jpeg_encoder::ColorType::Rgb) {
             return Err(format!("Encode error: {}", e));
         }
 
