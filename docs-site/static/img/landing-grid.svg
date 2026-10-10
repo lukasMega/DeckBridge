@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="192" height="110.852" viewBox="0 0 192 110.852">
+  <defs>
+    <g id="hex" stroke="#6487cc" stroke-width="0.7" fill="none">
+      <path d="M64 0 32 55.426H-32L-64 0-32-55.426H32Z M0 0H64 M0 0 32 55.426 M0 0-32 55.426 M0 0H-64 M0 0-32-55.426 M0 0 32-55.426"/>
+      <path d="M0 0 32-55.426H-32Z" fill="#6487cc" fill-opacity="0.12" stroke="none"/>
+    </g>
+  </defs>
+  <use href="#hex" x="64" y="55.426"/>
+  <use href="#hex" x="-32" y="0"/>
+  <use href="#hex" x="-32" y="110.852"/>
+  <use href="#hex" x="160" y="0"/>
+  <use href="#hex" x="160" y="110.852"/>
+</svg>
