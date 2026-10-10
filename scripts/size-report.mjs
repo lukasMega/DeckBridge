@@ -28,6 +28,7 @@ const gz = (bytes) => gzipSync(bytes, { level: 9 }).length;
 
 const clientDefine = {
   'process.env.NODE_ENV': '"production"',
+  __DEMO__: 'false',
   __SIMPLE_ONLY__: 'true',
   __MOCK_BUILD__: 'false',
   __VERSION__: JSON.stringify(version),
@@ -59,6 +60,7 @@ const shared = {
     __BUILD_TIME__: JSON.stringify(new Date().toISOString()),
     __LOG_LEVEL__: '1',
     __VERSION__: JSON.stringify(version),
+    __DEMO__: 'false',
     __SIMPLE_ONLY__: 'true',
     __MOCK_BUILD__: 'false',
   },

@@ -51,7 +51,7 @@ export const DOC_ROUTES: readonly string[] = [
 ];
 
 /** Every route the sitemap should contain: the docs, the landing page, search. */
-export const EXPECTED_ROUTES: readonly string[] = ['', 'search', ...DOC_ROUTES];
+export const EXPECTED_ROUTES: readonly string[] = ['', 'search', 'demo', ...DOC_ROUTES];
 
 export const FEED_FILES = ['blog/rss.xml', 'blog/atom.xml', 'blog/feed.json'] as const;
 

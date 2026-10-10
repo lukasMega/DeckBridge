@@ -1,5 +1,10 @@
+import {
+  DOCS_BASE as SHARED_DOCS_BASE,
+  DOCS_TOPICS as SHARED_DOCS_TOPICS,
+} from '../src/shared/docs-topics.js';
 import assert from 'tjs:assert';
 import {
+  DOCS_BASE,
   DOCS_TOPICS,
   docsTrackingAllowed,
   docsUrl,
@@ -8,6 +13,11 @@ import {
 } from '../src/web/server/docs-links.js';
 import type { DocsTopic } from '../src/web/contract.js';
 import { test, testAsync, summary } from './helpers/harness.js';
+
+test('server keeps shared docs exports compatible', () => {
+  assert.equal(DOCS_BASE, SHARED_DOCS_BASE);
+  assert.ok(DOCS_TOPICS === SHARED_DOCS_TOPICS);
+});
 
 test('isDocsTopic accepts every topic and nothing inherited', () => {
   for (const t of Object.keys(DOCS_TOPICS)) assert.equal(isDocsTopic(t), true, t);

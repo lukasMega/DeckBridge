@@ -148,6 +148,8 @@ export default defineConfig([
       'boundaries/legacy-warnings': false,
       'boundaries/elements': [
         { type: 'web-client', mode: 'full', pattern: 'src/web/client/**' },
+        { type: 'demo', mode: 'full', pattern: 'src/demo/**' },
+        { type: 'webhid', mode: 'full', pattern: 'src/webhid/**' },
         { type: 'web-server', mode: 'full', pattern: 'src/web/server/**' },
         // Zero-import leaf of HTTP/WS wire DTOs (contract.ts + contract-tuning.ts); the single G1 exception (type-only)
         // so browser and server share one declaration instead of mirroring each other.
@@ -183,6 +185,15 @@ export default defineConfig([
         {
           default: 'disallow',
           policies: [
+            { from: { element: { type: 'webhid' } }, allow: { to: { element: { type: 'webhid' } } }, message: 'webhid modules share browser transport helpers' },
+            { from: { element: { type: 'webhid' } }, allow: { to: { element: { type: 'devices' } } }, message: 'pure cores (devices/core) + registry only; build-demo.mjs fails on any tjs:* import' },
+            { from: { element: { type: 'webhid' } }, allow: { to: { element: { type: 'shared' } } }, message: 'webhid uses pure key mappings and shared types' },
+            { from: { element: { type: 'demo' } }, allow: { to: { element: { type: 'webhid' } } }, message: 'demo drives hardware through browser WebHID sessions' },
+            { from: { element: { type: 'demo' } }, allow: { to: { element: { type: 'demo' } } }, message: 'demo modules share the in-browser backend.' },
+            { from: { element: { type: 'demo' } }, allow: { to: { element: { type: 'web-client' } } }, message: 'demo boots the WebUI and installs its transport seam.' },
+            { from: { element: { type: 'demo' } }, allow: { to: { element: { type: 'web-contract' } }, dependency: { kind: 'type' } }, message: 'demo uses the type-only WebUI wire contract.' },
+            { from: { element: { type: 'demo' } }, allow: { to: { element: { type: 'shared' } } }, message: 'demo uses pure shared data.' },
+            { from: { element: { type: 'demo' } }, allow: { to: { element: { type: 'devices' } } }, message: 'registry data only (DEVICE_MODELS); device I/O goes through webhid.' },
             // same-element internal imports always allowed
             { allow: { dependency: { relationship: { to: 'internal' } } } },
             // Multi-file element types: same-type imports are always allowed (e.g. one

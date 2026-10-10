@@ -7,6 +7,10 @@ on:
       - 'docs/**'
       - 'docs-site/**'
       - 'patches/**'
+      - 'ts/src/**'
+      - 'ts/scripts/build-demo.mjs'
+      - 'ts/package.json'
+      - 'ts/pnpm-lock.yaml'
       - '.github/workflows/deploy-docs.yml'
   # Build + test docs changes before merge. The deploy job is skipped on PRs.
   pull_request:
@@ -14,6 +18,10 @@ on:
       - 'docs/**'
       - 'docs-site/**'
       - 'patches/**'
+      - 'ts/src/**'
+      - 'ts/scripts/build-demo.mjs'
+      - 'ts/package.json'
+      - 'ts/pnpm-lock.yaml'
       - '.github/workflows/deploy-docs.yml'
   workflow_dispatch:
 
@@ -46,7 +54,9 @@ jobs:
           # by `node --test` via native type stripping (needs 22.18+).
           node-version: 24
           cache: pnpm
-          cache-dependency-path: docs-site/pnpm-lock.yaml
+          cache-dependency-path: |
+            docs-site/pnpm-lock.yaml
+            ts/pnpm-lock.yaml
 
       - name: Install Chrome (for mermaid prerender)
         id: chrome
@@ -70,6 +80,14 @@ jobs:
         env:
           # Chrome comes from setup-chrome; skip puppeteer's own download.
           PUPPETEER_SKIP_DOWNLOAD: 'true'
+
+      - name: Install ts deps (demo bundle)
+        working-directory: ts
+        run: pnpm install --frozen-lockfile
+
+      - name: Build live demo bundle
+        working-directory: ts
+        run: node scripts/build-demo.mjs
 
       - name: Test
         run: pnpm run test
@@ -98,8 +116,8 @@ jobs:
       # Browser layer: everything above is static regex over build/. These specs
       # drive the built site in Lightpanda and cover hydration only — client-side
       # routing, the DeviceTable filter/sort, colour-mode and animation prefs.
-      # Lightpanda is not Chromium and needs no display; the Chrome installed
-      # above is for mermaid prerendering and is unrelated.
+      # Lightpanda covers DOM behavior; the demo orientation regression uses
+      # the Chrome installed above because CSS transforms need a renderer.
       - name: Cache Lightpanda binary
         uses: actions/cache@v6
         with:
@@ -110,12 +128,14 @@ jobs:
         working-directory: e2e
         run: pnpm install --frozen-lockfile
         env:
-          # The bundled Chromium is never launched — Lightpanda is the runtime.
+          # Real-renderer checks use the Chrome installed above.
           PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
 
       - name: Browser e2e (docs)
         working-directory: e2e
         run: pnpm run test:docs
+        env:
+          CHROME_BIN: ${{ steps.chrome.outputs.chrome-path }}
 
       - name: Upload Playwright report on failure
         if: failure()

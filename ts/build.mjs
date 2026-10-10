@@ -125,6 +125,7 @@ const clientSource = (entry, target) =>
       jsxImportSource: 'preact',
       define: {
         'process.env.NODE_ENV': '"production"',
+        __DEMO__: 'false',
         __SIMPLE_ONLY__: JSON.stringify(isSimpleOnly),
         __MOCK_BUILD__: JSON.stringify(isMockBuild),
         __VERSION__: JSON.stringify(version),
@@ -350,6 +351,7 @@ const shared = {
     __BUILD_TIME__: JSON.stringify(new Date().toISOString()),
     __LOG_LEVEL__: String(logLevel),
     __VERSION__: JSON.stringify(version),
+    __DEMO__: 'false',
     __SIMPLE_ONLY__: JSON.stringify(isSimpleOnly),
     __MOCK_BUILD__: JSON.stringify(isMockBuild),
   },

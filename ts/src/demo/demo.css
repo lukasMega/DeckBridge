@@ -1,0 +1,34 @@
+.demo-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 12px;
+  border-bottom: 1px solid var(--border);
+}
+.demo-controls [role='tablist'] {
+  display: flex;
+  gap: 4px;
+}
+.demo-controls [aria-selected='true'] {
+  font-weight: bold;
+}
+.demo-controls select {
+  max-width: 100%;
+  padding: 6px;
+  color: inherit;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+.demo-controls p {
+  flex-basis: 100%;
+  margin: 0;
+}
+
+/* Demo frames are upright; desktop frames need the shared orientation corrections. */
+#simple-view .key-grid .key-cell img {
+  transform: none;
+}

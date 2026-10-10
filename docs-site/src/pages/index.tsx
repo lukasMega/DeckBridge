@@ -83,6 +83,9 @@ export default function Home(): ReactNode {
               <Link className={styles.ctabtn} to="/getting-started">
                 Get started
               </Link>
+              <Link className={styles.ghostbtn} to="/demo">
+                Try the live demo
+              </Link>
               <a className={styles.ghostbtn} href={GITHUB_URL} target="_blank" rel="noreferrer">
                 GitHub ↗
               </a>

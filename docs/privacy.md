@@ -34,6 +34,14 @@ and no measurement can be joined to another (e.g. page path × country).
 The collector is open source and self-hosted:
 [deno-kv-analytics](https://github.com/lukasMega/deno-kv-analytics).
 
+## Live demo
+
+The docs-site demo reports which device model you tried: its model id, or USB
+vendor/product ids when a real device is unknown. It also reports unsupported
+real-device mode and connection failures, using one-word reasons. These aggregate
+events use the same first-party beacon as page views. No serial numbers, images or
+key presses are sent. Nothing is sent from localhost.
+
 ## Visitor & session counting
 
 To count visitors and sessions **without cookies**, your browser keeps a random,

@@ -104,7 +104,12 @@ export function SimpleApp(): preact.JSX.Element {
     ? docks.every((d) => d.elgatoConnected)
     : deviceState === 'ready';
   const showNudge =
-    ready && !settingsOpen && activeHelp === null && !!survey.data?.nudge && !surveyDismissed;
+    !__DEMO__ &&
+    ready &&
+    !settingsOpen &&
+    activeHelp === null &&
+    !!survey.data?.nudge &&
+    !surveyDismissed;
 
   // The gate is uptime-based, so a tab opened early only learns it may nudge on return.
   const reloadRef = useRef(survey.reload);
@@ -149,7 +154,7 @@ export function SimpleApp(): preact.JSX.Element {
   else if (activeHelp !== null) headerBack = handleBack;
 
   let stageContent: preact.JSX.Element;
-  if (settingsOpen) {
+  if (!__DEMO__ && settingsOpen) {
     stageContent = (
       <SettingsPage
         onBack={() => {
@@ -217,17 +222,19 @@ export function SimpleApp(): preact.JSX.Element {
                   />
                 </svg>
               </button>
-              <button
-                class="iconbtn circle"
-                id="settingsBtn"
-                aria-label="Settings"
-                title="Settings"
-                type="button"
-                onClick={openSettings}
-                // eslint-disable-next-line @eslint-react/dom-no-dangerously-set-innerhtml -- static trusted SVG icon markup
-                dangerouslySetInnerHTML={{ __html: ICON.gear }}
-              />
-              {updateBadge && (
+              {!__DEMO__ && (
+                <button
+                  class="iconbtn circle"
+                  id="settingsBtn"
+                  aria-label="Settings"
+                  title="Settings"
+                  type="button"
+                  onClick={openSettings}
+                  // eslint-disable-next-line @eslint-react/dom-no-dangerously-set-innerhtml -- static trusted SVG icon markup
+                  dangerouslySetInnerHTML={{ __html: ICON.gear }}
+                />
+              )}
+              {!__DEMO__ && updateBadge && (
                 <span class="update-dot" title={`DeckBridge v${updateBadge} available`} />
               )}
             </div>
@@ -267,21 +274,23 @@ export function SimpleApp(): preact.JSX.Element {
           <button class="linkbtn" id="footerAbout" type="button" onClick={openAbout}>
             About
           </button>{' '}
-          ·{' '}
-          <button
-            class="linkbtn"
-            id="footerFeedback"
-            type="button"
-            onClick={() => void openSurvey()}
-          >
-            Feedback
-            {showNudge && <span class="update-dot" />}
-          </button>
+          {!__DEMO__ && '·'}{' '}
+          {!__DEMO__ && (
+            <button
+              class="linkbtn"
+              id="footerFeedback"
+              type="button"
+              onClick={() => void openSurvey()}
+            >
+              Feedback
+              {showNudge && <span class="update-dot" />}
+            </button>
+          )}
         </footer>
       </div>
       <div class="toast" id="toast" role="status" aria-live="polite" />
       {aboutOpen && <AboutPopover onClose={closeAbout} onFeedback={() => void openSurvey()} />}
-      {surveyOpen && !survey.data && (
+      {!__DEMO__ && surveyOpen && !survey.data && (
         <Modal
           title="Quick feedback"
           titleId="survey-loading-title"
@@ -291,7 +300,7 @@ export function SimpleApp(): preact.JSX.Element {
           <GhostButton onClick={survey.reload}>Retry</GhostButton>
         </Modal>
       )}
-      {surveyStarted && survey.data && (
+      {!__DEMO__ && surveyStarted && survey.data && (
         <SurveyModal
           definition={survey.data}
           key={surveySession}
@@ -308,7 +317,7 @@ export function SimpleApp(): preact.JSX.Element {
           onRefresh={survey.reload}
         />
       )}
-      {shortOpen && survey.data && (
+      {!__DEMO__ && shortOpen && survey.data && (
         <SurveyShort
           definition={survey.data}
           seed={shortSeed}
