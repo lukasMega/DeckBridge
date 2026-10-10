@@ -30,7 +30,7 @@ const image = (a: Args): [number, Uint8Array] => [
   bytesOfHex(a.payloadHex as string),
 ];
 
-// Same normalisation as helpers/packet-replay.ts applies to the drivers' emits.
+// Same normalization as helpers/packet-replay.ts applies to the drivers' emits.
 function akp05Events(input: Akp05Input): FixtureEvent[] {
   if (input.kind === 'key') return keys([input.event]);
   if (input.kind === 'dial') return [{ type: 'dial', ...input.event }];
