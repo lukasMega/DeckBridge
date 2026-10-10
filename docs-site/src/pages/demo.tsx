@@ -9,6 +9,7 @@ import trayFull from '../../../rust/deckbridge-tray/icons/icon-full.png';
 
 export default function Demo(): ReactNode {
   const demoUrl = useBaseUrl('/demo-app/index.html');
+  const downloadUrl = useBaseUrl('/getting-started/#latest-downloads');
   const frame = useRef<HTMLIFrameElement>(null);
   const pairedModal = useRef<HTMLDialogElement>(null);
   const wasPaired = useRef(false);
@@ -17,6 +18,20 @@ export default function Demo(): ReactNode {
   const [windowOpen, setWindowOpen] = useState(false);
   const [tray, setTray] = useState({ icon: trayDisconnected, status: 'No device' });
   const [pairedDevice, setPairedDevice] = useState<string | null>(null);
+  const [launchHintVisible, setLaunchHintVisible] = useState(false);
+  const [now, setNow] = useState<Date | null>(null);
+
+  useEffect(() => {
+    setNow(new Date());
+    const timer = window.setInterval(() => setNow(new Date()), 1000);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    if (running) return;
+    const timer = window.setTimeout(() => setLaunchHintVisible(true), 2000);
+    return () => window.clearTimeout(timer);
+  }, [running]);
 
   useEffect(() => {
     function onStatus(event: MessageEvent) {
@@ -49,6 +64,7 @@ export default function Demo(): ReactNode {
 
   function quit() {
     setRunning(false);
+    setLaunchHintVisible(false);
     setTrayOpen(false);
     setWindowOpen(false);
     wasPaired.current = false;
@@ -64,11 +80,8 @@ export default function Demo(): ReactNode {
       <main className={styles.playground}>
         <header className={styles.header}>
           <div>
-            <p className={styles.eyebrow}>Live demo</p>
-            <h1>Try DeckBridge</h1>
-            <p className={styles.lead}>Launch DeckBridge. Open its tray.</p>
+            <h1 className={styles.eyebrow}>Live demo</h1>
           </div>
-          <span className={styles.badge}>No install · Nothing saved</span>
         </header>
         <div
           className={styles.preview}
@@ -77,22 +90,39 @@ export default function Demo(): ReactNode {
             if (event.key === 'Escape') setTrayOpen(false);
           }}
         >
-          <div className={styles.menuBar}>
-            <span>Desktop</span>
+          <div className={styles.menuBar} style={{ opacity: windowOpen ? 0.5 : 1 }}>
+            <div className={styles.desktopLabel}>
+              <span>Desktop</span>
+              <p className={styles.lead}>Launch DeckBridge. Open its tray.</p>
+            </div>
             <div className={styles.trayArea} onClick={(event) => event.stopPropagation()}>
-              <span className={styles.trayLabel}>System tray</span>
               {running && (
-                <button
-                  className={styles.trayButton}
-                  aria-label="DeckBridge tray"
-                  aria-expanded={trayOpen}
-                  aria-controls="demo-tray-menu"
-                  title={tray.status}
-                  onClick={() => setTrayOpen((open) => !open)}
-                >
-                  <img src={tray.icon} alt="" width={22} height={22} />
-                </button>
+                <div className={styles.trayIcon}>
+                  <button
+                    className={styles.trayButton}
+                    aria-label="DeckBridge tray"
+                    aria-expanded={trayOpen}
+                    aria-controls="demo-tray-menu"
+                    title={tray.status}
+                    onClick={() => setTrayOpen((open) => !open)}
+                  >
+                    <img src={tray.icon} alt="" width={22} height={22} />
+                  </button>
+                  {!windowOpen && !trayOpen && (
+                    <p className={styles.trayHint}>
+                      <span aria-hidden="true">↑</span> Click tray icon
+                    </p>
+                  )}
+                </div>
               )}
+              <time
+                className={styles.trayClock}
+                dateTime={now?.toISOString()}
+                aria-label="Date and time"
+              >
+                <span>{now?.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</span>
+                <span>{now?.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}</span>
+              </time>
               {trayOpen && (
                 <div
                   className={styles.trayMenu}
@@ -103,10 +133,13 @@ export default function Demo(): ReactNode {
                   <strong>DeckBridge</strong>
                   <p role="status">Status: {tray.status}</p>
                   <hr />
-                  <button onClick={() => {
-                    setWindowOpen(true);
-                    setTrayOpen(false);
-                  }}>
+                  <button
+                    className={styles.openWebUi}
+                    onClick={() => {
+                      setWindowOpen(true);
+                      setTrayOpen(false);
+                    }}
+                  >
                     Open Web UI
                   </button>
                   <hr />
@@ -129,7 +162,7 @@ export default function Demo(): ReactNode {
                   <img src={appIcon} alt="" width={64} height={64} />
                   <span>DeckBridge</span>
                 </button>
-                {!running && (
+                {!running && launchHintVisible && (
                   <div className={styles.launchHint}>
                     <svg viewBox="0 0 72 48" fill="none" aria-hidden="true">
                       <path
@@ -145,10 +178,12 @@ export default function Demo(): ReactNode {
                 )}
               </div>
             )}
-            {running && !windowOpen && !trayOpen && (
-              <p className={styles.trayHint}>
-                <span aria-hidden="true">↑</span> Click tray icon
-              </p>
+            {running && (
+              <div
+                id="deckbridge-demo-controls"
+                className={styles.controlsHost}
+                hidden={!windowOpen}
+              />
             )}
             {running && (
               <div className={styles.appWindow} hidden={!windowOpen}>
@@ -177,10 +212,17 @@ export default function Demo(): ReactNode {
           onCancel={() => setPairedDevice(null)}
           onClose={() => setPairedDevice(null)}
         >
-          <h2 id="demo-paired-title">Paired!</h2>
-          <p id="demo-paired-message">
-            Now you can control your <strong>{pairedDevice}</strong> buttons with the Elgato app.
-          </p>
+          <h2 id="demo-paired-title">Demo pairing complete</h2>
+          <div id="demo-paired-message">
+            <p>This demo cannot connect to the Elgato app.</p>
+            <p>
+              Run the native DeckBridge app on your PC to control your{' '}
+              <strong>{pairedDevice}</strong> buttons with the Elgato app.
+            </p>
+            <p>
+              <a href={downloadUrl}>Download DeckBridge</a>
+            </p>
+          </div>
           <button onClick={() => setPairedDevice(null)}>Got it</button>
         </dialog>
       </main>

@@ -56,10 +56,21 @@ for (const source of [
   );
 }
 await writeFile(path.join(out, 'ui.css'), css.join(''));
+const controlsCss = [
+  (await readFile(path.join(root, 'src/web/client/ui-base.css'), 'utf8'))
+    .replace(':root {', ':host {')
+    .replace("html[data-theme='dark'] {", ":host([data-theme='dark']) {"),
+  await readFile(path.join(root, 'src/demo/demo.css'), 'utf8'),
+  ':host { font-family: var(--font); font-size: 14px; color: var(--fg); } :host .demo-panel { position: absolute; top: -4em; z-index: 99; }',
+];
+await writeFile(
+  path.join(out, 'controls.css'),
+  (await transform(controlsCss.join('\n'), { loader: 'css', minify: true })).code,
+);
 await writeFile(
   path.join(out, 'index.html'),
   await readFile(path.join(root, 'src/demo/index.html')),
 );
-for (const name of ['demo.js', 'ui.css', 'index.html']) {
+for (const name of ['demo.js', 'ui.css', 'controls.css', 'index.html']) {
   console.log(`${name}: ${(await stat(path.join(out, name))).size} bytes`);
 }
