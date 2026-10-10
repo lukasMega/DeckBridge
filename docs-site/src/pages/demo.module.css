@@ -2,7 +2,7 @@
   width: 100%;
   max-width: 1180px;
   margin: 0 auto;
-  padding: 2.5rem 1.5rem;
+  padding: 1.5rem;
 }
 
 .header {
@@ -11,7 +11,7 @@
   align-items: center;
   justify-content: space-between;
   gap: 1rem;
-  margin-bottom: 1.5rem;
+  margin-bottom: 1rem;
 }
 
 .eyebrow {
@@ -23,24 +23,13 @@
   text-transform: uppercase;
 }
 
-.header h1 {
-  margin: 0 0 0.5rem;
-  font-size: clamp(2rem, 4vw, 2.75rem);
-  letter-spacing: -0.04em;
-  line-height: 1.15;
-}
-
 .lead {
   margin: 0;
   color: var(--ifm-color-content-secondary);
-}
-
-.badge {
-  padding: 0.5rem 0.875rem;
-  border: 1px solid var(--ifm-color-emphasis-200);
-  border-radius: 100px;
-  color: var(--ifm-color-content-secondary);
-  font-size: 0.8125rem;
+  font-family: 'Avenir Next Condensed', 'Arial Narrow', sans-serif;
+  font-size: 0.75rem;
+  font-stretch: condensed;
+  line-height: 1.25;
 }
 
 .preview {
@@ -52,6 +41,8 @@
 }
 
 .menuBar {
+  position: relative;
+  z-index: 30;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -70,9 +61,32 @@
   height: 100%;
 }
 
-.trayLabel {
+.desktopLabel {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  min-width: 0;
+  margin-right: 0.75rem;
+}
+
+.desktopLabel > span {
+  flex-shrink: 0;
+}
+
+.trayClock {
+  display: flex;
+  gap: 0.75rem;
   color: var(--ifm-color-content-secondary);
   font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.trayIcon {
+  position: relative;
+  display: flex;
+  align-items: center;
+  height: 100%;
 }
 
 .preview button {
@@ -146,11 +160,30 @@
   color: var(--ifm-background-color);
 }
 
+.openWebUi {
+  animation: trayMenuHighlight 1s 0.5s;
+}
+
+@keyframes trayMenuHighlight {
+  from,
+  to {
+    box-shadow:
+      inset 0 0 0 2px var(--ifm-color-primary),
+      0 0 24px 5px color-mix(in srgb, var(--ifm-color-primary) 80%, transparent);
+  }
+}
+
 .desktop {
   position: relative;
-  min-height: clamp(540px, 68vh, 720px);
+  min-height: clamp(680px, 85vh, 1000px);
   padding: 1.5rem;
-  background: radial-gradient(ellipse at bottom left, color-mix(in srgb, var(--ifm-color-primary) 12%, transparent), transparent 70%), var(--ifm-background-color);
+  background:
+    radial-gradient(
+      ellipse at bottom left,
+      color-mix(in srgb, var(--ifm-color-primary) 12%, transparent),
+      transparent 70%
+    ),
+    var(--ifm-background-color);
 }
 
 .launcher {
@@ -176,12 +209,35 @@
   background: var(--ifm-background-surface-color);
 }
 
+.launchHint,
+.trayHint {
+  color: var(--ifm-color-primary);
+  font-family: var(--ifm-font-family-base);
+  font-size: clamp(1.25rem, 3vw, 1.75rem);
+  font-weight: 600;
+  line-height: 1.4;
+}
+
 .launchHint {
   display: flex;
   align-items: flex-start;
   gap: 0.5rem;
-  color: var(--ifm-color-content-secondary);
-  font-size: 0.875rem;
+  animation: launchHintFadeLeft 0.4s ease-out both;
+}
+
+@keyframes launchHintFadeLeft {
+  from {
+    opacity: 0;
+    transform: translateX(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.launchHint span {
+  transform: translateY(-12px);
 }
 
 .launchHint svg {
@@ -193,15 +249,14 @@
 
 .trayHint {
   position: absolute;
-  top: 0.75rem;
-  right: 1.25rem;
+  top: calc(100% + 0.75rem);
+  right: 0;
+  z-index: 1;
   display: grid;
   justify-items: end;
   gap: 0.25rem;
   margin: 0;
-  color: var(--ifm-color-primary);
-  font-size: clamp(1.25rem, 3vw, 1.75rem);
-  font-weight: 600;
+  white-space: nowrap;
   animation: trayHintBounce 1.4s ease-in-out infinite;
 }
 
@@ -221,6 +276,7 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .launchHint,
   .trayHint {
     animation: none;
   }
@@ -232,6 +288,10 @@
   border-radius: 12px;
   background: var(--ifm-background-surface-color);
   box-shadow: 0 12px 36px #0002;
+}
+
+.controlsHost {
+  position: relative;
 }
 
 .windowBar {
@@ -260,7 +320,7 @@
 .frame {
   display: block;
   width: 100%;
-  height: clamp(520px, 64vh, 680px);
+  height: clamp(680px, 85vh, 1000px);
   border: 0;
 }
 
