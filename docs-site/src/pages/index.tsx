@@ -83,7 +83,17 @@ export default function Home(): ReactNode {
               <Link className={styles.ctabtn} to="/getting-started">
                 Get started
               </Link>
-              <Link className={styles.ghostbtn} to="/demo">
+              <Link className={`${styles.ghostbtn} ${styles.demobtn}`} to="/demo">
+                <svg
+                  className={styles.demoPlay}
+                  width="22"
+                  height="22"
+                  viewBox="0 0 24 24"
+                  aria-hidden="true"
+                >
+                  <circle cx="12" cy="12" r="10" fill="currentColor" fillOpacity="0.12" />
+                  <path d="M10 7.5v9l7-4.5Z" fill="currentColor" />
+                </svg>
                 Try the live demo
               </Link>
               <a className={styles.ghostbtn} href={GITHUB_URL} target="_blank" rel="noreferrer">

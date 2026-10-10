@@ -192,16 +192,24 @@ export function SurveyModal({
       {!sent && <p class="survey-intro">A few taps to help shape what comes next.</p>}
       {!sent && <SurveyProgress step={step} total={count + 2} />}
       <div class="survey-body" ref={bodyRef}>
+        {!sent && saved && (
+          <div class="survey-invite survey-resume">
+            <div>
+              <strong>Continue your unfinished feedback?</strong>
+              <br />
+              <small>Your answers are saved on this device.</small>
+            </div>
+            <div class="settings-actions survey-nav">
+              <button class="ctabtn primary" type="button" onClick={resume}>
+                Continue
+              </button>
+              <GhostButton onClick={startOver}>Start over</GhostButton>
+            </div>
+          </div>
+        )}
         <h3 class="survey-q" ref={headingRef} tabIndex={-1}>
           {sent ? 'Thanks for your feedback!' : stepTitle(definition, step)}
         </h3>
-        {!sent && saved && (
-          <div class="settings-actions panel-inset">
-            <p class="multi-deck-note">Continue your unfinished feedback?</p>
-            <GhostButton onClick={resume}>Continue</GhostButton>
-            <GhostButton onClick={startOver}>Start over</GhostButton>
-          </div>
-        )}
         {sent && <SurveyThanks />}
         {question && (
           <QuestionStep

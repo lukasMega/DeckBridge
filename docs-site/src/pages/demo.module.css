@@ -174,16 +174,25 @@
 }
 
 .desktop {
+  --wallpaper-pattern: none;
+  --wallpaper-size: 192px 110.852px;
+  --wallpaper-x: 60%;
+  --wallpaper-y: 75%;
+  --wallpaper-angle: 140deg;
+  --desktop-wash: color-mix(in srgb, var(--ifm-background-color) 85%, transparent);
+  --desktop-hint: var(--ifm-color-primary-darkest);
   position: relative;
   min-height: clamp(680px, 85vh, 1000px);
   padding: 1.5rem;
   background:
-    radial-gradient(
-      ellipse at bottom left,
-      color-mix(in srgb, var(--ifm-color-primary) 12%, transparent),
-      transparent 70%
-    ),
-    var(--ifm-background-color);
+    linear-gradient(var(--desktop-wash), var(--desktop-wash)),
+    var(--wallpaper-pattern) var(--wallpaper-x) var(--wallpaper-y) / var(--wallpaper-size),
+    linear-gradient(var(--wallpaper-angle), #285577, #70476f 35%, #765349 65%, #2b6565);
+}
+
+:global([data-theme='dark']) .desktop {
+  --desktop-wash: color-mix(in srgb, var(--ifm-background-color) 70%, transparent);
+  --desktop-hint: var(--ifm-color-primary);
 }
 
 .launcher {
@@ -219,6 +228,7 @@
 }
 
 .launchHint {
+  color: var(--desktop-hint);
   display: flex;
   align-items: flex-start;
   gap: 0.5rem;
