@@ -12,6 +12,8 @@ Plug your deck into any computer, run DeckBridge there, and the Elgato app on an
 on the same network finds it like real Elgato hardware. One small program (<5 MB), nothing
 else to install.
 
+Try it in your browser: [live demo](https://lukasmega.github.io/DeckBridge/demo/).
+
 <img src="docs/readme-flow.svg" alt="Data flow: USB Stream Deck to your computer running DeckBridge, then to the Elgato app or Bitfocus Companion over WiFi" width="680" />
 
 **📖 Documentation:** <https://lukasmega.github.io/DeckBridge/>

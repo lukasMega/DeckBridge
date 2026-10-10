@@ -449,6 +449,9 @@ run = "node ../scripts/quiet.mjs --ok=e2e-types -- pnpm --silent run types"
 description = "Run tests (TJS)"
 quiet = true
 depends = ["ts-install", "tjs-setup", "deckbridge-native"]
+# Selected aggregate tasks finish first: short process deadlines need CPU slack,
+# and test bundles must not overwrite dist files while compilation is running.
+wait_for = ["lint", "compile", "docs-check", "e2e-browser", "test-client"]
 env = { DECKBRIDGE_BUILD_MOCK = "1" }
 run = "node scripts/run-tests.mjs"
 timeout = "240s"
@@ -476,9 +479,16 @@ quiet = true
 dir = "docs-site"
 run = "pnpm install"
 
+[tasks.demo-build]
+description = "Build the in-browser docs demo"
+dir = "ts"
+depends = ["ts-install"]
+run = "node scripts/build-demo.mjs"
+
 [tasks.docs-dev]
 description = "Start Docusaurus dev server (docs-site)"
 dir = "docs-site"
+depends = ["demo-build"]
 # --port pins 3001 so an ambient PORT (e.g. from idf.py flash) can't make Docusaurus
 # parse port NaN. `pnpm exec`, not `pnpm run start --`: pnpm forwards the bare `--` and
 # Docusaurus reads it as the positional siteDir.
@@ -502,18 +512,19 @@ timeout = "900s"
 description = "docs-site: typecheck + tests (build/links/content/output)"
 quiet = true
 dir = "docs-site"
-depends = ["docs-install"]
+depends = ["docs-install", "demo-build"]
 run = "node ../scripts/quiet.mjs --fail-only --ok=docs-check -- pnpm run beforeCommit"
 
 [tasks.docs-build]
 description = "Build Docusaurus static HTML (docs-site/build/)"
 dir = "docs-site"
+depends = ["demo-build"]
 run = "pnpm run test && pnpm run build"
 
 [tasks.docs-serve]
 description = "Serve the built Docusaurus site locally"
 dir = "docs-site"
-run = "pnpm run serve -- --port 3000"
+run = "node scripts/serve.mjs --port 3000"
 
 [tasks.coverage]
 description = "Run the tjs test suite with Istanbul instrumentation and emit a merged coverage report (text/html/lcov)"

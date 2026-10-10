@@ -10,6 +10,12 @@ description: What DeckBridge does, who it's for, the permissions it needs, and t
 DeckBridge turns a USB Stream Deck into a network device the Elgato app can use over
 WiFi.
 
+## Live demo
+
+[Try the live demo](/demo) with a mock deck in your browser, without installing anything.
+Real device mode in desktop Chrome, Edge or Opera drives your deck's keys and brightness
+over WebHID, plus the strip and knobs on AKP05 and AKP05E.
+
 ## Use a budget deck with the Elgato app
 
 DeckBridge lets the **official Elgato Stream Deck app** drive cheap, non-Elgato decks —

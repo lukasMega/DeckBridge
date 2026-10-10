@@ -1,3 +1,4 @@
+import { demoDocsHref } from '../lib/demo-docs.js';
 import type { DocsTopic } from '../../contract.js';
 import { useId, useLayoutEffect, useRef, useState } from 'preact/hooks';
 import { ICON, Icon } from './Icon.js';
@@ -64,7 +65,7 @@ function DocsDialog({
 // Both entry points use the same tracked /go/docs redirect.
 export function DocsLink({ topic, label = 'Docs', block }: Readonly<Props>) {
   const [open, setOpen] = useState(false);
-  const href = `/go/docs/${topic}`;
+  const href = __DEMO__ ? demoDocsHref(topic) : `/go/docs/${topic}`;
   return (
     <>
       <span class={`docs-link-group${block ? ' docs-link-block' : ''}`}>

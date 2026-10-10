@@ -30,6 +30,9 @@ declare global {
   // When true, the advanced (debug) view + its CSS are tree-shaken out of the embedded UI.
   const __SIMPLE_ONLY__: boolean;
 
+  // Docs-site demo build (ts/scripts/build-demo.mjs), never true in the app.
+  const __DEMO__: boolean;
+
   // Explicit local/test build only. Release bundles fold mock paths away.
   const __MOCK_BUILD__: boolean;
 }

@@ -90,7 +90,7 @@ try {
     platform: 'browser',
     jsx: 'automatic',
     jsxImportSource: 'preact',
-    define: { __MOCK_BUILD__: 'true', __SIMPLE_ONLY__: 'true', __VERSION__: '"test"' },
+    define: { __MOCK_BUILD__: 'true', __DEMO__: 'false', __SIMPLE_ONLY__: 'true', __VERSION__: '"test"' },
   });
   const html = join(temp, 'test.html');
   writeFileSync(

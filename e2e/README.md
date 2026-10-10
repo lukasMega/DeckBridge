@@ -20,6 +20,10 @@ Preconditions:
   builds, because a build is minutes long and re-renders every mermaid diagram through
   headless Chrome.
 
+The docs preview uses `docs-site/scripts/serve.mjs`, preserving nested static
+`index.html` URLs under `/DeckBridge/`. Docusaurus's clean-URL preview redirects drop
+that prefix for the demo iframe.
+
 ## The runtime is Lightpanda, not Chromium
 
 [Lightpanda](https://lightpanda.io) is a headless browser written in Zig with a real JS

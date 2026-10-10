@@ -198,6 +198,18 @@ const trayStateWithAttempts = (n: number) =>
 if (posix) {
   await asyncTest('push coalesces to the newest snapshot while a write is in flight', async () => {
     const received: string[] = [];
+    async function waitForAttempts(attempts: number): Promise<void> {
+      const deadline = Date.now() + 5000;
+      while (
+        !received.some(
+          (line) =>
+            (JSON.parse(line) as { reconnectAttempts: number }).reconnectAttempts === attempts,
+        )
+      ) {
+        assert.ok(Date.now() < deadline, `snapshot ${attempts} not received`);
+        await new Promise((r) => setTimeout(r, 10));
+      }
+    }
     const server = await tjs.listen('tcp', '127.0.0.1', 0);
     const info = await server.opened;
     const port = info.localPort;
@@ -227,11 +239,13 @@ if (posix) {
     try {
       tray = startTray(script, { onQuit: () => {}, onRestartElgatoApp: () => {} });
       assert.ok(tray, 'spawned');
-      // Let the tray connect, then burst while the first write is in flight.
-      await new Promise((r) => setTimeout(r, 400));
+      // A delivered primer proves the writer is ready, even under parallel CI load.
+      tray!.push(trayStateWithAttempts(-1));
+      await waitForAttempts(-1);
+      received.length = 0;
       tray!.push(trayStateWithAttempts(0));
       for (let i = 1; i <= 50; i++) tray!.push(trayStateWithAttempts(i));
-      await new Promise((r) => setTimeout(r, 300));
+      await waitForAttempts(50);
       assert.ok(received.length >= 1 && received.length <= 2, `writes: ${received.length}`);
       assert.equal(
         (JSON.parse(received[received.length - 1]!) as { reconnectAttempts: number })

@@ -35,6 +35,12 @@ your issue.
   sends the full init sequence on open (`CRT VER`, then `DIS`, `LIG`, `CLE 0xff`, `STP`)
   and nothing on close; do not send other reset commands during recovery.
 
+## Live demo
+
+- **Real device is disabled** — your browser has no WebHID; use desktop Chrome, Edge or Opera.
+- **Could not open the deck** — quit DeckBridge and the vendor app, then connect again.
+- **My deck is not listed as supported** — check the [supported devices](./devices.mdx).
+
 ## Where the logs live
 
 `deckbridge.log`, in the cache directory:

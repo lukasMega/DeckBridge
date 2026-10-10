@@ -11,7 +11,7 @@ import type { StateResponse } from './ui-types.js';
 // whole round-trip (forever, if /api/state never resolves).
 if (__SIMPLE_ONLY__) {
   document.documentElement.removeAttribute('data-mode');
-  localStorage.removeItem('deckbridge.mode');
+  if (!__DEMO__) localStorage.removeItem('deckbridge.mode');
 }
 
 async function fetchState(): Promise<StateResponse> {

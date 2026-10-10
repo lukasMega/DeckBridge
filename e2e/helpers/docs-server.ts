@@ -16,13 +16,12 @@ export interface DocsServer {
 }
 
 /**
- * Serve the *production* build. Two reasons this is `docusaurus serve` and not
- * `docusaurus start`:
+ * Serve the *production* build instead of `docusaurus start`:
  *   - the local search index only exists in a production build; the dev server renders
  *     "⚠️ The search index is only available when you run docusaurus build!";
  *   - the dev server re-compiles, which would make a test run minutes long.
  *
- * `--host 127.0.0.1` is not optional: the default (`localhost`) binds IPv6-only here, and
+ * `--host 127.0.0.1` is not optional: `localhost` can bind IPv6-only here, and
  * every 127.0.0.1 request then fails to connect.
  */
 export async function startDocsServer(): Promise<DocsServer> {
@@ -35,19 +34,8 @@ export async function startDocsServer(): Promise<DocsServer> {
   const baseURL = `http://127.0.0.1:${port}${DOCS_BASE_PATH}`;
 
   const child: ChildProcess = spawn(
-    'pnpm',
-    [
-      'exec',
-      'docusaurus',
-      'serve',
-      '--dir',
-      'build',
-      '--port',
-      String(port),
-      '--host',
-      '127.0.0.1',
-      '--no-open',
-    ],
+    process.execPath,
+    ['scripts/serve.mjs', '--port', String(port), '--host', '127.0.0.1'],
     { cwd: SITE, env: { ...process.env, CI: '1' }, stdio: ['ignore', 'pipe', 'pipe'] },
   );
 
@@ -66,7 +54,7 @@ export async function startDocsServer(): Promise<DocsServer> {
   const stop = async (): Promise<void> => {
     if (exited) return;
     child.kill('SIGTERM');
-    await waitFor(async () => exited, { timeoutMs: 5000, what: 'docusaurus serve shutdown' }).catch(
+    await waitFor(async () => exited, { timeoutMs: 5000, what: 'docs server shutdown' }).catch(
       () => {
         child.kill('SIGKILL');
       },
@@ -76,8 +64,7 @@ export async function startDocsServer(): Promise<DocsServer> {
   try {
     await waitFor(
       async () => {
-        // A busy port makes `docusaurus serve` exit silently in non-TTY mode.
-        if (exited) throw new Error(`docusaurus serve exited before becoming ready:\n${log}`);
+        if (exited) throw new Error(`docs server exited before becoming ready:\n${log}`);
         try {
           return (await fetch(`${baseURL}/`)).ok;
         } catch {
@@ -88,7 +75,7 @@ export async function startDocsServer(): Promise<DocsServer> {
     );
   } catch (err) {
     await stop();
-    throw new Error(`${(err as Error).message}\n--- docusaurus output ---\n${log}`);
+    throw new Error(`${(err as Error).message}\n--- docs server output ---\n${log}`);
   }
 
   return { baseURL, stop };

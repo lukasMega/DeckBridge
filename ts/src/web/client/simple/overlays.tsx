@@ -127,7 +127,7 @@ export function AboutPopover({
           Network Dock. For reliable setups, use officially supported Elgato hardware.
         </p>
       </div>
-      {onFeedback && (
+      {!__DEMO__ && onFeedback && (
         <button class="linkbtn" type="button" onClick={onFeedback}>
           Give feedback
         </button>
