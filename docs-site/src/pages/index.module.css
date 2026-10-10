@@ -247,6 +247,56 @@
   transform: translateY(1px);
 }
 
+.demobtn {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  color: var(--fg);
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
+  background: linear-gradient(135deg, var(--accent-soft), transparent), var(--surface);
+  transition:
+    border-color 0.18s,
+    box-shadow 0.18s,
+    transform 0.18s;
+}
+.demobtn::after {
+  content: '';
+  position: absolute;
+  z-index: -1;
+  inset: 0;
+  background: linear-gradient(110deg, transparent 25%, var(--accent-soft) 50%, transparent 75%);
+  transform: translateX(-120%);
+  animation: demoShine 6s ease-in-out 1s infinite;
+  pointer-events: none;
+}
+.demobtn:hover {
+  border-color: var(--accent);
+  box-shadow:
+    var(--shadow-2),
+    0 0 18px var(--accent-soft);
+  transform: translateY(-2px);
+}
+.demobtn:active {
+  transform: translateY(1px);
+}
+.demobtn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 4px;
+}
+.demoPlay {
+  flex-shrink: 0;
+  color: var(--accent);
+}
+@keyframes demoShine {
+  0% {
+    transform: translateX(-120%);
+  }
+  25%,
+  100% {
+    transform: translateX(120%);
+  }
+}
+
 .trust {
   display: flex;
   flex-wrap: wrap;
@@ -881,6 +931,15 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .demobtn {
+    transition: none;
+  }
+  .demobtn:hover {
+    transform: none;
+  }
+  .demobtn::after {
+    animation: none;
+  }
   .reveal,
   .hero > *,
   .rotateWord,

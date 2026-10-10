@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import Layout from '@theme/Layout';
 import useBaseUrl from '@docusaurus/useBaseUrl';
 import styles from './demo.module.css';
@@ -20,6 +20,33 @@ export default function Demo(): ReactNode {
   const [pairedDevice, setPairedDevice] = useState<string | null>(null);
   const [launchHintVisible, setLaunchHintVisible] = useState(false);
   const [now, setNow] = useState<Date | null>(null);
+  const [wallpaper, setWallpaper] = useState<CSSProperties>();
+
+  useEffect(() => {
+    const size = 160 + Math.random() * 80;
+    const tile = `<svg xmlns="http://www.w3.org/2000/svg" width="192" height="110.852" viewBox="0 0 192 110.852">
+      <defs><g id="hex" stroke="#1d283d" stroke-opacity=".3" stroke-width=".6">
+        <path d="M0 0L64 0 32 55.426Z" fill="white" fill-opacity=".1"/>
+        <path d="M0 0L32 55.426 -32 55.426Z" fill="white" fill-opacity=".04"/>
+        <path d="M0 0L-32 55.426 -64 0Z" fill="black" fill-opacity=".12"/>
+        <path d="M0 0L-64 0 -32 -55.426Z" fill="black" fill-opacity=".06"/>
+        <path d="M0 0L-32 -55.426 32 -55.426Z" fill="white" fill-opacity=".02"/>
+        <path d="M0 0L32 -55.426 64 0Z" fill="white" fill-opacity=".12"/>
+      </g></defs>
+      <use href="#hex" x="64" y="55.426"/>
+      <use href="#hex" x="-32" y="0"/>
+      <use href="#hex" x="-32" y="110.852"/>
+      <use href="#hex" x="160" y="0"/>
+      <use href="#hex" x="160" y="110.852"/>
+    </svg>`;
+    setWallpaper({
+      '--wallpaper-pattern': `url("data:image/svg+xml,${encodeURIComponent(tile)}")`,
+      '--wallpaper-size': `${size}px ${size * (110.852 / 192)}px`,
+      '--wallpaper-x': `${20 + Math.random() * 60}%`,
+      '--wallpaper-y': `${50 + Math.random() * 35}%`,
+      '--wallpaper-angle': `${Math.random() * 360}deg`,
+    } as CSSProperties);
+  }, []);
 
   useEffect(() => {
     setNow(new Date());
@@ -120,8 +147,12 @@ export default function Demo(): ReactNode {
                 dateTime={now?.toISOString()}
                 aria-label="Date and time"
               >
-                <span>{now?.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</span>
-                <span>{now?.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}</span>
+                <span>
+                  {now?.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+                </span>
+                <span>
+                  {now?.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}
+                </span>
               </time>
               {trayOpen && (
                 <div
@@ -148,7 +179,7 @@ export default function Demo(): ReactNode {
               )}
             </div>
           </div>
-          <div className={styles.desktop}>
+          <div className={styles.desktop} style={wallpaper}>
             {!windowOpen && (
               <div className={styles.launcher}>
                 <button
