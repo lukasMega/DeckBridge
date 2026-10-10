@@ -72,7 +72,18 @@ Then **Copy overrides as JSON** and paste the values into your model file: the r
 is the source of truth, runtime tuning is only the way to find the values. Without
 hardware access, ask the owner for **Copy for bug report** output instead.
 
-## 7. Check and open a PR
+## 7. Capture a replay fixture
+
+```bash
+mise run device-capture -- --model <id>
+```
+
+Writes an empty packet-fixture skeleton for the connected deck (`ts/test/fixtures/packets/<id>/`).
+It only enumerates: it never opens or writes to the device, and exits non-zero with no
+hardware. Steps are still added by hand from the model-specific probes (`d6-capture`,
+`akp05-capture`); `ts/test/packet-replay.test.ts` then replays them through the real driver.
+
+## 8. Check and open a PR
 
 ```bash
 mise run beforeCommit
@@ -88,6 +99,7 @@ Update `e2e/helpers/devices.ts` if the deck needs a browser-matrix row.
 [ ] Notes filled in, tested PIDs under variants
 [ ] devices-generate output committed
 [ ] Orientation and key map verified on hardware and baked into the model
+[ ] Packet fixture captured (device-capture) and replayed
 [ ] Elgato software connects and receives key presses
 [ ] mise run beforeCommit passes
 ```

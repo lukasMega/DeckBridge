@@ -64,50 +64,83 @@ export default function Home(): ReactNode {
         <div className={styles.inner}>
           {/* ---- hero ---- */}
           <section className={styles.hero}>
-            <div className={styles.mark}>
-              <BridgeMark />
+            <div className={styles.heroCopy}>
+              <div className={styles.mark}>
+                <BridgeMark />
+              </div>
+              <h1 className={styles.title}>
+                <span className={styles.titleLead}>
+                  Your{' '}
+                  <span className={styles.accent}>
+                    <RotatingWord words={BRANDS} />
+                  </span>
+                </span>{' '}
+                <span className={styles.titleLine}>stream deck,</span>{' '}
+                <span className={styles.accent}>over WiFi.</span>
+              </h1>
+              <p className={styles.subtitle}>
+                Control supported non-Elgato decks using Elgato software. DeckBridge connects them
+                over network. No Network Dock ($70+) required.
+              </p>
+              <div className={styles.cta}>
+                <Link className={styles.ctabtn} to="/getting-started">
+                  Get started
+                </Link>
+                <Link className={`${styles.ghostbtn} ${styles.demobtn}`} to="/demo">
+                  <svg
+                    className={styles.demoPlay}
+                    width="22"
+                    height="22"
+                    viewBox="0 0 24 24"
+                    aria-hidden="true"
+                  >
+                    <circle cx="12" cy="12" r="10" fill="currentColor" fillOpacity="0.12" />
+                    <path d="M10 7.5v9l7-4.5Z" fill="currentColor" />
+                  </svg>
+                  Try the live demo
+                </Link>
+                <a className={styles.textLink} href={GITHUB_URL} target="_blank" rel="noreferrer">
+                  GitHub ↗
+                </a>
+              </div>
+              <div className={styles.trust}>
+                <span>free</span>
+                <span>open source</span>
+                <span>single &lt; 5 MB binary</span>
+                <span>
+                  no <code>sudo</code>
+                </span>
+              </div>
             </div>
-            <h1 className={styles.title}>
-              Your{' '}
-              <span className={styles.accent}>
-                <RotatingWord words={BRANDS} />
-              </span>{' '}
-              stream deck,
-              <br /> <span className={styles.accent}>over WiFi.</span>
-            </h1>
-            <p className={styles.subtitle}>
-              Control supported non-Elgato decks using Elgato software. DeckBridge connects them
-              over network. No Network Dock ($70+) required.
-            </p>
-            <div className={styles.cta}>
-              <Link className={styles.ctabtn} to="/getting-started">
-                Get started
-              </Link>
-              <Link className={`${styles.ghostbtn} ${styles.demobtn}`} to="/demo">
-                <svg
-                  className={styles.demoPlay}
-                  width="22"
-                  height="22"
-                  viewBox="0 0 24 24"
-                  aria-hidden="true"
-                >
-                  <circle cx="12" cy="12" r="10" fill="currentColor" fillOpacity="0.12" />
-                  <path d="M10 7.5v9l7-4.5Z" fill="currentColor" />
-                </svg>
-                Try the live demo
-              </Link>
-              <a className={styles.ghostbtn} href={GITHUB_URL} target="_blank" rel="noreferrer">
-                GitHub ↗
-              </a>
-            </div>
-            <div className={styles.trust}>
-              <span>free</span>
-              <span>open source</span>
-              <span>single &lt; 5 MB binary</span>
-              <span>
-                no <code>sudo</code>
-              </span>
-            </div>
+            <figure className={styles.heroPreview}>
+              <button
+                type="button"
+                className={`${styles.shotFrame} ${styles.heroInterface}`}
+                onClick={() => setZoom(0)}
+                aria-label="Enlarge pairing interface"
+              >
+                <ThemedImage
+                  sources={{
+                    light: withBaseUrl(SHOTS[0].light),
+                    dark: withBaseUrl(SHOTS[0].dark),
+                  }}
+                  alt={SHOTS[0].alt}
+                  width={SHOTS[0].width}
+                  height={SHOTS[0].height}
+                />
+                <span className={styles.shotZoom} aria-hidden="true">
+                  ⤢
+                </span>
+              </button>
+              <img
+                className={styles.heroDevice}
+                src={withBaseUrl('/img/devices/mirabox-293.svg')}
+                alt="MiraBox 293V3 hardware"
+                width="494"
+                height="346"
+              />
+              <figcaption className={styles.heroCaption}>Real hardware. Guided pairing.</figcaption>
+            </figure>
           </section>
 
           {/* ---- quick start ---- */}
