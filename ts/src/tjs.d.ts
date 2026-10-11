@@ -40,6 +40,12 @@ declare module 'virtual:plugin-worker' {
   export default s;
 }
 
+// esbuild virtual module: the bundled extension worker (runs one extension's server.js)
+declare module 'virtual:extension-worker' {
+  const s: string;
+  export default s;
+}
+
 declare module 'tjs:ffi' {
   export const suffix: string;
 

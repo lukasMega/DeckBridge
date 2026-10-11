@@ -16,7 +16,7 @@ import {
 } from '../devices/registry.js';
 import { Dock } from './dock.js';
 import type { DockHooks } from './dock-types.js';
-import { statsHooks } from './session-stats-wiring.js';
+import { ExtensionEventWiring } from './extension-events-wiring.js';
 import { ProbePacer } from './driver-manager-pacing.js';
 import { DockScanner } from './dock-scanner.js';
 import {
@@ -61,6 +61,9 @@ export class DriverManager extends EventEmitter {
   /** Dock 0 — the probe/reconnect lifecycle below attaches its drivers. */
   private readonly primary: Dock;
 
+  /** Dock events for running extensions (extension-events-wiring.ts). */
+  private readonly extensionEvents: ExtensionEventWiring;
+
   /** Docks 1..N (multi-deck); deps are closures over this instance's state. */
   private readonly scanner: DockScanner;
 
@@ -77,6 +80,8 @@ export class DriverManager extends EventEmitter {
     this.discovery = deps.discovery ?? nativeHidDiscovery();
     this.pool = deps.pool ?? new WorkerPool();
     const { webui } = deps;
+    this.extensionEvents = new ExtensionEventWiring(webui.extensions, (i) => this.docks.get(i));
+    webui.extensions.setDeckSource(() => this.extensionEvents.currentDecks());
     this.primary = new Dock({
       index: 0,
       cora: deps.cora,
@@ -174,6 +179,7 @@ export class DriverManager extends EventEmitter {
   /** Status + WebUI mirror hooks every dock gets, tagged with its index. */
   private dockHooks(index: number): DockHooks {
     const { webui } = this.deps;
+    const extension = this.extensionEvents.hooks(index);
     return {
       changed: () => this.changed(),
       action: (message) => webui.notifyDeviceAction(index, message),
@@ -185,7 +191,11 @@ export class DriverManager extends EventEmitter {
       stripWrite: (...args) => webui.imageChannel.notifyDockStripWrite(index, ...args),
       elgatoAttached: () => this.deps.onElgatoAttached?.(index),
       pageObservation: (obs) => webui.pages.notifyObservation(index, obs),
-      ...statsHooks(webui.sessionStats, index, () => this.docks.get(index)),
+      ...extension,
+      imageSent: (keyIndex, cached) => {
+        webui.noteImageSent();
+        extension.imageSent?.(keyIndex, cached);
+      },
     };
   }
 
@@ -293,6 +303,7 @@ export class DriverManager extends EventEmitter {
     // same unit can stay invisible to enumeration for the rest of the process.
     this.discovery.requestReset();
     this.primary.detach();
+    this.extensionEvents.forget(0);
     this.deps.webui.notifyDriverStatus('real', false);
     this.applyDeviceModel(DEFAULT_MODEL);
     if (this.mode === 'real') this.scheduleReconnect();

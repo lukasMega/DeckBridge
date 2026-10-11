@@ -1,6 +1,7 @@
 // WebUI wire contract: the `web-contract` leaf — DTOs sent over `/api/*` or the
-// WS broadcast, nothing else. Zero imports, type-only edge, both tiers re-export
-// from here. See "Architecture is lint-enforced" in CLAUDE.md.
+// WS broadcast, nothing else. Imports only its sibling contract files (type-only),
+// both tiers re-export from here. See "Architecture is lint-enforced" in CLAUDE.md.
+import type { ExtensionsView } from './contract-extensions.js';
 
 /** 'elgato'/'bitfocus' are set only once a client-specific query is observed
  *  (cora/primary-server.ts / cora/child-server.ts), 'unknown' otherwise. */
@@ -421,6 +422,7 @@ export interface StateResponse extends StatusSnapshot {
    *  `elgatoAutoRestart`/`elgatoAutoRestartDelayS`) — read once per Settings-page
    *  mount, like `updateInfo`. */
   elgatoAutoRestart: ElgatoAutoRestartState;
+  extensions: ExtensionsView;
 }
 
 /** WS `image`: one key of the selected dock, base64. */
@@ -521,6 +523,7 @@ export interface WsEvents {
   pushChannels: { channels: PushChannelView[] };
   pages: { pages: PageSummary[] };
   pageState: PageStateMsg;
+  extensions: ExtensionsView;
 }
 
 /** Docs sections the WebUI links to; the id is the `/go/docs/:topic` path segment. */
@@ -534,6 +537,7 @@ export type DocsTopic =
   | 'multi-deck'
   | 'click-to-press'
   | 'push-api'
+  | 'extensions'
   | 'side-keys'
   | 'device-tuning'
   | 'image-fit'

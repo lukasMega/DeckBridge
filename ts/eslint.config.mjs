@@ -101,7 +101,7 @@ export default defineConfig([
     const c = eslintReact.configs['recommended-typescript'];
     return {
       ...c,
-      files: ['src/web/client/**/*.ts', 'src/web/client/**/*.tsx'],
+      files: ['src/web/client/**/*.ts', 'src/web/client/**/*.tsx', 'src/extensions/**/*.tsx'],
       settings: { ...c.settings, 'react-x': { importSource: 'preact', version: '18.3.1' } },
       rules: Object.fromEntries(
         Object.entries(c.rules).map(([k, v]) => {
@@ -113,7 +113,7 @@ export default defineConfig([
     };
   })(),
   {
-    files: ['src/web/client/**/*.ts', 'src/web/client/**/*.tsx'],
+    files: ['src/web/client/**/*.ts', 'src/web/client/**/*.tsx', 'src/extensions/**/*.tsx'],
     rules: {
       // Genuine bugs, not style — keep these blocking.
       '@eslint-react/rules-of-hooks': 'error',
@@ -165,6 +165,13 @@ export default defineConfig([
         { type: 'plugin-worker-host', mode: 'full', pattern: 'src/plugin/*-host.ts' },
         { type: 'plugin-worker-ipc', mode: 'full', pattern: 'src/plugin/*-protocol.ts' },
         { type: 'plugin-worker', mode: 'full', pattern: 'src/plugin/**' },
+        { type: 'extension-host', mode: 'full', pattern: 'src/extension/*-host.ts' },
+        { type: 'extension-ipc', mode: 'full', pattern: 'src/extension/*-protocol.ts' },
+        // The public extension API (types + EXTENSION_API_VERSION) that extensions build against.
+        { type: 'extension-api', mode: 'full', pattern: 'src/extension/api.ts' },
+        { type: 'extension-worker', mode: 'full', pattern: 'src/extension/**' },
+        // Extensions themselves (shipped as separate zips, loaded at runtime): see docs/extensions.md.
+        { type: 'extension', mode: 'full', pattern: 'src/extensions/**' },
         { type: 'transform', mode: 'full', pattern: 'src/transform/**' },
         { type: 'cora', mode: 'full', pattern: 'src/cora/**' },
         { type: 'infra', mode: 'full', pattern: 'src/infra/**' },
@@ -240,13 +247,28 @@ export default defineConfig([
             {
               from: {
                 element: {
-                  type: ['web-client', 'web-server', 'shared', 'plugin-worker-host'],
+                  type: [
+                    'web-client',
+                    'web-server',
+                    'web-contract',
+                    'shared',
+                    'plugin-worker-host',
+                    'extension-api',
+                  ],
                 },
               },
               allow: { to: { element: { type: 'web-contract' } }, dependency: { kind: 'type' } },
               message:
-                'web/contract.ts is the type-only WebUI wire contract; only web-client, ' +
-                'web-server, shared (types.ts) and plugin-host.ts may import it.',
+                'web/contract*.ts is the type-only WebUI wire contract; only web-client, ' +
+                'web-server, its sibling contract files, shared (types.ts), plugin-host.ts and ' +
+                'the extension API (DockStatus/KeyState) may import it.',
+            },
+            // The second G1 exception: the browser hands extensions the UI API typed by
+            // extension/api.ts. Type-only, so no worker/host code reaches the browser.
+            {
+              from: { element: { type: 'web-client' } },
+              allow: { to: { element: { type: 'extension-api' } }, dependency: { kind: 'type' } },
+              message: 'web-client may import extension/api.ts for types only (the UI API it hands out).',
             },
             // `devices/driver.ts` defines the cross-tier DeviceDriver/DeviceModel contract types;
             // any non-browser tier may depend on it for *types only*, never for runtime device code.
@@ -383,6 +405,32 @@ export default defineConfig([
               allow: { to: { element: { type: 'infra' } } },
               message:
                 'plugin-host may import infra ONLY for the plugins-dir location (settings-store.pluginsDir) — never device I/O.',
+            },
+
+            // ── extensions (one worker per extension, docs/extensions.md) ──
+            {
+              from: { element: { type: ['extension-worker', 'extension-host', 'extension-ipc'] } },
+              allow: { to: { element: { type: ['extension-ipc', 'extension-api'] } } },
+            },
+            {
+              from: { element: { type: ['web-server', 'app'] } },
+              allow: { to: { element: { type: 'extension-api' } } },
+              message: 'the main thread builds extension events and reads EXTENSION_API_VERSION.',
+            },
+            {
+              from: { element: { type: 'web-server' } },
+              allow: { to: { element: { type: 'extension-host' } } },
+              message: 'extensions-controller.ts owns one ExtensionHost per enabled extension.',
+            },
+            // An extension builds against the public API only, never DeckBridge internals:
+            // it ships separately and must keep working across DeckBridge releases.
+            {
+              from: { element: { type: 'extension' } },
+              allow: { to: { element: { type: 'extension' } } },
+            },
+            {
+              from: { element: { type: 'extension' } },
+              allow: { to: { element: { type: 'extension-api' } }, dependency: { kind: 'type' } },
             },
 
             // ── tier B (USB worker) ──

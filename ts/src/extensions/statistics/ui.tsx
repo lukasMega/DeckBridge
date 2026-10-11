@@ -1,16 +1,18 @@
-import { useEffect, useRef, useState } from 'preact/hooks';
-import type { DeckCounters, DeckStats, StatsSnapshot } from '../../contract-stats.js';
-import { ChipRadioGroup } from '../components/ChipRadioGroup.js';
-import { IdentityRow } from '../components/IdentityRow.js';
-import { StatusChip } from '../components/StatusChip.js';
-import { useFetched } from '../lib/ui-api.js';
-import { useDismiss } from '../lib/ui-hooks.js';
-import { useStore } from '../lib/store.js';
+// Statistics extension, browser side: polls the snapshot route and renders it with the
+// WebUI's own components (api.kit), so the page looks like the rest of the app.
+import { useEffect, useState } from 'preact/hooks';
+import type { ExtensionUiApi } from '../../extension/api.js';
+import { bindHost } from '../sdk/preact-shim.js';
+import type { DeckCounters, DeckStats, StatsSnapshot } from './contract.js';
 
 const POLL_MS = 5000;
 const TOP_KEYS = 5;
 const CHART_BAR = 10;
 const CHART_HEIGHT = 40;
+/** Started this close to DeckBridge = counted from DeckBridge's start. */
+const WITH_APP_MS = 10_000;
+
+type Api = Readonly<{ api: ExtensionUiApi }>;
 
 function formatDuration(ms: number): string {
   const s = Math.floor(ms / 1000);
@@ -23,30 +25,24 @@ function formatDuration(ms: number): string {
   return `${s}s`;
 }
 
-function StatRow({
-  label,
-  value,
-}: Readonly<{ label: string; value: string | number }>): preact.JSX.Element {
-  const text = typeof value === 'number' ? value.toLocaleString() : value;
-  return (
-    <IdentityRow label={label}>
-      <code class="identity-value">{text}</code>
-    </IdentityRow>
-  );
-}
+const count = (n: number): string => n.toLocaleString();
 
-function minutesLabel(index: number, count: number): string {
-  const ago = count - 1 - index;
+function minutesLabel(index: number, total: number): string {
+  const ago = total - 1 - index;
   return ago === 0 ? 'Now (partial minute)' : `${ago} min ago`;
 }
 
-function ActivityChart({ activity }: Readonly<{ activity: number[] }>): preact.JSX.Element {
+function ActivityChart({
+  api,
+  activity,
+}: Api & Readonly<{ activity: number[] }>): preact.JSX.Element {
+  const { VisuallyHidden } = api.kit;
   const max = Math.max(1, ...activity);
   const total = activity.reduce((sum, n) => sum + n, 0);
   return (
     <>
       <svg
-        class="stats-chart"
+        style={{ display: 'block', width: '100%', height: '64px', color: 'var(--accent)' }}
         role="img"
         aria-label={`Key presses per minute over the last ${activity.length} minutes: ${total} in total`}
         viewBox={`0 0 ${activity.length * CHART_BAR} ${CHART_HEIGHT}`}
@@ -69,7 +65,7 @@ function ActivityChart({ activity }: Readonly<{ activity: number[] }>): preact.J
         })}
       </svg>
       {/* Clip a normal box: Firefox can paint a table caption outside the table's clip. */}
-      <div class="visually-hidden">
+      <VisuallyHidden>
         <table>
           <caption>Key presses per minute</caption>
           <thead>
@@ -88,7 +84,7 @@ function ActivityChart({ activity }: Readonly<{ activity: number[] }>): preact.J
             ))}
           </tbody>
         </table>
-      </div>
+      </VisuallyHidden>
     </>
   );
 }
@@ -111,10 +107,13 @@ function topKeys(
 }
 
 function Report({
+  api,
   data,
   error,
-}: Readonly<{ data: StatsSnapshot; error: string | null }>): preact.JSX.Element {
-  const docks = useStore((s) => s.status.docks);
+}: Api & Readonly<{ data: StatsSnapshot; error: string | null }>): preact.JSX.Element {
+  const { Lead, ErrorText, Field, ChipRadioGroup, SectionLabel, List, Row, EmptyRow, StatusChip } =
+    api.kit;
+  const docks = api.useDocks();
   const [picked, setPicked] = useState('');
   const deck = data.decks.find((d) => d.deviceKey === picked);
   const scope = deck ? [deck] : data.decks;
@@ -125,22 +124,26 @@ function Report({
       ? `${Math.round((c.cacheHits / c.imagesProcessed) * 100)}%`
       : '—';
   const keys = topKeys(scope, !deck && data.decks.length > 1);
-  const simulated = __MOCK_BUILD__ && data.decks.some((d) => d.source === 'mock');
+  const since =
+    data.startedAt - data.appStartedAt < WITH_APP_MS
+      ? 'Since DeckBridge started'
+      : 'Since Statistics was turned on';
 
   return (
     <>
-      <p class="help-lead">
-        Since DeckBridge started · {formatDuration(data.uptimeMs)}{' '}
-        {simulated && <StatusChip variant="dim">Simulated</StatusChip>}
-      </p>
+      <Lead>
+        {since} · {formatDuration(data.uptimeMs)}{' '}
+        {data.decks.some((d) => d.source === 'mock') && (
+          <StatusChip variant="dim">Simulated</StatusChip>
+        )}
+      </Lead>
       {error !== null && (
-        <p class="settings-error">
+        <ErrorText>
           Could not refresh. Showing values from {new Date(data.at).toLocaleTimeString()}.
-        </p>
+        </ErrorText>
       )}
       {data.decks.length > 1 && (
-        <div class="tuning-field">
-          <span>Deck</span>
+        <Field label="Deck">
           <ChipRadioGroup
             name="statsDeck"
             label="Deck"
@@ -151,78 +154,85 @@ function Report({
             ]}
             onChange={setPicked}
           />
-        </div>
+        </Field>
       )}
 
-      <p class="help-section-label">Usage</p>
-      <ul class="identity-list panel-inset">
-        <StatRow label="Key presses" value={c.keyPresses} />
+      <SectionLabel>Usage</SectionLabel>
+      <List>
+        <Row label="Key presses" value={count(c.keyPresses)} />
         {scope.some((d) => d.hasEncoders) && (
-          <StatRow
+          <Row
             label="Dial presses / detents"
-            value={`${c.dialPresses.toLocaleString()} / ${c.dialDetents.toLocaleString()}`}
+            value={`${count(c.dialPresses)} / ${count(c.dialDetents)}`}
           />
         )}
-        <StatRow
+        <Row
           label="Decks connected / paired"
           value={`${docks.length} / ${docks.filter((d) => d.elgatoConnected).length}`}
         />
-        <StatRow label="Reconnects" value={c.reconnects} />
-      </ul>
+        <Row label="Reconnects" value={count(c.reconnects)} />
+      </List>
 
-      <p class="help-section-label">Images</p>
-      <ul class="identity-list panel-inset">
-        <StatRow label="Key images processed" value={measured ? c.imagesProcessed : '—'} />
-        <StatRow label="Cache hit rate" value={hitRate} />
-      </ul>
+      <SectionLabel>Images</SectionLabel>
+      <List>
+        <Row label="Key images processed" value={measured ? count(c.imagesProcessed) : '—'} />
+        <Row label="Cache hit rate" value={hitRate} />
+      </List>
 
-      <p class="help-section-label">Key activity · presses per minute, last 15 min</p>
-      <ActivityChart activity={c.activity} />
+      <SectionLabel>Key activity · presses per minute, last 15 min</SectionLabel>
+      <ActivityChart api={api} activity={c.activity} />
 
-      <p class="help-section-label">Top keys</p>
-      <ul class="identity-list panel-inset">
+      <SectionLabel>Top keys</SectionLabel>
+      <List>
         {keys.map((k) => (
-          <StatRow key={k.id} label={k.label} value={k.count} />
+          <Row key={k.id} label={k.label} value={count(k.count)} />
         ))}
-        {keys.length === 0 && <li class="identity-label">No key presses yet.</li>}
-      </ul>
+        {keys.length === 0 && <EmptyRow>No key presses yet.</EmptyRow>}
+      </List>
     </>
   );
 }
 
-export function StatisticsPage({ onBack }: Readonly<{ onBack: () => void }>): preact.JSX.Element {
-  const stats = useFetched<StatsSnapshot>('/api/stats');
-  const headingRef = useRef<HTMLHeadingElement>(null);
-  // `reload` is a fresh closure every render; the timer must not restart on each one.
-  const reloadRef = useRef(stats.reload);
-  reloadRef.current = stats.reload;
+function StatisticsView({ api }: Api): preact.JSX.Element {
+  const [data, setData] = useState<StatsSnapshot | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
-  useDismiss(onBack);
-  useEffect(function focusHeading() {
-    headingRef.current?.focus();
-  }, []);
-  useEffect(function pollStats() {
-    function tick(): void {
-      if (!document.hidden) void reloadRef.current();
-    }
-    const timer = setInterval(tick, POLL_MS);
-    return function stopPolling() {
-      clearInterval(timer);
-    };
-  }, []);
-
-  return (
-    <div class="help settings-page">
-      <h1 ref={headingRef} tabIndex={-1}>
-        Statistics
-      </h1>
-      {stats.data ? (
-        <Report data={stats.data} error={stats.error} />
-      ) : (
-        <p class={stats.error === null ? 'help-lead' : 'settings-error'}>
-          {stats.error === null ? 'Loading…' : 'Could not load statistics.'}
-        </p>
-      )}
-    </div>
+  useEffect(
+    function pollStats() {
+      const ctrl = new AbortController();
+      function load(): void {
+        api
+          .getJson<StatsSnapshot>('snapshot', ctrl.signal)
+          .then((snap) => {
+            if (ctrl.signal.aborted) return undefined;
+            setData(snap);
+            setError(null);
+            return undefined;
+          })
+          .catch((e: unknown) => {
+            if (!ctrl.signal.aborted) setError(e instanceof Error ? e.message : 'Request failed');
+          });
+      }
+      function tick(): void {
+        if (!document.hidden) load();
+      }
+      load();
+      const timer = setInterval(tick, POLL_MS);
+      return function stopPolling() {
+        ctrl.abort();
+        clearInterval(timer);
+      };
+    },
+    [api],
   );
+
+  if (data) return <Report api={api} data={data} error={error} />;
+  const { Lead, ErrorText } = api.kit;
+  return error === null ? <Lead>Loading…</Lead> : <ErrorText>Could not load statistics.</ErrorText>;
+}
+
+export function mount(el: HTMLElement, api: ExtensionUiApi): () => void {
+  bindHost(api);
+  api.preact.render(<StatisticsView api={api} />, el);
+  return () => api.preact.render(null, el);
 }

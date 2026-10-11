@@ -8,10 +8,10 @@
 import { useEffect, useState } from 'preact/hooks';
 import { fire } from '../lib/ui-api.js';
 import { useStore } from '../lib/store.js';
-import type { Status } from '../ui-types.js';
+import type { ExtensionInfo, Status } from '../ui-types.js';
 import { deriveState, isMultiDockView, updateBadgeVersion } from '../ui-helpers.js';
 import { AboutPopover, SettingsPage, HelpScreen } from './overlays.js';
-import { StatisticsPage } from './statistics-page.js';
+import { ExtensionPage } from './extension-page.js';
 import { ICON, Icon } from '../components/Icon.js';
 import { AppFooter, Topbar } from './app-shell.js';
 import { useSurveyFlow } from './survey-flow.js';
@@ -34,26 +34,26 @@ function StaleBanner(): preact.JSX.Element | null {
   );
 }
 
-// Statistics repaints every poll; announcing it would be noise.
-const STAGE_LIVE = { home: 'polite', settings: 'polite', statistics: 'off' } as const;
+/** 'ext:<id>' = an extension's page. */
+type Page = 'home' | 'settings' | `ext:${string}`;
 
 function SubPage({
   page,
+  ext,
   onBack,
   onFeedback,
 }: Readonly<{
-  page: 'settings' | 'statistics';
+  page: Page;
+  ext: ExtensionInfo | undefined;
   onBack: () => void;
   onFeedback: () => void;
 }>): preact.JSX.Element {
-  return page === 'settings' ? (
-    <SettingsPage onBack={onBack} onFeedback={onFeedback} />
+  return ext ? (
+    <ExtensionPage key={page} ext={ext} onBack={onBack} />
   ) : (
-    <StatisticsPage onBack={onBack} />
+    <SettingsPage onBack={onBack} onFeedback={onFeedback} />
   );
 }
-
-type Page = 'home' | 'settings' | 'statistics';
 
 function isReady(status: Status): boolean {
   return isMultiDockView(status.docks)
@@ -63,6 +63,7 @@ function isReady(status: Status): boolean {
 
 function StageContent({
   page,
+  ext,
   activeHelp,
   onHelp,
   onBack,
@@ -70,6 +71,7 @@ function StageContent({
   onFeedback,
 }: Readonly<{
   page: Page;
+  ext: ExtensionInfo | undefined;
   activeHelp: string | null;
   onHelp: (id: string) => void;
   onBack: () => void;
@@ -80,7 +82,7 @@ function StageContent({
   const docks = status.docks;
   const deviceState = deriveState(status);
   if (!__DEMO__ && page !== 'home')
-    return <SubPage page={page} onBack={onClosePage} onFeedback={onFeedback} />;
+    return <SubPage page={page} ext={ext} onBack={onClosePage} onFeedback={onFeedback} />;
   if (activeHelp !== null) return <HelpScreen topicId={activeHelp} onBack={onBack} />;
   if (isMultiDockView(docks))
     return isReady(status) ? (
@@ -100,7 +102,12 @@ export function SimpleApp(): preact.JSX.Element {
   const stale = useStore((s) => s.connection === 'stale');
   const [activeHelp, setActiveHelp] = useState<string | null>(null);
   const [aboutOpen, setAboutOpen] = useState(false);
-  const [page, setPage] = useState<Page>('home');
+  const extensions = useStore((s) => s.extensions.extensions);
+  const [picked, setPicked] = useState<Page>('home');
+  const pages = extensions.filter((e) => e.state === 'running' && e.page);
+  const ext = pages.find((e) => picked === `ext:${e.id}`);
+  // An extension that stops while its page is open falls back to home.
+  const page: Page = picked.startsWith('ext:') && !ext ? 'home' : picked;
   const closeAbout = (): void => setAboutOpen(false);
   const flow = useSurveyFlow(
     !__DEMO__ && isReady(status) && page === 'home' && activeHelp === null,
@@ -119,7 +126,7 @@ export function SimpleApp(): preact.JSX.Element {
   }, []);
 
   const openAbout = (): void => setAboutOpen(true);
-  const closePage = (): void => setPage('home');
+  const closePage = (): void => setPicked('home');
   const handleBack = (): void => setActiveHelp(null);
   const goHome = (): void => {
     closePage();
@@ -137,15 +144,18 @@ export function SimpleApp(): preact.JSX.Element {
           onBack={headerBack}
           onHome={goHome}
           onAbout={openAbout}
-          onSettings={() => setPage('settings')}
-          onStatistics={() => setPage('statistics')}
+          onSettings={() => setPicked('settings')}
+          pages={pages}
+          onPage={(id) => setPicked(`ext:${id}`)}
         />
         <StaleBanner />
         {flow.banner}
         {/* inert: the shown status is cached, so its controls must not act on it. */}
-        <section class="stage" id="stage" aria-live={STAGE_LIVE[page]} inert={stale}>
+        {/* Extension pages may repaint on every poll; announcing that would be noise. */}
+        <section class="stage" id="stage" aria-live={ext ? 'off' : 'polite'} inert={stale}>
           <StageContent
             page={page}
+            ext={ext}
             activeHelp={activeHelp}
             onHelp={setActiveHelp}
             onBack={handleBack}

@@ -157,6 +157,7 @@ const WORKERS = {
   'hid-worker': 'src/worker/hid-worker.ts',
   'hid-scan-worker': 'src/worker/hid-scan-worker.ts',
   'plugin-worker': 'src/plugin/plugin-worker.ts',
+  'extension-worker': 'src/extension/extension-worker.ts',
 };
 const CSS_FILES = ['ui-base.css', 'ui-simple.css', 'deck/deck.css'];
 

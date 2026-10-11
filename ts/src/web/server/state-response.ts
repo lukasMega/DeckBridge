@@ -7,6 +7,7 @@ import type {
   DeviceModelInfo,
   DriverMode,
   ElgatoAutoRestartState,
+  ExtensionsView,
   KeyEventEntry,
   LogEntry,
   MockDeviceConfig,
@@ -49,6 +50,7 @@ export interface StateResponseInputs {
   keyPressEnabled: boolean;
   updateInfo: UpdateInfo;
   elgatoAutoRestart: ElgatoAutoRestartState;
+  extensions: ExtensionsView;
 }
 
 export function buildStateResponse(input: StateResponseInputs): StateResponse {

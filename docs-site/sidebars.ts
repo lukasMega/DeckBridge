@@ -33,6 +33,7 @@ const sidebars: SidebarsConfig = {
     'new-protocol',
     'side-keys',
     'plugin-widgets',
+    'extensions',
     'push-api',
     'hidapi-ffi',
     'image-flow',

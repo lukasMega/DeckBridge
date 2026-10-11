@@ -54,7 +54,7 @@ test.describe('the controls a user touches first', () => {
 
   test('help topic links the docs, keeping the external guide', async ({ page, app }) => {
     await gotoApp(page, `${app.baseURL}/`);
-    await click(page.getByRole('button', { name: 'No', exact: true }));
+    await click(page.getByRole('button', { name: /^No, set up pairing/ }));
     await click(page.locator('button[data-help="network-device"]'));
     await expect(page.locator('.help a[href="/go/docs/pairing"]')).toHaveCount(1);
     await expect(page.locator('.help a[href^="https://www.elgato.com/"]')).toHaveCount(1);
@@ -75,7 +75,7 @@ test.describe('the controls a user touches first', () => {
     // data-help is the closest thing to a test id in ts/src (ids live in ui-help.ts).
     // Choose No to open manual pairing; the plug-in chip belongs
     // to the "no device" stage, which mock mode never reaches.
-    await click(page.getByRole('button', { name: 'No', exact: true }));
+    await click(page.getByRole('button', { name: /^No, set up pairing/ }));
     await click(page.locator('button[data-help="network-device"]'));
     // The <h1> is a sibling of .help-stage (which holds only the topic SVG), not a child.
     await expect(page.locator('.help h1')).toHaveText('Add it as a network device');

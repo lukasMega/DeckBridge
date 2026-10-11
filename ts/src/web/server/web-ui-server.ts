@@ -43,7 +43,7 @@ import { VirtualDeckController } from './virtual-deck/virtual-deck-controller.js
 import { handlePushApi, isPushApiPath } from './push-routes.js';
 import { ElgatoAppController } from './elgato-app-controller.js';
 import { StandbyController } from './standby-controller.js';
-import { SessionStats } from './session-stats.js';
+import { ExtensionsController } from './extensions-controller.js';
 
 export { isAllowedWebRequest, isValidMacAddress, pickFallbackPort } from './web-request-guard.js';
 
@@ -75,19 +75,20 @@ export class WebUIServer extends EventEmitter implements WebUIController, WebUIC
   readonly standby: StandbyController;
   readonly push: PushController;
   readonly virtualDeck: VirtualDeckController;
+  readonly extensions: ExtensionsController;
   private readonly controllers: WebUIControllers;
   readonly imageChannel = new ImageChannel(this.bus, () => this.selectedDock);
   get selectedDock(): number {
     return this.dockRegistry.selectedDock;
   }
   private readonly status: StatusPublisher;
-  /** Session counters behind GET /api/stats; docks feed it directly (main/session-stats-wiring.ts). */
-  readonly sessionStats = new SessionStats();
+  private readonly startTime = Date.now();
+  private imagesSent = 0;
   uptimeMs(): number {
-    return Date.now() - this.sessionStats.startedAt;
+    return Date.now() - this.startTime;
   }
   private statsMessage(): Stats {
-    return { uptimeMs: this.uptimeMs(), imagesSent: this.sessionStats.imagesTotal() };
+    return { uptimeMs: this.uptimeMs(), imagesSent: this.imagesSent };
   }
   private opened = false;
   /** True once any browser page load or WebSocket reached this server (survey notification gate). */
@@ -177,6 +178,7 @@ export class WebUIServer extends EventEmitter implements WebUIController, WebUIC
     this.standby = new StandbyController(host);
     this.push = new PushController(host, () => this.dockRegistry.list());
     this.virtualDeck = new VirtualDeckController(host, this.push);
+    this.extensions = new ExtensionsController(host, { appStartedAt: this.startTime });
     this.controllers = {
       settings: this.settings,
       devicePrefs: this.devicePrefs,
@@ -192,6 +194,7 @@ export class WebUIServer extends EventEmitter implements WebUIController, WebUIC
       standby: this.standby,
       push: this.push,
       virtualDeck: this.virtualDeck,
+      extensions: this.extensions,
     };
     if (__MOCK_BUILD__) {
       this.applyMockConfig = (parsed) => {
@@ -349,6 +352,11 @@ export class WebUIServer extends EventEmitter implements WebUIController, WebUIC
     this.status.setAutoRestart(pending);
   }
 
+  /** A dock wrote a key image (the advanced view's counter). */
+  noteImageSent(): void {
+    this.imagesSent++;
+  }
+
   notifyDeviceModel(model: Parameters<StatusPublisher['setDeviceModel']>[0]): void {
     this.status.setDeviceModel(model);
   }
@@ -416,6 +424,7 @@ export class WebUIServer extends EventEmitter implements WebUIController, WebUIC
       keyPressEnabled: this.settings.webuiKeyPress,
       updateInfo: this.updates.info(),
       elgatoAutoRestart: this.elgatoApp.state(),
+      extensions: this.extensions.view(),
     });
   }
 }

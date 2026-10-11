@@ -356,7 +356,7 @@ const phases = [
       },
       'help-network-device': async (page, shot) => {
         await open(page);
-        await page.getByRole('button', { name: 'No', exact: true }).click();
+        await page.getByRole('button', { name: /^No, set up pairing/ }).click();
         await page.locator('button[data-help="network-device"]').click();
         await page.locator('.help h1').waitFor();
         await shot();

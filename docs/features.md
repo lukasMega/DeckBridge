@@ -100,9 +100,11 @@ a regular **Network device** at `localhost`; the deck behaves like Elgato hardwa
 - **Per-device image pipeline** — resizes, rotates, and (for the K1 Pro) re-encodes every
   button image to the device's native format via a Rust native library, with a cache
   to skip repeat work.
-- **Session statistics** — the web UI's Statistics page shows uptime, key and dial presses,
-  processed key images, cache hit rate, reconnects, and a 15-minute activity chart, per deck
-  or for all decks; it is session-only and never leaves your machine.
+- **Extensions** — optional features you download separately and switch on in Settings,
+  so the app stays small for everyone else; see [Extensions](./extensions.md). The
+  Statistics extension shows uptime, key and dial presses, processed key images, cache hit
+  rate, reconnects, and a 15-minute activity chart, per deck or for all decks; it is
+  session-only and never leaves your machine.
 - **Non-blocking by design** — USB HID and the image transforms run on a
   separate worker thread, so the network ACK loop and web UI never stall.
 - **Side-key widgets** — decks with display-only keys outside the grid (e.g. the 293S
@@ -347,7 +349,10 @@ only case that needs a system libhidapi installed.
   Old `native-<hash>` folders from previous versions are cleaned up automatically.
 - **Settings** — `settings.json` in the cache root: per-device brightness/identity,
   side-key widgets, log level, device tuning (`modelOverrides`), the browser-deck and
-  click-to-press opt-ins, and push-API / browser-deck tokens (hashed; never exported).
+  click-to-press opt-ins, the extensions you switched on, and push-API / browser-deck
+  tokens (hashed; never exported).
+- **Extensions** — only what you put in `<cache-root>/extensions/` yourself; DeckBridge
+  reads it and never writes there. See [Extensions](./extensions.md).
 - **Log file** — `<cache-root>/logs/deckbridge.log`, rotated at 2 MB with three files
   kept. See [Troubleshooting](./troubleshooting.md#where-the-logs-live).
 - **Diagnostics reports** — `<cache-root>/diagnostics/`, only when you ask for one.
@@ -399,6 +404,7 @@ ports and the Web UI. The Web UI binds `127.0.0.1` unless you pass `--bind`.
 |---|---|
 | `DECKBRIDGE_BIND` | Bind address for the CORA servers and the browser deck (default `0.0.0.0`) |
 | `DECKBRIDGE_DECK_PORT` | Browser deck page port (default `44660`, no fallback) |
+| `DECKBRIDGE_EXTENSIONS_DIR` | Folder to load extensions from (default `<cache-root>/extensions`) |
 | `HIDAPI_LIB` | Path to a specific libhidapi |
 | `DECKBRIDGE_NATIVE_LIB` | Path to the deckbridge-native cdylib |
 | `DECKBRIDGE_TRAY_BIN` | Path to the tray helper binary |

@@ -49,6 +49,7 @@ const STATE = {
   ...EMPTY_STATUS,
   driverConnected: true,
   stats: { uptimeMs: 0, imagesSent: 0 },
+  extensions: { dir: '', extensions: [] },
   brightness: 50,
   brightnessOverride: true,
   deviceModels: [],
@@ -438,7 +439,19 @@ async function runPairingChoices(root: HTMLElement, check: Check): Promise<void>
       patch({ status: { ...EMPTY_STATUS, driverConnected: true, localIp: '127.0.0.1' } });
       render(<StageDeviceNoElgato onHelp={() => {}} />, root);
     });
-    check(root.textContent.includes('Already paired?'), 'Pairing: starts with Already paired?');
+    check(
+      root.textContent.includes('Already paired with your control app?'),
+      'Pairing: question names the control app',
+    );
+    const choices = root.querySelectorAll<HTMLButtonElement>('.pairing-answers button');
+    check(
+      choices[0]!.textContent === 'Yes, already pairedOpen or restart Elgato app.',
+      'Pairing: Yes explains its next step',
+    );
+    check(
+      choices[1]!.textContent === 'No, set up pairingShow pairing steps and address.',
+      'Pairing: No explains its next step',
+    );
     check(requests.length === 0, 'Pairing: choosing Yes or No never launches the app');
     check(
       root.querySelector('.manual-add, .primary') === null,

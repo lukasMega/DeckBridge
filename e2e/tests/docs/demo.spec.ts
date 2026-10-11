@@ -177,7 +177,7 @@ test.describe('live demo', () => {
       await controls.getByRole('button', { name: 'Plug in', exact: true }).click();
       await expect(tray.locator('img')).toHaveAttribute('src', nativeIcon('usb-only'));
       await expect(pairedModal).not.toBeVisible();
-      await demo.getByRole('button', { name: 'Yes', exact: true }).click();
+      await demo.getByRole('button', { name: /^Yes, already paired/ }).click();
       await demo.getByRole('button', { name: 'Open Elgato app', exact: true }).click();
       await expect(tray.locator('img')).toHaveAttribute('src', nativeIcon('full'));
       await expect(pairedModal).toContainText('This demo cannot connect to the Elgato app.');
@@ -197,7 +197,7 @@ test.describe('live demo', () => {
       await expect(pairedModal).not.toBeVisible();
       await controls.getByRole('combobox', { name: 'Device model' }).selectOption('mini');
       await controls.getByRole('button', { name: 'Plug in', exact: true }).click();
-      await demo.getByRole('button', { name: 'Yes', exact: true }).click();
+      await demo.getByRole('button', { name: /^Yes, already paired/ }).click();
       await demo.getByRole('button', { name: 'Open Elgato app', exact: true }).click();
       await expect(pairedModal).toContainText(
         'Run the native DeckBridge app on your PC to control your Stream Deck Mini buttons with the Elgato app.',
@@ -224,7 +224,7 @@ test.describe('live demo', () => {
 
     await click(page.getByRole('button', { name: 'Plug in', exact: true }));
     await expect(page.locator('h1.stage-title')).toHaveText('Connect your control app');
-    await click(page.getByRole('button', { name: 'Yes', exact: true }));
+    await click(page.getByRole('button', { name: /^Yes, already paired/ }));
     await click(page.getByRole('button', { name: 'Open Elgato app', exact: true }));
     await expect(page.locator('h1.stage-title')).toHaveText('Connected to the Elgato app', {
       timeout: 3000,
@@ -250,7 +250,7 @@ test.describe('live demo', () => {
       for (const model of ['mk2', 'mini', 'mirabox-k1pro', 'ajazz-akp05e']) {
         await picker.selectOption(model);
         await page.getByRole('button', { name: 'Plug in', exact: true }).click();
-        await page.getByRole('button', { name: 'Yes', exact: true }).click();
+        await page.getByRole('button', { name: /^Yes, already paired/ }).click();
         await page.getByRole('button', { name: 'Open Elgato app', exact: true }).click();
         const grid = page.locator('#stage .key-grid');
         await expect(grid).toHaveAttribute('data-model', model);

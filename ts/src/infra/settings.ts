@@ -7,8 +7,6 @@ import {
   getOrCreateDeviceIdentity as getOrCreateDeviceIdentityPure,
   isStableDeviceKey,
 } from './device-identity.js';
-import { isModelOverridesRecord, validateModelOverride } from '../devices/model-overrides.js';
-import { findModelById } from '../devices/registry.js';
 import type { DeviceModelOverride } from '../devices/driver.js';
 import { log } from '../shared/logger.js';
 import {
@@ -29,6 +27,11 @@ import {
   DEFAULT_BROWSER_DECK_PROFILE,
   isBrowserDeckProfile,
 } from '../devices/virtual/browser-deck-profiles.js';
+import {
+  sanitizeExtensionIds,
+  sanitizeModelOverrides,
+  sanitizeVirtualDeck,
+} from './settings-sanitize.js';
 import { ACCESS_TOKENS_MAX, isPushTokenRecord, type PushTokenRecord } from './push-tokens.js';
 import { DockPrefs, defaultRuntimePrefs } from './dock-prefs.js';
 import type { DockPrefsStore } from './dock-prefs.js';
@@ -137,51 +140,10 @@ function isDeviceIdentitySettings(d: unknown): d is DeviceIdentitySettings {
   );
 }
 
-/** Validate a persisted/imported `modelOverrides` map, dropping (with a warn)
- *  every entry that names an unknown model or fails validateModelOverride. Runs
- *  on BOTH disk load and raw-JSON import, same as isDeviceIdentitySettings — an
- *  invalid override must never poison runtime state, and a bad keyMap can make a
- *  device look dead. */
-export function sanitizeModelOverrides(raw: unknown): Record<string, DeviceModelOverride> {
-  if (raw === undefined) return {};
-  if (!isModelOverridesRecord(raw)) {
-    log('warn', 'settings', 'modelOverrides: not an object map — ignoring');
-    return {};
-  }
-  const out: Record<string, DeviceModelOverride> = {};
-  for (const [modelId, override] of Object.entries(raw)) {
-    const model = findModelById(modelId);
-    if (!model) {
-      log('warn', 'settings', `modelOverrides['${modelId}']: unknown model id — dropped`);
-      continue;
-    }
-    const result = validateModelOverride(override, model);
-    if (!result.ok) {
-      log(
-        'warn',
-        'settings',
-        `modelOverrides['${modelId}']: dropped — ${result.errors.join('; ')}`,
-      );
-      continue;
-    }
-    out[modelId] = result.value;
-  }
-  return out;
-}
-
 /** settings.json in memory: process-wide prefs and the per-physical-device
  *  entries (identity + brightness/override/extraKeys/…), keyed by
  *  device-identity.ts's deviceKeyFor(). Loaded once by app.ts before anything
  *  else reads it; this class is the sole settings.json writer. */
-/** A saved `virtualDeck` section, or undefined when absent/malformed; an unknown profile falls back. */
-function sanitizeVirtualDeck(
-  v: Settings['virtualDeck'],
-): { enabled: boolean; profile: string } | undefined {
-  if (!v || typeof v.enabled !== 'boolean') return undefined;
-  const profile = isBrowserDeckProfile(v.profile) ? v.profile : DEFAULT_BROWSER_DECK_PROFILE;
-  return { enabled: v.enabled, profile };
-}
-
 export class PersistedSettings implements DockPrefsStore {
   selectedDock = 0;
   /** undefined = not persisted; the level then comes from the CLI flag / env /
@@ -203,6 +165,8 @@ export class PersistedSettings implements DockPrefsStore {
    *  undefined = enabled / default delay. */
   elgatoAutoRestart: boolean | undefined = undefined;
   elgatoAutoRestartDelayS: number | undefined = undefined;
+  /** Extension ids the user turned on; machine-local, a settings import never sets it. */
+  enabledExtensions: string[] = [];
   /** Browser's navigator.language (dailyPing's OS-locale fallback). Ephemeral —
    *  deliberately absent from current()/persist(), since the browser resends it
    *  on every load. */
@@ -257,6 +221,7 @@ export class PersistedSettings implements DockPrefsStore {
         .slice(0, MAX_DOCS_SEEN);
     }
     this.loadAutoRestart(saved);
+    this.enabledExtensions = sanitizeExtensionIds(saved.enabledExtensions);
     this.modelOverrides = sanitizeModelOverrides(saved.modelOverrides);
     if (Array.isArray(saved.accessTokens)) {
       const valid = saved.accessTokens.filter(isPushTokenRecord);
@@ -399,6 +364,13 @@ export class PersistedSettings implements DockPrefsStore {
     this.persist();
   }
 
+  /** Persist one extension's on/off (WebUI Settings > Extensions). */
+  setExtensionEnabled(id: string, enabled: boolean): void {
+    const others = this.enabledExtensions.filter((x) => x !== id);
+    this.enabledExtensions = enabled ? [...others, id] : others;
+    this.persist();
+  }
+
   /** Persist the browser-deck opt-in and layout (WebUI "Browser deck" panel). */
   setVirtualDeck(next: { enabled: boolean; profile: string }): void {
     this.virtualDeck = {
@@ -524,6 +496,7 @@ export class PersistedSettings implements DockPrefsStore {
       ...(this.elgatoAutoRestartDelayS !== undefined
         ? { elgatoAutoRestartDelayS: this.elgatoAutoRestartDelayS }
         : {}),
+      ...(this.enabledExtensions.length > 0 ? { enabledExtensions: this.enabledExtensions } : {}),
     };
   }
 

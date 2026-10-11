@@ -311,6 +311,7 @@ function runHydrateRegression(): void {
     keyPressEnabled: false,
     updateInfo: { enabled: true, current: '0.14.1', updateAvailable: true, latest: '0.15.0' },
     elgatoAutoRestart: { enabled: true, delayS: 10, supported: true },
+    extensions: { dir: '/ext', extensions: [] },
   });
   const snap = getSnapshot();
   check(
@@ -321,6 +322,7 @@ function runHydrateRegression(): void {
   check(snap.touchStripMode === 'deckbridge-repaint', 'hydrate() re-applies touchStripMode');
   check(!snap.brightnessOverride, 'hydrate() re-applies brightnessOverride');
   check(snap.updateInfo?.latest === '0.15.0', 'hydrate() re-applies updateInfo');
+  check(snap.extensions.dir === '/ext', 'hydrate() re-applies extensions');
   patch({
     extraKeys: {},
     touchStripMode: 'elgato',

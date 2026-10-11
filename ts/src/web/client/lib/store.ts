@@ -8,6 +8,7 @@ import type {
   CommLog,
   DeviceModel,
   EncoderSettings,
+  ExtensionsView,
   ExtraKeyCfg,
   PageStateMsg,
   PageSummary,
@@ -57,6 +58,8 @@ export interface StoreState {
   updateInfo?: UpdateInfo;
   /** Click-to-press opt-in (Settings); the preview grids are inert while off. */
   keyPressEnabled: boolean;
+  /** Installed extensions (Settings) and the pages they add (topbar). */
+  extensions: ExtensionsView;
   /** Push API store (WS `pushChannels`); the Push API panel seeds it over HTTP. */
   pushChannels: PushChannelView[];
   /** 'stale' = WebSocket closed: every status field above may be out of date. */
@@ -120,6 +123,7 @@ let state: StoreState = {
   encoders: {},
   updateInfo: undefined,
   keyPressEnabled: false,
+  extensions: { dir: '', extensions: [] },
   pushChannels: [],
   connection: 'live',
 };

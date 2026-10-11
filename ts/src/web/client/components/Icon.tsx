@@ -16,8 +16,9 @@ export const ICON = {
   close:
     '<svg width="13" height="13" viewBox="0 0 14 14" fill="none"><path d="M2 2l10 10M12 2L2 12" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>',
   gear: '<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M6.57 1.81h2.86l-.02 1.86 1.63.95 1.6-.95 1.43 2.47-1.62.91v1.9l1.62.91-1.43 2.47-1.6-.95-1.63.95.02 1.86H6.57l.02-1.86-1.63-.95-1.6.95-1.43-2.47 1.62-.91v-1.9l-1.62-.91 1.43-2.47 1.6.95 1.63-.95z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/><circle cx="8" cy="8" r="2.1" stroke="currentColor" stroke-width="1.3"/></svg>',
-  stats:
-    '<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M3 13.5v-5M8 13.5v-11M13 13.5v-7.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>',
+  /** An extension page whose manifest has no icon. */
+  extension:
+    '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="2.5" y="2.5" width="4.5" height="4.5" rx="1"/><rect x="9" y="2.5" width="4.5" height="4.5" rx="1"/><rect x="2.5" y="9" width="4.5" height="4.5" rx="1"/><rect x="9" y="9" width="4.5" height="4.5" rx="1"/></svg>',
 };
 
 /** Inline SVG/HTML in a <span>. `title` also names it for assistive tech —

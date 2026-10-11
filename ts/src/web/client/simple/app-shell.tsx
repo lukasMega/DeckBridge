@@ -1,5 +1,6 @@
 import { ICON } from '../components/Icon.js';
 import { ThemeButton } from '../components/ThemeButton.js';
+import type { ExtensionInfo } from '../ui-types.js';
 import { switchToAdvanced } from './handlers.js';
 import { BackButton } from './controls.js';
 
@@ -9,14 +10,17 @@ export function Topbar({
   onHome,
   onAbout,
   onSettings,
-  onStatistics,
+  pages,
+  onPage,
 }: Readonly<{
   updateBadge: string | null;
   onBack: (() => void) | null;
   onHome: () => void;
   onAbout: () => void;
   onSettings: () => void;
-  onStatistics: () => void;
+  /** Running extensions that add a page. */
+  pages: readonly ExtensionInfo[];
+  onPage: (id: string) => void;
 }>): preact.JSX.Element {
   return (
     <div class="topbar">
@@ -72,16 +76,19 @@ export function Topbar({
               {updateBadge && (
                 <span class="update-dot" title={`DeckBridge v${updateBadge} available`} />
               )}
-              <button
-                class="iconbtn circle"
-                id="statisticsBtn"
-                aria-label="Statistics"
-                title="Statistics"
-                type="button"
-                onClick={onStatistics}
-                // eslint-disable-next-line @eslint-react/dom-no-dangerously-set-innerhtml -- static trusted SVG icon markup
-                dangerouslySetInnerHTML={{ __html: ICON.stats }}
-              />
+              {pages.map((ext) => (
+                <button
+                  key={ext.id}
+                  class="iconbtn circle"
+                  id={`ext-${ext.id}`}
+                  aria-label={ext.page?.title}
+                  title={ext.page?.title}
+                  type="button"
+                  onClick={() => onPage(ext.id)}
+                  // eslint-disable-next-line @eslint-react/dom-no-dangerously-set-innerhtml -- the user enabled this extension, whose ui.js runs here anyway
+                  dangerouslySetInnerHTML={{ __html: ext.page?.icon ?? ICON.extension }}
+                />
+              ))}
             </>
           )}
         </div>

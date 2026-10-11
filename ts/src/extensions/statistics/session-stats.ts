@@ -1,7 +1,7 @@
-// In-memory session counters behind GET /api/stats. Pure: the clock is injected and
-// the activity ring advances lazily, so there are no timers.
-import type { DeckCounters, DeckSource, DeckStats, StatsSnapshot } from '../contract-stats.js';
-import type { KeyState } from '../../shared/types.js';
+// In-memory session counters behind the extension's `snapshot` route. Pure: the clock is
+// injected and the activity ring advances lazily, so there are no timers.
+import type { DeckSource, KeyState } from '../../extension/api.js';
+import type { DeckCounters, DeckStats, StatsSnapshot } from './contract.js';
 
 export const ACTIVITY_BUCKETS = 15;
 export const ACTIVITY_BUCKET_MS = 60_000;
@@ -87,7 +87,10 @@ export class SessionStats {
   private readonly totals: Counters;
   private readonly decks = new Map<string, DeckRecord>();
 
-  constructor(private readonly now: () => number = Date.now) {
+  constructor(
+    private readonly appStartedAt: number,
+    private readonly now: () => number = Date.now,
+  ) {
     this.startedAt = now();
     this.totals = new Counters(this.startedAt);
   }
@@ -154,10 +157,6 @@ export class SessionStats {
     }
   }
 
-  imagesTotal(): number {
-    return this.totals.imagesProcessed;
-  }
-
   snapshot(): StatsSnapshot {
     const at = this.now();
     const decks: DeckStats[] = [];
@@ -175,6 +174,7 @@ export class SessionStats {
     }
     return {
       startedAt: this.startedAt,
+      appStartedAt: this.appStartedAt,
       at,
       uptimeMs: at - this.startedAt,
       totals: this.totals.view(at),

@@ -148,6 +148,12 @@ jobs:
       - name: Smoke test (boots cleanly, serves, shuts down)
         run: ./scripts/e2e-smoke.sh
 
+      # Extensions are platform-independent, so one job ships them. After the smoke
+      # test: it boots the newest zip in dist/.
+      - name: Package extensions
+        if: matrix.platform == 'linux-x86_64'
+        run: mise run package-extensions
+
       - uses: actions/upload-artifact@v7
         with:
           name: ${{ matrix.platform }}

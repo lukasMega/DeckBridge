@@ -14,6 +14,7 @@ export const DOCS_TOPICS = {
   'multi-deck': '/features/#multiple-decks',
   'click-to-press': '/features/#click-to-press',
   'push-api': '/push-api/',
+  extensions: '/extensions/',
   'side-keys': '/side-keys/',
   'device-tuning': '/troubleshooting/#device-tuning',
   'image-fit': '/troubleshooting/#image-fit',

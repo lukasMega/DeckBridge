@@ -167,6 +167,8 @@ export interface Settings {
   /** Grace-period seconds before the auto-restart fires. Absent = 10; clamped to
    *  3..120 on load and on set (ELGATO_AUTO_RESTART_DELAY_S_MIN/MAX). */
   elgatoAutoRestartDelayS?: number;
+  /** Extension ids turned on in the WebUI (docs/extensions.md). Never imported. */
+  enabledExtensions?: string[];
 }
 
 const SETTINGS_FILE = 'settings.json';
@@ -179,6 +181,12 @@ let tmpCounter = 0;
 /** `cacheRoot` is overridable so tests can point at a throwaway tmp dir. */
 export function settingsPath(cacheRoot: string = defaultCacheRoot()): string {
   return `${cacheRoot}/${SETTINGS_FILE}`;
+}
+
+/** Directory holding one folder per extension (docs/extensions.md);
+ *  DECKBRIDGE_EXTENSIONS_DIR overrides it (dev runs point it at ts/dist/extensions). */
+export function extensionsDir(cacheRoot: string = defaultCacheRoot()): string {
+  return tjs.env.DECKBRIDGE_EXTENSIONS_DIR || `${cacheRoot}/extensions`;
 }
 
 /** Directory holding the user's plugin-widget JS files, next to the settings

@@ -9,6 +9,7 @@ import { pushAdminRoutes } from './push-routes.js';
 import { virtualDeckRoutes } from './virtual-deck/virtual-deck-routes.js';
 import { pairingAddressRoutes } from './pairing-address-routes.js';
 import { pageRoutes } from './page-routes.js';
+import { extensionRoutes } from './extension-routes.js';
 import type { ExternalExpire } from '../contract.js';
 import { isNonNegInt, nonNegIntMessage } from './types.js';
 import type { MockDeviceConfig } from './types.js';
@@ -56,7 +57,6 @@ export const routes: Route[] = [
   }),
   get('/api/requirements', async () => json(await checkRequirements())),
   get('/api/state', ({ ui }) => json(ui.fullState())),
-  get('/api/stats', ({ ui }) => json(ui.sessionStats.snapshot())),
   get('/api/plugins', async ({ extraKeys }) => json(await extraKeys.pluginsInfo())),
   get('/api/settings', ({ settings }) => json(JSON.parse(settings.json()))),
 
@@ -92,6 +92,7 @@ export const routes: Route[] = [
   ...pushAdminRoutes,
   ...virtualDeckRoutes,
   ...pairingAddressRoutes,
+  ...extensionRoutes,
   postJson('/api/touch-strip-mode', setTouchStripMode),
   postJson('/api/touch-strip-repaint', setTouchStripRepaint),
   postJson('/api/encoders', setEncoders),

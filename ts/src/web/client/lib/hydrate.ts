@@ -26,6 +26,7 @@ export function hydrate(st: StateResponse): void {
     encoders: st.encoders,
     updateInfo: st.updateInfo,
     keyPressEnabled: st.keyPressEnabled,
+    extensions: st.extensions,
     keyEvents: st.keyEvents,
   });
   // Absent in simple-only builds (state-response.ts).

@@ -372,10 +372,12 @@ mkdirSync(path.dirname(outfile), { recursive: true });
 //                    block for seconds on hostile Windows HID collections, so it
 //                    never runs on the CORA thread.
 //   plugin-worker    runs user-authored plugin JS in isolation
+//   extension-worker runs one extension's server.js (one worker per extension)
 const WORKER_ENTRIES = {
   'hid-worker': 'worker/hid-worker.ts',
   'hid-scan-worker': 'worker/hid-scan-worker.ts',
   'plugin-worker': 'plugin/plugin-worker.ts',
+  'extension-worker': 'extension/extension-worker.ts',
 };
 const workerSources = {};
 for (const [name, entry] of Object.entries(WORKER_ENTRIES)) {
@@ -485,8 +487,8 @@ function buildNativeLibsModuleSource() {
 
 const nativeLibsModuleSource = buildNativeLibsModuleSource();
 
-// Resolves `import src from '<spec>'` to in-memory contents. All four virtual
-// modules share this shape: the three worker bundles (as text) and the
+// Resolves `import src from '<spec>'` to in-memory contents. Every virtual
+// module shares this shape: the worker bundles (as text) and the
 // native-libs source (as js). `getContents` stays a thunk so the contents are
 // read at load time, not at plugin-construction time.
 const virtualModule = (spec, namespace, getContents, loader = 'text') => ({
@@ -517,6 +519,11 @@ const virtualPluginWorker = virtualModule(
   'virtual:plugin-worker',
   'pluginworker',
   () => workerSources['plugin-worker'],
+);
+const virtualExtensionWorker = virtualModule(
+  'virtual:extension-worker',
+  'extensionworker',
+  () => workerSources['extension-worker'],
 );
 
 // A release build must never load the mock driver source, even during bundling.
@@ -553,6 +560,7 @@ const mainResult = await build({
     virtualWorker,
     virtualScanWorker,
     virtualPluginWorker,
+    virtualExtensionWorker,
     virtualNativeLibs,
     ...(!isMockBuild ? [excludeMockDriver] : []),
     minifyTextAssets,

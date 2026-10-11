@@ -43,6 +43,7 @@ export type {
   WidgetDisplayInfo,
   WsEvents,
 } from '../contract.js';
+export type { ExtensionInfo, ExtensionsView } from '../contract-extensions.js';
 export type {
   DeviceOverridesView,
   TuningCropRect as DeviceCropRect,

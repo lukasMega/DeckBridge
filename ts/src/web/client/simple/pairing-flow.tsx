@@ -164,14 +164,28 @@ export function PairingFlow({
   }
   return (
     <div class="pairing-flow">
-      <p class="pairing-question">Already paired?</p>
+      <p class="pairing-question">Already paired with your control app?</p>
       <div class="pairing-controls">
-        <div class="pairing-answers" role="group" aria-label="Already paired?">
-          <GhostButton aria-pressed={paired === true} onClick={() => setPaired(true)}>
-            Yes
+        <div
+          class="pairing-answers"
+          role="group"
+          aria-label="Already paired with your control app?"
+        >
+          <GhostButton
+            class="pairing-choice"
+            aria-pressed={paired === true}
+            onClick={() => setPaired(true)}
+          >
+            <strong>Yes, already paired{paired === true && ' ✓'}</strong>
+            <span>Open or restart Elgato app.</span>
           </GhostButton>
-          <GhostButton aria-pressed={paired === false} onClick={() => setPaired(false)}>
-            No
+          <GhostButton
+            class="pairing-choice"
+            aria-pressed={paired === false}
+            onClick={() => setPaired(false)}
+          >
+            <strong>No, set up pairing{paired === false && ' ✓'}</strong>
+            <span>Show pairing steps and address.</span>
           </GhostButton>
         </div>
         {paired === true && <PairedAppAction onHelp={onHelp} />}

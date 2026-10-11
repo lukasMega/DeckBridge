@@ -127,7 +127,7 @@ admission credits. See [Threading and ordering](image-flow.md#threading--orderin
 
 #### Supporting workers
 
-Two lighter worker types sit outside the CORA/image hot path:
+Three lighter worker types sit outside the CORA/image hot path:
 
 - **HID scan worker** ([hid-scan-worker.ts](../ts/src/worker/hid-scan-worker.ts), proxied by
   `HidScanWorkerHost` in [hid-scan-worker-host.ts](../ts/src/worker/hid-scan-worker-host.ts),
@@ -146,6 +146,16 @@ Two lighter worker types sit outside the CORA/image hot path:
   lazily spawned. A crash/CPU isolation boundary, **not** a capability sandbox; the host pings
   it every `HEARTBEAT_MS` (2 s) and kills/restarts a wedged worker, giving up after
   `MAX_CONSECUTIVE_KILLS` (3).
+- **Extension workers** ([extension-worker.ts](../ts/src/extension/extension-worker.ts), one per
+  enabled extension, proxied by [extension-host.ts](../ts/src/extension/extension-host.ts) and
+  owned by [extensions-controller.ts](../ts/src/web/server/extensions-controller.ts)) — run an
+  [extension](extensions.md)'s `server.js`, loaded at runtime from `<cache>/extensions/`. The
+  dock hooks feed them through
+  [extension-events-wiring.ts](../ts/src/main/extension-events-wiring.ts), which builds no
+  event at all while no extension runs; events reach a worker in one batch per 250 ms.
+  `/api/ext/<id>/<path>` is proxied to the worker and `/ext/<id>/ui.js` is served to the web
+  UI, which mounts it with its own Preact. Same heartbeat as the plugin worker, but crashes
+  are never forgiven: the third one stops the extension until it is switched on again.
 
 <details>
 <summary>WebUI log batching</summary>
@@ -732,7 +742,7 @@ spawn fails, `startTray()` returns `null` and the app runs normally. Protocol de
 
 ## Build pipeline
 
-Four esbuild passes (`build.mjs`). Each worker is bundled into a self-contained ESM **string**
+Five esbuild passes (`build.mjs`). Each worker is bundled into a self-contained ESM **string**
 and embedded into the main bundle through a virtual module:
 
 | Pass | Entry | Virtual module | Also written to (debug) |
@@ -740,10 +750,13 @@ and embedded into the main bundle through a virtual module:
 | 1 | `hid-worker.ts` (generic USB worker — Mirabox + Elgato gen1/gen2) | `virtual:hid-worker` | `dist/hid-worker.js` |
 | 2 | `hid-scan-worker.ts` (HID enumeration, see [Supporting workers](#supporting-workers)) | `virtual:hid-scan-worker` | `dist/hid-scan-worker.js` |
 | 3 | `plugin-worker.ts` (see [Plugins and extra-key widgets](#plugins-and-extra-key-widgets)) | `virtual:plugin-worker` | `dist/plugin-worker.js` |
-| 4 | `app.ts` + rest of `src` | — | `dist/bundle.js` |
+| 4 | `extension-worker.ts` (see [Supporting workers](#supporting-workers)) | `virtual:extension-worker` | `dist/extension-worker.js` |
+| 5 | `app.ts` + rest of `src` | — | `dist/bundle.js` |
 
 The browser-side `ui-entry.ts` subtree is bundled the same way and embedded as text via the
-`ui-ts-as-text` plugin.
+`ui-ts-as-text` plugin. Extensions in `ts/src/extensions/` are never part of the binary:
+`ts/scripts/build-extensions.mjs` builds each into `ts/dist/extensions/<id>/`, and the release
+ships each as its own zip.
 
 Native dylibs (`libdeckbridge_native`, `libhidapi`) are embedded into `bundle.js` at build time
 as **latin1 strings** (one char per byte; QuickJS keeps them 8-bit, and the compiled bytecode

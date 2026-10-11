@@ -115,7 +115,7 @@ async function capture(name, snapshot, heading, wide = false) {
       await page.goto(base, { waitUntil: 'networkidle' });
       await page.getByRole('heading', { name: heading, exact: true }).waitFor();
       if (name === 'webui-simple' || name === 'webui-state-pairing') {
-        await page.getByRole('button', { name: 'No', exact: true }).click();
+        await page.getByRole('button', { name: /^No, set up pairing/ }).click();
       }
       await page.evaluate(() => document.fonts.ready);
       assert.equal(await page.locator('html').getAttribute('data-theme'), theme);

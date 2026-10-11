@@ -44,14 +44,17 @@ echo " - size:    $(du -k "$TJS" | cut -f1) kB"
 alias = ["start", "run"]
 description = "Build and run (default UI: simple-only, no advanced/debug view)"
 quiet = true
-depends = ["build"]
+depends = ["build", "extensions"]
+# Dev runs load the extensions just built; enable them under Settings > Extensions.
+env = { DECKBRIDGE_EXTENSIONS_DIR = "{{config_root}}/ts/dist/extensions" }
 run = "$TJS run ts/dist/bundle.js"
 
 [tasks.s-advanced]
 alias = ["start-advanced", "run-advanced"]
 description = "Build and run with the advanced/debug view included"
 quiet = true
-depends = ["build-advanced"]
+depends = ["build-advanced", "extensions"]
+env = { DECKBRIDGE_EXTENSIONS_DIR = "{{config_root}}/ts/dist/extensions" }
 run = "$TJS run ts/dist/bundle.js"
 
 [tasks.spike-docks]
@@ -66,7 +69,21 @@ run = "node scripts/mock-akp05.mjs"
 
 [tasks.d]
 description = "Rebuild at debug log level (readable WebUI class names) and run"
+depends = ["extensions"]
+env = { DECKBRIDGE_EXTENSIONS_DIR = "{{config_root}}/ts/dist/extensions" }
 run = "LOG_LEVEL=debug DECKBRIDGE_NO_MANGLE=1 mise run build && $TJS run ts/dist/bundle.js"
+
+[tasks.extensions]
+description = "Build the extensions in ts/src/extensions/ into ts/dist/extensions/ (not part of the binary)"
+quiet = true
+dir = "ts"
+depends = ["ts-install"]
+run = "node scripts/build-extensions.mjs"
+
+[tasks.package-extensions]
+description = "Zip each built extension for a release: dist/deckbridge-ext-<id>-v<version>.zip"
+depends = ["extensions"]
+run = "node scripts/package-extensions.mjs"
 
 [tasks.gen-splash]
 description = "Regenerate on-connect splash JPEG assets (run once after design changes)"

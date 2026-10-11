@@ -17,6 +17,7 @@ import { UpdatePanel } from './update-panel.js';
 import { ElgatoAppPanel } from './elgato-app-panel.js';
 import { DeviceTuningPanel } from './device-tuning.js';
 import { StandbyPanel } from './standby-panel.js';
+import { ExtensionsPanel } from './extensions-panel.js';
 import { SettingsGroup, SettingsSearch } from './settings-search.js';
 import { GhostButton } from '../components/GhostButton.js';
 import { download, postJson, useFetched } from '../lib/ui-api.js';
@@ -351,6 +352,7 @@ export function SettingsPage({
 
         <SettingsGroup title="Integrations">
           <PushApiPanel />
+          <ExtensionsPanel />
         </SettingsGroup>
 
         <SettingsGroup title="Advanced details">

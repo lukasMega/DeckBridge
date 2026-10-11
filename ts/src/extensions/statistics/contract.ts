@@ -1,7 +1,8 @@
-// Statistics wire DTO (GET /api/stats); session-only counters, never persisted.
+// Statistics wire DTO (GET /api/ext/statistics/snapshot); session-only counters, never persisted.
+import type { DeckSource } from '../../extension/api.js';
 
-/** Where a deck's input comes from; images and cache are measured only for 'usb'. */
-export type DeckSource = 'usb' | 'browser' | 'mock';
+/** Images and cache are measured only for 'usb' decks. */
+export type { DeckSource };
 
 export interface DeckCounters {
   keyPresses: number;
@@ -23,11 +24,12 @@ export interface DeckStats extends DeckCounters {
   keys: { label: string; count: number }[];
 }
 
-/** GET /api/stats. */
+/** GET /api/ext/statistics/snapshot. */
 export interface StatsSnapshot {
-  startedAt: number; // epoch ms; changes on process restart
+  startedAt: number; // epoch ms: counting began (the extension started)
+  appStartedAt: number; // epoch ms: DeckBridge started; changes on process restart
   at: number; // snapshot time, epoch ms
-  uptimeMs: number;
+  uptimeMs: number; // at - startedAt
   totals: DeckCounters;
   decks: DeckStats[]; // first-seen order
 }

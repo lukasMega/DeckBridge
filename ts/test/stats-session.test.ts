@@ -1,5 +1,5 @@
 import assert from 'tjs:assert';
-import { ACTIVITY_BUCKETS, SessionStats } from '../src/web/server/session-stats.js';
+import { ACTIVITY_BUCKETS, SessionStats } from '../src/extensions/statistics/session-stats.js';
 import { test, summary } from './helpers/harness.js';
 
 const MIN = 60_000;
@@ -7,7 +7,7 @@ const T0 = 1_000 * MIN; // minute-aligned, so bucket edges are exact
 
 function setup() {
   const clock = { t: T0 };
-  const stats = new SessionStats(() => clock.t);
+  const stats = new SessionStats(T0, () => clock.t);
   return { clock, stats };
 }
 
@@ -149,7 +149,7 @@ test('dial: presses count down edges, detents use abs', () => {
   assert.equal(stats.snapshot().totals.dialDetents, 5);
 });
 
-test('images: processed and cache hits, imagesTotal', () => {
+test('images: processed and cache hits', () => {
   const { stats } = setup();
   deck(stats);
   stats.imageProcessed('a', false);
@@ -158,7 +158,7 @@ test('images: processed and cache hits, imagesTotal', () => {
   const d = stats.snapshot().decks[0]!;
   assert.equal(d.imagesProcessed, 3);
   assert.equal(d.cacheHits, 2);
-  assert.equal(stats.imagesTotal(), 3);
+  assert.equal(stats.snapshot().totals.imagesProcessed, 3);
 });
 
 test('an empty deviceKey is ignored', () => {
@@ -171,7 +171,7 @@ test('an empty deviceKey is ignored', () => {
   const snap = stats.snapshot();
   assert.equal(snap.decks.length, 0);
   assert.equal(snap.totals.keyPresses, 0);
-  assert.equal(stats.imagesTotal(), 0);
+  assert.equal(snap.totals.imagesProcessed, 0);
 });
 
 test('an unseen key gets a defensive record', () => {
@@ -203,11 +203,12 @@ test('top keys sort by count desc, then label', () => {
   );
 });
 
-test('uptime and startedAt come from the clock', () => {
+test('uptime and startedAt come from the clock; appStartedAt is passed through', () => {
   const { clock, stats } = setup();
   clock.t += 5000;
   const snap = stats.snapshot();
   assert.equal(snap.startedAt, T0);
+  assert.equal(snap.appStartedAt, T0);
   assert.equal(snap.at, T0 + 5000);
   assert.equal(snap.uptimeMs, 5000);
 });

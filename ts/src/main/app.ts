@@ -95,6 +95,8 @@ const webui = new WebUIServer(
   getInitialDriverMode(),
   settings,
 );
+// Before any dock exists, so an enabled extension sees every deck attach.
+await step('deckBr', 'extensions scan', () => webui.extensions.rescan());
 const defaultChildGeometry = advertisedGeometry(DEFAULT_MODEL);
 const server = new ElgatoServer(defaultChildGeometry);
 const childServer = new ElgatoChildServer(
@@ -226,6 +228,7 @@ const shutdown = createShutdown({
   owners: [
     ['commands', () => Promise.all([stopCommands(), stopSpawns()])],
     ['plugins', shutdownPluginHost],
+    ['extensions', () => Promise.resolve(webui.extensions.dispose())],
     ['browser deck', () => virtualDeck.stop()],
     ['docks', () => driverManager.shutdown()],
     ['webui', () => webui.stop()],

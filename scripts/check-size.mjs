@@ -8,13 +8,15 @@ import { measure } from './size-report.mjs';
 // .claude/plans/2026-10-08_release-size-webui-css.md. ui.js and the ui CSS are the shipped,
 // class-mangled form (the size report's default).
 const BUDGETS = {
-  // Statistics page (2026-10-10); measured size + 1% headroom.
-  'ui.js': 165_005,
+  // Pairing choice cards (2026-10-11); measured size + 1% headroom.
+  'ui.js': 166_938,
   'deck.js': 30_106,
-  'css total': 35_401,
+  'css total': 35_758,
   'hid-worker': 47_394,
   'hid-scan-worker': 10_002,
   'plugin-worker': 2_733,
+  // Extension worker (2026-10-11); measured size + 1% headroom.
+  'extension-worker': 1_142,
 };
 
 const m = await measure();
@@ -25,6 +27,7 @@ const actual = {
   'hid-worker': m.bundles['hid-worker'].raw,
   'hid-scan-worker': m.bundles['hid-scan-worker'].raw,
   'plugin-worker': m.bundles['plugin-worker'].raw,
+  'extension-worker': m.bundles['extension-worker'].raw,
 };
 
 const rows = Object.entries(BUDGETS).map(([name, budget]) => ({

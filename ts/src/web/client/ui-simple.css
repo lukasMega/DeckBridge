@@ -664,7 +664,30 @@ input[type='range'].range:disabled {
   margin: 0 0 10px;
   font-weight: 600;
 }
-.pairing-answers [aria-pressed='true'],
+.pairing-answers {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 180px), 1fr));
+  align-items: stretch;
+  width: 100%;
+}
+.pairing-choice {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  padding: 12px 14px;
+  color: var(--fg);
+  text-align: left;
+}
+.pairing-choice span {
+  color: var(--fg-muted);
+  font-size: 12px;
+  font-weight: 400;
+}
+.pairing-choice[aria-pressed='true'] {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
 .ctabtn.primary {
   background: var(--accent);
   color: var(--accent-ink);
@@ -829,12 +852,6 @@ input[type='range'].range:disabled {
 /* separate a label that follows earlier content; the first one sits tight */
 .help-section-label:not(:first-child) {
   margin-top: 2em;
-}
-.stats-chart {
-  display: block;
-  width: 100%;
-  height: 64px;
-  color: var(--accent);
 }
 .help-steps {
   margin: 0 0 4px;

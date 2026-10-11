@@ -27,7 +27,6 @@ import { generateDeviceIdentity } from '../src/infra/device-identity.js';
 import type { DeviceIdentitySettings } from '../src/infra/settings-store.js';
 import type { PersistedSettings } from '../src/infra/settings.js';
 import { DockPrefs, defaultRuntimePrefs } from '../src/infra/dock-prefs.js';
-import { SessionStats } from '../src/web/server/session-stats.js';
 import { testAsync as test, summaryExit } from './helpers/harness.js';
 import { StubDockDriver } from './helpers/stub-dock-driver.js';
 
@@ -212,7 +211,8 @@ function makeFakeWebUI() {
     notifyBrightness(level: number) {
       this.notifyBrightnessCalls.push(level);
     },
-    sessionStats: new SessionStats(),
+    extensions: { active: false, emit() {}, setDeckSource() {} },
+    noteImageSent() {},
     notifyDockImageCalls: [] as { dock: number; key: number; format: string }[],
     notifyDockImage(dock: number, key: number, _data: unknown, format: 'jpeg' | 'bmp' = 'jpeg') {
       this.notifyDockImageCalls.push({ dock, key, format });
