@@ -1,5 +1,6 @@
 // Headers on every WebUI response: no framing by other sites (clickjacking), no inline
 // script, no MIME sniffing. See docs/ARCHITECTURE.md (Network exposure).
+import { DOCS_BASE } from '../../shared/docs-topics.js';
 
 const COMMON: Record<string, string> = {
   'X-Content-Type-Options': 'nosniff',
@@ -8,6 +9,10 @@ const COMMON: Record<string, string> = {
   'X-Frame-Options': 'DENY',
 };
 
+// A frame navigation is checked per redirect hop, so the docs modal (same-origin /go/docs
+// redirect, DocsLink.tsx) needs the docs host itself in frame-src.
+const DOCS_ORIGIN = new URL(DOCS_BASE).origin;
+
 // data: = key previews; streamdeck: = the hidden-iframe deeplink (ui-helpers.ts deeplink()).
 const APP_CSP = [
   "default-src 'self'",
@@ -15,7 +20,7 @@ const APP_CSP = [
   "style-src 'self'",
   "img-src 'self' data:",
   "connect-src 'self'",
-  "frame-src 'self' streamdeck:",
+  `frame-src 'self' streamdeck: ${DOCS_ORIGIN}`,
   "object-src 'none'",
   "base-uri 'none'",
   "form-action 'self'",

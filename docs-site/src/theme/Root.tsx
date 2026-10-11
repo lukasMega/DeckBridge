@@ -90,6 +90,20 @@ export default function Root({ children }: { children: ReactNode }): ReactNode {
   const [hideToc, setHideToc] = useState(() => readFlag('db-hide-toc'));
   const [noAnim, setNoAnim] = useState(() => readFlag(ANIM_STORAGE_KEY));
 
+  // In the WebUI's docs dialog the app refuses to be framed (frame-ancestors 'none'), so a
+  // link to the local WebUI would open a blank frame: send it to a new tab instead.
+  useEffect(() => {
+    if (window.self === window.top) return;
+    function onLocalLink(e: MouseEvent) {
+      const a = (e.target as HTMLElement | null)?.closest('a');
+      if (!a || !/^(localhost|127\.0\.0\.1)$/.test(a.hostname)) return;
+      a.target = '_blank';
+      a.rel = 'noopener';
+    }
+    document.addEventListener('click', onLocalLink, true);
+    return () => document.removeEventListener('click', onLocalLink, true);
+  }, []);
+
   // Restore saved widths once on mount.
   useEffect(() => {
     const root = document.documentElement;

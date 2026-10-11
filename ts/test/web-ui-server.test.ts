@@ -5,7 +5,7 @@ import {
   pickFallbackPort,
   WebUIServer,
 } from '../src/web/server/web-ui-server.js';
-import { docsUrl, docsTrackingAllowed } from '../src/web/server/docs-links.js';
+import { docsUrl, docsTrackingAllowed, DOCS_BASE } from '../src/web/server/docs-links.js';
 import { QR_LIB } from '../src/web/client/simple/qr-lib.js';
 import { Broadcaster } from '../src/web/server/broadcaster.js';
 import { OWN_IP_CACHE_TTL_MS, resetOwnIpCache } from '../src/web/server/web-request-guard.js';
@@ -944,6 +944,8 @@ try {
     const csp = res.headers.get('Content-Security-Policy') ?? '';
     assert.ok(csp.includes("frame-ancestors 'none'"), csp);
     assert.ok(csp.includes("script-src 'self' 'sha256-"), csp);
+    // The docs modal frames /go/docs, which redirects to the docs host.
+    assert.ok(csp.includes(`frame-src 'self' streamdeck: ${new URL(DOCS_BASE).origin}`), csp);
   });
 
   await runWebTest('security headers: CSP hashes match the inline scripts of GET /', async () => {
