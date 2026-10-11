@@ -29,7 +29,7 @@ const gz = (bytes) => gzipSync(bytes, { level: 9 }).length;
 
 // Same CSP hash sources build.mjs defines as __UI_SCRIPT_HASHES__.
 const uiScriptHashes = [
-  ...readFileSync(join(CLIENT, 'ui.html'), 'utf8').matchAll(/<script>([\s\S]*?)<\/script>/g),
+  ...readFileSync(join(CLIENT, 'ui.html'), 'utf8').matchAll(/<script>([\s\S]*?)<\/script>/gi),
 ]
   .map((m) => `'sha256-${createHash('sha256').update(m[1], 'utf8').digest('base64')}'`)
   .join(' ');

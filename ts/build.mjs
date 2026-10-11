@@ -21,7 +21,7 @@ const dir = path.dirname(fileURLToPath(import.meta.url));
 // <script> blocks verbatim, so the source text is what the browser hashes.
 const uiScriptHashes = [
   ...readFileSync(path.resolve(dir, 'src/web/client/ui.html'), 'utf8').matchAll(
-    /<script>([\s\S]*?)<\/script>/g,
+    /<script>([\s\S]*?)<\/script>/gi,
   ),
 ]
   .map((m) => `'sha256-${createHash('sha256').update(m[1], 'utf8').digest('base64')}'`)

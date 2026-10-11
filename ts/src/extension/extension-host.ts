@@ -68,7 +68,7 @@ export interface ExtensionHostOptions {
   onState: () => void;
   /** Sent first to every worker it starts (the attached decks): a restart loses them. */
   initialEvents?: () => ExtensionEvent[];
-  /** The types the extension's grant covers; any other type is dropped here, before queueing. */
+  /** The types the extension's grant covers; any other type is dropped here, before queuing. */
   events: readonly ExtensionEventType[];
   workerFactory?: WorkerFactory;
 }
@@ -113,7 +113,7 @@ export class ExtensionHost {
 
   /** Queued while the worker loads; sent in one batch per FLUSH_MS once it runs. */
   emit(event: ExtensionEvent): void {
-    // Filtered before queueing, so an undeclared type never counts toward the cap.
+    // Filtered before queuing, so an undeclared type never counts toward the cap.
     if (this.state === 'error' || !this.events.has(event.type)) return;
     if (this.queue.length >= MAX_QUEUED_EVENTS) {
       this.dropped++;

@@ -950,7 +950,7 @@ try {
     const res = await fetch(`${base}/`);
     const csp = res.headers.get('Content-Security-Policy') ?? '';
     const body = await res.text();
-    const inline = [...body.matchAll(/<script>([\s\S]*?)<\/script>/g)];
+    const inline = [...body.matchAll(/<script>([\s\S]*?)<\/script>/gi)];
     assert.ok(inline.length > 0, 'the page has an inline script');
     for (const m of inline) {
       const bytes = new Uint8Array(
