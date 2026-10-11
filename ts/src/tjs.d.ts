@@ -342,9 +342,15 @@ declare const tjs: {
   open(path: string, mode: string): Promise<TjsFileHandle>;
   rename(path: string, newPath: string): Promise<void>;
   remove(path: string, options?: { recursive?: boolean }): Promise<void>;
-  readDir(
-    path: string,
-  ): Promise<AsyncIterableIterator<{ name: string; isFile: boolean; isDirectory: boolean }>>;
+  readDir(path: string): Promise<
+    AsyncIterableIterator<{
+      name: string;
+      isFile: boolean;
+      isDirectory: boolean;
+      isSymbolicLink: boolean;
+    }>
+  >;
+  symlink(target: string, path: string): Promise<void>;
   readonly homeDir: string;
   readonly tmpDir: string;
   readonly exePath: string;

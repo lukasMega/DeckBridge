@@ -1,6 +1,7 @@
 import assert from 'tjs:assert';
 import { PersistedSettings } from '../src/infra/settings.js';
 import { settingsPath, loadSettings, saveSettings } from '../src/infra/settings-store.js';
+import type { Settings } from '../src/infra/settings-store.js';
 import { testAsync as test, summary } from './helpers/harness.js';
 import { makePage } from './helpers/pages.js';
 
@@ -276,6 +277,36 @@ await test('setDailyPingDay clears docsSeen on disk too', async () => {
   const onDisk = await loadSettings(dir);
   assert.equal(onDisk.docsSeen, undefined);
   assert.equal(onDisk.a7sDay, '2026-10-04');
+});
+
+console.log('\nPersistedSettings — extension grants');
+
+const GRANT_DIGEST = 'b'.repeat(64);
+
+await test('a saved extension grant round-trips through persist() and load()', async () => {
+  const dir = `${ROOT}/grant-round-trip`;
+  const settings = new PersistedSettings(dir);
+  settings.grantExtension('good', { digest: GRANT_DIGEST, events: ['input'] });
+  await settings.flush();
+  const reloaded = new PersistedSettings(dir);
+  await reloaded.load();
+  assert.deepEqual(reloaded.extensionGrants, { good: { digest: GRANT_DIGEST, events: ['input'] } });
+  reloaded.revokeExtension('good');
+  await reloaded.flush();
+  assert.equal((await loadSettings(dir)).extensions, undefined);
+});
+
+await test('a legacy enabledExtensions key is ignored and never written back', async () => {
+  const dir = `${ROOT}/grant-legacy`;
+  await saveSettings({ enabledExtensions: ['good'] } as unknown as Settings, dir);
+  const settings = new PersistedSettings(dir);
+  await settings.load();
+  assert.deepEqual(settings.extensionGrants, {});
+  settings.setMultiDeck(true);
+  await settings.flush();
+  const onDisk = (await loadSettings(dir)) as Record<string, unknown>;
+  assert.equal('enabledExtensions' in onDisk, false);
+  assert.equal(onDisk.extensions, undefined);
 });
 
 console.log('\nPersistedSettings — saved pages');

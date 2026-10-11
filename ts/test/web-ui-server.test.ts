@@ -6,6 +6,7 @@ import {
   WebUIServer,
 } from '../src/web/server/web-ui-server.js';
 import { docsUrl, docsTrackingAllowed } from '../src/web/server/docs-links.js';
+import { QR_LIB } from '../src/web/client/simple/qr-lib.js';
 import { Broadcaster } from '../src/web/server/broadcaster.js';
 import { OWN_IP_CACHE_TTL_MS, resetOwnIpCache } from '../src/web/server/web-request-guard.js';
 import { saveSettings } from '../src/infra/settings-store.js';
@@ -779,6 +780,12 @@ test('valid integer productId is masked and applied', () => {
 
 console.log('\nwebui: misc route validation');
 
+const expectCommonHeaders = (res: Response): void => {
+  assert.equal(res.headers.get('X-Frame-Options'), 'DENY');
+  assert.equal(res.headers.get('X-Content-Type-Options'), 'nosniff');
+  assert.equal(res.headers.get('Referrer-Policy'), 'same-origin');
+};
+
 const ROUTES_TEST_PORT = 13002;
 const routesUi = await webUIAt(TEST_SETTINGS_ROOT, ROUTES_TEST_PORT);
 await routesUi.start();
@@ -930,6 +937,68 @@ try {
   await runWebTest('POST /api/touch-strip (removed) → 404', async () => {
     assert.equal((await post('/api/touch-strip', { disabled: true })).status, 404);
   });
+
+  await runWebTest('security headers: GET /has frame, sniff, referrer and CSP', async () => {
+    const res = await fetch(`${base}/`);
+    expectCommonHeaders(res);
+    const csp = res.headers.get('Content-Security-Policy') ?? '';
+    assert.ok(csp.includes("frame-ancestors 'none'"), csp);
+    assert.ok(csp.includes("script-src 'self' 'sha256-"), csp);
+  });
+
+  await runWebTest('security headers: CSP hashes match the inline scripts of GET /', async () => {
+    const res = await fetch(`${base}/`);
+    const csp = res.headers.get('Content-Security-Policy') ?? '';
+    const body = await res.text();
+    const inline = [...body.matchAll(/<script>([\s\S]*?)<\/script>/g)];
+    assert.ok(inline.length > 0, 'the page has an inline script');
+    for (const m of inline) {
+      const bytes = new Uint8Array(
+        await crypto.subtle.digest('SHA-256', new TextEncoder().encode(m[1])),
+      );
+      const b64 = btoa(String.fromCharCode(...bytes));
+      assert.ok(csp.includes(`'sha256-${b64}'`), `missing hash for an inline script`);
+    }
+  });
+
+  await runWebTest('security headers: GET /nope (404) has the same headers', async () => {
+    const res = await fetch(`${base}/nope`);
+    assert.equal(res.status, 404);
+    expectCommonHeaders(res);
+    assert.ok(res.headers.get('Content-Security-Policy')?.includes("frame-ancestors 'none'"));
+  });
+
+  await runWebTest('security headers: GET /requirements has a CSP without script-src', async () => {
+    const res = await fetch(`${base}/requirements`);
+    expectCommonHeaders(res);
+    const csp = res.headers.get('Content-Security-Policy') ?? '';
+    assert.ok(csp.length > 0, 'a CSP is set');
+    assert.ok(!csp.includes('script-src'), csp);
+  });
+
+  await runWebTest(
+    'security headers: GET /qr-sandbox is framable by this origin only',
+    async () => {
+      const res = await fetch(`${base}/qr-sandbox`);
+      assert.equal(res.status, 200);
+      assert.equal(res.headers.get('X-Frame-Options'), 'SAMEORIGIN');
+      assert.equal(res.headers.get('X-Content-Type-Options'), 'nosniff');
+      assert.equal(res.headers.get('Referrer-Policy'), 'same-origin');
+      const csp = res.headers.get('Content-Security-Policy') ?? '';
+      assert.ok(csp.includes("frame-ancestors 'self'"), csp);
+      assert.ok(!csp.includes("frame-ancestors 'none'"), csp);
+      assert.ok(csp.includes('sandbox allow-scripts'), csp);
+    },
+  );
+
+  await runWebTest(
+    'qr-sandbox: the page loads QR_LIB with the same url and integrity',
+    async () => {
+      const body = await (await fetch(`${base}/qr-sandbox`)).text();
+      assert.ok(body.includes(`'${QR_LIB.url}'`), 'url literal');
+      assert.ok(body.includes(`'${QR_LIB.integrity}'`), 'integrity literal');
+    },
+  );
 
   const goDocs = (topic: string, headers: Record<string, string> = {}): Promise<Response> =>
     fetch(`${base}/go/docs/${topic}`, { redirect: 'manual', headers });
@@ -1129,6 +1198,14 @@ test('applySettingsJson: an unknown selectedDock is ignored, not fatal', () => {
   ui.notifyDocks([fakeDockStatus(0)]);
   ui.settingsFile.applyJson(JSON.stringify({ selectedDock: 99 }));
   assert.equal(ui.fullState().selectedDock, 0, 'selection stays on the primary');
+});
+
+test('applySettingsJson ignores an imported extensions record', () => {
+  const ui = new WebUIServer(undefined, [], 'real', new PersistedSettings(TEST_SETTINGS_ROOT));
+  ui.settingsFile.applyJson(
+    JSON.stringify({ extensions: { good: { digest: 'c'.repeat(64), events: ['input'] } } }),
+  );
+  assert.deepEqual(ui.settings.extensionGrants, {});
 });
 
 // WebUIServer device identity (getOrCreateDeviceIdentity / updateDeviceMdnsName)

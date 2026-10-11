@@ -2,10 +2,59 @@
 // diagnostics, widget popovers, touch strip). Markup is fixed by ui-simple.css:
 // `.tuning-field` for the number/select rows, `.settings-checkbox` for checkboxes.
 
+import { useRef } from 'preact/hooks';
+
 function numberOrUndefined(raw: string): number | undefined {
   if (raw.trim() === '') return undefined;
   const n = Number(raw);
   return Number.isFinite(n) ? n : undefined;
+}
+
+/** Number input with − / + buttons inside the field. The native spinner is hidden in CSS;
+ *  the buttons step the real input and fire its events so callers keep plain handlers. */
+export function NumberInput({
+  disabled,
+  ...rest
+}: Readonly<{
+  min?: number;
+  max?: number;
+  step?: number;
+  value: number | string;
+  disabled?: boolean;
+  onInput?: (e: Event) => void;
+  onChange?: (e: Event) => void;
+}>): preact.JSX.Element {
+  const ref = useRef<HTMLInputElement>(null);
+  const step = (dir: 'stepUp' | 'stepDown'): void => {
+    const el = ref.current;
+    if (el === null) return;
+    el[dir]();
+    el.dispatchEvent(new Event('input', { bubbles: true }));
+    el.dispatchEvent(new Event('change', { bubbles: true }));
+  };
+  return (
+    <span class="num-input">
+      <input {...rest} ref={ref} class="input" type="number" disabled={disabled} />
+      <button
+        type="button"
+        tabIndex={-1}
+        aria-label="Decrease"
+        disabled={disabled}
+        onClick={() => step('stepDown')}
+      >
+        −
+      </button>
+      <button
+        type="button"
+        tabIndex={-1}
+        aria-label="Increase"
+        disabled={disabled}
+        onClick={() => step('stepUp')}
+      >
+        +
+      </button>
+    </span>
+  );
 }
 
 /** Seconds input that posts milliseconds. Out-of-range values are ignored rather
@@ -34,14 +83,7 @@ export function SecondsField({
   return (
     <label class={cls}>
       <span>{label}</span>
-      <input
-        class="input"
-        type="number"
-        min={min}
-        max={max}
-        value={value}
-        onChange={handleChange}
-      />
+      <NumberInput min={min} max={max} value={value} onChange={handleChange} />
     </label>
   );
 }
@@ -69,9 +111,7 @@ export function NumberField({
   return (
     <label class="tuning-field">
       {labelHidden === true ? <span class="visually-hidden">{label}</span> : <span>{label}</span>}
-      <input
-        class="input"
-        type="number"
+      <NumberInput
         min={min}
         max={max}
         step={step ?? 1}

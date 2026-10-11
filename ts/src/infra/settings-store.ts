@@ -121,6 +121,12 @@ export function sanitizeSurveySettings(raw: unknown): SurveySettings {
   return state;
 }
 
+/** One switched-on extension: the folder digest the user approved and the events allowed. */
+export interface ExtensionGrant {
+  digest: string;
+  events: string[];
+}
+
 export interface Settings {
   survey?: SurveySettings;
   selectedDock?: number;
@@ -167,8 +173,8 @@ export interface Settings {
   /** Grace-period seconds before the auto-restart fires. Absent = 10; clamped to
    *  3..120 on load and on set (ELGATO_AUTO_RESTART_DELAY_S_MIN/MAX). */
   elgatoAutoRestartDelayS?: number;
-  /** Extension ids turned on in the WebUI (docs/extensions.md). Never imported. */
-  enabledExtensions?: string[];
+  /** Switched-on extensions by id (docs/extensions.md). Machine-local; never imported. */
+  extensions?: Record<string, ExtensionGrant>;
 }
 
 const SETTINGS_FILE = 'settings.json';

@@ -166,6 +166,10 @@ the device, because the driver reads those when it opens the device. If it leave
 `./deckbridge run --no-overrides` to ignore all tuning for one session. Active tuning is
 flagged at the top of the diagnostics report.
 
+Extensions have a safe mode of their own. `./deckbridge run --no-extensions` (or
+`DECKBRIDGE_NO_EXTENSIONS=1`) starts no extension for one session. The Extensions list stays
+visible, with its switches disabled, so you can see what is installed and switched on.
+
 ### Image fit
 
 Image fit decides what happens when the Elgato app's key image is not the size the device

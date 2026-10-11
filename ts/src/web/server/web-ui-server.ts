@@ -11,6 +11,7 @@ import { SettingsFileController } from './settings-file-controller.js';
 import { ModelOverridesController } from './model-overrides-controller.js';
 import { DockRegistry } from './dock-registry.js';
 import { isAllowedWebRequest, resolveListenPort } from './web-request-guard.js';
+import { withSecurityHeaders } from './security-headers.js';
 import { ActivityBuffers } from './activity-buffers.js';
 import type { RawMockInput } from './mock-input.js';
 import { PersistedSettings } from '../../infra/settings.js';
@@ -371,7 +372,19 @@ export class WebUIServer extends EventEmitter implements WebUIController, WebUIC
     this.pages.broadcastSelected();
   }
 
+  // Every HTTP response gets the security headers; a WS upgrade (undefined) passes through.
   private handleRequest(
+    req: Request,
+    extra: { server: TjsServeServer; remoteAddress: string },
+  ): Response | Promise<Response> | void {
+    const res = this.dispatch(req, extra);
+    if (res === undefined) return res;
+    const pathname = new URL(req.url).pathname;
+    if (res instanceof Promise) return res.then((r) => withSecurityHeaders(r, pathname));
+    return withSecurityHeaders(res, pathname);
+  }
+
+  private dispatch(
     req: Request,
     extra: { server: TjsServeServer; remoteAddress: string },
   ): Response | Promise<Response> | void {

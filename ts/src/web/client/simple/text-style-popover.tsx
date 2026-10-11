@@ -3,7 +3,7 @@
 import { useRef, useState } from 'preact/hooks';
 import type { ExtraKeyCfg, ExtraKeyTextStyle } from '../ui-types.js';
 import { AnchoredPopover } from '../components/AnchoredPopover.js';
-import { CheckField } from '../components/Fields.js';
+import { CheckField, NumberInput } from '../components/Fields.js';
 import { GhostButton } from '../components/GhostButton.js';
 import { postExtraKey } from './extra-keys-popovers.js';
 
@@ -112,14 +112,7 @@ function PxField({
   return (
     <label class="xkey-popover-field">
       <span>{label}</span>
-      <input
-        class="input"
-        type="number"
-        min={min}
-        max={max}
-        value={value}
-        onChange={handleChange}
-      />
+      <NumberInput min={min} max={max} value={value} onChange={handleChange} />
     </label>
   );
 }

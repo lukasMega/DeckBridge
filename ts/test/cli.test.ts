@@ -19,6 +19,7 @@ const ENV_KEYS = [
   'DECKBRIDGE_CACHE_DIR',
   'DECKBRIDGE_LOG_LEVEL',
   'DECKBRIDGE_NO_OVERRIDES',
+  'DECKBRIDGE_NO_EXTENSIONS',
   'DECKBRIDGE_NO_DAILY_PING',
 ] as const;
 
@@ -42,6 +43,7 @@ const NO_FLAGS: CliFlags = {
   headless: false,
   redactCommands: false,
   noOverrides: false,
+  noExtensions: false,
   noDailyPing: false,
 };
 
@@ -145,6 +147,16 @@ test('--redact-commands defaults to false (commands included verbatim)', () => {
   const r = parseCliArgs(['diagnose']);
   assert.ok(r.ok);
   if (r.ok) assert.equal(r.cli.flags.redactCommands, false);
+});
+
+test('run --no-extensions sets the safe-mode flag', () => {
+  const r = parseCliArgs(['run', '--no-extensions']);
+  assert.ok(r.ok);
+  if (r.ok) {
+    assert.equal(r.cli.command, 'run');
+    assert.equal(r.cli.flags.noExtensions, true);
+    assert.equal(r.cli.flags.noOverrides, false);
+  }
 });
 
 test('run --no-overrides sets the safe-mode flag', () => {
@@ -303,6 +315,7 @@ test('combined flags all land correctly', () => {
       cacheDir: OTHER_CACHE_DIR,
       redactCommands: false,
       noOverrides: false,
+      noExtensions: false,
       noDailyPing: false,
     });
   }
@@ -366,6 +379,16 @@ test('--no-overrides lands in tjs.env (read by DriverManager at module load)', (
   assert.equal(tjs.env.DECKBRIDGE_NO_OVERRIDES, undefined, 'absent flag sets nothing');
   applyFlagsToEnv({ ...NO_FLAGS, noOverrides: true });
   assert.equal(tjs.env.DECKBRIDGE_NO_OVERRIDES, '1');
+  restoreEnv(snap);
+});
+
+test('--no-extensions lands in tjs.env (read by the controller live)', () => {
+  const snap = snapshotEnv();
+  delete tjs.env.DECKBRIDGE_NO_EXTENSIONS;
+  applyFlagsToEnv(NO_FLAGS);
+  assert.equal(tjs.env.DECKBRIDGE_NO_EXTENSIONS, undefined, 'absent flag sets nothing');
+  applyFlagsToEnv({ ...NO_FLAGS, noExtensions: true });
+  assert.equal(tjs.env.DECKBRIDGE_NO_EXTENSIONS, '1');
   restoreEnv(snap);
 });
 

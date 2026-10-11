@@ -33,6 +33,15 @@
   font-size: 16px;
   letter-spacing: -0.01em;
 }
+/* Extension page icon: the manifest SVG as a mask (app-shell.tsx iconMask). */
+.ext-icon {
+  display: block;
+  width: 16px;
+  height: 16px;
+  background-color: currentColor;
+  -webkit-mask: var(--icon) center / contain no-repeat;
+  mask: var(--icon) center / contain no-repeat;
+}
 /* shared recipe for small icon buttons (topbar, popover close, step help, xkey config);
 later per-class rules keep only size/background/placement deltas */
 :is(.iconbtn, .pop-close, .step-help, .xkey-config-btn, .ghostbtn, .ctabtn, .addr-chip),
@@ -660,6 +669,27 @@ input[type='range'].range:disabled {
 .pairing-auto strong {
   margin-right: auto;
 }
+.pairing-progress {
+  flex: 1;
+  height: 8px;
+  overflow: hidden;
+  border-radius: 4px;
+  background: var(--accent-soft);
+}
+.pairing-progress span {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+  animation: pairing-fill linear forwards;
+}
+@keyframes pairing-fill {
+  from {
+    width: 0;
+  }
+  to {
+    width: 100%;
+  }
+}
 .pairing-question {
   margin: 0 0 10px;
   font-weight: 600;
@@ -875,6 +905,19 @@ input[type='range'].range:disabled {
 }
 .hsvg .rowin {
   animation-delay: 0.9s;
+}
+/* Keys light column by column; the 5 keys of a row are siblings (ui-help.ts svgPlugIn). */
+.hsvg .litkey:nth-child(5n + 2) {
+  animation-delay: 80ms;
+}
+.hsvg .litkey:nth-child(5n + 3) {
+  animation-delay: 160ms;
+}
+.hsvg .litkey:nth-child(5n + 4) {
+  animation-delay: 240ms;
+}
+.hsvg .litkey:nth-child(5n + 5) {
+  animation-delay: 320ms;
 }
 @keyframes hin {
   0%,
@@ -1354,7 +1397,7 @@ select.input.xkey-select {
 
 .popover.survey {
   max-width: 640px;
-  height: min(600px, calc(100dvh - 48px));
+  height: min(640px, calc(100dvh - 48px));
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -1636,4 +1679,66 @@ select.input.xkey-select {
   .survey-nav {
     margin-top: 14px;
   }
+}
+
+/* number input with inline -/+ buttons (components/Fields.tsx NumberInput) */
+.num-input {
+  position: relative;
+  display: inline-flex;
+}
+.tuning-field .num-input {
+  width: 100%;
+}
+.num-input input {
+  width: 100%;
+  padding-right: 52px;
+  appearance: textfield;
+  -moz-appearance: textfield;
+}
+.xkey-popover-field .num-input input {
+  width: 96px;
+}
+.num-input input::-webkit-inner-spin-button,
+.num-input input::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+.num-input button {
+  position: absolute;
+  top: 2px;
+  bottom: 2px;
+  width: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--r-sm);
+  background: transparent;
+  color: var(--fg-dim);
+  cursor: pointer;
+}
+.num-input button:first-of-type {
+  right: 25px;
+}
+.num-input button:last-of-type {
+  right: 3px;
+}
+.num-input button:hover:not(:disabled) {
+  color: var(--accent);
+  background: var(--border);
+}
+.num-input button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+/* Elgato app panel: delay field and "restart now" on one line */
+.elgato-restart-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+}
+.elgato-restart-row .tuning-field {
+  flex: 1;
+}
+.elgato-restart-row .ghostbtn {
+  white-space: nowrap;
 }

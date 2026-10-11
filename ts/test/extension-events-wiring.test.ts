@@ -10,12 +10,16 @@ import { test, summary } from './helpers/harness.js';
 
 function setup(model: DeviceModel, deviceKey: string | null = 'dk') {
   const events: ExtensionEvent[] = [];
-  const sink = { active: true, emit: (e: ExtensionEvent) => events.push(e) };
+  const wanted = new Set<ExtensionEvent['type']>(['deckAttached', 'input', 'imageProcessed']);
+  const sink = {
+    wants: (t: ExtensionEvent['type']) => wanted.has(t),
+    emit: (e: ExtensionEvent) => events.push(e),
+  };
   const docks = new Map<number, Dock>();
   const dock = { model, identity: deviceKey === null ? undefined : { deviceKey } } as Dock;
   const wiring = new ExtensionEventWiring(sink, (i) => docks.get(i));
   const place = (index: number): void => void docks.set(index, dock);
-  return { events, sink, docks, wiring, place };
+  return { events, wanted, docks, wiring, place };
 }
 
 console.log('\nextension-events-wiring');
@@ -65,9 +69,9 @@ test('input and image events carry the device key and the raw input', () => {
   );
 });
 
-test('an inactive sink gets nothing, but the attach is still remembered', () => {
-  const { events, sink, wiring, place } = setup(DEFAULT_MODEL);
-  sink.active = false;
+test('an unwanted type is not built, but the attach is still remembered', () => {
+  const { events, wanted, wiring, place } = setup(DEFAULT_MODEL);
+  wanted.clear();
   place(0);
   const hooks = wiring.hooks(0);
   hooks.attached!(false);
@@ -75,6 +79,21 @@ test('an inactive sink gets nothing, but the attach is still remembered', () => 
   hooks.imageSent!(0, false);
   assert.equal(events.length, 0);
   assert.equal(wiring.currentDecks().length, 1);
+});
+
+test('only the wanted types are built', () => {
+  const { events, wanted, wiring, place } = setup(DEFAULT_MODEL);
+  wanted.clear();
+  wanted.add('input');
+  place(0);
+  const hooks = wiring.hooks(0);
+  hooks.attached!(false);
+  hooks.input!({ kind: 'key', mk2: 0, state: 'down' });
+  hooks.imageSent!(0, false);
+  assert.deepEqual(
+    events.map((e) => e.type),
+    ['input'],
+  );
 });
 
 test('a forgotten dock (unplugged dock 0) is not replayed', () => {

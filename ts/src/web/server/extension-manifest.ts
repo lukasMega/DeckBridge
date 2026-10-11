@@ -1,7 +1,8 @@
 // Finds extension folders and checks their manifest.json (docs/extensions.md#manifest).
-import { EXTENSION_API_VERSION } from '../../extension/api.js';
+import { EXTENSION_API_VERSION, EXTENSION_EVENT_TYPES } from '../../extension/api.js';
 import type { ExtensionManifest } from '../../extension/api.js';
 import { EXTENSION_ID } from '../../infra/settings-sanitize.js';
+import { readFolderFiles } from './extension-digest.js';
 
 /** One folder under the extensions dir; `problem` set = it can never run. */
 export interface FoundExtension {
@@ -9,6 +10,10 @@ export interface FoundExtension {
   dir: string;
   manifest?: ExtensionManifest;
   problem?: string;
+  /** Digest of the whole folder, as read for this scan. */
+  digest?: string;
+  /** ui.js as hashed; served from memory. */
+  uiJs?: string;
 }
 
 const MAX_TEXT = 280;
@@ -32,6 +37,23 @@ function checkPage(page: unknown): Checked<ExtensionManifest['page']> {
   return { value: { title: p.title, icon: p.icon } };
 }
 
+/** Declared events must be known and unique; an empty list is valid. */
+function checkPermissions(raw: unknown): Checked<ExtensionManifest['permissions']> {
+  const problem = `permissions.events must list event types from: ${EXTENSION_EVENT_TYPES.join(', ')}`;
+  if (raw === undefined) return { problem: 'permissions is required' };
+  const p = raw as Record<string, unknown> | null;
+  if (typeof p !== 'object' || p === null || Array.isArray(p) || !Array.isArray(p.events)) {
+    return { problem };
+  }
+  const events = p.events as unknown[];
+  const known = EXTENSION_EVENT_TYPES as readonly unknown[];
+  const unique = new Set(events);
+  if (unique.size !== events.length || events.some((e) => !known.includes(e))) {
+    return { problem };
+  }
+  return { value: { events: [...(events as ExtensionManifest['permissions']['events'])] } };
+}
+
 /** The manifest, or why it is rejected. */
 export function checkManifest(
   raw: unknown,
@@ -50,6 +72,8 @@ export function checkManifest(
   if (description !== undefined && !text(description, MAX_TEXT)) {
     return { problem: `description must be text up to ${MAX_TEXT} characters` };
   }
+  const perms = checkPermissions(m.permissions);
+  if ('problem' in perms) return perms;
   const page = checkPage(m.page);
   if ('problem' in page) return page;
   const manifest: ExtensionManifest = {
@@ -57,27 +81,44 @@ export function checkManifest(
     name: m.name,
     version: m.version,
     apiVersion: EXTENSION_API_VERSION,
+    permissions: perms.value,
     ...(description === undefined ? {} : { description }),
     ...(page.value ? { page: page.value } : {}),
   };
   return { manifest };
 }
 
+/** Reads the folder once, so the manifest checked is the manifest that is hashed. */
 async function readFolder(id: string, dir: string): Promise<FoundExtension> {
+  const read = await readFolderFiles(dir);
+  if ('problem' in read) return { id, dir, problem: read.problem };
+  const { files, digest } = read;
+  const manifestBytes = files.get('manifest.json');
+  if (!manifestBytes) return { id, dir, problem: 'manifest.json is missing' };
   let raw: unknown;
   try {
-    raw = JSON.parse(new TextDecoder().decode(await tjs.readFile(`${dir}/manifest.json`)));
+    raw = JSON.parse(new TextDecoder().decode(manifestBytes));
   } catch (e) {
     return { id, dir, problem: `manifest.json unreadable: ${(e as Error).message}` };
   }
   const checked = checkManifest(raw, id);
   if ('problem' in checked) return { id, dir, problem: checked.problem };
-  try {
-    if (!(await tjs.stat(`${dir}/server.js`)).isFile) throw new Error('not a file');
-  } catch {
+  if (!files.has('server.js')) {
     return { id, dir, manifest: checked.manifest, problem: 'server.js is missing' };
   }
-  return { id, dir, manifest: checked.manifest };
+  const ui = files.get('ui.js');
+  return {
+    id,
+    dir,
+    manifest: checked.manifest,
+    digest,
+    ...(ui ? { uiJs: new TextDecoder().decode(ui) } : {}),
+  };
+}
+
+/** One extension folder, read as scanExtensions would read it. */
+export function readExtension(root: string, id: string): Promise<FoundExtension> {
+  return readFolder(id, `${root}/${id}`);
 }
 
 /** Every folder with an addressable id, sorted. A missing dir is empty; any other read

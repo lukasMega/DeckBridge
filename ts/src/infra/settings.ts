@@ -1,6 +1,11 @@
 import { sanitizeSurveySettings } from './settings-store.js';
 import { isTapFeedback, loadSettings, saveSettings, settingsPath } from './settings-store.js';
-import type { Settings, DeviceIdentitySettings, PersistedLogLevel } from './settings-store.js';
+import type {
+  ExtensionGrant,
+  Settings,
+  DeviceIdentitySettings,
+  PersistedLogLevel,
+} from './settings-store.js';
 import { isLogLevel } from '../shared/cli.js';
 import { openPathInOS } from './os-utils.ts';
 import {
@@ -28,7 +33,7 @@ import {
   isBrowserDeckProfile,
 } from '../devices/virtual/browser-deck-profiles.js';
 import {
-  sanitizeExtensionIds,
+  sanitizeExtensionGrants,
   sanitizeModelOverrides,
   sanitizeVirtualDeck,
 } from './settings-sanitize.js';
@@ -165,8 +170,8 @@ export class PersistedSettings implements DockPrefsStore {
    *  undefined = enabled / default delay. */
   elgatoAutoRestart: boolean | undefined = undefined;
   elgatoAutoRestartDelayS: number | undefined = undefined;
-  /** Extension ids the user turned on; machine-local, a settings import never sets it. */
-  enabledExtensions: string[] = [];
+  /** Switched-on extensions (id → grant); machine-local, a settings import never sets it. */
+  extensionGrants: Record<string, ExtensionGrant> = {};
   /** Browser's navigator.language (dailyPing's OS-locale fallback). Ephemeral —
    *  deliberately absent from current()/persist(), since the browser resends it
    *  on every load. */
@@ -221,7 +226,7 @@ export class PersistedSettings implements DockPrefsStore {
         .slice(0, MAX_DOCS_SEEN);
     }
     this.loadAutoRestart(saved);
-    this.enabledExtensions = sanitizeExtensionIds(saved.enabledExtensions);
+    this.extensionGrants = sanitizeExtensionGrants(saved.extensions);
     this.modelOverrides = sanitizeModelOverrides(saved.modelOverrides);
     if (Array.isArray(saved.accessTokens)) {
       const valid = saved.accessTokens.filter(isPushTokenRecord);
@@ -364,10 +369,17 @@ export class PersistedSettings implements DockPrefsStore {
     this.persist();
   }
 
-  /** Persist one extension's on/off (WebUI Settings > Extensions). */
-  setExtensionEnabled(id: string, enabled: boolean): void {
-    const others = this.enabledExtensions.filter((x) => x !== id);
-    this.enabledExtensions = enabled ? [...others, id] : others;
+  /** Switch an extension on with the digest and events the user approved. */
+  grantExtension(id: string, grant: ExtensionGrant): void {
+    this.extensionGrants = { ...this.extensionGrants, [id]: grant };
+    this.persist();
+  }
+
+  /** Switch an extension off. */
+  revokeExtension(id: string): void {
+    this.extensionGrants = Object.fromEntries(
+      Object.entries(this.extensionGrants).filter(([x]) => x !== id),
+    );
     this.persist();
   }
 
@@ -496,7 +508,7 @@ export class PersistedSettings implements DockPrefsStore {
       ...(this.elgatoAutoRestartDelayS !== undefined
         ? { elgatoAutoRestartDelayS: this.elgatoAutoRestartDelayS }
         : {}),
-      ...(this.enabledExtensions.length > 0 ? { enabledExtensions: this.enabledExtensions } : {}),
+      ...(Object.keys(this.extensionGrants).length > 0 ? { extensions: this.extensionGrants } : {}),
     };
   }
 

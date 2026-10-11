@@ -1,0 +1,35 @@
+<!doctype html>
+<meta charset="utf-8" />
+<!-- Served by GET /qr-sandbox and framed with sandbox="allow-scripts" (simple/pairing-qr.tsx).
+     The CSP comes from security-headers.ts. The URL and integrity must equal QR_LIB (simple/qr-lib.ts). -->
+<script>
+  var s = document.createElement('script');
+  s.src = 'https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.js';
+  s.integrity = 'sha384-8FWZA6BGMXhsfO+BLtrJK0We6gg5o1JyO8xQm6peWDEUs17ACA5ziE/NIAkl9z2k';
+  s.crossOrigin = 'anonymous';
+  s.onerror = function () {
+    parent.postMessage({ t: 'error' }, '*');
+  };
+  s.onload = function () {
+    parent.postMessage({ t: 'ready' }, '*');
+  };
+  document.head.appendChild(s);
+  addEventListener('message', function (e) {
+    if (!e.data || e.data.t !== 'make') return;
+    try {
+      var q = qrcode(0, 'M');
+      q.addData(String(e.data.text));
+      q.make();
+      var n = q.getModuleCount(),
+        m = [];
+      for (var r = 0; r < n; r++) {
+        var row = [];
+        for (var c = 0; c < n; c++) row.push(q.isDark(r, c) === true);
+        m.push(row);
+      }
+      parent.postMessage({ t: 'matrix', matrix: m }, '*');
+    } catch (x) {
+      parent.postMessage({ t: 'error' }, '*');
+    }
+  });
+</script>

@@ -4,6 +4,7 @@
   "version": "1.0.0",
   "apiVersion": 1,
   "description": "Session counters: key and dial presses, reconnects, key images and cache hits. Nothing is saved or sent anywhere.",
+  "permissions": { "events": ["deckAttached", "input", "imageProcessed"] },
   "page": {
     "title": "Statistics",
     "icon": "<svg width=\"16\" height=\"16\" viewBox=\"0 0 16 16\" fill=\"none\"><path d=\"M3 13.5v-5M8 13.5v-11M13 13.5v-7.5\" stroke=\"currentColor\" stroke-width=\"1.6\" stroke-linecap=\"round\"/></svg>"

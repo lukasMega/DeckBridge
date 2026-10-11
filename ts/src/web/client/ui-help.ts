@@ -24,8 +24,8 @@ function svgPlugIn(): string {
   const cols = [168, 192, 216, 240, 264];
   const rows = [34, 62, 90];
   rows.forEach((y) =>
-    cols.forEach((x, ci) => {
-      keys += `<rect class="litkey" x="${x}" y="${y}" width="18" height="18" rx="4" style="animation-delay:${ci * 80}ms"/>`;
+    cols.forEach((x) => {
+      keys += `<rect class="litkey" x="${x}" y="${y}" width="18" height="18" rx="4"/>`;
     }),
   );
   return (

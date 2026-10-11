@@ -1,8 +1,17 @@
-import { ICON } from '../components/Icon.js';
+import { ICON, Icon } from '../components/Icon.js';
 import { ThemeButton } from '../components/ThemeButton.js';
 import type { ExtensionInfo } from '../ui-types.js';
 import { switchToAdvanced } from './handlers.js';
 import { BackButton } from './controls.js';
+
+/** Manifest SVG as a CSS mask: its markup never reaches the DOM. An SVG image needs
+ *  xmlns, which inline markup usually omits. */
+function iconMask(svg: string): string {
+  const withNs = svg.includes('xmlns=')
+    ? svg
+    : svg.replace('<svg', '<svg xmlns="http://www.w3.org/2000/svg"');
+  return `url("data:image/svg+xml,${encodeURIComponent(withNs)}")`;
+}
 
 export function Topbar({
   updateBadge,
@@ -85,9 +94,17 @@ export function Topbar({
                   title={ext.page?.title}
                   type="button"
                   onClick={() => onPage(ext.id)}
-                  // eslint-disable-next-line @eslint-react/dom-no-dangerously-set-innerhtml -- the user enabled this extension, whose ui.js runs here anyway
-                  dangerouslySetInnerHTML={{ __html: ext.page?.icon ?? ICON.extension }}
-                />
+                >
+                  {ext.page?.icon ? (
+                    <span
+                      class="ext-icon"
+                      aria-hidden="true"
+                      style={{ '--icon': iconMask(ext.page.icon) }}
+                    />
+                  ) : (
+                    <Icon html={ICON.extension} />
+                  )}
+                </button>
               ))}
             </>
           )}

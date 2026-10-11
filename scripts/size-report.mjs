@@ -9,6 +9,7 @@
 // uses (ts/scripts/class-mangle.mjs); `--unmangled` reports the readable form instead.
 // Keep the options in sync when build.mjs changes.
 import { createRequire } from 'node:module';
+import { createHash } from 'node:crypto';
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -25,6 +26,13 @@ const DECK_CSS_TARGETS = ['safari12', 'ios12', 'chrome80', 'firefox78', 'edge80'
 const version = JSON.parse(readFileSync(join(TS, 'package.json'), 'utf8')).version;
 
 const gz = (bytes) => gzipSync(bytes, { level: 9 }).length;
+
+// Same CSP hash sources build.mjs defines as __UI_SCRIPT_HASHES__.
+const uiScriptHashes = [
+  ...readFileSync(join(CLIENT, 'ui.html'), 'utf8').matchAll(/<script>([\s\S]*?)<\/script>/g),
+]
+  .map((m) => `'sha256-${createHash('sha256').update(m[1], 'utf8').digest('base64')}'`)
+  .join(' ');
 
 const clientDefine = {
   'process.env.NODE_ENV': '"production"',
@@ -58,6 +66,7 @@ const shared = {
     global: 'globalThis',
     'process.env.NODE_ENV': '"production"',
     __BUILD_TIME__: JSON.stringify(new Date().toISOString()),
+    __UI_SCRIPT_HASHES__: JSON.stringify(uiScriptHashes),
     __LOG_LEVEL__: '1',
     __VERSION__: JSON.stringify(version),
     __DEMO__: 'false',

@@ -22,6 +22,9 @@ declare global {
   // Build timestamp injected by esbuild define.
   const __BUILD_TIME__: string;
 
+  // CSP sha256 hash sources of ui.html's inline scripts (ts/build.mjs, security-headers.ts).
+  const __UI_SCRIPT_HASHES__: string;
+
   // Version string injected by esbuild define (ts/build.mjs, VERSION env var; default 'dev').
   const __VERSION__: string;
 

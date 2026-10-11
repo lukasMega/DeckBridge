@@ -15,8 +15,8 @@ const BUDGETS = {
   'hid-worker': 47_394,
   'hid-scan-worker': 10_002,
   'plugin-worker': 2_733,
-  // Extension worker (2026-10-11); measured size + 1% headroom.
-  'extension-worker': 1_142,
+  // Extension worker: worker-side reply cap (2026-10-11); measured size + 1% headroom.
+  'extension-worker': 1_206,
 };
 
 const m = await measure();

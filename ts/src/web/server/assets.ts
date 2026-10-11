@@ -6,6 +6,7 @@ import uiAdvancedCSS from '../client/ui-advanced.css';
 import uiSimpleCSS from '../client/ui-simple.css';
 import uiJs from '../client/ui.js';
 import requirementsHtml from '../client/requirements.html';
+import qrSandboxHtml from '../client/qr-sandbox.html';
 
 export const assets = {
   html: uiHtml,
@@ -14,4 +15,5 @@ export const assets = {
   css: uiBaseCSS + (__SIMPLE_ONLY__ ? '' : uiAdvancedCSS) + uiSimpleCSS,
   js: uiJs,
   requirementsHtml,
+  qrSandboxHtml,
 };

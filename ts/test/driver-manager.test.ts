@@ -211,7 +211,7 @@ function makeFakeWebUI() {
     notifyBrightness(level: number) {
       this.notifyBrightnessCalls.push(level);
     },
-    extensions: { active: false, emit() {}, setDeckSource() {} },
+    extensions: { wants: () => false, emit() {}, setDeckSource() {} },
     noteImageSent() {},
     notifyDockImageCalls: [] as { dock: number; key: number; format: string }[],
     notifyDockImage(dock: number, key: number, _data: unknown, format: 'jpeg' | 'bmp' = 'jpeg') {

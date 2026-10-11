@@ -156,6 +156,8 @@ Three lighter worker types sit outside the CORA/image hot path:
   `/api/ext/<id>/<path>` is proxied to the worker and `/ext/<id>/ui.js` is served to the web
   UI, which mounts it with its own Preact. Same heartbeat as the plugin worker, but crashes
   are never forgiven: the third one stops the extension until it is switched on again.
+  Switching one on pins a SHA-256 digest of its whole folder; a scan that finds another digest
+  stops it, and it runs again only after a switch off and on ([trust](extensions.md#trust)).
 
 <details>
 <summary>WebUI log batching</summary>
@@ -175,6 +177,17 @@ authentication** — protocol-inherent, as the real Elgato Network Dock has none
 host can connect, push images, and read key events. `DECKBRIDGE_BIND` (e.g. `127.0.0.1`)
 restricts the listen address. The WebUI (3000) binds `127.0.0.1` by default; `--bind` /
 `DECKBRIDGE_BIND` moves both the CORA servers and the WebUI.
+
+Every WebUI response carries `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`,
+`Referrer-Policy: same-origin` and a Content-Security-Policy with `frame-ancestors 'none'`, so
+no other site can frame the WebUI. The app policy allows scripts only from the page itself and
+the hashes of the inline scripts in `ui.html`, and it allows no inline styles and no
+connections to other hosts. `/requirements` is a standalone page with inline script, so its
+policy only sets `object-src 'none'`, `base-uri 'none'` and `frame-ancestors 'none'`. The
+`/qr-sandbox` page draws the pairing QR code. It is framed by the WebUI itself
+(`X-Frame-Options: SAMEORIGIN`), its policy allows no connections, images or forms, and it runs with
+`sandbox allow-scripts`, so opened top-level it cannot reach the WebUI origin. A route can set
+its own header instead of the default; `/go/docs` keeps `Referrer-Policy: no-referrer`.
 
 `/api/push/*` is the one token-authenticated path (bearer token, `Origin` absent or the
 WebUI's own, no `Host` check; see [push-api.md](push-api.md)). A token authorizes nothing else,
@@ -231,7 +244,7 @@ immediately, and flags must land in `tjs.env` before other modules read it. `par
 a hand-rolled parser that must not import anything else in the tree. It recognizes six commands
 (`run` (default), `devices`, `diagnose`, `push`, `version`, `help`) plus flags: `--bind`,
 `--webui-port`, `--no-webui`, `--open`, `--headless`, `--log-level`, `--no-overrides`,
-`--cache-dir`, `-h/--help`, `-V/--version`, and the `diagnose`-only `--out` and
+`--no-extensions`, `--cache-dir`, `-h/--help`, `-V/--version`, and the `diagnose`-only `--out` and
 `--redact-commands`. `push` has positional args and its own flags, so the parser hands it the
 remaining args (`rest`) and [cli/push.ts](../ts/src/cli/push.ts) — a thin HTTP client for
 `/api/push/:channel` that loads no native libs and opens no device — parses them.
@@ -636,6 +649,7 @@ controllers on `RouteContext` directly; `WebUIController` holds only the state t
 | `ExtraKeysController` | `web/server/extra-keys-controller.ts` | extra-key widget config — see [Plugins and extra-key widgets](#plugins-and-extra-key-widgets) |
 | `MockConfig` (`defaultMockConfig`/`mergeMockConfig`) | `web/server/mock-config.ts` | the mock driver's spoofed identity fields, validated for the WebUI's mock-config editor |
 | `WebRequestGuard` (`isAllowedWebRequest`) | `web/server/web-request-guard.ts` | Host/Origin check against `localhost`/`127.0.0.1`/`[::1]` (+ this machine's own interface IPs when `--bind 0.0.0.0`) — DNS-rebinding/CSRF hardening for the WebUI, independent of the CORA ports' lack of auth (see [Network exposure](#network-exposure)) |
+| `withSecurityHeaders` (`securityHeaders`) | `web/server/security-headers.ts` | the headers on every WebUI response, wrapped around each dispatch in `web-ui-server.ts`: framing, CSP, nosniff, Referrer-Policy (see [Network exposure](#network-exposure)) |
 
 </details>
 

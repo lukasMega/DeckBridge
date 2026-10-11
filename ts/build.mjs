@@ -17,6 +17,15 @@ import { createInstrumenter } from 'istanbul-lib-instrument';
 import { cssClasses, mangleClasses, selectedClasses } from './scripts/class-mangle.mjs';
 
 const dir = path.dirname(fileURLToPath(import.meta.url));
+// CSP hash sources of ui.html's inline scripts (security-headers.ts). minifyHtml keeps
+// <script> blocks verbatim, so the source text is what the browser hashes.
+const uiScriptHashes = [
+  ...readFileSync(path.resolve(dir, 'src/web/client/ui.html'), 'utf8').matchAll(
+    /<script>([\s\S]*?)<\/script>/g,
+  ),
+]
+  .map((m) => `'sha256-${createHash('sha256').update(m[1], 'utf8').digest('base64')}'`)
+  .join(' ');
 const isTest = process.argv.includes('--test');
 const isSmoke = process.argv.includes('--smoke');
 const isProbe = process.argv.includes('--probe');
@@ -349,6 +358,7 @@ const shared = {
     global: 'globalThis',
     'process.env.NODE_ENV': '"production"',
     __BUILD_TIME__: JSON.stringify(new Date().toISOString()),
+    __UI_SCRIPT_HASHES__: JSON.stringify(uiScriptHashes),
     __LOG_LEVEL__: String(logLevel),
     __VERSION__: JSON.stringify(version),
     __DEMO__: 'false',

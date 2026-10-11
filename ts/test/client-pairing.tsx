@@ -394,9 +394,12 @@ async function runPairingChoices(root: HTMLElement, check: Check): Promise<void>
   const original = globalThis.fetch;
   const originalSetTimeout = globalThis.setTimeout;
   let finishMinimumWait: (() => void) | undefined;
+  const tenSecondTimers: Array<() => void> = [];
   globalThis.setTimeout = ((handler: TimerHandler, delay?: number, ...args: unknown[]): number => {
-    if (delay === 5000 && typeof handler === 'function') {
-      finishMinimumWait = () => (handler as (...values: unknown[]) => void)(...args);
+    if (delay === 10_000 && typeof handler === 'function') {
+      // The refresh hint shares this delay, so fire every ten-second timer together.
+      tenSecondTimers.push(() => (handler as (...values: unknown[]) => void)(...args));
+      finishMinimumWait = () => tenSecondTimers.splice(0).forEach((fire) => fire());
       return 1_000_000;
     }
     return originalSetTimeout(handler, delay, ...args);
@@ -487,24 +490,27 @@ async function runPairingChoices(root: HTMLElement, check: Check): Promise<void>
     );
     const open = root.querySelector<HTMLButtonElement>('.primary')!;
     await act(() => open.click());
-    await act(() => open.click());
-    check(open.disabled, 'Pairing: action is disabled while launching');
+    check(
+      root.querySelector('.primary') === null &&
+        root.querySelector('[role="progressbar"]') !== null,
+      'Pairing: progress bar replaces the button while launching',
+    );
     check(
       requests.filter((r) => r.method === 'POST').length === 1,
-      'Pairing: repeated activation sends one action',
+      'Pairing: one click sends one action',
     );
     await act(() => finishAction!());
     await settle();
     check(
-      open.disabled && open.textContent === 'Please wait…',
-      'Pairing: fast launch keeps Please wait until five seconds pass',
+      root.querySelector('[role="progressbar"]') !== null,
+      'Pairing: progress stays after fast launch until ten seconds pass',
     );
-    check(finishMinimumWait !== undefined, 'Pairing: opening starts a five-second minimum wait');
+    check(finishMinimumWait !== undefined, 'Pairing: opening starts a ten-second progress');
     await act(() => finishMinimumWait!());
     await settle();
     check(
       root.querySelector('.primary')?.textContent === 'Restart Elgato app',
-      'Pairing: running process shows Restart after launch',
+      'Pairing: running process shows Restart after progress',
     );
     check(root.textContent.includes('Elgato app opened.'), 'Pairing: launch completion is visible');
     running = false;
@@ -513,16 +519,19 @@ async function runPairingChoices(root: HTMLElement, check: Check): Promise<void>
       root.querySelector('.primary')?.textContent === 'Open Elgato app',
       'Pairing: focus refresh detects an app that quit',
     );
-    await act(() => open.click());
+    await act(() => root.querySelector<HTMLButtonElement>('.primary')!.click());
     await act(() => finishMinimumWait!());
     await settle();
     check(
-      open.disabled && open.textContent === 'Please wait…',
-      'Pairing: slow launch stays busy after five seconds while request is pending',
+      root.querySelector('[role="progressbar"]') !== null,
+      'Pairing: slow launch keeps progress after ten seconds while request is pending',
     );
     await act(() => finishAction!());
     await settle();
-    check(!open.disabled, 'Pairing: slow launch becomes available when request finishes');
+    check(
+      root.querySelector('.primary') !== null,
+      'Pairing: slow launch shows the button when request finishes',
+    );
     running = true;
     await choose(false);
     await choose(true);

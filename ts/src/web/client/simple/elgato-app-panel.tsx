@@ -65,17 +65,19 @@ export function ElgatoAppPanel({
         disabled={!supported}
         onChange={(next) => void save({ enabled: next })}
       />
-      <NumberField
-        label="Wait before restarting (seconds)"
-        value={delayS}
-        min={3}
-        max={120}
-        disabled={!supported || !enabled}
-        onChange={(next) => next !== undefined && void save({ enabled, delayS: next })}
-      />
-      <GhostButton disabled={!supported || action.busy} onClick={restartNow}>
-        {action.busy ? 'Restarting…' : 'Restart Elgato app now'}
-      </GhostButton>
+      <div class="elgato-restart-row">
+        <NumberField
+          label="Wait before restarting (seconds)"
+          value={delayS}
+          min={3}
+          max={120}
+          disabled={!supported || !enabled}
+          onChange={(next) => next !== undefined && void save({ enabled, delayS: next })}
+        />
+        <GhostButton disabled={!supported || action.busy} onClick={restartNow}>
+          {action.busy ? 'Restarting…' : 'Restart Elgato app now'}
+        </GhostButton>
+      </div>
       <Feedback error={action.error} status={action.status} />
     </Collapsible>
   );

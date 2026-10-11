@@ -15,6 +15,7 @@ const STATE_TEXT: Record<ExtensionInfo['state'], string> = {
   running: '',
   error: 'Stopped: ',
   invalid: 'Cannot run: ',
+  changed: 'Stopped: ',
 };
 
 function note(ext: ExtensionInfo): string {
@@ -45,13 +46,16 @@ export function ExtensionsPanel(): preact.JSX.Element {
       bodyId="extensions-body"
       status={`${running} of ${view.extensions.length} on`}
     >
+      {view.safeMode && (
+        <p class="multi-deck-note">Extensions are off for this session (--no-extensions).</p>
+      )}
       {view.extensions.map((ext) => (
         <ToggleRow
           key={ext.id}
           id={`toggle-ext-${ext.id}`}
           label={`${ext.name} ${ext.version}`}
           checked={ext.enabled}
-          disabled={action.busy || ext.state === 'invalid'}
+          disabled={action.busy || ext.state === 'invalid' || view.safeMode === true}
           onChange={(next) => void toggle(ext, next)}
         >
           <p class="multi-deck-note">{note(ext)}</p>

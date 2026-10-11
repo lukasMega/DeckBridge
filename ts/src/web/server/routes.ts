@@ -39,6 +39,8 @@ export const routes: Route[] = [
   get('/ui.css', () => css(assets.css)),
   get('/ui.js', () => js(assets.js)),
   get('/requirements', () => html(assets.requirementsHtml)),
+  // Framed by the pairing QR (simple/pairing-qr.tsx); its CSP is set in security-headers.ts.
+  get('/qr-sandbox', () => html(assets.qrSandboxHtml)),
   // Counts the docs open, then hands off to the docs site (see docs-links.ts).
   get('/go/docs/:topic', ({ params, req, settings }) => {
     const topic = params.topic ?? '';

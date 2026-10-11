@@ -9,9 +9,9 @@ import { physicalEncoderCount } from './dock-status.js';
 
 type DeckAttached = Extract<ExtensionEvent, { type: 'deckAttached' }>;
 
-/** Where events go. `active` false = no extension listens, so no event is built. */
+/** Where events go. `wants` false = no running extension takes that type, so it is not built. */
 export interface ExtensionEventSink {
-  readonly active: boolean;
+  wants(type: ExtensionEvent['type']): boolean;
   emit(event: ExtensionEvent): void;
 }
 
@@ -45,15 +45,15 @@ export class ExtensionEventWiring {
           extraKeys: [...(dock.model.keyMap.extraKeys ?? [])],
         };
         this.attached.set(index, event);
-        if (this.sink.active) this.sink.emit(event);
+        if (this.sink.wants('deckAttached')) this.sink.emit(event);
       },
       input: (input) => {
-        if (!this.sink.active) return;
+        if (!this.sink.wants('input')) return;
         const key = deviceKey();
         if (key !== '') this.sink.emit({ type: 'input', at: Date.now(), deviceKey: key, input });
       },
       imageSent: (_keyIndex, cached) => {
-        if (!this.sink.active) return;
+        if (!this.sink.wants('imageProcessed')) return;
         const key = deviceKey();
         if (key !== '') {
           this.sink.emit({ type: 'imageProcessed', at: Date.now(), deviceKey: key, cached });

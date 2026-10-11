@@ -2,6 +2,7 @@
  *  slow, looping or throwing extension cannot stall the CORA ACK loop. A crash/CPU
  *  boundary, not a sandbox: the code keeps full tjs rights (docs/extensions.md#trust). */
 import type { ExtensionServer, ExtensionServerFactory } from './api.js';
+import { MAX_REPLY_CHARS } from './extension-worker-protocol.js';
 import type { ExtensionWorkerToMain, MainToExtensionWorker } from './extension-worker-protocol.js';
 
 // The global fetch / WebSocket SIGABRT the whole process inside a worker (plugin-worker.ts).
@@ -52,16 +53,21 @@ function deliver(events: Parameters<NonNullable<ExtensionServer['onEvents']>>[0]
 
 async function answer(msg: Extract<MainToExtensionWorker, { type: 'request' }>): Promise<void> {
   const { reqId, method, path, query, body } = msg;
+  const reply = (status: number, json: string): void =>
+    post({ type: 'response', reqId, status, json });
   try {
     if (!server?.handle) {
-      post({ type: 'response', reqId, status: 404, body: { error: 'not found' } });
+      reply(404, '{"error":"not found"}');
       return;
     }
     const res = await server.handle({ method, path, query, body });
-    // postMessage throws on a body that cannot be cloned; the catch turns that into a 500.
-    post({ type: 'response', reqId, status: res.status ?? 200, body: res.body });
+    // Serialized here so a large or cyclic reply never reaches the main thread; a stringify
+    // throw (cycles, BigInt) becomes a 500 below. A function body stringifies to undefined.
+    const json = (JSON.stringify(res.body ?? null) as string | undefined) ?? 'null';
+    if (json.length > MAX_REPLY_CHARS) throw new Error(`reply over ${MAX_REPLY_CHARS} characters`);
+    reply(res.status ?? 200, json);
   } catch (e) {
-    post({ type: 'response', reqId, status: 500, body: { error: errorMessage(e) } });
+    reply(500, JSON.stringify({ error: errorMessage(e) }));
   }
 }
 

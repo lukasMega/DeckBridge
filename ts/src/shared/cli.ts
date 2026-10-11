@@ -21,6 +21,9 @@ export interface CliFlags {
   /** `run`: ignore settings.json's `modelOverrides` for this session (safe mode
    *  — a bad keyMap override can make a device look dead). */
   noOverrides: boolean;
+  /** `run`: start no extension this session (safe mode). The list still shows, and
+   *  switching one on answers 409. Same effect as DECKBRIDGE_NO_EXTENSIONS=1. */
+  noExtensions: boolean;
   /** `run`: never send the daily usage ping (daily-ping-env.ts). Same effect as
    *  `DECKBRIDGE_NO_DAILY_PING=1` or settings.json `"a7s": false`. */
   noDailyPing: boolean;
@@ -63,6 +66,7 @@ ${__MOCK_BUILD__ ? '  --mock                    Start with the mock driver (no h
   --headless                Shorthand: no tray, no browser open, skip Elgato-app poll
   --log-level <lvl>         debug|info|warn|error|silent (runtime override)
   --no-overrides            Safe mode: ignore settings.json modelOverrides
+  --no-extensions           Safe mode: start no extension this session
   --no-daily-ping           Never send the daily ping
   --cache-dir <path>        Settings + native-lib extraction root (default: XDG cache dir)
   -h, --help                Show this help
@@ -86,6 +90,12 @@ Log level precedence: --log-level > $DECKBRIDGE_LOG_LEVEL > settings.json
  *  module load, so the WebUI reports the same answer the DriverManager acts on. */
 export function overridesDisabled(): boolean {
   return typeof tjs !== 'undefined' && tjs.env.DECKBRIDGE_NO_OVERRIDES === '1';
+}
+
+/** True in safe mode (`run --no-extensions` / DECKBRIDGE_NO_EXTENSIONS=1): no extension
+ *  starts this session; the list stays visible. Read live, like overridesDisabled(). */
+export function extensionsDisabled(): boolean {
+  return typeof tjs !== 'undefined' && tjs.env.DECKBRIDGE_NO_EXTENSIONS === '1';
 }
 
 export function versionText(): string {
@@ -136,6 +146,7 @@ const BOOLEAN_FLAGS: Record<string, BooleanFlagKey> = {
   '--headless': 'headless',
   '--redact-commands': 'redactCommands',
   '--no-overrides': 'noOverrides',
+  '--no-extensions': 'noExtensions',
   '--no-daily-ping': 'noDailyPing',
 };
 
@@ -188,6 +199,7 @@ function defaultFlags(): CliFlags {
     headless: false,
     redactCommands: false,
     noOverrides: false,
+    noExtensions: false,
     noDailyPing: false,
   } as CliFlags;
 }
@@ -263,5 +275,6 @@ export function applyFlagsToEnv(flags: CliFlags): void {
   if (flags.cacheDir !== undefined) tjs.env.DECKBRIDGE_CACHE_DIR = flags.cacheDir;
   if (flags.logLevel !== undefined) tjs.env.DECKBRIDGE_LOG_LEVEL = flags.logLevel;
   if (flags.noOverrides) tjs.env.DECKBRIDGE_NO_OVERRIDES = '1';
+  if (flags.noExtensions) tjs.env.DECKBRIDGE_NO_EXTENSIONS = '1';
   if (flags.noDailyPing) tjs.env.DECKBRIDGE_NO_DAILY_PING = '1';
 }

@@ -1,20 +1,13 @@
 // QR code for the pairing URL (plan D12). No QR library ships with DeckBridge: after an explicit
 // confirm, one pinned file is fetched from a CDN and run ONLY inside a sandboxed iframe (no
 // allow-same-origin), because the admin page can edit settings and bind keys to shell commands.
-// The frame gets text and returns a boolean matrix; nothing else crosses the boundary.
+// The frame loads /qr-sandbox (qr-sandbox.html), a served page with its own CSP: a srcdoc frame
+// would inherit the WebUI CSP and block the script. The frame gets text and returns a boolean
+// matrix; nothing else crosses the boundary.
 import { DocsLink } from '../components/DocsLink.js';
 import { useEffect, useState } from 'preact/hooks';
 import { GhostButton } from '../components/GhostButton.js';
-
-export const QR_LIB = {
-  name: 'qrcode-generator',
-  version: '1.4.4',
-  license: 'MIT',
-  sizeKb: 55,
-  url: 'https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.js',
-  // Hash of package/qrcode.js in the npm tarball (verified against it, not only the CDN copy).
-  integrity: 'sha384-8FWZA6BGMXhsfO+BLtrJK0We6gg5o1JyO8xQm6peWDEUs17ACA5ziE/NIAkl9z2k',
-} as const;
+import { QR_LIB } from './qr-lib.js';
 
 const QUIET_ZONE = 4;
 const MAX_MODULES = 100;
@@ -51,30 +44,6 @@ export function matrixPath(matrix: boolean[][]): { d: string; size: number } {
 
 export type QrLoader = (text: string) => Promise<boolean[][]>;
 
-// Runs inside the sandbox: loads the pinned file (SRI-checked by the browser), then answers one
-// `make` message with the matrix. Values are quoted via JSON so the markup cannot be broken.
-const QR_CSP = `default-src 'none'; script-src 'unsafe-inline' ${new URL(QR_LIB.url).origin}; connect-src 'none'; img-src 'none'; form-action 'none'; base-uri 'none'`;
-
-function sandboxDoc(): string {
-  const src = JSON.stringify(QR_LIB.url);
-  const integrity = JSON.stringify(QR_LIB.integrity);
-  return (
-    '<!doctype html><meta charset="utf-8">' +
-    // Nothing may leave the frame except postMessage: the pairing URL is sent in here.
-    `<meta http-equiv="Content-Security-Policy" content="${QR_CSP}"><script>` +
-    `var s=document.createElement('script');s.src=${src};s.integrity=${integrity};` +
-    "s.crossOrigin='anonymous';" +
-    "s.onerror=function(){parent.postMessage({t:'error'},'*')};" +
-    "s.onload=function(){parent.postMessage({t:'ready'},'*')};" +
-    'document.head.appendChild(s);' +
-    "addEventListener('message',function(e){if(!e.data||e.data.t!=='make')return;" +
-    "try{var q=qrcode(0,'M');q.addData(String(e.data.text));q.make();var n=q.getModuleCount(),m=[];" +
-    'for(var r=0;r<n;r++){var row=[];for(var c=0;c<n;c++)row.push(q.isDark(r,c)===true);m.push(row)}' +
-    "parent.postMessage({t:'matrix',matrix:m},'*')}catch(x){parent.postMessage({t:'error'},'*')}});" +
-    '</script>'
-  );
-}
-
 export function loadQrViaSandbox(text: string): Promise<boolean[][]> {
   return new Promise<boolean[][]>((resolve, reject) => {
     const frame = document.createElement('iframe');
@@ -104,7 +73,7 @@ export function loadQrViaSandbox(text: string): Promise<boolean[][]> {
     const timer = setTimeout(() => finish(new Error('QR library timed out')), LOAD_TIMEOUT_MS);
     // eslint-disable-next-line sonarjs/post-message -- sandbox origin is opaque; onMessage verifies frame.contentWindow
     window.addEventListener('message', onMessage);
-    frame.srcdoc = sandboxDoc();
+    frame.src = '/qr-sandbox';
     document.body.appendChild(frame);
   });
 }

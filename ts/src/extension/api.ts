@@ -15,6 +15,8 @@ export interface ExtensionManifest {
   version: string;
   apiVersion: number;
   description?: string;
+  /** The event types the extension receives; the host drops every other type. */
+  permissions: { events: ExtensionEventType[] };
   /** A WebUI page: a topbar button opens it and ui.js mounts into its body. */
   page?: { title: string; /** Inline SVG markup for the button. */ icon?: string };
 }
@@ -47,6 +49,15 @@ export type ExtensionEvent =
   | { type: 'input'; at: number; deviceKey: string; input: ExtensionInput }
   /** A key image was transformed and written; `cached` = served by the image cache. */
   | { type: 'imageProcessed'; at: number; deviceKey: string; cached: boolean };
+
+export type ExtensionEventType = ExtensionEvent['type'];
+
+/** Every event type; manifest `permissions.events` picks from these. */
+export const EXTENSION_EVENT_TYPES = [
+  'deckAttached',
+  'input',
+  'imageProcessed',
+] as const satisfies readonly ExtensionEventType[];
 
 /** A call to /api/ext/<id>/<path>; `path` is the single segment after the id. */
 export interface ExtensionRequest {

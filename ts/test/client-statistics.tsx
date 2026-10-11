@@ -115,7 +115,12 @@ async function runShell(check: Check): Promise<void> {
     await settle();
     const button = root.querySelector<HTMLButtonElement>('#ext-statistics');
     check(button?.getAttribute('aria-label') === 'Statistics', 'A running extension gets a button');
-    check(root.querySelector('#statsIcon') !== null, 'The button shows the manifest icon');
+    const icon = button?.querySelector<HTMLElement>('.ext-icon');
+    check(
+      icon?.style.getPropertyValue('--icon').startsWith('url("data:image/svg+xml,') === true,
+      'The button shows the manifest icon as a CSS mask',
+    );
+    check(root.querySelector('#statsIcon') === null, 'The manifest icon markup is not in the DOM');
     check(root.querySelector('#ext-off') === null, 'A disabled extension gets none');
     check(live() === 'polite', 'Home stage announces changes');
 
@@ -316,8 +321,80 @@ async function runPanel(check: Check): Promise<void> {
   }
 }
 
+/** --no-extensions: the note shows and every switch is disabled. */
+async function runSafeModePanel(check: Check): Promise<void> {
+  const root = document.createElement('div');
+  document.body.appendChild(root);
+  const view: ExtensionsView = {
+    dir: '/cache/extensions',
+    extensions: [{ ...STATS, enabled: false, state: 'disabled' }],
+    safeMode: true,
+  };
+  const fetches = stubFetch(() => ({}));
+  const before = getSnapshot();
+  try {
+    await act(() => patch({ extensions: view }));
+    await act(() => render(<ExtensionsPanel />, root));
+    root.querySelector<HTMLElement>('.collapsible-header, .collapsible button')?.click();
+    await settle();
+    check(
+      root.textContent.includes('Extensions are off for this session (--no-extensions).'),
+      'Safe mode says extensions are off',
+    );
+    check(
+      root.querySelector<HTMLInputElement>('#toggle-ext-statistics')?.disabled === true,
+      'Safe mode disables every switch',
+    );
+  } finally {
+    fetches.restore();
+    await act(() => render(null, root));
+    root.remove();
+    await act(() => patch(before));
+  }
+}
+
+/** A manifest icon with script-capable markup must stay out of the DOM. */
+async function runHostileIcon(check: Check): Promise<void> {
+  const root = document.createElement('div');
+  document.body.appendChild(root);
+  const hostile: ExtensionInfo = {
+    ...STATS,
+    id: 'hostile',
+    page: { title: 'Hostile', icon: '<svg><image href="x" onerror="window.__pwned=1"/></svg>' },
+  };
+  const fetches = stubFetch(() => ({}));
+  const before = getSnapshot();
+  try {
+    await act(() =>
+      patch({
+        status: { ...EMPTY_STATUS, docks: [] },
+        extensions: { dir: '/x', extensions: [hostile] },
+      }),
+    );
+    await act(() => render(<SimpleApp />, root));
+    await settle();
+    check(
+      root.querySelector('#ext-hostile .ext-icon') !== null,
+      'A hostile icon still gets a mask',
+    );
+    await act(() => new Promise<void>((resolve) => setTimeout(resolve, 50)));
+    check(root.querySelector('image') === null, 'A manifest icon adds no image element');
+    check(
+      (globalThis as { __pwned?: unknown }).__pwned === undefined,
+      'A manifest icon runs no script',
+    );
+  } finally {
+    fetches.restore();
+    await act(() => render(null, root));
+    root.remove();
+    await act(() => patch(before));
+  }
+}
+
 export async function runStatistics(check: Check): Promise<void> {
   await runShell(check);
+  await runHostileIcon(check);
   await runStatisticsUi(check);
   await runPanel(check);
+  await runSafeModePanel(check);
 }

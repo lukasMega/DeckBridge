@@ -1,5 +1,5 @@
 // Load/import guards for settings.json sections, split from settings.ts to keep it under the line limit.
-import type { Settings } from './settings-store.js';
+import type { ExtensionGrant, Settings } from './settings-store.js';
 import { isModelOverridesRecord, validateModelOverride } from '../devices/model-overrides.js';
 import { findModelById } from '../devices/registry.js';
 import type { DeviceModelOverride } from '../devices/driver.js';
@@ -53,10 +53,23 @@ export function sanitizeVirtualDeck(
 /** Extension folder names: the same shape the extensions controller accepts. */
 export const EXTENSION_ID = /^[a-z0-9][a-z0-9-]{0,31}$/;
 
-/** Saved `enabledExtensions`: well-formed ids only, no duplicates. */
-export function sanitizeExtensionIds(v: unknown): string[] {
-  if (!Array.isArray(v)) return [];
-  return [
-    ...new Set(v.filter((id): id is string => typeof id === 'string' && EXTENSION_ID.test(id))),
-  ];
+const EXTENSION_DIGEST = /^[0-9a-f]{64}$/;
+// Event names are checked for shape only: the controller knows the real list (infra can't import extension/api).
+const EVENT_NAME = /^[a-z]{1,32}$/i;
+
+/** Saved `extensions` grants: well-formed id, digest and events only. Anything else is dropped. */
+export function sanitizeExtensionGrants(v: unknown): Record<string, ExtensionGrant> {
+  const out: Record<string, ExtensionGrant> = {};
+  if (typeof v !== 'object' || v === null || Array.isArray(v)) return out;
+  for (const [id, raw] of Object.entries(v)) {
+    if (!EXTENSION_ID.test(id) || typeof raw !== 'object' || raw === null) continue;
+    const { digest, events } = raw as { digest?: unknown; events?: unknown };
+    if (typeof digest !== 'string' || !EXTENSION_DIGEST.test(digest)) continue;
+    if (!Array.isArray(events)) continue;
+    const names = [
+      ...new Set(events.filter((e): e is string => typeof e === 'string' && EVENT_NAME.test(e))),
+    ];
+    out[id] = { digest, events: names };
+  }
+  return out;
 }

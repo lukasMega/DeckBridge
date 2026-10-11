@@ -10,6 +10,11 @@ const MAX_BODY = 64 * 1024;
 const tooLarge = (): Response => json({ error: `body over ${MAX_BODY} bytes` }, 413);
 
 async function proxy({ extensions, params, req, url }: RouteContext): Promise<Response> {
+  // A cross-site <img>/<script> GET has no Origin header, so the request guard passes it.
+  const site = req.headers.get('sec-fetch-site');
+  if (site !== null && site !== 'same-origin' && site !== 'none') {
+    return json({ error: 'cross-site request' }, 403);
+  }
   if (Number(req.headers.get('content-length') ?? 0) > MAX_BODY) return tooLarge();
   let body: unknown;
   const raw = req.method === 'POST' ? await req.text() : '';
@@ -28,7 +33,10 @@ async function proxy({ extensions, params, req, url }: RouteContext): Promise<Re
     ...(body === undefined ? {} : { body }),
   };
   const reply = await extensions.request(params.id ?? '', request);
-  return json(reply.body ?? null, reply.status);
+  return new Response(reply.json, {
+    status: reply.status,
+    headers: { 'Content-Type': 'application/json' },
+  });
 }
 
 export const extensionRoutes: Route[] = [
@@ -37,14 +45,14 @@ export const extensionRoutes: Route[] = [
     await extensions.rescan();
     return json(extensions.view());
   }),
-  postJson('/api/extensions/enabled', (body: { id?: unknown; enabled?: unknown }, ctx) => {
-    const err = ctx.extensions.setEnabled(body.id, body.enabled);
+  postJson('/api/extensions/enabled', async (body: { id?: unknown; enabled?: unknown }, ctx) => {
+    const err = await ctx.extensions.setEnabled(body.id, body.enabled);
     return err ? json({ error: err.error }, err.status) : json(ctx.extensions.view());
   }),
   get('/api/ext/:id/:path', proxy),
   post('/api/ext/:id/:path', proxy),
-  get('/ext/:id/ui.js', async ({ extensions, params }) => {
-    const source = await extensions.uiScript(params.id ?? '');
+  get('/ext/:id/ui.js', ({ extensions, params }) => {
+    const source = extensions.uiScript(params.id ?? '');
     if (source === null) return notFound();
     return new Response(source, {
       headers: { 'Content-Type': 'application/javascript', 'Cache-Control': 'no-store' },

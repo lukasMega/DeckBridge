@@ -9,6 +9,8 @@ import { ManualAddPanel } from './controls.js';
 import { StatusChip } from '../components/StatusChip.js';
 import { GhostButton } from '../components/GhostButton.js';
 
+const LAUNCH_PROGRESS_MS = 10_000;
+
 type AutoRestartPending = NonNullable<Status['elgatoAutoRestartPending']>;
 
 function AutoRestartNotice({
@@ -83,46 +85,75 @@ function PairedAppAction({
     [action.status],
   );
 
+  // Launch takes a while: show progress instead of the button until the app is likely up.
+  const [launching, setLaunching] = useState(false);
+  useEffect(
+    function endLaunchProgress() {
+      if (!launching) return undefined;
+      const timer = window.setTimeout(() => setLaunching(false), LAUNCH_PROGRESS_MS);
+      return () => window.clearTimeout(timer);
+    },
+    [launching],
+  );
+
   const label = app?.running ? 'Restart Elgato app' : 'Open Elgato app';
-  let buttonLabel = app ? label : 'Checking Elgato app…';
-  if (action.busy) buttonLabel = 'Please wait…';
-  const activate = (): Promise<void> =>
-    action.run(async () => {
-      const minimumWait = app?.running
-        ? Promise.resolve()
-        : new Promise<void>((resolve) => window.setTimeout(resolve, 5000));
-      const result = await postJson<{ ok: boolean; reason?: string }>(
-        '/api/elgato-app/restart',
-        undefined,
-        `${label} failed`,
-      );
-      if (!result.ok) throw new Error(`${label} failed: ${result.reason ?? 'unknown reason'}`);
+  const buttonLabel = app ? label : 'Checking Elgato app…';
+  const activate = (): Promise<void> => {
+    setLaunching(true);
+    return action.run(async () => {
+      try {
+        const result = await postJson<{ ok: boolean; reason?: string }>(
+          '/api/elgato-app/restart',
+          undefined,
+          `${label} failed`,
+        );
+        if (!result.ok) throw new Error(`${label} failed: ${result.reason ?? 'unknown reason'}`);
+      } catch (e) {
+        // Errors surface immediately, with the button back for a retry.
+        setLaunching(false);
+        throw e;
+      }
       await load();
-      // Success only: errors above must surface immediately, not after the floor.
-      await minimumWait;
       return app?.running ? 'Elgato app restarted.' : 'Elgato app opened.';
     });
+  };
 
   if (app && !app.supported) {
     return <p class="step-sub">Open or restart Elgato app on its computer.</p>;
   }
 
+  let control: preact.JSX.Element;
+  if (error) {
+    control = <GhostButton onClick={load}>Retry</GhostButton>;
+  } else if (launching || action.busy) {
+    control = (
+      <div
+        class="pairing-progress"
+        role="progressbar"
+        aria-label="Waiting for Elgato app"
+        aria-busy="true"
+      >
+        <span style={{ animationDuration: `${LAUNCH_PROGRESS_MS}ms` }} />
+      </div>
+    );
+  } else {
+    control = (
+      <button
+        class="ctabtn primary"
+        type="button"
+        disabled={!app}
+        title="Controls the Elgato app on the computer running DeckBridge"
+        onClick={() => void activate()}
+      >
+        {buttonLabel}
+      </button>
+    );
+  }
+
   return (
     <>
       <div class="addr-row pairing-action-row">
-        {error ? (
-          <GhostButton onClick={load}>Retry</GhostButton>
-        ) : (
-          <button
-            class="ctabtn primary"
-            type="button"
-            disabled={!app || action.busy}
-            title="Controls the Elgato app on the computer running DeckBridge"
-            onClick={() => void activate()}
-          >
-            {buttonLabel}
-          </button>
-        )}
+        {control}
         <HelpButton
           helpId="open-app"
           onHelp={onHelp}

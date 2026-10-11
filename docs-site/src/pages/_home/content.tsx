@@ -17,7 +17,7 @@ export const DEVICES = deviceData.homepageOrder;
 
 export const HIGHLIGHTS = [
   'TypeScript + Rust',
-  'txiki.js runtime — no Node.js',
+  'txiki.js runtime ❤️ — no Node.js',
   'Dedicated USB worker thread',
   'JPEG resize + rotate per model',
   'mDNS auto-discovery',
