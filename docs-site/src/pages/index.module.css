@@ -148,14 +148,6 @@
 .heroPreview .heroInterface {
   width: 76%;
   margin-left: auto;
-  aspect-ratio: 500 / 706;
-}
-/* Crop existing full-page screenshot to its centered pairing card. */
-.heroPreview .heroInterface img {
-  width: 288%;
-  max-width: none;
-  margin-left: -94%;
-  margin-top: -5.6%;
 }
 .heroDevice {
   position: absolute;
@@ -630,40 +622,88 @@
 .features {
   margin-top: 28px;
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 14px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: start;
+  gap: 18px;
 }
 .feature {
-  padding: 20px 18px;
+  display: grid;
+  grid-template-columns: 64px minmax(0, 1fr);
+  gap: 20px;
+  min-height: 184px;
+  padding: 24px;
   border-radius: var(--r-md);
-  background: var(--surface);
+  background: linear-gradient(135deg, var(--surface) 60%, var(--accent-soft)), var(--surface);
   border: 1px solid var(--border);
   box-shadow: var(--shadow-1);
+  transition:
+    border-color 0.18s,
+    box-shadow 0.18s;
+}
+.feature:hover,
+.feature:focus-within {
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--border));
+  box-shadow: var(--shadow-2);
+}
+.featureCopy {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
 }
 .featureIco {
-  width: 34px;
-  height: 34px;
-  border-radius: var(--r-sm);
+  width: 64px;
+  height: 64px;
+  border-radius: var(--r-md);
   display: grid;
   place-items: center;
-  margin-bottom: 13px;
   background: var(--accent-soft);
   color: var(--accent);
 }
 .featureIco svg {
-  width: 18px;
-  height: 18px;
+  width: 40px;
+  height: 40px;
+}
+.featureIco .adraw {
+  stroke-dashoffset: 0;
+  animation: none;
+}
+.featureIco .sig,
+.featureIco .sigDot,
+.featureIco .gCell {
+  animation: none;
+  opacity: 0.65;
+  transform: none;
+}
+.feature:is(:hover, :focus-within) .adraw {
+  stroke-dashoffset: 1;
+  animation: adraw 0.8s ease forwards;
+}
+.feature:is(:hover, :focus-within) .sig {
+  animation: sig 1.8s ease-out infinite;
+}
+.feature:is(:hover, :focus-within) .sigDot {
+  animation: sigDot 1.8s ease-in-out infinite;
+}
+.feature:is(:hover, :focus-within) .gCell {
+  animation: gCell 2s ease-in-out infinite;
+}
+:global(html.db-no-anim) .featureIco :is(.adraw, .sig, .sigDot, .gCell) {
+  animation: none !important;
+  stroke-dashoffset: 0;
+  opacity: 0.65;
+  transform: none;
 }
 .featureTitle {
-  margin: 0 0 5px;
-  font-size: 14.5px;
+  margin: 0 0 10px;
+  font-size: 17px;
   font-weight: 650;
+  line-height: 1.35;
   letter-spacing: -0.01em;
 }
 .featureText {
   margin: 0;
-  font-size: 13px;
-  line-height: 1.5;
+  font-size: 15px;
+  line-height: 1.65;
   color: var(--fg-muted);
   text-wrap: pretty;
 }
@@ -676,18 +716,24 @@
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  margin-top: 12px;
-  padding: 0;
+  margin-top: auto;
+  min-height: 44px;
+  padding: 12px 0 0;
   background: none;
   border: none;
-  font-size: 12.5px;
+  font-size: 14px;
   font-weight: 650;
-  color: var(--accent);
+  color: color-mix(in oklch, var(--accent) 75%, var(--fg));
   letter-spacing: -0.01em;
 }
 .learnBtn:hover {
   text-decoration: underline;
   text-underline-offset: 3px;
+}
+.learnBtn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 4px;
+  border-radius: 4px;
 }
 .chev {
   width: 14px;
@@ -704,19 +750,12 @@
   transform: rotate(180deg);
 }
 
-/* ---- expanded detail panel (one open at a time) ---- */
+/* ---- inline details (one open at a time) ---- */
 .featureDetail {
-  margin-top: 16px;
-  display: grid;
-  grid-template-columns: auto 1fr;
-  align-items: center;
-  gap: clamp(18px, 4vw, 34px);
-  padding: clamp(20px, 4vw, 30px);
-  border-radius: var(--r-lg);
-  background: var(--surface);
-  border: 1px solid var(--border);
-  box-shadow: var(--shadow-2);
-  animation: panelIn 0.4s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+  grid-column: 1 / -1;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+  animation: panelIn 0.2s ease both;
 }
 @keyframes panelIn {
   from {
@@ -729,21 +768,6 @@
     transform: none;
     clip-path: inset(0 0 0 0);
   }
-}
-.detailAnim {
-  width: clamp(96px, 22vw, 128px);
-  height: clamp(96px, 22vw, 128px);
-  border-radius: var(--r-md);
-  display: grid;
-  place-items: center;
-  background: var(--accent-soft);
-  color: var(--accent);
-}
-.detailTitle {
-  margin: 0 0 8px;
-  font-size: clamp(1.05rem, 2.4vw, 1.25rem);
-  font-weight: 650;
-  letter-spacing: -0.02em;
 }
 .detailText {
   margin: 0;
@@ -1030,21 +1054,24 @@
 }
 @media (max-width: 760px) {
   .features {
-    grid-template-columns: repeat(2, 1fr);
-  }
-}
-@media (max-width: 460px) {
-  .features {
     grid-template-columns: 1fr;
   }
-  .featureDetail {
-    grid-template-columns: 1fr;
-    justify-items: center;
-    text-align: center;
+  .feature {
+    grid-template-columns: 56px minmax(0, 1fr);
+    gap: 16px;
+    min-height: 0;
+    padding: 20px;
+  }
+  .featureIco {
+    width: 56px;
+    height: 56px;
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .feature:is(:hover, :focus-within) .adraw {
+    stroke-dashoffset: 0;
+  }
   .demobtn {
     transition: none;
   }
@@ -1172,7 +1199,7 @@
   }
 }
 .lightboxImg {
-  max-width: min(1440px, 96vw);
+  max-width: min(1440px, 100%);
   max-height: 90vh;
   width: auto;
   height: auto;

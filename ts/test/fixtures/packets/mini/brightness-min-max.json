@@ -1,0 +1,36 @@
+{
+  "version": 1,
+  "model": "mini",
+  "pid": "0x0063",
+  "firmware": null,
+  "interface": null,
+  "source": "synthetic",
+  "assumeOpen": true,
+  "note": "gen1 brightness: 17-byte feature report 05 55 aa d1 01 <pct>.",
+  "steps": [
+    {
+      "op": "call",
+      "call": "setBrightness",
+      "args": {
+        "level": 0
+      }
+    },
+    {
+      "op": "feature",
+      "dir": "out",
+      "hex": "0555aad101000000000000000000000000"
+    },
+    {
+      "op": "call",
+      "call": "setBrightness",
+      "args": {
+        "level": 100
+      }
+    },
+    {
+      "op": "feature",
+      "dir": "out",
+      "hex": "0555aad101640000000000000000000000"
+    }
+  ]
+}

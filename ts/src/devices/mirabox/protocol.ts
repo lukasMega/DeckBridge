@@ -31,7 +31,11 @@ export function parseAckReport(
 ): { keyIndex: number; stateByte: number } | null {
   const off = reportId !== 0 ? 1 : 0;
   if (data[off] !== ACK[0] || data[off + 1] !== ACK[1] || data[off + 2] !== ACK[2]) return null;
-  return { keyIndex: data[9 + off] ?? 0, stateByte: data[10 + off] ?? 0 };
+  // A report cut before the state byte must not become a phantom key-0 event.
+  const keyIndex = data[9 + off];
+  const stateByte = data[10 + off];
+  if (keyIndex === undefined || stateByte === undefined) return null;
+  return { keyIndex, stateByte };
 }
 
 function zeroPad(len: number): number[] {

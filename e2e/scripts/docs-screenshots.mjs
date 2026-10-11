@@ -127,9 +127,7 @@ async function capture(name, snapshot, heading, wide = false) {
       );
       const box = await page.locator('.app').boundingBox();
       assert.ok(box);
-      const height = wide ? Math.max(955, Math.ceil(box.height + 108)) : Math.ceil(box.height + 56);
-      if (wide)
-        assert.equal(height, 955, 'homepage capture outgrew its 1440x955 dimensions in index.tsx');
+      const height = Math.ceil(box.height + 56);
       await page.setViewportSize({ width: wide ? 1440 : 500, height });
       assert.equal(
         await page.evaluate(() => document.documentElement.scrollWidth > innerWidth),
@@ -137,10 +135,14 @@ async function capture(name, snapshot, heading, wide = false) {
         'capture has horizontal overflow',
       );
       const filename = `${name}${theme === 'dark' ? '-dark' : ''}.png`;
-      await page.screenshot({ path: join(work, filename), animations: 'disabled', fullPage: true });
+      const screenshot = { path: join(work, filename), animations: 'disabled' };
+      if (wide) await page.locator('.app').screenshot(screenshot);
+      else await page.screenshot({ ...screenshot, fullPage: true });
       assert.deepEqual(errors, []);
       files.push(filename);
-      console.log(`${filename}: ${wide ? 1440 : 1000}x${height * (wide ? 1 : 2)}`);
+      console.log(
+        `${filename}: ${wide ? Math.ceil(box.width) : 1000}x${wide ? Math.ceil(box.height) : height * 2}`,
+      );
     } finally {
       await context.close();
     }

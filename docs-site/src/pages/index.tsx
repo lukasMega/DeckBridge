@@ -18,8 +18,8 @@ const SHOTS = [
     id: 'simple',
     light: '/img/webui-simple.png',
     dark: '/img/webui-simple-dark.png',
-    width: 1440,
-    height: 955,
+    width: 500,
+    height: 705,
     alt: 'DeckBridge simple web UI: a step-by-step pairing card showing the connected Stream Deck MK.2 and the network address to enter in the Elgato app.',
     caption: <>connect the deck, copy the address, pair.</>,
     label: 'Simple view',
@@ -43,18 +43,6 @@ export default function Home(): ReactNode {
       document.body.style.overflow = prev;
     };
   }, [zoom]);
-  useEffect(() => {
-    if (open === null) return;
-    if (!window.matchMedia('(max-width: 900px)').matches) return;
-    const id = setTimeout(
-      () =>
-        document
-          .getElementById('feature-detail')
-          ?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }),
-      0,
-    );
-    return () => clearTimeout(id);
-  }, [open]);
   return (
     <Layout
       title="DeckBridge — USB Stream Deck over WiFi"
@@ -178,52 +166,52 @@ export default function Home(): ReactNode {
               {FEATURES.map((f, idx) => {
                 const isOpen = open === idx;
                 return (
-                  <div className={styles.feature} data-open={isOpen} key={f.title}>
-                    <div className={styles.featureIco}>{f.icon}</div>
-                    <h3 className={styles.featureTitle}>{f.title}</h3>
-                    <p className={styles.featureText}>{f.text}</p>
-                    <button
-                      type="button"
-                      className={styles.learnBtn}
-                      aria-expanded={isOpen}
-                      aria-controls="feature-detail"
-                      onClick={() => setOpen((o) => (o === idx ? null : idx))}
-                    >
-                      {isOpen ? 'Show less' : 'Learn more'}
-                      <svg
-                        className={styles.chev}
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        aria-hidden="true"
+                  <article className={styles.feature} data-open={isOpen} key={f.title}>
+                    <div className={styles.featureIco}>{f.anim}</div>
+                    <div className={styles.featureCopy}>
+                      <h3 className={styles.featureTitle} id={`feature-title-${idx}`}>
+                        {f.title}
+                      </h3>
+                      <p className={styles.featureText}>{f.text}</p>
+                      <button
+                        type="button"
+                        className={styles.learnBtn}
+                        aria-expanded={isOpen}
+                        aria-controls={`feature-detail-${idx}`}
+                        aria-describedby={`feature-title-${idx}`}
+                        onClick={() => setOpen((o) => (o === idx ? null : idx))}
                       >
-                        <path
-                          d="M6 9l6 6 6-6"
-                          stroke="currentColor"
-                          strokeWidth="2.2"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                        />
-                      </svg>
-                    </button>
-                  </div>
+                        {isOpen ? 'Show less' : 'Learn more'}
+                        <svg
+                          className={styles.chev}
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          aria-hidden="true"
+                        >
+                          <path
+                            d="M6 9l6 6 6-6"
+                            stroke="currentColor"
+                            strokeWidth="2.2"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          />
+                        </svg>
+                      </button>
+                    </div>
+                    {isOpen && (
+                      <div
+                        className={styles.featureDetail}
+                        id={`feature-detail-${idx}`}
+                        role="region"
+                        aria-labelledby={`feature-title-${idx}`}
+                      >
+                        <p className={styles.detailText}>{f.detail}</p>
+                      </div>
+                    )}
+                  </article>
                 );
               })}
             </div>
-            {open !== null && (
-              <div
-                className={styles.featureDetail}
-                id="feature-detail"
-                role="region"
-                aria-label={FEATURES[open].title}
-                key={open}
-              >
-                <div className={styles.detailAnim}>{FEATURES[open].anim}</div>
-                <div className={styles.detailBody}>
-                  <h3 className={styles.detailTitle}>{FEATURES[open].title}</h3>
-                  <p className={styles.detailText}>{FEATURES[open].detail}</p>
-                </div>
-              </div>
-            )}
           </section>
 
           {/* ---- screenshots ---- */}
