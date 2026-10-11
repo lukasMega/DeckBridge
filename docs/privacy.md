@@ -90,6 +90,9 @@ nothing to join two days' pings together. The only local state is `a7sDay`, the 
 of the last ping (which never leaves the machine), and the docs topics waiting for the next ping. Turn it off with `"a7s": false` in
 `settings.json` — a separate switch from the update check.
 
+The **Statistics** page counts presses, images, and reconnects for the current session. The
+numbers stay in memory, reset when DeckBridge restarts, and are never sent anywhere.
+
 ### When DeckBridge does not ping at all
 
 Independently of the setting above, the ping is skipped outright when any of these

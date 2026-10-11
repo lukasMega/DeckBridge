@@ -73,7 +73,7 @@ export function buildStateResponse(s: DemoState): StateResponse {
     keyEvents: [],
     logs: [],
     commLogs: [],
-    stats: { uptimeMs: 0, elgatoRxPkts: 0, elgatoTxPkts: 0, imagesSent: 0 },
+    stats: { uptimeMs: 0, imagesSent: 0 },
     brightnessOverride: s.brightnessOverride,
     deviceModels: DEVICE_MODELS.map(({ id, name, keyCount }) => ({ id, name, keyCount })),
     deviceIdentity: identity,

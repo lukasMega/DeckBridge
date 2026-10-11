@@ -11,14 +11,13 @@ import {
   MDNS_SERVICE_NAME,
   MOCK_KEY_PRESS_DURATION_MS,
 } from '../shared/types.js';
-import type { DockStatus, KeyState, TouchStripMode, TouchWindowRegion } from '../shared/types.js';
+import type { DockStatus, TouchStripMode } from '../shared/types.js';
+import type { DockHooks, DockOptions, DockSettings } from './dock-types.js';
 import type { ClientApp } from '../shared/types.js';
-import type { WidgetPaint } from '../shared/widget-layout.js';
 import { sendSplashImages } from '../shared/splash-sender.js';
 import { DEFAULT_MODEL, findModelById } from '../devices/registry.js';
 import { applyModelOverrides } from '../devices/model-overrides.js';
 import type { DockDriver, DeviceModel, DeviceModelOverride } from '../devices/driver.js';
-import type { PersistedSettings } from '../infra/settings.js';
 import type { DockPrefs } from '../infra/dock-prefs.js';
 import { touchStripOptionsOf } from '../infra/settings-store.js';
 import { ExtraKeyWidgets } from './extra-keys.js';
@@ -27,12 +26,9 @@ import { ExtraKeyActions } from './command-actions.js';
 import type { CoraDock } from './cora-dock.js';
 import { begin, settleAll } from './settle.js';
 import { LastFrames, wireDockImages } from './dock-frames.js';
-import type { ImageFormat } from './dock-frames.js';
 import { DockPages } from './dock-pages.js';
 import { createDockStandby, dialInput } from './dock-standby.js';
-import type { DockStandby } from './dock-standby.js';
-import type { PageObservation } from '../shared/page-match.js';
-import type { StandbyClock, StandbyTiming } from './standby-policy.js';
+import type { DockStandby, StandbyInput } from './dock-standby.js';
 import {
   buildDockStatus,
   knobRefresh,
@@ -45,49 +41,6 @@ import type { DeviceInfo, DockIdentity, DriverEventSinks } from './dock-status.j
 
 /** The app's own default-brightness handshake follows pairing; re-push after it. */
 const BRIGHTNESS_RESEND_MS = 1000;
-
-/** Where a dock reports out. All optional: a dock without a WebUI mirror just runs. */
-export interface DockHooks {
-  /** Status may have changed (brightness, identity, pairing, start/stop). */
-  changed?: () => void;
-  /** The attached USB driver reported an unplug. */
-  disconnect?: () => void;
-  /** Grid key press (activity feed + key-map learn mode). */
-  key?: (mk2Index: number, state: KeyState, wireId?: number) => void;
-  action?: (message: string) => void;
-  image?: (key: number, data: Buffer, format: ImageFormat) => void;
-  touchImage?: (data: Uint8Array, region?: TouchWindowRegion) => void;
-  widgetPaint?: (wireId: number, paint: WidgetPaint | null) => void;
-  stripWrite?: (wireId: number, jpeg: Uint8Array, full: boolean) => void;
-  /** The Elgato app set a brightness this dock applied (WebUI slider). */
-  brightness?: (level: number) => void;
-  imageSent?: () => void;
-  /** The Elgato app's child client attached (after markPaired). */
-  elgatoAttached?: () => void;
-  /** The Elgato page recognition changed (the WebUI mirrors it). */
-  pageObservation?: (obs: PageObservation) => void;
-}
-
-export type DockSettings = Pick<PersistedSettings, 'for' | 'getOrCreateIdentity' | 'markPaired'>;
-
-export interface DockOptions {
-  index: number;
-  cora: CoraDock;
-  /** CORA TCP ports: status + the bind-conflict message. */
-  ports: { primary: number; child: number };
-  settings: DockSettings;
-  /** Known up front for a dock built around one USB unit; else resolveIdentity(). */
-  identity?: DockIdentity;
-  model?: DeviceModel;
-  deviceInfo?: DeviceInfo;
-  hooks?: DockHooks;
-  getShuttingDown?: () => boolean;
-  /** Extra status fields only this dock knows (the browser deck's connected pages). */
-  statusExtra?: () => Partial<DockStatus>;
-  /** Test seams for the standby timers; production passes neither. */
-  standbyClock?: StandbyClock;
-  standbyTiming?: StandbyTiming;
-}
 
 export class Dock {
   readonly index: number;
@@ -238,6 +191,7 @@ export class Dock {
     this.pages.reset(); // frames replay below; this also publishes the geometry
     const real = !__MOCK_BUILD__ || !mock;
     this.wireDriver(driver, real);
+    this.hooks.attached?.(!real);
     this.seed(driver);
     if (real) {
       sendSplashImages(driver);
@@ -315,6 +269,8 @@ export class Dock {
     if (this.stopped || mk2Index < 0 || mk2Index >= this.model.keyCount) return false;
     if (this.virtualPresses.has(mk2Index)) return false;
     this.standby.noteActivity();
+    // Mock clicks stand in for hardware presses, so Statistics counts them.
+    if (__MOCK_BUILD__) this.hooks.input?.({ kind: 'key', mk2: mk2Index, state: 'down' });
     const child = this.cora.childServer;
     child.sendKeyEvent(mk2Index, 'down');
     this.hooks.key?.(mk2Index, 'down'); // no wireId: key-map learn must not take it as evidence
@@ -451,6 +407,12 @@ export class Dock {
     }, BRIGHTNESS_RESEND_MS);
   }
 
+  /** Stats see every input, including a waking press standby swallows. */
+  private noteInput(input: StandbyInput): boolean {
+    this.hooks.input?.(input);
+    return this.standby.noteInput(input);
+  }
+
   private wireDriver(driver: DockDriver, real: boolean): void {
     const child = this.cora.childServer;
     // Before the mock branch: mock docks are tracked too.
@@ -462,23 +424,23 @@ export class Dock {
         clearTimeout(this.virtualPresses.get(index));
         this.virtualPresses.delete(index);
         // A swallowed waking press stays off the app; the activity feed / key-map learn still see it.
-        if (!this.standby.noteInput({ kind: 'key', mk2: index, state })) {
+        if (!this.noteInput({ kind: 'key', mk2: index, state })) {
           child.sendKeyEvent(index, state);
         }
         this.hooks.key?.(index, state, wireId);
       },
       onExtraKey: (wireId, state) => {
-        if (!this.standby.noteInput({ kind: 'extraKey', wireId, state })) {
+        if (!this.noteInput({ kind: 'extraKey', wireId, state })) {
           this.extraKeyActions.handleKey(wireId, state);
         }
       },
       // The knob override / a widget tap refresh consumes the event; else the app gets it.
       onDial: (event) => {
-        if (this.standby.noteInput(dialInput(event))) return;
+        if (this.noteInput(dialInput(event))) return;
         if (!this.encoders.handleDial(event)) child.sendDial(event);
       },
       onTouch: (event) => {
-        if (this.standby.noteInput({ kind: 'touch' })) return;
+        if (this.noteInput({ kind: 'touch' })) return;
         if (!tapRefresh(this.widgets, this.model, event)) child.sendTouch(event);
       },
       onReinit: () => {

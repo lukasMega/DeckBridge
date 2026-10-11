@@ -512,8 +512,12 @@ export class PersistedSettings implements DockPrefsStore {
     this.persist();
   }
 
-  private autoRestartEntries(): Pick<Settings, 'elgatoAutoRestart' | 'elgatoAutoRestartDelayS'> {
+  private optionalEntries(): Partial<Settings> {
     return {
+      ...(this.updateCheck !== undefined ? { updateCheck: this.updateCheck } : {}),
+      ...(this.updateState ? { updateState: this.updateState } : {}),
+      ...(this.a7s !== undefined ? { a7s: this.a7s } : {}),
+      ...(this.a7sDay ? { a7sDay: this.a7sDay } : {}),
       ...(this.elgatoAutoRestart !== undefined
         ? { elgatoAutoRestart: this.elgatoAutoRestart }
         : {}),
@@ -532,13 +536,9 @@ export class PersistedSettings implements DockPrefsStore {
       ...(this.virtualDeck.enabled || this.virtualDeck.profile !== DEFAULT_BROWSER_DECK_PROFILE
         ? { virtualDeck: this.virtualDeck }
         : {}),
-      ...(this.updateCheck !== undefined ? { updateCheck: this.updateCheck } : {}),
-      ...(this.updateState ? { updateState: this.updateState } : {}),
-      ...(this.a7s !== undefined ? { a7s: this.a7s } : {}),
-      ...(this.a7sDay ? { a7sDay: this.a7sDay } : {}),
       ...(Object.keys(this.survey ?? {}).length ? { survey: this.survey } : {}),
       ...(this.docsSeen.length > 0 ? { docsSeen: this.docsSeen } : {}),
-      ...this.autoRestartEntries(),
+      ...this.optionalEntries(),
       ...(this.accessTokens.length > 0 ? { accessTokens: this.accessTokens } : {}),
       ...(this.devices.length > 0 ? { devices: this.devices } : {}),
       ...(Object.keys(this.modelOverrides).length > 0

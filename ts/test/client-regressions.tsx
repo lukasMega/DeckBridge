@@ -26,6 +26,7 @@ import { runDeckPage } from './client-deck.js';
 import { runPairingFlow } from './client-pairing.js';
 import { runDocsLinks } from './client-docs.js';
 import { runSurvey } from './client-survey.js';
+import { runStatistics } from './client-statistics.js';
 import { runModalShells } from './client-modal.js';
 import { runPagesPanel } from './client-pages.js';
 import { StandbyPanel } from '../src/web/client/simple/standby-panel.js';
@@ -264,6 +265,7 @@ async function run(): Promise<void> {
   await runDocsLinks(root, check);
   await runModalShells(root, check);
   await runSurvey(root, check);
+  await runStatistics(check);
   await runKeymapAndDiagnosticsPanels();
   await runMultiDockCards();
   await runMultiDockConfiguration();
@@ -292,7 +294,7 @@ function runHydrateRegression(): void {
     driverConnected: true,
     elgatoConnected: true,
     keyEvents: [],
-    stats: { uptimeMs: 1, elgatoRxPkts: 0, elgatoTxPkts: 0, imagesSent: 0 },
+    stats: { uptimeMs: 1, imagesSent: 0 },
     mockConfig: { ...DOCK_IDENTITY },
     deviceModels: [],
     deviceIdentity: { ...DOCK_IDENTITY },

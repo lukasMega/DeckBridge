@@ -172,7 +172,7 @@ await test("an 'image' message carries the frame hash on imageSent", async () =>
   await wait(20);
   const sent = messages.filter((m) => m.type === 'imageSent');
   assert.deepEqual(sent, [
-    { type: 'imageSent', keyIndex: 2, hash: hashJpeg(SOLID_RED_16X16_JPEG) },
+    { type: 'imageSent', keyIndex: 2, hash: hashJpeg(SOLID_RED_16X16_JPEG), cached: false },
   ]);
 });
 

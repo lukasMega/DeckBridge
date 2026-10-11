@@ -18,6 +18,7 @@ import type { ExtraKeysController } from './extra-keys-controller.js';
 import type { PagesController } from './pages-controller.js';
 import type { ModelOverridesController } from './model-overrides-controller.js';
 import type { LoggingController } from './logging-controller.js';
+import type { SessionStats } from './session-stats.js';
 import type { PushController } from './push-controller.js';
 import type { VirtualDeckController } from './virtual-deck/virtual-deck-controller.js';
 import type { SettingsFileController } from './settings-file-controller.js';
@@ -132,6 +133,7 @@ export interface WebUIControllers {
 export interface WebUIController {
   emit(event: string, ...args: unknown[]): boolean;
   readonly selectedDock: number;
+  readonly sessionStats: SessionStats;
   fullState(): StateResponse;
   notifyBrightness(level: number): void;
   applyMockConfig(parsed: Partial<MockDeviceConfig>): MockDeviceConfig;

@@ -104,7 +104,7 @@ await test('a key held across the timeout: its up is forwarded and restores', ()
 await test('knob rotate, touch and a dial press pair also wake and are swallowed', () => {
   const h = setup({ settings: DIM });
   h.clock.advance(5 * MIN);
-  assert.equal(h.s.noteInput({ kind: 'dialRotate', index: 0 }), true);
+  assert.equal(h.s.noteInput({ kind: 'dialRotate', index: 0, delta: 1 }), true);
   h.clock.advance(5 * MIN);
   assert.equal(h.s.noteInput({ kind: 'touch' }), true);
   h.clock.advance(5 * MIN);

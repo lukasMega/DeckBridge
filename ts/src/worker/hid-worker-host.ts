@@ -295,7 +295,7 @@ export class WorkerHidDriver extends EventEmitter implements DockDriver {
         break;
       case 'imageSent':
         if (msg.hash !== undefined) this.emit('frameHash', msg.keyIndex, msg.hash);
-        this.emit('imageSent', msg.keyIndex);
+        this.emit('imageSent', msg.keyIndex, msg.cached === true);
         break;
       case 'reinit':
         this.emit('reinit');

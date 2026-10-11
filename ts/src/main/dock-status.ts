@@ -160,7 +160,7 @@ export function buildDockStatus(s: DockStatusInput): DockStatus {
 /** Knobs on the physical panel: the model's own count, else the most any of its
  *  CORA emulations declares — AKP05E's knobs are described only by its Plus profile,
  *  and exist (for the encoder override) whichever profile it advertises. */
-function physicalEncoderCount(model: DeviceModel): number {
+export function physicalEncoderCount(model: DeviceModel): number {
   const emulated = emulationProfiles(model).map((profile) => profile.encoderCount ?? 0);
   return Math.max(model.encoderCount ?? 0, ...emulated);
 }

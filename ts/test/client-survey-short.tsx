@@ -25,6 +25,12 @@ function makeDefinition(): SurveyDefinition {
   };
 }
 
+const isShortPayload = (p: { a: Record<string, unknown>; f?: string }): boolean =>
+  p.f === 'short' &&
+  Object.keys(p.a)
+    .toSorted((a, b) => a.localeCompare(b))
+    .join() === 'nps,rating,want';
+
 export async function runSurveyShort(root: HTMLElement, check: Check): Promise<void> {
   const original = globalThis.fetch;
   const before = getSnapshot();
@@ -139,12 +145,7 @@ export async function runSurveyShort(root: HTMLElement, check: Check): Promise<v
     await pick('survey-want', 'widgets');
     check(!sendBtn().disabled, 'All 3 answers enable Send');
     const shown = preview();
-    check(
-      Object.keys(shown.a)
-        .toSorted((a, b) => a.localeCompare(b))
-        .join() === 'nps,rating,want' && shown.f === 'short',
-      'Preview holds only the 3 ids and f: short',
-    );
+    check(isShortPayload(shown), 'Preview holds only the 3 ids and f: short');
     check(localStorage.getItem(DRAFT_KEY) !== null, 'Wizard draft exists before No thanks');
     await press('#survey-short', 'No thanks');
     check(
@@ -161,7 +162,8 @@ export async function runSurveyShort(root: HTMLElement, check: Check): Promise<v
     // Banner Not now: short form first, snooze only when it closes unsent; Send path.
     await mount();
     await press('.survey-nudge', 'Not now');
-    check(shortOpen() && dismissCalls().length === 0, 'Not now opens the short form unposted');
+    check(shortOpen(), 'Not now opens the short form');
+    check(dismissCalls().length === 0, 'Not now posts nothing yet');
     check(root.querySelector('.survey-nudge') === null, 'Not now hides the banner');
     await pick('survey-rating', '3');
     await pick('survey-nps', '7');
@@ -179,10 +181,7 @@ export async function runSurveyShort(root: HTMLElement, check: Check): Promise<v
     const body = posted[posted.length - 1]!.body as SurveyPayload;
     check(
       JSON.stringify(body) === exact &&
-        body.f === 'short' &&
-        Object.keys(body.a)
-          .toSorted((a, b) => a.localeCompare(b))
-          .join() === 'nps,rating,want' &&
+        isShortPayload(body) &&
         body.a.rating === '3' &&
         body.sv === SURVEY_VERSION &&
         !('c' in body),

@@ -1,7 +1,7 @@
-// Install the backend and docs hook before the WebUI boots on import.
-import './install.js';
-import '../web/client/ui-entry.js';
+// The backend and docs hook install before the WebUI boots on import.
 import { backend } from './install.js';
+// oxlint-disable-next-line import/no-unassigned-import -- boots the WebUI as a module side effect
+import '../web/client/ui-entry.js';
 import { mountBar } from './bar.js';
 import { syncParentTheme } from './theme-sync.js';
 
@@ -15,10 +15,10 @@ if (controlsHost) {
   stylesheet.rel = 'stylesheet';
   stylesheet.href = new URL('./controls.css', window.location.href).href;
   const controls = controlsHost.ownerDocument.createElement('div');
-  stylesheet.onload = () => {
+  stylesheet.addEventListener('load', () => {
     const unmount = mountBar(controls, backend);
     window.addEventListener('pagehide', unmount, { once: true });
-  };
+  });
   shadow.replaceChildren(stylesheet, controls);
   document.body.classList.add('demo-controls-external');
 } else {

@@ -22,7 +22,8 @@ import { DeckServer } from '../../web/server/virtual-deck/deck-server.js';
 import type { VirtualDeckController } from '../../web/server/virtual-deck/virtual-deck-controller.js';
 import type { CoraDockFactory } from '../dock-scanner-deps.js';
 import { dockSlot } from '../dock-status.js';
-import { Dock, type DockHooks } from '../dock.js';
+import { Dock } from '../dock.js';
+import type { DockHooks } from '../dock-types.js';
 import { VirtualDeckDriver } from './virtual-deck-driver.js';
 
 /** `usb:` so settings.json keeps the identity across restarts (see isStableDeviceKey): the

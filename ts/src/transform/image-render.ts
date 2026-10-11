@@ -132,15 +132,15 @@ function revisionFor(model: DeviceModel): string {
 }
 
 /** Transform (if needed), cache, key-remap, and write one CORA image to the
- *  device. Returns the raw-frame hash once the device write has been dispatched;
- *  throws on a transform failure (the worker turns that into an 'error' message). */
+ *  device. Returns the raw-frame hash and whether the LRU served it, once the device
+ *  write has been dispatched; throws on a transform failure (the worker turns that into an 'error' message). */
 export function renderImage(
   driver: RenderTarget,
   model: DeviceModel,
   keyIndex: number,
   coraBytes: Uint8Array,
   format: 'jpeg' | 'bmp',
-): string {
+): { hash: string; cached: boolean } {
   // Capture the raw input first so it's saved even if the transform throws.
   const rawDump = dumpRawReceived(keyIndex, coraBytes, format);
 
@@ -150,6 +150,7 @@ export function renderImage(
   const frameHash = hashJpeg(coraBytes);
   const hash = makeCacheKey(model.id, frameHash, 'def', revisionFor(model));
   let entry = imageCache.get(hash);
+  const cached = entry !== undefined;
 
   if (!entry) {
     const tStart = Date.now();
@@ -188,11 +189,11 @@ export function renderImage(
   const deviceKeyIndex = mk2IndexToDeviceImgId(keyIndex, model);
   if (deviceKeyIndex < 0) {
     warn('image', `skipping image for out-of-range key ${keyIndex}`);
-    return frameHash;
+    return { hash: frameHash, cached };
   }
 
   driver.sendImage(deviceKeyIndex, entry.nativeBytes);
-  return frameHash;
+  return { hash: frameHash, cached };
 }
 
 /** Every strip zone a region touches: the Elgato app's 200-px zones, the same split

@@ -15,7 +15,8 @@ import {
   findModelById,
 } from '../devices/registry.js';
 import { Dock } from './dock.js';
-import type { DockHooks } from './dock.js';
+import type { DockHooks } from './dock-types.js';
+import { statsHooks } from './session-stats-wiring.js';
 import { ProbePacer } from './driver-manager-pacing.js';
 import { DockScanner } from './dock-scanner.js';
 import {
@@ -43,7 +44,6 @@ export class DriverManager extends EventEmitter {
 
   /** Real USB or the mock; the driver itself is dock 0's (`primary.driver`). */
   private mode: DriverMode = getInitialDriverMode();
-  private imagesSent = 0;
 
   /** Probe interval + reconnect/in-flight state (driver-manager-pacing.ts). */
   private readonly pacer = new ProbePacer();
@@ -83,14 +83,13 @@ export class DriverManager extends EventEmitter {
       ports: { primary: ELGATO_TCP_PORT, child: ELGATO_CHILD_PORT },
       settings: deps.settings,
       getShuttingDown: deps.getShuttingDown,
-      // The process-lifetime dock also feeds the key activity feed, the brightness
-      // slider and the image counter; its disconnect starts the reconnect probe.
+      // The process-lifetime dock also feeds the key activity feed and the brightness
+      // slider; its disconnect starts the reconnect probe.
       hooks: {
         ...this.dockHooks(0),
         disconnect: () => this.onPrimaryDisconnect(),
         key: (index, state, wireId) => webui.notifyKeyEvent(index, state, wireId),
         brightness: (level) => webui.notifyBrightness(level),
-        imageSent: () => webui.notifyStats({ imagesSent: ++this.imagesSent }),
       },
     });
     this.docks.set(0, this.primary);
@@ -186,6 +185,7 @@ export class DriverManager extends EventEmitter {
       stripWrite: (...args) => webui.imageChannel.notifyDockStripWrite(index, ...args),
       elgatoAttached: () => this.deps.onElgatoAttached?.(index),
       pageObservation: (obs) => webui.pages.notifyObservation(index, obs),
+      ...statsHooks(webui.sessionStats, index, () => this.docks.get(index)),
     };
   }
 

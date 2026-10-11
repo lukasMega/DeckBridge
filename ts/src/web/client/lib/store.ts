@@ -97,7 +97,7 @@ export const EMPTY_STATUS: Status = {
 
 let state: StoreState = {
   status: EMPTY_STATUS,
-  stats: { uptimeMs: 0, elgatoRxPkts: 0, elgatoTxPkts: 0, imagesSent: 0 },
+  stats: { uptimeMs: 0, imagesSent: 0 },
   ...(__MOCK_BUILD__ ? { mockConfig: undefined } : {}),
   brightness: 82,
   brightnessOverride: true,

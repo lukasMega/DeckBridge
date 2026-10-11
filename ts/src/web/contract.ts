@@ -139,8 +139,6 @@ export interface PluginsInfo {
 
 export interface Stats {
   uptimeMs: number;
-  elgatoRxPkts: number;
-  elgatoTxPkts: number;
   imagesSent: number;
 }
 

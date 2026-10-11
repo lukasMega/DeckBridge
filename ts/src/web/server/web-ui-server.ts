@@ -43,6 +43,7 @@ import { VirtualDeckController } from './virtual-deck/virtual-deck-controller.js
 import { handlePushApi, isPushApiPath } from './push-routes.js';
 import { ElgatoAppController } from './elgato-app-controller.js';
 import { StandbyController } from './standby-controller.js';
+import { SessionStats } from './session-stats.js';
 
 export { isAllowedWebRequest, isValidMacAddress, pickFallbackPort } from './web-request-guard.js';
 
@@ -80,10 +81,13 @@ export class WebUIServer extends EventEmitter implements WebUIController, WebUIC
     return this.dockRegistry.selectedDock;
   }
   private readonly status: StatusPublisher;
-  private readonly stats: Stats = { uptimeMs: 0, elgatoRxPkts: 0, elgatoTxPkts: 0, imagesSent: 0 };
-  private readonly startTime = Date.now();
+  /** Session counters behind GET /api/stats; docks feed it directly (main/session-stats-wiring.ts). */
+  readonly sessionStats = new SessionStats();
   uptimeMs(): number {
-    return Date.now() - this.startTime;
+    return Date.now() - this.sessionStats.startedAt;
+  }
+  private statsMessage(): Stats {
+    return { uptimeMs: this.uptimeMs(), imagesSent: this.sessionStats.imagesTotal() };
   }
   private opened = false;
   /** True once any browser page load or WebSocket reached this server (survey notification gate). */
@@ -158,7 +162,7 @@ export class WebUIServer extends EventEmitter implements WebUIController, WebUIC
         cacheRoot: this.settings.cacheRoot,
         logPath: this.logging.path(),
         logLevel: this.logging.level(),
-        uptimeMs: Date.now() - this.startTime,
+        uptimeMs: this.uptimeMs(),
         overrides: this.modelOverrides,
         state: this.fullState(),
         activity: this.activity,
@@ -236,10 +240,7 @@ export class WebUIServer extends EventEmitter implements WebUIController, WebUIC
       }),
     });
 
-    this.bus.start(() => {
-      this.stats.uptimeMs = Date.now() - this.startTime;
-      this.bus.broadcast('stats', this.stats);
-    });
+    this.bus.start(() => this.bus.broadcast('stats', this.statsMessage()));
   }
 
   /** Synchronous, from shutdown's quiesce: later mutations would race the final settings write. */
@@ -348,10 +349,6 @@ export class WebUIServer extends EventEmitter implements WebUIController, WebUIC
     this.status.setAutoRestart(pending);
   }
 
-  notifyStats(delta: Partial<Stats>): void {
-    Object.assign(this.stats, delta);
-  }
-
   notifyDeviceModel(model: Parameters<StatusPublisher['setDeviceModel']>[0]): void {
     this.status.setDeviceModel(model);
   }
@@ -398,7 +395,7 @@ export class WebUIServer extends EventEmitter implements WebUIController, WebUIC
     return buildStateResponse({
       snapshot: this.snapshot(),
       activity: this.activity,
-      stats: { ...this.stats, uptimeMs: Date.now() - this.startTime },
+      stats: this.statsMessage(),
       ...(__MOCK_BUILD__ ? { mockConfig: this.mockConfig } : {}),
       brightnessOverride: this.devicePrefs.brightnessOverride,
       deviceModels: this.deviceModels,

@@ -6,7 +6,8 @@ import type { HidDiscovery } from './driver-manager-discovery.js';
 import type { WorkerPool } from './worker-pool.js';
 import type { DockSlot } from './dock-status.js';
 import type { CoraDock } from './cora-dock.js';
-import type { Dock, DockHooks, DockSettings } from './dock.js';
+import type { Dock } from './dock.js';
+import type { DockHooks, DockSettings } from './dock-types.js';
 
 /** Builds a dock's CORA server pair (already wrapped as a CoraDock — see
  *  cora-dock.ts) for the given identity; the factory (wired in app.ts) is what

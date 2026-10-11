@@ -4,6 +4,7 @@ import { DEVICE_MODELS, DEFAULT_MODEL } from '../devices/registry.js';
 import { DOCS_BASE, DOCS_TOPICS } from '../shared/docs-topics.js';
 import type { DemoBackend } from './backend.js';
 import { connectHwDeck } from './hw-deck.js';
+import type { HwConnection } from './hw-deck.js';
 import { track, type FailReason } from './track.js';
 
 const FAILURE_MESSAGES: Record<FailReason, string> = {
@@ -122,6 +123,16 @@ function DemoBar({ backend }: Readonly<{ backend: DemoBackend }>) {
     [backend],
   );
 
+  async function showResult(result: HwConnection): Promise<void> {
+    if (!result) return;
+    if ('unknown' in result) setUnknown(result.unknown);
+    else if ('fail' in result) setMessage(FAILURE_MESSAGES[result.fail]);
+    else {
+      await backend.useDeck(result);
+      setMessage(`Connected: ${result.model.name}`);
+    }
+  }
+
   function connect(): void {
     setBusy(true);
     setMessage('');
@@ -138,17 +149,7 @@ function DemoBar({ backend }: Readonly<{ backend: DemoBackend }>) {
       },
       track,
     );
-    void pending
-      .then(async (result) => {
-        if (!result) return;
-        if ('unknown' in result) setUnknown(result.unknown);
-        else if ('fail' in result) setMessage(FAILURE_MESSAGES[result.fail]);
-        else {
-          await backend.useDeck(result);
-          setMessage(`Connected: ${result.model.name}`);
-        }
-      })
-      .finally(() => setBusy(false));
+    void pending.then(showResult).finally(() => setBusy(false));
   }
 
   async function disconnect(): Promise<void> {

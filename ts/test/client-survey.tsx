@@ -71,6 +71,8 @@ export async function runSurvey(root: HTMLElement, check: Check): Promise<void> 
     );
     await settle();
   };
+  const progress = (): string | null | undefined =>
+    root.querySelector('[role="progressbar"]')?.getAttribute('aria-valuenow');
   const title = (): string | null => root.querySelector('.survey-q')?.textContent ?? null;
   try {
     localStorage.removeItem('deckbridge.surveyDraft');
@@ -83,10 +85,7 @@ export async function runSurvey(root: HTMLElement, check: Check): Promise<void> 
       document.activeElement === root.querySelector('.survey-q'),
       'Survey focuses question rather than first chip',
     );
-    check(
-      root.querySelector('[role="progressbar"]')?.getAttribute('aria-valuenow') === '1',
-      'Progress starts at first step',
-    );
+    check(progress() === '1', 'Progress starts at first step');
     await choose('rating', '4');
     check(
       title() === SURVEY_QUESTIONS[0]!.label,
@@ -94,10 +93,7 @@ export async function runSurvey(root: HTMLElement, check: Check): Promise<void> 
     );
     await waitAdvance();
     check(title() === SURVEY_QUESTIONS[1]!.label, 'Single pick auto-advances');
-    check(
-      root.querySelector('[role="progressbar"]')?.getAttribute('aria-valuenow') === '2',
-      'Progress follows auto-advance',
-    );
+    check(progress() === '2', 'Progress follows auto-advance');
     await click('Back');
     check(
       root.querySelector<HTMLInputElement>('input[value="4"]')!.checked,
@@ -115,7 +111,10 @@ export async function runSurvey(root: HTMLElement, check: Check): Promise<void> 
     check(root.querySelector('textarea') === null, 'Other use detail starts hidden');
     await choose('use-for', 'other');
     check(document.activeElement === root.querySelector('textarea'), 'Other use focuses its field');
-    check(root.querySelector('textarea')?.required === true, 'Other use detail is required');
+    check(
+      root.querySelector<HTMLTextAreaElement>('textarea')!.required,
+      'Other use detail is required',
+    );
     check(button('Next ›').disabled, 'Empty Other use blocks Next');
     await act(() => {
       const input = root.querySelector<HTMLTextAreaElement>('textarea')!;
@@ -128,7 +127,10 @@ export async function runSurvey(root: HTMLElement, check: Check): Promise<void> 
       button('Next ›').disabled && title() === SURVEY_QUESTIONS[4]!.label,
       'Whitespace Other use cannot advance',
     );
-    check(root.querySelector('textarea')?.maxLength === 300, 'Other use allows 300 characters');
+    check(
+      root.querySelector<HTMLTextAreaElement>('textarea')!.maxLength === 300,
+      'Other use allows 300 characters',
+    );
     await act(() => {
       const input = root.querySelector<HTMLTextAreaElement>('textarea')!;
       input.value = 'x'.repeat(301);
@@ -147,7 +149,10 @@ export async function runSurvey(root: HTMLElement, check: Check): Promise<void> 
     await choose('use-for', 'other');
     await click('Next ›');
     await click('Back');
-    check(root.querySelector('textarea')?.value === 'x'.repeat(300), 'Back preserves Other draft');
+    check(
+      root.querySelector<HTMLTextAreaElement>('textarea')!.value === 'x'.repeat(300),
+      'Back preserves Other draft',
+    );
     check(
       document.activeElement === root.querySelector('.survey-q'),
       'Back focuses question heading',
@@ -193,10 +198,7 @@ export async function runSurvey(root: HTMLElement, check: Check): Promise<void> 
     await choose('want', 'other');
     const requestInput = (): HTMLInputElement | null => root.querySelector('.survey-detail');
     check(document.activeElement === requestInput(), 'Other request focuses its field');
-    check(
-      requestInput()?.required === true && button('Next ›').disabled,
-      'Empty Other request blocks Next',
-    );
+    check(requestInput()!.required && button('Next ›').disabled, 'Empty Other request blocks Next');
     await act(() => {
       requestInput()!.value = '   ';
       requestInput()!.dispatchEvent(new Event('input', { bubbles: true }));
@@ -207,7 +209,7 @@ export async function runSurvey(root: HTMLElement, check: Check): Promise<void> 
       button('Next ›').disabled && title() === SURVEY_QUESTIONS[7]!.label,
       'Whitespace Other request cannot advance',
     );
-    check(requestInput()?.maxLength === 100, 'Other request allows 100 characters');
+    check(requestInput()!.maxLength === 100, 'Other request allows 100 characters');
     await act(() => {
       const input = requestInput()!;
       input.value = 'y'.repeat(101);
@@ -223,7 +225,7 @@ export async function runSurvey(root: HTMLElement, check: Check): Promise<void> 
     await choose('want', 'other');
     await click('Back');
     await click('Next ›');
-    check(requestInput()?.value === 'y'.repeat(100), 'Back preserves Other request draft');
+    check(requestInput()!.value === 'y'.repeat(100), 'Back preserves Other request draft');
     check(
       document.activeElement === root.querySelector('.survey-q'),
       'Return focuses question heading',
@@ -245,10 +247,7 @@ export async function runSurvey(root: HTMLElement, check: Check): Promise<void> 
       useForOther?: string;
       wantOther?: string;
     };
-    check(
-      root.querySelector('[role="progressbar"]')?.getAttribute('aria-valuenow') === '12',
-      'Skipped questions still advance progress',
-    );
+    check(progress() === '12', 'Skipped questions still advance progress');
     check(
       !('rating' in preview.a) && !('features' in preview.a),
       'Skip and cleared features are omitted',

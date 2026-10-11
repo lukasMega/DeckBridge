@@ -56,6 +56,7 @@ export const routes: Route[] = [
   }),
   get('/api/requirements', async () => json(await checkRequirements())),
   get('/api/state', ({ ui }) => json(ui.fullState())),
+  get('/api/stats', ({ ui }) => json(ui.sessionStats.snapshot())),
   get('/api/plugins', async ({ extraKeys }) => json(await extraKeys.pluginsInfo())),
   get('/api/settings', ({ settings }) => json(JSON.parse(settings.json()))),
 

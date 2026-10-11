@@ -179,10 +179,10 @@ await runTest("an 'imageSent' hash becomes a 'frameHash' event before 'imageSent
   const { driver, send } = attached();
   const seen: string[] = [];
   driver.on('frameHash', (key: number, hash: string) => seen.push(`hash ${key} ${hash}`));
-  driver.on('imageSent', (key: number) => seen.push(`sent ${key}`));
-  send({ type: 'imageSent', keyIndex: 3, hash: 'deadbeef' });
+  driver.on('imageSent', (key: number, cached: boolean) => seen.push(`sent ${key} ${cached}`));
+  send({ type: 'imageSent', keyIndex: 3, hash: 'deadbeef', cached: true });
   send({ type: 'imageSent', keyIndex: 4 });
-  assert.deepEqual(seen, ['hash 3 deadbeef', 'sent 3', 'sent 4']);
+  assert.deepEqual(seen, ['hash 3 deadbeef', 'sent 3 true', 'sent 4 false']);
 });
 
 await runTest(

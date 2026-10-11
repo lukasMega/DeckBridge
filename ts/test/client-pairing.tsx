@@ -48,7 +48,7 @@ class FakeWs {
 const STATE = {
   ...EMPTY_STATUS,
   driverConnected: true,
-  stats: { uptimeMs: 0, elgatoRxPkts: 0, elgatoTxPkts: 0, imagesSent: 0 },
+  stats: { uptimeMs: 0, imagesSent: 0 },
   brightness: 50,
   brightnessOverride: true,
   deviceModels: [],

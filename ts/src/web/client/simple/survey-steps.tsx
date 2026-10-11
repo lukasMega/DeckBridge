@@ -126,6 +126,132 @@ export function LimitedText({
   );
 }
 
+function ScaleEnds({ ends }: Readonly<{ ends: [string, string] }>): preact.JSX.Element {
+  return (
+    <div class="settings-actions multi-deck-note survey-ends">
+      <span>{ends[0]}</span>
+      <span class="grow" />
+      <span>{ends[1]}</span>
+    </div>
+  );
+}
+
+function PickCount({
+  picked,
+  max,
+  full,
+}: Readonly<{ picked: number; max: number; full: boolean }>): preact.JSX.Element {
+  return (
+    <p class="multi-deck-note" aria-live="polite">
+      {picked} of {max} picked{full ? ' · Tap a choice to change it.' : ''}
+    </p>
+  );
+}
+
+function SurveyInvite(): preact.JSX.Element {
+  return (
+    <div class="survey-invite">
+      <span aria-hidden="true">✦</span>
+      <div>
+        <strong>Your voice, next release.</strong>
+        <p>Tell us what works and what could feel better. Your ideas help guide DeckBridge.</p>
+        <small>Skip freely. Nothing is sent until you press Send.</small>
+      </div>
+    </div>
+  );
+}
+
+function SubChoices({
+  question: q,
+  picks,
+  parents,
+  parentOf,
+  onChange,
+}: Readonly<{
+  question: SurveyQuestion;
+  picks: string[];
+  parents: string[];
+  parentOf: (id: string) => string;
+  onChange: (value: string | string[], advance: boolean) => void;
+}>): preact.JSX.Element {
+  return (
+    <>
+      {q.options
+        .filter((o) => o.options && parents.includes(o.id))
+        .map((parent) => (
+          <div key={parent.id}>
+            <p class="multi-deck-note">Which one?</p>
+            <ChipRadioGroup
+              name={`survey-${parent.id}-detail`}
+              label={`${parent.label}: which one?`}
+              value={picks.find((id) => parent.options?.some((o) => o.id === id)) ?? ''}
+              options={(parent.options ?? []).map((o) => ({ value: o.id, label: o.label }))}
+              onChange={(id) =>
+                q.kind === 'single'
+                  ? onChange(id, true)
+                  : onChange(
+                      picks.map((v) => (parentOf(v) === parent.id ? id : v)),
+                      false,
+                    )
+              }
+            />
+          </div>
+        ))}
+    </>
+  );
+}
+
+type ChipOption = { value: string; label: preact.ComponentChild; disabled: boolean };
+
+/** What a tap on `id` picks, and whether the single-choice flow may advance. */
+function nextPicks(
+  q: SurveyQuestion,
+  picks: string[],
+  parents: string[],
+  parentOf: (id: string) => string,
+  id: string,
+): [string | string[], boolean] {
+  if (q.kind === 'single') return [id, !q.options.find((o) => o.id === id)?.options];
+  if (parents.includes(id)) return [picks.filter((v) => parentOf(v) !== id), false];
+  if (id === q.exclusive) return [[id], false];
+  return [[...picks.filter((v) => v !== q.exclusive), id], false];
+}
+
+function ChoiceGroup({
+  question: q,
+  parents,
+  options,
+  onChange,
+}: Readonly<{
+  question: SurveyQuestion;
+  parents: string[];
+  options: ChipOption[];
+  onChange: (id: string) => void;
+}>): preact.JSX.Element {
+  const name = `survey-${q.id}`;
+  if (q.kind !== 'single')
+    return (
+      <ChipCheckGroup
+        name={name}
+        label={q.label}
+        value={parents}
+        options={options}
+        onChange={onChange}
+      />
+    );
+  const singleClass = q.faces ? 'survey-faces' : undefined;
+  return (
+    <ChipRadioGroup
+      name={name}
+      label={q.label}
+      value={parents[0] ?? ''}
+      options={options}
+      class={singleClass ?? (q.ends ? 'survey-score' : undefined)}
+      onChange={onChange}
+    />
+  );
+}
+
 export function QuestionStep({
   question: q,
   value,
@@ -162,81 +288,24 @@ export function QuestionStep({
   }));
   const choose = (id: string): void => {
     focusDetailRef.current = id === 'other' && !otherSelected;
-    if (q.kind === 'single') onChange(id, !q.options.find((o) => o.id === id)?.options);
-    else if (parents.includes(id))
-      onChange(
-        picks.filter((v) => parentOf(v) !== id),
-        false,
-      );
-    else if (id === q.exclusive) onChange([id], false);
-    else onChange([...picks.filter((v) => v !== q.exclusive), id], false);
+    const [next, advance] = nextPicks(q, picks, parents, parentOf, id);
+    onChange(next, advance);
   };
   const detail = OTHER_DETAILS[q.id];
-  const singleClass = q.faces ? 'survey-faces' : undefined;
   return (
     <>
       <p class="survey-hint">{HINTS[q.id]}</p>
-      {q.kind === 'single' ? (
-        <ChipRadioGroup
-          name={`survey-${q.id}`}
-          label={q.label}
-          value={parents[0] ?? ''}
-          options={chipOptions}
-          class={singleClass ?? (q.ends ? 'survey-score' : undefined)}
-          onChange={choose}
-        />
-      ) : (
-        <ChipCheckGroup
-          name={`survey-${q.id}`}
-          label={q.label}
-          value={parents}
-          options={chipOptions}
-          onChange={choose}
-        />
-      )}
-      {q.ends && (
-        <div class="settings-actions multi-deck-note survey-ends">
-          <span>{q.ends[0]}</span>
-          <span class="grow" />
-          <span>{q.ends[1]}</span>
-        </div>
-      )}
-      {q.max && (
-        <p class="multi-deck-note" aria-live="polite">
-          {picks.length} of {q.max} picked{full ? ' · Tap a choice to change it.' : ''}
-        </p>
-      )}
-      {q.faces && !compact && (
-        <div class="survey-invite">
-          <span aria-hidden="true">✦</span>
-          <div>
-            <strong>Your voice, next release.</strong>
-            <p>Tell us what works and what could feel better. Your ideas help guide DeckBridge.</p>
-            <small>Skip freely. Nothing is sent until you press Send.</small>
-          </div>
-        </div>
-      )}
-      {q.options
-        .filter((o) => o.options && parents.includes(o.id))
-        .map((parent) => (
-          <div key={parent.id}>
-            <p class="multi-deck-note">Which one?</p>
-            <ChipRadioGroup
-              name={`survey-${parent.id}-detail`}
-              label={`${parent.label}: which one?`}
-              value={picks.find((id) => parent.options?.some((o) => o.id === id)) ?? ''}
-              options={(parent.options ?? []).map((o) => ({ value: o.id, label: o.label }))}
-              onChange={(id) =>
-                q.kind === 'single'
-                  ? onChange(id, true)
-                  : onChange(
-                      picks.map((v) => (parentOf(v) === parent.id ? id : v)),
-                      false,
-                    )
-              }
-            />
-          </div>
-        ))}
+      <ChoiceGroup question={q} parents={parents} options={chipOptions} onChange={choose} />
+      {q.ends && <ScaleEnds ends={q.ends} />}
+      {q.max && <PickCount picked={picks.length} max={q.max} full={full} />}
+      {q.faces && !compact && <SurveyInvite />}
+      <SubChoices
+        question={q}
+        picks={picks}
+        parents={parents}
+        parentOf={parentOf}
+        onChange={onChange}
+      />
       {detail && otherSelected && (
         <LimitedText
           {...detail}

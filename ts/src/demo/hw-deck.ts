@@ -68,36 +68,35 @@ export function connectHwDeck(events: DeckEvents, tracker: typeof track): Promis
         tracker.hwUnknown(device.vendorId, device.productId);
         return { unknown: { vid: device.vendorId, pid: device.productId } };
       }
-      let writeFailed = false;
-      let ready = false;
-      let lost = false;
+      // Object fields: closures flip them, which `let` narrowing would hide from the checks below.
+      const flags = { writeFailed: false, ready: false, lost: false };
       function fail(): void {
-        if (writeFailed) return;
-        writeFailed = true;
+        if (flags.writeFailed) return;
+        flags.writeFailed = true;
         tracker.hwFail('write');
-        if (ready && !lost) {
-          lost = true;
+        if (flags.ready && !flags.lost) {
+          flags.lost = true;
           events.lost('write');
         }
       }
       const transport = new HidTransport(device, fail, hid);
       const session = new HwSession(device, model, transport);
-      session.onKey(events.key);
+      session.onKey((index, state) => events.key(index, state));
       session.onDial((event) => events.dial?.(event));
       session.onTouch((event) => events.touch?.(event));
       transport.onLost(() => {
-        if (lost) return;
-        lost = true;
+        if (flags.lost) return;
+        flags.lost = true;
         tracker.hwFail('disconnect');
-        if (ready) events.lost('disconnect');
+        if (flags.ready) events.lost('disconnect');
       });
       try {
         await session.open();
-        if (writeFailed || lost) {
+        if (flags.writeFailed || flags.lost) {
           await session.close().catch(() => undefined);
-          return { fail: writeFailed ? 'write' : 'disconnect' };
+          return { fail: flags.writeFailed ? 'write' : 'disconnect' };
         }
-        ready = true;
+        flags.ready = true;
         tracker.hwConnected(model.id);
         return new HwDeck(model, session, fail);
       } catch (error) {
@@ -107,7 +106,7 @@ export function connectHwDeck(events: DeckEvents, tracker: typeof track): Promis
         return { fail: reason };
       }
     },
-    (error): HwConnection => {
+    (error: unknown): HwConnection => {
       if (errorName(error) === 'NotFoundError') return null;
       const reason = errorName(error) === 'SecurityError' ? 'denied' : 'open';
       tracker.hwFail(reason);

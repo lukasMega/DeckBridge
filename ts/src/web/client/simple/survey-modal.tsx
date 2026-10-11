@@ -59,9 +59,154 @@ function startState(definition: SurveyDefinition, rating: string | undefined) {
   };
 }
 
+function missingDetailIds(answers: SurveyAnswers, drafts: Record<string, string>): string[] {
+  return ['use-for', 'want'].filter((id) => answers[id]?.includes('other') && !drafts[id]?.trim());
+}
+
 function stepTitle({ questions }: SurveyDefinition, step: number): string {
   if (step === questions.length) return 'Anything else?';
   return questions[step]?.label ?? 'Review your feedback';
+}
+
+function ResumeCard({
+  onResume,
+  onStartOver,
+}: Readonly<{ onResume: () => void; onStartOver: () => void }>): preact.JSX.Element {
+  return (
+    <div class="survey-invite survey-resume">
+      <div>
+        <strong>Continue your unfinished feedback?</strong>
+        <br />
+        <small>Your answers are saved on this device.</small>
+      </div>
+      <div class="settings-actions survey-nav">
+        <button class="ctabtn primary" type="button" onClick={onResume}>
+          Continue
+        </button>
+        <GhostButton onClick={onStartOver}>Start over</GhostButton>
+      </div>
+    </div>
+  );
+}
+
+function CommentStep({
+  value,
+  onInput,
+}: Readonly<{ value: string; onInput: (text: string) => void }>): preact.JSX.Element {
+  return (
+    <>
+      <p class="survey-hint">Anything we missed? Small ideas welcome.</p>
+      <LimitedText
+        label="Anything else?"
+        placeholder="An idea, a rough edge, or something you love…"
+        max={280}
+        multiline
+        value={value}
+        onInput={onInput}
+      />
+    </>
+  );
+}
+
+function ReviewStep({
+  definition,
+  answers,
+  comment,
+  busy,
+  message,
+  payload,
+  onEdit,
+}: Readonly<{
+  definition: SurveyDefinition;
+  answers: SurveyAnswers;
+  comment: string;
+  busy: boolean;
+  message: string;
+  payload: SurveyPayload;
+  onEdit: (step: number) => void;
+}>): preact.JSX.Element {
+  return (
+    <>
+      <p class="survey-hint">Ready when you are. Edit anything before sending.</p>
+      <ReviewList
+        questions={definition.questions}
+        answers={answers}
+        others={{ 'use-for': payload.useForOther, want: payload.wantOther }}
+        comment={comment}
+        busy={busy}
+        onEdit={onEdit}
+      />
+      <p class="multi-deck-note">
+        Nothing leaves your machine before Send. Responses are stored individually without IP or
+        install ID.
+      </p>
+      <Collapsible title="What gets sent">
+        <pre class="settings-json-preview panel-inset" id="survey-preview">
+          {JSON.stringify(payload, null, 2)}
+        </pre>
+      </Collapsible>
+      {message && (
+        <p role="status" class="settings-error">
+          {message}
+        </p>
+      )}
+    </>
+  );
+}
+
+function SurveyNav({
+  review,
+  busy,
+  backDisabled,
+  nextDisabled,
+  sendDisabled,
+  onBack,
+  onNext,
+  onSkip,
+  onClose,
+  onSend,
+}: Readonly<{
+  review: boolean;
+  busy: boolean;
+  backDisabled: boolean;
+  nextDisabled: boolean;
+  sendDisabled: boolean;
+  onBack: () => void;
+  onNext: () => void;
+  onSkip: () => void;
+  onClose: () => void;
+  onSend: () => void;
+}>): preact.JSX.Element {
+  return (
+    <div class="settings-actions survey-nav">
+      <GhostButton disabled={backDisabled || busy} onClick={onBack}>
+        Back
+      </GhostButton>
+      <span class="grow" />
+      {review ? (
+        <>
+          <GhostButton disabled={busy} onClick={onClose}>
+            Don't send
+          </GhostButton>
+          <button
+            class="ctabtn primary"
+            type="button"
+            disabled={busy || sendDisabled}
+            onClick={onSend}
+          >
+            {busy ? 'Sending…' : 'Send'}
+          </button>
+        </>
+      ) : (
+        <>
+          <GhostButton onClick={onSkip}>Skip</GhostButton>
+          <GhostButton class="survey-next" disabled={nextDisabled} onClick={onNext}>
+            Next ›
+          </GhostButton>
+        </>
+      )}
+    </div>
+  );
 }
 
 export function SurveyModal({
@@ -98,9 +243,7 @@ export function SurveyModal({
   const question = definition.questions[step];
   const review = !sent && step === count + 1;
   const payload = surveyPayload(definition, answers, drafts, comment);
-  const missingDetails = ['use-for', 'want'].filter(
-    (id) => answers[id]?.includes('other') && !drafts[id]?.trim(),
-  );
+  const missingDetails = missingDetailIds(answers, drafts);
 
   useEffect(
     function focusQuestion() {
@@ -189,24 +332,14 @@ export function SurveyModal({
       titleId="survey-title"
       onClose={close}
     >
-      {!sent && <p class="survey-intro">A few taps to help shape what comes next.</p>}
-      {!sent && <SurveyProgress step={step} total={count + 2} />}
+      {!sent && (
+        <>
+          <p class="survey-intro">A few taps to help shape what comes next.</p>
+          <SurveyProgress step={step} total={count + 2} />
+        </>
+      )}
       <div class="survey-body" ref={bodyRef}>
-        {!sent && saved && (
-          <div class="survey-invite survey-resume">
-            <div>
-              <strong>Continue your unfinished feedback?</strong>
-              <br />
-              <small>Your answers are saved on this device.</small>
-            </div>
-            <div class="settings-actions survey-nav">
-              <button class="ctabtn primary" type="button" onClick={resume}>
-                Continue
-              </button>
-              <GhostButton onClick={startOver}>Start over</GhostButton>
-            </div>
-          </div>
-        )}
+        {!sent && saved && <ResumeCard onResume={resume} onStartOver={startOver} />}
         <h3 class="survey-q" ref={headingRef} tabIndex={-1}>
           {sent ? 'Thanks for your feedback!' : stepTitle(definition, step)}
         </h3>
@@ -225,82 +358,39 @@ export function SurveyModal({
           />
         )}
         {step === count && (
-          <>
-            <p class="survey-hint">Anything we missed? Small ideas welcome.</p>
-            <LimitedText
-              label="Anything else?"
-              placeholder="An idea, a rough edge, or something you love…"
-              max={280}
-              multiline
-              value={comment}
-              onInput={(text) => {
-                setTouched(true);
-                setComment(text);
-              }}
-            />
-          </>
+          <CommentStep
+            value={comment}
+            onInput={(text) => {
+              setTouched(true);
+              setComment(text);
+            }}
+          />
         )}
         {review && (
-          <>
-            <p class="survey-hint">Ready when you are. Edit anything before sending.</p>
-            <ReviewList
-              questions={definition.questions}
-              answers={answers}
-              others={{ 'use-for': payload.useForOther, want: payload.wantOther }}
-              comment={comment}
-              busy={busy}
-              onEdit={move}
-            />
-            <p class="multi-deck-note">
-              Nothing leaves your machine before Send. Responses are stored individually without IP
-              or install ID.
-            </p>
-            <Collapsible title="What gets sent">
-              <pre class="settings-json-preview panel-inset" id="survey-preview">
-                {JSON.stringify(payload, null, 2)}
-              </pre>
-            </Collapsible>
-            {message && (
-              <p role="status" class="settings-error">
-                {message}
-              </p>
-            )}
-          </>
+          <ReviewStep
+            definition={definition}
+            answers={answers}
+            comment={comment}
+            busy={busy}
+            message={message}
+            payload={payload}
+            onEdit={move}
+          />
         )}
       </div>
       {!sent && (
-        <div class="settings-actions survey-nav">
-          <GhostButton disabled={step === 0 || busy} onClick={() => move(step - 1)}>
-            Back
-          </GhostButton>
-          <span class="grow" />
-          {review ? (
-            <>
-              <GhostButton disabled={busy} onClick={close}>
-                Don't send
-              </GhostButton>
-              <button
-                class="ctabtn primary"
-                type="button"
-                disabled={busy || missingDetails.length > 0}
-                onClick={() => void send()}
-              >
-                {busy ? 'Sending…' : 'Send'}
-              </button>
-            </>
-          ) : (
-            <>
-              <GhostButton onClick={skip}>Skip</GhostButton>
-              <GhostButton
-                class="survey-next"
-                disabled={missingDetails.includes(question?.id ?? '')}
-                onClick={() => move(step + 1)}
-              >
-                Next ›
-              </GhostButton>
-            </>
-          )}
-        </div>
+        <SurveyNav
+          review={review}
+          busy={busy}
+          backDisabled={step === 0}
+          nextDisabled={missingDetails.includes(question?.id ?? '')}
+          sendDisabled={missingDetails.length > 0}
+          onBack={() => move(step - 1)}
+          onNext={() => move(step + 1)}
+          onSkip={skip}
+          onClose={close}
+          onSend={() => void send()}
+        />
       )}
     </Modal>
   );

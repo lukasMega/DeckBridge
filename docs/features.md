@@ -100,6 +100,9 @@ a regular **Network device** at `localhost`; the deck behaves like Elgato hardwa
 - **Per-device image pipeline** — resizes, rotates, and (for the K1 Pro) re-encodes every
   button image to the device's native format via a Rust native library, with a cache
   to skip repeat work.
+- **Session statistics** — the web UI's Statistics page shows uptime, key and dial presses,
+  processed key images, cache hit rate, reconnects, and a 15-minute activity chart, per deck
+  or for all decks; it is session-only and never leaves your machine.
 - **Non-blocking by design** — USB HID and the image transforms run on a
   separate worker thread, so the network ACK loop and web UI never stall.
 - **Side-key widgets** — decks with display-only keys outside the grid (e.g. the 293S

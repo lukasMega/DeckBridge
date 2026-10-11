@@ -830,6 +830,12 @@ input[type='range'].range:disabled {
 .help-section-label:not(:first-child) {
   margin-top: 2em;
 }
+.stats-chart {
+  display: block;
+  width: 100%;
+  height: 64px;
+  color: var(--accent);
+}
 .help-steps {
   margin: 0 0 4px;
   gap: 11px;
@@ -976,8 +982,13 @@ input[type='range'].range:disabled {
   .xkeys-compact .xkey-card-fields {
     flex-basis: 100%;
   }
-  .app-version,
   .brightness-footer .b-ico {
+    display: none;
+  }
+}
+/* A sub-page's Back button next to four icon buttons: the version yields first */
+@media (max-width: 420px) {
+  .app-version {
     display: none;
   }
 }

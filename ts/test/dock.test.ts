@@ -9,7 +9,7 @@ import {
 import type { DockSlot } from '../src/main/dock-status.js';
 import { CoraDock } from '../src/main/cora-dock.js';
 import { Dock } from '../src/main/dock.js';
-import type { DockHooks, DockSettings } from '../src/main/dock.js';
+import type { DockHooks, DockSettings } from '../src/main/dock-types.js';
 import type { ElgatoServer } from '../src/cora/primary-server.js';
 import type { ElgatoChildServer } from '../src/cora/child-server.js';
 import { generateDeviceIdentity } from '../src/infra/device-identity.js';
@@ -231,6 +231,8 @@ function makeTestSetup(
   });
   const imageCalls: { keyIndex: number; format: string }[] = [];
   const keyCalls: string[] = [];
+  const inputs: string[] = [];
+  const attaches: boolean[] = [];
   const dock = makeTestDock({
     identity: dockSlot(1, testIdentity(model)),
     cora: makeDock(server, childServer),
@@ -249,6 +251,12 @@ function makeTestSetup(
       key: (mk2, state) => {
         keyCalls.push(`${mk2}:${state}`);
       },
+      input: (input) => {
+        inputs.push(input.kind);
+      },
+      attached: (mock) => {
+        attaches.push(mock);
+      },
     },
     prefs,
     standbyClock: extras.clock,
@@ -262,6 +270,8 @@ function makeTestSetup(
     start: () => dock.start(driver),
     imageCalls,
     keyCalls,
+    inputs,
+    attaches,
     entry,
     getDisconnects: () => disconnects,
     getStatusChanges: () => statusChanges,
@@ -755,6 +765,23 @@ await test('a waking knob turn and touch are swallowed', async () => {
   assert.equal(childServer.sendTouchCalls.length, 0, 'touch swallowed');
 });
 
+await test('the input hook sees keys and knobs before standby swallows them', async () => {
+  const { clock, childServer, driver, inputs } = await dimmedSetup();
+  clock.advance(5 * MIN);
+  driver.emit('key', { keyIndex: 3, state: 'down' });
+  driver.emit('dial', { index: 0, kind: 'rotate', delta: 2 });
+  assert.equal(childServer.sendKeyEventCalls.length, 0, 'the waking press was swallowed');
+  assert.deepEqual(inputs, ['key', 'dialRotate']);
+});
+
+await test('the attached hook fires on every attach with the mock flag', async () => {
+  const { dock, driver, attaches, start } = makeTestSetup();
+  await start();
+  assert.deepEqual(attaches, [false]);
+  dock.attach(driver, true);
+  assert.deepEqual(attaches, [false, __MOCK_BUILD__]);
+});
+
 await test('WebUI click-to-press wakes the deck and is never swallowed', async () => {
   const { clock, childServer, driver, dock } = await dimmedSetup();
   clock.advance(5 * MIN);
@@ -1067,6 +1094,14 @@ await test('click-to-press: down now, up after the hold; a second click while pe
   await new Promise((r) => setTimeout(r, MOCK_KEY_PRESS_DURATION_MS + 60));
   assert.deepEqual(childServer.sendKeyEventCalls.at(-1), { keyIndex: 3, state: 'up' });
   assert.equal(dock.simulateKeyPress(3), true, 'free again after the release');
+  await new Promise((r) => setTimeout(r, MOCK_KEY_PRESS_DURATION_MS + 60));
+});
+
+await test('click-to-press: reaches the input observer in mock builds only', async () => {
+  const { dock, inputs, start } = makeTestSetup();
+  await start();
+  dock.simulateKeyPress(3);
+  assert.deepEqual(inputs, __MOCK_BUILD__ ? ['key'] : []);
   await new Promise((r) => setTimeout(r, MOCK_KEY_PRESS_DURATION_MS + 60));
 });
 

@@ -39,6 +39,10 @@ function validAnswer(q: SurveyQuestion, value: unknown): string | string[] | und
   return values.length ? values : undefined;
 }
 
+function otherText(answer: string | string[] | undefined, text: unknown, max: number): string {
+  return answer?.includes('other') && typeof text === 'string' ? text.trim().slice(0, max) : '';
+}
+
 export function validateSurvey(
   raw: unknown,
   comment: unknown,
@@ -52,14 +56,8 @@ export function validateSurvey(
     if (value !== undefined) a[q.id] = value;
   }
   const c = typeof comment === 'string' ? comment.trim().slice(0, 280) : '';
-  const detail =
-    a['use-for']?.includes('other') && typeof useForOther === 'string'
-      ? useForOther.trim().slice(0, 300)
-      : '';
-  const request =
-    a.want?.includes('other') && typeof wantOther === 'string'
-      ? wantOther.trim().slice(0, 100)
-      : '';
+  const detail = otherText(a['use-for'], useForOther, 300);
+  const request = otherText(a.want, wantOther, 100);
   return {
     a,
     ...(c ? { c } : {}),

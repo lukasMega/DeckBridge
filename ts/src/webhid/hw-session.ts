@@ -87,27 +87,35 @@ export class HwSession {
     const wireId = mk2IndexToDeviceImgId(index, this.model);
     if (wireId < 0 || this.closing) return Promise.resolve();
     this.icons.set(index, icon);
-    this.paints = this.paints.then(async () => {
-      if (this.closing) return;
-      // Demo icons, like splashes, arrive upright rather than CORA-oriented.
-      const spec = { ...this.model.image, ...this.model.splash?.transformOverride };
-      const bytes = await encodeKeyImage(icon, spec);
-      if (!this.closing) this.core.sendImage(wireId, bytes);
-      await this.transport.flush();
-    });
+    this.paints = this.paints.then(() => this.paintKey(wireId, icon));
     return this.paints;
+  }
+
+  private async paintKey(wireId: number, icon: OffscreenCanvas): Promise<void> {
+    if (this.closing) return;
+    // Demo icons, like splashes, arrive upright rather than CORA-oriented.
+    const spec = { ...this.model.image, ...this.model.splash?.transformOverride };
+    await this.sendPainted(wireId, await encodeKeyImage(icon, spec));
+  }
+
+  private async sendPainted(wireId: number, bytes: Uint8Array): Promise<void> {
+    if (!this.closing) this.core.sendImage(wireId, bytes);
+    await this.transport.flush();
   }
 
   paintStrip(zone: number, icon: OffscreenCanvas): Promise<void> {
     const display = this.model.widgetDisplays?.[zone];
     if (!display || this.closing || !(this.core instanceof Akp05Core)) return Promise.resolve();
-    this.paints = this.paints.then(async () => {
-      if (this.closing) return;
-      const bytes = await encodeKeyImage(icon, display.image);
-      if (!this.closing) this.core.sendImage(display.wireId, bytes);
-      await this.transport.flush();
-    });
+    this.paints = this.paints.then(() => this.paintZone(display, icon));
     return this.paints;
+  }
+
+  private async paintZone(
+    display: NonNullable<DeviceModel['widgetDisplays']>[number],
+    icon: OffscreenCanvas,
+  ): Promise<void> {
+    if (this.closing) return;
+    await this.sendPainted(display.wireId, await encodeKeyImage(icon, display.image));
   }
 
   onDial(fn: (event: DialEvent) => void): void {

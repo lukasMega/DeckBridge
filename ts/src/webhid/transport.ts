@@ -97,13 +97,17 @@ export class HidTransport {
     // Cores reuse scratch buffers immediately after this call.
     const data = new Uint8Array(length);
     data.set(report.subarray(1));
-    this.queue = this.queue
-      .then(async () => {
-        if (this.failed) return;
-        if (kind === 'output') await this.device.sendReport(id, data);
-        else await this.device.sendFeatureReport(id, data);
-      })
-      .catch(() => this.fail());
+    this.queue = this.queue.then(() => this.send(kind, id, data)).catch(() => this.fail());
+  }
+
+  private async send(
+    kind: 'output' | 'feature',
+    id: number,
+    data: Uint8Array<ArrayBuffer>,
+  ): Promise<void> {
+    if (this.failed) return;
+    if (kind === 'output') await this.device.sendReport(id, data);
+    else await this.device.sendFeatureReport(id, data);
   }
 
   readonly write: ReportSink = (report) => this.enqueue(report, 'output');

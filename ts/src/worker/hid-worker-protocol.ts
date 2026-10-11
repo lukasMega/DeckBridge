@@ -74,10 +74,10 @@ export type WorkerToMain =
   | { type: 'inputAction'; message: string }
   | { type: 'log'; level: LogLevel; component: string; message: string }
   | { type: 'error'; message: string }
-  // One image finished writing to the device — drives the WebUI imagesSent stat. `hash` is
+  // One image finished writing to the device — drives the Statistics page. `hash` is
   // the raw CORA frame hash (page fingerprint, main/page-tracker.ts); riding here keeps it
-  // to one message per frame on the ACK-paced path.
-  | { type: 'imageSent'; keyIndex: number; hash?: string }
+  // to one message per frame on the ACK-paced path. `cached`: the LRU served the frame.
+  | { type: 'imageSent'; keyIndex: number; hash?: string; cached?: boolean }
   // A touch-strip upload reached the device — the WebUI strip preview mirrors it.
   | { type: 'stripWrite'; wireId: number; bytes: Uint8Array; full: boolean }
   // The driver re-initialized the device (sleep/wake CLE ALL) — the main

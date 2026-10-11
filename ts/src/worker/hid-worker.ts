@@ -27,6 +27,8 @@ setWorkerPost(scope.postMessage.bind(scope));
 
 const post = scope.postMessage.bind(scope);
 
+type RenderResult = ReturnType<typeof renderImage>;
+
 let driver: UsbDriver | null = null;
 let currentModel: DeviceModel | null = null;
 // Registry entry behind currentModel, kept so a live tuning swap ('setOverrides')
@@ -107,11 +109,11 @@ function handleImage(
   bytes: Uint8Array,
   format: 'jpeg' | 'bmp',
   deferNotification: boolean,
-): string | undefined {
+): RenderResult | undefined {
   if (!driver || !currentModel) return undefined;
-  const hash = renderImage(driver, currentModel, keyIndex, bytes, format);
-  if (!deferNotification) post({ type: 'imageSent', keyIndex, hash });
-  return hash;
+  const rendered = renderImage(driver, currentModel, keyIndex, bytes, format);
+  if (!deferNotification) post({ type: 'imageSent', keyIndex, ...rendered });
+  return rendered;
 }
 
 /** Transform the splash source image with the caller-supplied spec (which may
@@ -163,15 +165,15 @@ function handleSetting(msg: Extract<MainToWorker, { type: 'setOverrides' | 'setL
   else setLogLevel(msg.level);
 }
 
-/** Frame hashes of a batch's images, held until the batch's imageSent notifications. */
-const deferredHashes = new WeakMap<object, string>();
+/** Render results of a batch's images, held until the batch's imageSent notifications. */
+const deferredRenders = new WeakMap<object, RenderResult>();
 
 function handleImageMsg(
   msg: Extract<MainToWorker, { type: 'image' }>,
   deferNotification: boolean,
 ): void {
-  const hash = handleImage(msg.keyIndex, msg.bytes, msg.format, deferNotification);
-  if (deferNotification && hash !== undefined) deferredHashes.set(msg, hash);
+  const rendered = handleImage(msg.keyIndex, msg.bytes, msg.format, deferNotification);
+  if (deferNotification && rendered !== undefined) deferredRenders.set(msg, rendered);
 }
 
 async function handle(msg: MainToWorker, deferNotification: boolean): Promise<void> {
@@ -237,7 +239,7 @@ async function handleImageBatch(images: WorkMessage[]): Promise<void> {
     });
     for (const msg of images) {
       if (msg.type === 'image') {
-        post({ type: 'imageSent', keyIndex: msg.keyIndex, hash: deferredHashes.get(msg) });
+        post({ type: 'imageSent', keyIndex: msg.keyIndex, ...deferredRenders.get(msg) });
       }
     }
   } finally {

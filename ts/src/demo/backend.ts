@@ -52,13 +52,17 @@ export class DemoBackend {
     return this.currentDeck;
   }
 
-  async fetch(input: string, init?: RequestInit): Promise<Response> {
+  fetch(input: string, init?: RequestInit): Promise<Response> {
+    // Deferred so a throw (bad JSON body) rejects, as an async method did.
+    return Promise.resolve().then(() => this.respond(input, init));
+  }
+
+  private respond(input: string, init?: RequestInit): Response {
     const path = new URL(input, 'https://demo.invalid').pathname;
     const method = init?.method?.toUpperCase() ?? 'GET';
-    const route = `${method} ${path}`;
     const body =
       typeof init?.body === 'string' ? (JSON.parse(init.body) as Record<string, unknown>) : {};
-    switch (route) {
+    switch (`${method} ${path}`) {
       case 'GET /api/state':
         return json(buildStateResponse(this.state));
       case 'GET /api/requirements':
@@ -69,28 +73,35 @@ export class DemoBackend {
         this.restart();
         return json({ ok: true });
       case 'POST /api/brightness':
-        this.state.brightness = Number(body.level);
-        this.deck.setBrightness(this.state.brightness);
-        this.broadcast('brightness', { level: this.state.brightness });
-        this.changed();
-        return json({});
+        return this.setBrightness(Number(body.level));
       case 'POST /api/brightness-override':
         this.state.brightnessOverride = body.enabled === true;
         this.broadcast('brightnessOverride', { enabled: this.state.brightnessOverride });
         return json({});
       case 'POST /api/browser-locale':
         return json({});
+      default:
+        return this.pressKey(method, path);
     }
+  }
+
+  private setBrightness(level: number): Response {
+    this.state.brightness = level;
+    this.deck.setBrightness(level);
+    this.broadcast('brightness', { level });
+    this.changed();
+    return json({});
+  }
+
+  private pressKey(method: string, path: string): Response {
     const key = method === 'POST' ? /^\/api\/key\/(\d+)$/.exec(path) : null;
-    if (key) {
-      const index = Number(key[1]);
-      if (index >= buildStatus(this.state).keyCount)
-        return json({ error: 'Not available in the demo' }, 404);
-      this.keyEvent(index, 'down');
-      this.keyEvent(index, 'up');
-      return json({});
-    }
-    return json({ error: 'Not available in the demo' }, 404);
+    if (!key) return json({ error: 'Not available in the demo' }, 404);
+    const index = Number(key[1]);
+    if (index >= buildStatus(this.state).keyCount)
+      return json({ error: 'Not available in the demo' }, 404);
+    this.keyEvent(index, 'down');
+    this.keyEvent(index, 'up');
+    return json({});
   }
 
   private restart(): void {

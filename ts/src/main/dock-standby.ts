@@ -33,7 +33,7 @@ export type StandbyInput =
   | { kind: 'key'; mk2: number; state: KeyState }
   | { kind: 'extraKey'; wireId: number; state: KeyState }
   | { kind: 'dialPress'; index: number; state: KeyState }
-  | { kind: 'dialRotate'; index: number }
+  | { kind: 'dialRotate'; index: number; delta: number }
   | { kind: 'touch' };
 
 export interface StandbySink {
@@ -69,7 +69,7 @@ export interface DockStandbyDeps {
 export function dialInput(e: DialEvent): StandbyInput {
   return e.kind === 'press'
     ? { kind: 'dialPress', index: e.index, state: e.state }
-    : { kind: 'dialRotate', index: e.index };
+    : { kind: 'dialRotate', index: e.index, delta: e.delta };
 }
 
 function tagOf(i: StandbyInput): string | undefined {

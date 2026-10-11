@@ -152,18 +152,6 @@ function HeaderStats({
         </span>
       </div>
       <div class="si">
-        <span class="sl">RX</span>
-        <span class="sv" id="s-rx-hdr">
-          {stats.elgatoRxPkts}
-        </span>
-      </div>
-      <div class="si">
-        <span class="sl">TX</span>
-        <span class="sv" id="s-tx-hdr">
-          {stats.elgatoTxPkts}
-        </span>
-      </div>
-      <div class="si">
         <span class="sl">IMGS</span>
         <span class="sv" id="s-img-hdr">
           {stats.imagesSent}

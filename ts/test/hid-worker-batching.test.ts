@@ -167,6 +167,8 @@ await test('CORA image completion notifications follow final STP', async () => {
     hashed.toSorted((a, b) => a - b),
     Array.from({ length: 15 }, (_, i) => i),
   );
+  // The LRU flag rides the deferred notification too.
+  assert.ok(messages.every((m) => m.type !== 'imageSent' || typeof m.cached === 'boolean'));
 });
 
 await test('workDone returns every batched id once, after imageSent and the final STP', async () => {

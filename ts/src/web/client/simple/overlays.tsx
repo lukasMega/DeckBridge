@@ -272,6 +272,20 @@ function ConnectionDetails({
   );
 }
 
+function SavedSettings({
+  text,
+  onOpen,
+}: Readonly<{ text: string | null; onOpen: () => Promise<void> }>): preact.JSX.Element {
+  return (
+    <Collapsible title="Saved settings (JSON)" status={text === null ? 'Loading…' : 'Loaded'}>
+      <pre class="settings-json-preview panel-inset">{text ?? 'Loading…'}</pre>
+      <div class="settings-actions">
+        <GhostButton onClick={onOpen}>Open settings.json</GhostButton>
+      </div>
+    </Collapsible>
+  );
+}
+
 export function SettingsPage({
   onBack,
   onFeedback,
@@ -349,15 +363,7 @@ export function SettingsPage({
             }}
           />
 
-          <Collapsible
-            title="Saved settings (JSON)"
-            status={settingsText === null ? 'Loading…' : 'Loaded'}
-          >
-            <pre class="settings-json-preview panel-inset">{settingsText ?? 'Loading…'}</pre>
-            <div class="settings-actions">
-              <GhostButton onClick={handleOpenInOS}>Open settings.json</GhostButton>
-            </div>
-          </Collapsible>
+          <SavedSettings text={settingsText} onOpen={handleOpenInOS} />
         </SettingsGroup>
       </SettingsSearch>
     </div>

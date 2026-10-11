@@ -3,7 +3,8 @@ import { EventEmitter } from '../src/platform/events-shim.js';
 import { WebUIServer } from '../src/web/server/web-ui-server.js';
 import { PersistedSettings } from '../src/infra/settings.js';
 import { CoraDock } from '../src/main/cora-dock.js';
-import type { Dock, DockHooks } from '../src/main/dock.js';
+import type { Dock } from '../src/main/dock.js';
+import type { DockHooks } from '../src/main/dock-types.js';
 import type { ElgatoServer } from '../src/cora/primary-server.js';
 import type { ElgatoChildServer } from '../src/cora/child-server.js';
 import {
