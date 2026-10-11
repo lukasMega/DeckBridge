@@ -20,7 +20,7 @@ const ids = readdirSync(srcRoot, { withFileTypes: true })
   .filter((e) => e.isDirectory() && existsSync(path.join(srcRoot, e.name, 'manifest.json')))
   .map((e) => e.name)
   .filter((id) => only === undefined || id === only);
-if (ids.length === 0) throw new Error(`no extension to build${only ? `: ${only}` : ''}`);
+if (ids.length === 0) throw new Error('no extension to build' + (only ? ': ' + only : ''));
 
 for (const id of ids) {
   const src = path.join(srcRoot, id);
