@@ -88,7 +88,7 @@ export const FEATURES: Feature[] = [
     text: 'Show clocks, weather, command output, or JavaScript widgets. Save layouts that follow your Elgato pages.',
     detail: (
       <>
-        On supported decks, customise side keys and touch strip zones with live widgets, text
+        On supported decks, customize side keys and touch strip zones with live widgets, text
         styles, and colours. They keep updating while your browser is closed. Save a page-specific
         layout to switch widgets when the Elgato app changes pages or folders.{' '}
         <Link to="/side-keys">Build your display layout →</Link>
