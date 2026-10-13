@@ -130,7 +130,6 @@ export class DockScanner {
     if (this.deps.isProbeInFlight()) return null;
     if (!this.deps.coraDockFactory) return null;
     if (this.createInFlight) return null;
-    if (this.freeIndices.length === 0) return null;
     return this.deps.getRealDriver();
   }
 
@@ -146,6 +145,9 @@ export class DockScanner {
       const currentRealDriver = this.scanTarget();
       if (currentRealDriver === null) return;
 
+      this.deps.onScanned();
+      // Full pool still scans (above): the picker must see a third deck to offer it.
+      if (this.freeIndices.length === 0) return;
       const pick = this.pickUnclaimedPath(currentRealDriver);
       if (!pick) return;
       this.createInFlight = true;
@@ -183,7 +185,7 @@ export class DockScanner {
       if (model.id === skipModelId) continue;
       for (const path of this.deps.discovery.paths(model)) {
         seen++;
-        if (claimed.has(path)) continue;
+        if (claimed.has(path) || !this.deps.isUnitAllowed(model, path)) continue;
         if (!pick || path < pick.hidPath) pick = { model, hidPath: path };
       }
     }
@@ -367,6 +369,19 @@ export class DockScanner {
     for (const [index, { driver }] of Array.from(this.units)) {
       if (modelId && driver.model.id !== modelId) continue;
       await this.teardownDock(index);
+    }
+  }
+
+  /** HID paths held by scanned docks, so the primary probe never re-opens one. */
+  claimedPaths(): string[] {
+    return [...this.units.values()].map((u) => u.hidPath);
+  }
+
+  /** Tear down scanned docks whose device key `drop` rejects (the user unticked them). */
+  async dropWhere(drop: (deviceKey: string) => boolean): Promise<void> {
+    for (const index of Array.from(this.units.keys())) {
+      const key = this.deps.docks.get(index)?.identity?.deviceKey;
+      if (key !== undefined && drop(key)) await this.teardownDock(index);
     }
   }
 

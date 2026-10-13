@@ -50,6 +50,13 @@ export function sanitizeVirtualDeck(
   return { enabled: v.enabled, profile };
 }
 
+/** A saved `activeDecks` list: non-empty strings, deduped, at most `max` (the free-tier cap). */
+export function sanitizeActiveDecks(v: unknown, max: number): string[] {
+  if (!Array.isArray(v)) return [];
+  const keys = v.filter((k): k is string => typeof k === 'string' && k !== '' && k.length <= 256);
+  return [...new Set(keys)].slice(0, max);
+}
+
 /** Extension folder names: the same shape the extensions controller accepts. */
 export const EXTENSION_ID = /^[a-z0-9][a-z0-9-]{0,31}$/;
 

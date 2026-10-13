@@ -1372,6 +1372,57 @@ await test('M4. setMultiDeck(false) tears a live scanned dock down', async () =>
   assert.equal(identities.length, 1, 'no new extra created while multi-deck is off');
 });
 
+await test('M5. a full pool still detects a third deck and flags which two run', async () => {
+  const { driverManager, present, pathsByModel } = setupCoord(2);
+  present.add(DEFAULT_MODEL.id);
+  pathsByModel.set(DEFAULT_MODEL.id, ['hid:mk2:a', 'hid:mk2:b', 'hid:mk2:c']);
+
+  await driverManager.tryRealConnect();
+  await driverManager.__scanOnce(); // docks b
+  await driverManager.__scanOnce(); // pool full, still scans
+
+  const decks = driverManager.getDetectedDecks();
+  assert.equal(decks.length, 3, 'all three listed');
+  assert.deepEqual(
+    decks.map((d) => d.active),
+    [true, true, false],
+    'only the first two run',
+  );
+});
+
+await test('M6. setActiveDecks swaps the running pair to the chosen decks', async () => {
+  const { driverManager, present, pathsByModel } = setupCoord(2);
+  present.add(DEFAULT_MODEL.id);
+  pathsByModel.set(DEFAULT_MODEL.id, ['hid:mk2:a', 'hid:mk2:b', 'hid:mk2:c']);
+  await driverManager.tryRealConnect();
+  await driverManager.__scanOnce();
+
+  await driverManager.setActiveDecks(['hid:mk2:b', 'hid:mk2:c']);
+  await driverManager.tryRealConnect(); // the scheduled reconnect, run now
+  await driverManager.__scanOnce();
+
+  const active = driverManager
+    .getDetectedDecks()
+    .filter((d) => d.active)
+    .map((d) => d.key);
+  assert.deepEqual(
+    active.toSorted((x, y) => x.localeCompare(y)),
+    ['hid:mk2:b', 'hid:mk2:c'],
+    'a is released, c docked',
+  );
+});
+
+await test('M7. a saved choice naming no detected deck is ignored', async () => {
+  const { driverManager, present, pathsByModel } = setupCoord(2);
+  present.add(DEFAULT_MODEL.id);
+  pathsByModel.set(DEFAULT_MODEL.id, ['hid:mk2:a', 'hid:mk2:b']);
+  await driverManager.setActiveDecks(['usb:unplugged']);
+
+  await driverManager.tryRealConnect();
+  await driverManager.__scanOnce();
+  assert.equal(driverManager.getDockStatuses().length, 2, 'both decks still run');
+});
+
 // Device tuning (settings.json modelOverrides — see devices/model-overrides.ts)
 
 /** A driver whose open() always succeeds, capturing the model + override the

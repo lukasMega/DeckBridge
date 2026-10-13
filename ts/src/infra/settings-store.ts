@@ -135,6 +135,9 @@ export interface Settings {
    *  dock (max MAX_MULTI_DECK_DOCKS). Absent/false = a single dock, and no USB
    *  scanning at all once it is connected. */
   multiDeck?: boolean;
+  /** Device keys the user chose to run when more decks are detected than the cap allows
+   *  (max MAX_MULTI_DECK_DOCKS). Absent = the first decks found win. */
+  activeDecks?: string[];
   /** Click-to-press in the WebUI preview (double-click a key = a virtual press on the Elgato
    *  app). Opt-in, off by default; never imported from a settings file. */
   webuiKeyPress?: boolean;

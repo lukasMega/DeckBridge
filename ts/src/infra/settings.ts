@@ -18,6 +18,7 @@ import {
   isExtraKeysRecord,
   isOneOf,
   isTouchStripRepaintMs,
+  MAX_MULTI_DECK_DOCKS,
   normalizeExtraKeyConfig,
   TOUCH_STRIP_MODES,
   TOUCH_STRIP_UPLOADS,
@@ -33,6 +34,7 @@ import {
   isBrowserDeckProfile,
 } from '../devices/virtual/browser-deck-profiles.js';
 import {
+  sanitizeActiveDecks,
   sanitizeExtensionGrants,
   sanitizeModelOverrides,
   sanitizeVirtualDeck,
@@ -157,6 +159,8 @@ export class PersistedSettings implements DockPrefsStore {
   /** Opt-in second dock; false = single dock and no dock scan (types.ts
    *  MAX_MULTI_DECK_DOCKS, dock-scanner.ts). */
   multiDeck = false;
+  /** User-chosen device keys among the detected decks (deck-selection.ts). */
+  activeDecks: string[] = [];
   webuiKeyPress = false;
   virtualDeck = { enabled: false, profile: DEFAULT_BROWSER_DECK_PROFILE as string };
   /** GitHub-release update check opt-out (see update-check.ts). undefined = enabled. */
@@ -213,6 +217,7 @@ export class PersistedSettings implements DockPrefsStore {
     if (typeof saved.selectedDock === 'number') this.selectedDock = saved.selectedDock;
     if (isLogLevel(saved.logLevel)) this.logLevel = saved.logLevel;
     if (typeof saved.multiDeck === 'boolean') this.multiDeck = saved.multiDeck;
+    this.activeDecks = sanitizeActiveDecks(saved.activeDecks, MAX_MULTI_DECK_DOCKS);
     if (typeof saved.webuiKeyPress === 'boolean') this.webuiKeyPress = saved.webuiKeyPress;
     this.virtualDeck = sanitizeVirtualDeck(saved.virtualDeck) ?? this.virtualDeck;
     if (typeof saved.updateCheck === 'boolean') this.updateCheck = saved.updateCheck;
@@ -360,6 +365,12 @@ export class PersistedSettings implements DockPrefsStore {
   /** Persist the multi-deck opt-in (WebUI "Use two decks at once"). */
   setMultiDeck(enabled: boolean): void {
     this.multiDeck = enabled;
+    this.persist();
+  }
+
+  /** Persist which detected decks run (WebUI multi-deck checkbox list). */
+  setActiveDecks(keys: string[]): void {
+    this.activeDecks = keys;
     this.persist();
   }
 
@@ -517,6 +528,7 @@ export class PersistedSettings implements DockPrefsStore {
       selectedDock: this.selectedDock,
       ...(this.logLevel !== undefined ? { logLevel: this.logLevel } : {}),
       ...(this.multiDeck ? { multiDeck: true } : {}),
+      ...(this.activeDecks.length > 0 ? { activeDecks: this.activeDecks } : {}),
       ...(this.webuiKeyPress ? { webuiKeyPress: true } : {}),
       ...(this.virtualDeck.enabled || this.virtualDeck.profile !== DEFAULT_BROWSER_DECK_PROFILE
         ? { virtualDeck: this.virtualDeck }

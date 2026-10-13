@@ -29,7 +29,8 @@ import type {
   WebUIControllers,
 } from './types.js';
 import type { KeyState, CommEntry, DockStatus, ClientApp } from '../../shared/types.js';
-import { WEBUI_PORT, webuiBindAddr } from '../../shared/types.js';
+import { MAX_MULTI_DECK_DOCKS, WEBUI_PORT, webuiBindAddr } from '../../shared/types.js';
+import type { DetectedDeck, DetectedDecksView } from '../contract-decks.js';
 import { StatusPublisher } from './status-publisher.js';
 import { buildStateResponse, selectedDeviceIdentity } from './state-response.js';
 import { LoggingController } from './logging-controller.js';
@@ -100,6 +101,7 @@ export class WebUIServer extends EventEmitter implements WebUIController, WebUIC
     this.status.setLocalIp(ip);
   }
   private _port: number;
+  private detected: DetectedDeck[] = [];
   /** Injected by app.ts once discovery exists; reports show the error until then. */
   private hidInventory: HidInventoryFn = () =>
     Promise.reject(new Error('HID inventory not available'));
@@ -339,6 +341,15 @@ export class WebUIServer extends EventEmitter implements WebUIController, WebUIC
     // Re-push per-device values after a replug (the selected deviceKey may have changed); selectDock(0) covers it too.
     if (this.selectedDock !== 0 && !live.has(this.selectedDock)) this.selectDock(0);
     else this.broadcastSelectedDeviceState();
+  }
+
+  /** Latest USB scan result for the multi-deck picker; polled by the Settings page, so no broadcast. */
+  notifyDetectedDecks(decks: DetectedDeck[]): void {
+    this.detected = decks;
+  }
+
+  detectedDecks(): DetectedDecksView {
+    return { decks: this.detected, selected: this.settings.activeDecks, max: MAX_MULTI_DECK_DOCKS };
   }
 
   notifyElgatoAppConflict(conflict: boolean): void {

@@ -4,7 +4,8 @@
 import type { Settings } from '../../infra/settings-store.js';
 import type { LoggingController } from './logging-controller.js';
 import type { ControllerHost } from './types.js';
-import { DEFAULT_TOUCH_STRIP_MODE } from '../../shared/types.js';
+import { sanitizeActiveDecks } from '../../infra/settings-sanitize.js';
+import { DEFAULT_TOUCH_STRIP_MODE, MAX_MULTI_DECK_DOCKS } from '../../shared/types.js';
 
 export class SettingsFileController {
   constructor(
@@ -26,6 +27,12 @@ export class SettingsFileController {
     this.host.emit('setMultiDeck', enabled);
   }
 
+  /** Persist the chosen decks and let app.ts reconcile the running docks with them. */
+  setActiveDecks(keys: string[]): void {
+    this.host.settings.setActiveDecks(keys);
+    this.host.emit('setActiveDecks', keys);
+  }
+
   /** Parse `raw`, validate it's an object, assign known fields, persist. Throws on malformed
    *  JSON/non-object; unknown/invalid individual fields are ignored (not fatal). */
   applyJson(raw: string): void {
@@ -38,6 +45,9 @@ export class SettingsFileController {
     // Multi-deck travels with the file: importing one that enables it must
     // actually raise the cap, not just persist the flag.
     if (typeof s.multiDeck === 'boolean') this.setMultiDeck(s.multiDeck);
+    if (Object.hasOwn(parsed, 'activeDecks')) {
+      this.setActiveDecks(sanitizeActiveDecks(s.activeDecks, MAX_MULTI_DECK_DOCKS));
+    }
     // Device tuning: invalid entries are dropped with a warn inside
     // importModelOverrides, never thrown — an imported file must not be able to
     // poison runtime state. '' = "all models", the sessions reopen either way.

@@ -210,9 +210,17 @@ With it on, a second deck becomes its own network dock: own mDNS name, own CORA 
    brightness slider. Each deck keeps its own brightness (also applied per deck from the
    Elgato app, unless "Ignore brightness from Elgato app" is on).
 
+**Choosing which decks run.** With multiple decks on, DeckBridge detects up to four plugged-in
+decks and lists them under **Settings → Multiple decks**. Tick the (at most two) decks to run;
+the rest stay idle. Your choice is stored as `"activeDecks"` in settings.json. With no choice
+saved, the first two decks found run.
+
 Unplugging an extra deck removes its card; replugging brings it back automatically.
 Turning the setting back off disconnects the second deck (its settings are kept, so
 switching it on again restores the dock).
+
+Only one DeckBridge can run per machine. A second copy exits at startup with "DeckBridge is
+already running" (it holds loopback TCP port 44659 as a lock).
 
 Every dock needs its **own IP address** in the Elgato app — see
 [one dock per IP address](./browser-deck.md#one-dock-per-ip-address). A phone or tablet can

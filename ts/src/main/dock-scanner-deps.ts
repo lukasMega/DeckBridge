@@ -42,6 +42,10 @@ export interface DockScannerDeps {
     model: DeviceModel;
     override?: DeviceModelOverride;
   };
+  /** May this unit run (deck-selection.ts)? Unticked decks are detected but never docked. */
+  isUnitAllowed: (model: DeviceModel, hidPath: string) => boolean;
+  /** A scan finished, so the detected-deck list may have changed. */
+  onScanned: () => void;
   /** Per-device identity (getOrCreateIdentity) and live prefs (for) by deviceKey. */
   settings: DockSettings;
   /** The WebUI mirror + status hooks for the dock at `index`. */

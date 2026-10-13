@@ -1,5 +1,6 @@
 import type { ExtraKeyConfig, DockStatus } from '../../shared/types.js';
 import type { PageDefinition } from '../../shared/page-config.js';
+import type { DetectedDecksView } from '../contract-decks.js';
 import type {
   ExtraKeyPressAction,
   MockDeviceConfig,
@@ -136,6 +137,7 @@ export interface WebUIController {
   emit(event: string, ...args: unknown[]): boolean;
   readonly selectedDock: number;
   fullState(): StateResponse;
+  detectedDecks(): DetectedDecksView;
   notifyBrightness(level: number): void;
   applyMockConfig(parsed: Partial<MockDeviceConfig>): MockDeviceConfig;
   trySimulateKey(n: number): ReqError | null;

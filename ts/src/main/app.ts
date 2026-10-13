@@ -13,6 +13,7 @@ import type { OverrideChangeKind } from '../devices/model-overrides.js';
 import { log, setWebUILog, setLogLevel, step } from '../shared/logger.js';
 import { startLogFile, stopLogFile, activeLogFilePath } from '../infra/log-file.js';
 import { setupNativeLibs } from '../infra/native-libs.js';
+import { acquireInstanceLock } from '../infra/single-instance.js';
 import { DriverManager } from './driver-manager.js';
 import { ElgatoAutoRestart, createElgatoAutoRestartDeps } from './elgato-auto-restart.js';
 import { getInitialDriverMode } from './driver-manager-deps.js';
@@ -60,6 +61,12 @@ applyFlagsToEnv(cli.flags);
 if (cli.command === 'diagnose') {
   await runDiagnoseCommand(cli.flags);
   tjs.exit(0);
+}
+// Hard requirement: one instance at a time. After the CLI subcommands (they never serve),
+// before the log sink so a refused copy cannot rotate the running instance's log files.
+if (!(await acquireInstanceLock())) {
+  console.error('DeckBridge is already running. Only one instance is allowed; exiting.');
+  tjs.exit(1);
 }
 // Disk sink first — before setupNativeLibs, before any HID call. defaultCacheRoot()
 // is pure (env + tjs.homeDir), so this needs no native lib, and a freeze anywhere
@@ -185,6 +192,7 @@ webui.setHidInventory(() => driverManager.hidInventory());
 // there) and the tray.
 driverManager.on('changed', () => {
   webui.notifyDocks(driverManager.getDockStatuses());
+  webui.notifyDetectedDecks(driverManager.getDetectedDecks());
   pushTrayState();
 });
 
@@ -291,6 +299,13 @@ webui.on('setLogLevel', (level: string) => {
 webui.on('setMultiDeck', (enabled: boolean) => {
   driverManager.setMultiDeck(enabled).catch((err: unknown) => {
     log('error', 'deckBr', `setMultiDeck(${enabled}) failed: ${(err as Error).message}`);
+  });
+});
+
+// Deck picker changed (WebUI or settings import): stop decks that are no longer chosen.
+webui.on('setActiveDecks', (keys: string[]) => {
+  driverManager.setActiveDecks(keys).catch((err: unknown) => {
+    log('error', 'deckBr', `setActiveDecks failed: ${(err as Error).message}`);
   });
 });
 
@@ -519,6 +534,7 @@ if (__MOCK_BUILD__ && driverManager.getDriverMode() === 'mock') {
 // opt-in: with it off (the default) startScan() installs no timer at all, so a
 // connected single deck ends USB enumeration for good.
 await driverManager.setMultiDeck(settings.multiDeck);
+await driverManager.setActiveDecks(settings.activeDecks);
 // Safe in mock mode: scanForDocks() guards on driverMode==='real' and a connected
 // primary, so it's a no-op until a real primary is up.
 driverManager.startScan();

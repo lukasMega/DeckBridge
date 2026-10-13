@@ -4,7 +4,7 @@ import { overridesDisabled } from '../shared/cli.js';
 import { closeDriver } from '../worker/hid-worker-host.js';
 import type { WorkerHidDriver } from '../worker/hid-worker-host.js';
 import { ELGATO_CHILD_PORT, ELGATO_TCP_PORT, MAX_MULTI_DECK_DOCKS } from '../shared/types.js';
-import type { DockStatus } from '../shared/types.js';
+import type { DetectedDeck, DockStatus } from '../shared/types.js';
 import type { DockDriver, DeviceModel, DeviceModelOverride } from '../devices/driver.js';
 import { applyModelOverrides, overrideSummary } from '../devices/model-overrides.js';
 import type { OverrideChangeKind } from '../devices/model-overrides.js';
@@ -19,6 +19,7 @@ import type { DockHooks } from './dock-types.js';
 import { ExtensionEventWiring } from './extension-events-wiring.js';
 import { ProbePacer } from './driver-manager-pacing.js';
 import { DockScanner } from './dock-scanner.js';
+import { DeckSelection } from './deck-selection.js';
 import {
   elgatoHardwarePresent,
   nativeHidDiscovery,
@@ -67,6 +68,9 @@ export class DriverManager extends EventEmitter {
   /** Docks 1..N (multi-deck); deps are closures over this instance's state. */
   private readonly scanner: DockScanner;
 
+  /** Last scan's units and the user's chosen device keys (deck-selection.ts). */
+  private readonly deckChoice = new DeckSelection();
+
   /** The running probe (tryRealConnect), so shutdown can wait for it to settle. */
   private probeTask: Promise<unknown> | null = null;
   private shutdownTask: Promise<void> | null = null;
@@ -111,6 +115,11 @@ export class DriverManager extends EventEmitter {
         model: this.effectiveModel(model),
         override: this.overrideFor(model.id),
       }),
+      isUnitAllowed: (model, hidPath) =>
+        this.deckChoice.unitAllowed(this.discovery, model, hidPath),
+      onScanned: () => {
+        if (this.deckChoice.refresh(this.discovery)) this.changed();
+      },
       settings: deps.settings,
       dockHooks: (index) => this.dockHooks(index),
       onChanged: () => this.changed(),
@@ -314,6 +323,7 @@ export class DriverManager extends EventEmitter {
    * pacer; even a stalled scan cannot starve CORA/WebUI work (issue #67.2). */
   private async presentModels(): Promise<DeviceModel[]> {
     const took = await this.discovery.scan();
+    if (this.deckChoice.refresh(this.discovery)) this.changed();
     const present = DEVICE_MODELS.filter((model) => this.discovery.present(model));
     log('debug', 'hid', `enumerate took ${took}ms, ${present.length} model(s) present`);
     this.pacer.note(took);
@@ -328,9 +338,12 @@ export class DriverManager extends EventEmitter {
       // e.g. Input Monitoring denied) — it connects the moment open() succeeds.
       const override = this.overrideFor(model.id);
       const effective = applyModelOverrides(model, override);
-      const hidPath = this.discovery.paths(effective)[0];
+      const claimed = this.scanner.claimedPaths();
+      const hidPath = this.discovery
+        .paths(effective)
+        .find((p) => !claimed.includes(p) && this.deckChoice.unitAllowed(this.discovery, model, p));
       if (!hidPath) {
-        log('warn', 'hid', `${model.id} has no usage-matched HID path`);
+        log('warn', 'hid', `${model.id} has no usable HID path (none matched, or not selected)`);
         continue;
       }
       // Listeners are wired by Dock.attach after a good open.
@@ -453,7 +466,29 @@ export class DriverManager extends EventEmitter {
   /** Multi-deck opt-in: off (the default) = one dock, no USB scanning once up;
    * switching it off tears down a live second dock. `cap` is a test seam. */
   setMultiDeck(enabled: boolean, cap: number = MAX_MULTI_DECK_DOCKS): Promise<void> {
+    this.deckChoice.multiDeck = enabled;
     return this.scanner.setMaxDocks(enabled ? cap : 1);
+  }
+
+  /** The user's chosen decks (WebUI picker, settings import). Stops docks that are no longer
+   *  chosen; the reconnect probe and the scan then pick up the chosen ones. */
+  async setActiveDecks(keys: string[]): Promise<void> {
+    this.deckChoice.selected = keys;
+    await this.scanner.dropWhere((key) => !this.deckChoice.keyAllowed(key));
+    const driver = this.primary.driver;
+    const key = this.primary.identity?.deviceKey;
+    if (this.mode === 'real' && driver && key && !this.deckChoice.keyAllowed(key)) {
+      this.primary.detach();
+      this.deps.webui.notifyDriverStatus('real', false);
+      await closeDriver(driver);
+      this.scheduleReconnect();
+    }
+    this.changed();
+  }
+
+  /** Decks the last scan saw, each flagged when a dock is running it. */
+  getDetectedDecks(): DetectedDeck[] {
+    return this.deckChoice.view((key) => this.dockForDevice(key) !== undefined);
   }
 
   /** Begin polling for scanned docks. Idempotent; no-op until multi-deck is on. */

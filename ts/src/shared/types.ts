@@ -17,6 +17,7 @@ export type {
   TouchStripMode,
   WidgetDisplayInfo,
 } from '../web/contract.js';
+export type { DetectedDeck } from '../web/contract-decks.js';
 export type {
   StandbyAppGoneAction,
   StandbySettings,
@@ -46,6 +47,9 @@ export const MAX_DOCKS = 4;
 // one scanned dock). Without it DeckBridge runs a single dock and stops scanning USB
 // once that dock is up — see dock-scanner.ts.
 export const MAX_MULTI_DECK_DOCKS = 2;
+// How many physical decks the scan reports to the picker. More than the active cap so the
+// user can choose which ones run (main/deck-selection.ts).
+export const MAX_DETECTED_DECKS = 4;
 // The browser deck's dock: fixed (not pool-allocated) so its CORA ports never move —
 // the Elgato app pairs by IP:port.
 export const VIRTUAL_DOCK_INDEX = MAX_DOCKS - 1;
@@ -82,6 +86,9 @@ export const HID_POLL_INTERVAL_MS = 3_000;
 // WebUI server
 export const WEBUI_PORT = 3000;
 export const WEBUI_LISTEN_ADDRESS = '127.0.0.1';
+
+// Loopback port held for the process lifetime: the single-instance lock (infra/single-instance.ts).
+export const INSTANCE_LOCK_PORT = 44_659;
 
 // Browser deck listener (phones/tablets). Fixed, no fallback: a paired device bookmarks the URL.
 export const DECK_PORT = 44_660;

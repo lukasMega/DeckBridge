@@ -16,6 +16,7 @@ import type { MockDeviceConfig } from './types.js';
 import {
   EXTRA_KEY_PRESS_ACTIONS,
   ENCODER_COMMAND_MAX,
+  MAX_MULTI_DECK_DOCKS,
   TOUCH_STRIP_MODES,
   TOUCH_STRIP_REPAINT_MIN_MS,
   TOUCH_STRIP_REPAINT_MAX_MS,
@@ -106,6 +107,8 @@ export const routes: Route[] = [
   postJson('/api/device-identity/mdns-name', setDeviceMdnsName),
   postJson('/api/log-level', setLogLevelRoute),
   postJson('/api/multi-deck', setMultiDeckRoute),
+  get('/api/detected-decks', ({ ui }) => json(ui.detectedDecks())),
+  postJson('/api/active-decks', setActiveDecksRoute),
   postJson('/api/browser-locale', setBrowserLocaleRoute),
   post('/api/logs/open-in-os', async ({ logging }) => {
     await logging.openFolder();
@@ -234,6 +237,22 @@ function setMultiDeckRoute(
   if (typeof enabled !== 'boolean') return badRequest('enabled must be a boolean');
   settingsFile.setMultiDeck(enabled);
   return json({ ok: true, enabled });
+}
+
+/** WebUI deck picker: which detected decks run. Capped at the active-deck limit here, not
+ *  only in the UI, so a hand-made request cannot lift it. */
+function setActiveDecksRoute(
+  { keys }: { keys: unknown },
+  { settingsFile }: RouteContext,
+): Response {
+  const valid = Array.isArray(keys) && keys.every((k) => typeof k === 'string' && k !== '');
+  if (!valid) return badRequest('keys must be an array of device keys');
+  const unique = [...new Set(keys as string[])];
+  if (unique.length > MAX_MULTI_DECK_DOCKS) {
+    return badRequest(`at most ${MAX_MULTI_DECK_DOCKS} decks can be active`);
+  }
+  settingsFile.setActiveDecks(unique);
+  return json({ ok: true, keys: unique });
 }
 
 /** WebUI Settings "Click to press" opt-in. */
