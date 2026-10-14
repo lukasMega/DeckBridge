@@ -1483,3 +1483,1827 @@ capabilities: {
 ```
 
 **Derived from:** opendeck-akp153 · keydeck
+
+### Redragon SS552 \{#redragon-ss552}
+
+`redragon-ss552` · `ajazz-akp05` · — untested · [compare entry](./devices.mdx#redragon-ss552)
+
+```text
+stream-deck-plus index → wire image id  (4×2, row-major)
+
+   0   1   2   3      11  12  13  14
+   4   5   6   7       6   7   8   9
+
+  extra keys (outside the CORA grid): 15, 10
+```
+
+```js
+keyMap: {
+  "coraToWireImage": [
+    11,
+    12,
+    13,
+    14,
+    6,
+    7,
+    8,
+    9
+  ],
+  "wireInputToCora": [
+    -1,
+    0,
+    1,
+    2,
+    3,
+    -1,
+    4,
+    5,
+    6,
+    7,
+    -1
+  ],
+  "extraKeys": [
+    15,
+    10
+  ],
+  "extraKeyInputs": [
+    5,
+    10
+  ]
+}
+cora: {
+  "productId": 0x0084,
+  "advertiseAs": "stream-deck-plus",
+  "usePhysicalIdentity": false,
+  "emulations": {
+    "stream-deck-plus": {
+      "image": {
+        "format": "jpeg",
+        "width": 112,
+        "height": 112,
+        "rotate": 180,
+        "flipH": false,
+        "flipV": false,
+        "colorMode": "rgb",
+        "maxBytes": 65535,
+        "quality": 0.9,
+        "resizeFilter": "lanczos3",
+        "sharpen": 0.6,
+        "transform": "sidecar"
+      },
+      "keyMap": {
+        "coraToWireImage": [
+          11,
+          12,
+          13,
+          14,
+          6,
+          7,
+          8,
+          9
+        ],
+        "wireInputToCora": [
+          -1,
+          0,
+          1,
+          2,
+          3,
+          -1,
+          4,
+          5,
+          6,
+          7,
+          -1
+        ],
+        "extraKeys": [
+          15,
+          10
+        ],
+        "extraKeyInputs": [
+          5,
+          10
+        ]
+      }
+    }
+  }
+}
+splash: {
+  "transformOverride": {
+    "rotate": 180
+  }
+}
+capabilities: {
+  "batchImageTransfers": {
+    "configured": null,
+    "effective": false
+  },
+  "widgetDisplays": [
+    {
+      "wireId": 1,
+      "size": "176×112",
+      "label": "Left"
+    },
+    {
+      "wireId": 2,
+      "size": "176×112",
+      "label": "Left center"
+    },
+    {
+      "wireId": 3,
+      "size": "176×112",
+      "label": "Right center"
+    },
+    {
+      "wireId": 4,
+      "size": "176×112",
+      "label": "Right"
+    }
+  ],
+  "touchStripDisplay": {
+    "wireId": 1,
+    "size": "800×112"
+  },
+  "extraKeyInputs": [
+    5,
+    10
+  ],
+  "emulations": [
+    "stream-deck-plus"
+  ],
+  "defaultAdvertiseAs": "stream-deck-plus"
+}
+```
+
+**Derived from:** ambiso/opendeck-akp05 src/mappings.rs · ValentinTorassa/VT-Ragnaros ragnaros/protocol.py + daemon.py · opendeck-akp05 issue #6, PR #7, PR #23
+
+### Mirabox N4 \{#mirabox-n4}
+
+`mirabox-n4` · `ajazz-akp05` · — untested · [compare entry](./devices.mdx#mirabox-n4)
+
+```text
+stream-deck-plus index → wire image id  (4×2, row-major)
+
+   0   1   2   3      11  12  13  14
+   4   5   6   7       6   7   8   9
+
+  extra keys (outside the CORA grid): 15, 10
+```
+
+```js
+keyMap: {
+  "coraToWireImage": [
+    11,
+    12,
+    13,
+    14,
+    6,
+    7,
+    8,
+    9
+  ],
+  "wireInputToCora": [
+    -1,
+    0,
+    1,
+    2,
+    3,
+    -1,
+    4,
+    5,
+    6,
+    7,
+    -1
+  ],
+  "extraKeys": [
+    15,
+    10
+  ],
+  "extraKeyInputs": [
+    5,
+    10
+  ]
+}
+cora: {
+  "productId": 0x0084,
+  "advertiseAs": "stream-deck-plus",
+  "usePhysicalIdentity": false,
+  "emulations": {
+    "stream-deck-plus": {
+      "image": {
+        "format": "jpeg",
+        "width": 112,
+        "height": 112,
+        "rotate": 180,
+        "flipH": false,
+        "flipV": false,
+        "colorMode": "rgb",
+        "maxBytes": 65535,
+        "quality": 0.9,
+        "resizeFilter": "lanczos3",
+        "sharpen": 0.6,
+        "transform": "sidecar"
+      },
+      "keyMap": {
+        "coraToWireImage": [
+          11,
+          12,
+          13,
+          14,
+          6,
+          7,
+          8,
+          9
+        ],
+        "wireInputToCora": [
+          -1,
+          0,
+          1,
+          2,
+          3,
+          -1,
+          4,
+          5,
+          6,
+          7,
+          -1
+        ],
+        "extraKeys": [
+          15,
+          10
+        ],
+        "extraKeyInputs": [
+          5,
+          10
+        ]
+      }
+    }
+  }
+}
+splash: {
+  "transformOverride": {
+    "rotate": 180
+  }
+}
+capabilities: {
+  "batchImageTransfers": {
+    "configured": null,
+    "effective": false
+  },
+  "widgetDisplays": [
+    {
+      "wireId": 1,
+      "size": "176×112",
+      "label": "Left"
+    },
+    {
+      "wireId": 2,
+      "size": "176×112",
+      "label": "Left center"
+    },
+    {
+      "wireId": 3,
+      "size": "176×112",
+      "label": "Right center"
+    },
+    {
+      "wireId": 4,
+      "size": "176×112",
+      "label": "Right"
+    }
+  ],
+  "touchStripDisplay": {
+    "wireId": 1,
+    "size": "800×112"
+  },
+  "extraKeyInputs": [
+    5,
+    10
+  ],
+  "emulations": [
+    "stream-deck-plus"
+  ],
+  "defaultAdvertiseAs": "stream-deck-plus"
+}
+```
+
+**Derived from:** ambiso/opendeck-akp05 src/mappings.rs · MiraboxSpace/StreamDock-Device-SDK CPP-SDK/src/HotspotDevice/StreamDockN4/streamdockN4.cpp · teras/keydeck driver/devices/StreamDock-N4-0x1001.json
+
+### Mirabox N4E \{#mirabox-n4e}
+
+`mirabox-n4e` · `ajazz-akp05` · — untested · [compare entry](./devices.mdx#mirabox-n4e)
+
+```text
+stream-deck-plus index → wire image id  (4×2, row-major)
+
+   0   1   2   3      11  12  13  14
+   4   5   6   7       6   7   8   9
+
+  extra keys (outside the CORA grid): 15, 10
+```
+
+```js
+keyMap: {
+  "coraToWireImage": [
+    11,
+    12,
+    13,
+    14,
+    6,
+    7,
+    8,
+    9
+  ],
+  "wireInputToCora": [
+    -1,
+    0,
+    1,
+    2,
+    3,
+    -1,
+    4,
+    5,
+    6,
+    7,
+    -1
+  ],
+  "extraKeys": [
+    15,
+    10
+  ],
+  "extraKeyInputs": [
+    5,
+    10
+  ]
+}
+cora: {
+  "productId": 0x0084,
+  "advertiseAs": "stream-deck-plus",
+  "usePhysicalIdentity": false,
+  "emulations": {
+    "stream-deck-plus": {
+      "image": {
+        "format": "jpeg",
+        "width": 112,
+        "height": 112,
+        "rotate": 180,
+        "flipH": false,
+        "flipV": false,
+        "colorMode": "rgb",
+        "maxBytes": 65535,
+        "quality": 0.9,
+        "resizeFilter": "lanczos3",
+        "sharpen": 0.6,
+        "transform": "sidecar"
+      },
+      "keyMap": {
+        "coraToWireImage": [
+          11,
+          12,
+          13,
+          14,
+          6,
+          7,
+          8,
+          9
+        ],
+        "wireInputToCora": [
+          -1,
+          0,
+          1,
+          2,
+          3,
+          -1,
+          4,
+          5,
+          6,
+          7,
+          -1
+        ],
+        "extraKeys": [
+          15,
+          10
+        ],
+        "extraKeyInputs": [
+          5,
+          10
+        ]
+      }
+    }
+  }
+}
+splash: {
+  "transformOverride": {
+    "rotate": 180
+  }
+}
+capabilities: {
+  "batchImageTransfers": {
+    "configured": null,
+    "effective": false
+  },
+  "widgetDisplays": [
+    {
+      "wireId": 1,
+      "size": "176×112",
+      "label": "Left"
+    },
+    {
+      "wireId": 2,
+      "size": "176×112",
+      "label": "Left center"
+    },
+    {
+      "wireId": 3,
+      "size": "176×112",
+      "label": "Right center"
+    },
+    {
+      "wireId": 4,
+      "size": "176×112",
+      "label": "Right"
+    }
+  ],
+  "touchStripDisplay": {
+    "wireId": 1,
+    "size": "800×112"
+  },
+  "extraKeyInputs": [
+    5,
+    10
+  ],
+  "emulations": [
+    "stream-deck-plus"
+  ],
+  "defaultAdvertiseAs": "stream-deck-plus"
+}
+```
+
+**Derived from:** ambiso/opendeck-akp05 src/mappings.rs · MiraboxSpace/StreamDock-Device-SDK CPP-SDK/src/HotspotDevice/StreamDockN4/streamdockN4.cpp · teras/keydeck driver/devices/StreamDock-N4-0x1007.json
+
+### Mirabox N4 Pro \{#mirabox-n4-pro}
+
+`mirabox-n4-pro` · `ajazz-akp05` · — untested · [compare entry](./devices.mdx#mirabox-n4-pro)
+
+```text
+stream-deck-plus index → wire image id  (4×2, row-major)
+
+   0   1   2   3      11  12  13  14
+   4   5   6   7       6   7   8   9
+
+  extra keys (outside the CORA grid): 15, 10
+```
+
+```js
+keyMap: {
+  "coraToWireImage": [
+    11,
+    12,
+    13,
+    14,
+    6,
+    7,
+    8,
+    9
+  ],
+  "wireInputToCora": [
+    -1,
+    0,
+    1,
+    2,
+    3,
+    -1,
+    4,
+    5,
+    6,
+    7,
+    -1
+  ],
+  "extraKeys": [
+    15,
+    10
+  ],
+  "extraKeyInputs": [
+    5,
+    10
+  ]
+}
+cora: {
+  "productId": 0x0084,
+  "advertiseAs": "stream-deck-plus",
+  "usePhysicalIdentity": false,
+  "emulations": {
+    "stream-deck-plus": {
+      "image": {
+        "format": "jpeg",
+        "width": 112,
+        "height": 112,
+        "rotate": 180,
+        "flipH": false,
+        "flipV": false,
+        "colorMode": "rgb",
+        "maxBytes": 65535,
+        "quality": 0.9,
+        "resizeFilter": "lanczos3",
+        "sharpen": 0.6,
+        "transform": "sidecar"
+      },
+      "keyMap": {
+        "coraToWireImage": [
+          11,
+          12,
+          13,
+          14,
+          6,
+          7,
+          8,
+          9
+        ],
+        "wireInputToCora": [
+          -1,
+          0,
+          1,
+          2,
+          3,
+          -1,
+          4,
+          5,
+          6,
+          7,
+          -1
+        ],
+        "extraKeys": [
+          15,
+          10
+        ],
+        "extraKeyInputs": [
+          5,
+          10
+        ]
+      }
+    }
+  }
+}
+splash: {
+  "transformOverride": {
+    "rotate": 180
+  }
+}
+capabilities: {
+  "batchImageTransfers": {
+    "configured": null,
+    "effective": false
+  },
+  "widgetDisplays": [
+    {
+      "wireId": 1,
+      "size": "176×112",
+      "label": "Left"
+    },
+    {
+      "wireId": 2,
+      "size": "176×112",
+      "label": "Left center"
+    },
+    {
+      "wireId": 3,
+      "size": "176×112",
+      "label": "Right center"
+    },
+    {
+      "wireId": 4,
+      "size": "176×112",
+      "label": "Right"
+    }
+  ],
+  "touchStripDisplay": {
+    "wireId": 1,
+    "size": "800×112"
+  },
+  "extraKeyInputs": [
+    5,
+    10
+  ],
+  "emulations": [
+    "stream-deck-plus"
+  ],
+  "defaultAdvertiseAs": "stream-deck-plus"
+}
+```
+
+**Derived from:** ambiso/opendeck-akp05 src/mappings.rs
+
+### Mirabox N4 Pro E \{#mirabox-n4-pro-e}
+
+`mirabox-n4-pro-e` · `ajazz-akp05` · — untested · [compare entry](./devices.mdx#mirabox-n4-pro-e)
+
+```text
+stream-deck-plus index → wire image id  (4×2, row-major)
+
+   0   1   2   3      11  12  13  14
+   4   5   6   7       6   7   8   9
+
+  extra keys (outside the CORA grid): 15, 10
+```
+
+```js
+keyMap: {
+  "coraToWireImage": [
+    11,
+    12,
+    13,
+    14,
+    6,
+    7,
+    8,
+    9
+  ],
+  "wireInputToCora": [
+    -1,
+    0,
+    1,
+    2,
+    3,
+    -1,
+    4,
+    5,
+    6,
+    7,
+    -1
+  ],
+  "extraKeys": [
+    15,
+    10
+  ],
+  "extraKeyInputs": [
+    5,
+    10
+  ]
+}
+cora: {
+  "productId": 0x0084,
+  "advertiseAs": "stream-deck-plus",
+  "usePhysicalIdentity": false,
+  "emulations": {
+    "stream-deck-plus": {
+      "image": {
+        "format": "jpeg",
+        "width": 112,
+        "height": 112,
+        "rotate": 180,
+        "flipH": false,
+        "flipV": false,
+        "colorMode": "rgb",
+        "maxBytes": 65535,
+        "quality": 0.9,
+        "resizeFilter": "lanczos3",
+        "sharpen": 0.6,
+        "transform": "sidecar"
+      },
+      "keyMap": {
+        "coraToWireImage": [
+          11,
+          12,
+          13,
+          14,
+          6,
+          7,
+          8,
+          9
+        ],
+        "wireInputToCora": [
+          -1,
+          0,
+          1,
+          2,
+          3,
+          -1,
+          4,
+          5,
+          6,
+          7,
+          -1
+        ],
+        "extraKeys": [
+          15,
+          10
+        ],
+        "extraKeyInputs": [
+          5,
+          10
+        ]
+      }
+    }
+  }
+}
+splash: {
+  "transformOverride": {
+    "rotate": 180
+  }
+}
+capabilities: {
+  "batchImageTransfers": {
+    "configured": null,
+    "effective": false
+  },
+  "widgetDisplays": [
+    {
+      "wireId": 1,
+      "size": "176×112",
+      "label": "Left"
+    },
+    {
+      "wireId": 2,
+      "size": "176×112",
+      "label": "Left center"
+    },
+    {
+      "wireId": 3,
+      "size": "176×112",
+      "label": "Right center"
+    },
+    {
+      "wireId": 4,
+      "size": "176×112",
+      "label": "Right"
+    }
+  ],
+  "touchStripDisplay": {
+    "wireId": 1,
+    "size": "800×112"
+  },
+  "extraKeyInputs": [
+    5,
+    10
+  ],
+  "emulations": [
+    "stream-deck-plus"
+  ],
+  "defaultAdvertiseAs": "stream-deck-plus"
+}
+```
+
+**Derived from:** ambiso/opendeck-akp05 src/mappings.rs
+
+### VSDinside N4 \{#vsdinside-n4}
+
+`vsdinside-n4` · `ajazz-akp05` · — untested · [compare entry](./devices.mdx#vsdinside-n4)
+
+```text
+stream-deck-plus index → wire image id  (4×2, row-major)
+
+   0   1   2   3      11  12  13  14
+   4   5   6   7       6   7   8   9
+
+  extra keys (outside the CORA grid): 15, 10
+```
+
+```js
+keyMap: {
+  "coraToWireImage": [
+    11,
+    12,
+    13,
+    14,
+    6,
+    7,
+    8,
+    9
+  ],
+  "wireInputToCora": [
+    -1,
+    0,
+    1,
+    2,
+    3,
+    -1,
+    4,
+    5,
+    6,
+    7,
+    -1
+  ],
+  "extraKeys": [
+    15,
+    10
+  ],
+  "extraKeyInputs": [
+    5,
+    10
+  ]
+}
+cora: {
+  "productId": 0x0084,
+  "advertiseAs": "stream-deck-plus",
+  "usePhysicalIdentity": false,
+  "emulations": {
+    "stream-deck-plus": {
+      "image": {
+        "format": "jpeg",
+        "width": 112,
+        "height": 112,
+        "rotate": 180,
+        "flipH": false,
+        "flipV": false,
+        "colorMode": "rgb",
+        "maxBytes": 65535,
+        "quality": 0.9,
+        "resizeFilter": "lanczos3",
+        "sharpen": 0.6,
+        "transform": "sidecar"
+      },
+      "keyMap": {
+        "coraToWireImage": [
+          11,
+          12,
+          13,
+          14,
+          6,
+          7,
+          8,
+          9
+        ],
+        "wireInputToCora": [
+          -1,
+          0,
+          1,
+          2,
+          3,
+          -1,
+          4,
+          5,
+          6,
+          7,
+          -1
+        ],
+        "extraKeys": [
+          15,
+          10
+        ],
+        "extraKeyInputs": [
+          5,
+          10
+        ]
+      }
+    }
+  }
+}
+splash: {
+  "transformOverride": {
+    "rotate": 180
+  }
+}
+capabilities: {
+  "batchImageTransfers": {
+    "configured": null,
+    "effective": false
+  },
+  "widgetDisplays": [
+    {
+      "wireId": 1,
+      "size": "176×112",
+      "label": "Left"
+    },
+    {
+      "wireId": 2,
+      "size": "176×112",
+      "label": "Left center"
+    },
+    {
+      "wireId": 3,
+      "size": "176×112",
+      "label": "Right center"
+    },
+    {
+      "wireId": 4,
+      "size": "176×112",
+      "label": "Right"
+    }
+  ],
+  "touchStripDisplay": {
+    "wireId": 1,
+    "size": "800×112"
+  },
+  "extraKeyInputs": [
+    5,
+    10
+  ],
+  "emulations": [
+    "stream-deck-plus"
+  ],
+  "defaultAdvertiseAs": "stream-deck-plus"
+}
+```
+
+**Derived from:** ambiso/opendeck-akp05 src/mappings.rs
+
+### VSDinside N4 Pro \{#vsdinside-n4-pro}
+
+`vsdinside-n4-pro` · `ajazz-akp05` · — untested · [compare entry](./devices.mdx#vsdinside-n4-pro)
+
+```text
+stream-deck-plus index → wire image id  (4×2, row-major)
+
+   0   1   2   3      11  12  13  14
+   4   5   6   7       6   7   8   9
+
+  extra keys (outside the CORA grid): 15, 10
+```
+
+```js
+keyMap: {
+  "coraToWireImage": [
+    11,
+    12,
+    13,
+    14,
+    6,
+    7,
+    8,
+    9
+  ],
+  "wireInputToCora": [
+    -1,
+    0,
+    1,
+    2,
+    3,
+    -1,
+    4,
+    5,
+    6,
+    7,
+    -1
+  ],
+  "extraKeys": [
+    15,
+    10
+  ],
+  "extraKeyInputs": [
+    5,
+    10
+  ]
+}
+cora: {
+  "productId": 0x0084,
+  "advertiseAs": "stream-deck-plus",
+  "usePhysicalIdentity": false,
+  "emulations": {
+    "stream-deck-plus": {
+      "image": {
+        "format": "jpeg",
+        "width": 112,
+        "height": 112,
+        "rotate": 180,
+        "flipH": false,
+        "flipV": false,
+        "colorMode": "rgb",
+        "maxBytes": 65535,
+        "quality": 0.9,
+        "resizeFilter": "lanczos3",
+        "sharpen": 0.6,
+        "transform": "sidecar"
+      },
+      "keyMap": {
+        "coraToWireImage": [
+          11,
+          12,
+          13,
+          14,
+          6,
+          7,
+          8,
+          9
+        ],
+        "wireInputToCora": [
+          -1,
+          0,
+          1,
+          2,
+          3,
+          -1,
+          4,
+          5,
+          6,
+          7,
+          -1
+        ],
+        "extraKeys": [
+          15,
+          10
+        ],
+        "extraKeyInputs": [
+          5,
+          10
+        ]
+      }
+    }
+  }
+}
+splash: {
+  "transformOverride": {
+    "rotate": 180
+  }
+}
+capabilities: {
+  "batchImageTransfers": {
+    "configured": null,
+    "effective": false
+  },
+  "widgetDisplays": [
+    {
+      "wireId": 1,
+      "size": "176×112",
+      "label": "Left"
+    },
+    {
+      "wireId": 2,
+      "size": "176×112",
+      "label": "Left center"
+    },
+    {
+      "wireId": 3,
+      "size": "176×112",
+      "label": "Right center"
+    },
+    {
+      "wireId": 4,
+      "size": "176×112",
+      "label": "Right"
+    }
+  ],
+  "touchStripDisplay": {
+    "wireId": 1,
+    "size": "800×112"
+  },
+  "extraKeyInputs": [
+    5,
+    10
+  ],
+  "emulations": [
+    "stream-deck-plus"
+  ],
+  "defaultAdvertiseAs": "stream-deck-plus"
+}
+```
+
+**Derived from:** ambiso/opendeck-akp05 src/mappings.rs
+
+### Mars Gaming MSD-PRO \{#mars-msd-pro}
+
+`mars-msd-pro` · `ajazz-akp05` · — untested · [compare entry](./devices.mdx#mars-msd-pro)
+
+```text
+stream-deck-plus index → wire image id  (4×2, row-major)
+
+   0   1   2   3      11  12  13  14
+   4   5   6   7       6   7   8   9
+
+  extra keys (outside the CORA grid): 15, 10
+```
+
+```js
+keyMap: {
+  "coraToWireImage": [
+    11,
+    12,
+    13,
+    14,
+    6,
+    7,
+    8,
+    9
+  ],
+  "wireInputToCora": [
+    -1,
+    0,
+    1,
+    2,
+    3,
+    -1,
+    4,
+    5,
+    6,
+    7,
+    -1
+  ],
+  "extraKeys": [
+    15,
+    10
+  ],
+  "extraKeyInputs": [
+    5,
+    10
+  ]
+}
+cora: {
+  "productId": 0x0084,
+  "advertiseAs": "stream-deck-plus",
+  "usePhysicalIdentity": false,
+  "emulations": {
+    "stream-deck-plus": {
+      "image": {
+        "format": "jpeg",
+        "width": 112,
+        "height": 112,
+        "rotate": 180,
+        "flipH": false,
+        "flipV": false,
+        "colorMode": "rgb",
+        "maxBytes": 65535,
+        "quality": 0.9,
+        "resizeFilter": "lanczos3",
+        "sharpen": 0.6,
+        "transform": "sidecar"
+      },
+      "keyMap": {
+        "coraToWireImage": [
+          11,
+          12,
+          13,
+          14,
+          6,
+          7,
+          8,
+          9
+        ],
+        "wireInputToCora": [
+          -1,
+          0,
+          1,
+          2,
+          3,
+          -1,
+          4,
+          5,
+          6,
+          7,
+          -1
+        ],
+        "extraKeys": [
+          15,
+          10
+        ],
+        "extraKeyInputs": [
+          5,
+          10
+        ]
+      }
+    }
+  }
+}
+splash: {
+  "transformOverride": {
+    "rotate": 180
+  }
+}
+capabilities: {
+  "batchImageTransfers": {
+    "configured": null,
+    "effective": false
+  },
+  "widgetDisplays": [
+    {
+      "wireId": 1,
+      "size": "176×112",
+      "label": "Left"
+    },
+    {
+      "wireId": 2,
+      "size": "176×112",
+      "label": "Left center"
+    },
+    {
+      "wireId": 3,
+      "size": "176×112",
+      "label": "Right center"
+    },
+    {
+      "wireId": 4,
+      "size": "176×112",
+      "label": "Right"
+    }
+  ],
+  "touchStripDisplay": {
+    "wireId": 1,
+    "size": "800×112"
+  },
+  "extraKeyInputs": [
+    5,
+    10
+  ],
+  "emulations": [
+    "stream-deck-plus"
+  ],
+  "defaultAdvertiseAs": "stream-deck-plus"
+}
+```
+
+**Derived from:** ambiso/opendeck-akp05 src/mappings.rs · opendeck-akp05 PR #3
+
+### Soomfon CN003 \{#soomfon-cn003}
+
+`soomfon-cn003` · `ajazz-akp05` · — untested · [compare entry](./devices.mdx#soomfon-cn003)
+
+```text
+stream-deck-plus index → wire image id  (4×2, row-major)
+
+   0   1   2   3      11  12  13  14
+   4   5   6   7       6   7   8   9
+
+  extra keys (outside the CORA grid): 15, 10
+```
+
+```js
+keyMap: {
+  "coraToWireImage": [
+    11,
+    12,
+    13,
+    14,
+    6,
+    7,
+    8,
+    9
+  ],
+  "wireInputToCora": [
+    -1,
+    0,
+    1,
+    2,
+    3,
+    -1,
+    4,
+    5,
+    6,
+    7,
+    -1
+  ],
+  "extraKeys": [
+    15,
+    10
+  ],
+  "extraKeyInputs": [
+    5,
+    10
+  ]
+}
+cora: {
+  "productId": 0x0084,
+  "advertiseAs": "stream-deck-plus",
+  "usePhysicalIdentity": false,
+  "emulations": {
+    "stream-deck-plus": {
+      "image": {
+        "format": "jpeg",
+        "width": 112,
+        "height": 112,
+        "rotate": 180,
+        "flipH": false,
+        "flipV": false,
+        "colorMode": "rgb",
+        "maxBytes": 65535,
+        "quality": 0.9,
+        "resizeFilter": "lanczos3",
+        "sharpen": 0.6,
+        "transform": "sidecar"
+      },
+      "keyMap": {
+        "coraToWireImage": [
+          11,
+          12,
+          13,
+          14,
+          6,
+          7,
+          8,
+          9
+        ],
+        "wireInputToCora": [
+          -1,
+          0,
+          1,
+          2,
+          3,
+          -1,
+          4,
+          5,
+          6,
+          7,
+          -1
+        ],
+        "extraKeys": [
+          15,
+          10
+        ],
+        "extraKeyInputs": [
+          5,
+          10
+        ]
+      }
+    }
+  }
+}
+splash: {
+  "transformOverride": {
+    "rotate": 180
+  }
+}
+capabilities: {
+  "batchImageTransfers": {
+    "configured": null,
+    "effective": false
+  },
+  "widgetDisplays": [
+    {
+      "wireId": 1,
+      "size": "176×112",
+      "label": "Left"
+    },
+    {
+      "wireId": 2,
+      "size": "176×112",
+      "label": "Left center"
+    },
+    {
+      "wireId": 3,
+      "size": "176×112",
+      "label": "Right center"
+    },
+    {
+      "wireId": 4,
+      "size": "176×112",
+      "label": "Right"
+    }
+  ],
+  "touchStripDisplay": {
+    "wireId": 1,
+    "size": "800×112"
+  },
+  "extraKeyInputs": [
+    5,
+    10
+  ],
+  "emulations": [
+    "stream-deck-plus"
+  ],
+  "defaultAdvertiseAs": "stream-deck-plus"
+}
+```
+
+**Derived from:** ambiso/opendeck-akp05 src/mappings.rs
+
+### Streonor S10 Pro \{#streonor-s10-pro}
+
+`streonor-s10-pro` · `ajazz-akp05` · — untested · [compare entry](./devices.mdx#streonor-s10-pro)
+
+```text
+stream-deck-plus index → wire image id  (4×2, row-major)
+
+   0   1   2   3      11  12  13  14
+   4   5   6   7       6   7   8   9
+
+  extra keys (outside the CORA grid): 15, 10
+```
+
+```js
+keyMap: {
+  "coraToWireImage": [
+    11,
+    12,
+    13,
+    14,
+    6,
+    7,
+    8,
+    9
+  ],
+  "wireInputToCora": [
+    -1,
+    0,
+    1,
+    2,
+    3,
+    -1,
+    4,
+    5,
+    6,
+    7,
+    -1
+  ],
+  "extraKeys": [
+    15,
+    10
+  ],
+  "extraKeyInputs": [
+    5,
+    10
+  ]
+}
+cora: {
+  "productId": 0x0084,
+  "advertiseAs": "stream-deck-plus",
+  "usePhysicalIdentity": false,
+  "emulations": {
+    "stream-deck-plus": {
+      "image": {
+        "format": "jpeg",
+        "width": 112,
+        "height": 112,
+        "rotate": 180,
+        "flipH": false,
+        "flipV": false,
+        "colorMode": "rgb",
+        "maxBytes": 65535,
+        "quality": 0.9,
+        "resizeFilter": "lanczos3",
+        "sharpen": 0.6,
+        "transform": "sidecar"
+      },
+      "keyMap": {
+        "coraToWireImage": [
+          11,
+          12,
+          13,
+          14,
+          6,
+          7,
+          8,
+          9
+        ],
+        "wireInputToCora": [
+          -1,
+          0,
+          1,
+          2,
+          3,
+          -1,
+          4,
+          5,
+          6,
+          7,
+          -1
+        ],
+        "extraKeys": [
+          15,
+          10
+        ],
+        "extraKeyInputs": [
+          5,
+          10
+        ]
+      }
+    }
+  }
+}
+splash: {
+  "transformOverride": {
+    "rotate": 180
+  }
+}
+capabilities: {
+  "batchImageTransfers": {
+    "configured": null,
+    "effective": false
+  },
+  "widgetDisplays": [
+    {
+      "wireId": 1,
+      "size": "176×112",
+      "label": "Left"
+    },
+    {
+      "wireId": 2,
+      "size": "176×112",
+      "label": "Left center"
+    },
+    {
+      "wireId": 3,
+      "size": "176×112",
+      "label": "Right center"
+    },
+    {
+      "wireId": 4,
+      "size": "176×112",
+      "label": "Right"
+    }
+  ],
+  "touchStripDisplay": {
+    "wireId": 1,
+    "size": "800×112"
+  },
+  "extraKeyInputs": [
+    5,
+    10
+  ],
+  "emulations": [
+    "stream-deck-plus"
+  ],
+  "defaultAdvertiseAs": "stream-deck-plus"
+}
+```
+
+**Derived from:** ambiso/opendeck-akp05 src/mappings.rs
+
+### AJAZZ AKP05E Pro \{#ajazz-akp05e-pro}
+
+`ajazz-akp05e-pro` · `ajazz-akp05` · — untested · [compare entry](./devices.mdx#ajazz-akp05e-pro)
+
+```text
+stream-deck-plus index → wire image id  (4×2, row-major)
+
+   0   1   2   3      11  12  13  14
+   4   5   6   7       6   7   8   9
+
+  extra keys (outside the CORA grid): 15, 10
+```
+
+```js
+keyMap: {
+  "coraToWireImage": [
+    11,
+    12,
+    13,
+    14,
+    6,
+    7,
+    8,
+    9
+  ],
+  "wireInputToCora": [
+    -1,
+    0,
+    1,
+    2,
+    3,
+    -1,
+    4,
+    5,
+    6,
+    7,
+    -1
+  ],
+  "extraKeys": [
+    15,
+    10
+  ],
+  "extraKeyInputs": [
+    5,
+    10
+  ]
+}
+cora: {
+  "productId": 0x0084,
+  "advertiseAs": "stream-deck-plus",
+  "usePhysicalIdentity": false,
+  "emulations": {
+    "stream-deck-plus": {
+      "image": {
+        "format": "jpeg",
+        "width": 112,
+        "height": 112,
+        "rotate": 180,
+        "flipH": false,
+        "flipV": false,
+        "colorMode": "rgb",
+        "maxBytes": 65535,
+        "quality": 0.9,
+        "resizeFilter": "lanczos3",
+        "sharpen": 0.6,
+        "transform": "sidecar"
+      },
+      "keyMap": {
+        "coraToWireImage": [
+          11,
+          12,
+          13,
+          14,
+          6,
+          7,
+          8,
+          9
+        ],
+        "wireInputToCora": [
+          -1,
+          0,
+          1,
+          2,
+          3,
+          -1,
+          4,
+          5,
+          6,
+          7,
+          -1
+        ],
+        "extraKeys": [
+          15,
+          10
+        ],
+        "extraKeyInputs": [
+          5,
+          10
+        ]
+      }
+    }
+  }
+}
+splash: {
+  "transformOverride": {
+    "rotate": 180
+  }
+}
+capabilities: {
+  "batchImageTransfers": {
+    "configured": null,
+    "effective": false
+  },
+  "widgetDisplays": [
+    {
+      "wireId": 1,
+      "size": "176×112",
+      "label": "Left"
+    },
+    {
+      "wireId": 2,
+      "size": "176×112",
+      "label": "Left center"
+    },
+    {
+      "wireId": 3,
+      "size": "176×112",
+      "label": "Right center"
+    },
+    {
+      "wireId": 4,
+      "size": "176×112",
+      "label": "Right"
+    }
+  ],
+  "touchStripDisplay": {
+    "wireId": 1,
+    "size": "800×112"
+  },
+  "extraKeyInputs": [
+    5,
+    10
+  ],
+  "emulations": [
+    "stream-deck-plus"
+  ],
+  "defaultAdvertiseAs": "stream-deck-plus"
+}
+```
+
+**Derived from:** ambiso/opendeck-akp05 src/mappings.rs
+
+### AJAZZ AKP05CN Pro \{#ajazz-akp05cn-pro}
+
+`ajazz-akp05cn-pro` · `ajazz-akp05` · — untested · [compare entry](./devices.mdx#ajazz-akp05cn-pro)
+
+```text
+stream-deck-plus index → wire image id  (4×2, row-major)
+
+   0   1   2   3      11  12  13  14
+   4   5   6   7       6   7   8   9
+
+  extra keys (outside the CORA grid): 15, 10
+```
+
+```js
+keyMap: {
+  "coraToWireImage": [
+    11,
+    12,
+    13,
+    14,
+    6,
+    7,
+    8,
+    9
+  ],
+  "wireInputToCora": [
+    -1,
+    0,
+    1,
+    2,
+    3,
+    -1,
+    4,
+    5,
+    6,
+    7,
+    -1
+  ],
+  "extraKeys": [
+    15,
+    10
+  ],
+  "extraKeyInputs": [
+    5,
+    10
+  ]
+}
+cora: {
+  "productId": 0x0084,
+  "advertiseAs": "stream-deck-plus",
+  "usePhysicalIdentity": false,
+  "emulations": {
+    "stream-deck-plus": {
+      "image": {
+        "format": "jpeg",
+        "width": 112,
+        "height": 112,
+        "rotate": 180,
+        "flipH": false,
+        "flipV": false,
+        "colorMode": "rgb",
+        "maxBytes": 65535,
+        "quality": 0.9,
+        "resizeFilter": "lanczos3",
+        "sharpen": 0.6,
+        "transform": "sidecar"
+      },
+      "keyMap": {
+        "coraToWireImage": [
+          11,
+          12,
+          13,
+          14,
+          6,
+          7,
+          8,
+          9
+        ],
+        "wireInputToCora": [
+          -1,
+          0,
+          1,
+          2,
+          3,
+          -1,
+          4,
+          5,
+          6,
+          7,
+          -1
+        ],
+        "extraKeys": [
+          15,
+          10
+        ],
+        "extraKeyInputs": [
+          5,
+          10
+        ]
+      }
+    }
+  }
+}
+splash: {
+  "transformOverride": {
+    "rotate": 180
+  }
+}
+capabilities: {
+  "batchImageTransfers": {
+    "configured": null,
+    "effective": false
+  },
+  "widgetDisplays": [
+    {
+      "wireId": 1,
+      "size": "176×112",
+      "label": "Left"
+    },
+    {
+      "wireId": 2,
+      "size": "176×112",
+      "label": "Left center"
+    },
+    {
+      "wireId": 3,
+      "size": "176×112",
+      "label": "Right center"
+    },
+    {
+      "wireId": 4,
+      "size": "176×112",
+      "label": "Right"
+    }
+  ],
+  "touchStripDisplay": {
+    "wireId": 1,
+    "size": "800×112"
+  },
+  "extraKeyInputs": [
+    5,
+    10
+  ],
+  "emulations": [
+    "stream-deck-plus"
+  ],
+  "defaultAdvertiseAs": "stream-deck-plus"
+}
+```
+
+**Derived from:** ambiso/opendeck-akp05 src/mappings.rs

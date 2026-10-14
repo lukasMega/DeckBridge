@@ -9,8 +9,7 @@ import {
 } from './packet-fixture.js';
 import { setupNativeLibs } from '../infra/native-libs.js';
 import { MiraboxDriver } from '../devices/mirabox/driver.js';
-import { AJAZZ_AKP05E_MODEL } from '../devices/ajazz/akp05e.js';
-import { AJAZZ_AKP05_MODEL } from '../devices/ajazz/akp05.js';
+import { DEVICE_MODELS } from '../devices/registry.js';
 import type { DeviceModel } from '../devices/driver.js';
 import type { KeyEvent } from '../shared/types.js';
 
@@ -72,10 +71,10 @@ export async function openProbeDevice(model: DeviceModel, prefix: string): Promi
   return driver;
 }
 
-/** First AKP05E/AKP05 on the bus, or exits with the usual causes. The caller opens
+/** First AKP05-family deck on the bus, or exits with the usual causes. The caller opens
  *  it: each AKP05 probe subclasses `Akp05Driver` differently. */
 export function findAkp05Device(prefix: string): { model: DeviceModel; hidPath: string } {
-  for (const model of [AJAZZ_AKP05E_MODEL, AJAZZ_AKP05_MODEL]) {
+  for (const model of DEVICE_MODELS.filter((m) => m.protocol === 'ajazz-akp05')) {
     for (const pid of model.usbProductIds) {
       const paths = listHidPaths(model.usbVendorId, model.usagePage!, model.usage!, pid);
       if (paths.length === 0) continue;
@@ -87,7 +86,7 @@ export function findAkp05Device(prefix: string): { model: DeviceModel; hidPath: 
   }
   return fail(
     prefix,
-    'no AKP05/AKP05E found on VID 0x0300 usage 0xffa0/1.',
+    'no AKP05-family deck found (usage 0xffa0/1).',
     'check the cable, and stop any running DeckBridge instance —',
     'hidapi opens exclusively on macOS.',
   );

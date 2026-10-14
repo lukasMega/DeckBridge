@@ -108,6 +108,42 @@ test('findModel returns each supported AKP05 PID', () => {
   assert.equal(findModel(0x0300, 0x3006)?.id, 'ajazz-akp05');
 });
 
+const AKP05_CLONES: [number, number, string][] = [
+  [0x0200, 0x3001, 'redragon-ss552'],
+  [0x6602, 0x1001, 'mirabox-n4'],
+  [0x6603, 0x1007, 'mirabox-n4e'],
+  [0x5548, 0x1008, 'mirabox-n4-pro'],
+  [0x5548, 0x1021, 'mirabox-n4-pro-e'],
+  [0x5548, 0x1004, 'vsdinside-n4'],
+  [0x5548, 0x1023, 'vsdinside-n4-pro'],
+  [0x0b00, 0x1003, 'mars-msd-pro'],
+  [0x1500, 0x3002, 'soomfon-cn003'],
+  [0x1500, 0x3007, 'streonor-s10-pro'],
+  [0x0300, 0x3013, 'ajazz-akp05e-pro'],
+  [0x0300, 0x3014, 'ajazz-akp05cn-pro'],
+];
+
+test('findModel returns each AKP05 clone, all paired as Stream Deck +', () => {
+  for (const [vid, pid, id] of AKP05_CLONES) {
+    const m = findModel(vid, pid);
+    assert.equal(m?.id, id);
+    assert.equal(m?.protocol, 'ajazz-akp05');
+    assert.equal(m?.cora.advertiseAs, 'stream-deck-plus');
+    assert.equal(m?.wire, AJAZZ_AKP05E_MODEL.wire);
+  }
+});
+
+test('N4 and N4E differ only by id, name and USB id', () => {
+  const n4 = findModel(0x6602, 0x1001)!;
+  const n4e = findModel(0x6603, 0x1007)!;
+  assert.deepEqual(
+    { ...n4, id: '', name: '', usbVendorId: 0, usbProductIds: [] },
+    { ...n4e, id: '', name: '', usbVendorId: 0, usbProductIds: [] },
+  );
+  assert.equal(n4.name, 'Mirabox N4');
+  assert.equal(n4e.name, 'Mirabox N4E');
+});
+
 test('AKP05E has its proven 2x5 output mapping', () => {
   assert.equal(AJAZZ_AKP05E_MODEL.protocol, 'ajazz-akp05');
   assert.deepEqual(modelToChildGeometry(AJAZZ_AKP05E_MODEL), {
@@ -393,8 +429,8 @@ test('findModel returns null for a known VID but unknown PID', () => {
 
 console.log('\ndevice-models: DEVICE_MODELS ordering');
 
-test('DEVICE_MODELS contains exactly 18 models', () => {
-  assert.equal(DEVICE_MODELS.length, 18);
+test('DEVICE_MODELS contains exactly 30 models', () => {
+  assert.equal(DEVICE_MODELS.length, 30);
 });
 
 test('DEFAULT_MODEL is MK2_MODEL', () => {

@@ -23,14 +23,15 @@ Links below identify historical research sources.
 |---|---|
 | [4ndv/mirajazz](https://github.com/4ndv/mirajazz) | Mirabox/Ajazz protocol library — primary reference for the non-Elgato decks. |
 | [4ndv/opendeck-akp153](https://github.com/4ndv/opendeck-akp153) | AKP153 (293-series) driver details. |
-| [ambiso/opendeck-akp05](https://github.com/ambiso/opendeck-akp05) | AKP05/AKP05E (and Mirabox N4) plugin — per-connect init, 10 s `CRT CONNECT` keepalive, encoder/key input codes. |
+| [ambiso/opendeck-akp05](https://github.com/ambiso/opendeck-akp05) | AKP05-family plugin (AKP05/AKP05E, Mirabox N4/N4E/N4 Pro, Mars MSD-PRO, Redragon SS552, Soomfon, Streonor) — VID/PID table, per-connect init, 10 s `CRT CONNECT` keepalive, encoder/key input codes. |
 | [zeccola/ajazz-akp05](https://github.com/zeccola/ajazz-akp05) | AKP05E Python SDK — hardware-confirmed notes that the `DIS`/`LIG`/`CLE`/`STP` init unlocks key reporting, and that the keepalive tick needs the `DIS` + `LIG` wake pair. |
 | [Uriziel01/Ajazz-AKP153-reverse-engineering](https://github.com/Uriziel01/Ajazz-AKP153-reverse-engineering) | AKP153 USB protocol teardown. |
 | [crusardri/MiraboxStreamController](https://github.com/crusardri/MiraboxStreamController) | Mirabox controller — image and input handling. |
-| [MiraboxSpace/StreamDock-Device-SDK](https://github.com/MiraboxSpace/StreamDock-Device-SDK) | Vendor SDK — image format and report IDs. |
+| [MiraboxSpace/StreamDock-Device-SDK](https://github.com/MiraboxSpace/StreamDock-Device-SDK) | Vendor SDK — image format and report IDs; N4/N4E key and second-screen constants (`StreamDockN4`). |
 | [teras/keydeck](https://github.com/teras/keydeck) | Cross-platform deck driver. |
 | [rigor789/mirabox-streamdock-node](https://github.com/rigor789/mirabox-streamdock-node) | Node Mirabox driver. |
 | [kebot/mirabox-ts](https://github.com/kebot/mirabox-ts) | TypeScript Mirabox driver. |
+| [ValentinTorassa/VT-Ragnaros](https://github.com/ValentinTorassa/VT-Ragnaros) | Ragnaros (Redragon SS552, `0200:3001`) Linux driver — reverse-engineered Mirabox/Ajazz v3 1024-byte protocol, 10 keys, 4 knobs, touch strip. |
 
 ## Fifine devices
 

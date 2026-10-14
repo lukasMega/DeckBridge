@@ -186,3 +186,55 @@ Inherited values do not establish hardware equivalence.
 | `0x0300:0x3011` | rev. 2         | v3       | `ajazz/akp153-rev2.ts`        |
 
 Same VID, adjacent PIDs, completely different protocol.
+
+---
+
+## AKP05 family (`ajazz/akp05e.ts`, `ajazz/akp05.ts`, `rebadge/akp05-clones.ts`)
+
+`ajazz-akp05e` (PID `0x3004`) was hardware-tested on macOS on 2026-09-21; the retail
+AKP05 (`0x3006`) is a plain spread of it. `rebadge/akp05-clones.ts` adds 12 more
+spreads that change only id, name, vendor and VID/PID. **None is hardware-tested.**
+
+All IDs come from `ambiso/opendeck-akp05` `src/mappings.rs`. The N4/N4E ids are also in
+keydeck and in Mirabox's own `StreamDock-Device-SDK` (one `StreamDockN4` class: 112×112
+keys rotated 180°, 176×112 second screen at image ids 1-4). Input codes agree across
+opendeck-akp05, the Mirabox SDK and VT-Ragnaros. opendeck-akp05 queries usage page
+`0xffa0` / usage 1 for every row without verifying it per model.
+
+| Model id            | VID:PID         | Notes                                                         |
+| ------------------- | --------------- | ------------------------------------------------------------- |
+| `redragon-ss552`    | `0x0200:0x3001` | Strip geometry disputed (below); Linux needs hidraw, unproven |
+| `mirabox-n4`        | `0x6602:0x1001` | The N3 is `0x6602:0x1002`, a different board                  |
+| `mirabox-n4e`       | `0x6603:0x1007` |                                                               |
+| `mirabox-n4-pro`    | `0x5548:0x1008` | Pro SDK class: PNG keys, RGB LEDs, vibration (`QUCMD`)        |
+| `mirabox-n4-pro-e`  | `0x5548:0x1021` | Vibration confirmed by capture in opendeck-akp05              |
+| `vsdinside-n4`      | `0x5548:0x1004` | Not a Pro in opendeck-akp05 (no vibration)                    |
+| `vsdinside-n4-pro`  | `0x5548:0x1023` |                                                               |
+| `mars-msd-pro`      | `0x0b00:0x1003` | Windows-only report; white MSDPROW PID unknown                |
+| `soomfon-cn003`     | `0x1500:0x3002` |                                                               |
+| `streonor-s10-pro`  | `0x1500:0x3007` | Filed under the Soomfon VID in opendeck-akp05                 |
+| `ajazz-akp05e-pro`  | `0x0300:0x3013` |                                                               |
+| `ajazz-akp05cn-pro` | `0x0300:0x3014` |                                                               |
+
+### Open items, nothing measured
+
+- **SS552 strip.** VT-Ragnaros paints four contiguous 176×124 panels (each flushed with
+  STP); opendeck-akp05 and the N4 SDK use 176×112; DeckBridge inherits the AKP05E
+  800×112 single surface with slot windows at x = 0 / 204 / 406 / 610. Only hardware
+  settles it, and `widgetDisplays` / `touchStripDisplay` are not user-tunable.
+- **Uploads.** DeckBridge commits with ULEND; VT-Ragnaros sends STP and says strips only
+  show after it. If a deck needs STP, `Akp05Driver` must honour `wire.sendStpAfterImage`.
+- **N4 Pro family.** Inherits the AKP05E JPEG path as opendeck-akp05 does. Mirabox's SDK
+  lists a separate class with PNG keys; keys rendering wrong is the first suspect.
+- **Not implemented:** LED strip commands (`LBLIG`, `SETLB`), vibration (`QUCMD`) and the
+  `HAN` sleep command. DeckBridge has no CORA concept for them.
+
+### Adjacent PIDs, different protocols — do not merge
+
+| PID             | Device                   | Protocol | Model file                    |
+| --------------- | ------------------------ | -------- | ----------------------------- |
+| `0x0b00:0x1000` | Mars MSD-ONE             | v1       | `rebadge/akp153-v1-clones.ts` |
+| `0x0b00:0x1001` | Mars MSD-TWO (keydeck)   | v2       | unsupported                   |
+| `0x0b00:0x1003` | Mars MSD-PRO             | AKP05    | `rebadge/akp05-clones.ts`     |
+| `0x5500:0x1001` | Mirabox 293 (original)   | v1       | unsupported                   |
+| `0x6602:0x1001` | Mirabox N4 (not the 293) | AKP05    | `rebadge/akp05-clones.ts`     |

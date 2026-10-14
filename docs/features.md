@@ -306,8 +306,11 @@ On Linux, add a udev rule (once), then unplug/replug the device:
 sudo tee /etc/udev/rules.d/99-mirabox.rules <<'EOF'
 SUBSYSTEM=="hidraw", ATTRS{idVendor}=="0fd9", MODE="0666"
 SUBSYSTEM=="hidraw", ATTRS{idVendor}=="6603", MODE="0666"
+SUBSYSTEM=="hidraw", ATTRS{idVendor}=="6602", MODE="0666"
 SUBSYSTEM=="hidraw", ATTRS{idVendor}=="5548", MODE="0666"
 SUBSYSTEM=="hidraw", ATTRS{idVendor}=="0300", MODE="0666"
+SUBSYSTEM=="hidraw", ATTRS{idVendor}=="0200", MODE="0666"
+SUBSYSTEM=="hidraw", ATTRS{idVendor}=="1500", MODE="0666"
 SUBSYSTEM=="hidraw", ATTRS{idVendor}=="0b00", MODE="0666"
 SUBSYSTEM=="hidraw", ATTRS{idVendor}=="0c00", MODE="0666"
 SUBSYSTEM=="hidraw", ATTRS{idVendor}=="0a00", MODE="0666"
@@ -317,8 +320,8 @@ EOF
 sudo udevadm control --reload-rules && sudo udevadm trigger
 ```
 
-(`0fd9` = Elgato Stream Deck MK.2 / Mini, `6603` = Mirabox 293V3 / HSV293SV3 / K1 Pro, `5548` = Mirabox 293S / Ajazz AKP153,
-`0300` = Ajazz AKP153E/R (rev. 1 and rev. 2) and AKP05/AKP05E, `0b00` = Mars Gaming MSD-ONE, `0c00` = Mad
+(`0fd9` = Elgato Stream Deck MK.2 / Mini, `6603` = Mirabox 293V3 / HSV293SV3 / K1 Pro / N4E, `6602` = Mirabox N4, `5548` = Mirabox 293S / N4 Pro family / Ajazz AKP153,
+`0300` = Ajazz AKP153E/R (rev. 1 and rev. 2) and the AKP05 family, `0200` = Redragon SS552, `1500` = Soomfon CN003 / Streonor S10 Pro, `0b00` = Mars Gaming MSD-ONE / MSD-PRO, `0c00` = Mad
 Dog GK150K, `0a00` = Risemode Vision 01, `0500` = TMICE Stream Controller, `3142` =
 Fifine AmpliGame D6 (rev. 1 and rev. 2).)
 

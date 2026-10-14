@@ -133,6 +133,14 @@ const akp05Common = {
   touchStripId: 1,
 };
 
+const akp05Clone = (id: string, vendor: string, vid: number, pid: number): Expected => ({
+  ...akp05Common,
+  id,
+  vendor,
+  usbVendorId: vid,
+  usbProductIds: [pid],
+});
+
 const v1Clone = (id: string, vendor: string, vid: number, pid: number): Expected => ({
   id,
   vendor,
@@ -308,6 +316,18 @@ const EXPECTED: Expected[] = [
   v1Clone('maddog-gk150k', 'mad-dog', 0x0c00, 0x1000),
   v1Clone('risemode-vision-01', 'risemode', 0x0a00, 0x1001),
   v1Clone('tmice-stream-controller', 'tmice', 0x0500, 0x1001),
+  akp05Clone('redragon-ss552', 'redragon', 0x0200, 0x3001),
+  akp05Clone('mirabox-n4', 'mirabox', 0x6602, 0x1001),
+  akp05Clone('mirabox-n4e', 'mirabox', 0x6603, 0x1007),
+  akp05Clone('mirabox-n4-pro', 'mirabox', 0x5548, 0x1008),
+  akp05Clone('mirabox-n4-pro-e', 'mirabox', 0x5548, 0x1021),
+  akp05Clone('vsdinside-n4', 'vsdinside', 0x5548, 0x1004),
+  akp05Clone('vsdinside-n4-pro', 'vsdinside', 0x5548, 0x1023),
+  akp05Clone('mars-msd-pro', 'mars-gaming', 0x0b00, 0x1003),
+  akp05Clone('soomfon-cn003', 'soomfon', 0x1500, 0x3002),
+  akp05Clone('streonor-s10-pro', 'streonor', 0x1500, 0x3007),
+  akp05Clone('ajazz-akp05e-pro', 'ajazz', 0x0300, 0x3013),
+  akp05Clone('ajazz-akp05cn-pro', 'ajazz', 0x0300, 0x3014),
 ];
 
 // JSON round trip drops undefined fields, so "unset" and "absent" compare equal.
@@ -385,6 +405,18 @@ test('DEVICE_MODELS order and CORA_PROFILES ids are unchanged', () => {
       'maddog-gk150k',
       'risemode-vision-01',
       'tmice-stream-controller',
+      'redragon-ss552',
+      'mirabox-n4',
+      'mirabox-n4e',
+      'mirabox-n4-pro',
+      'mirabox-n4-pro-e',
+      'vsdinside-n4',
+      'vsdinside-n4-pro',
+      'mars-msd-pro',
+      'soomfon-cn003',
+      'streonor-s10-pro',
+      'ajazz-akp05e-pro',
+      'ajazz-akp05cn-pro',
     ],
   );
   assert.deepEqual(
@@ -406,12 +438,12 @@ for (const expected of EXPECTED) {
   });
 }
 
-test('findModel resolves all 27 VID/PID pairs to the expected model', () => {
+test('findModel resolves all 39 VID/PID pairs to the expected model', () => {
   const pairs: [number, number, string][] = EXPECTED.flatMap((e) =>
     e.usbProductIds.map((pid): [number, number, string] => [e.usbVendorId, pid, e.id]),
   );
-  assert.equal(pairs.length, 27);
-  assert.equal(new Set(pairs.map(([vid, pid]) => `${vid}:${pid}`)).size, 27);
+  assert.equal(pairs.length, 39);
+  assert.equal(new Set(pairs.map(([vid, pid]) => `${vid}:${pid}`)).size, 39);
   for (const [vid, pid, id] of pairs) {
     assert.equal(findModel(vid, pid)?.id, id, `0x${vid.toString(16)}:0x${pid.toString(16)}`);
   }
@@ -429,6 +461,21 @@ test('the AKP05 pair differ only by id and product id', () => {
     { ...r, id: '', usbProductIds: [] },
     'AKP05 must stay a spread of AKP05E',
   );
+});
+
+test('every AKP05 clone differs from AKP05E only by identity', () => {
+  const base = project(findModelById('ajazz-akp05e')!);
+  const clones = DEVICE_MODELS.filter(
+    (m) => m.protocol === 'ajazz-akp05' && m.id !== 'ajazz-akp05e',
+  );
+  assert.equal(clones.length, 13);
+  for (const m of clones) {
+    assert.deepEqual(
+      { ...project(m), id: '', vendor: '', usbVendorId: 0, usbProductIds: [] },
+      { ...base, id: '', vendor: '', usbVendorId: 0, usbProductIds: [] },
+      `${m.id} must stay a spread of AKP05E`,
+    );
+  }
 });
 
 test('the browser deck is not a USB model and has no override-able registry entry', () => {

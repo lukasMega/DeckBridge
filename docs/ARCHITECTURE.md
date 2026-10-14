@@ -114,7 +114,7 @@ see *Supporting workers*), for **four** thread contexts in total:
   `WorkerHidDriver`) serves every device; `USB_DRIVERS`
   ([usb-drivers.ts](../ts/src/devices/usb-drivers.ts)) picks by `model.protocol`:
   `ElgatoHidDriver` (MK.2, Mini), `MiraboxDriver` (293/293S/K1 Pro), or `Akp05Driver`
-  (AJAZZ AKP05/AKP05E).
+  (AKP05 family).
 
 A full profile load is fast on **both** sides: the main thread pushes every image to the
 browser immediately while the device updates in parallel on the worker. Mock mode stays on the

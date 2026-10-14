@@ -9,6 +9,7 @@ import { AJAZZ_AKP05E_MODEL } from './ajazz/akp05e.js';
 import { AJAZZ_AKP05_MODEL } from './ajazz/akp05.js';
 import { FIFINE_D6_MODEL, FIFINE_D6_REV2_MODEL } from './fifine/fifine-d6.js';
 import { AKP153_V1_CLONE_MODELS } from './rebadge/akp153-v1-clones.js';
+import { AKP05_CLONE_MODELS } from './rebadge/akp05-clones.js';
 import { STREAM_DECK_PLUS_MODEL } from './elgato/plus.js';
 
 // Probe order: Elgato first (priority over Mirabox), then 293V3 before 293S. Everything
@@ -27,6 +28,7 @@ export const DEVICE_MODELS: DeviceModel[] = [
   FIFINE_D6_MODEL,
   FIFINE_D6_REV2_MODEL,
   ...AKP153_V1_CLONE_MODELS,
+  ...AKP05_CLONE_MODELS,
 ];
 
 /** Fallback model used when nothing is connected / before a real device is probed. */

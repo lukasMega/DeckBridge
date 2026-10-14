@@ -77,6 +77,18 @@ Dedicated 1024-byte CRT protocol: ten JPEG keys (CRT BAT uploads committed with 
 |---|---|---|---|---|---|---|---|
 | [AJAZZ AKP05E](#ajazz-akp05e) | ajazz | `0x0300:0x3004` | 10 (5×2) | 112×112 | JPEG | 2 | ✓ tested (macOS, 2026-09-21) |
 | [AJAZZ AKP05](#ajazz-akp05) | ajazz | `0x0300:0x3006` | 10 (5×2) | 112×112 | JPEG | 2 | — untested |
+| [Redragon SS552](#redragon-ss552) | redragon | `0x0200:0x3001` | 10 (5×2) | 112×112 | JPEG | 2 | — untested |
+| [Mirabox N4](#mirabox-n4) | mirabox | `0x6602:0x1001` | 10 (5×2) | 112×112 | JPEG | 2 | — untested |
+| [Mirabox N4E](#mirabox-n4e) | mirabox | `0x6603:0x1007` | 10 (5×2) | 112×112 | JPEG | 2 | — untested |
+| [Mirabox N4 Pro](#mirabox-n4-pro) | mirabox | `0x5548:0x1008` | 10 (5×2) | 112×112 | JPEG | 2 | — untested |
+| [Mirabox N4 Pro E](#mirabox-n4-pro-e) | mirabox | `0x5548:0x1021` | 10 (5×2) | 112×112 | JPEG | 2 | — untested |
+| [VSDinside N4](#vsdinside-n4) | vsdinside | `0x5548:0x1004` | 10 (5×2) | 112×112 | JPEG | 2 | — untested |
+| [VSDinside N4 Pro](#vsdinside-n4-pro) | vsdinside | `0x5548:0x1023` | 10 (5×2) | 112×112 | JPEG | 2 | — untested |
+| [Mars Gaming MSD-PRO](#mars-msd-pro) | mars-gaming | `0x0b00:0x1003` | 10 (5×2) | 112×112 | JPEG | 2 | — untested |
+| [Soomfon CN003](#soomfon-cn003) | soomfon | `0x1500:0x3002` | 10 (5×2) | 112×112 | JPEG | 2 | — untested |
+| [Streonor S10 Pro](#streonor-s10-pro) | streonor | `0x1500:0x3007` | 10 (5×2) | 112×112 | JPEG | 2 | — untested |
+| [AJAZZ AKP05E Pro](#ajazz-akp05e-pro) | ajazz | `0x0300:0x3013` | 10 (5×2) | 112×112 | JPEG | 2 | — untested |
+| [AJAZZ AKP05CN Pro](#ajazz-akp05cn-pro) | ajazz | `0x0300:0x3014` | 10 (5×2) | 112×112 | JPEG | 2 | — untested |
 
 </div>
 
@@ -197,7 +209,7 @@ AJAZZ AKP05E (VID 0x0300, PID 0x3004): ten 112×112 LCD keys in a 2×5 grid, plu
 | **Protocol** | `ajazz-akp05` |
 | **Tested** | ✓ tested (macOS, 2026-09-21) |
 
-- Only PID 0x3004 is hardware-tested; the retail AKP05 (0x3006) is registered from opendeck-akp05 evidence. Do not add Pro, Mirabox, or hub siblings without their own evidence packet.
+- Only PID 0x3004 is hardware-tested; the retail AKP05 (0x3006) is registered from opendeck-akp05 evidence. The Pro, Mirabox, Redragon, Mars, Soomfon and Streonor siblings are registered as untested clones from opendeck-akp05 ids; see their own notes.
 - The firmware reports nothing until it receives the init sequence (CRT DIS, CRT LIG, CRT CLE 0xff, CRT STP). Without it images still paint, but no key report ever arrives.
 - The host is dropped after roughly 15 s of silence: the panel blanks and key reporting stops until a key press partially wakes it. The keepalive runs every 10 s and repeats CRT DIS + CRT LIG before CRT CONNECT — CONNECT alone leaves the panel refusing further image updates (zeccola/ajazz-akp05 0.10.1, reverted in 0.10.2). The LIG carries the live brightness so a tick cannot reset it.
 - Input codes are not the image wire ids: keys report 0x01–0x0a in row order, while their images address wire ids 11–15 (top row) and 6–10 (bottom row).
@@ -426,3 +438,212 @@ A v1 rebadge of the Mirabox 293S board (VID 0x0500, PID 0x1001).
 - Hardware remains untested. Image and mapping defaults inherit 293S. Image batching remains disabled by default.
 
 [Full spec →](./device-specs.mdx#tmice-stream-controller)
+
+### Redragon SS552 \{#redragon-ss552}
+
+Redragon SS552 "Ragnaros" (VID 0x0200, PID 0x3001): 2×5 LCD keys, four encoders and a touch strip on the AKP05 protocol, registered as a clone of the AKP05E.
+
+|  |  |
+|---|---|
+| **USB** | `0x0200`:`0x3001` |
+| **Keys** | 10 (5×2) + 2 extra |
+| **Panel** | 112×112 JPEG |
+| **Protocol** | `ajazz-akp05` |
+| **Tested** | — untested |
+
+- Every field except identity is inherited from the AJAZZ AKP05E model (ten 112×112 keys, four encoders, touch strip; pairs as Stream Deck + by default). The ID is source-derived from opendeck-akp05 src/mappings.rs, which queries usage page 0xffa0 / usage 1 for every AKP05-family row without per-model verification. Not DeckBridge-tested on this SKU.
+- Touch-strip geometry is unconfirmed. DeckBridge inherits the AKP05E layout (one 800×112 surface at wire id 1, slot windows at x = 0 / 204 / 406 / 610), while VT-Ragnaros paints four contiguous 176×124 panels and opendeck-akp05 uses 176×112. Only hardware settles it.
+- VT-Ragnaros ends image uploads with STP and says strips only show after STP; the AKP05 driver commits with ULEND. If the strip stays blank, the driver needs to honour wire.sendStpAfterImage.
+- Linux is unproven. VT-Ragnaros drives the deck through libusb with a usbhid HID_QUIRK_IGNORE for 0200:3001, which leaves no /dev/hidraw node for DeckBridge's hidapi path. Windows input is reported working via opendeck-akp05 issue #6 (not DeckBridge-tested).
+- Brightness 0 is the lowest step, not off, per opendeck-akp05 PR #23. LED strip commands, vibration and the HAN sleep command are not implemented.
+
+[Full spec →](./device-specs.mdx#redragon-ss552)
+
+### Mirabox N4 \{#mirabox-n4}
+
+Mirabox N4 (VID 0x6602, PID 0x1001): 2×5 LCD keys and a second 176×112 screen on the AKP05 protocol, registered as a clone of the AKP05E.
+
+|  |  |
+|---|---|
+| **USB** | `0x6602`:`0x1001` |
+| **Keys** | 10 (5×2) + 2 extra |
+| **Panel** | 112×112 JPEG |
+| **Protocol** | `ajazz-akp05` |
+| **Tested** | — untested |
+
+- Every field except identity is inherited from the AJAZZ AKP05E model (ten 112×112 keys, four encoders, touch strip; pairs as Stream Deck + by default). The ID is source-derived from opendeck-akp05 src/mappings.rs, which queries usage page 0xffa0 / usage 1 for every AKP05-family row without per-model verification. Not DeckBridge-tested on this SKU.
+- Mirabox's own StreamDock-Device-SDK (CPP-SDK StreamDockN4) uses 112×112 keys rotated 180° and a 176×112 second screen at image ids 1-4 for both N4 and N4E, which matches the inherited geometry. Whether the N4 has physical encoders is unclear: the keydeck driver notes the N4 SDK class has no encoder handling.
+- N4 and N4E differ only by USB id. The N3 is a different board (0x6602:0x1002).
+
+[Full spec →](./device-specs.mdx#mirabox-n4)
+
+### Mirabox N4E \{#mirabox-n4e}
+
+Mirabox N4E (VID 0x6603, PID 0x1007): the N4 behind a different USB id, registered as a clone of the AKP05E.
+
+|  |  |
+|---|---|
+| **USB** | `0x6603`:`0x1007` |
+| **Keys** | 10 (5×2) + 2 extra |
+| **Panel** | 112×112 JPEG |
+| **Protocol** | `ajazz-akp05` |
+| **Tested** | — untested |
+
+- Every field except identity is inherited from the AJAZZ AKP05E model (ten 112×112 keys, four encoders, touch strip; pairs as Stream Deck + by default). The ID is source-derived from opendeck-akp05 src/mappings.rs, which queries usage page 0xffa0 / usage 1 for every AKP05-family row without per-model verification. Not DeckBridge-tested on this SKU.
+- Identical to the N4 apart from the USB id; see the Mirabox N4 notes.
+
+[Full spec →](./device-specs.mdx#mirabox-n4e)
+
+### Mirabox N4 Pro \{#mirabox-n4-pro}
+
+Mirabox N4 Pro (VID 0x5548, PID 0x1008): AKP05-family deck with RGB LEDs, registered as a clone of the AKP05E.
+
+|  |  |
+|---|---|
+| **USB** | `0x5548`:`0x1008` |
+| **Keys** | 10 (5×2) + 2 extra |
+| **Panel** | 112×112 JPEG |
+| **Protocol** | `ajazz-akp05` |
+| **Tested** | — untested |
+
+- Every field except identity is inherited from the AJAZZ AKP05E model (ten 112×112 keys, four encoders, touch strip; pairs as Stream Deck + by default). The ID is source-derived from opendeck-akp05 src/mappings.rs, which queries usage page 0xffa0 / usage 1 for every AKP05-family row without per-model verification. Not DeckBridge-tested on this SKU.
+- This is the N4 Pro family, a separate SDK class (PNG key type, RGB LEDs, QUCMD vibration) in Mirabox's SDK. DeckBridge drives it with the AKP05 JPEG path like opendeck-akp05, which uses one image format for the whole family. If keys render wrong, the PNG key type is the first suspect. LED strip commands, vibration and the HAN sleep command are not implemented.
+
+[Full spec →](./device-specs.mdx#mirabox-n4-pro)
+
+### Mirabox N4 Pro E \{#mirabox-n4-pro-e}
+
+Mirabox N4 Pro E (VID 0x5548, PID 0x1021): AKP05-family deck with RGB LEDs, registered as a clone of the AKP05E.
+
+|  |  |
+|---|---|
+| **USB** | `0x5548`:`0x1021` |
+| **Keys** | 10 (5×2) + 2 extra |
+| **Panel** | 112×112 JPEG |
+| **Protocol** | `ajazz-akp05` |
+| **Tested** | — untested |
+
+- Every field except identity is inherited from the AJAZZ AKP05E model (ten 112×112 keys, four encoders, touch strip; pairs as Stream Deck + by default). The ID is source-derived from opendeck-akp05 src/mappings.rs, which queries usage page 0xffa0 / usage 1 for every AKP05-family row without per-model verification. Not DeckBridge-tested on this SKU.
+- This is the N4 Pro family, a separate SDK class (PNG key type, RGB LEDs, QUCMD vibration) in Mirabox's SDK. DeckBridge drives it with the AKP05 JPEG path like opendeck-akp05, which uses one image format for the whole family. If keys render wrong, the PNG key type is the first suspect. LED strip commands, vibration and the HAN sleep command are not implemented.
+- opendeck-akp05 confirmed the QUCMD vibration config command by USB capture on this model.
+
+[Full spec →](./device-specs.mdx#mirabox-n4-pro-e)
+
+### VSDinside N4 \{#vsdinside-n4}
+
+VSDinside N4 (VID 0x5548, PID 0x1004): AKP05-family deck, registered as a clone of the AKP05E.
+
+|  |  |
+|---|---|
+| **USB** | `0x5548`:`0x1004` |
+| **Keys** | 10 (5×2) + 2 extra |
+| **Panel** | 112×112 JPEG |
+| **Protocol** | `ajazz-akp05` |
+| **Tested** | — untested |
+
+- Every field except identity is inherited from the AJAZZ AKP05E model (ten 112×112 keys, four encoders, touch strip; pairs as Stream Deck + by default). The ID is source-derived from opendeck-akp05 src/mappings.rs, which queries usage page 0xffa0 / usage 1 for every AKP05-family row without per-model verification. Not DeckBridge-tested on this SKU.
+- The VSDinside N4 shares VID 0x5548 with the Pro family but opendeck-akp05 does not treat it as a Pro model (no vibration). LED strip commands, vibration and the HAN sleep command are not implemented.
+
+[Full spec →](./device-specs.mdx#vsdinside-n4)
+
+### VSDinside N4 Pro \{#vsdinside-n4-pro}
+
+VSDinside N4 Pro (VID 0x5548, PID 0x1023): AKP05-family deck with RGB LEDs, registered as a clone of the AKP05E.
+
+|  |  |
+|---|---|
+| **USB** | `0x5548`:`0x1023` |
+| **Keys** | 10 (5×2) + 2 extra |
+| **Panel** | 112×112 JPEG |
+| **Protocol** | `ajazz-akp05` |
+| **Tested** | — untested |
+
+- Every field except identity is inherited from the AJAZZ AKP05E model (ten 112×112 keys, four encoders, touch strip; pairs as Stream Deck + by default). The ID is source-derived from opendeck-akp05 src/mappings.rs, which queries usage page 0xffa0 / usage 1 for every AKP05-family row without per-model verification. Not DeckBridge-tested on this SKU.
+- This is the N4 Pro family, a separate SDK class (PNG key type, RGB LEDs, QUCMD vibration) in Mirabox's SDK. DeckBridge drives it with the AKP05 JPEG path like opendeck-akp05, which uses one image format for the whole family. If keys render wrong, the PNG key type is the first suspect. LED strip commands, vibration and the HAN sleep command are not implemented.
+
+[Full spec →](./device-specs.mdx#vsdinside-n4-pro)
+
+### Mars Gaming MSD-PRO \{#mars-msd-pro}
+
+Mars Gaming MSD-PRO (VID 0x0b00, PID 0x1003): 10 LCD keys, four dials and a touch screen on the AKP05 protocol, registered as a clone of the AKP05E.
+
+|  |  |
+|---|---|
+| **USB** | `0x0b00`:`0x1003` |
+| **Keys** | 10 (5×2) + 2 extra |
+| **Panel** | 112×112 JPEG |
+| **Protocol** | `ajazz-akp05` |
+| **Tested** | — untested |
+
+- Every field except identity is inherited from the AJAZZ AKP05E model (ten 112×112 keys, four encoders, touch strip; pairs as Stream Deck + by default). The ID is source-derived from opendeck-akp05 src/mappings.rs, which queries usage page 0xffa0 / usage 1 for every AKP05-family row without per-model verification. Not DeckBridge-tested on this SKU.
+- Only a Windows report exists (opendeck-akp05 PR #3: tested on Windows only, works fine). The touch-strip size is unknown. The white MSDPROW may use a different PID.
+- Adjacent PIDs are other protocols: 0x0b00:0x1000 is the MSD-ONE (v1, see the MSD-ONE notes) and keydeck lists 0x0b00:0x1001 as the MSD-TWO (v2, unsupported).
+
+[Full spec →](./device-specs.mdx#mars-msd-pro)
+
+### Soomfon CN003 \{#soomfon-cn003}
+
+Soomfon CN003 (VID 0x1500, PID 0x3002): AKP05-family deck, registered as a clone of the AKP05E.
+
+|  |  |
+|---|---|
+| **USB** | `0x1500`:`0x3002` |
+| **Keys** | 10 (5×2) + 2 extra |
+| **Panel** | 112×112 JPEG |
+| **Protocol** | `ajazz-akp05` |
+| **Tested** | — untested |
+
+- Every field except identity is inherited from the AJAZZ AKP05E model (ten 112×112 keys, four encoders, touch strip; pairs as Stream Deck + by default). The ID is source-derived from opendeck-akp05 src/mappings.rs, which queries usage page 0xffa0 / usage 1 for every AKP05-family row without per-model verification. Not DeckBridge-tested on this SKU.
+
+[Full spec →](./device-specs.mdx#soomfon-cn003)
+
+### Streonor S10 Pro \{#streonor-s10-pro}
+
+Streonor S10 Pro (VID 0x1500, PID 0x3007): AKP05-family deck, registered as a clone of the AKP05E.
+
+|  |  |
+|---|---|
+| **USB** | `0x1500`:`0x3007` |
+| **Keys** | 10 (5×2) + 2 extra |
+| **Panel** | 112×112 JPEG |
+| **Protocol** | `ajazz-akp05` |
+| **Tested** | — untested |
+
+- Every field except identity is inherited from the AJAZZ AKP05E model (ten 112×112 keys, four encoders, touch strip; pairs as Stream Deck + by default). The ID is source-derived from opendeck-akp05 src/mappings.rs, which queries usage page 0xffa0 / usage 1 for every AKP05-family row without per-model verification. Not DeckBridge-tested on this SKU.
+- opendeck-akp05 files this model under the Soomfon VID (0x1500).
+
+[Full spec →](./device-specs.mdx#streonor-s10-pro)
+
+### AJAZZ AKP05E Pro \{#ajazz-akp05e-pro}
+
+AJAZZ AKP05E Pro (VID 0x0300, PID 0x3013): AKP05-family deck, registered as a clone of the AKP05E.
+
+|  |  |
+|---|---|
+| **USB** | `0x0300`:`0x3013` |
+| **Keys** | 10 (5×2) + 2 extra |
+| **Panel** | 112×112 JPEG |
+| **Protocol** | `ajazz-akp05` |
+| **Tested** | — untested |
+
+- Every field except identity is inherited from the AJAZZ AKP05E model (ten 112×112 keys, four encoders, touch strip; pairs as Stream Deck + by default). The ID is source-derived from opendeck-akp05 src/mappings.rs, which queries usage page 0xffa0 / usage 1 for every AKP05-family row without per-model verification. Not DeckBridge-tested on this SKU.
+- Only PID 0x3004 (AKP05E) has hardware evidence; this Pro SKU may differ in firmware.
+
+[Full spec →](./device-specs.mdx#ajazz-akp05e-pro)
+
+### AJAZZ AKP05CN Pro \{#ajazz-akp05cn-pro}
+
+AJAZZ AKP05CN Pro (VID 0x0300, PID 0x3014): AKP05-family deck, registered as a clone of the AKP05E.
+
+|  |  |
+|---|---|
+| **USB** | `0x0300`:`0x3014` |
+| **Keys** | 10 (5×2) + 2 extra |
+| **Panel** | 112×112 JPEG |
+| **Protocol** | `ajazz-akp05` |
+| **Tested** | — untested |
+
+- Every field except identity is inherited from the AJAZZ AKP05E model (ten 112×112 keys, four encoders, touch strip; pairs as Stream Deck + by default). The ID is source-derived from opendeck-akp05 src/mappings.rs, which queries usage page 0xffa0 / usage 1 for every AKP05-family row without per-model verification. Not DeckBridge-tested on this SKU.
+- Only PID 0x3004 (AKP05E) has hardware evidence; this Pro SKU may differ in firmware.
+
+[Full spec →](./device-specs.mdx#ajazz-akp05cn-pro)

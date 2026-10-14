@@ -119,7 +119,7 @@ const COLUMNS = {
       key: 'protocol',
       label: 'Protocol',
       description:
-        'Wire protocol family: mirabox-cora (v3, 1024-byte packets, press+release), mirabox-cora-v1 (512-byte, keydown only), ajazz-akp05 (AKP05/AKP05E), elgato-gen1 (BMP, Mini), elgato-gen2 (JPEG, MK.2/XL). It also selects the USB driver.',
+        'Wire protocol family: mirabox-cora (v3, 1024-byte packets, press+release), mirabox-cora-v1 (512-byte, keydown only), ajazz-akp05 (AKP05 family), elgato-gen1 (BMP, Mini), elgato-gen2 (JPEG, MK.2/XL). It also selects the USB driver.',
     },
     {
       key: 'vid',

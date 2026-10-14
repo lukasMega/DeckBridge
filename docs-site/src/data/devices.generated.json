@@ -25,7 +25,7 @@
         {
           "key": "protocol",
           "label": "Protocol",
-          "description": "Wire protocol family: mirabox-cora (v3, 1024-byte packets, press+release), mirabox-cora-v1 (512-byte, keydown only), ajazz-akp05 (AKP05/AKP05E), elgato-gen1 (BMP, Mini), elgato-gen2 (JPEG, MK.2/XL). It also selects the USB driver.",
+          "description": "Wire protocol family: mirabox-cora (v3, 1024-byte packets, press+release), mirabox-cora-v1 (512-byte, keydown only), ajazz-akp05 (AKP05 family), elgato-gen1 (BMP, Mini), elgato-gen2 (JPEG, MK.2/XL). It also selects the USB driver.",
           "defaultVisible": true
         },
         {
@@ -1316,6 +1316,690 @@
           "packetSizeCandidates": "—"
         }
       }
+    },
+    {
+      "id": "redragon-ss552",
+      "name": "Redragon SS552",
+      "family": "ajazz-akp05",
+      "tested": false,
+      "testedLabel": "— untested",
+      "cells": {
+        "identity": {
+          "name": "Redragon SS552",
+          "id": "redragon-ss552",
+          "vendor": "redragon",
+          "protocol": "ajazz-akp05",
+          "vid": "0x0200",
+          "pids": "0x3001",
+          "usagePage": "0xffa0",
+          "usage": "1",
+          "keyCount": "10",
+          "columns": "5",
+          "rows": "2",
+          "keyWidth": "112",
+          "keyHeight": "112"
+        },
+        "image": {
+          "name": "Redragon SS552",
+          "format": "jpeg",
+          "width": "112",
+          "height": "112",
+          "rotate": "180°",
+          "flipH": "no",
+          "flipV": "no",
+          "colorMode": "rgb",
+          "crop": "—",
+          "resizeMode": "—",
+          "padFill": "—",
+          "resizeFilter": "lanczos3",
+          "sharpen": "0.6",
+          "blur": "—",
+          "maxBytes": "65535",
+          "quality": "0.9",
+          "bmpPpm": "—",
+          "transform": "sidecar"
+        },
+        "wire": {
+          "name": "Redragon SS552",
+          "packetSize": "1024",
+          "inSize": "512",
+          "heartbeatMs": "—",
+          "synthesizeKeyUp": "—",
+          "sendStpAfterImage": "—",
+          "reportId": "0x00",
+          "chunkPadByte": "—",
+          "chunkDelayMs": "—",
+          "sharedSerial": "—",
+          "packetSizeCandidates": "—"
+        }
+      }
+    },
+    {
+      "id": "mirabox-n4",
+      "name": "Mirabox N4",
+      "family": "ajazz-akp05",
+      "tested": false,
+      "testedLabel": "— untested",
+      "cells": {
+        "identity": {
+          "name": "Mirabox N4",
+          "id": "mirabox-n4",
+          "vendor": "mirabox",
+          "protocol": "ajazz-akp05",
+          "vid": "0x6602",
+          "pids": "0x1001",
+          "usagePage": "0xffa0",
+          "usage": "1",
+          "keyCount": "10",
+          "columns": "5",
+          "rows": "2",
+          "keyWidth": "112",
+          "keyHeight": "112"
+        },
+        "image": {
+          "name": "Mirabox N4",
+          "format": "jpeg",
+          "width": "112",
+          "height": "112",
+          "rotate": "180°",
+          "flipH": "no",
+          "flipV": "no",
+          "colorMode": "rgb",
+          "crop": "—",
+          "resizeMode": "—",
+          "padFill": "—",
+          "resizeFilter": "lanczos3",
+          "sharpen": "0.6",
+          "blur": "—",
+          "maxBytes": "65535",
+          "quality": "0.9",
+          "bmpPpm": "—",
+          "transform": "sidecar"
+        },
+        "wire": {
+          "name": "Mirabox N4",
+          "packetSize": "1024",
+          "inSize": "512",
+          "heartbeatMs": "—",
+          "synthesizeKeyUp": "—",
+          "sendStpAfterImage": "—",
+          "reportId": "0x00",
+          "chunkPadByte": "—",
+          "chunkDelayMs": "—",
+          "sharedSerial": "—",
+          "packetSizeCandidates": "—"
+        }
+      }
+    },
+    {
+      "id": "mirabox-n4e",
+      "name": "Mirabox N4E",
+      "family": "ajazz-akp05",
+      "tested": false,
+      "testedLabel": "— untested",
+      "cells": {
+        "identity": {
+          "name": "Mirabox N4E",
+          "id": "mirabox-n4e",
+          "vendor": "mirabox",
+          "protocol": "ajazz-akp05",
+          "vid": "0x6603",
+          "pids": "0x1007",
+          "usagePage": "0xffa0",
+          "usage": "1",
+          "keyCount": "10",
+          "columns": "5",
+          "rows": "2",
+          "keyWidth": "112",
+          "keyHeight": "112"
+        },
+        "image": {
+          "name": "Mirabox N4E",
+          "format": "jpeg",
+          "width": "112",
+          "height": "112",
+          "rotate": "180°",
+          "flipH": "no",
+          "flipV": "no",
+          "colorMode": "rgb",
+          "crop": "—",
+          "resizeMode": "—",
+          "padFill": "—",
+          "resizeFilter": "lanczos3",
+          "sharpen": "0.6",
+          "blur": "—",
+          "maxBytes": "65535",
+          "quality": "0.9",
+          "bmpPpm": "—",
+          "transform": "sidecar"
+        },
+        "wire": {
+          "name": "Mirabox N4E",
+          "packetSize": "1024",
+          "inSize": "512",
+          "heartbeatMs": "—",
+          "synthesizeKeyUp": "—",
+          "sendStpAfterImage": "—",
+          "reportId": "0x00",
+          "chunkPadByte": "—",
+          "chunkDelayMs": "—",
+          "sharedSerial": "—",
+          "packetSizeCandidates": "—"
+        }
+      }
+    },
+    {
+      "id": "mirabox-n4-pro",
+      "name": "Mirabox N4 Pro",
+      "family": "ajazz-akp05",
+      "tested": false,
+      "testedLabel": "— untested",
+      "cells": {
+        "identity": {
+          "name": "Mirabox N4 Pro",
+          "id": "mirabox-n4-pro",
+          "vendor": "mirabox",
+          "protocol": "ajazz-akp05",
+          "vid": "0x5548",
+          "pids": "0x1008",
+          "usagePage": "0xffa0",
+          "usage": "1",
+          "keyCount": "10",
+          "columns": "5",
+          "rows": "2",
+          "keyWidth": "112",
+          "keyHeight": "112"
+        },
+        "image": {
+          "name": "Mirabox N4 Pro",
+          "format": "jpeg",
+          "width": "112",
+          "height": "112",
+          "rotate": "180°",
+          "flipH": "no",
+          "flipV": "no",
+          "colorMode": "rgb",
+          "crop": "—",
+          "resizeMode": "—",
+          "padFill": "—",
+          "resizeFilter": "lanczos3",
+          "sharpen": "0.6",
+          "blur": "—",
+          "maxBytes": "65535",
+          "quality": "0.9",
+          "bmpPpm": "—",
+          "transform": "sidecar"
+        },
+        "wire": {
+          "name": "Mirabox N4 Pro",
+          "packetSize": "1024",
+          "inSize": "512",
+          "heartbeatMs": "—",
+          "synthesizeKeyUp": "—",
+          "sendStpAfterImage": "—",
+          "reportId": "0x00",
+          "chunkPadByte": "—",
+          "chunkDelayMs": "—",
+          "sharedSerial": "—",
+          "packetSizeCandidates": "—"
+        }
+      }
+    },
+    {
+      "id": "mirabox-n4-pro-e",
+      "name": "Mirabox N4 Pro E",
+      "family": "ajazz-akp05",
+      "tested": false,
+      "testedLabel": "— untested",
+      "cells": {
+        "identity": {
+          "name": "Mirabox N4 Pro E",
+          "id": "mirabox-n4-pro-e",
+          "vendor": "mirabox",
+          "protocol": "ajazz-akp05",
+          "vid": "0x5548",
+          "pids": "0x1021",
+          "usagePage": "0xffa0",
+          "usage": "1",
+          "keyCount": "10",
+          "columns": "5",
+          "rows": "2",
+          "keyWidth": "112",
+          "keyHeight": "112"
+        },
+        "image": {
+          "name": "Mirabox N4 Pro E",
+          "format": "jpeg",
+          "width": "112",
+          "height": "112",
+          "rotate": "180°",
+          "flipH": "no",
+          "flipV": "no",
+          "colorMode": "rgb",
+          "crop": "—",
+          "resizeMode": "—",
+          "padFill": "—",
+          "resizeFilter": "lanczos3",
+          "sharpen": "0.6",
+          "blur": "—",
+          "maxBytes": "65535",
+          "quality": "0.9",
+          "bmpPpm": "—",
+          "transform": "sidecar"
+        },
+        "wire": {
+          "name": "Mirabox N4 Pro E",
+          "packetSize": "1024",
+          "inSize": "512",
+          "heartbeatMs": "—",
+          "synthesizeKeyUp": "—",
+          "sendStpAfterImage": "—",
+          "reportId": "0x00",
+          "chunkPadByte": "—",
+          "chunkDelayMs": "—",
+          "sharedSerial": "—",
+          "packetSizeCandidates": "—"
+        }
+      }
+    },
+    {
+      "id": "vsdinside-n4",
+      "name": "VSDinside N4",
+      "family": "ajazz-akp05",
+      "tested": false,
+      "testedLabel": "— untested",
+      "cells": {
+        "identity": {
+          "name": "VSDinside N4",
+          "id": "vsdinside-n4",
+          "vendor": "vsdinside",
+          "protocol": "ajazz-akp05",
+          "vid": "0x5548",
+          "pids": "0x1004",
+          "usagePage": "0xffa0",
+          "usage": "1",
+          "keyCount": "10",
+          "columns": "5",
+          "rows": "2",
+          "keyWidth": "112",
+          "keyHeight": "112"
+        },
+        "image": {
+          "name": "VSDinside N4",
+          "format": "jpeg",
+          "width": "112",
+          "height": "112",
+          "rotate": "180°",
+          "flipH": "no",
+          "flipV": "no",
+          "colorMode": "rgb",
+          "crop": "—",
+          "resizeMode": "—",
+          "padFill": "—",
+          "resizeFilter": "lanczos3",
+          "sharpen": "0.6",
+          "blur": "—",
+          "maxBytes": "65535",
+          "quality": "0.9",
+          "bmpPpm": "—",
+          "transform": "sidecar"
+        },
+        "wire": {
+          "name": "VSDinside N4",
+          "packetSize": "1024",
+          "inSize": "512",
+          "heartbeatMs": "—",
+          "synthesizeKeyUp": "—",
+          "sendStpAfterImage": "—",
+          "reportId": "0x00",
+          "chunkPadByte": "—",
+          "chunkDelayMs": "—",
+          "sharedSerial": "—",
+          "packetSizeCandidates": "—"
+        }
+      }
+    },
+    {
+      "id": "vsdinside-n4-pro",
+      "name": "VSDinside N4 Pro",
+      "family": "ajazz-akp05",
+      "tested": false,
+      "testedLabel": "— untested",
+      "cells": {
+        "identity": {
+          "name": "VSDinside N4 Pro",
+          "id": "vsdinside-n4-pro",
+          "vendor": "vsdinside",
+          "protocol": "ajazz-akp05",
+          "vid": "0x5548",
+          "pids": "0x1023",
+          "usagePage": "0xffa0",
+          "usage": "1",
+          "keyCount": "10",
+          "columns": "5",
+          "rows": "2",
+          "keyWidth": "112",
+          "keyHeight": "112"
+        },
+        "image": {
+          "name": "VSDinside N4 Pro",
+          "format": "jpeg",
+          "width": "112",
+          "height": "112",
+          "rotate": "180°",
+          "flipH": "no",
+          "flipV": "no",
+          "colorMode": "rgb",
+          "crop": "—",
+          "resizeMode": "—",
+          "padFill": "—",
+          "resizeFilter": "lanczos3",
+          "sharpen": "0.6",
+          "blur": "—",
+          "maxBytes": "65535",
+          "quality": "0.9",
+          "bmpPpm": "—",
+          "transform": "sidecar"
+        },
+        "wire": {
+          "name": "VSDinside N4 Pro",
+          "packetSize": "1024",
+          "inSize": "512",
+          "heartbeatMs": "—",
+          "synthesizeKeyUp": "—",
+          "sendStpAfterImage": "—",
+          "reportId": "0x00",
+          "chunkPadByte": "—",
+          "chunkDelayMs": "—",
+          "sharedSerial": "—",
+          "packetSizeCandidates": "—"
+        }
+      }
+    },
+    {
+      "id": "mars-msd-pro",
+      "name": "Mars Gaming MSD-PRO",
+      "family": "ajazz-akp05",
+      "tested": false,
+      "testedLabel": "— untested",
+      "cells": {
+        "identity": {
+          "name": "Mars Gaming MSD-PRO",
+          "id": "mars-msd-pro",
+          "vendor": "mars-gaming",
+          "protocol": "ajazz-akp05",
+          "vid": "0x0b00",
+          "pids": "0x1003",
+          "usagePage": "0xffa0",
+          "usage": "1",
+          "keyCount": "10",
+          "columns": "5",
+          "rows": "2",
+          "keyWidth": "112",
+          "keyHeight": "112"
+        },
+        "image": {
+          "name": "Mars Gaming MSD-PRO",
+          "format": "jpeg",
+          "width": "112",
+          "height": "112",
+          "rotate": "180°",
+          "flipH": "no",
+          "flipV": "no",
+          "colorMode": "rgb",
+          "crop": "—",
+          "resizeMode": "—",
+          "padFill": "—",
+          "resizeFilter": "lanczos3",
+          "sharpen": "0.6",
+          "blur": "—",
+          "maxBytes": "65535",
+          "quality": "0.9",
+          "bmpPpm": "—",
+          "transform": "sidecar"
+        },
+        "wire": {
+          "name": "Mars Gaming MSD-PRO",
+          "packetSize": "1024",
+          "inSize": "512",
+          "heartbeatMs": "—",
+          "synthesizeKeyUp": "—",
+          "sendStpAfterImage": "—",
+          "reportId": "0x00",
+          "chunkPadByte": "—",
+          "chunkDelayMs": "—",
+          "sharedSerial": "—",
+          "packetSizeCandidates": "—"
+        }
+      }
+    },
+    {
+      "id": "soomfon-cn003",
+      "name": "Soomfon CN003",
+      "family": "ajazz-akp05",
+      "tested": false,
+      "testedLabel": "— untested",
+      "cells": {
+        "identity": {
+          "name": "Soomfon CN003",
+          "id": "soomfon-cn003",
+          "vendor": "soomfon",
+          "protocol": "ajazz-akp05",
+          "vid": "0x1500",
+          "pids": "0x3002",
+          "usagePage": "0xffa0",
+          "usage": "1",
+          "keyCount": "10",
+          "columns": "5",
+          "rows": "2",
+          "keyWidth": "112",
+          "keyHeight": "112"
+        },
+        "image": {
+          "name": "Soomfon CN003",
+          "format": "jpeg",
+          "width": "112",
+          "height": "112",
+          "rotate": "180°",
+          "flipH": "no",
+          "flipV": "no",
+          "colorMode": "rgb",
+          "crop": "—",
+          "resizeMode": "—",
+          "padFill": "—",
+          "resizeFilter": "lanczos3",
+          "sharpen": "0.6",
+          "blur": "—",
+          "maxBytes": "65535",
+          "quality": "0.9",
+          "bmpPpm": "—",
+          "transform": "sidecar"
+        },
+        "wire": {
+          "name": "Soomfon CN003",
+          "packetSize": "1024",
+          "inSize": "512",
+          "heartbeatMs": "—",
+          "synthesizeKeyUp": "—",
+          "sendStpAfterImage": "—",
+          "reportId": "0x00",
+          "chunkPadByte": "—",
+          "chunkDelayMs": "—",
+          "sharedSerial": "—",
+          "packetSizeCandidates": "—"
+        }
+      }
+    },
+    {
+      "id": "streonor-s10-pro",
+      "name": "Streonor S10 Pro",
+      "family": "ajazz-akp05",
+      "tested": false,
+      "testedLabel": "— untested",
+      "cells": {
+        "identity": {
+          "name": "Streonor S10 Pro",
+          "id": "streonor-s10-pro",
+          "vendor": "streonor",
+          "protocol": "ajazz-akp05",
+          "vid": "0x1500",
+          "pids": "0x3007",
+          "usagePage": "0xffa0",
+          "usage": "1",
+          "keyCount": "10",
+          "columns": "5",
+          "rows": "2",
+          "keyWidth": "112",
+          "keyHeight": "112"
+        },
+        "image": {
+          "name": "Streonor S10 Pro",
+          "format": "jpeg",
+          "width": "112",
+          "height": "112",
+          "rotate": "180°",
+          "flipH": "no",
+          "flipV": "no",
+          "colorMode": "rgb",
+          "crop": "—",
+          "resizeMode": "—",
+          "padFill": "—",
+          "resizeFilter": "lanczos3",
+          "sharpen": "0.6",
+          "blur": "—",
+          "maxBytes": "65535",
+          "quality": "0.9",
+          "bmpPpm": "—",
+          "transform": "sidecar"
+        },
+        "wire": {
+          "name": "Streonor S10 Pro",
+          "packetSize": "1024",
+          "inSize": "512",
+          "heartbeatMs": "—",
+          "synthesizeKeyUp": "—",
+          "sendStpAfterImage": "—",
+          "reportId": "0x00",
+          "chunkPadByte": "—",
+          "chunkDelayMs": "—",
+          "sharedSerial": "—",
+          "packetSizeCandidates": "—"
+        }
+      }
+    },
+    {
+      "id": "ajazz-akp05e-pro",
+      "name": "AJAZZ AKP05E Pro",
+      "family": "ajazz-akp05",
+      "tested": false,
+      "testedLabel": "— untested",
+      "cells": {
+        "identity": {
+          "name": "AJAZZ AKP05E Pro",
+          "id": "ajazz-akp05e-pro",
+          "vendor": "ajazz",
+          "protocol": "ajazz-akp05",
+          "vid": "0x0300",
+          "pids": "0x3013",
+          "usagePage": "0xffa0",
+          "usage": "1",
+          "keyCount": "10",
+          "columns": "5",
+          "rows": "2",
+          "keyWidth": "112",
+          "keyHeight": "112"
+        },
+        "image": {
+          "name": "AJAZZ AKP05E Pro",
+          "format": "jpeg",
+          "width": "112",
+          "height": "112",
+          "rotate": "180°",
+          "flipH": "no",
+          "flipV": "no",
+          "colorMode": "rgb",
+          "crop": "—",
+          "resizeMode": "—",
+          "padFill": "—",
+          "resizeFilter": "lanczos3",
+          "sharpen": "0.6",
+          "blur": "—",
+          "maxBytes": "65535",
+          "quality": "0.9",
+          "bmpPpm": "—",
+          "transform": "sidecar"
+        },
+        "wire": {
+          "name": "AJAZZ AKP05E Pro",
+          "packetSize": "1024",
+          "inSize": "512",
+          "heartbeatMs": "—",
+          "synthesizeKeyUp": "—",
+          "sendStpAfterImage": "—",
+          "reportId": "0x00",
+          "chunkPadByte": "—",
+          "chunkDelayMs": "—",
+          "sharedSerial": "—",
+          "packetSizeCandidates": "—"
+        }
+      }
+    },
+    {
+      "id": "ajazz-akp05cn-pro",
+      "name": "AJAZZ AKP05CN Pro",
+      "family": "ajazz-akp05",
+      "tested": false,
+      "testedLabel": "— untested",
+      "cells": {
+        "identity": {
+          "name": "AJAZZ AKP05CN Pro",
+          "id": "ajazz-akp05cn-pro",
+          "vendor": "ajazz",
+          "protocol": "ajazz-akp05",
+          "vid": "0x0300",
+          "pids": "0x3014",
+          "usagePage": "0xffa0",
+          "usage": "1",
+          "keyCount": "10",
+          "columns": "5",
+          "rows": "2",
+          "keyWidth": "112",
+          "keyHeight": "112"
+        },
+        "image": {
+          "name": "AJAZZ AKP05CN Pro",
+          "format": "jpeg",
+          "width": "112",
+          "height": "112",
+          "rotate": "180°",
+          "flipH": "no",
+          "flipV": "no",
+          "colorMode": "rgb",
+          "crop": "—",
+          "resizeMode": "—",
+          "padFill": "—",
+          "resizeFilter": "lanczos3",
+          "sharpen": "0.6",
+          "blur": "—",
+          "maxBytes": "65535",
+          "quality": "0.9",
+          "bmpPpm": "—",
+          "transform": "sidecar"
+        },
+        "wire": {
+          "name": "AJAZZ AKP05CN Pro",
+          "packetSize": "1024",
+          "inSize": "512",
+          "heartbeatMs": "—",
+          "synthesizeKeyUp": "—",
+          "sendStpAfterImage": "—",
+          "reportId": "0x00",
+          "chunkPadByte": "—",
+          "chunkDelayMs": "—",
+          "sharedSerial": "—",
+          "packetSizeCandidates": "—"
+        }
+      }
     }
   ],
   "homepageOrder": [
@@ -1407,6 +2091,66 @@
     {
       "id": "tmice-stream-controller",
       "name": "TMICE Stream Controller",
+      "tested": false
+    },
+    {
+      "id": "redragon-ss552",
+      "name": "Redragon SS552",
+      "tested": false
+    },
+    {
+      "id": "mirabox-n4",
+      "name": "Mirabox N4",
+      "tested": false
+    },
+    {
+      "id": "mirabox-n4e",
+      "name": "Mirabox N4E",
+      "tested": false
+    },
+    {
+      "id": "mirabox-n4-pro",
+      "name": "Mirabox N4 Pro",
+      "tested": false
+    },
+    {
+      "id": "mirabox-n4-pro-e",
+      "name": "Mirabox N4 Pro E",
+      "tested": false
+    },
+    {
+      "id": "vsdinside-n4",
+      "name": "VSDinside N4",
+      "tested": false
+    },
+    {
+      "id": "vsdinside-n4-pro",
+      "name": "VSDinside N4 Pro",
+      "tested": false
+    },
+    {
+      "id": "mars-msd-pro",
+      "name": "Mars Gaming MSD-PRO",
+      "tested": false
+    },
+    {
+      "id": "soomfon-cn003",
+      "name": "Soomfon CN003",
+      "tested": false
+    },
+    {
+      "id": "streonor-s10-pro",
+      "name": "Streonor S10 Pro",
+      "tested": false
+    },
+    {
+      "id": "ajazz-akp05e-pro",
+      "name": "AJAZZ AKP05E Pro",
+      "tested": false
+    },
+    {
+      "id": "ajazz-akp05cn-pro",
+      "name": "AJAZZ AKP05CN Pro",
       "tested": false
     }
   ]

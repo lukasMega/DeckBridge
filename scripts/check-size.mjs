@@ -13,8 +13,9 @@ const BUDGETS = {
   'deck.js': 30_106,
   // Number input, pairing progress, Elgato restart row (2026-10-11); measured + 1%.
   'css total': 36_994,
-  'hid-worker': 47_394,
-  'hid-scan-worker': 10_002,
+  // 12 AKP05-family clone models (2026-10-14); measured size + 1% headroom.
+  'hid-worker': 48_306,
+  'hid-scan-worker': 10_826,
   'plugin-worker': 2_733,
   // Extension worker: worker-side reply cap (2026-10-11); measured size + 1% headroom.
   'extension-worker': 1_206,

@@ -1,6 +1,7 @@
 import assert from 'tjs:assert';
 import { Akp05Driver } from '../src/devices/ajazz/akp05-driver.js';
 import { AJAZZ_AKP05E_MODEL } from '../src/devices/ajazz/akp05e.js';
+import { DEVICE_MODELS, findModelById } from '../src/devices/registry.js';
 import { describePacket } from '../src/devices/ajazz/akp05-protocol.js';
 import { transformImageForDevice } from '../src/transform/translator.js';
 import type { DialEvent, KeyEvent, TouchInputEvent } from '../src/shared/types.js';
@@ -37,6 +38,20 @@ class TestDriver extends Akp05Driver {
     this.parseInput(ackReport(code, stateByte));
   }
 }
+
+test('the driver constructs for every ajazz-akp05 model', () => {
+  const models = DEVICE_MODELS.filter((m) => m.protocol === 'ajazz-akp05');
+  assert.equal(models.length, 14);
+  for (const m of models) assert.ok(new Akp05Driver(m), m.id);
+});
+
+test('SS552 key slots match VT-Ragnaros KEY_TO_SLOT + 1 for keys 0-9', () => {
+  const { coraToWireImage, extraKeys } = findModelById('redragon-ss552')!.keyMap;
+  // Physical order is row-major over 5 columns; the 5th column is the extra keys.
+  const wire = [0, 1, 2, 3].map((c) => coraToWireImage![c]).concat(extraKeys![0]);
+  wire.push(...[4, 5, 6, 7].map((c) => coraToWireImage![c]), extraKeys![1]);
+  assert.deepEqual(wire, [11, 12, 13, 14, 15, 6, 7, 8, 9, 10]);
+});
 
 test('key codes 0x01–0x0a emit key events with the raw code as keyIndex', () => {
   const d = new TestDriver();

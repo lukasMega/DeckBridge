@@ -34,6 +34,8 @@ const STRIP_W = 38; // width of the 3-segment LCD status strip on the 18-key boa
 const BEZEL = 24; // chassis margin around the key panel
 const BAND = 40; // branding band (top or bottom, per model)
 const KNOB_R = 21; // rotary encoder radius
+const TOUCH_H = 30; // height of the full-width touch strip under the keys
+const TOUCH_GAP = 14; // space between the key grid and the touch strip
 const KNOB_BAND = 60; // vertical space a knob row occupies
 const PAD = 28; // canvas padding around the chassis (room for the stand + shadow)
 
@@ -51,7 +53,8 @@ const CHASSIS = {
  *   cols/rows  main key grid, straight out of the device registry
  *   strip      right-hand 3-segment LCD status column (the v1 18-key boards) — flush
  *              with the face, not pressable, so it gets no keycap bevel
- *   knobs      rotary-encoder count
+ *   touchStrip full-width LCD touch strip under the keys (AKP05 family), four zones
+*   knobs      rotary-encoder count
  *   knobsAbove place rotary encoders above the keys instead of below
  *   gap        key gap as a fraction of key width, traced from product photos
  *   bodyR      chassis corner radius (Mirabox's plate is squarer than Elgato's slab)
@@ -76,8 +79,8 @@ const DEVICES = [
   { id: 'ajazz-akp153e', name: 'Ajazz AKP153E (rev. 1)', brand: 'AJAZZ', cols: 5, rows: 3, strip: true, gap: 0.30, bodyR: 14, label: 'bottom', stand: 'wedge', chassis: 'ink', accent: '#e8590c' }, // prettier-ignore
   { id: 'ajazz-akp153r', name: 'Ajazz AKP153R (rev. 1)', brand: 'AJAZZ', cols: 5, rows: 3, strip: true, gap: 0.30, bodyR: 14, label: 'bottom', stand: 'wedge', chassis: 'white', accent: '#e8590c' }, // prettier-ignore
 
-  { id: 'ajazz-akp05', name: 'AJAZZ AKP05', brand: 'AJAZZ', cols: 5, rows: 2, gap: 0.22, bodyR: 18, label: 'top-left', stand: 'wedge', chassis: 'graphite', accent: '#e8590c' }, // prettier-ignore
-  { id: 'ajazz-akp05e', name: 'AJAZZ AKP05E', brand: 'AJAZZ', cols: 5, rows: 2, gap: 0.22, bodyR: 18, label: 'top-left', stand: 'wedge', chassis: 'graphite', accent: '#e8590c' }, // prettier-ignore
+  { id: 'ajazz-akp05', name: 'AJAZZ AKP05', brand: 'AJAZZ', cols: 5, rows: 2, touchStrip: true, knobs: 4, gap: 0.22, bodyR: 18, label: 'top-left', stand: 'wedge', chassis: 'graphite', accent: '#e8590c' }, // prettier-ignore
+  { id: 'ajazz-akp05e', name: 'AJAZZ AKP05E', brand: 'AJAZZ', cols: 5, rows: 2, touchStrip: true, knobs: 4, gap: 0.22, bodyR: 18, label: 'top-left', stand: 'wedge', chassis: 'graphite', accent: '#e8590c' }, // prettier-ignore
 
   // --- Fifine -------------------------------------------------------------
   { id: 'fifine-d6', name: 'Fifine AmpliGame D6', brand: 'AMPLIGAME', cols: 5, rows: 3, gap: 0.19, bodyR: 14, label: 'top', stand: 'integrated', underglow: true, chassis: 'ink', accent: '#f59f00' }, // prettier-ignore
@@ -153,6 +156,33 @@ function renderStrip({ d, c, gap, gridW, panelH, px, py, uid }) {
   );
 }
 
+function renderTouchStrip({ d, c, gridW, panelH, px, py, uid }) {
+  if (!d.touchStrip) return '';
+
+  const zoneW = gridW / 4;
+  const zones = Array.from({ length: 4 }, (_, i) => {
+    const j = jitter(`${d.id}:touch`, i);
+    const x = i * zoneW;
+    const divider =
+      i > 0
+        ? `<rect x="${x.toFixed(1)}" y="5" width="1" height="${TOUCH_H - 10}" fill="#ffffff" opacity="0.10"/>`
+        : '';
+    return (
+      `<rect x="${(x + 14).toFixed(1)}" y="${TOUCH_H / 2 - 5}" width="${(zoneW - 28).toFixed(1)}" height="4" rx="2" fill="${d.accent}" opacity="${(0.3 + j * 0.5).toFixed(2)}"/>` +
+      `<rect x="${(x + 14).toFixed(1)}" y="${TOUCH_H / 2 + 2}" width="${((zoneW - 28) * (0.4 + j * 0.5)).toFixed(1)}" height="3" rx="1.5" fill="#ffffff" opacity="0.16"/>` +
+      divider
+    );
+  }).join('');
+  return (
+    `<g transform="translate(${px},${py + panelH + TOUCH_GAP})">` +
+    `<rect width="${gridW}" height="${TOUCH_H}" rx="6" fill="${c.edge}"/>` +
+    `<rect x="1" y="1" width="${gridW - 2}" height="${TOUCH_H - 2}" rx="5" fill="url(#idle${uid})"/>` +
+    zones +
+    `<rect x="1" y="1" width="${gridW - 2}" height="${TOUCH_H - 2}" rx="5" fill="url(#gloss${uid})"/>` +
+    `</g>`
+  );
+}
+
 function renderStand(d, c, bx, by, bodyW, bodyH) {
   if (d.stand === 'wedge') {
     return `<path d="M ${bx + bodyW * 0.2} ${by + 10} H ${bx + bodyW * 0.8} L ${bx + bodyW * 0.88} ${by + bodyH + 13} H ${bx + bodyW * 0.12} Z" fill="${c.edge}" opacity="0.85"/>`;
@@ -180,13 +210,21 @@ function renderWordmark(d, c, bx, bodyW, bandMidY, font) {
   return `<text x="${bx + BEZEL}" y="${bandMidY}" font-family="${font}" font-size="13" font-weight="600" letter-spacing="2.4" fill="${c.text}">${d.brand}</text>`;
 }
 
-function controlLayout(d, knobs, panelH, by) {
+function controlLayout(d, knobs, panelH, touchH, by) {
   const knobsAbove = knobs > 0 && d.knobsAbove;
   const labelTop = ['top', 'top-left'].includes(d.label);
   const py = by + (labelTop ? BAND : BEZEL) + (knobsAbove ? KNOB_BAND : 0);
-  const knobY = knobsAbove ? py - KNOB_BAND / 2 : py + panelH + KNOB_BAND / 2;
+  const knobY = knobsAbove ? py - KNOB_BAND / 2 : py + panelH + touchH + KNOB_BAND / 2;
   const recessY = py - 7 - (knobsAbove ? KNOB_BAND - 6 : 0);
   return { knobY, py, recessY };
+}
+
+function gridCaption(d, knobs) {
+  const parts = [`${d.cols}×${d.rows}`];
+  if (d.strip) parts.push('3');
+  if (d.touchStrip) parts.push('strip');
+  if (knobs) parts.push(`${knobs}○`);
+  return parts.join(' + ');
 }
 
 function render(d) {
@@ -199,13 +237,14 @@ function render(d) {
   const panelW = gridW + (d.strip ? gap + STRIP_W : 0);
   const panelH = d.rows * KEY + (d.rows - 1) * gap;
   const bodyW = panelW + BEZEL * 2;
-  const bodyH = BEZEL + panelH + (knobs ? KNOB_BAND : 0) + BAND;
+  const touchH = d.touchStrip ? TOUCH_GAP + TOUCH_H : 0;
+  const bodyH = BEZEL + panelH + touchH + (knobs ? KNOB_BAND : 0) + BAND;
   const W = bodyW + PAD * 2;
   const H = bodyH + PAD * 2;
   const bx = PAD;
   const by = PAD;
   const px = bx + BEZEL;
-  const { knobY, py, recessY } = controlLayout(d, knobs, panelH, by);
+  const { knobY, py, recessY } = controlLayout(d, knobs, panelH, touchH, by);
 
   const uid = d.id.replace(/[^a-z0-9]/g, '');
 
@@ -216,6 +255,8 @@ function render(d) {
   // real 18-key boards this column is a display, even though DeckBridge exposes its
   // three zones as extra key ids.
   const stripEls = renderStrip({ d, c, gap, gridW, panelH, px, py, uid });
+
+  const touchEls = renderTouchStrip({ d, c, gridW, panelH, px, py, uid });
 
   // --- knobs ---------------------------------------------------------------
   const knobEls = knobs
@@ -239,8 +280,7 @@ function render(d) {
 
   // --- labels --------------------------------------------------------------
   const bandMidY = labelTop ? by + BAND / 2 + 5 : by + bodyH - BAND / 2 + 5;
-  const knobLabel = knobs ? ` + ${knobs}○` : '';
-  const gridLabel = `${d.cols}×${d.rows}${d.strip ? ' + 3' : ''}${knobLabel}`;
+  const gridLabel = gridCaption(d, knobs);
   const font = 'Inter, Helvetica Neue, Arial, sans-serif';
   const wordmark = renderWordmark(d, c, bx, bodyW, bandMidY, font);
   // The grid caption shares the wordmark's band (the opposite band is only a plain
@@ -255,7 +295,7 @@ function render(d) {
     ? `<rect x="${bx + 10}" y="${by + bodyH - 5}" width="${bodyW - 20}" height="4" rx="2" fill="${d.accent}" opacity="0.75"/>`
     : '';
 
-  const recessH = panelH + 14 + (knobs ? KNOB_BAND - 6 : 0);
+  const recessH = panelH + 14 + touchH + (knobs ? KNOB_BAND - 6 : 0);
 
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-label="${d.name} — ${gridLabel} key stream deck">
   <title>${d.name}</title>
@@ -297,7 +337,7 @@ function render(d) {
 
   <!-- keys -->
   <g>${keyEls}</g>
-  ${stripEls}
+  ${stripEls}${touchEls}
   ${knobEls ? `<g>${knobEls}</g>` : ''}
 
   <!-- wordmark + grid caption -->
@@ -319,7 +359,8 @@ function fallbackDevice(m) {
     brand: m.vendor.toUpperCase(),
     cols: m.columns,
     rows: m.rows,
-    knobs: m.encoderCount ?? 0,
+    knobs: m.encoderCount ?? (m.touchStripDisplay ? 4 : 0),
+    touchStrip: Boolean(m.touchStripDisplay),
     gap: 0.28,
     bodyR: 14,
     label: 'top',
