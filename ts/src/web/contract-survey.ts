@@ -27,10 +27,15 @@ export interface SurveyContext {
 
 export interface SurveyPayload extends SurveyContext {
   sv: number;
+  /** Ids of the questions shown, so the dashboard can list unanswered ones. */
+  q: string[];
   a: SurveyAnswers;
   c?: string;
   useForOther?: string;
   wantOther?: string;
+  foundOther?: string;
+  painOther?: string;
+  supportOther?: string;
   /** Marks the 3-question fallback form; absent for the full survey. */
   f?: 'short';
 }

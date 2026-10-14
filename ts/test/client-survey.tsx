@@ -101,9 +101,27 @@ export async function runSurvey(root: HTMLElement, check: Check): Promise<void> 
     );
     await click('Skip');
     await click('Skip');
+    const detailInput = (): HTMLInputElement | null => root.querySelector('.survey-detail');
+    check(detailInput() === null, 'Other source detail starts hidden');
+    await choose('found', 'other');
+    await waitAdvance();
+    check(title() === SURVEY_QUESTIONS[2]!.label, 'Other source waits for its detail');
+    check(document.activeElement === detailInput(), 'Other source focuses its field');
+    check(detailInput()!.required, 'Other source is required');
+    check(button('Next ›').disabled, 'Empty Other source blocks Next');
+    check(detailInput()!.maxLength === 100, 'Other source allows 100 characters');
+    await act(() => {
+      detailInput()!.value = 'Hacker News';
+      detailInput()!.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    await settle();
+    check(!button('Next ›').disabled, 'Other source text enables Next');
     await choose('found', 'ai');
+    check(detailInput() === null, 'Changing channel hides Other source');
     await waitAdvance();
     check(title() === SURVEY_QUESTIONS[2]!.label, 'Discovery waits for detail');
+    await choose('ai-detail', 'ai-other');
+    check(!button('Next ›').disabled, 'Other AI needs no description');
     await choose('ai-detail', 'ai-claude');
     await waitAdvance();
     check(title() === SURVEY_QUESTIONS[3]!.label, 'Discovery detail auto-advances');
@@ -184,6 +202,14 @@ export async function runSurvey(root: HTMLElement, check: Check): Promise<void> 
       !root.querySelector<HTMLInputElement>('input[value="nothing"]')!.checked,
       'Complaint clears Nothing',
     );
+    check(detailInput() === null, 'Other issue detail starts hidden');
+    await choose('pain', 'other');
+    check(document.activeElement === detailInput(), 'Other issue focuses its field');
+    check(button('Next ›').disabled, 'Empty Other issue blocks Next');
+    check(detailInput()!.maxLength === 100, 'Other issue allows 100 characters');
+    await choose('pain', 'nothing');
+    check(detailInput() === null, 'Nothing clears Other issue');
+    await choose('pain', 'docs');
     await click('Next ›');
     await choose('want', 'more-devices');
     await choose('more-devices-detail', 'more-devices-ajazz');
@@ -232,6 +258,10 @@ export async function runSurvey(root: HTMLElement, check: Check): Promise<void> 
     );
     await click('Next ›');
     await click('Skip');
+    await choose('support', 'other');
+    await waitAdvance();
+    check(document.activeElement === detailInput(), 'Other support waits in its field');
+    check(button('Next ›').disabled, 'Empty Other support blocks Next');
     await click('Skip');
     await act(() => {
       const input = root.querySelector<HTMLTextAreaElement>('textarea')!;
@@ -246,6 +276,7 @@ export async function runSurvey(root: HTMLElement, check: Check): Promise<void> 
       a: Record<string, unknown>;
       useForOther?: string;
       wantOther?: string;
+      foundOther?: string;
     };
     check(progress() === '12', 'Skipped questions still advance progress');
     check(
@@ -253,6 +284,7 @@ export async function runSurvey(root: HTMLElement, check: Check): Promise<void> 
       'Skip and cleared features are omitted',
     );
     check(preview.a.found === 'ai-claude', 'Discovery uses wire detail');
+    check(!('foundOther' in preview), 'Changed channel omits Other source');
     check(preview.useForOther === 'x'.repeat(300), 'Preview includes Other use detail');
     check(preview.wantOther === 'y'.repeat(100), 'Preview includes Other request detail');
     check(

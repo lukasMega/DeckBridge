@@ -146,6 +146,7 @@ export const SURVEY_QUESTIONS: SurveyQuestion[] = [
       ['permissions', 'macOS permissions'],
       ['webui', 'Web UI hard to use'],
       ['docs', 'Docs unclear'],
+      ['other', 'Other'],
       ['nothing', 'Nothing 😊'],
     ]),
   },
@@ -200,6 +201,7 @@ export const SURVEY_QUESTIONS: SurveyQuestion[] = [
       ['share', 'Star / share it'],
       ['no', 'Not now'],
       ['already', 'Already do'],
+      ['other', 'Other'],
     ]),
   },
 ];

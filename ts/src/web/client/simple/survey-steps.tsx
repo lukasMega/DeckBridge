@@ -10,17 +10,32 @@ interface OtherDetail {
   multiline?: boolean;
 }
 
-// Caps mirror validateSurvey (web/server/survey.ts).
+// Caps mirror OTHER_FIELDS (web/server/survey.ts).
 const OTHER_DETAILS: Partial<Record<string, OtherDetail>> = {
+  found: {
+    label: 'Other source',
+    placeholder: 'Where did you find it? (required)',
+    max: 100,
+  },
   'use-for': {
     label: 'Other use',
     placeholder: 'Describe your other use (required)',
     max: 300,
     multiline: true,
   },
+  pain: {
+    label: 'Other issue',
+    placeholder: 'Describe what bothers you (required)',
+    max: 100,
+  },
   want: {
     label: 'Other request',
     placeholder: 'Describe your request (required)',
+    max: 100,
+  },
+  support: {
+    label: 'Other support',
+    placeholder: 'How would you support it? (required)',
     max: 100,
   },
 };
@@ -286,12 +301,13 @@ export function QuestionStep({
     label: q.faces ? <FaceLabel face={o.label} index={i} /> : o.label,
     disabled: full && !parents.includes(o.id) && o.id !== q.exclusive,
   }));
+  const detail = OTHER_DETAILS[q.id];
   const choose = (id: string): void => {
     focusDetailRef.current = id === 'other' && !otherSelected;
     const [next, advance] = nextPicks(q, picks, parents, parentOf, id);
-    onChange(next, advance);
+    // A single pick with a required detail waits for the text, not the timer.
+    onChange(next, advance && !(detail && id === 'other'));
   };
-  const detail = OTHER_DETAILS[q.id];
   return (
     <>
       <p class="survey-hint">{HINTS[q.id]}</p>

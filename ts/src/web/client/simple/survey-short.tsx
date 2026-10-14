@@ -55,6 +55,7 @@ export function SurveyShort({
   const payload: SurveyPayload = {
     sv: definition.sv,
     ...definition.context,
+    q: definition.short,
     a: answers,
     f: 'short',
   };

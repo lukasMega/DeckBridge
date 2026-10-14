@@ -6,9 +6,11 @@ import type {
 } from '../contract-survey.js';
 import type { PersistedSettings } from '../../infra/settings.js';
 import {
+  OTHER_FIELDS,
   SHORT_QUESTIONS,
   SURVEY_QUESTIONS,
   SURVEY_VERSION,
+  picksOther,
   prefillSurvey,
   shortSurveyPayload,
   shouldNotifySurvey,
@@ -31,18 +33,17 @@ function hasOtherThanShort(input: RawSurvey): boolean {
   return (
     ids.some((id) => !SHORT_QUESTIONS.includes(id)) ||
     input.c !== undefined ||
-    input.useForOther !== undefined ||
-    input.wantOther !== undefined
+    OTHER_FIELDS.some(([, field]) => input[field] !== undefined)
   );
 }
 
 function buildPayload(context: SurveyContext, input: RawSurvey): SurveyPayload | undefined {
   if (input.f === 'short')
     return hasOtherThanShort(input) ? undefined : shortSurveyPayload(context, input.a);
-  const payload = surveyPayload(context, input.a, input.c, input.useForOther, input.wantOther);
-  const missingDetail =
-    (payload.a['use-for']?.includes('other') && !payload.useForOther) ||
-    (payload.a.want?.includes('other') && !payload.wantOther);
+  const payload = surveyPayload(context, input.a, input.c, input);
+  const missingDetail = OTHER_FIELDS.some(
+    ([id, field]) => picksOther(payload.a[id]) && !payload[field],
+  );
   return missingDetail ? undefined : payload;
 }
 

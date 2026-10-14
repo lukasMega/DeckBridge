@@ -84,36 +84,77 @@ await test('comment trims, caps and omits empty text', () => {
 });
 await test('other use detail trims, caps and requires Other selection', () => {
   const answers = { 'use-for': ['development', 'other'] };
-  assert.equal(validateSurvey(answers, '', '  Teaching  ').useForOther, 'Teaching');
-  assert.equal(validateSurvey(answers, 'General comment', 'x'.repeat(301)), {
+  assert.equal(
+    validateSurvey(answers, '', { useForOther: '  Teaching  ' }).useForOther,
+    'Teaching',
+  );
+  assert.equal(validateSurvey(answers, 'General comment', { useForOther: 'x'.repeat(301) }), {
     a: answers,
     c: 'General comment',
     useForOther: 'x'.repeat(300),
   });
   for (const detail of ['   ', null, 42, ['Teaching']])
-    assert.equal(validateSurvey(answers, '', detail), { a: answers });
+    assert.equal(validateSurvey(answers, '', { useForOther: detail }), { a: answers });
   for (const answer of [undefined, ['development'], 'other'])
-    assert.equal(validateSurvey({ 'use-for': answer }, '', 'Teaching').useForOther, undefined);
+    assert.equal(
+      validateSurvey({ 'use-for': answer }, '', { useForOther: 'Teaching' }).useForOther,
+      undefined,
+    );
 });
 await test('other request trims, caps and requires retained Other selection', () => {
   const answers = { want: ['widgets', 'other'] };
   assert.equal(
-    validateSurvey(answers, '', undefined, '  MIDI support  ').wantOther,
+    validateSurvey(answers, '', { wantOther: '  MIDI support  ' }).wantOther,
     'MIDI support',
   );
-  assert.equal(validateSurvey(answers, '', undefined, 'x'.repeat(101)), {
+  assert.equal(validateSurvey(answers, '', { wantOther: 'x'.repeat(101) }), {
     a: answers,
     wantOther: 'x'.repeat(100),
   });
   for (const detail of ['   ', null, 42, ['MIDI support']])
-    assert.equal(validateSurvey(answers, '', undefined, detail), { a: answers });
+    assert.equal(validateSurvey(answers, '', { wantOther: detail }), { a: answers });
   for (const want of [
     undefined,
     ['widgets'],
     'other',
     ['widgets', 'home-assistant', 'linux-packages', 'other'],
   ])
-    assert.equal(validateSurvey({ want }, '', undefined, 'MIDI support').wantOther, undefined);
+    assert.equal(validateSurvey({ want }, '', { wantOther: 'MIDI support' }).wantOther, undefined);
+});
+await test('single-choice Other detail trims, caps and requires exact Other selection', () => {
+  for (const [id, field, wrong] of [
+    ['found', 'foundOther', ['friend', 'search-other', 'ai-other']],
+    ['support', 'supportOther', ['share', 'no']],
+  ] as const) {
+    const answers = { [id]: 'other' };
+    assert.equal(validateSurvey(answers, '', { [field]: '  Hacker News  ' })[field], 'Hacker News');
+    assert.equal(validateSurvey(answers, '', { [field]: 'x'.repeat(101) }), {
+      a: answers,
+      [field]: 'x'.repeat(100),
+    });
+    for (const detail of ['   ', null, 42, ['Hacker News']])
+      assert.equal(validateSurvey(answers, '', { [field]: detail }), { a: answers });
+    for (const answer of [undefined, ['other'], ...wrong])
+      assert.equal(validateSurvey({ [id]: answer }, '', { [field]: 'HN' })[field], undefined);
+  }
+});
+await test('other issue trims, caps and is dropped by Nothing or the cap', () => {
+  const answers = { pain: ['setup', 'other'] };
+  assert.equal(validateSurvey(answers, '', { painOther: '  Tray icon  ' }).painOther, 'Tray icon');
+  assert.equal(validateSurvey(answers, '', { painOther: 'x'.repeat(101) }), {
+    a: answers,
+    painOther: 'x'.repeat(100),
+  });
+  for (const detail of ['   ', null, 42, ['Tray icon']])
+    assert.equal(validateSurvey(answers, '', { painOther: detail }), { a: answers });
+  for (const pain of [
+    undefined,
+    ['setup'],
+    'other',
+    ['other', 'nothing'],
+    ['setup', 'disconnects', 'image-lag', 'other'],
+  ])
+    assert.equal(validateSurvey({ pain }, '', { painOther: 'Tray icon' }).painOther, undefined);
 });
 await test('prefill maps settings without exposing private values', () => {
   const settings: Settings = {
@@ -354,8 +395,7 @@ await test('failed sends preserve nudge; success validates and persists only sta
     context,
     { rating: '4', 'use-for': ['other'], want: ['other'] },
     ' hello ',
-    ' Teaching ',
-    ' MIDI support ',
+    { useForOther: ' Teaching ', wantOther: ' MIDI support ' },
   );
   assert.equal((await survey.view()).nudge, true);
   assert.equal((await survey.submit(payload)).sent, false);
@@ -404,17 +444,20 @@ await test('Other requires non-whitespace detail before outbound send', async ()
       return Promise.resolve({ sent: true });
     },
   });
-  for (const [id, field] of [
-    ['use-for', 'useForOther'],
-    ['want', 'wantOther'],
-  ]) {
+  for (const [id, answer, field] of [
+    ['use-for', ['other'], 'useForOther'],
+    ['want', ['other'], 'wantOther'],
+    ['found', 'other', 'foundOther'],
+    ['pain', ['other'], 'painOther'],
+    ['support', 'other', 'supportOther'],
+  ] as const) {
     for (const detail of [undefined, '', ' \n ', null, 42]) {
       assert.equal(
         await survey.submit({
           sv: SURVEY_VERSION,
           ...context,
-          a: { [id!]: ['other'] },
-          [field!]: detail,
+          a: { [id]: answer },
+          [field]: detail,
         }),
         { sent: false, reason: 'rejected' },
       );
@@ -464,6 +507,7 @@ await test('short form sends only its 3 answers and strips other from want', asy
   assert.equal(JSON.parse(bodies[0]!), {
     sv: SURVEY_VERSION,
     ...context,
+    q: SHORT_QUESTIONS,
     a: { rating: '4', nps: '9', want: ['widgets'] },
     f: 'short',
   });
@@ -477,6 +521,9 @@ await test('short form sends only its 3 answers and strips other from want', asy
     { ...base, a: answers, c: 'hello' },
     { ...base, a: answers, wantOther: 'MIDI' },
     { ...base, a: answers, useForOther: 'x' },
+    { ...base, a: answers, foundOther: 'x' },
+    { ...base, a: answers, painOther: 'x' },
+    { ...base, a: answers, supportOther: 'x' },
     { ...base, f: 'full', a: answers },
     { ...base, f: 1, a: answers },
   ])
@@ -503,9 +550,13 @@ await test('payload without f keeps the full-survey path', async () => {
   assert.equal(JSON.parse(bodies[0]!), {
     sv: SURVEY_VERSION,
     ...context,
+    q: SURVEY_QUESTIONS.map((q) => q.id),
     a: { rating: '4' },
     c: 'hello',
   });
+  const source = { ...surveyPayload(context, { found: 'other' }, ''), foundOther: '  HN  ' };
+  assert.equal(await survey.submit(source), { sent: true });
+  assert.equal((JSON.parse(bodies[1]!) as { foundOther?: string }).foundOther, 'HN');
 });
 await test('dismiss persists 30-day snooze and permanent opt-out', async () => {
   const settings = new PersistedSettings(`${ROOT}/dismiss`);

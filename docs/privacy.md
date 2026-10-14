@@ -121,10 +121,11 @@ environment section.
 A third outbound call happens only when you press **Send** in the feedback survey.
 Open it from Settings → Maintenance → **Give feedback**, About, or the footer's
 **Feedback** link. Every question can be skipped. Before sending, **What gets sent**
-shows the exact JSON body: survey version, your selected answers, an optional comment
+shows the exact JSON body: survey version, the ids of the questions shown, your selected answers, an optional comment
 (trimmed and capped at 280 characters), a description required when you select **Other** in
-**What do you use it for?** (trimmed and capped at 300 characters) or
-**What should come next?** (trimmed and capped at 100 characters), DeckBridge version,
+**What do you use it for?** (trimmed and capped at 300 characters) or in
+**How did you find DeckBridge?**, **What bothers you most?**, **What should come next?** or
+**Would you support DeckBridge?** (each trimmed and capped at 100 characters), DeckBridge version,
 OS family and major version, and connected model ids. Nothing leaves your machine before Send.
 
 Unlike the daily ping, each survey response is **stored as one row** by the same

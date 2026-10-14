@@ -11,13 +11,23 @@ test('feedback stepper submits locally but mock never sends', async ({ page, req
   await expect(modal).toHaveCount(1);
   await click(modal.getByRole('radio', { name: 'Good', exact: true }));
   await expect(modal.locator('.survey-q')).toHaveText('Did it do what you expected?');
-  for (let i = 0; i < 3; i++) await click(modal.getByRole('button', { name: 'Skip', exact: true }));
+  await click(modal.getByRole('button', { name: 'Skip', exact: true }));
+  await click(modal.getByRole('radio', { name: 'Other', exact: true }));
+  await expect(modal.getByRole('textbox', { name: 'Other source', exact: true })).toBeFocused();
+  await expect(modal.getByRole('button', { name: 'Next ›', exact: true })).toBeDisabled();
+  await modal.getByRole('textbox', { name: 'Other source', exact: true }).fill('z'.repeat(100));
+  await click(modal.getByRole('button', { name: 'Next ›', exact: true }));
+  await click(modal.getByRole('button', { name: 'Skip', exact: true }));
   await click(modal.getByRole('checkbox', { name: 'Other', exact: true }));
   await expect(modal.getByRole('textbox', { name: 'Other use', exact: true })).toBeFocused();
   await expect(modal.getByRole('button', { name: 'Next ›', exact: true })).toBeDisabled();
   await modal.getByRole('textbox', { name: 'Other use', exact: true }).fill('x'.repeat(300));
   await click(modal.getByRole('button', { name: 'Next ›', exact: true }));
-  for (let i = 0; i < 2; i++) await click(modal.getByRole('button', { name: 'Skip', exact: true }));
+  await click(modal.getByRole('button', { name: 'Skip', exact: true }));
+  await click(modal.getByRole('checkbox', { name: 'Other', exact: true }));
+  await expect(modal.getByRole('textbox', { name: 'Other issue', exact: true })).toBeFocused();
+  await modal.getByRole('textbox', { name: 'Other issue', exact: true }).fill('w'.repeat(100));
+  await click(modal.getByRole('button', { name: 'Next ›', exact: true }));
   await click(modal.getByRole('checkbox', { name: 'Other', exact: true }));
   const next = modal.getByRole('button', { name: 'Next ›', exact: true });
   await expect(modal.getByRole('textbox', { name: 'Other request', exact: true })).toBeFocused();
@@ -31,10 +41,24 @@ test('feedback stepper submits locally but mock never sends', async ({ page, req
   await click(modal.getByRole('checkbox', { name: 'Other', exact: true }));
   await modal.getByRole('textbox', { name: 'Other request', exact: true }).fill('y'.repeat(100));
   await click(modal.getByRole('button', { name: 'Next ›', exact: true }));
-  for (let i = 0; i < 3; i++) await click(modal.getByRole('button', { name: 'Skip', exact: true }));
+  await click(modal.getByRole('button', { name: 'Skip', exact: true }));
+  await click(modal.getByRole('radio', { name: 'Other', exact: true }));
+  await modal.getByRole('textbox', { name: 'Other support', exact: true }).fill('v'.repeat(100));
+  await click(modal.getByRole('button', { name: 'Next ›', exact: true }));
+  await click(modal.getByRole('button', { name: 'Skip', exact: true }));
   await expect(modal.locator('.survey-q')).toHaveText('Review your feedback');
   const preview = JSON.parse((await modal.locator('#survey-preview').textContent()) ?? '{}');
-  expect(preview.a).toEqual({ rating: '4', 'use-for': ['other'], want: ['other'] });
+  expect(preview.a).toEqual({
+    rating: '4',
+    found: 'other',
+    'use-for': ['other'],
+    pain: ['other'],
+    want: ['other'],
+    support: 'other',
+  });
+  expect(preview.foundOther).toBe('z'.repeat(100));
+  expect(preview.painOther).toBe('w'.repeat(100));
+  expect(preview.supportOther).toBe('v'.repeat(100));
   expect(preview.useForOther).toBe('x'.repeat(300));
   expect(preview.wantOther).toBe('y'.repeat(100));
   const reply = page.waitForResponse(

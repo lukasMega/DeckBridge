@@ -39,16 +39,34 @@ function validAnswer(q: SurveyQuestion, value: unknown): string | string[] | und
   return values.length ? values : undefined;
 }
 
-function otherText(answer: string | string[] | undefined, text: unknown, max: number): string {
-  return answer?.includes('other') && typeof text === 'string' ? text.trim().slice(0, max) : '';
+type Answer = SurveyAnswers[string] | undefined;
+
+// Exact match: a single answer is a string, and `search-other` must not count.
+export function picksOther(answer: Answer): boolean {
+  return [answer].flat().includes('other');
 }
+
+function otherText(answer: Answer, text: unknown, max: number): string {
+  return picksOther(answer) && typeof text === 'string' ? text.trim().slice(0, max) : '';
+}
+
+/** Required Other descriptions: question id, payload field, cap.
+ *  OTHER_DETAILS (web/client/simple/survey-steps.tsx) mirrors the caps. */
+export const OTHER_FIELDS = [
+  ['found', 'foundOther', 100],
+  ['use-for', 'useForOther', 300],
+  ['pain', 'painOther', 100],
+  ['want', 'wantOther', 100],
+  ['support', 'supportOther', 100],
+] as const;
+type OtherField = (typeof OTHER_FIELDS)[number][1];
+export type OtherTexts = Partial<Record<OtherField, unknown>>;
 
 export function validateSurvey(
   raw: unknown,
   comment: unknown,
-  useForOther?: unknown,
-  wantOther?: unknown,
-): Pick<SurveyPayload, 'a' | 'c' | 'useForOther' | 'wantOther'> {
+  others: OtherTexts = {},
+): Pick<SurveyPayload, 'a' | 'c' | OtherField> {
   const a: SurveyAnswers = {};
   const input = typeof raw === 'object' && raw !== null ? (raw as Record<string, unknown>) : {};
   for (const q of SURVEY_QUESTIONS) {
@@ -56,14 +74,12 @@ export function validateSurvey(
     if (value !== undefined) a[q.id] = value;
   }
   const c = typeof comment === 'string' ? comment.trim().slice(0, 280) : '';
-  const detail = otherText(a['use-for'], useForOther, 300);
-  const request = otherText(a.want, wantOther, 100);
-  return {
-    a,
-    ...(c ? { c } : {}),
-    ...(detail ? { useForOther: detail } : {}),
-    ...(request ? { wantOther: request } : {}),
-  };
+  const details: Partial<Record<OtherField, string>> = {};
+  for (const [id, field, max] of OTHER_FIELDS) {
+    const text = otherText(a[id], others[field], max);
+    if (text) details[field] = text;
+  }
+  return { a, ...(c ? { c } : {}), ...details };
 }
 
 export function surveyContext(input: PayloadInput): SurveyContext {
@@ -75,13 +91,13 @@ export function surveyPayload(
   context: SurveyContext,
   answers: unknown,
   comment: unknown,
-  useForOther?: unknown,
-  wantOther?: unknown,
+  others?: OtherTexts,
 ): SurveyPayload {
   return {
     sv: SURVEY_VERSION,
     ...context,
-    ...validateSurvey(answers, comment, useForOther, wantOther),
+    q: SURVEY_QUESTIONS.map((q) => q.id),
+    ...validateSurvey(answers, comment, others),
   };
 }
 
@@ -137,7 +153,7 @@ export function shortSurveyPayload(
   if (Array.isArray(raw.want)) raw.want = raw.want.filter((id) => id !== 'other');
   const { a } = validateSurvey(raw, null);
   if (!SHORT_QUESTIONS.every((id) => a[id] !== undefined)) return undefined;
-  return { sv: SURVEY_VERSION, ...context, a, f: 'short' };
+  return { sv: SURVEY_VERSION, ...context, q: SHORT_QUESTIONS, a, f: 'short' };
 }
 
 function surveyOpen(settings: Settings, now: Date): boolean {

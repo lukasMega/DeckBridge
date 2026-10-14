@@ -13,25 +13,41 @@ import {
   SurveyThanks,
 } from './survey-steps.js';
 
+// Question id -> payload field of its required Other description.
+const OTHER_FIELDS = {
+  found: 'foundOther',
+  'use-for': 'useForOther',
+  pain: 'painOther',
+  want: 'wantOther',
+  support: 'supportOther',
+} as const;
+type OtherField = (typeof OTHER_FIELDS)[keyof typeof OTHER_FIELDS];
+
 function surveyPayload(
   definition: SurveyDefinition,
   answers: SurveyAnswers,
   drafts: Record<string, string>,
   comment: string,
 ): SurveyPayload {
-  // A draft survives Back, but is sent only while 'other' is still picked.
-  const other = (id: string): string =>
-    answers[id]?.includes('other') ? (drafts[id] ?? '').trim() : '';
-  const useForOther = other('use-for');
-  const wantOther = other('want');
+  const details: Partial<Record<OtherField, string>> = {};
+  for (const [id, field] of Object.entries(OTHER_FIELDS)) {
+    // A draft survives Back, but is sent only while 'other' is still picked.
+    const text = picksOther(answers[id]) ? (drafts[id] ?? '').trim() : '';
+    if (text) details[field] = text;
+  }
   return {
     sv: definition.sv,
     ...definition.context,
+    q: definition.questions.map((q) => q.id),
     a: answers,
     ...(comment.trim() ? { c: comment.trim() } : {}),
-    ...(useForOther ? { useForOther } : {}),
-    ...(wantOther ? { wantOther } : {}),
+    ...details,
   };
+}
+
+// Exact match: a single answer is a string, and `search-other` must not count.
+function picksOther(answer: string | string[] | undefined): boolean {
+  return [answer].flat().includes('other');
 }
 
 /** A banner face tap lands after `rating`; a saved draft is merged in, never overwritten. */
@@ -60,7 +76,7 @@ function startState(definition: SurveyDefinition, rating: string | undefined) {
 }
 
 function missingDetailIds(answers: SurveyAnswers, drafts: Record<string, string>): string[] {
-  return ['use-for', 'want'].filter((id) => answers[id]?.includes('other') && !drafts[id]?.trim());
+  return Object.keys(OTHER_FIELDS).filter((id) => picksOther(answers[id]) && !drafts[id]?.trim());
 }
 
 function stepTitle({ questions }: SurveyDefinition, step: number): string {
@@ -131,7 +147,9 @@ function ReviewStep({
       <ReviewList
         questions={definition.questions}
         answers={answers}
-        others={{ 'use-for': payload.useForOther, want: payload.wantOther }}
+        others={Object.fromEntries(
+          Object.entries(OTHER_FIELDS).map(([id, field]) => [id, payload[field]]),
+        )}
         comment={comment}
         busy={busy}
         onEdit={onEdit}
