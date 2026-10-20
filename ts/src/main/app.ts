@@ -391,6 +391,7 @@ if (__MOCK_BUILD__)
 const BANNER_RULE = '══════════════════════════════════════════════';
 for (const [level, line] of [
   ['info', BANNER_RULE],
+  ['info', `version      : ${__VERSION__}`],
   ['info', `bundle built : ${__BUILD_TIME__}`],
   ['info', `started      : ${new Date().toISOString()}`],
   ['info', `cpus         : ${tjs.system.cpus.length}x ${tjs.system.cpus[0]?.model ?? '?'}`],
