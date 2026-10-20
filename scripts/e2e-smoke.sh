@@ -28,6 +28,17 @@ OUT="$WORK/stdout.log"; ERR="$WORK/stderr.log"
 # must be gone (stripping DECKBRIDGE_TRAY_BIN below is not enough on its own).
 rm -f "$APPDIR/deckbridge-tray"
 
+# Linux zip: the menu-entry script writes an entry that runs this binary (into a scratch HOME).
+if [ "$(uname -s)" = Linux ]; then
+  DESKTOP_HOME="$WORK/home"; mkdir -p "$DESKTOP_HOME"
+  HOME="$DESKTOP_HOME" XDG_DATA_HOME='' "$APPDIR/install-desktop.sh" >/dev/null \
+    || { echo "FAIL: install-desktop.sh failed"; exit 1; }
+  grep -qxF "Exec=\"$APPDIR/deckbridge\" --open" "$DESKTOP_HOME/.local/share/applications/deckbridge.desktop" \
+    || { echo "FAIL: desktop entry does not run $APPDIR/deckbridge"; exit 1; }
+  [ -s "$DESKTOP_HOME/.local/share/icons/hicolor/128x128/apps/deckbridge.png" ] \
+    || { echo "FAIL: desktop icon not installed"; exit 1; }
+fi
+
 # Boot in real mode — no HID device required.
 # env -u: strip dev env vars (mise [env] sets them) so the binary exercises
 # the embedded-extraction path, exactly like an end-user machine.
@@ -90,6 +101,14 @@ fi
 # Startup banner present on stdout
 grep -q 'startup complete' "$OUT" \
   || { echo "FAIL: no startup-complete marker in stdout"; kill "$APP_PID"; exit 1; }
+
+# Banner version matches the zip name (package.mjs: deckbridge-v<version>-<platform>.zip);
+# a dev zip (`mise run package -- dev`) names no version, so only require the line.
+ACTUAL_VERSION="$(sed -nE 's/.*\] version {6}: (.+)$/\1/p' "$OUT" | head -1)"
+EXPECTED_VERSION="$(basename "$ZIP" | sed -nE 's/^deckbridge(-advanced)?-v(.+)-(macos|linux|windows)-(x86_64|arm64)\.zip$/\2/p')"
+[ -n "$ACTUAL_VERSION" ] || { echo "FAIL: no version line in startup banner"; kill "$APP_PID"; exit 1; }
+[ -z "$EXPECTED_VERSION" ] || [ "$ACTUAL_VERSION" = "$EXPECTED_VERSION" ] \
+  || { echo "FAIL: banner version '$ACTUAL_VERSION' != zip version '$EXPECTED_VERSION'"; kill "$APP_PID"; exit 1; }
 
 # Clean shutdown via SIGTERM
 kill -TERM "$APP_PID"

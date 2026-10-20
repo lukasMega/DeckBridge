@@ -50,5 +50,11 @@ $mockRoute = Invoke-WebRequest -Method Post -Uri "$baseUrl/api/mock/dial" `
   -Body '{}' -ContentType 'application/json' `
   -UseBasicParsing -SkipHttpErrorCheck -TimeoutSec 15
 if ($mockRoute.StatusCode -ne 404) { throw "mock route present in release" }
-Write-Host "Smoke test OK: real state API responded; mock route absent"
+# Runs before packaging, so there is no zip name: compare with the version build.mjs stamps in.
+$expectedVersion = (Get-Content ts/package.json -Raw | ConvertFrom-Json).version
+$banner = Select-String -Path "smoke-stdout.log" -Pattern '\] version {6}: (.+)$' | Select-Object -First 1
+if (-not $banner) { throw "no version line in startup banner" }
+$bannerVersion = $banner.Matches[0].Groups[1].Value
+if ($bannerVersion -ne $expectedVersion) { throw "banner version '$bannerVersion' != ts/package.json '$expectedVersion'" }
+Write-Host "Smoke test OK: real state API responded; mock route absent; version $bannerVersion"
 Stop-Process -Id $proc.Id -Force

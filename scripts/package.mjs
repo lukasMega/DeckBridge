@@ -112,6 +112,13 @@ if (includeTray) {
   console.log('Excluding system tray (INCLUDE_TRAY=0): omitting deckbridge-tray + icons');
 }
 
+// Linux has no app bundle: a per-user script adds the desktop menu entry instead.
+if (process.platform === 'linux') {
+  copyFileSync(join(scriptDir, 'packaging', 'linux', 'install-desktop.sh'), join(distDir, 'install-desktop.sh'));
+  chmodSync(join(distDir, 'install-desktop.sh'), 0o755);
+  copyFileSync(join(root, 'src-tauri', 'icons', '128x128.png'), join(distDir, 'deckbridge.png'));
+}
+
 // Bundle third-party licenses: hidapi and the widget fonts are embedded in the binary,
 // and the Helvetica notice must travel with every copy.
 for (const name of ['LICENSE-hidapi.txt', 'LICENSE-spleen.txt', 'LICENSE-helvetica.txt', 'LICENSE-barlow.txt']) {
