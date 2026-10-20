@@ -108,6 +108,10 @@ A web page at <http://localhost:3000> shows your deck's keys and a live log.
 Full install and troubleshooting steps:
 [Getting Started](https://lukasmega.github.io/DeckBridge/getting-started).
 
+**Privacy:** DeckBridge checks GitHub for updates and sends one aggregate usage ping a day
+(no ids, no serials); each can be turned off. See
+[what is sent](https://lukasmega.github.io/DeckBridge/privacy#the-deckbridge-app).
+
 ## CLI usage
 
 ```
