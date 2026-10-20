@@ -101,6 +101,16 @@ curl on the system (Linux minimal installs) silently disables the check — it n
 blocks startup or shows an error, but the diagnostics report's **update check** section
 will say so.
 
+## Daily usage ping
+
+The [daily usage ping](./privacy.md#the-deckbridge-app) is silent by design: nothing in the
+UI, nothing in the log at the default level, and a failed send is never reported. With
+[debug logging](#turning-on-debug-logging) on, an attempt logs `[dailyPing] payload {…}`
+(exactly what is sent) or `[dailyPing] suppressed (<reason>)`. No line means it is off in
+`settings.json` or today's (UTC) ping already went out. The first attempt comes 5 minutes
+after start. Turn it off with `"a7s": false` in `settings.json`, `--no-daily-ping`, or
+`DO_NOT_TRACK=1`; `"updateCheck": false` does not affect it.
+
 ## Restarting the Elgato app
 
 The Elgato Stream Deck app only re-dials network docks on launch, so a dock that appears
