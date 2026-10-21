@@ -13,7 +13,12 @@ import { CoraDock } from '../src/main/cora-dock.js';
 import type { Dock } from '../src/main/dock.js';
 import type { DeviceModel, DeviceModelOverride } from '../src/devices/driver.js';
 import type { CommEntry, DialEvent, KeyState, TouchInputEvent } from '../src/shared/types.js';
-import { ELGATO_TCP_PORT, MAX_DOCKS, MAX_MULTI_DECK_DOCKS } from '../src/shared/types.js';
+import {
+  ELGATO_TCP_PORT,
+  MAX_DOCKS,
+  MAX_MULTI_DECK_DOCKS,
+  MOCK_KEY_PRESS_DURATION_MS,
+} from '../src/shared/types.js';
 import type { ChildGeometry } from '../src/devices/driver.js';
 import type { DeviceConfig } from '../src/cora/types.js';
 import type { ElgatoServer } from '../src/cora/primary-server.js';
@@ -889,7 +894,10 @@ class FactoryChildServer extends EventEmitter {
     return Promise.resolve();
   }
   setChildGeometry(): void {}
-  sendKeyEvent(): void {}
+  sendKeyEventCalls: { keyIndex: number; state: KeyState }[] = [];
+  sendKeyEvent(keyIndex: number, state: KeyState): void {
+    this.sendKeyEventCalls.push({ keyIndex, state });
+  }
 }
 
 /** Build a scan-enabled DriverManager: a CoraDock factory (records
@@ -958,6 +966,7 @@ function setupCoord(maxDocks: number = MAX_MULTI_DECK_DOCKS) {
   return {
     driverManager,
     usb,
+    childServer,
     identities,
     serversByIndex,
     drivers,
@@ -1180,6 +1189,29 @@ await test('C8b. dockForDevice finds the dock serving a device key (mDNS rename)
   assert.deepEqual(renamed, ['Desk B'], 'the extra re-advertises');
   assert.equal(driverManager.getDockStatuses()[1]?.mdnsServiceName, 'Desk B');
   assert.ok(getDocksChangedCalls() > before, 'status change notified');
+});
+
+await test('C8c. simulateKeyPress presses on the addressed dock only; no dock there → false', async () => {
+  const { driverManager, childServer, serversByIndex, present } = setupCoord();
+  present.add(DEFAULT_MODEL.id);
+  present.add(MIRABOX_293_MODEL.id);
+  await driverManager.tryRealConnect();
+  await driverManager.__scanOnce();
+  const extra = serversByIndex.get(1)!.childServer;
+
+  assert.equal(driverManager.simulateKeyPress(0, 3), true, 'primary');
+  assert.equal(driverManager.simulateKeyPress(1, 2), true, 'extra');
+  assert.equal(driverManager.simulateKeyPress(2, 2), false, 'no dock at index 2');
+  await new Promise((r) => setTimeout(r, MOCK_KEY_PRESS_DURATION_MS + 60));
+
+  assert.deepEqual(childServer.sendKeyEventCalls, [
+    { keyIndex: 3, state: 'down' },
+    { keyIndex: 3, state: 'up' },
+  ]);
+  assert.deepEqual(extra.sendKeyEventCalls, [
+    { keyIndex: 2, state: 'down' },
+    { keyIndex: 2, state: 'up' },
+  ]);
 });
 
 await test('D1. two units of the SAME model → primary claims one path, extra opens the other', async () => {

@@ -1,6 +1,6 @@
 import { gotoApp } from '../../helpers/goto.js';
-import { click } from '../../helpers/click.js';
-import { connectElgato, expect, test } from '../../fixtures/app.js';
+import { click, doubleClick } from '../../helpers/click.js';
+import { connectElgato, expect, nextFrame, test } from '../../fixtures/app.js';
 
 test.describe('paired with the Elgato app (fake CORA client)', () => {
   test('connected summary dismisses without hiding controls and returns after reconnect', async ({
@@ -32,6 +32,28 @@ test.describe('paired with the Elgato app (fake CORA client)', () => {
       await expect(stage.getByRole('button', { name: 'Hide connection status' })).toHaveCount(1);
     } finally {
       await reconnected.close();
+    }
+  });
+
+  test('double-clicking a preview key presses it (click-to-press)', async ({
+    page,
+    request,
+    app,
+  }) => {
+    await gotoApp(page, `${app.baseURL}/`);
+    const elgato = await connectElgato(request, app.baseURL, app.childPort);
+    try {
+      // app-server.ts turns the click-to-press setting on; pairing makes the keys clickable.
+      const cell = page.locator('#stage .key-cell.clickable[data-key="3"]');
+      await expect(cell).toHaveCount(1);
+      const frame = await nextFrame(
+        app.baseURL,
+        (f) => f.event === 'keyEvent' && f.data.mk2Index === 3,
+        () => doubleClick(cell),
+      );
+      expect(frame.data.state).toBe('down');
+    } finally {
+      await elgato.close();
     }
   });
 });
