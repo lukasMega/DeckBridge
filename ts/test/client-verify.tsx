@@ -488,7 +488,7 @@ async function runDeckPicture(root: HTMLElement, check: Check): Promise<void> {
         'Dashed: DeckBridge keys, dials, touch strip. Not part of this check.',
       ) &&
       svg?.getAttribute('aria-label')?.startsWith('Keys 1–8 in 2 rows of 4.') === true,
-    'AKP05E: caption, legend and a summarising label',
+    'AKP05E: caption, legend and a summarizing label',
   );
   await act(() => render(<DeckPicture spec={SPEC} />, root));
   check(
