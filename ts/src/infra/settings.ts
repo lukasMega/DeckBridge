@@ -34,32 +34,21 @@ import {
   isBrowserDeckProfile,
 } from '../devices/virtual/browser-deck-profiles.js';
 import {
+  clampAutoRestartDelayS,
+  ELGATO_AUTO_RESTART_DELAY_S_DEFAULT,
   sanitizeActiveDecks,
   sanitizeExtensionGrants,
   sanitizeModelOverrides,
+  sanitizeVerifyDismissed,
   sanitizeVirtualDeck,
 } from './settings-sanitize.js';
 import { ACCESS_TOKENS_MAX, isPushTokenRecord, type PushTokenRecord } from './push-tokens.js';
 import { DockPrefs, defaultRuntimePrefs } from './dock-prefs.js';
 import type { DockPrefsStore } from './dock-prefs.js';
 
-/** Grace-period bounds for elgatoAutoRestartDelayS (see
- *  .claude/plans/2026-09-27_auto-restart-elgato-app.md §4.2). */
 /** Ids land in the daily ping, so keep them to a closed shape (infra can't import web/contract). */
 const DOCS_TOPIC_ID = /^[a-z0-9-]{1,32}$/;
 const MAX_DOCS_SEEN = 32;
-
-const ELGATO_AUTO_RESTART_DELAY_S_MIN = 3;
-const ELGATO_AUTO_RESTART_DELAY_S_MAX = 120;
-const ELGATO_AUTO_RESTART_DELAY_S_DEFAULT = 10;
-
-/** Clamp a persisted/incoming grace-period value into the accepted range. */
-function clampAutoRestartDelayS(delayS: number): number {
-  return Math.min(
-    ELGATO_AUTO_RESTART_DELAY_S_MAX,
-    Math.max(ELGATO_AUTO_RESTART_DELAY_S_MIN, delayS),
-  );
-}
 
 /** Optional per-device fields shared by stripInvalidDeviceSettings and
  *  hasValidDeviceSettings — one table so both stay in sync and neither trips
@@ -170,6 +159,7 @@ export class PersistedSettings implements DockPrefsStore {
   a7sDay: string | undefined = undefined;
   survey: Settings['survey'] = {};
   docsSeen: string[] = []; // Docs topics opened since last ping.
+  verifyDismissed: string[] = []; // Model ids the verify wizard is never offered for again.
   /** Elgato-app auto-restart opt-out + grace delay (see elgato-auto-restart.ts).
    *  undefined = enabled / default delay. */
   elgatoAutoRestart: boolean | undefined = undefined;
@@ -231,6 +221,7 @@ export class PersistedSettings implements DockPrefsStore {
         .slice(0, MAX_DOCS_SEEN);
     }
     this.loadAutoRestart(saved);
+    this.verifyDismissed = sanitizeVerifyDismissed(saved.verifyDismissed);
     this.extensionGrants = sanitizeExtensionGrants(saved.extensions);
     this.modelOverrides = sanitizeModelOverrides(saved.modelOverrides);
     if (Array.isArray(saved.accessTokens)) {
@@ -438,6 +429,12 @@ export class PersistedSettings implements DockPrefsStore {
     this.persist();
   }
 
+  /** Replace the verify-wizard opt-outs (dismiss "never", a save, a settings import). */
+  setVerifyDismissed(ids: string[]): void {
+    this.verifyDismissed = ids;
+    this.persist();
+  }
+
   // Elgato-app auto-restart (see main/elgato-auto-restart.ts)
 
   /** Persist the auto-restart opt-out + grace delay (WebUI "Elgato app" panel). An
@@ -513,6 +510,7 @@ export class PersistedSettings implements DockPrefsStore {
       ...(this.updateState ? { updateState: this.updateState } : {}),
       ...(this.a7s !== undefined ? { a7s: this.a7s } : {}),
       ...(this.a7sDay ? { a7sDay: this.a7sDay } : {}),
+      ...(this.verifyDismissed.length > 0 ? { verifyDismissed: this.verifyDismissed } : {}),
       ...(this.elgatoAutoRestart !== undefined
         ? { elgatoAutoRestart: this.elgatoAutoRestart }
         : {}),

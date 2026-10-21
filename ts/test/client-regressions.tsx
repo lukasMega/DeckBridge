@@ -29,6 +29,7 @@ import { runSurvey } from './client-survey.js';
 import { runStatistics } from './client-statistics.js';
 import { runModalShells } from './client-modal.js';
 import { runPagesPanel } from './client-pages.js';
+import { runVerifyWizard } from './client-verify.js';
 import { StandbyPanel } from '../src/web/client/simple/standby-panel.js';
 import type { StandbyView } from '../src/web/contract-standby.js';
 import { ElgatoAppPanel } from '../src/web/client/simple/elgato-app-panel.js';
@@ -265,6 +266,7 @@ async function run(): Promise<void> {
   await runDocsLinks(root, check);
   await runModalShells(root, check);
   await runSurvey(root, check);
+  await runVerifyWizard(root, check);
   await runStatistics(check);
   await runKeymapAndDiagnosticsPanels();
   await runMultiDockCards();

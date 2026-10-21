@@ -18,6 +18,7 @@ import type { EncodersController } from './encoders-controller.js';
 import type { ExtraKeysController } from './extra-keys-controller.js';
 import type { PagesController } from './pages-controller.js';
 import type { ModelOverridesController } from './model-overrides-controller.js';
+import type { VerifyController } from './verify-controller.js';
 import type { LoggingController } from './logging-controller.js';
 import type { ExtensionsController } from './extensions-controller.js';
 import type { PushController } from './push-controller.js';
@@ -85,6 +86,8 @@ export interface ControllerHost {
   trySelectDock(index: unknown): ReqError | null;
   /** Re-push the selected dock's per-device values (none are in the status snapshot). */
   broadcastSelected(): void;
+  /** Re-broadcast the status snapshot (a field outside the dock list changed). */
+  publishStatus(): void;
 }
 
 // Wire DTOs shared with the browser live in the `web-contract` leaf
@@ -117,6 +120,7 @@ export interface WebUIControllers {
   readonly extraKeys: ExtraKeysController;
   readonly pages: PagesController;
   readonly modelOverrides: ModelOverridesController;
+  readonly verify: VerifyController;
   readonly logging: LoggingController;
   readonly updates: UpdateController;
   readonly survey: SurveyController;

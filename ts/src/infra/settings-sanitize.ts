@@ -50,6 +50,27 @@ export function sanitizeVirtualDeck(
   return { enabled: v.enabled, profile };
 }
 
+/** Grace-period bounds for elgatoAutoRestartDelayS (see
+ *  .claude/plans/2026-09-27_auto-restart-elgato-app.md §4.2). */
+const ELGATO_AUTO_RESTART_DELAY_S_MIN = 3;
+const ELGATO_AUTO_RESTART_DELAY_S_MAX = 120;
+export const ELGATO_AUTO_RESTART_DELAY_S_DEFAULT = 10;
+
+/** Clamp a persisted/incoming grace-period value into the accepted range. */
+export function clampAutoRestartDelayS(delayS: number): number {
+  return Math.min(
+    ELGATO_AUTO_RESTART_DELAY_S_MAX,
+    Math.max(ELGATO_AUTO_RESTART_DELAY_S_MIN, delayS),
+  );
+}
+
+/** A saved `verifyDismissed` list: registry model ids only, deduped. */
+export function sanitizeVerifyDismissed(v: unknown): string[] {
+  if (!Array.isArray(v)) return [];
+  const ids = v.filter((id): id is string => typeof id === 'string' && findModelById(id) !== null);
+  return [...new Set(ids)];
+}
+
 /** A saved `activeDecks` list: non-empty strings, deduped, at most `max` (the free-tier cap). */
 export function sanitizeActiveDecks(v: unknown, max: number): string[] {
   if (!Array.isArray(v)) return [];

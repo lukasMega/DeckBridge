@@ -25,6 +25,7 @@ import type { DeviceIdentitySettings } from '../infra/settings-store.js';
 import { advertisedGeometry, advertisedModel, advertisedTouchStrip } from '../devices/registry.js';
 import { deviceInputToExtraKey, deviceInputToMk2Index } from '../shared/key-map.js';
 import { emulationProfiles } from '../devices/model-overrides.js';
+import { TESTED_MODEL_IDS } from '../assets/tested-models.js';
 import type {
   DeviceDriver,
   DockDriver,
@@ -122,6 +123,7 @@ export function buildDockStatus(s: DockStatusInput): DockStatus {
     ...advertisedTouchStrip(model),
     modelId: model.id,
     modelName: model.name,
+    tested: TESTED_MODEL_IDS.includes(model.id),
     keyCount: model.keyCount,
     columns: model.columns,
     rows: model.rows,

@@ -2,6 +2,7 @@
 // else. Built only from the tuning view and key events the panel already holds, so settings
 // commands and unrelated settings can never leak into it.
 import type { DeviceOverridesView, KeyEvent } from '../ui-types.js';
+import type { VerifyReport } from './verify-wizard/verify-report.js';
 
 type DeviceOverrides = DeviceOverridesView['overrides'];
 
@@ -18,6 +19,8 @@ export interface BugReportExport {
   overrides: DeviceOverrides;
   advertiseAs?: string;
   rawInputSamples?: RawInputSample[];
+  /** Device verify wizard answers and results. */
+  verify?: VerifyReport;
 }
 
 /** Newest first in the store; a handful is enough to show the wire-id pattern. */
@@ -41,6 +44,7 @@ export function buildBugReport(
   appVersion: string,
   keyEvents: readonly KeyEvent[],
   inputModelId: string,
+  verify?: VerifyReport,
 ): BugReportExport {
   const advertiseAs = view.effective.cora?.advertiseAs;
   const samples = inputModelId === view.modelId ? inputSamples(keyEvents) : [];
@@ -50,5 +54,6 @@ export function buildBugReport(
     overrides: view.overrides,
     ...(advertiseAs ? { advertiseAs } : {}),
     ...(samples.length > 0 ? { rawInputSamples: samples } : {}),
+    ...(verify ? { verify } : {}),
   };
 }

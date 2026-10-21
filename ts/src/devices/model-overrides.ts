@@ -292,8 +292,10 @@ export function validateModelOverride(raw: unknown, model: DeviceModel): Validat
   const errors: Errors = [];
   rejectUnknownKeys(raw, SECTION_KEYS, 'override', errors);
   if (raw.image !== undefined) validateImage(raw.image, model, errors);
-  // An emulated grid has its own key count (Plus = 8), so coraToWireImage is sized to it.
-  const advertiseAs = isPlainObject(raw.cora) ? raw.cora.advertiseAs : undefined;
+  // An emulated grid has its own key count (Plus = 8), so coraToWireImage is sized to it;
+  // the registry's own advertiseAs selects one too (AKP05 family) when the override doesn't.
+  const advertiseAs =
+    (isPlainObject(raw.cora) ? raw.cora.advertiseAs : undefined) ?? model.cora.advertiseAs;
   const profile = selectedEmulation(model, advertiseAs)
     ? findModelById(advertiseAs as string)
     : null;

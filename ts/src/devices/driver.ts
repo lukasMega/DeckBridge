@@ -27,8 +27,8 @@ export interface DeviceImageSpec {
   format: 'jpeg' | 'bmp';
   width: number;
   height: number;
-  /** Extra CW rotation applied to the CORA JPEG before sending. CORA images are
-   *  upright, so MK.2 needs 180 and Mini 90. */
+  /** Extra CW rotation applied to the CORA image before sending. The app pre-orients
+   *  frames per advertised profile (web/server/verify-orientation.ts). */
   rotate: 0 | 90 | 180 | 270;
   flipH: boolean;
   flipV: boolean;

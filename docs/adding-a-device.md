@@ -71,6 +71,8 @@ No rebuild per guess: open **Settings → Device tuning** with the deck connecte
 Then **Copy overrides as JSON** and paste the values into your model file: the registry
 is the source of truth, runtime tuning is only the way to find the values. Without
 hardware access, ask the owner for **Copy for bug report** output instead.
+The [device check](./verify-device.md) report is the evidence to attach: it holds the
+owner's answers and the override JSON the wizard saved.
 
 ## 7. Capture a replay fixture
 

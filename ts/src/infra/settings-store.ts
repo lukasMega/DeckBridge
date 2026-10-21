@@ -169,6 +169,9 @@ export interface Settings {
   a7sDay?: string;
   /** Docs topics opened from the WebUI since the last daily ping; cleared when it is sent. */
   docsSeen?: string[];
+  /** Model ids the device verify wizard is never offered for again ("Don't ask again", or
+   *  saved once) — see web/server/verify-controller.ts. */
+  verifyDismissed?: string[];
   /** Restart the Elgato desktop app when a previously-paired dock connects and the
    *  app hasn't attached to it itself within the grace period. Absent = on (see
    *  .claude/plans/2026-09-27_auto-restart-elgato-app.md). */

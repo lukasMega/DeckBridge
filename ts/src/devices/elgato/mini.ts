@@ -2,7 +2,8 @@ import type { DeviceModel } from '../driver.js';
 
 // Mini key size: 80×80. BMP payload: 54 + 80*80*3 = 19254 bytes → 20 packets. Pixel transform
 // { colorMode:'bgr', rotate:90° CW } matches reference 6-key.ts:39 { colorMode:'bgr',
-// rotate:true, yFlip:true } which equals 90° CW. Assumes CORA images are upright (Phase 0 to confirm).
+// rotate:true, yFlip:true } which equals 90° CW. CORA BMPs bypass it: the app pre-orients
+// frames per advertised profile (web/server/verify-orientation.ts).
 export const MINI_MODEL: DeviceModel = {
   id: 'mini',
   vendor: 'elgato',

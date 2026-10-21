@@ -6,6 +6,7 @@ import type { WebUIServer } from '../web/server/index.js';
 import type { PersistedSettings } from '../infra/settings.js';
 import type { HidDiscovery } from './driver-manager-discovery.js';
 import type { WorkerPool } from './worker-pool.js';
+import type { DeviceModelOverride } from '../devices/driver.js';
 
 export type DriverMode = 'real' | 'mock';
 
@@ -21,6 +22,8 @@ export interface DriverManagerDeps {
   onDockConnected?: (dockIndex: number, deviceKey: string) => void;
   /** The Elgato child client attached to a dock. */
   onElgatoAttached?: (dockIndex: number) => void;
+  /** Verify-wizard draft (persisted ⊕ draft image) for a model id; wins over settings. */
+  draftOverrideFor?: (modelId: string) => DeviceModelOverride | undefined;
   /** Injected by tests (no hardware/FFI); default nativeHidDiscovery() / new WorkerPool(). */
   discovery?: HidDiscovery;
   pool?: WorkerPool;

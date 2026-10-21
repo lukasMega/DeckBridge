@@ -114,6 +114,8 @@ export class DockStandby {
   private muted = false;
   /** The sleep hook ran and no wake hook has yet (a replug must not skip it). */
   private wakePending = false;
+  /** Verify wizard session on this dock (setHeld). */
+  private held = false;
 
   constructor(private readonly deps: DockStandbyDeps) {
     this.clock = deps.clock ?? SYSTEM_CLOCK;
@@ -232,6 +234,14 @@ export class DockStandby {
     this.res = this.evaluate(this.clock.now());
   }
 
+  /** Verify wizard: forced awake (no dim, sleep or standby clock) while held. Release
+   *  re-evaluates without counting as activity, so the state from before comes back. */
+  setHeld(on: boolean): void {
+    if (this.held === on) return;
+    this.held = on;
+    this.recompute();
+  }
+
   /** Mirabox 'reinit': firmware reset the level (and woke the panel). */
   onDeviceReinit(): void {
     this.recompute(true);
@@ -305,6 +315,7 @@ export class DockStandby {
   }
 
   private evaluate(now: number): CapResult & { action: 'none' | 'clock' | 'off' } {
+    if (this.held) return { effective: this.requested, state: 'active', action: 'none' };
     const s = this.deps.settings();
     const idleFor = now - this.lastInputAt;
     const night = s.night ? this.inNight(s, now) : false;
@@ -492,8 +503,9 @@ export function createDockStandby(h: DockStandbyHost): DockStandby {
       paintStandby: (now) => painter.paint(now),
       wakeRepaint(afterSleep) {
         const driver = h.driver();
-        // In standby the clock painter redraws the grid right after, so skip the frames.
-        if (afterSleep && driver && standby.state !== 'standby') {
+        // In standby the clock painter redraws the grid right after, so skip the frames;
+        // a verify hold keeps the wizard's pattern instead.
+        if (afterSleep && driver && standby.state !== 'standby' && !h.frames.held) {
           sendSplashImages(driver);
           h.frames.repaint(driver, h.mirror);
         }

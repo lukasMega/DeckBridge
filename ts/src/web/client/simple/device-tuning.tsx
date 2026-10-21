@@ -15,6 +15,7 @@ import { postJson } from '../lib/ui-api.js';
 import { Feedback, useAsyncAction } from '../lib/ui-async.js';
 import { buildBugReport } from './bug-report-export.js';
 import { KeymapLearn } from './keymap-learn.js';
+import { VerifyButton } from './verify-wizard/verify-entry.js';
 import { ImageCropEditor } from './image-crop-editor.js';
 import { ImageFitHelp, fitApplicability, padFillApplies } from './image-fit-help.js';
 import type { FitApplicability, Size } from './image-fit-help.js';
@@ -206,6 +207,8 @@ function ProfileField({
 
 export function DeviceTuningPanel(): preact.JSX.Element {
   const selectedModelId = useStore(selectedModel);
+  // A wizard save changes the override behind this form: reload when it opens or closes.
+  const verifying = useStore((s) => s.verifyDock !== null);
   const selectedModelIdRef = useRef(selectedModelId);
   selectedModelIdRef.current = selectedModelId;
   const loadSeqRef = useRef(0);
@@ -253,7 +256,7 @@ export function DeviceTuningPanel(): preact.JSX.Element {
         ctrl.abort();
       };
     },
-    [load, resetFeedback],
+    [load, resetFeedback, verifying],
   );
 
   // Never leave previous dock's controls actionable while its replacement view
@@ -470,6 +473,7 @@ export function DeviceTuningPanel(): preact.JSX.Element {
         >
           {copyLabel(reportCopy.status, 'Copy for bug report')}
         </GhostButton>
+        <VerifyButton modelId={activeView.modelId} />
       </div>
       <Feedback error={action.error} status={action.status} />
 

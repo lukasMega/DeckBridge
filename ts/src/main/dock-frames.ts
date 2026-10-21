@@ -7,6 +7,8 @@ import type { DockDriver } from '../devices/driver.js';
 import type { ImageEvent, TouchWindowRegion } from '../shared/types.js';
 import type { ElgatoChildServer } from '../cora/child-server.js';
 import { perfOnArrival, perfOnWebUI } from './image-perf.js';
+import { mk2IndexToDeviceImgId } from '../shared/key-map.js';
+import { sendSplashImages } from '../shared/splash-sender.js';
 
 export type ImageFormat = 'jpeg' | 'bmp';
 export type DockFrame = { data: Buffer; format: ImageFormat };
@@ -15,6 +17,8 @@ export class LastFrames {
   private readonly frames = new Map<number, DockFrame>();
   /** Model of the driver the frames were painted on: a different device must not inherit them. */
   private modelId: string | null = null;
+  /** Keys the verify wizard painted during its hold; null = not held (Dock.setVerifyHold). */
+  private verifyKeys: Set<number> | null = null;
 
   /** No copy: `data` is a fresh Buffer.concat result from image-assembler.ts that nothing mutates. */
   record(key: number, data: Buffer, format: ImageFormat): void {
@@ -29,12 +33,52 @@ export class LastFrames {
     return this.frames.has(key);
   }
 
+  hasAny(): boolean {
+    return this.frames.size > 0;
+  }
+
+  /** While held, frames are still recorded but none is drawn. */
+  get held(): boolean {
+    return this.verifyKeys !== null;
+  }
+
+  hold(): void {
+    this.verifyKeys ??= new Set();
+  }
+
+  /** One verify test-pattern key (a JPEG at the advertised key size); ignored unless held. */
+  paintHeld(driver: DockDriver, key: number, bytes: Uint8Array): void {
+    if (!this.verifyKeys) return;
+    this.verifyKeys.add(key);
+    driver.renderCoraImage(key, bytes, 'jpeg');
+  }
+
+  /** End the hold. `repaint` re-renders the app's frames (end/cancel; a save leaves it to
+   *  the live/reopen path). Keys only the pattern covered are blanked, and without any
+   *  app frame the splash comes back, as before the session. */
+  release(
+    driver: DockDriver | null,
+    repaint: boolean,
+    mirror?: (key: number, data: Buffer, format: ImageFormat) => void,
+  ): void {
+    const painted = this.verifyKeys;
+    this.verifyKeys = null;
+    if (!driver || !painted) return;
+    for (const key of painted) {
+      const wire = mk2IndexToDeviceImgId(key, driver.model);
+      if (!this.frames.has(key) && wire >= 0) driver.clearKey(wire);
+    }
+    if (this.frames.size === 0) sendSplashImages(driver);
+    if (repaint) this.repaint(driver, mirror);
+  }
+
   /** Re-render every frame through the driver (live spec change, standby exit); the frames
    *  themselves are unchanged. `mirror` restores the WebUI preview too. */
   repaint(
     driver: DockDriver,
     mirror?: (key: number, data: Buffer, format: ImageFormat) => void,
   ): void {
+    if (this.held) return;
     for (const [key, { data, format }] of this.frames) {
       driver.renderCoraImage(key, data, format);
       mirror?.(key, data, format);
@@ -48,7 +92,7 @@ export class LastFrames {
     mirror?: (key: number, data: Buffer, format: ImageFormat) => void,
   ): void {
     if (this.modelId === driver.model.id) {
-      for (const [key, { data, format }] of this.frames) {
+      for (const [key, { data, format }] of this.held ? [] : this.frames) {
         driver.renderCoraImage(key, data, format);
         mirror?.(key, data, format);
       }
@@ -81,8 +125,9 @@ export function wireDockImages(
     perfOnArrival();
     const driver = sink.driver();
     // USB latency first: the worker transforms, caches and writes off the main
-    // thread, so the FFI transform never stalls this CORA ACK loop.
-    driver?.renderCoraImage(keyIndex, data, format);
+    // thread, so the FFI transform never stalls this CORA ACK loop. A verify hold
+    // keeps the wizard's pattern on the panel; the frame is still recorded below.
+    if (!sink.frames.held) driver?.renderCoraImage(keyIndex, data, format);
     // Only frames painted on a device are replayable onto it.
     if (driver) sink.frames.record(keyIndex, data, format);
     sink.onImage?.(keyIndex, data, format);

@@ -26,6 +26,7 @@ import { runPushCommand } from '../cli/push.js';
 import { runDiagnoseCommand } from '../cli/diagnose.js';
 import { PersistedSettings } from '../infra/settings.js';
 import { wireSurvey } from './survey-wiring.js';
+import { wireVerify } from './verify-wiring.js';
 import { createDailyPing, sendBeacon } from '../infra/daily-ping.js';
 import { STARTUP_DELAY_MS, CHECK_INTERVAL_MS } from '../infra/update-check.js';
 import { stopCommands } from '../infra/command-runner.js';
@@ -184,6 +185,7 @@ const driverManager = new DriverManager({
   onDockConnected: (dockIndex, deviceKey) =>
     elgatoAutoRestart.onDockConnected(dockIndex, deviceKey),
   onElgatoAttached: (dockIndex) => elgatoAutoRestart.onElgatoAttached(dockIndex),
+  draftOverrideFor: (modelId) => webui.verify.draftOverride(modelId),
 });
 
 webui.setHidInventory(() => driverManager.hidInventory());
@@ -197,6 +199,7 @@ driverManager.on('changed', () => {
 });
 
 wireSurvey({ webui, driverManager, getTray: () => tray, notify: !noWebui, timers });
+wireVerify(webui, driverManager);
 
 // Grace-period scheduler (main/elgato-auto-restart.ts, §4.3) — at most once per
 // process, restarts the Elgato app for a previously-paired dock it hasn't

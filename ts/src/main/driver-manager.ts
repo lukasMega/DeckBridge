@@ -263,10 +263,10 @@ export class DriverManager extends EventEmitter {
     return this.pacer.attempts;
   }
 
-  /** User tuning for `modelId`, undefined in safe mode (`--no-overrides`)/when unset. Shared with the WebUI view. */
+  /** User tuning for `modelId` (a verify-wizard draft first); undefined in safe mode/unset. */
   private overrideFor(modelId: string): DeviceModelOverride | undefined {
     if (overridesDisabled()) return undefined;
-    return this.deps.settings.overrideFor(modelId);
+    return this.deps.draftOverrideFor?.(modelId) ?? this.deps.settings.overrideFor(modelId);
   }
 
   /** Model + user tuning; downstream sees the effective model, registry never mutated. */
