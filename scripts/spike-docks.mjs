@@ -1,4 +1,4 @@
-// Throwaway helper for step 0 of .claude/plans/2026-09-30_virtual-browser-deck.md:
+// Throwaway helper for step 0 of .claude/plans/.done/2026-09-30_virtual-browser-deck.md:
 // three mock-backed docks with distinct identities, to test Elgato pairing limits.
 // Delete with the plan's "Spike results" section once the spike is recorded.
 import { spawn } from 'node:child_process';

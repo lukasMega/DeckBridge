@@ -71,7 +71,8 @@ await click(page.locator('#themeBtn'));
 `click()` calls the element's own `.click()`. Note that `locator.dispatchEvent('click')` —
 the usual Playwright workaround for missing actionability — **delivers the event twice**
 on Lightpanda (measured with a raw listener counter), so anything that toggles ends up
-back where it started. That bug is why the helper exists.
+back where it started. That bug is why the helper exists. `doubleClick()` dispatches one
+`dblclick` event the same way, since `locator.dblclick()` hangs too.
 
 ### Triage: run the same specs in real Chromium
 

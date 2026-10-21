@@ -27,6 +27,17 @@ export async function click(locator: Locator): Promise<void> {
     });
 }
 
+/** Double-click. Lightpanda has no `dblclick()` either, so dispatch the one event the handler listens for. */
+export async function doubleClick(locator: Locator): Promise<void> {
+  if (usingChromium) {
+    await locator.dblclick();
+    return;
+  }
+  await locator.evaluate((el) => {
+    el.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
+  });
+}
+
 /** Type into an input. `fill()` dispatches `input` itself, which React and Preact both honour. */
 export async function typeInto(locator: Locator, value: string): Promise<void> {
   await locator.fill(value);

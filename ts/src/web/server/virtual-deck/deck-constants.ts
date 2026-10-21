@@ -1,4 +1,4 @@
-// Browser deck tunables. See .claude/plans/2026-09-30_virtual-browser-deck.md (D-D, D-E).
+// Browser deck tunables. See docs/ARCHITECTURE.md "Browser deck: a dock with no USB device".
 
 /** `hello.v` must equal this; the page carries its own copy (G1 forbids sharing). */
 export const DECK_PROTOCOL_VERSION = 1;

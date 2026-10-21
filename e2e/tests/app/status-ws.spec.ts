@@ -37,9 +37,10 @@ test.describe('live status channel', () => {
   test('a simulated key press round-trips HTTP → driver → WS', async ({ page, app }) => {
     await gotoApp(page, `${app.baseURL}/`);
 
-    // POST /api/key/:n is mock-only (409 otherwise). It reaches the driver, which reports
-    // the press back through notifyKeyEvent → broadcaster, so this exercises the whole
-    // request → driver → websocket loop rather than one endpoint.
+    // POST /api/key/:n needs the click-to-press setting (403 otherwise; app-server.ts turns
+    // it on). It reaches the driver, which reports the press back through notifyKeyEvent →
+    // broadcaster, so this exercises the whole request → driver → websocket loop rather
+    // than one endpoint.
     const frame = await page.evaluate(
       () =>
         new Promise<string>((resolve, reject) => {
