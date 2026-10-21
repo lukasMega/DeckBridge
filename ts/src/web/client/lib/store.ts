@@ -16,6 +16,7 @@ import type {
   TouchStripMode,
   UpdateInfo,
 } from '../ui-types.js';
+import type { VerifyEndedMsg } from '../../contract-verify.js';
 
 // LOG_MAX matches advanced/log-panel.tsx's own LOG_MAX (DOM log trimming there mirrors
 // the store's cap so neither trims more eagerly than the other). KE_MAX has no external
@@ -64,6 +65,11 @@ export interface StoreState {
   pushChannels: PushChannelView[];
   /** 'stale' = WebSocket closed: every status field above may be out of date. */
   connection: 'live' | 'stale';
+  /** Dock the verify wizard runs on (UI-only); it lives above the stages, so a dock
+   *  that drops out while reopening does not unmount it. */
+  verifyDock: number | null;
+  /** Last WS `verifyEnded`; a new object per event. */
+  verifyEnded: VerifyEndedMsg | null;
 }
 
 /** Before the first observation: nothing known, nothing to snapshot. */
@@ -126,6 +132,8 @@ let state: StoreState = {
   extensions: { dir: '', extensions: [] },
   pushChannels: [],
   connection: 'live',
+  verifyDock: null,
+  verifyEnded: null,
 };
 
 const listeners = new Set<() => void>();

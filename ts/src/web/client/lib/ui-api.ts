@@ -12,7 +12,7 @@ function postInit(body: unknown): RequestInit {
 }
 
 /** POST JSON and return the parsed reply. Throws `${what} (${status})` on failure,
- *  or the server's own `error` message when it sent one. */
+ *  or the server's own `error` message when it sent one; the error carries `status`. */
 export async function postJson<T = void>(
   url: string,
   body?: unknown,
@@ -20,7 +20,9 @@ export async function postJson<T = void>(
 ): Promise<T> {
   const r = await fetch(url, postInit(body));
   const parsed = (await r.json().catch(() => ({}))) as { error?: string };
-  if (!r.ok) throw new Error(parsed.error ?? `${what} (${r.status})`);
+  if (!r.ok) {
+    throw Object.assign(new Error(parsed.error ?? `${what} (${r.status})`), { status: r.status });
+  }
   return parsed as T;
 }
 

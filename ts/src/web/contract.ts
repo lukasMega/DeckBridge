@@ -2,6 +2,7 @@
 // WS broadcast, nothing else. Imports only its sibling contract files (type-only),
 // both tiers re-export from here. See "Architecture is lint-enforced" in CLAUDE.md.
 import type { ExtensionsView } from './contract-extensions.js';
+import type { VerifyEndedMsg } from './contract-verify.js';
 
 /** 'elgato'/'bitfocus' are set only once a client-specific query is observed
  *  (cora/primary-server.ts / cora/child-server.ts), 'unknown' otherwise. */
@@ -303,6 +304,7 @@ export interface DockStatus {
   index: number; // 0 = primary
   modelId: string;
   modelName: string;
+  tested?: boolean; // the registry model has hardware evidence (device-notes.json)
   keyCount: number;
   columns: number;
   rows: number;
@@ -382,6 +384,7 @@ export interface StatusSnapshot {
    *  anchors it to its own receipt time); `docks` are the dock indices the restart
    *  is waiting on, so only those lock their pairing controls. */
   elgatoAutoRestartPending?: { remainingMs: number; docks: number[] } | null;
+  verifyDismissed?: string[]; // model ids not offered the verify wizard (settings + this run)
 }
 
 /** GET /api/state: the status snapshot plus everything a freshly loaded page needs.
@@ -524,6 +527,7 @@ export interface WsEvents {
   pages: { pages: PageSummary[] };
   pageState: PageStateMsg;
   extensions: ExtensionsView;
+  verifyEnded: VerifyEndedMsg;
 }
 
 /** Docs sections the WebUI links to; the id is the `/go/docs/:topic` path segment. */

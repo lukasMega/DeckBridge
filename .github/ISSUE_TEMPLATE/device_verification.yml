@@ -1,0 +1,46 @@
+name: Device check report
+description: Results of the "Check my device" wizard for an untested deck
+title: "[Device check]: "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for checking your deck. The wizard in the DeckBridge web UI fills in the
+        fields below. If the report field is empty, paste the report: the wizard copied
+        it to your clipboard.
+  - type: input
+    id: model
+    attributes:
+      label: Device model
+      description: Model name and DeckBridge model id, e.g. Ajazz AKP153 (ajazz-akp153)
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: DeckBridge version
+      placeholder: 0.21.0
+    validations:
+      required: true
+  - type: textarea
+    id: report
+    attributes:
+      label: Wizard report
+      description: The JSON report from the wizard (answers, results and the saved device tuning).
+      render: json
+    validations:
+      required: true
+  - type: input
+    id: os
+    attributes:
+      label: Host OS
+      description: e.g. macOS 15.5, Windows 11, Ubuntu 24.04
+    validations:
+      required: false
+  - type: textarea
+    id: notes
+    attributes:
+      label: Notes
+      description: Anything the wizard could not ask, e.g. a key that never lights up.
+    validations:
+      required: false

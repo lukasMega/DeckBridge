@@ -15,6 +15,7 @@ import { MIRABOX_293_MODEL } from '../src/devices/mirabox/mirabox-293.js';
 import { MK2_MODEL } from '../src/devices/elgato/mk2.js';
 import { MIRABOX_K1PRO_MODEL } from '../src/devices/mirabox/mirabox-k1pro.js';
 import { AJAZZ_AKP05E_MODEL } from '../src/devices/ajazz/akp05e.js';
+import { NATIVE_AKP05E_MODEL } from './helpers/native-akp05e.js';
 import { ELGATO_MK2_PID, ELGATO_PLUS_PID } from '../src/shared/types.js';
 import { test, summary as reportSummary } from './helpers/harness.js';
 
@@ -619,8 +620,11 @@ test('keyMap length is checked against the emulated grid', () => {
   assert.ok(
     !validateModelOverride({ cora: plus, keyMap: { coraToWireImage: ten } }, AJAZZ_AKP05E_MODEL).ok,
   );
+  // The registry already pairs it as a Plus, so an override without `cora` is sized to 8 too.
+  assert.ok(validateModelOverride({ keyMap: { coraToWireImage: eight } }, AJAZZ_AKP05E_MODEL).ok);
+  assert.ok(!validateModelOverride({ keyMap: { coraToWireImage: ten } }, AJAZZ_AKP05E_MODEL).ok);
   // Native AKP05E keeps its 10-key grid.
-  assert.ok(validateModelOverride({ keyMap: { coraToWireImage: ten } }, AJAZZ_AKP05E_MODEL).ok);
+  assert.ok(validateModelOverride({ keyMap: { coraToWireImage: ten } }, NATIVE_AKP05E_MODEL).ok);
 });
 
 reportSummary();

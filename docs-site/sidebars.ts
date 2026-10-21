@@ -20,6 +20,7 @@ const sidebars: SidebarsConfig = {
     'features',
     'browser-deck',
     'headless-linux',
+    'verify-device',
     'troubleshooting',
     'virustotal',
     'virustotal-v0.17.0',

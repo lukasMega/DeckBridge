@@ -26,6 +26,7 @@ import type { ElgatoChildServer } from '../src/cora/child-server.js';
 import type { WebUIServer } from '../src/web/server/index.js';
 import { WorkerHidDriver } from '../src/worker/hid-worker-host.js';
 import { WorkerPool } from '../src/main/worker-pool.js';
+import type { DriverManagerDeps } from '../src/main/driver-manager-deps.js';
 import type { WorkerFactory } from '../src/main/worker-pool.js';
 import type { HidDiscovery } from '../src/main/driver-manager-discovery.js';
 import { generateDeviceIdentity } from '../src/infra/device-identity.js';
@@ -310,7 +311,7 @@ function fakeUsb() {
   return { discovery, factory, pool: new WorkerPool((model, ov) => factory.make(model, ov)) };
 }
 
-function setup() {
+function setup(extra: Pick<DriverManagerDeps, 'draftOverrideFor'> = {}) {
   const usb = fakeUsb();
   const server = makeFakeServer();
   const childServer = makeFakeChildServer();
@@ -322,6 +323,7 @@ function setup() {
     getShuttingDown: () => false,
     discovery: usb.discovery,
     pool: usb.pool,
+    ...extra,
   });
   return { server, childServer, webui, driverManager, usb };
 }
@@ -1592,6 +1594,21 @@ await test('E5. an image-only tuning change is applied live — no close, no rec
   assert.deepEqual(driver.applyOverridesCalls[0]?.overrides, { image: { rotate: 90 } });
   assert.equal(driverManager.getCurrentDriver()?.model.image.rotate, 90, 'tuned spec is visible');
   assert.deepEqual(driver.renderCalls, [0, 3], 'both cached frames were re-rendered');
+});
+
+await test('E5b. a verify-wizard draft wins over settings; once dropped, settings win again', async () => {
+  let draft: DeviceModelOverride | undefined = { image: { rotate: 180 } };
+  const env = setup({ draftOverrideFor: () => draft });
+  const firstModel = DEVICE_MODELS[0]!;
+  const driver = await connectCapturing(env);
+  env.webui.modelOverrideFor = () => ({ image: { rotate: 90 } });
+
+  await env.driverManager.reloadDeviceTuning(firstModel.id, 'live');
+  assert.equal(driver.model.image.rotate, 180, 'the draft is what the panel runs');
+
+  draft = undefined;
+  await env.driverManager.reloadDeviceTuning(firstModel.id, 'live');
+  assert.equal(driver.model.image.rotate, 90, 'cancel: the persisted override is back');
 });
 
 await test('E6. a wire/keyMap change still closes the session and reconnects', async () => {

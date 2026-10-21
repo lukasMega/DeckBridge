@@ -12,6 +12,7 @@ export interface SnapshotExtras {
   brightness: number;
   docks: DockStatus[];
   selectedDock: number;
+  verifyDismissed: string[];
 }
 
 type StatusFlag = 'clientApp' | 'elgatoAppConflict' | 'elgatoDevicePresent';

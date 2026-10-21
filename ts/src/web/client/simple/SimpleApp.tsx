@@ -15,6 +15,7 @@ import { ExtensionPage } from './extension-page.js';
 import { ICON, Icon } from '../components/Icon.js';
 import { AppFooter, Topbar } from './app-shell.js';
 import { useSurveyFlow } from './survey-flow.js';
+import { VerifyHost } from './verify-wizard/verify-entry.js';
 import {
   StageReady,
   StageDeviceNoElgato,
@@ -169,6 +170,7 @@ export function SimpleApp(): preact.JSX.Element {
       </div>
       <div class="toast" id="toast" role="status" aria-live="polite" />
       {aboutOpen && <AboutPopover onClose={closeAbout} onFeedback={flow.open} />}
+      <VerifyHost />
       {!__DEMO__ && flow.overlays}
     </>
   );

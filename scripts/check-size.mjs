@@ -8,11 +8,12 @@ import { measure } from './size-report.mjs';
 // .claude/plans/2026-10-08_release-size-webui-css.md. ui.js and the ui CSS are the shipped,
 // class-mangled form (the size report's default).
 const BUDGETS = {
-  // Pairing choice cards (2026-10-11); measured size + 1% headroom.
-  'ui.js': 166_938,
+  // Device verify wizard (2026-10-22): D13 optimization pass missed the +12 KB cap by
+  // 839 B, plus option pictures (user request, +~1 KB); measured + 1%.
+  'ui.js': 182_006,
   'deck.js': 30_106,
-  // Number input, pairing progress, Elgato restart row (2026-10-11); measured + 1%.
-  'css total': 36_994,
+  // Device verify wizard (2026-10-22); measured + 1%.
+  'css total': 37_394,
   // 12 AKP05-family clone models (2026-10-14); measured size + 1% headroom.
   'hid-worker': 48_306,
   'hid-scan-worker': 10_826,

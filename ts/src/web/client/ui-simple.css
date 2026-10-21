@@ -1638,6 +1638,62 @@ select.input.xkey-select {
 .survey-nudge .chip-radio small {
   font-size: 11px;
 }
+/* ---- device verify wizard (reuses .popover.survey, .survey-*, .chip-radio-group) ---- */
+.verify-offer {
+  margin: 12px 0;
+}
+.verify-body {
+  border: 0;
+  padding: 0;
+  margin: 0;
+  min-width: 0;
+}
+.verify-grid {
+  display: grid;
+  gap: 2px;
+  width: 96px;
+}
+/* After .verify-grid: a 3×3 picture grid takes the thumbnail size. */
+.verify-thumb {
+  width: 48px;
+  height: 48px;
+}
+.verify-body .chip-radio {
+  gap: 8px;
+}
+.survey-progress progress {
+  flex: 1;
+  accent-color: var(--accent);
+}
+.verify-deck text {
+  fill: #fff;
+  font: 600 9px sans-serif;
+  text-anchor: middle;
+}
+.verify-off {
+  fill: none;
+  stroke: var(--fg-dim);
+  stroke-dasharray: 2;
+}
+.verify-grid > * {
+  display: grid;
+  place-items: center;
+  aspect-ratio: 1;
+  border: 0;
+  border-radius: 3px;
+  background: var(--border-strong);
+  color: #fff;
+  font-size: 10px;
+  font-style: normal;
+}
+.verify-tap {
+  width: min(100%, 320px);
+  margin-bottom: 12px;
+}
+.verify-tap > * {
+  font-size: 15px;
+  cursor: pointer;
+}
 .linkbtn .update-dot {
   display: inline-block;
   margin-left: 6px;

@@ -11,6 +11,7 @@ import { ConnectionPath } from '../components/ConnectionPath.js';
 import { KeyGridPreview } from '../components/KeyGridPreview.js';
 import { ExtraKeysPanel } from './extra-keys-panel.js';
 import { DockList, keyPressTitle } from './dock-cards.js';
+import { VerifyOffer } from './verify-wizard/verify-entry.js';
 import { pressKey, quitElgatoApp } from './handlers.js';
 import {
   isMultiDockView,
@@ -80,6 +81,7 @@ export function StageReady({
   return (
     <>
       <ReadyStatus title={`Connected${appName}`} deviceName={modelName} />
+      <VerifyOffer index={selectedDock} />
       <KeyGridPreview
         keyCount={keyCount}
         columns={columns}
@@ -128,6 +130,7 @@ export function StageDeviceNoElgato({
       <h1 class="stage-title">Connect your control app</h1>
       <ConnectionPath device="done" app="active" deviceName={modelName} />
       <PairingFlow onHelp={onHelp} />
+      <VerifyOffer index={0} />
       <KeyGridPreview
         keyCount={keyCount}
         columns={columns}

@@ -214,6 +214,11 @@ export class Dock {
     driver.removeAllListeners();
     this.driver = null;
     this.standby.onDriverDetached();
+    // A held dock losing its driver ends the verify session; changed() tells the WebUI now.
+    if (this.frames.held) {
+      this.setVerifyHold(false);
+      this.changed();
+    }
     return driver;
   }
 
@@ -332,6 +337,26 @@ export class Dock {
     this.widgets?.repaint();
   }
 
+  /** Verify wizard (web/server/verify-controller.ts): while on, app frames are recorded and
+   *  mirrored but not drawn, and standby keeps the panel awake. Off with `repaint` puts the
+   *  app's frames back (end/cancel); a save leaves that to the live/reopen path. */
+  setVerifyHold(on: boolean, repaint = false): void {
+    if (this.frames.held === on) return;
+    if (on) this.frames.hold();
+    else this.frames.release(this.driver, repaint, this.hooks.image);
+    // After the frames: a standby clock coming back must paint over them, not under.
+    this.standby.setHeld(on);
+  }
+
+  /** One wizard test-pattern key; drawn only while held. */
+  paintVerify(key: number, bytes: Uint8Array): void {
+    if (this.driver) this.frames.paintHeld(this.driver, key, bytes);
+  }
+
+  hasAppFrames(): boolean {
+    return this.frames.hasAny();
+  }
+
   /** A pushed channel changed: paint only widgets whose content changed. */
   paintChangedWidgets(): void {
     this.widgets?.paintChanged();
@@ -415,8 +440,10 @@ export class Dock {
 
   private wireDriver(driver: DockDriver, real: boolean): void {
     const child = this.cora.childServer;
-    // Before the mock branch: mock docks are tracked too.
-    driver.on('frameHash', (key: number, hash: string) => this.pages.noteFrame(key, hash));
+    // Before the mock branch: mock docks are tracked too. A verify hold's pattern is no page.
+    driver.on('frameHash', (key: number, hash: string) => {
+      if (!this.frames.held) this.pages.noteFrame(key, hash);
+    });
     const sinks: DriverEventSinks = {
       onAction: this.hooks.action,
       onKey: (index, state, wireId) => {

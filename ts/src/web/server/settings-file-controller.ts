@@ -4,7 +4,7 @@
 import type { Settings } from '../../infra/settings-store.js';
 import type { LoggingController } from './logging-controller.js';
 import type { ControllerHost } from './types.js';
-import { sanitizeActiveDecks } from '../../infra/settings-sanitize.js';
+import { sanitizeActiveDecks, sanitizeVerifyDismissed } from '../../infra/settings-sanitize.js';
 import { DEFAULT_TOUCH_STRIP_MODE, MAX_MULTI_DECK_DOCKS } from '../../shared/types.js';
 
 export class SettingsFileController {
@@ -47,6 +47,10 @@ export class SettingsFileController {
     if (typeof s.multiDeck === 'boolean') this.setMultiDeck(s.multiDeck);
     if (Object.hasOwn(parsed, 'activeDecks')) {
       this.setActiveDecks(sanitizeActiveDecks(s.activeDecks, MAX_MULTI_DECK_DOCKS));
+    }
+    if (Object.hasOwn(parsed, 'verifyDismissed')) {
+      this.host.settings.setVerifyDismissed(sanitizeVerifyDismissed(s.verifyDismissed));
+      this.host.publishStatus();
     }
     // Device tuning: invalid entries are dropped with a warn inside
     // importModelOverrides, never thrown — an imported file must not be able to

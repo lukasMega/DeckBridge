@@ -9,6 +9,7 @@ import { ImageChannel } from './image-channel.js';
 import type { ImageFormat } from './image-channel.js';
 import { SettingsFileController } from './settings-file-controller.js';
 import { ModelOverridesController } from './model-overrides-controller.js';
+import { VerifyController } from './verify-controller.js';
 import { DockRegistry } from './dock-registry.js';
 import { isAllowedWebRequest, resolveListenPort } from './web-request-guard.js';
 import { withSecurityHeaders } from './security-headers.js';
@@ -69,6 +70,7 @@ export class WebUIServer extends EventEmitter implements WebUIController, WebUIC
   readonly extraKeys: ExtraKeysController;
   readonly pages: PagesController;
   readonly modelOverrides: ModelOverridesController;
+  readonly verify: VerifyController;
   readonly logging: LoggingController;
   readonly updates: UpdateController;
   readonly survey: SurveyController;
@@ -135,6 +137,7 @@ export class WebUIServer extends EventEmitter implements WebUIController, WebUIC
         brightness: this.dockRegistry.selectedBrightness(),
         docks: this.dockRegistry.list(),
         selectedDock: this.selectedDock,
+        verifyDismissed: this.verify.dismissedIds(),
       }),
       (event, payload) => this.bus.broadcast(event, payload),
       initialDriverMode,
@@ -148,6 +151,7 @@ export class WebUIServer extends EventEmitter implements WebUIController, WebUIC
       selectedDockStatus: () => this.dockRegistry.selectedStatus(),
       trySelectDock: (index) => this.trySelectDock(index),
       broadcastSelected: () => this.broadcastSelectedDeviceState(),
+      publishStatus: () => this.status.publish(),
     };
     this.devicePrefs = new DevicePrefsController(host, () =>
       this.dockRegistry.selectedBrightness(),
@@ -161,6 +165,7 @@ export class WebUIServer extends EventEmitter implements WebUIController, WebUIC
       host,
       () => this.dockRegistry.selectedStatus()?.modelId ?? this.status.modelId,
     );
+    this.verify = new VerifyController(host, this.modelOverrides, () => this.dockRegistry.list());
     this.logging = new LoggingController(host, () =>
       liveDiagnosticsInputs({
         cacheRoot: this.settings.cacheRoot,
@@ -189,6 +194,7 @@ export class WebUIServer extends EventEmitter implements WebUIController, WebUIC
       extraKeys: this.extraKeys,
       pages: this.pages,
       modelOverrides: this.modelOverrides,
+      verify: this.verify,
       logging: this.logging,
       updates: this.updates,
       survey: this.survey,
@@ -256,6 +262,7 @@ export class WebUIServer extends EventEmitter implements WebUIController, WebUIC
 
   async stop(): Promise<void> {
     this.activity.stop();
+    this.verify.dispose();
     this.push.dispose();
     this.bus.stop();
     const server = this.server;
@@ -332,6 +339,7 @@ export class WebUIServer extends EventEmitter implements WebUIController, WebUIC
   /** Push the current per-dock status list (primary + extras); deduped, since the 3s reconnect scan calls this every tick. */
   notifyDocks(docks: DockStatus[]): void {
     if (!this.dockRegistry.update(docks)) return;
+    this.verify.syncDocks(docks);
     // Drop image caches of vanished docks; fall back to the primary when the selected dock was unplugged.
     const live = new Set(docks.map((d) => d.index));
     this.imageChannel.pruneDeadDocks(live);

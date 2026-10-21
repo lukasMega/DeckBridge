@@ -13,6 +13,7 @@ import { Brightness } from './controls.js';
 import { ExtraKeysPanel } from './extra-keys-panel.js';
 import { rovingTabKey } from '../lib/roving-tabs.js';
 import { GhostButton } from '../components/GhostButton.js';
+import { VerifyOffer } from './verify-wizard/verify-entry.js';
 
 function postSelectDock(index: number): void {
   fire('/api/select-dock', { index });
@@ -69,6 +70,7 @@ function DockCard({
         <span class="dock-card-name">{dock.modelName}</span>
         <DockChip dock={dock} />
       </div>
+      <VerifyOffer index={dock.index} />
       {dock.virtualClients !== undefined && (
         <StatusChip variant="accent" id={`virtual-clients-${dock.index}`}>
           Browser deck · {dock.virtualClients} connected

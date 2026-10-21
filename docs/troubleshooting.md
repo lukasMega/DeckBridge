@@ -21,7 +21,9 @@ your issue.
   install the [udev rule](./features.md#permissions).
 - **Missing libhidapi** — see the [requirements check](./features.md#requirements).
 - **Restrict LAN access** — set `DECKBRIDGE_BIND=127.0.0.1`.
-- **Images rotated, mirrored, or on the wrong key** — see [Device tuning](#device-tuning).
+- **Images rotated, mirrored, on the wrong key, cut off or black** — run the
+  [device check](./verify-device.md), which fixes these by picture; or see
+  [Device tuning](#device-tuning).
 - **The first press after the deck dimmed does nothing** — by design: the first press only
   wakes the deck. Set *Wake press* to *Wakes and runs the key* in Standby & burn-in care.
 - **A clock appeared on my deck** — the Elgato app disconnected (quit, its computer slept, or
@@ -158,6 +160,8 @@ same two values live in `settings.json`:
 Some boards are supported from documentation, not hardware we own. **Settings → Device
 tuning** fixes them at runtime:
 
+- **Check images step by step** asks which picture matches your deck and sets orientation,
+  key order, size and JPEG limits for you; see [Device check](./verify-device.md).
 - Rotation, flip H/V, image fit, JPEG quality and size.
 - **Crop…** (next to Image fit) picks which part of the Elgato app's key image lands on
   the key: drag the region over a real key frame, then **Try on device** to see the exact
