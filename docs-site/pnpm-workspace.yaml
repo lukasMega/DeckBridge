@@ -52,4 +52,4 @@ overrides:
 # Remove once upstream releases address these issues; see README.md.
 patchedDependencies:
   braces@3.0.3: ../patches/braces@3.0.3.patch
-  http-cache-semantics@4.2.0: ../patches/http-cache-semantics@4.2.0.patch
+  http-cache-semantics@4.3.0: ../patches/http-cache-semantics@4.3.0.patch

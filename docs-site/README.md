@@ -41,7 +41,7 @@ Security tests exercise both CommonJS and ESM copies used by these packages.
 - `braces@3.0.3` (CVE-2026-93687): reject patterns exceeding 100 nested
   brace/parenthesis blocks before recursive AST walkers run. The TypeScript
   workspace shares this patch for ESLint's transitive copy.
-- `http-cache-semantics@4.2.0` (CVE-2026-93748): prevent `max-stale` and other
+- `http-cache-semantics@4.3.0` (CVE-2026-93748): prevent `max-stale` and other
   stale-response paths from bypassing existing cache security restrictions.
   Normal expiry and explicitly permitted caching retain their behavior.
 
@@ -52,7 +52,9 @@ prototype-pollution checks. It runs as part of `pnpm test` in CI.
 These are local mitigations, not upstream releases. Dependabot may continue
 reporting the affected package versions. Remove each patch registration and
 file when an upstream release passes the regression tests, then regenerate
-the lockfiles. HTTP cache 4.3.0 still reproduces the `max-stale` issue.
+the lockfiles. HTTP cache 4.3.0 still reproduces the `max-stale` issue,
+although the advisory lists only `<= 4.2.0` as affected. Its Dependabot alert
+closes, but the patch stays required.
 
 ## Refresh screenshots
 
