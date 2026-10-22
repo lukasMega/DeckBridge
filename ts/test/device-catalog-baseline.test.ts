@@ -328,6 +328,7 @@ const EXPECTED: Expected[] = [
   akp05Clone('streonor-s10-pro', 'streonor', 0x1500, 0x3007),
   akp05Clone('ajazz-akp05e-pro', 'ajazz', 0x0300, 0x3013),
   akp05Clone('ajazz-akp05cn-pro', 'ajazz', 0x0300, 0x3014),
+  v3Board('uphere-293v3', 'uphere', 0x1200, 0x2012),
 ];
 
 // JSON round trip drops undefined fields, so "unset" and "absent" compare equal.
@@ -417,6 +418,7 @@ test('DEVICE_MODELS order and CORA_PROFILES ids are unchanged', () => {
       'streonor-s10-pro',
       'ajazz-akp05e-pro',
       'ajazz-akp05cn-pro',
+      'uphere-293v3',
     ],
   );
   assert.deepEqual(
@@ -438,12 +440,12 @@ for (const expected of EXPECTED) {
   });
 }
 
-test('findModel resolves all 39 VID/PID pairs to the expected model', () => {
+test('findModel resolves all 40 VID/PID pairs to the expected model', () => {
   const pairs: [number, number, string][] = EXPECTED.flatMap((e) =>
     e.usbProductIds.map((pid): [number, number, string] => [e.usbVendorId, pid, e.id]),
   );
-  assert.equal(pairs.length, 39);
-  assert.equal(new Set(pairs.map(([vid, pid]) => `${vid}:${pid}`)).size, 39);
+  assert.equal(pairs.length, 40);
+  assert.equal(new Set(pairs.map(([vid, pid]) => `${vid}:${pid}`)).size, 40);
   for (const [vid, pid, id] of pairs) {
     assert.equal(findModel(vid, pid)?.id, id, `0x${vid.toString(16)}:0x${pid.toString(16)}`);
   }

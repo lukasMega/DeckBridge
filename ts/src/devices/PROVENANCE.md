@@ -136,6 +136,21 @@ and D6 rev. 2 hardware) is the first thing to re-derive.
 
 ---
 
+## upHere 293V3 (`uphere/uphere-293v3.ts`)
+
+**Not hardware-tested.** VID/PID `0x1200:0x2012` come from the owner in
+[androme13/JIB issue #2](https://github.com/androme13/JIB/issues/2) and from JIB v1.2.0.0's
+native catalog (`StreamDockNative.dll`), which lists it as `upHere 293V3` and drives it with
+the Mirabox SDK's `StreamDock293V3` class: the same board as `mirabox-293`, 112 px keys.
+
+The owner's swapped top/bottom rows were a bug in JIB's default order for that family, not
+a deck quirk: JIB's fix renders the bottom row first, putting the top-left image on wire id
+11, exactly like `mirabox-293`'s hardware-verified `[11..15, 6..10, 1..5]`. Image, wire,
+keyMap and splash are therefore copied from `MIRABOX_293_MODEL`. The usage page
+(`0xffa0`/1) is assumed from the template and unverified.
+
+---
+
 ## Ajazz AKP153E / AKP153R rev. 2 (`ajazz/akp153-rev2.ts`)
 
 The same board as the Mirabox 293V3 behind a different VID/PID

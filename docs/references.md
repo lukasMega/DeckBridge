@@ -33,6 +33,10 @@ Links below identify historical research sources.
 | [kebot/mirabox-ts](https://github.com/kebot/mirabox-ts) | TypeScript Mirabox driver. |
 | [ValentinTorassa/VT-Ragnaros](https://github.com/ValentinTorassa/VT-Ragnaros) | Ragnaros (Redragon SS552, `0200:3001`) Linux driver — reverse-engineered Mirabox/Ajazz v3 1024-byte protocol, 10 keys, 4 knobs, touch strip. |
 
+<!-- Promote into the table above once upHere support lands (.claude/plans/2026-10-22_uphere-293v3-support.md):
+| [androme13/JIB](https://github.com/androme13/JIB) | Windows deck host (binary releases, no public source) — issue #2 and its device catalog: upHere 293V3 is `1200:2012`, driven by the vendor SDK's `StreamDock293V3` class (same board as the Mirabox 293V3). |
+-->
+
 ## Fifine devices
 
 | Project | What it gave us |

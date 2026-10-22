@@ -429,8 +429,8 @@ test('findModel returns null for a known VID but unknown PID', () => {
 
 console.log('\ndevice-models: DEVICE_MODELS ordering');
 
-test('DEVICE_MODELS contains exactly 30 models', () => {
-  assert.equal(DEVICE_MODELS.length, 30);
+test('DEVICE_MODELS contains exactly 31 models', () => {
+  assert.equal(DEVICE_MODELS.length, 31);
 });
 
 test('DEFAULT_MODEL is MK2_MODEL', () => {

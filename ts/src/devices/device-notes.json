@@ -403,6 +403,19 @@
         "Only PID 0x3004 (AKP05E) has hardware evidence; this Pro SKU may differ in firmware."
       ],
       "sources": ["ambiso/opendeck-akp05 src/mappings.rs"]
+    },
+    "uphere-293v3": {
+      "tested": { "status": false },
+      "summary": "15-key (5×3, 112×112) deck sold by upHere: the same board and key map as mirabox-293 according to JIB's device catalog, advertised to the Elgato app as an MK.2. Not hardware-tested here.",
+      "alsoSoldAs": [],
+      "quirks": [
+        "JIB drives it with the Mirabox SDK's StreamDock293V3 class. The top/bottom row swap reported in JIB issue #2 came from JIB's own default order, not from the deck.",
+        "HID usage page and key input order are unverified and inherited from mirabox-293."
+      ],
+      "sources": [
+        "JIB issue #2 (androme13/JIB)",
+        "JIB v1.2.0.0 device catalog (StreamDockNative.dll)"
+      ]
     }
   }
 }
