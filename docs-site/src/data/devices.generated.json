@@ -2000,6 +2000,63 @@
           "packetSizeCandidates": "—"
         }
       }
+    },
+    {
+      "id": "uphere-293v3",
+      "name": "upHere 293V3",
+      "family": "mirabox-v3",
+      "tested": false,
+      "testedLabel": "— untested",
+      "cells": {
+        "identity": {
+          "name": "upHere 293V3",
+          "id": "uphere-293v3",
+          "vendor": "uphere",
+          "protocol": "mirabox-cora",
+          "vid": "0x1200",
+          "pids": "0x2012",
+          "usagePage": "0xffa0",
+          "usage": "1",
+          "keyCount": "15",
+          "columns": "5",
+          "rows": "3",
+          "keyWidth": "112",
+          "keyHeight": "112"
+        },
+        "image": {
+          "name": "upHere 293V3",
+          "format": "jpeg",
+          "width": "112",
+          "height": "112",
+          "rotate": "0°",
+          "flipH": "no",
+          "flipV": "no",
+          "colorMode": "rgb",
+          "crop": "—",
+          "resizeMode": "—",
+          "padFill": "—",
+          "resizeFilter": "lanczos3",
+          "sharpen": "0.6",
+          "blur": "—",
+          "maxBytes": "10240",
+          "quality": "0.9",
+          "bmpPpm": "—",
+          "transform": "sidecar"
+        },
+        "wire": {
+          "name": "upHere 293V3",
+          "packetSize": "1024",
+          "inSize": "512",
+          "heartbeatMs": "8000",
+          "synthesizeKeyUp": "no",
+          "sendStpAfterImage": "yes",
+          "reportId": "—",
+          "chunkPadByte": "—",
+          "chunkDelayMs": "—",
+          "sharedSerial": "—",
+          "packetSizeCandidates": "—"
+        }
+      }
     }
   ],
   "homepageOrder": [
@@ -2151,6 +2208,11 @@
     {
       "id": "ajazz-akp05cn-pro",
       "name": "AJAZZ AKP05CN Pro",
+      "tested": false
+    },
+    {
+      "id": "uphere-293v3",
+      "name": "upHere 293V3",
       "tested": false
     }
   ]

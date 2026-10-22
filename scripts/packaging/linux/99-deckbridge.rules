@@ -111,3 +111,6 @@ KERNEL=="hidraw*", ATTRS{idVendor}=="0300", ATTRS{idProduct}=="3013", TAG+="uacc
 
 # AJAZZ AKP05CN Pro (vendor 0x0300)
 KERNEL=="hidraw*", ATTRS{idVendor}=="0300", ATTRS{idProduct}=="3014", TAG+="uaccess", MODE="0660", GROUP="plugdev"
+
+# upHere 293V3 (vendor 0x1200)
+KERNEL=="hidraw*", ATTRS{idVendor}=="1200", ATTRS{idProduct}=="2012", TAG+="uaccess", MODE="0660", GROUP="plugdev"

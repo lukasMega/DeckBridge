@@ -45,6 +45,7 @@ The 293V3 board and its rebadges: 1024-byte CRT packets (512 on the D6 rev. 1), 
 | [Ajazz AKP153R (rev. 2)](#ajazz-akp153r-rev2) | ajazz | `0x0300:0x3011` | 15 (5×3) | 112×112 | JPEG | — | — untested |
 | [Fifine AmpliGame D6](#fifine-d6) | fifine | `0x3142:0x0007` | 15 (5×3) | 112×112 | JPEG | — | — untested |
 | [Fifine AmpliGame D6 (rev. 2)](#fifine-d6-rev2) | fifine | `0x3142:0x0060` | 15 (5×3) | 112×112 | JPEG | — | ✓ tested (macOS, 2026-09-11) |
+| [upHere 293V3](#uphere-293v3) | uphere | `0x1200:0x2012` | 15 (5×3) | 112×112 | JPEG | — | — untested |
 
 </div>
 
@@ -647,3 +648,20 @@ AJAZZ AKP05CN Pro (VID 0x0300, PID 0x3014): AKP05-family deck, registered as a c
 - Only PID 0x3004 (AKP05E) has hardware evidence; this Pro SKU may differ in firmware.
 
 [Full spec →](./device-specs.mdx#ajazz-akp05cn-pro)
+
+### upHere 293V3 \{#uphere-293v3}
+
+15-key (5×3, 112×112) deck sold by upHere: the same board and key map as mirabox-293 according to JIB's device catalog, advertised to the Elgato app as an MK.2. Not hardware-tested here.
+
+|  |  |
+|---|---|
+| **USB** | `0x1200`:`0x2012` |
+| **Keys** | 15 (5×3) |
+| **Panel** | 112×112 JPEG |
+| **Protocol** | `mirabox-cora` |
+| **Tested** | — untested |
+
+- JIB drives it with the Mirabox SDK's StreamDock293V3 class. The top/bottom row swap reported in JIB issue #2 came from JIB's own default order, not from the deck.
+- HID usage page and key input order are unverified and inherited from mirabox-293.
+
+[Full spec →](./device-specs.mdx#uphere-293v3)

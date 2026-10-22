@@ -8,6 +8,7 @@ import { AJAZZ_AKP153E_REV2_MODEL, AJAZZ_AKP153R_REV2_MODEL } from './ajazz/akp1
 import { AJAZZ_AKP05E_MODEL } from './ajazz/akp05e.js';
 import { AJAZZ_AKP05_MODEL } from './ajazz/akp05.js';
 import { FIFINE_D6_MODEL, FIFINE_D6_REV2_MODEL } from './fifine/fifine-d6.js';
+import { UPHERE_293V3_MODEL } from './uphere/uphere-293v3.js';
 import { AKP153_V1_CLONE_MODELS } from './rebadge/akp153-v1-clones.js';
 import { AKP05_CLONE_MODELS } from './rebadge/akp05-clones.js';
 import { STREAM_DECK_PLUS_MODEL } from './elgato/plus.js';
@@ -29,6 +30,7 @@ export const DEVICE_MODELS: DeviceModel[] = [
   FIFINE_D6_REV2_MODEL,
   ...AKP153_V1_CLONE_MODELS,
   ...AKP05_CLONE_MODELS,
+  UPHERE_293V3_MODEL,
 ];
 
 /** Fallback model used when nothing is connected / before a real device is probed. */

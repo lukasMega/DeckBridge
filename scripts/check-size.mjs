@@ -16,7 +16,8 @@ const BUDGETS = {
   'css total': 37_394,
   // 12 AKP05-family clone models (2026-10-14); measured size + 1% headroom.
   'hid-worker': 48_306,
-  'hid-scan-worker': 10_826,
+  // upHere 293V3 model (2026-10-22): the registry grows the scan worker; measured + 1%.
+  'hid-scan-worker': 11_195,
   'plugin-worker': 2_733,
   // Extension worker: worker-side reply cap (2026-10-11); measured size + 1% headroom.
   'extension-worker': 1_206,
