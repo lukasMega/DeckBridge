@@ -130,7 +130,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libhidapi-dev libudev-dev libffi-dev cmake build-essential libgtk-3-dev libxdo-dev libayatana-appindicator3-dev netcat-openbsd unzip curl
 
-      - uses: jdx/mise-action@v4
+      - uses: jdx/mise-action@v5
 
       - name: Compile
         run: mise run compile
@@ -258,7 +258,7 @@ jobs:
       - name: Configure hidapi.dll
         run: echo "HIDAPI_LIB=${{ github.workspace }}\vendor\hidapi\hidapi.dll" >> $env:GITHUB_ENV
 
-      - uses: jdx/mise-action@v4
+      - uses: jdx/mise-action@v5
 
       - name: Install pinned Tauri CLI
         working-directory: src-tauri
