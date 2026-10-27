@@ -66,7 +66,7 @@ jobs:
         id: chrome
         uses: browser-actions/setup-chrome@v2
 
-      - uses: jdx/mise-action@v4
+      - uses: jdx/mise-action@v5
 
       # Cache the pnpm content-addressable store, not ts/node_modules: under pnpm
       # node_modules is a symlink farm pointing into the store, so restoring it
@@ -120,7 +120,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libhidapi-dev libudev-dev libffi-dev libgtk-3-dev libxdo-dev libayatana-appindicator3-dev
 
-      - uses: jdx/mise-action@v4
+      - uses: jdx/mise-action@v5
 
       - name: Cache pnpm store
         uses: actions/cache@v6
@@ -182,7 +182,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libhidapi-dev libudev-dev libffi-dev libgtk-3-dev libxdo-dev libayatana-appindicator3-dev
 
-      - uses: jdx/mise-action@v4
+      - uses: jdx/mise-action@v5
 
       - name: rustfmt + clippy + test
         run: mise run rust-lint
@@ -207,7 +207,7 @@ jobs:
             src-tauri -> target
           shared-key: ci-windows
 
-      - uses: jdx/mise-action@v4
+      - uses: jdx/mise-action@v5
 
       # No hidapi.dll built here (that's release.yml's job) — EMBED_NATIVE_LIBS=0
       # skips ts/build.mjs's native-lib embed step (and its hard-fail-if-missing
