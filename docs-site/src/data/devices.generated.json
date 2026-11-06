@@ -2002,6 +2002,63 @@
       }
     },
     {
+      "id": "mirabox-k1pro-5548",
+      "name": "Mirabox K1 Pro (0x5548)",
+      "family": "mirabox-v3",
+      "tested": false,
+      "testedLabel": "— untested",
+      "cells": {
+        "identity": {
+          "name": "Mirabox K1 Pro (0x5548)",
+          "id": "mirabox-k1pro-5548",
+          "vendor": "mirabox",
+          "protocol": "mirabox-cora",
+          "vid": "0x5548",
+          "pids": "0x1025",
+          "usagePage": "0xffa0",
+          "usage": "1",
+          "keyCount": "6",
+          "columns": "3",
+          "rows": "2",
+          "keyWidth": "64",
+          "keyHeight": "64"
+        },
+        "image": {
+          "name": "Mirabox K1 Pro (0x5548)",
+          "format": "jpeg",
+          "width": "64",
+          "height": "64",
+          "rotate": "0°",
+          "flipH": "yes",
+          "flipV": "no",
+          "colorMode": "rgb",
+          "crop": "6",
+          "resizeMode": "—",
+          "padFill": "—",
+          "resizeFilter": "lanczos3",
+          "sharpen": "—",
+          "blur": "—",
+          "maxBytes": "4096",
+          "quality": "0.9",
+          "bmpPpm": "—",
+          "transform": "sidecar"
+        },
+        "wire": {
+          "name": "Mirabox K1 Pro (0x5548)",
+          "packetSize": "1024",
+          "inSize": "512",
+          "heartbeatMs": "2000",
+          "synthesizeKeyUp": "no",
+          "sendStpAfterImage": "yes",
+          "reportId": "0x04",
+          "chunkPadByte": "yes",
+          "chunkDelayMs": "—",
+          "sharedSerial": "—",
+          "packetSizeCandidates": "—"
+        }
+      }
+    },
+    {
       "id": "uphere-293v3",
       "name": "upHere 293V3",
       "family": "mirabox-v3",
@@ -2208,6 +2265,11 @@
     {
       "id": "ajazz-akp05cn-pro",
       "name": "AJAZZ AKP05CN Pro",
+      "tested": false
+    },
+    {
+      "id": "mirabox-k1pro-5548",
+      "name": "Mirabox K1 Pro (0x5548)",
       "tested": false
     },
     {

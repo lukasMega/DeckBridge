@@ -85,6 +85,15 @@
       ],
       "sources": ["keydeck", ".claude/plans/K1Pro/jpeg-artifact-findings.md"]
     },
+    "mirabox-k1pro-5548": {
+      "tested": { "status": false },
+      "summary": "Mirabox K1 Pro (VID 0x5548, PID 0x1025): K1 Pro registered under a second VID/PID, enumerating as \"HOTSPOTEKUSB Keyboard\" (user report, issue 252).",
+      "alsoSoldAs": [],
+      "quirks": [
+        "Every field except identity is inherited from the Mirabox K1 Pro model. The PID sits next to the AKP05-family PIDs 0x1021/0x1023, so the protocol is a guess until a user confirms: if keys or images misbehave, suspect the AKP05 protocol instead."
+      ],
+      "sources": ["issue 252 diagnostics report"]
+    },
     "ajazz-akp05e": {
       "tested": { "status": true, "platform": "macOS", "date": "2026-09-21" },
       "variants": [

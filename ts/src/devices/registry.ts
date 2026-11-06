@@ -11,6 +11,7 @@ import { FIFINE_D6_MODEL, FIFINE_D6_REV2_MODEL } from './fifine/fifine-d6.js';
 import { UPHERE_293V3_MODEL } from './uphere/uphere-293v3.js';
 import { AKP153_V1_CLONE_MODELS } from './rebadge/akp153-v1-clones.js';
 import { AKP05_CLONE_MODELS } from './rebadge/akp05-clones.js';
+import { K1PRO_CLONE_MODELS } from './rebadge/k1pro-clones.js';
 import { STREAM_DECK_PLUS_MODEL } from './elgato/plus.js';
 
 // Probe order: Elgato first (priority over Mirabox), then 293V3 before 293S. Everything
@@ -30,6 +31,7 @@ export const DEVICE_MODELS: DeviceModel[] = [
   FIFINE_D6_REV2_MODEL,
   ...AKP153_V1_CLONE_MODELS,
   ...AKP05_CLONE_MODELS,
+  ...K1PRO_CLONE_MODELS,
   UPHERE_293V3_MODEL,
 ];
 
