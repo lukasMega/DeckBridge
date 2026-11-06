@@ -418,6 +418,7 @@ test('DEVICE_MODELS order and CORA_PROFILES ids are unchanged', () => {
       'streonor-s10-pro',
       'ajazz-akp05e-pro',
       'ajazz-akp05cn-pro',
+      'mirabox-k1pro-5548',
       'uphere-293v3',
     ],
   );
