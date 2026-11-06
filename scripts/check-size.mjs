@@ -14,10 +14,10 @@ const BUDGETS = {
   'deck.js': 30_106,
   // Device verify wizard (2026-10-22); measured + 1%.
   'css total': 37_394,
-  // 12 AKP05-family clone models (2026-10-14); measured size + 1% headroom.
-  'hid-worker': 48_306,
-  // upHere 293V3 model (2026-10-22): the registry grows the scan worker; measured + 1%.
-  'hid-scan-worker': 11_195,
+  // 12 AKP05-family clone models (2026-10-14), K1 Pro 0x5548 clone (2026-11-06); measured + 1%.
+  'hid-worker': 48_871,
+  // upHere 293V3 (2026-10-22), K1 Pro 0x5548 clone (2026-11-06): the registry grows the scan worker; measured + 1%.
+  'hid-scan-worker': 11_391,
   'plugin-worker': 2_733,
   // Extension worker: worker-side reply cap (2026-10-11); measured size + 1% headroom.
   'extension-worker': 1_206,
