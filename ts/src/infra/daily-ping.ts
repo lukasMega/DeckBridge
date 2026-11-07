@@ -3,7 +3,7 @@
 // pure half + a curl beacon, silent on failure. See docs/privacy.md.
 import { sendCurl } from './curl-send.js';
 import { log } from '../shared/logger.js';
-import { readText } from './os-utils.js';
+import { elgatoAppVersion, readText } from './os-utils.js';
 import { spawnOwned } from './owned-spawn.js';
 import { suppressReason } from './daily-ping-env.js';
 import type { SuppressReason } from './daily-ping-env.js';
@@ -52,7 +52,12 @@ export interface DailyPingPayload {
   country: string;
   /** Docs topics opened since the last ping, comma-joined; omitted when none. */
   dc?: string;
+  /** Installed Elgato app version, `major.minor.patch`; omitted when not found. */
+  ev?: string;
 }
+
+/** Same reason as MODEL_ID: the value lands in a KV key. Drops any 4th (build) part. */
+const ELGATO_VERSION = /^(\d{1,3}\.\d{1,3}\.\d{1,3})(?:\.\d{1,6})?$/;
 
 // pure
 
@@ -151,6 +156,7 @@ export interface PayloadInput {
   locale?: string;
   timeZone?: string;
   docsTopics?: readonly string[];
+  elgatoVersion?: string;
 }
 
 /** Deduped + sorted so two docks of one model count once and the same hardware
@@ -163,6 +169,7 @@ export function buildPayload(input: PayloadInput): DailyPingPayload {
   const topics = [...new Set((input.docsTopics ?? []).filter((t) => DOCS_TOPIC.test(t)))]
     .toSorted((a, b) => a.localeCompare(b))
     .slice(0, MAX_DOCS_TOPICS);
+  const elgato = ELGATO_VERSION.exec(input.elgatoVersion ?? '')?.[1];
   return {
     os: normalizeOs(input.platform),
     ov: OS_VERSION.test(input.osVersion) ? input.osVersion : 'unknown',
@@ -171,6 +178,7 @@ export function buildPayload(input: PayloadInput): DailyPingPayload {
     tz: normalizeTimeZone(input.timeZone) ?? tzOffset(input.now),
     country: normalizeLocale(input.locale ?? ''),
     ...(topics.length > 0 ? { dc: topics.join(',') } : {}),
+    ...(elgato ? { ev: elgato } : {}),
   };
 }
 
@@ -296,6 +304,8 @@ export interface DailyPingDeps {
   /** Injected so tests never spawn; defaults to `readOsVersion`. */
   readOsVersion?: (os: DailyPingOs) => Promise<string>;
   readLocale?: (os: DailyPingOs) => Promise<string>;
+  /** Injected so tests never spawn; defaults to `elgatoAppVersion`. */
+  readElgatoVersion?: () => Promise<string | undefined>;
   /** Last locale the WebUI's browser reported (`navigator.language`, see
    *  web-ui-server.ts). Used only when the OS-level probe comes back
    *  `unknown` — a headless/CLI run with no browser ever attached leaves this
@@ -373,6 +383,12 @@ export function createDailyPing(deps: DailyPingDeps): DailyPing {
     if (normalizeLocale(locale) === 'unknown') {
       locale = deps.browserLocale?.() ?? locale;
     }
+    let elgatoVersion: string | undefined;
+    try {
+      elgatoVersion = await (deps.readElgatoVersion ?? elgatoAppVersion)();
+    } catch {
+      // best-effort; the field is simply omitted
+    }
     let timeZone: string | undefined;
     try {
       timeZone = deps.browserTimeZone?.();
@@ -388,6 +404,7 @@ export function createDailyPing(deps: DailyPingDeps): DailyPing {
       locale,
       timeZone,
       docsTopics,
+      elgatoVersion,
     });
     log('debug', 'dailyPing', `payload ${JSON.stringify(payload)}`);
     await deps.send(encodePayload(payload), deps.currentVersion);

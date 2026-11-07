@@ -310,6 +310,7 @@ function harness(
     docsSeen?: string[];
     suppress?: SuppressReason;
     readLocale?: string;
+    elgatoVersion?: string;
     browserLocale?: string;
     browserTimeZone?: string | (() => string);
   } = {},
@@ -337,6 +338,7 @@ function harness(
     platform: () => 'Linux',
     readOsVersion: () => Promise.resolve('ID=ubuntu\nVERSION_ID="24.04"\n'),
     readLocale: () => Promise.resolve(opts.readLocale ?? 'pl_PL.UTF-8'),
+    readElgatoVersion: () => Promise.resolve(opts.elgatoVersion),
     browserLocale: () => opts.browserLocale,
     browserTimeZone: () =>
       typeof opts.browserTimeZone === 'function' ? opts.browserTimeZone() : opts.browserTimeZone,
@@ -382,11 +384,26 @@ await test('a thrown OS-version probe degrades the dim, it does not lose the pin
     platform: () => 'Windows',
     readOsVersion: () => Promise.reject(new Error('spawn failed')),
     readLocale: () => Promise.resolve(''),
+    readElgatoVersion: () => Promise.resolve(undefined),
     suppress: () => null,
   });
   await t.ping();
   assert.equal(sent.length, 1);
   assert.equal(decodePayload(sent[0]!.encoded).ov, 'unknown');
+});
+
+await test('Elgato app version is reduced to major.minor.patch', async () => {
+  const h = harness({ elgatoVersion: '7.6.1.22000' });
+  await h.ping();
+  assert.equal(decodePayload(h.sent[0]!.encoded).ev, '7.6.1');
+});
+
+await test('a missing or malformed Elgato version is omitted', async () => {
+  for (const elgatoVersion of [undefined, 'abc', '7.6']) {
+    const h = harness({ elgatoVersion });
+    await h.ping();
+    assert.equal('ev' in decodePayload(h.sent[0]!.encoded), false);
+  }
 });
 
 await test('an unreadable OS locale falls back to the browser-reported one', async () => {
@@ -464,6 +481,7 @@ await test('the day is marked before the send, so a dead collector is not retrie
     platform: () => 'macOS',
     readOsVersion: () => Promise.resolve('26.6.2\n'),
     readLocale: () => Promise.resolve(''),
+    readElgatoVersion: () => Promise.resolve(undefined),
     suppress: () => null,
   });
   let threw = false;

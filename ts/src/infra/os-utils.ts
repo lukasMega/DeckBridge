@@ -49,6 +49,35 @@ export async function isElgatoAppRunning(): Promise<boolean> {
   }
 }
 
+/** Installed Elgato Stream Deck app version (default install paths only), or
+ *  `undefined` when absent, unreadable, or on an unsupported platform. */
+export async function elgatoAppVersion(): Promise<string | undefined> {
+  const platform = platformName();
+  if (platform !== MAC_OS && platform !== WIN) return undefined;
+  try {
+    const cmd =
+      platform === MAC_OS
+        ? [
+            'defaults',
+            'read',
+            '/Applications/Elgato Stream Deck.app/Contents/Info',
+            'CFBundleShortVersionString',
+          ]
+        : [
+            'powershell',
+            '-NoProfile',
+            '-Command',
+            `(Get-Item "$env:ProgramFiles\\Elgato\\StreamDeck\\StreamDeck.exe").VersionInfo.ProductVersion`,
+          ];
+    const p = tjs.spawn(cmd, { stdout: 'pipe', stderr: 'ignore' });
+    const out = (await readText(p.stdout)).trim();
+    const { exit_status } = await p.wait();
+    return exit_status === 0 && out ? out : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 /** Opens `path` (a file path or URL) with the platform's default handler.
  *  Silently ignored on failure (headless Linux, missing opener, sandboxed
  *  environment, etc.) — this is a convenience action, never load-bearing. */

@@ -12,6 +12,7 @@ import { advertisedGeometry, DEFAULT_MODEL, DEVICE_MODELS } from '../devices/reg
 import type { OverrideChangeKind } from '../devices/model-overrides.js';
 import { log, setWebUILog, setLogLevel, step } from '../shared/logger.js';
 import { startLogFile, stopLogFile, activeLogFilePath } from '../infra/log-file.js';
+import { logElgatoAppVersion } from '../infra/elgato-app.js';
 import { setupNativeLibs } from '../infra/native-libs.js';
 import { acquireInstanceLock } from '../infra/single-instance.js';
 import { DriverManager } from './driver-manager.js';
@@ -84,6 +85,7 @@ if (tjs.env.DECKBRIDGE_LOG_LEVEL) {
   setLogLevel(settings.logLevel);
   tjs.env.DECKBRIDGE_LOG_LEVEL = settings.logLevel;
 }
+void logElgatoAppVersion();
 const headless = cli.flags.headless;
 const noWebui = cli.flags.noWebui;
 

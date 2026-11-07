@@ -35,6 +35,18 @@ function StaleBanner(): preact.JSX.Element | null {
   );
 }
 
+function ElgatoVersionBanner(): preact.JSX.Element {
+  return (
+    <div class="warnrow conn-banner" role="note">
+      <Icon class="w-ico" html={ICON.warn} />
+      <span>
+        Elgato Stream Deck app 7.6.1 does not pair with DeckBridge. Use 7.6.0 until a fix is
+        released.
+      </span>
+    </div>
+  );
+}
+
 /** 'ext:<id>' = an extension's page. */
 type Page = 'home' | 'settings' | `ext:${string}`;
 
@@ -150,6 +162,7 @@ export function SimpleApp(): preact.JSX.Element {
           onPage={(id) => setPicked(`ext:${id}`)}
         />
         <StaleBanner />
+        <ElgatoVersionBanner />
         {flow.banner}
         {/* inert: the shown status is cached, so its controls must not act on it. */}
         {/* Extension pages may repaint on every poll; announcing that would be noise. */}

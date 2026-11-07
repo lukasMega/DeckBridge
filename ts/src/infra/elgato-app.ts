@@ -8,7 +8,7 @@
 // a straight kill can lose unsaved Elgato profile edits, so it's a last resort.
 // Everything is injectable (spawn/openUrl/isRunning/platform/sleep) so tests never
 // spawn a real process or wait on a real timer.
-import { isElgatoAppRunning, openPathInOS, platformName } from './os-utils.ts';
+import { elgatoAppVersion, isElgatoAppRunning, openPathInOS, platformName } from './os-utils.ts';
 import { log } from '../shared/logger.js';
 
 const MAC_OS = 'macOS';
@@ -173,6 +173,13 @@ async function launchWith(deps: Deps, platform: string): Promise<boolean> {
   }
   if (!spawned) return false;
   return pollUntil(deps, true, LAUNCH_VERIFY_TIMEOUT_MS);
+}
+
+/** Startup breadcrumb: the installed app version decides pairing bugs (#257).
+ *  Callers don't await it — a slow probe must not delay startup. Never throws. */
+export async function logElgatoAppVersion(): Promise<void> {
+  const version = await elgatoAppVersion();
+  log('info', 'elgato-app', `installed Stream Deck app: ${version ?? 'not found'}`);
 }
 
 /** Creates the app-control surface. `deps` overrides are for tests only —

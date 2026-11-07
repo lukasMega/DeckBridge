@@ -149,6 +149,12 @@ const config: Config = {
   ],
 
   themeConfig: {
+    announcementBar: {
+      id: 'elgato-7-6-1',
+      content:
+        'Elgato Stream Deck app 7.6.1 does not pair with DeckBridge. Use 7.6.0 until a fix is released. <a href="https://github.com/lukasMega/DeckBridge/issues/257">Details</a>',
+      isCloseable: false,
+    },
     colorMode: {
       defaultMode: 'dark',
       respectPrefersColorScheme: true,

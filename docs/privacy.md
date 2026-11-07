@@ -68,7 +68,7 @@ request. Turn it off with the **Check for updates** toggle in Settings, or by se
 `"updateCheck": false` in `settings.json`.
 
 A **daily usage ping**, on its own timer (first one 5 minutes after startup — see
-below for why). One request per UTC day, carrying seven things:
+below for why). One request per UTC day, carrying eight things:
 
 - **OS family** — `macos` / `windows` / `linux`.
 - **OS major version** — `windows-11`, `macos-26`, `ubuntu-24.04`. Never the patch level.
@@ -81,6 +81,8 @@ below for why). One request per UTC day, carrying seven things:
   WebUI reports one. Otherwise, UTC offset, such as `UTC+02:00`. Named zones
   reveal more about approximate location than offsets. This remains an
   aggregate-only counter; browser timezone is never saved in settings.
+- **Elgato Stream Deck app version** — `7.6.0`, read from the default install path
+  (macOS/Windows). Omitted when the app is not installed there.
 - **Docs topics opened from the WebUI** since the last ping — topic names only (e.g.
   `push-api`): no count, no time, nothing about the page you were on. Not recorded at all
   while the ping is off.
