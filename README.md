@@ -25,6 +25,12 @@ Try it in your browser: [live demo](https://lukasmega.github.io/DeckBridge/demo/
 > supports only 6-button (3×2) grids like the Stream Deck Mini and grids with up to 15
 > buttons (5×3) like the Stream Deck MK.2.
 
+> [!IMPORTANT]
+> **Use Elgato Stream Deck app 7.6.0.** Version 7.6.1 closes the connection to DeckBridge
+> right after it connects, so the deck never pairs
+> ([#257](https://github.com/lukasMega/DeckBridge/issues/257)). If you already updated,
+> reinstall 7.6.0 until a fix is released.
+
 > **🛠 How it was built:** DeckBridge started as a small personal project. The code was
 > written largely with [Claude Code](https://claude.com/claude-code) (mostly Opus), but the
 > author spent a significant amount of their free time debugging it and testing against
