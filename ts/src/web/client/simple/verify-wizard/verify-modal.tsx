@@ -290,11 +290,17 @@ function WizardRun({
           spec.appVersion,
           snap.keyEvents,
           snap.status.modelId,
-          verifyReport(answers, {
-            failed: !saved,
-            imageChanged: !!order || Object.keys(img).some((k) => k !== 'width' && k !== 'height'),
-            sizeChanged: 'width' in img,
-          }),
+          verifyReport(
+            answers,
+            {
+              failed: !saved,
+              imageChanged:
+                !!order || Object.keys(img).some((k) => k !== 'width' && k !== 'height'),
+              sizeChanged: 'width' in img,
+            },
+            spec.hardware,
+            spec.elgatoApp,
+          ),
         ),
         null,
         2,

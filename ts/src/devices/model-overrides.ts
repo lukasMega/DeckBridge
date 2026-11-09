@@ -142,6 +142,11 @@ type CoraOverrideKey = (typeof CORA_OVERRIDE_KEYS)[number];
 const CORA_FIELDS: Record<CoraOverrideKey, FieldSpec> = {
   advertiseAs: { kind: 'string', max: 64 },
   productId: { kind: 'number', min: 0, max: 0xffff, integer: true },
+  dockSerialNumber: { kind: 'string', max: 64 },
+  childSerialNumber: { kind: 'string', max: 64 },
+  macAddress: { kind: 'string', max: 17 },
+  dockFirmwareVersion: { kind: 'string', max: 32 },
+  childFirmwareVersion: { kind: 'string', max: 32 },
 };
 
 /** Shape-check, then pin `advertiseAs` to a target this model has a mapping for and
@@ -160,6 +165,23 @@ function validateCora(raw: unknown, model: DeviceModel, errors: Errors): void {
     typeof advertiseAs === 'string' ? targets.get(advertiseAs)! : model.cora.productId;
   if (typeof productId === 'number' && productId !== expectedPid) {
     errors.push(`cora.productId: must be 0x${expectedPid.toString(16).padStart(4, '0')}`);
+  }
+  if (
+    typeof raw.macAddress === 'string' &&
+    !/^(?:[0-9a-f]{2}:){5}[0-9a-f]{2}$/i.test(raw.macAddress)
+  ) {
+    errors.push('cora.macAddress: must be six hex bytes separated by colons');
+  }
+  for (const key of [
+    'dockSerialNumber',
+    'childSerialNumber',
+    'dockFirmwareVersion',
+    'childFirmwareVersion',
+  ] as const) {
+    const value = raw[key];
+    if (typeof value === 'string' && !/^[\x20-\x7e]*$/.test(value)) {
+      errors.push(`cora.${key}: must contain printable ASCII characters only`);
+    }
   }
 }
 

@@ -11,6 +11,7 @@ export function wireVerify(
 ): void {
   webui.verify.configure({
     hasAppFrames: (index) => driverManager.dock(index)?.hasAppFrames() ?? false,
+    usbIdentity: (index) => driverManager.dock(index)?.deviceInfo?.usb,
   });
   webui.on('verifyHold', (index: number, on: boolean, repaint: boolean) => {
     driverManager.dock(index)?.setVerifyHold(on, repaint);

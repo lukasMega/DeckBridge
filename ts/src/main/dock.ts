@@ -174,7 +174,7 @@ export class Dock {
     this.deviceInfo = deviceInfo;
     // A different model on a live driver: the old frames no longer fit the panel.
     if (this.driver) this.frames.clear();
-    this.cora.applyModel(model, deviceInfo);
+    this.cora.applyModel(model, deviceInfo, this.identity);
     this.pages.reset();
   }
 
@@ -233,7 +233,7 @@ export class Dock {
     });
     // stop() during the bind leaves nothing to attach to; the caller still owns the driver.
     if (this.stopped) throw new Error(`dock ${this.index} stopped during start`);
-    this.cora.applyModel(this.model, this.deviceInfo);
+    this.cora.applyModel(this.model, this.deviceInfo, this.identity);
     this.attach(driver);
   }
 

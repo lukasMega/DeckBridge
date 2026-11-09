@@ -8,9 +8,8 @@ import { measure } from './size-report.mjs';
 // .claude/plans/2026-10-08_release-size-webui-css.md. ui.js and the ui CSS are the shipped,
 // class-mangled form (the size report's default).
 const BUDGETS = {
-  // Device verify wizard (2026-10-22): D13 optimization pass missed the +12 KB cap by
-  // 839 B, plus option pictures (user request, +~1 KB); measured + 1%.
-  'ui.js': 182_006,
+  // Device verify hardware report + Elgato identity tuning (2026-11-09); measured + 1%.
+  'ui.js': 184_873,
   'deck.js': 30_106,
   // Device verify wizard (2026-10-22); measured + 1%.
   'css total': 37_394,

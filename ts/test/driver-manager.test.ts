@@ -299,6 +299,7 @@ function fakeUsb() {
     present: () => true,
     paths: (model) => [`fake:${model.id}`],
     serial: () => null,
+    info: () => null,
     inventory: () => Promise.resolve({ devices: [], tookMs: 0 }),
     requestReset: () => {},
   };
