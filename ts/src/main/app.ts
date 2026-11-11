@@ -21,7 +21,14 @@ import { getInitialDriverMode } from './driver-manager-deps.js';
 import { macToBytes } from './dock-status.js';
 import type { CoraDockFactory } from './dock-scanner-deps.js';
 import { isElgatoAppRunning, openPathInOS, platformName } from '../infra/os-utils.ts';
-import { parseCli, userArgs, applyFlagsToEnv, versionText, USAGE_TEXT } from '../shared/cli.js';
+import {
+  parseCli,
+  userArgs,
+  applyFlagsToEnv,
+  versionText,
+  mdnsDisabled,
+  USAGE_TEXT,
+} from '../shared/cli.js';
 import { runDevicesCommand } from '../cli/devices.js';
 import { runPushCommand } from '../cli/push.js';
 import { runDiagnoseCommand } from '../cli/diagnose.js';
@@ -108,7 +115,14 @@ const webui = new WebUIServer(
 // Before any dock exists, so an enabled extension sees every deck attach.
 await step('deckBr', 'extensions scan', () => webui.extensions.rescan());
 const defaultChildGeometry = advertisedGeometry(DEFAULT_MODEL);
-const server = new ElgatoServer(defaultChildGeometry);
+const server = new ElgatoServer(defaultChildGeometry, undefined, mdnsDisabled());
+if (mdnsDisabled()) {
+  log(
+    'info',
+    'deckBr',
+    'mDNS advertise disabled (DECKBRIDGE_NO_MDNS=1) — add the dock in Elgato by IP address',
+  );
+}
 const childServer = new ElgatoChildServer(
   defaultChildGeometry,
   ELGATO_CHILD_PORT,
@@ -166,7 +180,7 @@ webui.updates.setOnChange(pushTrayState);
 // above: the childServer shares the SAME server.deviceConfig reference, and each
 // serverLog is piped to the shared logger. No WebUI/comm mirror — WebUI stays primary-only.
 const coraDockFactory: CoraDockFactory = (identity) => {
-  const s = new ElgatoServer(defaultChildGeometry, identity.primaryPort, false, {
+  const s = new ElgatoServer(defaultChildGeometry, identity.primaryPort, mdnsDisabled(), {
     childPort: identity.childPort,
     mdnsServiceName: identity.mdnsServiceName,
     dockSerial: identity.dockSerial,

@@ -27,7 +27,7 @@ Try it in your browser: [live demo](https://lukasmega.github.io/DeckBridge/demo/
 
 > [!IMPORTANT]
 > **Use Elgato Stream Deck app 7.6.0.** Version 7.6.1 closes the connection to DeckBridge
-> right after it connects, so the deck never pairs
+> when both run on the same computer, so the deck never pairs
 > ([#257](https://github.com/lukasMega/DeckBridge/issues/257)). If you already updated,
 > reinstall 7.6.0 until a fix is released.
 

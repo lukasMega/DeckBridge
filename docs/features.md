@@ -426,6 +426,7 @@ ports and the Web UI. The Web UI binds `127.0.0.1` unless you pass `--bind`.
 | `DECKBRIDGE_LOG_LEVEL` | Log verbosity: `debug`/`info`/`warn`/`error`/`silent` |
 | `DECKBRIDGE_CACHE_DIR` | Cache root (settings, logs, extracted native libs) |
 | `DECKBRIDGE_NO_OVERRIDES` | Safe mode: ignore device tuning for this session |
+| `DECKBRIDGE_NO_MDNS` | Don't advertise the dock over mDNS; the Elgato app must add it by IP address |
 | `DECKBRIDGE_PUSH_TOKEN` | Token used by `deckbridge push` (see [Push API](./push-api.md)) |
 
 Log verbosity resolves as `--log-level` > `$DECKBRIDGE_LOG_LEVEL` > `"logLevel"` in

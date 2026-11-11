@@ -4,6 +4,7 @@ import {
   parseCliArgs,
   applyFlagsToEnv,
   isLogLevel,
+  mdnsDisabled,
   versionText,
   USAGE_TEXT,
 } from '../src/shared/cli.js';
@@ -20,6 +21,7 @@ const ENV_KEYS = [
   'DECKBRIDGE_LOG_LEVEL',
   'DECKBRIDGE_NO_OVERRIDES',
   'DECKBRIDGE_NO_EXTENSIONS',
+  'DECKBRIDGE_NO_MDNS',
   'DECKBRIDGE_NO_DAILY_PING',
 ] as const;
 
@@ -165,6 +167,20 @@ test('run --no-overrides sets the safe-mode flag', () => {
   if (r.ok) {
     assert.equal(r.cli.command, 'run');
     assert.equal(r.cli.flags.noOverrides, true);
+  }
+});
+
+test('mdnsDisabled() is true only for DECKBRIDGE_NO_MDNS=1', () => {
+  const snap = snapshotEnv();
+  try {
+    delete tjs.env.DECKBRIDGE_NO_MDNS;
+    assert.equal(mdnsDisabled(), false);
+    tjs.env.DECKBRIDGE_NO_MDNS = '1';
+    assert.equal(mdnsDisabled(), true);
+    tjs.env.DECKBRIDGE_NO_MDNS = '0';
+    assert.equal(mdnsDisabled(), false);
+  } finally {
+    restoreEnv(snap);
   }
 });
 

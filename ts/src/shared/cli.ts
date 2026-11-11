@@ -98,6 +98,12 @@ export function extensionsDisabled(): boolean {
   return typeof tjs !== 'undefined' && tjs.env.DECKBRIDGE_NO_EXTENSIONS === '1';
 }
 
+/** True when DECKBRIDGE_NO_MDNS=1: the CORA servers don't advertise `_elg._tcp`,
+ *  so the Elgato app only reaches a dock added by address (e.g. via a relay). */
+export function mdnsDisabled(): boolean {
+  return typeof tjs !== 'undefined' && tjs.env.DECKBRIDGE_NO_MDNS === '1';
+}
+
 export function versionText(): string {
   return `deckbridge ${__VERSION__} (built ${__BUILD_TIME__})`;
 }
