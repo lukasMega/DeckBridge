@@ -52,6 +52,10 @@ export function cachedDiscoverySerial(hidPath: string): string | null {
   return hit?.serial && hit.serial !== TSV_ABSENT ? hit.serial : null;
 }
 
+export function cachedDiscoveryInfo(hidPath: string): HidDeviceInfo | null {
+  return snapshot.find((d) => d.path === hidPath) ?? null;
+}
+
 export function cachedDiscoveryPaths(
   vendorId: number,
   productIds: readonly number[],

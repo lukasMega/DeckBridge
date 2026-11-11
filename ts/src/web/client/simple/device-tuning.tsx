@@ -19,6 +19,8 @@ import { VerifyButton } from './verify-wizard/verify-entry.js';
 import { ImageCropEditor } from './image-crop-editor.js';
 import { ImageFitHelp, fitApplicability, padFillApplies } from './image-fit-help.js';
 import type { FitApplicability, Size } from './image-fit-help.js';
+import { buildCoraOverride, ElgatoIdentityFields } from './device-tuning-identity.js';
+import type { CoraIdentityDraft } from './device-tuning-identity.js';
 import type { DeviceCropRect, DeviceImageOverride, DeviceOverridesView } from '../ui-types.js';
 
 const ROTATIONS = [0, 90, 180, 270] as const;
@@ -216,19 +218,27 @@ export function DeviceTuningPanel(): preact.JSX.Element {
   const [image, setImage] = useState<DeviceImageOverride>({});
   const [batchImageTransfers, setBatchImageTransfers] = useState(false);
   const [coraProfile, setCoraProfile] = useState('');
+  const [coraIdentity, setCoraIdentity] = useState<CoraIdentityDraft>({
+    dockSerialNumber: '',
+    childSerialNumber: '',
+    macAddress: '',
+    dockFirmwareVersion: '',
+    childFirmwareVersion: '',
+  });
   const action = useAsyncAction();
   const resetFeedback = action.reset;
   const copy = useCopyText();
   const reportCopy = useCopyText();
 
   const load = useCallback(
+    // oxlint-disable-next-line complexity -- request, selection and state guards stay together.
     async (signal?: AbortSignal): Promise<void> => {
       const requested = selectedModelId;
       // Calls retained by an earlier Apply/Reset/learn callback must not start
       // another request after selection changes.
       if (requested !== selectedModelIdRef.current) return;
       const seq = ++loadSeqRef.current;
-      const query = selectedModelId ? `?modelId=${encodeURIComponent(selectedModelId)}` : '';
+      const query = requested ? `?modelId=${encodeURIComponent(requested)}` : '';
       const r = await fetch(`/api/device-overrides${query}`, signal ? { signal } : {});
       if (!r.ok) throw new Error(`Could not load device tuning (${r.status})`);
       const data = (await r.json()) as DeviceOverridesView;
@@ -239,6 +249,14 @@ export function DeviceTuningPanel(): preact.JSX.Element {
       setImage({ ...data.tunable.image });
       setBatchImageTransfers(data.tunable.wire?.batchImageTransfers === true);
       setCoraProfile(data.tunable.cora?.advertiseAs ?? '');
+      const cora = data.overrides.cora;
+      setCoraIdentity({
+        dockSerialNumber: cora?.dockSerialNumber ?? '',
+        childSerialNumber: cora?.childSerialNumber ?? '',
+        macAddress: cora?.macAddress ?? '',
+        dockFirmwareVersion: cora?.dockFirmwareVersion ?? '',
+        childFirmwareVersion: cora?.childFirmwareVersion ?? '',
+      });
     },
     [selectedModelId],
   );
@@ -269,13 +287,11 @@ export function DeviceTuningPanel(): preact.JSX.Element {
     action.run(async () => {
       if (!activeView) return;
       const overrides: Record<string, unknown> = { ...activeView.overrides, image };
+      const cora = buildCoraOverride(activeView, coraIdentity, coraProfile);
       if (typeof activeView.tunable.wire?.batchImageTransfers === 'boolean') {
         overrides.wire = { ...activeView.overrides.wire, batchImageTransfers };
       }
       if (activeView.profiles.length) {
-        const profile = activeView.profiles.find((p) => p.id === coraProfile);
-        if (profile) overrides.cora = { advertiseAs: profile.id, productId: profile.productId };
-        else delete overrides.cora;
         // Image + key map are per grid: the draft was seeded from the old target and
         // would override the new target's transform (e.g. undo the Plus 180°).
         if (coraProfile !== (activeView.tunable.cora?.advertiseAs ?? '')) {
@@ -283,6 +299,8 @@ export function DeviceTuningPanel(): preact.JSX.Element {
           delete overrides.keyMap;
         }
       }
+      if (cora) overrides.cora = cora;
+      else delete overrides.cora;
       const parsed = await postJson<{ reconnecting?: boolean }>(
         '/api/device-overrides',
         { modelId: activeView.modelId, overrides },
@@ -424,6 +442,8 @@ export function DeviceTuningPanel(): preact.JSX.Element {
       )}
 
       <ProfileField view={activeView} coraProfile={coraProfile} onChange={setCoraProfile} />
+
+      <ElgatoIdentityFields value={coraIdentity} onChange={setCoraIdentity} />
 
       <Collapsible title="Advanced" status={advancedTuningStatus(activeView.overrides.image)}>
         <div class="tuning-grid">

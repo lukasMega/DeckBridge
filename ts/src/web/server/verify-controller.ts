@@ -58,6 +58,7 @@ const SYSTEM_TIMERS: VerifyClock = {
 /** What only the main tier knows about a dock (main/verify-wiring.ts). */
 export interface VerifyDockPort {
   hasAppFrames(dockIndex: number): boolean;
+  usbIdentity?(dockIndex: number): VerifySpec['hardware']['usb']['connected'] | undefined;
 }
 
 /** One decoded test-pattern key, for Dock.paintVerify. */
@@ -300,10 +301,15 @@ export class VerifyController {
     return false;
   }
 
+  // oxlint-disable-next-line complexity -- flat projection keeps the wire DTO visible.
   private buildSpec(status: DockStatus, effective: DeviceModel, frame: VerifyOrientation) {
     const advertised = advertisedModel(effective);
     const { image } = effective;
     const splash = splashSpec(effective);
+    const connectedUsb = this.port.usbIdentity?.(status.index);
+    const coraToWireImage = Array.from({ length: advertised.keyCount }, (_, i) =>
+      mk2IndexToDeviceImgId(i, effective),
+    );
     const spec: VerifySpec = {
       dockIndex: status.index,
       modelId: effective.id,
@@ -326,10 +332,58 @@ export class VerifyController {
         quality: image.quality,
         maxBytes: image.maxBytes,
       },
-      coraToWireImage: Array.from({ length: advertised.keyCount }, (_, i) =>
-        mk2IndexToDeviceImgId(i, effective),
-      ),
+      coraToWireImage,
       splash: { rotate: splash.rotate, flipH: splash.flipH, flipV: splash.flipV },
+      hardware: {
+        vendor: effective.vendor,
+        protocol: effective.protocol,
+        usb: {
+          vendorId: effective.usbVendorId,
+          ...(effective.usbProductIds.length === 1
+            ? { matchedProductId: effective.usbProductIds[0] }
+            : {}),
+          productIds: [...effective.usbProductIds],
+          ...(effective.usagePage === undefined ? {} : { usagePage: effective.usagePage }),
+          ...(effective.usage === undefined ? {} : { usage: effective.usage }),
+          ...(connectedUsb ? { connected: connectedUsb } : {}),
+        },
+        physical: {
+          rows: effective.rows,
+          columns: effective.columns,
+          keyCount: effective.keyCount,
+          keyWidth: effective.keyWidth,
+          keyHeight: effective.keyHeight,
+          extraKeyWireIds: [...(effective.keyMap.extraKeys ?? [])],
+          ...(effective.encoderCount === undefined ? {} : { encoderCount: effective.encoderCount }),
+          ...(effective.touchWidth === undefined ? {} : { touchWidth: effective.touchWidth }),
+          ...(effective.touchHeight === undefined ? {} : { touchHeight: effective.touchHeight }),
+        },
+        wire: { ...effective.wire },
+        image: { ...effective.image },
+        keyMap: { ...effective.keyMap, coraToWireImage },
+        cora: {
+          productId: effective.cora.productId,
+          ...(effective.cora.advertiseAs ? { advertiseAs: effective.cora.advertiseAs } : {}),
+          usePhysicalIdentity: effective.cora.usePhysicalIdentity,
+          geometry: {
+            productName: advertised.name,
+            rows: advertised.rows,
+            columns: advertised.columns,
+            keyCount: advertised.keyCount,
+            keyWidth: advertised.keyWidth,
+            keyHeight: advertised.keyHeight,
+            ...(advertised.encoderCount === undefined
+              ? {}
+              : { encoderCount: advertised.encoderCount }),
+            ...(advertised.touchWidth === undefined ? {} : { touchWidth: advertised.touchWidth }),
+            ...(advertised.touchHeight === undefined
+              ? {}
+              : { touchHeight: advertised.touchHeight }),
+          },
+          coraToWireImage,
+        },
+        ...(status.realDeviceIdentity ? { realDeviceIdentity: status.realDeviceIdentity } : {}),
+      },
       hasAppFrames: this.port.hasAppFrames(status.index),
       appVersion: __VERSION__,
     };

@@ -259,6 +259,7 @@ export class DockScanner {
     // deviceKeyFor JSDoc) — append the model id so two different v1 decks don't
     // collapse into one identity.
     const serial = this.deps.discovery.serial(hidPath);
+    const usb = this.deps.discovery.info(hidPath);
     const deviceKey = deviceKeyFor(hidPath, serial, sharedSerialModelId(model));
     const deviceIdentity = this.deps.settings.getOrCreateIdentity(
       deviceKey,
@@ -275,6 +276,19 @@ export class DockScanner {
       deviceInfo: {
         serial: driver.deviceSerial ?? serial ?? undefined,
         firmware: driver.deviceFirmware,
+        ...(usb
+          ? {
+              usb: {
+                vendorId: usb.vendorId,
+                productId: usb.productId,
+                usagePage: usb.usagePage,
+                usage: usb.usage,
+                interfaceNumber: usb.interfaceNumber,
+                manufacturer: usb.manufacturer,
+                product: usb.product,
+              },
+            }
+          : {}),
       },
       getShuttingDown: this.deps.getShuttingDown,
       hooks: {

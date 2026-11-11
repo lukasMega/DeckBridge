@@ -9,6 +9,7 @@ import {
   DEFAULT_CHILD_FIRMWARE_VERSION,
   DEFAULT_DOCK_SERIAL_NUMBER,
   DEFAULT_CHILD_SERIAL_NUMBER,
+  DEFAULT_MAC_ADDRESS,
   DEFAULT_MAC_ADDRESS_STRING,
   MDNS_SERVICE_NAME,
   PLUS_TOUCH_WIDTH,
@@ -41,6 +42,15 @@ import type { ExtraKeyWidgets } from './extra-keys.js';
 export interface DeviceInfo {
   serial?: string;
   firmware?: string;
+  usb?: {
+    vendorId: number;
+    productId: number;
+    usagePage: number;
+    usage: number;
+    interfaceNumber: number;
+    manufacturer: string;
+    product: string;
+  };
 }
 
 /** Identity for a scanned dock: ports from CORA_PORT_STRIDE off the primary pair (a
@@ -105,9 +115,7 @@ export interface DockStatusInput {
 // oxlint-disable-next-line complexity -- flat fallback chain, not branching logic
 export function buildDockStatus(s: DockStatusInput): DockStatus {
   const { model, identity, deviceInfo } = s;
-  // Mirrors applyModelToServers: only childSerialNumber/childFirmwareVersion are ever patched
-  // with the physical device's own values, and only when usePhysicalIdentity is set — everything
-  // else is the dock's own fixed identity (dockSerial/mdns) or the shared defaults.
+  // Per-model overrides win, then forwarded hardware identity, then generated defaults.
   const usePhysical = model.cora.usePhysicalIdentity;
   const encoderCount = physicalEncoderCount(model);
   const pressable = pressableExtraKeys(model);
@@ -138,13 +146,14 @@ export function buildDockStatus(s: DockStatusInput): DockStatus {
           standbyCaps: s.display.caps,
         }
       : {}),
-    dockFirmwareVersion: DEFAULT_DOCK_FIRMWARE_VERSION,
-    childFirmwareVersion: childFirmwareFor(model, deviceInfo),
-    serialNumber: identity?.dockSerial ?? DEFAULT_DOCK_SERIAL_NUMBER,
+    dockFirmwareVersion: model.cora.dockFirmwareVersion ?? DEFAULT_DOCK_FIRMWARE_VERSION,
+    childFirmwareVersion: model.cora.childFirmwareVersion ?? childFirmwareFor(model, deviceInfo),
+    serialNumber: model.cora.dockSerialNumber ?? identity?.dockSerial ?? DEFAULT_DOCK_SERIAL_NUMBER,
     childSerialNumber:
-      (usePhysical && deviceInfo?.serial) || identity?.childSerial || DEFAULT_CHILD_SERIAL_NUMBER,
+      model.cora.childSerialNumber ??
+      ((usePhysical && deviceInfo?.serial) || identity?.childSerial || DEFAULT_CHILD_SERIAL_NUMBER),
     productId: model.cora.productId,
-    macAddress: identity?.macAddress ?? DEFAULT_MAC_ADDRESS_STRING,
+    macAddress: model.cora.macAddress ?? identity?.macAddress ?? DEFAULT_MAC_ADDRESS_STRING,
     mdnsServiceName: identity?.mdnsServiceName ?? MDNS_SERVICE_NAME,
     deviceKey: identity?.deviceKey ?? '',
     ...(deviceInfo
@@ -352,6 +361,7 @@ export function knobRefresh(
  *  forwards it, else the advertised profile's line (the desktop rejects 1.01.x for a
  *  Stream Deck +), else the shared default. */
 export function childFirmwareFor(model: DeviceModel, deviceInfo: DeviceInfo | undefined): string {
+  if (model.cora.childFirmwareVersion) return model.cora.childFirmwareVersion;
   if (model.cora.usePhysicalIdentity && deviceInfo?.firmware) return deviceInfo.firmware;
   return advertisedModel(model).cora.childFirmwareVersion ?? DEFAULT_CHILD_FIRMWARE_VERSION;
 }
@@ -364,6 +374,7 @@ export function applyModelToServers(
   childServer: ElgatoChildServer,
   model: DeviceModel,
   deviceInfo?: DeviceInfo,
+  identity?: Pick<DockIdentity, 'dockSerial' | 'childSerial' | 'macAddress'>,
 ): void {
   const pid = model.cora.productId;
   const geo = advertisedGeometry(model);
@@ -371,11 +382,19 @@ export function applyModelToServers(
   // after the device is unplugged or re-paired as an MK.2.
   const configPatch: Partial<DeviceConfig> = {
     productId: pid,
+    dockFirmwareVersion: model.cora.dockFirmwareVersion ?? DEFAULT_DOCK_FIRMWARE_VERSION,
     childFirmwareVersion: childFirmwareFor(model, deviceInfo),
+    serialNumber: model.cora.dockSerialNumber ?? identity?.dockSerial ?? DEFAULT_DOCK_SERIAL_NUMBER,
+    childSerialNumber:
+      model.cora.childSerialNumber ??
+      ((model.cora.usePhysicalIdentity && deviceInfo?.serial) ||
+        identity?.childSerial ||
+        DEFAULT_CHILD_SERIAL_NUMBER),
+    macAddress: macToBytes(
+      model.cora.macAddress ?? identity?.macAddress ?? DEFAULT_MAC_ADDRESS_STRING,
+      [...DEFAULT_MAC_ADDRESS],
+    ),
   };
-  if (model.cora.usePhysicalIdentity && deviceInfo?.serial) {
-    configPatch.childSerialNumber = deviceInfo.serial;
-  }
   server.setDeviceConfig(configPatch);
   server.setChildGeometry(geo);
   server.restartMdns(pid);

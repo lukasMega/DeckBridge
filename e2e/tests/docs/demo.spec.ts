@@ -38,10 +38,11 @@ test.describe('live demo', () => {
       });
       const clockStart = new Date('2026-10-10T12:00:00Z');
       await page.clock.install({ time: clockStart });
-      await page.clock.pauseAt(clockStart);
       const nativeIcon = (state: string) =>
         `data:image/png;base64,${readFileSync(new URL(`../../../rust/deckbridge-tray/icons/icon-${state}.png`, import.meta.url)).toString('base64')}`;
       await page.goto(`${docs.baseURL}/demo/`, { waitUntil: 'load' });
+      const loadedAt = await page.evaluate(() => Date.now());
+      await page.clock.pauseAt(new Date(loadedAt + 500));
       const tray = page.getByRole('button', { name: 'DeckBridge tray', exact: true });
       await expect(tray).toHaveCount(0);
       await page.clock.runFor(1000);

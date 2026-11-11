@@ -9,6 +9,8 @@ export type VerifyAnswers = Record<string, string[]>;
 export interface VerifyReport {
   answers: VerifyAnswers;
   results: Record<'image' | 'input' | 'colours' | 'size' | 'realImages', VerifyResult>;
+  hardware?: VerifySpec['hardware'];
+  elgatoApp?: NonNullable<VerifySpec['elgatoApp']>;
 }
 
 /** What only the wizard knows: the blank ladder ran out, and what the save changed. */
@@ -27,7 +29,12 @@ const BY_LAST_PICK: Record<string, Record<string, string>> = {
   confirm: { yes: 'ok' },
 };
 
-export function verifyReport(answers: VerifyAnswers, outcome: VerifyOutcome): VerifyReport {
+export function verifyReport(
+  answers: VerifyAnswers,
+  outcome: VerifyOutcome,
+  hardware?: VerifySpec['hardware'],
+  elgatoApp?: VerifySpec['elgatoApp'],
+): VerifyReport {
   const result = (step: string, changed?: boolean): VerifyResult => {
     const r = BY_LAST_PICK[step]![answers[step]?.at(-1) ?? ''] ?? 'unknown';
     if (r !== 'ok') return r as VerifyResult;
@@ -35,6 +42,8 @@ export function verifyReport(answers: VerifyAnswers, outcome: VerifyOutcome): Ve
   };
   return {
     answers,
+    ...(hardware ? { hardware } : {}),
+    ...(elgatoApp ? { elgatoApp } : {}),
     results: {
       image: outcome.failed ? 'fail' : result('confirm', outcome.imageChanged),
       input: result('buttons'),

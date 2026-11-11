@@ -22,6 +22,7 @@ const sidebars: SidebarsConfig = {
     'headless-linux',
     'verify-device',
     'troubleshooting',
+    'elgato-same-computer',
     'virustotal',
     'virustotal-v0.17.0',
     'privacy',

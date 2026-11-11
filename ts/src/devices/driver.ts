@@ -127,6 +127,12 @@ export interface DeviceCoraSpec {
    *  Omit for the shared DEFAULT_CHILD_FIRMWARE_VERSION ('1.01.000'); the Stream Deck +
    *  profile sets a 2.00.x version because the desktop rejects 1.01.x for PID 0x0084. */
   childFirmwareVersion?: string;
+  /** Optional identity overrides sent over CORA. Omitted fields use generated or
+   *  physical identity, and the profile's firmware defaults. */
+  dockSerialNumber?: string;
+  childSerialNumber?: string;
+  macAddress?: string;
+  dockFirmwareVersion?: string;
   /** CORA profiles (registry.ts `CORA_PROFILES` ids) this device may re-pair as via a
    *  `cora.advertiseAs` override, each with the physical image transform + key map the
    *  emulated grid needs on this panel. Only these (or the model's own `advertiseAs`)
@@ -256,7 +262,15 @@ export function imageBatchingEnabled(model: DeviceModel): boolean {
  *  model's `cora.emulations` (or its own advertiseAs); `productId` must match that
  *  profile's PID. `usePhysicalIdentity` is deliberately absent — it is a
  *  physical-device fact, not a pairing preference. */
-export const CORA_OVERRIDE_KEYS = ['advertiseAs', 'productId'] as const;
+export const CORA_OVERRIDE_KEYS = [
+  'advertiseAs',
+  'productId',
+  'dockSerialNumber',
+  'childSerialNumber',
+  'macAddress',
+  'dockFirmwareVersion',
+  'childFirmwareVersion',
+] as const;
 
 /** User-tunable subset of a DeviceModel, persisted per model id under settings.json's
  *  `modelOverrides` (devices/model-overrides.ts). Deep-partial per section, arrays

@@ -337,6 +337,13 @@ export default defineConfig([
               from: { element: { type: 'cora' } },
               allow: { to: { element: { type: ['infra', 'platform'] } } },
             },
+            // main/relay/relay.ts listens with raw tjs (it needs half-close) and shares the
+            // accept-crash guard with platform/tcp.ts.
+            {
+              from: { element: { type: 'app' } },
+              allow: { to: { element: { type: 'platform' } } },
+              message: 'app may import platform ONLY for platform/accept-guard.ts.',
+            },
             // web-server may read FFI capability candidates (path enumeration only — no device I/O),
             // and the device registry (for DEFAULT_MODEL) — never live device I/O.
             {

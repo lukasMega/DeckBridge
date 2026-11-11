@@ -2,6 +2,7 @@
 import { get, postJson } from './router.js';
 import type { Route } from './router.js';
 import { badRequest, json } from './http.js';
+import { elgatoAppVersion, isElgatoAppRunning } from '../../infra/os-utils.js';
 import { isNonNegInt, nonNegIntMessage } from './types.js';
 import type { ReqError } from './types.js';
 import type { VerifyError, VerifyRawBody, VerifySaveInput } from './verify-controller.js';
@@ -9,6 +10,7 @@ import type {
   VerifyDismissBody,
   VerifyDraftBody,
   VerifyPaintBody,
+  VerifySpec,
   VerifyStartResponse,
 } from '../contract-verify.js';
 
@@ -20,6 +22,11 @@ function fail(e: VerifyError): Response {
 
 const okOr = (err: ReqError | null): Response => (err ? fail(err) : json({ ok: true }));
 
+async function withElgatoApp(spec: VerifySpec): Promise<VerifySpec> {
+  const [running, version] = await Promise.all([isElgatoAppRunning(), elgatoAppVersion()]);
+  return { ...spec, elgatoApp: { running, ...(version ? { version } : {}) } };
+}
+
 export const verifyRoutes: Route[] = [
   get('/api/verify/spec', ({ verify, url, ui }) => {
     const raw = url.searchParams.get('dock');
@@ -27,9 +34,9 @@ export const verifyRoutes: Route[] = [
     if (!isNonNegInt(dock)) return badRequest(nonNegIntMessage('dock'));
     return json(verify.spec(dock));
   }),
-  postJson('/api/verify/start', (body: { dockIndex?: unknown }, { verify }) => {
+  postJson('/api/verify/start', async (body: { dockIndex?: unknown }, { verify }) => {
     const r = verify.start(body.dockIndex);
-    return 'error' in r ? fail(r) : json(r);
+    return 'error' in r ? fail(r) : json({ ...r, spec: await withElgatoApp(r.spec) });
   }),
   postJson('/api/verify/keepalive', (body: TokenBody, { verify }) => {
     const r = verify.keepalive(body.token);

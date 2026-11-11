@@ -4,12 +4,14 @@ import { isElgatoHid, type DeviceModel } from '../devices/driver.js';
 import { DEVICE_MODELS } from '../devices/registry.js';
 import {
   cachedDiscoveryPaths,
+  cachedDiscoveryInfo,
   cachedDiscoverySerial,
   installDiscoverySnapshot,
 } from '../ffi/hid-discovery.js';
 import { deviceKeyFor, sharedSerialModelId } from '../infra/device-identity.js';
 import { HidScanWorkerHost, type HidScanResult } from '../worker/hid-scan-worker-host.js';
 import { log } from '../shared/logger.js';
+import type { HidDeviceInfo } from '../ffi/hidapi.js';
 
 export interface HidDiscovery {
   /** One supported-device scan; installs the snapshot the queries read. Resolves to its ms. */
@@ -19,6 +21,7 @@ export interface HidDiscovery {
   /** Every usage-matched HID path for this model, one per physical unit. */
   paths(model: DeviceModel): string[];
   serial(hidPath: string): string | null;
+  info(hidPath: string): HidDeviceInfo | null;
   /** Re-init the native HID stack before the next scan (after a disconnect). */
   requestReset(): void;
   /** Unfiltered HID inventory for diagnostics, off the main thread (shares the scan worker). */
@@ -48,6 +51,7 @@ export function nativeHidDiscovery(): HidDiscovery {
     paths: (model) =>
       cachedDiscoveryPaths(model.usbVendorId, model.usbProductIds, model.usagePage, model.usage),
     serial: cachedDiscoverySerial,
+    info: cachedDiscoveryInfo,
     inventory: () => scanner.inventory(),
     requestReset: () => scanner.requestReset(),
     dispose: () => scanner.dispose(),

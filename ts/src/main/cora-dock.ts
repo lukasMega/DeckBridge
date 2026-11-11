@@ -13,6 +13,7 @@ import type { PairingWatchdog } from '../cora/pairing-watchdog.js';
 import type { ElgatoServer } from '../cora/primary-server.js';
 import type { ElgatoChildServer } from '../cora/child-server.js';
 import type { DeviceModel } from '../devices/driver.js';
+import type { DockIdentity } from './dock-status.js';
 import { applyModelToServers } from './dock-status.js';
 import type { DeviceInfo } from './dock-status.js';
 import { coraPortConflict } from './cora-startup.js';
@@ -66,8 +67,12 @@ export class CoraDock {
 
   /** One call replacing the config/geometry/mDNS/capabilities push sequence
    *  (device/PID, advertised geometry, mDNS restart, child capabilities). */
-  applyModel(model: DeviceModel, deviceInfo?: DeviceInfo): void {
-    applyModelToServers(this.server, this.childServer, model, deviceInfo);
+  applyModel(
+    model: DeviceModel,
+    deviceInfo?: DeviceInfo,
+    identity?: Pick<DockIdentity, 'dockSerial' | 'childSerial' | 'macAddress'>,
+  ): void {
+    applyModelToServers(this.server, this.childServer, model, deviceInfo, identity);
   }
 
   /** Live-rename the mDNS advert (WebUI "Device Identity" edit). */

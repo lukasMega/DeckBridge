@@ -40,8 +40,8 @@ function ElgatoVersionBanner(): preact.JSX.Element {
     <div class="warnrow conn-banner" role="note">
       <Icon class="w-ico" html={ICON.warn} />
       <span>
-        Elgato Stream Deck app 7.6.1 does not pair with DeckBridge. Use 7.6.0 until a fix is
-        released.
+        Elgato Stream Deck app 7.6.1 does not pair with DeckBridge on the same computer. Use 7.6.0
+        until a fix is released.
       </span>
     </div>
   );

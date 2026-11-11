@@ -1,9 +1,11 @@
+/* eslint-disable sonarjs/no-hardcoded-ip -- fixture addresses, nothing is contacted */
 import assert from 'tjs:assert';
 import {
   userArgs,
   parseCliArgs,
   applyFlagsToEnv,
   isLogLevel,
+  mdnsDisabled,
   versionText,
   USAGE_TEXT,
 } from '../src/shared/cli.js';
@@ -20,6 +22,7 @@ const ENV_KEYS = [
   'DECKBRIDGE_LOG_LEVEL',
   'DECKBRIDGE_NO_OVERRIDES',
   'DECKBRIDGE_NO_EXTENSIONS',
+  'DECKBRIDGE_NO_MDNS',
   'DECKBRIDGE_NO_DAILY_PING',
 ] as const;
 
@@ -168,6 +171,20 @@ test('run --no-overrides sets the safe-mode flag', () => {
   }
 });
 
+test('mdnsDisabled() is true only for DECKBRIDGE_NO_MDNS=1', () => {
+  const snap = snapshotEnv();
+  try {
+    delete tjs.env.DECKBRIDGE_NO_MDNS;
+    assert.equal(mdnsDisabled(), false);
+    tjs.env.DECKBRIDGE_NO_MDNS = '1';
+    assert.equal(mdnsDisabled(), true);
+    tjs.env.DECKBRIDGE_NO_MDNS = '0';
+    assert.equal(mdnsDisabled(), false);
+  } finally {
+    restoreEnv(snap);
+  }
+});
+
 test('"version" → command "version"', () => {
   const r = parseCliArgs(['version']);
   assert.ok(r.ok);
@@ -205,6 +222,15 @@ test('unknown command word → error, not thrown/exited', () => {
   const r = parseCliArgs(['bogus']);
   assert.ok(!r.ok);
   if (!r.ok) assert.ok(r.error.includes('bogus'));
+});
+
+test('relay passes its args through untouched', () => {
+  const r = parseCliArgs(['relay', '--target', '1.2.3.4']);
+  assert.ok(r.ok);
+  if (r.ok) {
+    assert.equal(r.cli.command, 'relay');
+    assert.deepEqual(r.cli.rest, ['--target', '1.2.3.4']);
+  }
 });
 
 // parseCliArgs: flag matrix

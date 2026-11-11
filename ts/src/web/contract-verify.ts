@@ -43,8 +43,64 @@ export interface VerifySpec {
   coraToWireImage: number[];
   /** Effective splash orientation (transformOverride merged over image, as splashSpec does). */
   splash: VerifyOrientation & { flipV: boolean };
+  /** Physical hardware and the separate CORA profile presented to the desktop app. */
+  hardware: {
+    vendor: string;
+    protocol: string;
+    usb: {
+      vendorId: number;
+      /** Exact match when this model has only one registered USB PID. */
+      matchedProductId?: number;
+      productIds: number[];
+      usagePage?: number;
+      usage?: number;
+      connected?: {
+        vendorId: number;
+        productId: number;
+        usagePage: number;
+        usage: number;
+        interfaceNumber: number;
+        manufacturer: string;
+        product: string;
+      };
+    };
+    physical: {
+      rows: number;
+      columns: number;
+      keyCount: number;
+      keyWidth: number;
+      keyHeight: number;
+      encoderCount?: number;
+      touchWidth?: number;
+      touchHeight?: number;
+      extraKeyWireIds: number[];
+    };
+    wire: Record<string, unknown>;
+    image: Record<string, unknown>;
+    keyMap: Record<string, unknown>;
+    cora: {
+      productId: number;
+      advertiseAs?: string;
+      usePhysicalIdentity: boolean;
+      geometry: {
+        productName: string;
+        rows: number;
+        columns: number;
+        keyCount: number;
+        keyWidth: number;
+        keyHeight: number;
+        encoderCount?: number;
+        touchWidth?: number;
+        touchHeight?: number;
+      };
+      coraToWireImage: number[];
+    };
+    realDeviceIdentity?: { modelName: string; serialNumber?: string; firmwareVersion?: string };
+  };
   /** LastFrames holds app frames, so the real-image check after save is possible. */
   hasAppFrames: boolean;
+  /** Best-effort host detection captured when the verification session starts. */
+  elgatoApp?: { running: boolean; version?: string };
   appVersion: string;
 }
 

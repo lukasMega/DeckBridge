@@ -46,6 +46,11 @@ export interface TuningKeyMap {
 export interface TuningCora {
   advertiseAs?: string;
   productId?: number;
+  dockSerialNumber?: string;
+  childSerialNumber?: string;
+  macAddress?: string;
+  dockFirmwareVersion?: string;
+  childFirmwareVersion?: string;
 }
 
 /** Every wire field is sent; the WebUI only reads and sets this one. */

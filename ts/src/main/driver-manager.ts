@@ -92,8 +92,7 @@ export class DriverManager extends EventEmitter {
       ports: { primary: ELGATO_TCP_PORT, child: ELGATO_CHILD_PORT },
       settings: deps.settings,
       getShuttingDown: deps.getShuttingDown,
-      // The process-lifetime dock also feeds the key activity feed and the brightness
-      // slider; its disconnect starts the reconnect probe.
+      // The process-lifetime dock feeds activity/brightness; disconnect starts reconnect probing.
       hooks: {
         ...this.dockHooks(0),
         disconnect: () => this.onPrimaryDisconnect(),
@@ -422,10 +421,12 @@ export class DriverManager extends EventEmitter {
       found.hidPath,
       found.model,
     );
+    const usb = found.hidPath ? this.discovery.info(found.hidPath) : null;
     this.primary.resolveIdentity(deviceKey);
     this.applyDeviceModel(found.model, {
       serial: found.deviceSerial ?? serial ?? undefined,
       firmware: found.deviceFirmware,
+      ...(usb ? { usb } : {}),
     });
     return found;
   }
