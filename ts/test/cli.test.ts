@@ -1,3 +1,4 @@
+/* eslint-disable sonarjs/no-hardcoded-ip -- fixture addresses, nothing is contacted */
 import assert from 'tjs:assert';
 import {
   userArgs,
@@ -221,6 +222,15 @@ test('unknown command word → error, not thrown/exited', () => {
   const r = parseCliArgs(['bogus']);
   assert.ok(!r.ok);
   if (!r.ok) assert.ok(r.error.includes('bogus'));
+});
+
+test('relay passes its args through untouched', () => {
+  const r = parseCliArgs(['relay', '--target', '1.2.3.4']);
+  assert.ok(r.ok);
+  if (r.ok) {
+    assert.equal(r.cli.command, 'relay');
+    assert.deepEqual(r.cli.rest, ['--target', '1.2.3.4']);
+  }
 });
 
 // parseCliArgs: flag matrix

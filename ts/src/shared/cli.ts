@@ -1,7 +1,7 @@
 /** CLI argument parsing. Hand-rolled, zero dependencies (see CLAUDE.md boundaries —
  *  this file is classified 'shared' and must not import anything else in the tree). */
 
-export type CliCommand = 'run' | 'devices' | 'diagnose' | 'push' | 'version' | 'help';
+export type CliCommand = 'run' | 'devices' | 'diagnose' | 'push' | 'relay' | 'version' | 'help';
 
 export interface CliFlags {
   mock: boolean;
@@ -32,13 +32,13 @@ export interface CliFlags {
 export interface ParsedCli {
   command: CliCommand;
   flags: CliFlags;
-  /** `push`: the args after the command word; cli/push.ts parses them itself. */
+  /** `push`/`relay`: the args after the command word; their own modules parse them. */
   rest?: string[];
 }
 
 export type CliParseResult = { ok: true; cli: ParsedCli } | { ok: false; error: string };
 
-const COMMANDS = ['run', 'devices', 'diagnose', 'push', 'version', 'help'] as const;
+const COMMANDS = ['run', 'devices', 'diagnose', 'push', 'relay', 'version', 'help'] as const;
 /** Single source of truth for the accepted levels — reused by the infra/settings.ts
  *  guard and POST /api/log-level so the three can't drift apart. */
 export const LOG_LEVELS = ['debug', 'info', 'warn', 'error', 'silent'] as const;
@@ -55,6 +55,7 @@ Commands:
   devices             List detected stream deck HID devices, then exit
   diagnose            Write a diagnostics report (for bug reports), then exit
   push                Send text to a push channel of a running bridge, then exit
+  relay               Relay a DeckBridge on another computer to the Elgato app (see docs)
   version             Print version/build info, then exit
   help                Print usage, then exit
 
@@ -240,11 +241,11 @@ function parseFlagArgs(args: string[], startIndex: number): FlagsParseResult {
 export function parseCliArgs(args: string[]): CliParseResult {
   const word = parseCommandWord(args);
   if ('error' in word) return { ok: false, error: word.error };
-  // `push` has positional args and its own flags: cli/push.ts parses the rest.
-  if (word.command === 'push') {
+  // `push`/`relay` have their own flags: their modules parse the rest.
+  if (word.command === 'push' || word.command === 'relay') {
     return {
       ok: true,
-      cli: { command: 'push', flags: defaultFlags(), rest: args.slice(word.consumed) },
+      cli: { command: word.command, flags: defaultFlags(), rest: args.slice(word.consumed) },
     };
   }
 

@@ -9,6 +9,8 @@
 // halves finish, so a peer FIN (readable done, writable still locked) would otherwise
 // leak the descriptor.
 
+import { guardAccept, isDroppedAccept } from './accept-guard.js';
+
 /** tjs rejects with plain values as well as Errors; callbacks here take an Error. */
 const asError = (e: unknown): Error => (e instanceof Error ? e : new Error(String(e)));
 
@@ -228,6 +230,7 @@ export class NodeLikeServer {
       let server: TjsTCPServerSocket | null = null;
       try {
         server = await tjs.listen('tcp', host, port);
+        guardAccept(server);
         if (generation !== this._generation) {
           closeQuietly(server);
           return;
@@ -257,6 +260,7 @@ export class NodeLikeServer {
       for (;;) {
         const { done, value: conn } = await reader.read();
         if (done) break;
+        if (isDroppedAccept(conn)) continue;
         if (generation !== this._generation) {
           closeQuietly(conn);
           continue;
