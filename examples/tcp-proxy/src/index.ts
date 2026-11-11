@@ -273,8 +273,8 @@ function handleConnection(name: string, client: Socket, options: Options, port: 
   });
   upstream.setNoDelay(true);
 
-  const tapEtoD = createTap(tag, 'E->D', logFrames, options.hex, isChild);
-  const tapDtoE = createTap(tag, 'D->E', logFrames, options.hex, isChild);
+  const tapElgatoToDock = createTap(tag, 'E->D', logFrames, options.hex, isChild);
+  const tapDockToElgato = createTap(tag, 'D->E', logFrames, options.hex, isChild);
 
   function markClose(side: string, how: string): void {
     if (first) return;
@@ -289,7 +289,7 @@ function handleConnection(name: string, client: Socket, options: Options, port: 
     log(
       tag,
       `closed: first=${f.side} how=${f.how} duration=${Date.now() - startedAt}ms ` +
-        `bytes E->D=${toD} D->E=${toE} frames E->D=${tapEtoD.frames()} D->E=${tapDtoE.frames()}`,
+        `bytes E->D=${toD} D->E=${toE} frames E->D=${tapElgatoToDock.frames()} D->E=${tapDockToElgato.frames()}`,
     );
   }
 
@@ -341,11 +341,11 @@ function handleConnection(name: string, client: Socket, options: Options, port: 
     log(tag, `upstream connected ${at} in ${Date.now() - connectStart}ms`);
     client.on('data', function onClientData(chunk: Buffer) {
       toD += chunk.length;
-      tapEtoD.feed(chunk);
+      tapElgatoToDock.feed(chunk);
     });
     upstream.on('data', function onUpstreamData(chunk: Buffer) {
       toE += chunk.length;
-      tapDtoE.feed(chunk);
+      tapDockToElgato.feed(chunk);
     });
     client.pipe(upstream);
     upstream.pipe(client);
