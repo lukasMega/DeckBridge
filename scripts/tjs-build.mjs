@@ -66,8 +66,14 @@ try {
   // --filter txiki.js installs the root only, skipping the Docusaurus website
   // package, which is irrelevant to the runtime. --ignore-scripts is safe:
   // esbuild's binary ships in the @esbuild/<platform> optional dep.
+  // --pm-on-fail=ignore: use mise's pnpm, not the fork's packageManager pin,
+  // which may ship no native binary for this host (pnpm 11 has no darwin-x64).
   console.log('Installing build deps (pnpm install --filter txiki.js) ...');
-  run('pnpm', ['install', '--frozen-lockfile', '--ignore-scripts', '--filter', 'txiki.js'], { cwd: srcDir });
+  run(
+    'pnpm',
+    ['install', '--frozen-lockfile', '--ignore-scripts', '--filter', 'txiki.js', '--pm-on-fail=ignore'],
+    { cwd: srcDir },
+  );
 
   console.log('Building slim runtime (build-dist.mjs --profile ffi) ...');
   run(process.execPath, ['scripts/build-dist.mjs', '--profile', 'ffi', '--out', outDir], { cwd: srcDir });
