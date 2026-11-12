@@ -1,3 +1,4 @@
+/* eslint-disable sonarjs/no-hardcoded-ip -- fixture addresses, nothing is contacted */
 import assert from 'tjs:assert';
 import { PersistedSettings } from '../src/infra/settings.js';
 import { settingsPath, loadSettings, saveSettings } from '../src/infra/settings-store.js';
@@ -307,6 +308,37 @@ await test('a legacy enabledExtensions key is ignored and never written back', a
   const onDisk = (await loadSettings(dir)) as Record<string, unknown>;
   assert.equal('enabledExtensions' in onDisk, false);
   assert.equal(onDisk.extensions, undefined);
+});
+
+console.log('\nPersistedSettings — wslRelay');
+
+await test('wslRelay defaults off, round-trips through persist() and load()', async () => {
+  const dir = `${ROOT}/wsl-relay`;
+  const settings = new PersistedSettings(dir);
+  assert.deepEqual(settings.wslRelay, { enabled: false });
+  settings.setWslRelay({ enabled: true, lastIp: '172.20.1.5' });
+  await settings.flush();
+  const reloaded = new PersistedSettings(dir);
+  await reloaded.load();
+  assert.deepEqual(reloaded.wslRelay, { enabled: true, lastIp: '172.20.1.5' });
+  reloaded.setWslRelay({ enabled: false });
+  await reloaded.flush();
+  assert.equal((await loadSettings(dir)).wslRelay, undefined, 'default is not written');
+});
+
+await test('load() drops a malformed wslRelay and a bad lastIp alone', async () => {
+  for (const bad of ['yes', 7, [], { enabled: 'true' }, { lastIp: '1.2.3.4' }]) {
+    const dir = `${ROOT}/wsl-relay-bad`;
+    await saveSettings({ wslRelay: bad } as unknown as Settings, dir);
+    const settings = new PersistedSettings(dir);
+    await settings.load();
+    assert.deepEqual(settings.wslRelay, { enabled: false }, JSON.stringify(bad));
+  }
+  const dir = `${ROOT}/wsl-relay-badip`;
+  await saveSettings({ wslRelay: { enabled: true, lastIp: 'not an ip' } }, dir);
+  const settings = new PersistedSettings(dir);
+  await settings.load();
+  assert.deepEqual(settings.wslRelay, { enabled: true });
 });
 
 console.log('\nPersistedSettings — saved pages');

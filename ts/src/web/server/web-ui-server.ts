@@ -47,6 +47,7 @@ import { handlePushApi, isPushApiPath } from './push-routes.js';
 import { ElgatoAppController } from './elgato-app-controller.js';
 import { StandbyController } from './standby-controller.js';
 import { ExtensionsController } from './extensions-controller.js';
+import { WslRelayController } from './wsl-relay-controller.js';
 
 export { isAllowedWebRequest, isValidMacAddress, pickFallbackPort } from './web-request-guard.js';
 
@@ -80,6 +81,7 @@ export class WebUIServer extends EventEmitter implements WebUIController, WebUIC
   readonly push: PushController;
   readonly virtualDeck: VirtualDeckController;
   readonly extensions: ExtensionsController;
+  readonly wslRelay: WslRelayController;
   private readonly controllers: WebUIControllers;
   readonly imageChannel = new ImageChannel(this.bus, () => this.selectedDock);
   get selectedDock(): number {
@@ -176,6 +178,7 @@ export class WebUIServer extends EventEmitter implements WebUIController, WebUIC
         state: this.fullState(),
         activity: this.activity,
         settingsJson: this.settings.json(),
+        wslRelay: this.wslRelay.status(),
         inventory: () => this.hidInventory(),
       }),
     );
@@ -187,6 +190,7 @@ export class WebUIServer extends EventEmitter implements WebUIController, WebUIC
     this.push = new PushController(host, () => this.dockRegistry.list());
     this.virtualDeck = new VirtualDeckController(host, this.push);
     this.extensions = new ExtensionsController(host, { appStartedAt: this.startTime });
+    this.wslRelay = new WslRelayController(host);
     this.controllers = {
       settings: this.settings,
       devicePrefs: this.devicePrefs,
@@ -204,6 +208,7 @@ export class WebUIServer extends EventEmitter implements WebUIController, WebUIC
       push: this.push,
       virtualDeck: this.virtualDeck,
       extensions: this.extensions,
+      wslRelay: this.wslRelay,
     };
     if (__MOCK_BUILD__) {
       this.applyMockConfig = (parsed) => {

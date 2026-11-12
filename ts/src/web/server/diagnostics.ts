@@ -9,6 +9,7 @@ import type { HidDeviceInfo } from '../../ffi/hidapi.js';
 import type { DeviceRow } from '../../cli/devices.js';
 import type { RequirementResult } from './requirements.js';
 import type { CommEntry } from '../../shared/types.js';
+import type { WslRelayStatus } from '../contract-wsl-relay.js';
 import type { KeyEventEntry, LogEntry, StateResponse } from './types.js';
 
 export interface DiagnosticsOptions {
@@ -71,6 +72,8 @@ export interface DiagnosticsSources {
    *  is unreadable or the sink was disabled. */
   ringLogs?: LogEntry[];
   settingsJson?: string;
+  /** WSL relay status (server path only). */
+  wslRelay?: WslRelayStatus;
 }
 
 export const DEFAULT_LOG_TAIL_LINES = 400;
@@ -271,6 +274,13 @@ function updatesBlock(updates: DiagnosticsSources['updates']): string {
   });
 }
 
+/** One line; the relay's own log lines are in the log tail (component wsl-relay). */
+function wslRelayLine(s: WslRelayStatus | undefined): string {
+  if (!s) return '';
+  if (!s.supported) return 'not supported on this system';
+  return `enabled=${s.enabled} state=${s.state} wslIp=${s.wslIp ?? '-'} distro=${s.distro ?? '-'}`;
+}
+
 function headerBlock(h: DiagnosticsSources['header']): string {
   return kvBlock({
     version: h.version,
@@ -311,6 +321,7 @@ export function buildDiagnostics(src: DiagnosticsSources, opt: DiagnosticsOption
     section('environment (DECKBRIDGE_*)', kvBlock(src.env)),
     section('paths', kvBlock(src.paths)),
     section('update check', updatesBlock(src.updates)),
+    section('wsl relay', wslRelayLine(src.wslRelay)),
     section('model overrides', overridesBlock(src.modelOverrides)),
     section('effective model specs', jsonBlock(src.effectiveModels)),
     section(

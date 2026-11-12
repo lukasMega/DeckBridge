@@ -15,6 +15,7 @@ import { VirtualDeckPanel } from './virtual-deck-panel.js';
 import { KeyPressPanel } from './key-press-panel.js';
 import { UpdatePanel } from './update-panel.js';
 import { ElgatoAppPanel } from './elgato-app-panel.js';
+import { WslRelaySetting } from './wsl-relay-card.js';
 import { DeviceTuningPanel } from './device-tuning.js';
 import { StandbyPanel } from './standby-panel.js';
 import { ExtensionsPanel } from './extensions-panel.js';
@@ -336,6 +337,7 @@ export function SettingsPage({
 
         <SettingsGroup title="App connection">
           <ElgatoAppPanel state={elgatoAutoRestartFor(state.data)} />
+          <WslRelaySetting />
         </SettingsGroup>
 
         <SettingsGroup title="Maintenance">

@@ -36,12 +36,14 @@ function StaleBanner(): preact.JSX.Element | null {
 }
 
 function ElgatoVersionBanner(): preact.JSX.Element {
+  const wsl = useStore((s) => s.wslRelay?.supported === true);
   return (
     <div class="warnrow conn-banner" role="note">
       <Icon class="w-ico" html={ICON.warn} />
       <span>
         Elgato Stream Deck app 7.6.1 does not pair with DeckBridge on the same computer. Use 7.6.0
         until a fix is released.
+        {wsl && ' Or use Pair through WSL on the pairing screen.'}
       </span>
     </div>
   );

@@ -10,7 +10,13 @@ import {
   EVENT_SUBTYPE_KEEPALIVE,
   CLIENT_EVICTION_GRACE_MS,
 } from './protocol.js';
-import { CORA_FLAG_ACKNAK, CORA_FLAG_VERBATIM, CoraFrameReader, encodeCoraFrame } from './frame.js';
+import {
+  CORA_FLAG_ACKNAK,
+  CORA_FLAG_VERBATIM,
+  CoraFrameReader,
+  coraFlagString,
+  encodeCoraFrame,
+} from './frame.js';
 import { formatCommHex } from '../shared/comm-format.js';
 
 export abstract class CoraServerBase extends EventEmitter {
@@ -28,6 +34,9 @@ export abstract class CoraServerBase extends EventEmitter {
   public evictionGraceMs = CLIENT_EVICTION_GRACE_MS;
   protected lastClientRxTs = 0;
   protected abstract componentName: string;
+  /** Full wire traces are useful for the low-volume primary handshake, but not
+   *  for the ACK-paced child image stream. */
+  protected traceWireFrames = false;
 
   protected constructor(port: number) {
     super();
@@ -103,7 +112,11 @@ export abstract class CoraServerBase extends EventEmitter {
     _noisy = false,
   ): void {
     const frame = encodeCoraFrame(payload, flags, hidOp, messageId);
-    this.client?.write(frame);
+    const client = this.client;
+    if (client) {
+      client.write(frame);
+      if (this.traceWireFrames) this.logWireFrame('tx', frame);
+    }
     if (description) this.emitComm('tx', description, frame);
   }
 
@@ -207,6 +220,12 @@ export abstract class CoraServerBase extends EventEmitter {
       this.lastClientRxTs = Date.now();
       this.reader.append(chunk);
       for (const frame of this.reader.drainFrames()) {
+        if (this.traceWireFrames) {
+          this.logWireFrame(
+            'rx',
+            encodeCoraFrame(frame.payload, frame.flags, frame.hidOp, frame.messageId),
+          );
+        }
         this.handleCoraPacket(frame.flags, frame.hidOp, frame.messageId, frame.payload);
       }
     });
@@ -235,4 +254,14 @@ export abstract class CoraServerBase extends EventEmitter {
     messageId: number,
     payload: Buffer,
   ): void;
+
+  private logWireFrame(direction: 'rx' | 'tx', frame: Buffer): void {
+    this.emitLog(
+      'debug',
+      `wire ${direction} flags=${coraFlagString(frame.readUInt16LE(4))} ` +
+        `hidOp=0x${frame[6]!.toString(16).padStart(2, '0')} ` +
+        `msgId=${frame.readUInt32LE(8)} payload=${frame.readUInt32LE(12)}B ` +
+        `raw=${frame.toString('hex')}`,
+    );
+  }
 }

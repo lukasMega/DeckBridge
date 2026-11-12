@@ -12,6 +12,7 @@ import { KeyGridPreview } from '../components/KeyGridPreview.js';
 import { ExtraKeysPanel } from './extra-keys-panel.js';
 import { DockList, keyPressTitle } from './dock-cards.js';
 import { VerifyOffer } from './verify-wizard/verify-entry.js';
+import { WslReadyLine, WslRelayCard } from './wsl-relay-card.js';
 import { pressKey, quitElgatoApp } from './handlers.js';
 import {
   isMultiDockView,
@@ -39,6 +40,7 @@ function ReadyStatus({
           {deviceName}
         </span>
       )}
+      <WslReadyLine />
       <button
         class="iconbtn circle ready-status-dismiss"
         type="button"
@@ -130,6 +132,7 @@ export function StageDeviceNoElgato({
       <h1 class="stage-title">Connect your control app</h1>
       <ConnectionPath device="done" app="active" deviceName={modelName} />
       <PairingFlow onHelp={onHelp} />
+      <WslRelayCard />
       <VerifyOffer index={0} />
       <KeyGridPreview
         keyCount={keyCount}

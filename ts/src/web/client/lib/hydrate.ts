@@ -1,4 +1,5 @@
-import type { StateResponse } from '../ui-types.js';
+import type { StateResponse, WslRelayStatus } from '../ui-types.js';
+import { getJson } from './ui-api.js';
 import * as store from './store.js';
 
 /**
@@ -31,4 +32,19 @@ export function hydrate(st: StateResponse): void {
   });
   // Absent in simple-only builds (state-response.ts).
   store.replaceLogs(st.logs ?? [], st.commLogs ?? []);
+  void loadWslRelay();
+}
+
+/** Not part of /api/state: a failed read means no WSL relay here, so its UI stays hidden. */
+async function loadWslRelay(): Promise<void> {
+  // A WS `wslRelay` event that lands while the GET is in flight is newer than its reply.
+  const before = store.getSnapshot().wslRelay;
+  const apply = (wslRelay: WslRelayStatus | null): void => {
+    if (store.getSnapshot().wslRelay === before) store.patch({ wslRelay });
+  };
+  try {
+    apply(await getJson<WslRelayStatus>('/api/wsl-relay'));
+  } catch {
+    apply(null);
+  }
 }

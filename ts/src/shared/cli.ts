@@ -105,6 +105,12 @@ export function mdnsDisabled(): boolean {
   return typeof tjs !== 'undefined' && tjs.env.DECKBRIDGE_NO_MDNS === '1';
 }
 
+/** True when DECKBRIDGE_CORA_LOG=1: the primary CORA server logs every rx/tx frame
+ *  as hex (debug level only). Off by default: a pairing-capture aid, not routine noise. */
+export function coraLogEnabled(): boolean {
+  return typeof tjs !== 'undefined' && tjs.env.DECKBRIDGE_CORA_LOG === '1';
+}
+
 export function versionText(): string {
   return `deckbridge ${__VERSION__} (built ${__BUILD_TIME__})`;
 }
