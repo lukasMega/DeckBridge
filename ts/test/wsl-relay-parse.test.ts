@@ -118,8 +118,8 @@ test('noWslFix and firewallFixCommand', () => {
 
 test('decodeWslText: UTF-16LE with and without BOM, UTF-8 untouched', () => {
   const msg = 'Windows Subsystem for Linux has no installed distributions.\r\n';
-  assert.equal(decodeWslText(utf16(msg)), msg.replace('\r', ''));
-  assert.equal(decodeWslText(utf16(msg, true)), msg.replace('\r', ''));
+  assert.equal(decodeWslText(utf16(msg)), msg.replaceAll('\r', ''));
+  assert.equal(decodeWslText(utf16(msg, true)), msg.replaceAll('\r', ''));
   assert.equal(
     decodeWslText(new TextEncoder().encode('kernel=5.15\nip=1.2.3.4')),
     'kernel=5.15\nip=1.2.3.4',

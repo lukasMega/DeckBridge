@@ -29,6 +29,8 @@ import type { DeviceConfig } from './types.js';
 import { buildCapabilitiesPacket, buildFeatureResponse } from './responses.js';
 import type { ChildGeometry } from '../devices/driver.js';
 import { MdnsAdvertiser } from '../infra/mdns-advertiser.js';
+import { coraLogEnabled } from '../shared/cli.js';
+import { isLevelEnabled } from '../shared/logger.js';
 
 export type { DeviceConfig };
 
@@ -146,6 +148,8 @@ export class ElgatoServer extends CoraServerBase {
     opts: ElgatoServerOptions = {},
   ) {
     super(port);
+    // Decided once: the gate must cost nothing per frame.
+    this.traceWireFrames = coraLogEnabled() && isLevelEnabled('debug');
     this.childGeometry = childGeometry;
     this.skipMdns = skipMdns;
     this.childPort = opts.childPort ?? ELGATO_CHILD_PORT;
