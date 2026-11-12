@@ -669,6 +669,27 @@ input[type='range'].range:disabled {
 .pairing-auto strong {
   margin-right: auto;
 }
+/* "Pair through WSL" card (simple/wsl-relay-card.tsx); steps reuse .help-steps */
+.wsl-card {
+  margin-top: 12px;
+}
+.wsl-card .help-steps {
+  margin: 10px 0;
+}
+.wsl-step {
+  flex: 1;
+  min-width: 0;
+}
+.wsl-step .step-sub {
+  margin: 2px 0 8px;
+}
+.help-steps .num.wsl-err {
+  background: var(--warn-soft);
+  color: var(--warn);
+}
+.ready-status .wsl-ready {
+  flex: none;
+}
 .pairing-progress {
   flex: 1;
   height: 8px;

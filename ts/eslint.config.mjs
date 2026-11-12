@@ -254,14 +254,16 @@ export default defineConfig([
                     'shared',
                     'plugin-worker-host',
                     'extension-api',
+                    'infra',
                   ],
                 },
               },
               allow: { to: { element: { type: 'web-contract' } }, dependency: { kind: 'type' } },
               message:
                 'web/contract*.ts is the type-only WebUI wire contract; only web-client, ' +
-                'web-server, its sibling contract files, shared (types.ts), plugin-host.ts and ' +
-                'the extension API (DockStatus/KeyState) may import it.',
+                'web-server, its sibling contract files, shared (types.ts), plugin-host.ts, ' +
+                'the extension API (DockStatus/KeyState) and infra (wsl-relay*.ts status types) ' +
+                'may import it.',
             },
             // The second G1 exception: the browser hands extensions the UI API typed by
             // extension/api.ts. Type-only, so no worker/host code reaches the browser.

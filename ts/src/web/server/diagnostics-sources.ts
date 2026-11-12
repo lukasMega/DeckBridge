@@ -7,6 +7,7 @@ import type { DiagnosticsOptions, DiagnosticsSources } from './diagnostics.js';
 import { checkRequirements } from './requirements.js';
 import type { KeyEventEntry, LogEntry, StateResponse } from './types.js';
 import type { CommEntry } from '../../shared/types.js';
+import type { WslRelayStatus } from '../contract-wsl-relay.js';
 import type { DeviceModelOverride } from '../../devices/driver.js';
 import type { ModelOverridesController } from './model-overrides-controller.js';
 import { deviceRowsFromInventory } from '../../cli/devices.js';
@@ -30,6 +31,7 @@ interface DiagnosticsInputsBase {
   uptimeMs: number;
   state: StateResponse;
   settingsJson: string;
+  wslRelay?: WslRelayStatus;
 }
 
 /** Everything the report needs that only the running server knows. */
@@ -148,6 +150,7 @@ function sourcesFor(
     logTail,
     ringLogs: live.ringLogs,
     settingsJson: live.settingsJson,
+    wslRelay: live.wslRelay,
   };
 }
 

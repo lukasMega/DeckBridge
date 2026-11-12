@@ -25,6 +25,7 @@ import { Collapsible } from '../src/web/client/components/Collapsible.js';
 import { runDeckPage } from './client-deck.js';
 import { runPairingFlow } from './client-pairing.js';
 import { runDocsLinks } from './client-docs.js';
+import { runWslHydrateRace, runWslRelay } from './client-wsl.js';
 import { runSurvey } from './client-survey.js';
 import { runStatistics } from './client-statistics.js';
 import { runModalShells } from './client-modal.js';
@@ -264,6 +265,7 @@ async function run(): Promise<void> {
 
   await runSettingsPanels();
   await runDocsLinks(root, check);
+  await runWslRelay(root, check);
   await runModalShells(root, check);
   await runSurvey(root, check);
   await runVerifyWizard(root, check);
@@ -278,20 +280,20 @@ async function run(): Promise<void> {
   await runPreviewBacklog();
   await runLogBatches();
   runUpdateBadge();
-  runHydrateRegression();
+  await runHydrateRegression();
 }
 
 // B4: WS reconnect used to re-apply only images, leaving extraKeys/encoders/
 // touchStripMode/brightnessOverride/updateInfo stale after an app restart.
 // hydrate() is now the single entry point for both first load and reconnect.
-function runHydrateRegression(): void {
+async function runHydrateRegression(): Promise<void> {
   patch({
     extraKeys: {},
     touchStripMode: 'elgato',
     brightnessOverride: true,
     updateInfo: undefined,
   });
-  hydrate({
+  const state: Parameters<typeof hydrate>[0] = {
     ...EMPTY_STATUS,
     driverConnected: true,
     elgatoConnected: true,
@@ -314,7 +316,8 @@ function runHydrateRegression(): void {
     updateInfo: { enabled: true, current: '0.14.1', updateAvailable: true, latest: '0.15.0' },
     elgatoAutoRestart: { enabled: true, delayS: 10, supported: true },
     extensions: { dir: '/ext', extensions: [] },
-  });
+  };
+  hydrate(state);
   const snap = getSnapshot();
   check(
     JSON.stringify(snap.extraKeys) ===
@@ -325,6 +328,7 @@ function runHydrateRegression(): void {
   check(!snap.brightnessOverride, 'hydrate() re-applies brightnessOverride');
   check(snap.updateInfo?.latest === '0.15.0', 'hydrate() re-applies updateInfo');
   check(snap.extensions.dir === '/ext', 'hydrate() re-applies extensions');
+  await runWslHydrateRace(() => hydrate(state), check);
   patch({
     extraKeys: {},
     touchStripMode: 'elgato',

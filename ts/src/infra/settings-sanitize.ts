@@ -1,9 +1,10 @@
 // Load/import guards for settings.json sections, split from settings.ts to keep it under the line limit.
-import type { ExtensionGrant, Settings } from './settings-store.js';
+import type { ExtensionGrant, Settings, WslRelaySettings } from './settings-store.js';
 import { isModelOverridesRecord, validateModelOverride } from '../devices/model-overrides.js';
 import { findModelById } from '../devices/registry.js';
 import type { DeviceModelOverride } from '../devices/driver.js';
 import { log } from '../shared/logger.js';
+import { isIPv4 } from './wsl-relay-parse.js';
 import {
   DEFAULT_BROWSER_DECK_PROFILE,
   isBrowserDeckProfile,
@@ -100,4 +101,26 @@ export function sanitizeExtensionGrants(v: unknown): Record<string, ExtensionGra
     out[id] = { digest, events: names };
   }
   return out;
+}
+
+/** Ids land in the daily ping, so keep them to a closed shape (infra can't import web/contract). */
+const DOCS_TOPIC_ID = /^[a-z0-9-]{1,32}$/;
+
+/** A saved `docsSeen` list: well-formed topic ids only, at most `max`. */
+export function sanitizeDocsSeen(v: unknown, max: number): string[] {
+  if (!Array.isArray(v)) return [];
+  return v.filter((t): t is string => typeof t === 'string' && DOCS_TOPIC_ID.test(t)).slice(0, max);
+}
+
+/** A saved `wslRelay` section, or undefined when absent/malformed. A bad `lastIp` is dropped alone. */
+export function sanitizeWslRelay(v: unknown): WslRelaySettings | undefined {
+  if (typeof v !== 'object' || v === null || Array.isArray(v)) return undefined;
+  const { enabled, lastIp } = v as { enabled?: unknown; lastIp?: unknown };
+  if (typeof enabled !== 'boolean') return undefined;
+  return typeof lastIp === 'string' && isIPv4(lastIp) ? { enabled, lastIp } : { enabled };
+}
+
+/** The `wslRelay` entry of a settings snapshot; omitted while it is still the default. */
+export function wslRelayEntry(v: WslRelaySettings): { wslRelay?: WslRelaySettings } {
+  return v.enabled || v.lastIp ? { wslRelay: v } : {};
 }

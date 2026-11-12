@@ -18,5 +18,7 @@ export const DOCS_TOPICS = {
   'side-keys': '/side-keys/',
   'device-tuning': '/troubleshooting/#device-tuning',
   'image-fit': '/troubleshooting/#image-fit',
+  'wsl-relay': '/elgato-same-computer/#windows-wsl',
+  'wsl-relay-stuck': '/elgato-same-computer/#wsl-not-pairing',
   troubleshooting: '/troubleshooting/#diagnostics-report',
 } as const satisfies Record<DocsTopic, string>;

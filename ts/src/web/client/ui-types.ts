@@ -44,6 +44,7 @@ export type {
   WsEvents,
 } from '../contract.js';
 export type { ExtensionInfo, ExtensionsView } from '../contract-extensions.js';
+export type { WslRelayStatus } from '../contract-wsl-relay.js';
 export type {
   DeviceOverridesView,
   TuningCropRect as DeviceCropRect,

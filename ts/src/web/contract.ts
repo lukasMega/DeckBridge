@@ -3,6 +3,7 @@
 // both tiers re-export from here. See "Architecture is lint-enforced" in CLAUDE.md.
 import type { ExtensionsView } from './contract-extensions.js';
 import type { VerifyEndedMsg } from './contract-verify.js';
+import type { WslRelayStatus } from './contract-wsl-relay.js';
 
 /** 'elgato'/'bitfocus' are set only once a client-specific query is observed
  *  (cora/primary-server.ts / cora/child-server.ts), 'unknown' otherwise. */
@@ -497,11 +498,8 @@ export type PushErrorCode =
   | 'unsupported_media_type'
   | 'rate_limited';
 
-/** Every WS broadcast: event name → payload. Server `broadcast<K>` and the client
- *  handler table are both keyed by this map, so neither side can drift. */
-/** Typed WS send: the payload must match its event. */
 export type WsBroadcast = <K extends keyof WsEvents>(event: K, data: WsEvents[K]) => void;
-
+/** Every WS broadcast, event → payload; `WsBroadcast` and the client handlers key off it. */
 export interface WsEvents {
   status: StatusSnapshot;
   image: KeyImageMsg;
@@ -528,6 +526,7 @@ export interface WsEvents {
   pageState: PageStateMsg;
   extensions: ExtensionsView;
   verifyEnded: VerifyEndedMsg;
+  wslRelay: WslRelayStatus;
 }
 
 /** Docs sections the WebUI links to; the id is the `/go/docs/:topic` path segment. */
@@ -545,4 +544,6 @@ export type DocsTopic =
   | 'side-keys'
   | 'device-tuning'
   | 'image-fit'
+  | 'wsl-relay'
+  | 'wsl-relay-stuck'
   | 'troubleshooting';

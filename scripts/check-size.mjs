@@ -8,8 +8,9 @@ import { measure } from './size-report.mjs';
 // .claude/plans/2026-10-08_release-size-webui-css.md. ui.js and the ui CSS are the shipped,
 // class-mangled form (the size report's default).
 const BUDGETS = {
-  // Device verify hardware report + Elgato identity tuning (2026-11-09); measured + 1%.
-  'ui.js': 184_873,
+  // Device verify hardware report + Elgato identity tuning (2026-11-09),
+  // WSL relay card for Stream Deck app 7.6.1 (2026-11-12); measured + 1%.
+  'ui.js': 190_009,
   'deck.js': 30_106,
   // Device verify wizard (2026-10-22); measured + 1%.
   'css total': 37_394,

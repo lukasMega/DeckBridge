@@ -49,6 +49,8 @@ export class ElgatoServer extends CoraServerBase {
   private static readonly keepaliveAckLogIntervalMs = 60_000;
   private mdnsAdvertiser: MdnsAdvertiser | null = null;
   private readonly skipMdns: boolean;
+  private mdnsWanted = true;
+  private started = false;
   readonly childPort: number;
   private mdnsServiceName: string;
   private childGeometry: ChildGeometry;
@@ -122,6 +124,21 @@ export class ElgatoServer extends CoraServerBase {
     void this.mdnsAdvertiser.start();
   }
 
+  /** Live on/off for the `_elg._tcp` advert (the WSL relay needs it silent so Elgato
+   *  doesn't list DeckBridge's own-host IP). start() honours the last value; turning it
+   *  on never overrides the constructor's `skipMdns`, and does nothing before start(). */
+  setMdnsEnabled(enabled: boolean): void {
+    this.mdnsWanted = enabled;
+    if (!enabled) {
+      this.mdnsAdvertiser?.stop();
+      this.mdnsAdvertiser = null;
+      return;
+    }
+    if (!this.started || this.skipMdns || this.mdnsAdvertiser) return;
+    this.mdnsAdvertiser = this.spawnAdvertiser();
+    void this.mdnsAdvertiser.start();
+  }
+
   constructor(
     childGeometry: ChildGeometry,
     port = ELGATO_TCP_PORT,
@@ -139,7 +156,8 @@ export class ElgatoServer extends CoraServerBase {
 
   async start(): Promise<void> {
     await this.startServer();
-    if (this.skipMdns) return;
+    this.started = true;
+    if (this.skipMdns || !this.mdnsWanted) return;
     this.mdnsAdvertiser = this.spawnAdvertiser();
     await this.mdnsAdvertiser.start();
   }
@@ -147,6 +165,7 @@ export class ElgatoServer extends CoraServerBase {
   async stop(): Promise<void> {
     this.mdnsAdvertiser?.stop();
     this.mdnsAdvertiser = null;
+    this.started = false;
     await this.stopServer();
   }
 

@@ -127,8 +127,15 @@ export interface ExtensionGrant {
   events: string[];
 }
 
+/** Same-PC Windows WSL relay (infra/wsl-relay.ts): switch + the last WSL IP shown to the user. */
+export interface WslRelaySettings {
+  enabled: boolean;
+  lastIp?: string;
+}
+
 export interface Settings {
   survey?: SurveySettings;
+  wslRelay?: WslRelaySettings;
   selectedDock?: number;
   logLevel?: PersistedLogLevel;
   /** Opt-in multi-deck: dock a second supported device as its own headless CORA

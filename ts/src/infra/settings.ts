@@ -37,17 +37,18 @@ import {
   clampAutoRestartDelayS,
   ELGATO_AUTO_RESTART_DELAY_S_DEFAULT,
   sanitizeActiveDecks,
+  sanitizeDocsSeen,
   sanitizeExtensionGrants,
   sanitizeModelOverrides,
   sanitizeVerifyDismissed,
   sanitizeVirtualDeck,
+  sanitizeWslRelay,
+  wslRelayEntry,
 } from './settings-sanitize.js';
 import { ACCESS_TOKENS_MAX, isPushTokenRecord, type PushTokenRecord } from './push-tokens.js';
 import { DockPrefs, defaultRuntimePrefs } from './dock-prefs.js';
 import type { DockPrefsStore } from './dock-prefs.js';
 
-/** Ids land in the daily ping, so keep them to a closed shape (infra can't import web/contract). */
-const DOCS_TOPIC_ID = /^[a-z0-9-]{1,32}$/;
 const MAX_DOCS_SEEN = 32;
 
 /** Optional per-device fields shared by stripInvalidDeviceSettings and
@@ -160,6 +161,7 @@ export class PersistedSettings implements DockPrefsStore {
   survey: Settings['survey'] = {};
   docsSeen: string[] = []; // Docs topics opened since last ping.
   verifyDismissed: string[] = []; // Model ids the verify wizard is never offered for again.
+  wslRelay: NonNullable<Settings['wslRelay']> = { enabled: false }; // Windows same-PC WSL relay switch.
   /** Elgato-app auto-restart opt-out + grace delay (see elgato-auto-restart.ts).
    *  undefined = enabled / default delay. */
   elgatoAutoRestart: boolean | undefined = undefined;
@@ -215,11 +217,8 @@ export class PersistedSettings implements DockPrefsStore {
     if (typeof saved.a7s === 'boolean') this.a7s = saved.a7s;
     if (typeof saved.a7sDay === 'string') this.a7sDay = saved.a7sDay;
     this.survey = sanitizeSurveySettings(saved.survey);
-    if (Array.isArray(saved.docsSeen)) {
-      this.docsSeen = saved.docsSeen
-        .filter((t): t is string => typeof t === 'string' && DOCS_TOPIC_ID.test(t))
-        .slice(0, MAX_DOCS_SEEN);
-    }
+    this.docsSeen = sanitizeDocsSeen(saved.docsSeen, MAX_DOCS_SEEN);
+    this.wslRelay = sanitizeWslRelay(saved.wslRelay) ?? this.wslRelay;
     this.loadAutoRestart(saved);
     this.verifyDismissed = sanitizeVerifyDismissed(saved.verifyDismissed);
     this.extensionGrants = sanitizeExtensionGrants(saved.extensions);
@@ -350,6 +349,11 @@ export class PersistedSettings implements DockPrefsStore {
    *  the CLI flag / env / build-time default takes over again. */
   setLogLevel(level: PersistedLogLevel | undefined): void {
     this.logLevel = level;
+    this.persist();
+  }
+
+  setWslRelay(v: NonNullable<Settings['wslRelay']>): void {
+    this.wslRelay = { ...v };
     this.persist();
   }
 
@@ -533,6 +537,7 @@ export class PersistedSettings implements DockPrefsStore {
         : {}),
       ...(Object.keys(this.survey ?? {}).length ? { survey: this.survey } : {}),
       ...(this.docsSeen.length > 0 ? { docsSeen: this.docsSeen } : {}),
+      ...wslRelayEntry(this.wslRelay),
       ...this.optionalEntries(),
       ...(this.accessTokens.length > 0 ? { accessTokens: this.accessTokens } : {}),
       ...(this.devices.length > 0 ? { devices: this.devices } : {}),

@@ -15,6 +15,7 @@ import type {
   PushChannelView,
   TouchStripMode,
   UpdateInfo,
+  WslRelayStatus,
 } from '../ui-types.js';
 import type { VerifyEndedMsg } from '../../contract-verify.js';
 
@@ -70,6 +71,8 @@ export interface StoreState {
   verifyDock: number | null;
   /** Last WS `verifyEnded`; a new object per event. */
   verifyEnded: VerifyEndedMsg | null;
+  /** WSL relay for Stream Deck app 7.6.1 (GET /api/wsl-relay + WS); null hides its UI. */
+  wslRelay: WslRelayStatus | null;
 }
 
 /** Before the first observation: nothing known, nothing to snapshot. */
@@ -134,6 +137,7 @@ let state: StoreState = {
   connection: 'live',
   verifyDock: null,
   verifyEnded: null,
+  wslRelay: null,
 };
 
 const listeners = new Set<() => void>();

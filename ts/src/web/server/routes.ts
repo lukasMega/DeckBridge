@@ -8,6 +8,7 @@ import type { RawMockInput } from './mock-input.js';
 import { pushAdminRoutes } from './push-routes.js';
 import { virtualDeckRoutes } from './virtual-deck/virtual-deck-routes.js';
 import { pairingAddressRoutes } from './pairing-address-routes.js';
+import { wslRelayRoutes } from './wsl-relay-routes.js';
 import { pageRoutes } from './page-routes.js';
 import { extensionRoutes } from './extension-routes.js';
 import { verifyRoutes } from './verify-routes.js';
@@ -96,6 +97,7 @@ export const routes: Route[] = [
   ...pushAdminRoutes,
   ...virtualDeckRoutes,
   ...pairingAddressRoutes,
+  ...wslRelayRoutes,
   ...extensionRoutes,
   ...verifyRoutes,
   postJson('/api/touch-strip-mode', setTouchStripMode),

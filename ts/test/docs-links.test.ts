@@ -86,7 +86,7 @@ test('docsTrackingAllowed honours the daily-ping opt-outs', () => {
   assert.equal(docsTrackingAllowed(true, {}), true);
 });
 
-// github-slugger, as Docusaurus uses for heading ids.
+// github-slugger, as Docusaurus uses for heading ids; an explicit `{#id}` wins.
 function slug(heading: string): string {
   return heading
     .replace(/`/g, '')
@@ -117,7 +117,7 @@ for (const [topic, target] of Object.entries(DOCS_TOPICS) as [DocsTopic, string]
     const ids = body
       .split('\n')
       .filter((l) => l.startsWith('#'))
-      .map((l) => slug(l.replace(/^#+/, '').trim()));
+      .map((l) => /\\?\{#([\w-]+)\\?\}\s*$/.exec(l)?.[1] ?? slug(l.replace(/^#+/, '').trim()));
     assert.ok(ids.includes(anchor), `no heading with id "${anchor}" in ${path}`);
   });
 }
