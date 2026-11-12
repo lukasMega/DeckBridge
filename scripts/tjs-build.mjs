@@ -3,7 +3,7 @@
 // no prebuilt slim asset (macOS x86_64); the default path is scripts/tjs-download.mjs.
 // Hand-rolls no cmake flags — delegates to the fork's own scripts/build-dist.mjs with
 // `--profile ffi`, the driver its release CI runs, so the output matches the published
-// `txiki-slim-ffi-*` binary. Requires: git, cmake, a C/C++ toolchain, npm.
+// `txiki-slim-ffi-*` binary. Requires: git, cmake, a C/C++ toolchain, pnpm.
 //
 // Env (same contract as tjs-download.mjs):
 //   TJS            destination path for the runtime binary (vendor/.../build/tjs)
@@ -23,7 +23,7 @@ const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const REPO = 'https://github.com/lukasMega/txiki.js-with-slim-builds.git';
 
 // Toolchain preflight: fail with an actionable message, not a build error
-const missing = ['git', 'cmake', 'npm'].filter((c) => !have(c));
+const missing = ['git', 'cmake', 'pnpm'].filter((c) => !have(c));
 if (!isWin && !['cc', 'clang', 'gcc'].some(have)) missing.push('a C/C++ compiler (cc/clang/gcc)');
 
 if (missing.length) {
@@ -62,15 +62,18 @@ try {
   run('git', ['clone', '--depth=1', '--branch', TXIKI_VERSION, '--recursive', '--shallow-submodules', REPO, srcDir]);
 
   // build-dist.mjs resolves esbuild from the clone's node_modules and fails if
-  // it isn't there. --ignore-scripts: the fork's root postinstall runs
-  // `npm install --prefix website` (Docusaurus), which has no lockfile and
-  // fails under `npm ci` — and the docs site is irrelevant to the runtime.
-  // esbuild still works: its binary ships in the @esbuild/<platform> optional
-  // dep, and bin/esbuild is a JS shim, so no install script is needed.
-  console.log('Installing build deps (npm ci --ignore-scripts) ...');
-  // npm.cmd on Windows: npm is a shim, not an .exe, so execFileSync can't spawn
-  // plain `npm` there (and `shell: true` would re-introduce quoting problems).
-  run(isWin ? 'npm.cmd' : 'npm', ['ci', '--ignore-scripts', '--no-fund', '--no-audit'], { cwd: srcDir });
+  // it isn't there. The fork is a pnpm workspace (since slim-v26.11.0-1);
+  // --filter txiki.js installs the root only, skipping the Docusaurus website
+  // package, which is irrelevant to the runtime. --ignore-scripts is safe:
+  // esbuild's binary ships in the @esbuild/<platform> optional dep.
+  // --pm-on-fail=ignore: use mise's pnpm, not the fork's packageManager pin,
+  // which may ship no native binary for this host (pnpm 11 has no darwin-x64).
+  console.log('Installing build deps (pnpm install --filter txiki.js) ...');
+  run(
+    'pnpm',
+    ['install', '--frozen-lockfile', '--ignore-scripts', '--filter', 'txiki.js', '--pm-on-fail=ignore'],
+    { cwd: srcDir },
+  );
 
   console.log('Building slim runtime (build-dist.mjs --profile ffi) ...');
   run(process.execPath, ['scripts/build-dist.mjs', '--profile', 'ffi', '--out', outDir], { cwd: srcDir });
