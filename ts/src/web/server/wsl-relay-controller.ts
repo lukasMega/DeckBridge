@@ -1,12 +1,13 @@
-// Admin side of the WSL relay (issue #257): the switch and its live status. The relay itself
-// lives in infra/ and is attached by main/wsl-relay-wiring.ts; this class never spawns anything.
+// Admin side of the WSL relay (issue #257): its live status and the legacy on/off switch. The
+// relay itself lives in infra/ and is attached by main/wsl-relay-wiring.ts; this class never
+// spawns anything. Which route is active is the pairing route's business.
 import type { WslRelayStatus } from '../contract-wsl-relay.js';
+import type { PairingRouteController } from './pairing-route-controller.js';
 import type { ControllerHost } from './types.js';
 
-/** What the controller needs from the relay. `setEnabled` also applies the mDNS side effect. */
+/** What the controller needs from the relay. */
 export interface WslRelayPort {
   status(): WslRelayStatus;
-  setEnabled(on: boolean): Promise<WslRelayStatus>;
   recheck(): Promise<WslRelayStatus>;
 }
 
@@ -24,7 +25,10 @@ const UNSUPPORTED: WslRelayStatus = {
 export class WslRelayController {
   private port: WslRelayPort | null = null;
 
-  constructor(private readonly host: ControllerHost) {}
+  constructor(
+    private readonly host: ControllerHost,
+    private readonly pairingRoute: Pick<PairingRouteController, 'status' | 'setRoute'>,
+  ) {}
 
   attach(port: WslRelayPort): void {
     this.port = port;
@@ -39,15 +43,15 @@ export class WslRelayController {
     this.host.broadcast('wslRelay', status);
   }
 
-  /** Enabling replies as soon as the flow has started (the download can take a while);
+  /** The pre-wizard switch, kept for old clients: it is the `wsl` / `none` route (PW-D15).
+   *  Enabling replies as soon as the flow has started (the download can take a while);
    *  the rest of the progress comes over the `wslRelay` WS event. */
   async setEnabled(enabled: boolean): Promise<WslRelayStatus> {
     const port = this.port;
     if (port === null || !port.status().supported) return this.status();
-    const { settings } = this.host;
-    settings.setWslRelay({ ...settings.wslRelay, enabled });
-    const done = port.setEnabled(enabled);
-    if (!enabled) await done;
+    const { route } = this.pairingRoute.status();
+    // Switching WSL off must not clobber another route the user picked.
+    if (enabled || route === 'wsl') await this.pairingRoute.setRoute(enabled ? 'wsl' : 'none');
     return port.status();
   }
 

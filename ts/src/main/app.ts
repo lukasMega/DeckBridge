@@ -33,7 +33,7 @@ import { stopSpawns } from '../infra/owned-spawn.js';
 import { shutdownPluginHost } from '../plugin/plugin-host.js';
 import { createShutdown } from './shutdown.js';
 import { wireVirtualDeck } from './virtual-deck/virtual-deck-wiring.js';
-import { wireWslRelay } from './wsl-relay-wiring.js';
+import { wirePairingRoute } from './pairing-route-wiring.js';
 import {
   MIN_DWELL_MS,
   PING_SCHEDULE_SLACK_MS,
@@ -161,7 +161,7 @@ const coraDockFactory: CoraDockFactory = (identity) => {
     childSerial: identity.childSerial,
   });
   const cs = new ElgatoChildServer(defaultChildGeometry, identity.childPort, s.deviceConfig, false);
-  wslRelay.trackMdns(s);
+  pairingRoute.trackMdns(s);
   s.on('serverLog', ({ level, component: c, message: m }: LogObject) => log(level, c, m));
   cs.on('serverLog', ({ level, component: c, message: m }: LogObject) => log(level, c, m));
   return new CoraDock(s, cs, `dock ${identity.index}`);
@@ -211,7 +211,10 @@ const virtualDeck = wireVirtualDeck({
   getShuttingDown: () => shuttingDown,
   onDockConnected: (i, key) => elgatoAutoRestart.onDockConnected(i, key),
 });
-const wslRelay = wireWslRelay({ webui, settings, driverManager, primaryDock }, () => localIp);
+const pairingRoute = wirePairingRoute(
+  { webui, settings, driverManager, primaryDock },
+  () => localIp,
+);
 
 const shutdown = createShutdown({
   quiesce: () => {
@@ -230,7 +233,7 @@ const shutdown = createShutdown({
   },
   owners: [
     // The relay's pkill goes through the spawn owner, so it must finish before stopSpawns().
-    ['commands', () => Promise.all([stopCommands(), wslRelay.stop().then(() => stopSpawns())])],
+    ['commands', () => Promise.all([stopCommands(), pairingRoute.stop().then(() => stopSpawns())])],
     ['plugins', shutdownPluginHost],
     ['extensions', () => Promise.resolve(webui.extensions.dispose())],
     ['browser deck', () => virtualDeck.stop()],
@@ -528,7 +531,7 @@ await step('deckBr', `cora bind :${ELGATO_TCP_PORT}/:${ELGATO_CHILD_PORT}`, () =
 );
 log('info', 'elgato', `primary (Network Dock) listening on ${localIp}:${ELGATO_TCP_PORT}`);
 log('info', 'elgato', `child (Stream Deck) listening on ${localIp}:${ELGATO_CHILD_PORT}`);
-wslRelay.start();
+pairingRoute.start();
 
 if (__MOCK_BUILD__ && driverManager.getDriverMode() === 'mock') {
   await driverManager.connectMock();

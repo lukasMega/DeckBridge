@@ -8,6 +8,7 @@ import { checkRequirements } from './requirements.js';
 import type { KeyEventEntry, LogEntry, StateResponse } from './types.js';
 import type { CommEntry } from '../../shared/types.js';
 import type { WslRelayStatus } from '../contract-wsl-relay.js';
+import type { PairingRouteStatus } from '../contract-pairing-route.js';
 import type { DeviceModelOverride } from '../../devices/driver.js';
 import type { ModelOverridesController } from './model-overrides-controller.js';
 import { deviceRowsFromInventory } from '../../cli/devices.js';
@@ -32,6 +33,8 @@ interface DiagnosticsInputsBase {
   state: StateResponse;
   settingsJson: string;
   wslRelay?: WslRelayStatus;
+  /** Carries no token by design (settingsJson is the only place a route is spelled out). */
+  pairingRoute?: PairingRouteStatus;
 }
 
 /** Everything the report needs that only the running server knows. */
@@ -151,6 +154,7 @@ function sourcesFor(
     ringLogs: live.ringLogs,
     settingsJson: live.settingsJson,
     wslRelay: live.wslRelay,
+    pairingRoute: live.pairingRoute,
   };
 }
 

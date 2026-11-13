@@ -4,6 +4,7 @@ import type {
   ExtensionGrant,
   Settings,
   DeviceIdentitySettings,
+  PairingRouteSettings,
   PersistedLogLevel,
 } from './settings-store.js';
 import { isLogLevel } from '../shared/cli.js';
@@ -39,11 +40,11 @@ import {
   sanitizeActiveDecks,
   sanitizeDocsSeen,
   sanitizeExtensionGrants,
+  pairingRouteEntry,
   sanitizeModelOverrides,
+  sanitizePairingRoute,
   sanitizeVerifyDismissed,
   sanitizeVirtualDeck,
-  sanitizeWslRelay,
-  wslRelayEntry,
 } from './settings-sanitize.js';
 import { ACCESS_TOKENS_MAX, isPushTokenRecord, type PushTokenRecord } from './push-tokens.js';
 import { DockPrefs, defaultRuntimePrefs } from './dock-prefs.js';
@@ -161,7 +162,7 @@ export class PersistedSettings implements DockPrefsStore {
   survey: Settings['survey'] = {};
   docsSeen: string[] = []; // Docs topics opened since last ping.
   verifyDismissed: string[] = []; // Model ids the verify wizard is never offered for again.
-  wslRelay: NonNullable<Settings['wslRelay']> = { enabled: false }; // Windows same-PC WSL relay switch.
+  pairingRoute: PairingRouteSettings = { route: 'none' }; // Same-PC pairing workaround (#257).
   /** Elgato-app auto-restart opt-out + grace delay (see elgato-auto-restart.ts).
    *  undefined = enabled / default delay. */
   elgatoAutoRestart: boolean | undefined = undefined;
@@ -218,7 +219,8 @@ export class PersistedSettings implements DockPrefsStore {
     if (typeof saved.a7sDay === 'string') this.a7sDay = saved.a7sDay;
     this.survey = sanitizeSurveySettings(saved.survey);
     this.docsSeen = sanitizeDocsSeen(saved.docsSeen, MAX_DOCS_SEEN);
-    this.wslRelay = sanitizeWslRelay(saved.wslRelay) ?? this.wslRelay;
+    this.pairingRoute =
+      sanitizePairingRoute(saved.pairingRoute, saved.wslRelay) ?? this.pairingRoute;
     this.loadAutoRestart(saved);
     this.verifyDismissed = sanitizeVerifyDismissed(saved.verifyDismissed);
     this.extensionGrants = sanitizeExtensionGrants(saved.extensions);
@@ -279,8 +281,10 @@ export class PersistedSettings implements DockPrefsStore {
   }
 
   json(): string {
-    // Export/import never carry credentials (JSON.stringify drops undefined).
-    return JSON.stringify({ ...this.current(), accessTokens: undefined }, null, 2);
+    // Export/import/diagnostics never carry credentials (JSON.stringify drops undefined).
+    const cur = this.current();
+    const pairingRoute = cur.pairingRoute && { ...cur.pairingRoute, token: undefined };
+    return JSON.stringify({ ...cur, accessTokens: undefined, pairingRoute }, null, 2);
   }
 
   /** Open settings.json in the OS default handler. Writes current settings
@@ -352,8 +356,8 @@ export class PersistedSettings implements DockPrefsStore {
     this.persist();
   }
 
-  setWslRelay(v: NonNullable<Settings['wslRelay']>): void {
-    this.wslRelay = { ...v };
+  setPairingRoute(v: PairingRouteSettings): void {
+    this.pairingRoute = { ...v };
     this.persist();
   }
 
@@ -537,7 +541,7 @@ export class PersistedSettings implements DockPrefsStore {
         : {}),
       ...(Object.keys(this.survey ?? {}).length ? { survey: this.survey } : {}),
       ...(this.docsSeen.length > 0 ? { docsSeen: this.docsSeen } : {}),
-      ...wslRelayEntry(this.wslRelay),
+      ...pairingRouteEntry(this.pairingRoute),
       ...this.optionalEntries(),
       ...(this.accessTokens.length > 0 ? { accessTokens: this.accessTokens } : {}),
       ...(this.devices.length > 0 ? { devices: this.devices } : {}),

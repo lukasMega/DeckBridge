@@ -310,35 +310,105 @@ await test('a legacy enabledExtensions key is ignored and never written back', a
   assert.equal(onDisk.extensions, undefined);
 });
 
-console.log('\nPersistedSettings — wslRelay');
+console.log('\nPersistedSettings — pairingRoute');
 
-await test('wslRelay defaults off, round-trips through persist() and load()', async () => {
-  const dir = `${ROOT}/wsl-relay`;
+const TOKEN = 'a1b2c3d4e5f60718293a4b5c6d7e8f90';
+
+await test('pairingRoute defaults to none and writes nothing', async () => {
+  const dir = `${ROOT}/pairing-default`;
   const settings = new PersistedSettings(dir);
-  assert.deepEqual(settings.wslRelay, { enabled: false });
-  settings.setWslRelay({ enabled: true, lastIp: '172.20.1.5' });
+  assert.deepEqual(settings.pairingRoute, { route: 'none' });
+  settings.setPairingRoute({ route: 'none' });
+  await settings.flush();
+  const onDisk = await loadSettings(dir);
+  assert.equal(onDisk.pairingRoute, undefined);
+  assert.equal(onDisk.wslRelay, undefined);
+});
+
+await test('pairingRoute round-trips through persist() and load()', async () => {
+  const dir = `${ROOT}/pairing-roundtrip`;
+  const route = {
+    route: 'device',
+    wslLastIp: '172.20.1.5',
+    token: TOKEN,
+    relayIp: '192.168.1.40',
+    wizardDismissed: true,
+  } as const;
+  const settings = new PersistedSettings(dir);
+  settings.setPairingRoute(route);
   await settings.flush();
   const reloaded = new PersistedSettings(dir);
   await reloaded.load();
-  assert.deepEqual(reloaded.wslRelay, { enabled: true, lastIp: '172.20.1.5' });
-  reloaded.setWslRelay({ enabled: false });
-  await reloaded.flush();
-  assert.equal((await loadSettings(dir)).wslRelay, undefined, 'default is not written');
+  assert.deepEqual(reloaded.pairingRoute, route);
+  assert.equal((await loadSettings(dir)).wslRelay, undefined, 'legacy key is not written');
+  assert.ok(!reloaded.json().includes(TOKEN), 'export/diagnostics JSON never carries the token');
+  assert.ok(reloaded.json().includes('192.168.1.40'), 'the rest of the route is exported');
 });
 
-await test('load() drops a malformed wslRelay and a bad lastIp alone', async () => {
+await test('load() migrates a legacy wslRelay section', async () => {
+  for (const [enabled, route] of [
+    [true, 'wsl'],
+    [false, 'none'],
+  ] as const) {
+    const dir = `${ROOT}/pairing-migrate-${enabled}`;
+    await saveSettings({ wslRelay: { enabled, lastIp: '172.20.1.5' } }, dir);
+    const settings = new PersistedSettings(dir);
+    await settings.load();
+    assert.deepEqual(settings.pairingRoute, { route, wslLastIp: '172.20.1.5' });
+    settings.persist();
+    await settings.flush();
+    const onDisk = await loadSettings(dir);
+    assert.equal(onDisk.wslRelay, undefined, 'rewritten without the legacy key');
+    assert.equal(onDisk.pairingRoute?.route, route);
+  }
+  const dir = `${ROOT}/pairing-migrate-noip`;
+  await saveSettings({ wslRelay: { enabled: true } }, dir);
+  const settings = new PersistedSettings(dir);
+  await settings.load();
+  assert.deepEqual(settings.pairingRoute, { route: 'wsl' });
+});
+
+await test('load() drops a malformed legacy wslRelay and a bad lastIp alone', async () => {
   for (const bad of ['yes', 7, [], { enabled: 'true' }, { lastIp: '1.2.3.4' }]) {
-    const dir = `${ROOT}/wsl-relay-bad`;
+    const dir = `${ROOT}/pairing-legacy-bad`;
     await saveSettings({ wslRelay: bad } as unknown as Settings, dir);
     const settings = new PersistedSettings(dir);
     await settings.load();
-    assert.deepEqual(settings.wslRelay, { enabled: false }, JSON.stringify(bad));
+    assert.deepEqual(settings.pairingRoute, { route: 'none' }, JSON.stringify(bad));
   }
-  const dir = `${ROOT}/wsl-relay-badip`;
+  const dir = `${ROOT}/pairing-legacy-badip`;
   await saveSettings({ wslRelay: { enabled: true, lastIp: 'not an ip' } }, dir);
   const settings = new PersistedSettings(dir);
   await settings.load();
-  assert.deepEqual(settings.wslRelay, { enabled: true });
+  assert.deepEqual(settings.pairingRoute, { route: 'wsl' });
+});
+
+await test('a saved pairingRoute wins over a legacy wslRelay', async () => {
+  const dir = `${ROOT}/pairing-wins`;
+  await saveSettings({ pairingRoute: { route: 'downgrade' }, wslRelay: { enabled: true } }, dir);
+  const settings = new PersistedSettings(dir);
+  await settings.load();
+  assert.deepEqual(settings.pairingRoute, { route: 'downgrade' });
+});
+
+await test('load() drops an invalid route, IP or token', async () => {
+  for (const bad of ['wsl', 7, [], { route: 'bogus' }, { wslLastIp: '1.2.3.4' }, { route: 3 }]) {
+    const dir = `${ROOT}/pairing-bad`;
+    await saveSettings({ pairingRoute: bad } as unknown as Settings, dir);
+    const settings = new PersistedSettings(dir);
+    await settings.load();
+    assert.deepEqual(settings.pairingRoute, { route: 'none' }, JSON.stringify(bad));
+  }
+  const dir = `${ROOT}/pairing-bad-fields`;
+  await saveSettings(
+    {
+      pairingRoute: { route: 'device', wslLastIp: 'nope', token: 'XYZ', relayIp: 'relay.local' },
+    },
+    dir,
+  );
+  const settings = new PersistedSettings(dir);
+  await settings.load();
+  assert.deepEqual(settings.pairingRoute, { route: 'device' });
 });
 
 console.log('\nPersistedSettings — saved pages');

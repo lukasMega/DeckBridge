@@ -4,6 +4,7 @@
 import type { ExtensionsView } from './contract-extensions.js';
 import type { VerifyEndedMsg } from './contract-verify.js';
 import type { WslRelayStatus } from './contract-wsl-relay.js';
+import type { PairingRouteStatus } from './contract-pairing-route.js';
 
 /** 'elgato'/'bitfocus' are set only once a client-specific query is observed
  *  (cora/primary-server.ts / cora/child-server.ts), 'unknown' otherwise. */
@@ -527,6 +528,7 @@ export interface WsEvents {
   extensions: ExtensionsView;
   verifyEnded: VerifyEndedMsg;
   wslRelay: WslRelayStatus;
+  pairingRoute: PairingRouteStatus;
 }
 
 /** Docs sections the WebUI links to; the id is the `/go/docs/:topic` path segment. */

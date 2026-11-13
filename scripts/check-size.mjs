@@ -10,7 +10,8 @@ import { measure } from './size-report.mjs';
 const BUDGETS = {
   // Device verify hardware report + Elgato identity tuning (2026-11-09),
   // WSL relay card for Stream Deck app 7.6.1 (2026-11-12); measured + 1%.
-  'ui.js': 190_009,
+  // "Fix pairing" wizard for 7.6.1 + manual OrbStack route (2026-11-12): measured 202,410 + ~1 KB.
+  'ui.js': 203_500,
   'deck.js': 30_106,
   // Device verify wizard (2026-10-22); measured + 1%.
   'css total': 37_394,

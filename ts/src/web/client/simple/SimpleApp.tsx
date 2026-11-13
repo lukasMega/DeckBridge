@@ -16,6 +16,7 @@ import { ICON, Icon } from '../components/Icon.js';
 import { AppFooter, Topbar } from './app-shell.js';
 import { useSurveyFlow } from './survey-flow.js';
 import { VerifyHost } from './verify-wizard/verify-entry.js';
+import { ElgatoVersionBanner, PairingWizardHost } from './pairing-wizard/entry.js';
 import {
   StageReady,
   StageDeviceNoElgato,
@@ -31,20 +32,6 @@ function StaleBanner(): preact.JSX.Element | null {
     <div class="warnrow conn-banner" id="connBanner" role="status">
       <Icon class="w-ico" html={ICON.warn} />
       <span>Connection interrupted. Retrying…</span>
-    </div>
-  );
-}
-
-function ElgatoVersionBanner(): preact.JSX.Element {
-  const wsl = useStore((s) => s.wslRelay?.supported === true);
-  return (
-    <div class="warnrow conn-banner" role="note">
-      <Icon class="w-ico" html={ICON.warn} />
-      <span>
-        Elgato Stream Deck app 7.6.1 does not pair with DeckBridge on the same computer. Use 7.6.0
-        until a fix is released.
-        {wsl && ' Or use Pair through WSL on the pairing screen.'}
-      </span>
     </div>
   );
 }
@@ -186,6 +173,7 @@ export function SimpleApp(): preact.JSX.Element {
       <div class="toast" id="toast" role="status" aria-live="polite" />
       {aboutOpen && <AboutPopover onClose={closeAbout} onFeedback={flow.open} />}
       <VerifyHost />
+      <PairingWizardHost onHelp={setActiveHelp} />
       {!__DEMO__ && flow.overlays}
     </>
   );

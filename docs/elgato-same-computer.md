@@ -3,7 +3,7 @@ sidebar_position: 7
 sidebar_label: Elgato on the same computer
 title: Elgato app 7.6.1 on the same computer as DeckBridge
 slug: /elgato-same-computer
-description: Elgato Stream Deck 7.6.1 refuses a network dock on its own computer. Pair anyway with deckbridge relay on a second machine, or on Windows with the built-in WSL relay.
+description: Elgato Stream Deck 7.6.1 refuses a network dock on its own computer. Fix it with the Fix pairing wizard in DeckBridge - use app 7.6.0, a relay on another device, a relay in WSL on Windows, or a relay in OrbStack on a Mac.
 ---
 
 # Elgato app 7.6.1 on the same computer as DeckBridge
@@ -16,7 +16,48 @@ fail, so DeckBridge never pairs ([#257](https://github.com/lukasMega/DeckBridge/
 Version 7.6.0 is not affected, and neither is a setup where Elgato runs on another computer
 than DeckBridge.
 
-## The fix: a relay on a second machine
+## Fix it with the wizard
+
+DeckBridge guides you through the fix. On the pairing screen, click **Fix pairing for
+Stream Deck app 7.6.1**. If DeckBridge finds a Stream Deck app 7.6.1 or newer on this
+computer, the wizard also opens once on its own. Later you can open it from the **Fix
+pairing** link in the warning banner, or from **Run setup again** in Settings, in the
+"Stream Deck app 7.6.1 pairing" section.
+
+The wizard asks which Stream Deck app version you use (it prefills what it found; "Not
+sure" counts as 7.6.1 or newer), where the app runs, and whether you have another device on
+the network. Then it offers the fixes below, marks one as **Recommended**, and shows the
+setup steps for the one you pick. The downgrade is always listed. The relay on another
+device appears when you have one, and Windows adds the WSL relay. The wizard is not shown
+when DeckBridge runs on Linux.
+
+| Fix | Memory | Disk | Setup | Cost | Needs |
+|---|---|---|---|---|---|
+| Use Stream Deck app 7.6.0 | none | none | ~5 min | free | Turn off app updates. You miss newer app fixes. |
+| Relay on another device | ~15 MB on that device | ~30 MB | ~5 min | free if you own one (Raspberry Pi Zero 2 W ~$15) | 64-bit Linux, macOS or Windows; stays on |
+| Relay in WSL on this PC | ~300-600 MB while on | ~1.5-2 GB | ~2 min, or 15 min + restart | free | Windows 10 2004+ or 11 |
+| Relay in OrbStack on this Mac | ~150 MB-1 GB | ~0.8 GB | ~5 min | free for personal use; $8/month commercial | macOS |
+
+A relay in Apple's `container` tool (macOS 26) is coming later.
+
+- **Use Stream Deck app 7.6.0.** No relay. The wizard links the 7.6.0 download (Windows) or
+  the Elgato 7.6 release notes (macOS). Install it over your current version, then turn off
+  automatic updates in Preferences > General.
+- **Relay on another device.** The wizard shows a `deckbridge relay --target ...` command
+  with this computer's address filled in. Run it on the other device. See
+  [the manual relay](#manual-relay) below, which is the same thing. A Raspberry Pi needs
+  64-bit Raspberry Pi OS Trixie.
+- **Relay in WSL on this PC.** See [Windows: pair on the same PC with WSL](#windows-wsl).
+- **Relay in OrbStack on this Mac.** See [macOS: pair on the same Mac with OrbStack](#macos-orbstack).
+
+For a relay, add the relay's IP address in the Stream Deck app as a Network Dock by IP.
+While a relay is set up, DeckBridge stops advertising itself on the network, so the app
+finds the dock only at the relay's address. **Turn off relay** in Settings undoes this.
+
+Answer "7.6.0 or older" or "On another computer" and the wizard says no fix is needed: the
+app can pair with DeckBridge directly.
+
+## The manual relay: a second machine {#manual-relay}
 
 `deckbridge relay` runs on a second computer (B). Elgato on computer A connects to the
 relay, sees a foreign IP and pairs. The relay passes every byte on to DeckBridge on A.
@@ -86,18 +127,19 @@ and attach the diagnostics report.
 
 ### Steps
 
-1. Open DeckBridge in the browser. On the "Connect your control app" screen, find the card
-   "Using Stream Deck app 7.6.1?" and click **Pair through WSL**. You can also turn it on in
-   Settings.
-2. Wait for the steps in the card to turn green. The first start downloads the relay.
-3. In the Stream Deck app, add a Network Dock by IP address. Use the IP the card shows
+1. Open DeckBridge in the browser, click **Fix pairing for Stream Deck app 7.6.1** and
+   answer the questions until you reach **Choose a fix**. Pick **Relay in WSL on this PC**.
+   You can also start it from **Run setup again** in Settings.
+2. Wait for the steps to turn green. The first start downloads the relay.
+3. In the Stream Deck app, add a Network Dock by IP address. Use the IP the steps show
    (use its Copy button).
 
-DeckBridge remembers the switch and starts the relay again the next time it runs. The WSL IP
+DeckBridge remembers the choice and starts the relay again the next time it runs.
+**Turn off** (in the wizard) or **Turn off relay** (in Settings) stops it. The WSL IP
 can change after you restart the PC. If it does, DeckBridge says so. Remove the old Network
 Dock in the Stream Deck app and add the new IP.
 
-While the switch is on, DeckBridge stops advertising itself on the network. The Stream Deck app
+While the relay is on, DeckBridge stops advertising itself on the network. The Stream Deck app
 then finds the dock only at the WSL IP.
 
 ### If a step fails
@@ -148,6 +190,29 @@ On the first start, DeckBridge downloads the Linux release zip of the same versi
 (`linux-x86_64`, or `linux-arm64` on Windows on ARM). It checks the file against the
 release's SHA256 checksums, then unzips it into DeckBridge's cache folder. The installer
 itself does not grow. The relay's log lines go into DeckBridge's log file under `wsl-relay`.
+
+## macOS: pair on the same Mac with OrbStack {#macos-orbstack}
+
+[OrbStack](https://orbstack.dev) runs a small Linux machine on your Mac with its own IP
+address, so the Stream Deck app sees the relay at a different address than its own. For now
+you run three commands yourself; the wizard shows them with your values filled in.
+
+1. Install OrbStack and open it once.
+2. In Terminal, create the machine (once): `orb create ubuntu:noble deckbridge-relay`.
+3. Start the relay in it. The wizard's **Run** command is one short `curl` of an install
+   script that DeckBridge serves on port 44661 (or a free high port if 44661 is taken) while
+   this route is selected. The script installs `curl` and `unzip`, downloads the Linux
+   release zip that matches your DeckBridge version into `~/relay` inside the machine,
+   checks it against `SHA256SUMS.txt`, and runs
+   `deckbridge relay --target <this Mac's IP> --no-advertise`. Running it again skips the
+   download. Keep the Terminal window open while you use the deck.
+4. The relay prints its IP addresses. `orb -m deckbridge-relay hostname -I` shows the IP
+   later. Add it in the Stream Deck app as a Network Dock by IP.
+
+Run the relay inside the machine's own home, never from a folder under `/Users`: OrbStack
+runs macOS binaries it finds there on the Mac itself, and that copy can't listen next to
+DeckBridge (`EADDRINUSE`). The relay does not start again after a reboot yet: run step 3
+again. OrbStack is free for personal use; commercial use needs a paid licence.
 
 ## Notes
 

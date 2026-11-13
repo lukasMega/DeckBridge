@@ -25,6 +25,7 @@ import type { PushController } from './push-controller.js';
 import type { VirtualDeckController } from './virtual-deck/virtual-deck-controller.js';
 import type { SettingsFileController } from './settings-file-controller.js';
 import type { WslRelayController } from './wsl-relay-controller.js';
+import type { PairingRouteController } from './pairing-route-controller.js';
 import type { RawMockInput } from './mock-input.js';
 // Canonical LogLevel lives in logger.ts (derived from cli.ts's LOG_LEVELS);
 // re-exported below so existing web-server call sites keep importing from types.js.
@@ -132,6 +133,7 @@ export interface WebUIControllers {
   readonly virtualDeck: VirtualDeckController;
   readonly extensions: ExtensionsController;
   readonly wslRelay: WslRelayController;
+  readonly pairingRoute: PairingRouteController;
 }
 
 /**

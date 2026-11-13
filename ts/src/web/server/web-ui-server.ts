@@ -48,6 +48,7 @@ import { ElgatoAppController } from './elgato-app-controller.js';
 import { StandbyController } from './standby-controller.js';
 import { ExtensionsController } from './extensions-controller.js';
 import { WslRelayController } from './wsl-relay-controller.js';
+import { PairingRouteController } from './pairing-route-controller.js';
 
 export { isAllowedWebRequest, isValidMacAddress } from './web-request-guard.js';
 
@@ -82,6 +83,7 @@ export class WebUIServer extends EventEmitter implements WebUIController, WebUIC
   readonly virtualDeck: VirtualDeckController;
   readonly extensions: ExtensionsController;
   readonly wslRelay: WslRelayController;
+  readonly pairingRoute: PairingRouteController;
   private readonly controllers: WebUIControllers;
   readonly imageChannel = new ImageChannel(this.bus, () => this.selectedDock);
   get selectedDock(): number {
@@ -179,6 +181,7 @@ export class WebUIServer extends EventEmitter implements WebUIController, WebUIC
         activity: this.activity,
         settingsJson: this.settings.json(),
         wslRelay: this.wslRelay.status(),
+        pairingRoute: this.pairingRoute.status(),
         inventory: () => this.hidInventory(),
       }),
     );
@@ -190,7 +193,8 @@ export class WebUIServer extends EventEmitter implements WebUIController, WebUIC
     this.push = new PushController(host, () => this.dockRegistry.list());
     this.virtualDeck = new VirtualDeckController(host, this.push);
     this.extensions = new ExtensionsController(host, { appStartedAt: this.startTime });
-    this.wslRelay = new WslRelayController(host);
+    this.pairingRoute = new PairingRouteController(host);
+    this.wslRelay = new WslRelayController(host, this.pairingRoute);
     this.controllers = {
       settings: this.settings,
       devicePrefs: this.devicePrefs,
@@ -209,6 +213,7 @@ export class WebUIServer extends EventEmitter implements WebUIController, WebUIC
       virtualDeck: this.virtualDeck,
       extensions: this.extensions,
       wslRelay: this.wslRelay,
+      pairingRoute: this.pairingRoute,
     };
     if (__MOCK_BUILD__) {
       this.applyMockConfig = (parsed) => {

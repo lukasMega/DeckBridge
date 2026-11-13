@@ -1,5 +1,10 @@
 // Load/import guards for settings.json sections, split from settings.ts to keep it under the line limit.
-import type { ExtensionGrant, Settings, WslRelaySettings } from './settings-store.js';
+import type {
+  ExtensionGrant,
+  PairingRouteSettings,
+  Settings,
+  WslRelaySettings,
+} from './settings-store.js';
 import { isModelOverridesRecord, validateModelOverride } from '../devices/model-overrides.js';
 import { findModelById } from '../devices/registry.js';
 import type { DeviceModelOverride } from '../devices/driver.js';
@@ -112,15 +117,53 @@ export function sanitizeDocsSeen(v: unknown, max: number): string[] {
   return v.filter((t): t is string => typeof t === 'string' && DOCS_TOPIC_ID.test(t)).slice(0, max);
 }
 
-/** A saved `wslRelay` section, or undefined when absent/malformed. A bad `lastIp` is dropped alone. */
-export function sanitizeWslRelay(v: unknown): WslRelaySettings | undefined {
+/** Legacy `wslRelay` section, read only to migrate. A bad `lastIp` is dropped alone. */
+function sanitizeWslRelay(v: unknown): WslRelaySettings | undefined {
   if (typeof v !== 'object' || v === null || Array.isArray(v)) return undefined;
   const { enabled, lastIp } = v as { enabled?: unknown; lastIp?: unknown };
   if (typeof enabled !== 'boolean') return undefined;
   return typeof lastIp === 'string' && isIPv4(lastIp) ? { enabled, lastIp } : { enabled };
 }
 
-/** The `wslRelay` entry of a settings snapshot; omitted while it is still the default. */
-export function wslRelayEntry(v: WslRelaySettings): { wslRelay?: WslRelaySettings } {
-  return v.enabled || v.lastIp ? { wslRelay: v } : {};
+const PAIRING_ROUTES: readonly string[] = [
+  'none',
+  'downgrade',
+  'wsl',
+  'device',
+  'container',
+  'orbstack',
+];
+const isIp = (x: unknown): x is string => typeof x === 'string' && isIPv4(x);
+const PAIRING_TOKEN = /^[0-9a-f]{32}$/;
+
+function migrateWslRelay(legacy: unknown): PairingRouteSettings | undefined {
+  const old = sanitizeWslRelay(legacy);
+  if (!old) return undefined;
+  return { route: old.enabled ? 'wsl' : 'none', ...(old.lastIp ? { wslLastIp: old.lastIp } : {}) };
+}
+
+/** A saved `pairingRoute`, or undefined when absent/malformed; bad fields are dropped alone.
+ *  Without one, a valid legacy `wslRelay` section migrates in. */
+export function sanitizePairingRoute(
+  v: unknown,
+  legacy: unknown,
+): PairingRouteSettings | undefined {
+  if (v === undefined) return migrateWslRelay(legacy);
+  if (typeof v !== 'object' || v === null || Array.isArray(v)) return undefined;
+  const r = v as Record<string, unknown>;
+  if (typeof r.route !== 'string' || !PAIRING_ROUTES.includes(r.route)) return undefined;
+  return {
+    route: r.route as PairingRouteSettings['route'],
+    ...(isIp(r.wslLastIp) ? { wslLastIp: r.wslLastIp } : {}),
+    ...(typeof r.token === 'string' && PAIRING_TOKEN.test(r.token) ? { token: r.token } : {}),
+    ...(isIp(r.relayIp) ? { relayIp: r.relayIp } : {}),
+    ...(r.wizardDismissed === true ? { wizardDismissed: true } : {}),
+  };
+}
+
+/** The `pairingRoute` entry of a settings snapshot; omitted while it is still the default. */
+export function pairingRouteEntry(v: PairingRouteSettings): {
+  pairingRoute?: PairingRouteSettings;
+} {
+  return v.route === 'none' && Object.keys(v).length === 1 ? {} : { pairingRoute: v };
 }

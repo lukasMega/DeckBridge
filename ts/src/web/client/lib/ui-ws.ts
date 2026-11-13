@@ -77,6 +77,7 @@ const handlers: Partial<Handlers> = {
   extensions: (extensions) => store.patch({ extensions }),
   verifyEnded: (verifyEnded) => store.patch({ verifyEnded }),
   wslRelay: (wslRelay) => store.patch({ wslRelay }),
+  pairingRoute: (pairingRoute) => store.patch({ pairingRoute }),
 };
 
 // Looked up by the server-sent event name: a Map has no prototype keys to hit.

@@ -11,7 +11,7 @@ const RELEASE_BASE = 'https://github.com/lukasMega/DeckBridge/releases/download'
 const IPV4 = /^\d{1,3}(?:\.\d{1,3}){3}$/;
 
 export function isIPv4(s: string): boolean {
-  return IPV4.test(s);
+  return IPV4.test(s) && s.split('.').every((o) => Number(o) <= 255);
 }
 
 export type RelayTarget = { ip: string } | { error: string };

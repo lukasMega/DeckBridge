@@ -10,6 +10,7 @@ import type { DeviceRow } from '../../cli/devices.js';
 import type { RequirementResult } from './requirements.js';
 import type { CommEntry } from '../../shared/types.js';
 import type { WslRelayStatus } from '../contract-wsl-relay.js';
+import type { PairingRouteStatus } from '../contract-pairing-route.js';
 import type { KeyEventEntry, LogEntry, StateResponse } from './types.js';
 
 export interface DiagnosticsOptions {
@@ -74,6 +75,8 @@ export interface DiagnosticsSources {
   settingsJson?: string;
   /** WSL relay status (server path only). */
   wslRelay?: WslRelayStatus;
+  /** Pairing route status (server path only); carries no token. */
+  pairingRoute?: PairingRouteStatus;
 }
 
 export const DEFAULT_LOG_TAIL_LINES = 400;
@@ -208,13 +211,19 @@ function keyEventsBlock(events: KeyEventEntry[] | undefined): string {
     .join('\n');
 }
 
-/** Remove push-token hashes from a settings.json string. Hashes are harmless, but have
- *  no place in a public issue; the CLI path reads the raw file, so strip here. */
+/** Remove push-token hashes and the pairing-route script token from a settings.json string.
+ *  Neither belongs in a public issue; the CLI path reads the raw file, so strip here. */
 export function stripPushTokenHashes(settingsJson: string): string {
   try {
-    const parsed = JSON.parse(settingsJson) as { accessTokens?: Array<{ hash?: string }> };
-    if (!Array.isArray(parsed.accessTokens)) return settingsJson;
-    for (const t of parsed.accessTokens) delete t.hash;
+    const parsed = JSON.parse(settingsJson) as {
+      accessTokens?: Array<{ hash?: string }>;
+      pairingRoute?: { token?: string };
+    };
+    const hasHashes = Array.isArray(parsed.accessTokens);
+    const hasToken = parsed.pairingRoute?.token !== undefined;
+    if (!hasHashes && !hasToken) return settingsJson;
+    if (hasHashes) for (const t of parsed.accessTokens!) delete t.hash;
+    if (hasToken) delete parsed.pairingRoute!.token;
     return JSON.stringify(parsed, null, 2);
   } catch {
     return settingsJson;
@@ -281,6 +290,12 @@ function wslRelayLine(s: WslRelayStatus | undefined): string {
   return `enabled=${s.enabled} state=${s.state} wslIp=${s.wslIp ?? '-'} distro=${s.distro ?? '-'}`;
 }
 
+function pairingRouteLine(s: PairingRouteStatus | undefined): string {
+  if (!s) return '';
+  if (!s.supported) return 'not supported on this system';
+  return `route=${s.route} relayIp=${s.relayIp ?? '-'} paired=${s.paired} elgato=${s.elgatoVersion ?? '-'}`;
+}
+
 function headerBlock(h: DiagnosticsSources['header']): string {
   return kvBlock({
     version: h.version,
@@ -321,6 +336,7 @@ export function buildDiagnostics(src: DiagnosticsSources, opt: DiagnosticsOption
     section('environment (DECKBRIDGE_*)', kvBlock(src.env)),
     section('paths', kvBlock(src.paths)),
     section('update check', updatesBlock(src.updates)),
+    section('pairing route', pairingRouteLine(src.pairingRoute)),
     section('wsl relay', wslRelayLine(src.wslRelay)),
     section('model overrides', overridesBlock(src.modelOverrides)),
     section('effective model specs', jsonBlock(src.effectiveModels)),

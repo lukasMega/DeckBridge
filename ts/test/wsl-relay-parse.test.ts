@@ -221,6 +221,7 @@ test('isIPv4 accepts dotted quads only', () => {
   assert.equal(isIPv4('172.28.16.5'), true);
   assert.equal(isIPv4('fd00::1'), false);
   assert.equal(isIPv4('host.local'), false);
+  assert.equal(isIPv4('999.1.1.1'), false);
   assert.equal(isIPv4(''), false);
 });
 

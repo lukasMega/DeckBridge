@@ -4,7 +4,6 @@ import type { WslRelayState, WslRelayStatus } from '../src/web/contract-wsl-rela
 import {
   STUCK_HINT,
   wslRelayFailed,
-  wslRelayStatusLine,
   wslRelaySteps,
 } from '../src/web/client/simple/wsl-relay-steps.js';
 import { test, summary } from './helpers/harness.js';
@@ -130,23 +129,6 @@ test('wslRelayFailed is true only for the failure states', () => {
     'error',
   ];
   for (const state of all) assert.equal(wslRelayFailed(status(state)), failed.includes(state));
-});
-
-test('status line for the Settings switch', () => {
-  assert.equal(wslRelayStatusLine(status('off', { enabled: false })), 'Off');
-  assert.equal(
-    wslRelayStatusLine(status('downloading')),
-    'Downloading the relay (first time only)…',
-  );
-  assert.equal(wslRelayStatusLine(status('blocked')), 'Needs attention');
-  assert.equal(
-    wslRelayStatusLine(status('ready', { wslIp: '172.20.1.2' })),
-    'Ready · add 172.20.1.2 in the Stream Deck app',
-  );
-  assert.equal(
-    wslRelayStatusLine(status('paired', { wslIp: '172.20.1.2' })),
-    'Paired · 172.20.1.2',
-  );
 });
 
 summary();

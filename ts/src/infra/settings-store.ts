@@ -127,15 +127,27 @@ export interface ExtensionGrant {
   events: string[];
 }
 
-/** Same-PC Windows WSL relay (infra/wsl-relay.ts): switch + the last WSL IP shown to the user. */
+/** Pre-pairingRoute WSL switch; read only to migrate old files (see sanitizePairingRoute). */
 export interface WslRelaySettings {
   enabled: boolean;
   lastIp?: string;
 }
 
+/** How this install works around Stream Deck app 7.6.1+ refusing a dock at its own IP (issue #257).
+ *  The route union duplicates web/contract-pairing-route.ts: infra can't import web. */
+export interface PairingRouteSettings {
+  route: 'none' | 'downgrade' | 'wsl' | 'device' | 'container' | 'orbstack';
+  wslLastIp?: string;
+  /** Script token (32 hex chars). Never logged, never in diagnostics. */
+  token?: string;
+  relayIp?: string;
+  wizardDismissed?: boolean;
+}
+
 export interface Settings {
   survey?: SurveySettings;
   wslRelay?: WslRelaySettings;
+  pairingRoute?: PairingRouteSettings;
   selectedDock?: number;
   logLevel?: PersistedLogLevel;
   /** Opt-in multi-deck: dock a second supported device as its own headless CORA
