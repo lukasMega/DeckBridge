@@ -1,66 +1,165 @@
-// Node-net-like TCP API backed by txiki.js tjs.connect / tjs.listen globals.
-// Concentrates all impedance mismatch in one place so cora-server-base.ts
-// and elgato.ts only need a one-line import change.
-// No tjs:* import needed — tjs is a global provided at runtime.
+// Node-net-like TCP API backed by the txiki.js tjs.connect / tjs.listen globals (no
+// tjs:* import needed — tjs is a runtime global).
 //
-// No write backpressure: write() fires-and-forgets the writer.write()
-// promise (errors are still caught and routed to the 'error'/close path).
-// This is acceptable because all CORA frames are bounded to <=512 bytes —
-// at that size the OS socket buffer absorbs writes far faster than the
-// 1024B Elgato legacy packets or CORA frames can be produced, so the
-// unawaited promise never represents meaningful unbounded queuing. If a
-// future caller needs to stream larger payloads, add backpressure here.
+// Write backpressure is a cap, not flow control: write() stays fire-and-forget, but queued
+// bytes are tracked and a peer that lets more than MAX_PENDING_WRITE_BYTES pile up is
+// destroyed with an error (CORA's Elgato client reconnects and resyncs).
+//
+// Terminal cleanup closes the native handle itself: txiki only closes it once BOTH stream
+// halves finish, so a peer FIN (readable done, writable still locked) would otherwise
+// leak the descriptor.
+
+import { guardAccept, isDroppedAccept } from './accept-guard.js';
+
+/** tjs rejects with plain values as well as Errors; callbacks here take an Error. */
+const asError = (e: unknown): Error => (e instanceof Error ? e : new Error(String(e)));
+
+/** Queued-but-unsettled bytes past which a stalled peer is dropped. */
+export const MAX_PENDING_WRITE_BYTES = 1024 * 1024;
+
+const noop = (): void => {};
+
+/** Run every callback even if one throws; rethrow outside cleanup like an unhandled callback. */
+function emitAll<T>(cbs: Array<(arg: T) => void>, arg: T): void {
+  for (const cb of cbs) {
+    try {
+      cb(arg);
+    } catch (e) {
+      queueMicrotask(() => {
+        throw e;
+      });
+    }
+  }
+}
+
+function closeQuietly(native: { close(): void }): void {
+  try {
+    native.close();
+  } catch {
+    // already closed
+  }
+}
 
 type DataCb = (chunk: Buffer) => void;
 type CloseCb = (hadError: boolean) => void;
 type ErrorCb = (err: Error) => void;
 
+interface NativeSocket {
+  close(): void;
+}
+
 export class NodeLikeSocket {
   remoteAddress = '';
   private _cbs = { data: [] as DataCb[], close: [] as CloseCb[], error: [] as ErrorCb[] };
+  private _native: NativeSocket | null = null;
   private _writer: WritableStreamDefaultWriter<Uint8Array> | null = null;
   private _reader: ReadableStreamDefaultReader<Uint8Array> | null = null;
-  private _destroyed = false;
+  /** Set once terminal cleanup starts; no new writes or attachments after this. */
+  private _closing = false;
+  private _hadError = false;
+  private _cleanup: Promise<void> | null = null;
+  private _pendingBytes = 0;
+  /** Aborts a connect still in flight (createConnection only). */
+  _connectAbort: AbortController | null = null;
 
-  /** @internal — called after socket opens with its readable/writable streams */
+  /** Bytes handed to the writer that have not settled yet. */
+  get pendingBytes(): number {
+    return this._pendingBytes;
+  }
+
+  get destroyed(): boolean {
+    return this._closing;
+  }
+
+  /** Settles once the native handle is closed and both stream locks are released. */
+  get cleanup(): Promise<void> {
+    return this._cleanup ?? Promise.resolve();
+  }
+
+  /** @internal — called once the socket opens. Returns false when it lost the race
+   *  with destroy(); the handle is closed then and must not be used. */
   _attach(
+    native: NativeSocket,
     readable: ReadableStream<Uint8Array>,
     writable: WritableStream<Uint8Array>,
     remoteAddr: string,
-  ): void {
+  ): boolean {
+    if (this._closing) {
+      closeQuietly(native);
+      void readable.cancel().catch(noop);
+      void writable.abort().catch(noop);
+      return false;
+    }
+    this._native = native;
     this.remoteAddress = remoteAddr;
     this._writer = writable.getWriter();
-    void this._pump(readable);
+    this._reader = readable.getReader();
+    void this._pump(this._reader);
+    return true;
   }
 
   /** @internal — called on pre-connection error */
   _emitError(err: Error): void {
-    for (const cb of this._cbs.error) cb(err);
+    if (this._closing) return;
+    this._closing = true;
+    emitAll(this._cbs.error, err);
   }
 
-  private async _pump(readable: ReadableStream<Uint8Array>): Promise<void> {
-    const reader = readable.getReader();
-    this._reader = reader;
-    let hadError = false;
+  private async _pump(reader: ReadableStreamDefaultReader<Uint8Array>): Promise<void> {
     try {
       for (;;) {
         const { done, value } = await reader.read();
-        if (done) break;
-        // Wrap Uint8Array in Buffer so callers can use Buffer methods (readUInt16LE, etc.)
-        const chunk = Buffer.from(value);
+        if (done || this._closing) break;
+        // Wrap, don't copy: callers get Buffer methods without copying every inbound
+        // byte, and CoraFrameBuffer.append concats it away immediately. Safe because
+        // txiki allocates a fresh buffer per read. See Buffer.wrap for the caveats.
+        const chunk = Buffer.wrap(value);
         for (const cb of this._cbs.data) cb(chunk);
       }
     } catch (e) {
-      hadError = true;
-      const err = e instanceof Error ? e : new Error(String(e));
-      for (const cb of this._cbs.error) cb(err);
-    } finally {
-      reader.releaseLock();
-      if (!this._destroyed) {
-        this._destroyed = true;
-        for (const cb of this._cbs.close) cb(hadError);
-      }
+      this._fail(asError(e));
+      return;
     }
+    this._terminate();
+  }
+
+  /** First transport failure wins `hadError`; error listeners run after cleanup started. */
+  private _fail(err: Error): void {
+    if (this._closing) return;
+    this._hadError = true;
+    this._terminate();
+    emitAll(this._cbs.error, err);
+  }
+
+  private _terminate(): void {
+    if (this._closing) return;
+    this._closing = true;
+    this._connectAbort?.abort();
+    this._connectAbort = null;
+    const reader = this._reader;
+    const writer = this._writer;
+    const native = this._native;
+    // Abort, not writer.close(): a graceful close waits behind queued writes.
+    const settles: Promise<unknown>[] = [];
+    if (reader) settles.push(reader.cancel().catch(noop));
+    if (writer) settles.push(writer.abort().catch(noop));
+    if (native) closeQuietly(native);
+    this._cleanup = this._release(settles, reader, writer);
+    const hadError = this._hadError;
+    queueMicrotask(() => emitAll(this._cbs.close, hadError));
+  }
+
+  private async _release(
+    settles: Promise<unknown>[],
+    reader: ReadableStreamDefaultReader<Uint8Array> | null,
+    writer: WritableStreamDefaultWriter<Uint8Array> | null,
+  ): Promise<void> {
+    await Promise.all(settles);
+    reader?.releaseLock();
+    writer?.releaseLock();
+    this._reader = null;
+    this._writer = null;
+    this._native = null;
   }
 
   on(event: 'data', cb: DataCb): this;
@@ -74,33 +173,41 @@ export class NodeLikeSocket {
   }
 
   write(data: Uint8Array): void {
-    if (this._destroyed || !this._writer) return;
-    void this._writer.write(data).catch((e: unknown) => {
-      const err = e instanceof Error ? e : new Error(String(e));
-      queueMicrotask(() => {
-        for (const handler of this._cbs.error) {
-          handler(err);
-        }
-        this.destroy();
+    if (this._closing || !this._writer) return;
+    if (this._pendingBytes + data.byteLength > MAX_PENDING_WRITE_BYTES) {
+      this._fail(
+        new Error(`write backlog exceeded ${MAX_PENDING_WRITE_BYTES} bytes; peer stalled`),
+      );
+      return;
+    }
+    const len = data.byteLength;
+    this._pendingBytes += len;
+    void this._writer
+      .write(data)
+      .then(() => {
+        this._pendingBytes -= len;
+        return undefined;
+      })
+      .catch((e: unknown) => {
+        this._pendingBytes -= len;
+        const err = asError(e);
+        queueMicrotask(() => this._fail(err));
       });
-    });
   }
 
   destroy(): void {
-    if (this._destroyed) return;
-    this._destroyed = true;
-    void this._writer?.close().catch(() => {});
-    void this._reader?.cancel().catch(() => {});
-    queueMicrotask(() => {
-      for (const cb of this._cbs.close) cb(false);
-    });
+    this._terminate();
   }
 }
 
 export class NodeLikeServer {
   private readonly _handler: (socket: NodeLikeSocket) => void;
-  private _serverClose: (() => void) | null = null;
   private _errorCbs: Array<(err: Error) => void> = [];
+  /** Bumped by close(): a listen/accept that resumes under an older generation is stale. */
+  private _generation = 0;
+  private _native: TjsTCPServerSocket | null = null;
+  private _acceptReader: ReadableStreamDefaultReader<TjsAcceptedTCPSocket> | null = null;
+  private _acceptLoop: Promise<void> | null = null;
 
   constructor(handler: (socket: NodeLikeSocket) => void) {
     this._handler = handler;
@@ -118,48 +225,88 @@ export class NodeLikeServer {
   }
 
   listen(port: number, host: string, cb: () => void): void {
+    const generation = this._generation;
     void (async () => {
+      let server: TjsTCPServerSocket | null = null;
       try {
-        const server = await tjs.listen('tcp', host, port);
-        this._serverClose = () => server.close();
+        server = await tjs.listen('tcp', host, port);
+        guardAccept(server);
+        if (generation !== this._generation) {
+          closeQuietly(server);
+          return;
+        }
         const info = await server.opened;
+        if (generation !== this._generation) {
+          closeQuietly(server);
+          return;
+        }
+        this._native = server;
+        this._acceptReader = info.readable.getReader();
+        this._acceptLoop = this._runAcceptLoop(this._acceptReader, generation);
         cb();
-        await this._acceptLoop(info.readable);
       } catch (e) {
-        const err = e instanceof Error ? e : new Error(String(e));
-        for (const ecb of this._errorCbs) ecb(err);
+        if (server && this._native !== server) closeQuietly(server);
+        if (generation !== this._generation) return;
+        emitAll(this._errorCbs, asError(e));
       }
     })();
   }
 
-  private async _acceptLoop(readable: ReadableStream<TjsAcceptedSocket>): Promise<void> {
-    const reader = readable.getReader();
+  private async _runAcceptLoop(
+    reader: ReadableStreamDefaultReader<TjsAcceptedTCPSocket>,
+    generation: number,
+  ): Promise<void> {
     try {
       for (;;) {
         const { done, value: conn } = await reader.read();
         if (done) break;
-        void (async () => {
-          try {
-            const info = await conn.opened;
-            const sock = new NodeLikeSocket();
-            sock._attach(info.readable, info.writable, info.remoteAddress ?? '');
-            this._handler(sock);
-          } catch {
-            // connection failed to open — ignore
-          }
-        })();
+        if (isDroppedAccept(conn)) continue;
+        if (generation !== this._generation) {
+          closeQuietly(conn);
+          continue;
+        }
+        void this._adopt(conn, generation);
       }
+    } catch {
+      // accept stream errored — the server is unusable; close() still cleans up
     } finally {
       reader.releaseLock();
     }
   }
 
-  close(cb: () => void): void {
-    if (this._serverClose) {
-      this._serverClose();
-      this._serverClose = null;
+  private async _adopt(conn: TjsAcceptedTCPSocket, generation: number): Promise<void> {
+    let info: TjsTCPOpenedInfo;
+    try {
+      info = await conn.opened;
+    } catch {
+      closeQuietly(conn);
+      return;
     }
-    cb();
+    if (generation !== this._generation) {
+      closeQuietly(conn);
+      return;
+    }
+    const sock = new NodeLikeSocket();
+    sock._attach(conn, info.readable, info.writable, info.remoteAddress);
+    this._handler(sock);
+  }
+
+  /** Stops listening (including a listen still starting) and calls `cb` once the
+   *  accept loop has released its reader. Accepted client sockets are not closed. */
+  close(cb: () => void): void {
+    this._generation++;
+    const server = this._native;
+    const reader = this._acceptReader;
+    const loop = this._acceptLoop;
+    this._native = null;
+    this._acceptReader = null;
+    this._acceptLoop = null;
+    const cancelled = reader ? reader.cancel().catch(noop) : Promise.resolve();
+    if (server) closeQuietly(server);
+    void (async () => {
+      await Promise.all([cancelled, loop]);
+      cb();
+    })();
   }
 }
 
@@ -177,30 +324,25 @@ export function createConnection(
   cb: () => void,
 ): NodeLikeSocket {
   const nodeSocket = new NodeLikeSocket();
+  const abort = new AbortController();
+  nodeSocket._connectAbort = abort;
   void (async () => {
+    let socket: TjsTCPSocket | null = null;
     try {
-      const socket = await tjs.connect('tcp', opts.host, opts.port);
+      socket = await tjs.connect('tcp', opts.host, opts.port, { signal: abort.signal });
       const info = await socket.opened;
-      nodeSocket._attach(info.readable, info.writable, info.remoteAddress);
-      cb();
+      if (nodeSocket._connectAbort !== abort) {
+        closeQuietly(socket);
+        return;
+      }
+      nodeSocket._connectAbort = null;
+      if (nodeSocket._attach(socket, info.readable, info.writable, info.remoteAddress)) cb();
     } catch (e) {
-      nodeSocket._emitError(e instanceof Error ? e : new Error(String(e)));
+      if (socket) closeQuietly(socket);
+      if (nodeSocket._connectAbort !== abort) return;
+      nodeSocket._connectAbort = null;
+      nodeSocket._emitError(asError(e));
     }
   })();
   return nodeSocket;
-}
-
-// Internal type helpers (not exported)
-interface TjsSocketOpenedInfo {
-  readable: ReadableStream<Uint8Array>;
-  writable: WritableStream<Uint8Array>;
-  remoteAddress?: string;
-  remotePort?: number;
-  localAddress?: string;
-  localPort?: number;
-}
-
-interface TjsAcceptedSocket {
-  readonly opened: Promise<TjsSocketOpenedInfo>;
-  close(): void;
 }

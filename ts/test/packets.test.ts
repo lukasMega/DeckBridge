@@ -1,5 +1,5 @@
 import assert from 'tjs:assert';
-import { buildCrt, buildBat, buildLig, buildCle } from '../src/mirabox.js';
+import { buildCrt, buildBat, buildLig, buildCle } from '../src/devices/mirabox/driver.js';
 import {
   CORA_MAGIC,
   encodeCoraFrame,
@@ -7,39 +7,31 @@ import {
   CORA_FLAG_VERBATIM,
   CoraFrameReader,
   tryDecodeCoraFrame,
-} from '../src/cora-frame.js';
+} from '../src/cora/frame.js';
+import { gen1ParseInput } from '../src/devices/protocol/elgato-gen1.js';
+import { gen2ParseInput } from '../src/devices/protocol/elgato-gen2.js';
+import { MIRABOX_293_MODEL } from '../src/devices/mirabox/mirabox-293.js';
+import { test, summary } from './helpers/harness.js';
 
-let passed = 0;
-let failed = 0;
+const PACKET_SIZE = MIRABOX_293_MODEL.wire.packetSize;
 
-function test(name: string, fn: () => void): void {
-  try {
-    fn();
-    console.log(`  ✓ ${name}`);
-    passed++;
-  } catch (e) {
-    console.error(`  ✗ ${name}: ${(e as Error).message}`);
-    failed++;
-  }
-}
-
-// ── Mirabox packet builders ──────────────────────────────────────────────────
+// Mirabox packet builders
 
 console.log('\npacket builders');
 
 const CRT_PREFIX = [0x43, 0x52, 0x54, 0x00, 0x00];
 
 test('DIS packet: CRT prefix at bytes 0-4, DIS at 5-7, length 1024, rest zero', () => {
-  const pkt = buildCrt([0x44, 0x49, 0x53]);
-  assert.equal(pkt.length, 1024);
+  const pkt = buildCrt([0x44, 0x49, 0x53], [], PACKET_SIZE);
+  assert.equal(pkt.length, PACKET_SIZE);
   assert.deepEqual(Array.from(pkt.slice(0, 5)), CRT_PREFIX);
   assert.deepEqual(Array.from(pkt.slice(5, 8)), [0x44, 0x49, 0x53]);
   assert.ok(pkt.slice(8).every((b: number) => b === 0));
 });
 
 test('BAT packet: buildBat(0x1F40, 13) matches USB sniff', () => {
-  const pkt = buildBat(0x1f40, 13);
-  assert.equal(pkt.length, 1024);
+  const pkt = buildBat(0x1f40, 13, PACKET_SIZE);
+  assert.equal(pkt.length, PACKET_SIZE);
   assert.deepEqual(
     Array.from(pkt.slice(0, 13)),
     [0x43, 0x52, 0x54, 0x00, 0x00, 0x42, 0x41, 0x54, 0x00, 0x00, 0x1f, 0x40, 0x0d],
@@ -47,29 +39,29 @@ test('BAT packet: buildBat(0x1F40, 13) matches USB sniff', () => {
 });
 
 test('LIG packet: buildLig(75) has byte 10 = 75 and LIG at 5-7', () => {
-  const pkt = buildLig(75);
-  assert.equal(pkt.length, 1024);
+  const pkt = buildLig(75, PACKET_SIZE);
+  assert.equal(pkt.length, PACKET_SIZE);
   assert.deepEqual(Array.from(pkt.slice(5, 8)), [0x4c, 0x49, 0x47]);
   assert.equal(pkt[10], 75);
 });
 
 test('CLE-all packet: buildCle(0xFF) has byte 11 = 0xFF', () => {
-  const pkt = buildCle(0xff);
-  assert.equal(pkt.length, 1024);
+  const pkt = buildCle(0xff, PACKET_SIZE);
+  assert.equal(pkt.length, PACKET_SIZE);
   assert.equal(pkt[11], 0xff);
 });
 
 test('STP packet: bytes 5-7 = 53 54 50', () => {
-  const pkt = buildCrt([0x53, 0x54, 0x50]);
+  const pkt = buildCrt([0x53, 0x54, 0x50], [], PACKET_SIZE);
   assert.deepEqual(Array.from(pkt.slice(5, 8)), [0x53, 0x54, 0x50]);
 });
 
 test('CONNECT packet: bytes 5-11 = 43 4F 4E 4E 45 43 54', () => {
-  const pkt = buildCrt([0x43, 0x4f, 0x4e, 0x4e, 0x45, 0x43, 0x54]);
+  const pkt = buildCrt([0x43, 0x4f, 0x4e, 0x4e, 0x45, 0x43, 0x54], [], PACKET_SIZE);
   assert.deepEqual(Array.from(pkt.slice(5, 12)), [0x43, 0x4f, 0x4e, 0x4e, 0x45, 0x43, 0x54]);
 });
 
-// ── CORA framing ─────────────────────────────────────────────────────────────
+// CORA framing
 
 console.log('\nCORA framing');
 
@@ -140,7 +132,53 @@ test('tryDecodeCoraFrame returns frame for complete data', () => {
   assert.deepEqual(Array.from(decoded!.payload), [0xaa, 0xbb]);
 });
 
-// ── Summary ──────────────────────────────────────────────────────────────────
+// Elgato HID input reports
 
-console.log(`\n${passed} passed, ${failed} failed`);
-if (failed > 0) tjs.exit(1);
+console.log('\nElgato input parsing');
+
+test('gen2ParseInput: states start after the u16 key count, not inside it', () => {
+  // Wire: [reportId, inputType, count_lo, count_hi, key0..key14]
+  const data = new Uint8Array(20);
+  data[0] = 0x01;
+  data[1] = 0x00;
+  data[2] = 15;
+  data[3] = 0;
+  data[4] = 1; // key 0 pressed
+
+  const states = gen2ParseInput(data, 15);
+  assert.notEqual(states, null);
+  assert.equal(states![0]!.pressed, true);
+  assert.equal(states![1]!.pressed, false);
+});
+
+test('gen2ParseInput: last key of a 15-key deck is reachable', () => {
+  const data = new Uint8Array(20);
+  data[0] = 0x01;
+  data[1] = 0x00;
+  data[2] = 15;
+  data[18] = 1; // key 14 pressed
+
+  const states = gen2ParseInput(data, 15);
+  assert.equal(states![14]!.pressed, true);
+});
+
+test('gen2ParseInput: rejects non-button reports', () => {
+  const data = new Uint8Array(20);
+  data[0] = 0x01;
+  data[1] = 0x02; // encoder/touch input type
+  assert.equal(gen2ParseInput(data, 15), null);
+});
+
+test('gen1ParseInput: states start right after the report ID', () => {
+  const data = new Uint8Array(8);
+  data[0] = 0x01;
+  data[1] = 1; // key 0 pressed
+
+  const states = gen1ParseInput(data, 6);
+  assert.equal(states![0]!.pressed, true);
+  assert.equal(states![1]!.pressed, false);
+});
+
+// Summary
+
+summary();

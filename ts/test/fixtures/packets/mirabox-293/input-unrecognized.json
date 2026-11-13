@@ -1,0 +1,27 @@
+{
+  "version": 1,
+  "model": "mirabox-293",
+  "pid": "0x1005",
+  "firmware": null,
+  "interface": {
+    "usagePage": 65440,
+    "usage": 1
+  },
+  "source": "synthetic",
+  "assumeOpen": true,
+  "note": "A non-ACK report (the firmware banner) emits nothing.",
+  "steps": [
+    {
+      "op": "read",
+      "dir": "in",
+      "hex": "5355434345535346554c4c5920434f4e4e4543544544",
+      "expect": []
+    },
+    {
+      "op": "read",
+      "dir": "in",
+      "hex": "deadbeef",
+      "expect": []
+    }
+  ]
+}

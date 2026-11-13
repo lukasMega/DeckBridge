@@ -1,21 +1,16 @@
-// Minimal Node-Buffer-compatible shim for the txiki.js runtime.
+// Minimal Node-Buffer-compatible shim for txiki.js, replacing the npm `buffer` polyfill.
+// Implements ONLY the surface deckbridge uses, over a Uint8Array subclass so instances
+// pass to FFI / TextDecoder / postMessage with no copy. Codecs use the runtime globals
+// TextEncoder/TextDecoder and btoa/atob.
 //
-// Replaces the npm `buffer` polyfill (~27 kB minified, previously bundled into BOTH the
-// main bundle and the embedded USB-worker string). Implements ONLY the Buffer surface
-// deckbridge uses (verified across ts/src + ts/test). Backed by a Uint8Array subclass so
-// instances pass straight to FFI / TextDecoder / postMessage with no copy.
-//
-// Codecs use txiki runtime globals: TextEncoder/TextDecoder (utf8) and btoa/atob (base64).
-//
-// Wired in two ways by ts/build.mjs `shared`:
-//   - inject: ['./src/platform/buffer-shim.ts'] → provides the global `Buffer`
-//   - alias:  'node:buffer' → this file
-// Do NOT rename the exported `Buffer` binding or esbuild's inject will break.
+// ts/build.mjs `shared` wires it twice: `inject` (provides the global `Buffer`) and an
+// `alias` for 'node:buffer'. Do NOT rename the exported `Buffer` — inject breaks.
 
 type Encoding = 'utf8' | 'utf-8' | 'ascii' | 'latin1' | 'binary' | 'hex' | 'base64';
 
-const td = new TextDecoder();
-const te = new TextEncoder();
+// PURE: workers that never use Buffer (plugin, hid-scan) then tree-shake the whole shim.
+const td = /* @__PURE__ */ new TextDecoder();
+const te = /* @__PURE__ */ new TextEncoder();
 
 function bytesFromString(s: string, enc: Encoding): Uint8Array {
   switch (enc) {
@@ -46,6 +41,18 @@ function bytesFromString(s: string, enc: Encoding): Uint8Array {
   }
 }
 
+/** Resolve write()'s three Node overloads into its (offset, length, encoding) triple. */
+function normalizeWriteArgs(
+  offset?: number | Encoding,
+  length?: number | Encoding,
+  encoding?: Encoding,
+): { off: number; len: number | undefined; enc: Encoding } {
+  if (typeof offset === 'string') return { off: 0, len: undefined, enc: offset };
+  const off = offset ?? 0;
+  if (typeof length === 'string') return { off, len: undefined, enc: length };
+  return { off, len: length, enc: encoding ?? 'utf8' };
+}
+
 // Instance behaviour only. Static factories are attached below (see `Buffer`), NOT declared
 // here: declaring a static `from` on a Uint8Array subclass triggers TS2417 (incompatible with
 // Uint8Array's generic static `from`).
@@ -65,7 +72,7 @@ class BufferClass extends Uint8Array {
   }
 
   // Accepts a single byte (number) OR a subsequence (Uint8Array/Buffer), unlike Uint8Array.indexOf
-  // which only takes a number. cora-frame.ts searches for CORA_MAGIC, a 4-byte Buffer.
+  // which only takes a number. cora/frame.ts searches for CORA_MAGIC, a 4-byte Buffer.
   override indexOf(value: number | Uint8Array, byteOffset = 0): number {
     if (typeof value === 'number') return super.indexOf(value, byteOffset);
     if (value.length === 0) return Math.min(Math.max(byteOffset, 0), this.length);
@@ -142,19 +149,7 @@ class BufferClass extends Uint8Array {
     length?: number | Encoding,
     encoding?: Encoding,
   ): number {
-    let off = 0;
-    let len: number | undefined;
-    let enc: Encoding = 'utf8';
-    if (typeof offset === 'string') {
-      enc = offset;
-    } else {
-      if (offset !== undefined) off = offset;
-      if (typeof length === 'string') enc = length;
-      else {
-        if (length !== undefined) len = length;
-        if (encoding !== undefined) enc = encoding;
-      }
-    }
+    const { off, len, enc } = normalizeWriteArgs(offset, length, encoding);
     const bytes = bytesFromString(value, enc);
     const writable = Math.max(this.length - off, 0);
     const max = len === undefined ? writable : Math.min(len, writable);
@@ -224,6 +219,18 @@ function from(
   return b;
 }
 
+/** Reinterpret `u8` as a Buffer WITHOUT copying — a view over the same memory.
+ *
+ *  Only for bytes you own outright and consume in the same turn: writes alias both
+ *  ways, and the wrapper pins the WHOLE of `u8.buffer` while reachable, so storing a
+ *  wrapped chunk retains that allocation. The one caller (the TCP read pump) gets a
+ *  fresh per-read buffer from txiki and concats it away in the same turn. */
+function wrap(u8: Uint8Array): BufferClass {
+  // `u8.buffer` widens to ArrayBufferLike (i.e. may be a SharedArrayBuffer); nothing
+  // in this runtime produces one, and BufferClass's ctor takes a plain ArrayBuffer.
+  return new BufferClass(u8.buffer as ArrayBuffer, u8.byteOffset, u8.length);
+}
+
 function concat(list: readonly Uint8Array[], totalLength?: number): BufferClass {
   let total = totalLength;
   if (total === undefined) {
@@ -255,6 +262,7 @@ interface BufferConstructor {
     arg3?: number,
   ): BufferClass;
   concat(list: readonly Uint8Array[], totalLength?: number): BufferClass;
+  wrap(u8: Uint8Array): BufferClass;
   readonly prototype: BufferClass;
 }
 
@@ -265,8 +273,9 @@ export type Buffer = BufferClass;
 // The runtime value: constructor + static factories. Object.assign shadows Uint8Array's inherited
 // static `from`/`of` with ours at runtime; the cast narrows to the public shape and sidesteps the
 // Uint8Array static-side mismatch.
-export const Buffer = Object.assign(BufferClass, {
+export const Buffer = /* @__PURE__ */ Object.assign(BufferClass, {
   alloc,
   from,
   concat,
+  wrap,
 }) as unknown as BufferConstructor;

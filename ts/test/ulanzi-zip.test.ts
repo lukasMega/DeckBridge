@@ -157,7 +157,8 @@ await test('every entry is stored (method 0) with a valid CRC and intact bytes',
   const zip = buildPageZip([{ slotId: 2, png }], OPTS);
   const entries = readZip(zip);
 
-  assert.equal(entries.length, 2, 'manifest.json + one icon');
+  assert.equal(entries.length, 3, 'manifest.json + one icon + sentinel.txt');
+  assert.equal(entries.at(-1)!.name, 'sentinel.txt', 'the throwaway entry is last');
   for (const e of entries) {
     assert.equal(e.method, 0, `${e.name} must be stored, not deflated`);
     assert.equal(crc32(e.data), e.crc, `${e.name} CRC must match its bytes`);

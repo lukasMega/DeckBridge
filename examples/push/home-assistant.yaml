@@ -1,0 +1,27 @@
+# Home Assistant: push a sensor value to a DeckBridge key bound to the channel "ha-temp".
+#
+# secrets.yaml:
+#   deckbridge_push_auth: "Bearer dbp_…"
+#
+# configuration.yaml
+rest_command:
+  deckbridge_push:
+    url: "http://deckbridge-host:3000/api/push/{{ channel }}"
+    method: post
+    content_type: "application/json"
+    headers:
+      authorization: !secret deckbridge_push_auth
+    payload: '{"text": "{{ text }}", "ttl": {{ ttl | default(600) }}}'
+
+# The WebUI listens on 127.0.0.1 unless DeckBridge runs with --bind 0.0.0.0.
+automation:
+  - alias: Show living-room temperature on the deck
+    trigger:
+      - platform: state
+        entity_id: sensor.living_room_temperature
+    action:
+      - service: rest_command.deckbridge_push
+        data:
+          channel: ha-temp
+          text: "{{ states('sensor.living_room_temperature') }}°"
+          ttl: 900

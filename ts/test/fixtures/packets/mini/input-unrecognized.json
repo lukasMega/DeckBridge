@@ -1,0 +1,18 @@
+{
+  "version": 1,
+  "model": "mini",
+  "pid": "0x0063",
+  "firmware": null,
+  "interface": null,
+  "source": "synthetic",
+  "assumeOpen": true,
+  "note": "Report id other than 0x01 is not a button report.",
+  "steps": [
+    {
+      "op": "read",
+      "dir": "in",
+      "hex": "0200000100000000000000000000000000",
+      "expect": []
+    }
+  ]
+}

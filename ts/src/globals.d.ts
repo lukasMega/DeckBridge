@@ -22,12 +22,22 @@ declare global {
   // Build timestamp injected by esbuild define.
   const __BUILD_TIME__: string;
 
+  // CSP sha256 hash sources of ui.html's inline scripts (ts/build.mjs, security-headers.ts).
+  const __UI_SCRIPT_HASHES__: string;
+
   // Version string injected by esbuild define (ts/build.mjs, VERSION env var; default 'dev').
   const __VERSION__: string;
 
-  // Simple-only build flag injected by esbuild define (ts/build.mjs --simple-only).
+  // Simple-only build flag injected by esbuild define (ts/build.mjs). Defaults to
+  // TRUE — `node build.mjs --advanced` is the only way to get false.
   // When true, the advanced (debug) view + its CSS are tree-shaken out of the embedded UI.
   const __SIMPLE_ONLY__: boolean;
+
+  // Docs-site demo build (ts/scripts/build-demo.mjs), never true in the app.
+  const __DEMO__: boolean;
+
+  // Explicit local/test build only. Release bundles fold mock paths away.
+  const __MOCK_BUILD__: boolean;
 }
 
 export {};

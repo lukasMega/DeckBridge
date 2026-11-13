@@ -1,20 +1,13 @@
 import assert from 'tjs:assert';
-import { parseAckReport, buildCrt, buildBat, buildLig, buildCle } from '../src/mirabox.js';
-import { CMD_STP } from '../src/devices/mirabox-protocol.js';
-
-let passed = 0;
-let failed = 0;
-
-async function test(name: string, fn: () => void | Promise<void>): Promise<void> {
-  try {
-    await fn();
-    console.log(`  ✓ ${name}`);
-    passed++;
-  } catch (e: unknown) {
-    console.error(`  ✗ ${name}: ${(e as Error).message}`);
-    failed++;
-  }
-}
+import {
+  parseAckReport,
+  buildCrt,
+  buildBat,
+  buildLig,
+  buildCle,
+} from '../src/devices/mirabox/driver.js';
+import { CMD_STP } from '../src/devices/mirabox/protocol.js';
+import { testAsync as test, summaryExit } from './helpers/harness.js';
 
 console.log('\nmirabox-parse: parseAckReport');
 
@@ -48,7 +41,7 @@ await test('non-ACK "SUCCESSFULLY CONNECTED" banner (reportId=0x04) returns null
   assert.equal(result, null);
 });
 
-// ── CRT framing across packet sizes ──────────────────────────────────────────
+// CRT framing across packet sizes
 //
 // Phase B0/B4 pre-flight for the Fifine D6, whose two revisions differ ONLY in
 // wire.packetSize (512 for rev. 1, 1024 for rev. 2). The command builders take
@@ -96,5 +89,4 @@ await test('a 10 KiB image splits into 20 chunks at 512 and 10 at 1024', () => {
   assert.equal(Math.ceil(jpegLen / 1024), 10);
 });
 
-console.log(`\n${passed} passed, ${failed} failed`);
-tjs.exit(failed > 0 ? 1 : 0);
+summaryExit();

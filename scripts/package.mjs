@@ -7,8 +7,9 @@
 // Requires: mise run compile already done
 //
 // Env:
-//   SRC_BIN       source binary to package (default "deckbridge"; "deckbridge-lite"
-//                 for the simple-only build). Always renamed to `deckbridge` in the zip.
+//   SRC_BIN       source binary to package (default "deckbridge", the shipped
+//                 simple-only build; "deckbridge-advanced" for the opt-in
+//                 advanced-view build). Always renamed to `deckbridge` in the zip.
 //   INCLUDE_TRAY  1 (default) bundles deckbridge-tray + status icons; 0 omits them.
 import { execSync, spawnSync } from 'node:child_process';
 import {
@@ -24,6 +25,7 @@ import {
 } from 'node:fs';
 import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { have } from './tjs-common.mjs';
 
 const die = (msg) => {
   console.error(msg);
@@ -33,7 +35,7 @@ const die = (msg) => {
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const root = resolve(scriptDir, '..');
 
-// --- Version ---
+// Version
 // Single source of truth is ts/package.json (see scripts/sync-version.mjs);
 // a CLI arg still wins, for manual/dry-run invocations.
 let version = process.argv[2];
@@ -42,17 +44,26 @@ if (!version) {
   version = `v${pkgVersion}`;
 }
 
-// --- Platform ---
-const osMap = { darwin: { name: 'macos', lib: 'dylib' }, linux: { name: 'linux', lib: 'so' } };
+// Platform
+const osMap = {
+  darwin: { name: 'macos', lib: 'dylib' },
+  linux: { name: 'linux', lib: 'so' },
+  win32: { name: 'windows', lib: 'dll' },
+};
 const os = osMap[process.platform];
 if (!os) die(`error: unsupported OS: ${process.platform}`);
+
+// Windows executables keep their .exe suffix inside the zip; hidapi.dll is embedded
+// in the binary and extracted at runtime (native-libs.ts), so the zip stays portable.
+const isWindows = process.platform === 'win32';
+const exe = isWindows ? '.exe' : '';
 
 const archMap = { x64: 'x86_64', arm64: 'arm64' };
 const archName = archMap[process.arch];
 if (!archName) die(`error: unsupported arch: ${process.arch}`);
 
-// Source binary to package: deckbridge (full, default) or deckbridge-lite
-// (simple-only, from `mise run compile-simple`). The in-zip binary is always
+// Source binary to package: deckbridge (simple-only, default) or deckbridge-advanced
+// (advanced view, from `mise run compile-advanced`). The in-zip binary is always
 // named `deckbridge`, so runtime/tray/e2e behavior is identical either way.
 const srcBin = process.env.SRC_BIN || 'deckbridge';
 
@@ -62,12 +73,13 @@ const distRoot = join(root, 'dist');
 const distDir = join(distRoot, distName);
 const zipFile = join(distRoot, `${distName}.zip`);
 
-// --- Verify build artifacts ---
-const mainBin = join(root, srcBin);
-const trayBin = join(root, 'rust', 'target', 'release', 'deckbridge-tray');
+// Verify build artifacts
+// txiki's compile may emit `deckbridge` without the .exe suffix on Windows.
+const mainBin = existsSync(join(root, `${srcBin}${exe}`)) ? join(root, `${srcBin}${exe}`) : join(root, srcBin);
+const trayBin = join(root, 'rust', 'target', 'release', `deckbridge-tray${exe}`);
 const iconsDir = join(root, 'rust', 'deckbridge-tray', 'icons');
 
-// --- Optional system tray ---
+// Optional system tray
 // INCLUDE_TRAY=1 (default): bundle deckbridge-tray + status icons (full behavior).
 // INCLUDE_TRAY=0: omit them for a ~1 MB smaller download. The app degrades
 // gracefully (auto-detects deckbridge-tray next to the executable and runs without
@@ -82,37 +94,58 @@ if (missing.length) {
   die("Run 'mise run compile' first.");
 }
 
-// --- Assemble ---
+// Assemble
 rmSync(distDir, { recursive: true, force: true });
 mkdirSync(distDir, { recursive: true });
 
-copyFileSync(mainBin, join(distDir, 'deckbridge'));
-chmodSync(join(distDir, 'deckbridge'), 0o755);
+copyFileSync(mainBin, join(distDir, `deckbridge${exe}`));
+if (!isWindows) chmodSync(join(distDir, 'deckbridge'), 0o755);
 
 if (includeTray) {
-  copyFileSync(trayBin, join(distDir, 'deckbridge-tray'));
+  copyFileSync(trayBin, join(distDir, `deckbridge-tray${exe}`));
   for (const f of readdirSync(iconsDir).filter((f) => f.endsWith('.png'))) {
     copyFileSync(join(iconsDir, f), join(distDir, f));
   }
-  chmodSync(join(distDir, 'deckbridge-tray'), 0o755);
+  if (!isWindows) chmodSync(join(distDir, 'deckbridge-tray'), 0o755);
   console.log('Including system tray: deckbridge-tray + icons');
 } else {
   console.log('Excluding system tray (INCLUDE_TRAY=0): omitting deckbridge-tray + icons');
 }
 
-// Bundle third-party licenses (hidapi is embedded in the binary — license still required)
-const licenseSrc = join(scriptDir, 'LICENSE-hidapi.txt');
-if (existsSync(licenseSrc)) copyFileSync(licenseSrc, join(distDir, 'LICENSE-hidapi.txt'));
+// Linux has no app bundle: a per-user script adds the desktop menu entry instead.
+if (process.platform === 'linux') {
+  copyFileSync(join(scriptDir, 'packaging', 'linux', 'install-desktop.sh'), join(distDir, 'install-desktop.sh'));
+  chmodSync(join(distDir, 'install-desktop.sh'), 0o755);
+  copyFileSync(join(root, 'src-tauri', 'icons', '128x128.png'), join(distDir, 'deckbridge.png'));
+}
 
-// --- Zip (primary artifact) ---
+// Bundle third-party licenses: hidapi and the widget fonts are embedded in the binary,
+// and the Helvetica notice must travel with every copy.
+for (const name of ['LICENSE-hidapi.txt', 'LICENSE-spleen.txt', 'LICENSE-helvetica.txt', 'LICENSE-barlow.txt']) {
+  const licenseSrc = join(scriptDir, name);
+  if (existsSync(licenseSrc)) copyFileSync(licenseSrc, join(distDir, name));
+}
+
+// Zip (primary artifact)
 // -9: maximum deflate compression (smaller download).
 // -X: exclude macOS extended attributes (resource forks) that cause warnings/non-zero exit
+// Windows runners ship no `zip`; PowerShell's Compress-Archive keeps the same layout.
 rmSync(zipFile, { force: true });
-const zip = spawnSync('zip', ['-9', '-qrX', basename(zipFile), distName], { cwd: distRoot, stdio: 'inherit' });
+const zip = isWindows
+  ? spawnSync(
+      'powershell',
+      [
+        '-NoProfile',
+        '-Command',
+        `Compress-Archive -Path '${distName}' -DestinationPath '${basename(zipFile)}' -CompressionLevel Optimal -Force`,
+      ],
+      { cwd: distRoot, stdio: 'inherit' },
+    )
+  : spawnSync('zip', ['-9', '-qrX', basename(zipFile), distName], { cwd: distRoot, stdio: 'inherit' });
 if (zip.status !== 0 || !existsSync(zipFile)) die('error: zip was not created');
 console.log(`Created: ${zipFile}`);
 
-// --- Record zip size in bundle-sizes.csv ---
+// Record zip size in bundle-sizes.csv
 // build.mjs already appended this build's row with an empty trailing `zip` field
 // (the zip didn't exist yet at bundle time). Fill in that field now by overwriting
 // the last column of the final row. Idempotent: re-running package overwrites the
@@ -131,18 +164,10 @@ if (existsSync(csv)) {
   console.log(`Recorded zip size in bundle-sizes.csv: ${zipKb} kB`);
 }
 
-// --- Optional .tar.xz (secondary artifact) ---
+// Optional .tar.xz (secondary artifact)
 // xz/LZMA compresses these binaries noticeably better than zip-deflate.
 // Best-effort only: skip silently (never fail the build) if xz or tar are absent.
 const tarxzFile = join(distRoot, `${distName}.tar.xz`);
-const have = (cmd) => {
-  try {
-    execSync(`command -v ${cmd}`, { stdio: 'ignore' });
-    return true;
-  } catch {
-    return false;
-  }
-};
 if (have('xz') && have('tar')) {
   rmSync(tarxzFile, { force: true });
   try {

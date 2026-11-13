@@ -47,6 +47,14 @@ const ROWS: Row[] = [
     cells: [c('yes', 'Yes'), c('yes', 'Yes'), c('no', 'USB only')],
   },
   {
+    label: 'PoE & portability',
+    cells: [
+      c('no', 'No PoE; needs a host computer left on'),
+      c('yes', 'PoE, no computer needed; plug in anywhere'),
+      c('no', 'No PoE; deck tied to its PC by USB'),
+    ],
+  },
+  {
     label: 'If it breaks your PC',
     cells: [
       c('na', 'As-is, hobby use'),

@@ -1,8 +1,10 @@
 // Tracks the live per-dock status list + which dock is selected, and resolves per-dock
 // deviceKey/brightness against it (settings.devices[] keyed by deviceKey).
-import type { PersistedSettings } from './persisted-settings.js';
-import type { DockStatus } from '../../types.js';
-import { DEFAULT_BRIGHTNESS } from '../../types.js';
+import type { PersistedSettings } from '../../infra/settings.js';
+import { isNonNegInt, nonNegIntError } from './types.js';
+import type { ReqError } from './types.js';
+import type { DockStatus } from '../../shared/types.js';
+import { DEFAULT_BRIGHTNESS } from '../../shared/types.js';
 
 export class DockRegistry {
   private docks: DockStatus[] = [];
@@ -24,7 +26,17 @@ export class DockRegistry {
     return this.docks.some((d) => d.index === index);
   }
 
-  /** Replace the dock list; false (no-op) if unchanged — the 2s reconnect scan calls this every
+  /** Validate a select-dock request. Index 0 (the primary) is always selectable,
+   *  even before a device connects. Returns an HTTP-shaped error, or null. */
+  validateSelect(index: unknown): ReqError | null {
+    if (!isNonNegInt(index)) return nonNegIntError('index');
+    if (index !== 0 && !this.has(index)) {
+      return { error: `no dock with index ${index}`, status: 404 };
+    }
+    return null;
+  }
+
+  /** Replace the dock list; false (no-op) if unchanged — the 3s reconnect scan calls this every
    *  tick and an unchanged shape must not spam a broadcast. */
   update(docks: DockStatus[]): boolean {
     if (JSON.stringify(docks) === JSON.stringify(this.docks)) return false;
@@ -52,9 +64,5 @@ export class DockRegistry {
 
   selectedBrightness(): number {
     return this.selectedStatus()?.brightness ?? DEFAULT_BRIGHTNESS;
-  }
-
-  brightnessFor(index: number): number {
-    return this.settings.entryFor(this.deviceKeyFor(index))?.brightness ?? DEFAULT_BRIGHTNESS;
   }
 }

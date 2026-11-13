@@ -3,3 +3,18 @@
 allowBuilds:
   "esbuild": true
   "unrs-resolver": true
+
+minimumReleaseAgeExclude:
+  - preact@11.0.1
+
+# Keep transitive browser data tooling above security-fix floors.
+# Drop these once all direct parents resolve fixed releases themselves.
+overrides:
+  browserslist: "^4.28.7"
+  baseline-browser-mapping: "^2.11.0"
+  # 4.7.10 fixes AST injection, constructor access, and inline script escaping.
+  handlebars: "^4.7.10"
+
+# Share the docs build's nesting guard with ESLint's transitive braces copy.
+patchedDependencies:
+  braces@3.0.3: ../patches/braces@3.0.3.patch

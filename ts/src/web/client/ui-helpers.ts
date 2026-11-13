@@ -1,5 +1,4 @@
-import type { ClientApp, DockUi, Status } from './ui-types.js';
-import type { DeviceState } from './ui-state.js';
+import type { ClientApp, DockUi, Status, TouchStripSize, UpdateInfo } from './ui-types.js';
 
 /** " to the Elgato app" / " to the Bitfocus Companion app" / "" — appended
  *  after "connected" in the ready-stage copy. Empty string (generic "connected
@@ -11,9 +10,15 @@ export function clientAppName(app: ClientApp | undefined): string {
   return '';
 }
 
+export type DeviceState = 'no-device' | 'no-device-elgato-conflict' | 'device-no-elgato' | 'ready';
+
 export function deriveState(s: Status): DeviceState {
   if (!s.driverConnected) {
-    if (s.driverMode !== 'mock' && s.elgatoAppRunning && s.elgatoDevicePresent)
+    if (
+      (!__MOCK_BUILD__ || s.driverMode !== 'mock') &&
+      s.elgatoAppConflict &&
+      s.elgatoDevicePresent
+    )
       return 'no-device-elgato-conflict';
     return 'no-device';
   }
@@ -24,52 +29,41 @@ export function deriveState(s: Status): DeviceState {
 /** True when `docks` must be rendered dock-aware rather than via the
  *  single-primary deriveState() wizard — either genuinely multiple docks, or
  *  a lone dock that isn't the primary (index 0): the primary disconnected
- *  while an extra dock is still live, which deriveState() can't see since it
+ *  while a scanned dock is still live, which deriveState() can't see since it
  *  only reads the primary's own status fields. */
+/** The version to show the topbar update dot for, or null to hide it —
+ *  available, and not the version the user already dismissed. */
+export function updateBadgeVersion(info: UpdateInfo | undefined): string | null {
+  if (info?.updateAvailable !== true || info.latest === info.dismissedVersion) return null;
+  return info.latest ?? null;
+}
+
 export function isMultiDockView(docks: DockUi[]): boolean {
   return docks.length > 1 || (docks.length === 1 && docks[0]!.index !== 0);
 }
 
-// Returns the multi-dock list when the server provides one; otherwise synthesizes
-// a single-entry list from legacy top-level fields so the client keeps working
-// against an older server bundle (dev skew between client/server builds).
-export function deriveDocks(s: Status): DockUi[] {
-  if (s.docks && s.docks.length > 0) return s.docks;
-  if (!s.driverConnected) return [];
-  const keyCount = s.keyCount ?? 15;
-  const columns = s.columns ?? 5;
-  return [
-    {
-      index: 0,
-      modelId: s.modelId ?? '',
-      modelName: s.modelName ?? 'Stream Deck MK.2',
-      keyCount,
-      columns,
-      rows: Math.ceil(keyCount / columns),
-      primaryPort: 5343,
-      // Legacy server has no per-dock primary signal: child-connected implies
-      // primary-connected; otherwise conservatively false.
-      primaryConnected: s.elgatoConnected,
-      elgatoConnected: s.elgatoConnected,
-    },
-  ];
+/** The selected dock's re-paired CORA profile — the single-dock views read the
+ *  top-level status, which has no per-dock fields. */
+export function selectedCoraProfile(s: Status): string | undefined {
+  const selected = s.selectedDock;
+  return s.docks.find((d) => d.index === selected)?.coraProfile;
 }
 
-export type ThemePref = 'light' | 'dark' | 'auto';
-
-/** Mirrors the inline pre-paint script in ui.html — must stay in sync. */
-export function getTheme(): ThemePref {
-  const t = localStorage.getItem('deckbridge.theme');
-  return t === 'light' || t === 'dark' ? t : 'auto';
+/** The selected dock's advertised touch strip, if its profile has one. */
+export function selectedTouchStripSize(s: Status): TouchStripSize | undefined {
+  const selected = s.selectedDock;
+  return s.docks.find((d) => d.index === selected)?.touchStripSize;
 }
 
-export function setTheme(pref: ThemePref): void {
-  if (pref === 'auto') localStorage.removeItem('deckbridge.theme');
-  else localStorage.setItem('deckbridge.theme', pref);
-  const dark =
-    pref === 'dark' ||
-    (pref === 'auto' && window.matchMedia('(prefers-color-scheme: dark)').matches);
-  document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
+/** Key frames use Elgato indices; AKP05/AKP05E side keys have separate controls. */
+export function previewLayout(
+  keyCount: number,
+  columns: number,
+  modelId?: string,
+): { keyCount: number; columns: number } {
+  return modelId === 'ajazz-akp05' || modelId === 'ajazz-akp05e'
+    ? { keyCount: 8, columns: 4 }
+    : { keyCount, columns };
 }
 
 export function deeplink(url: string): void {

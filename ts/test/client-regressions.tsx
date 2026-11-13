@@ -1,0 +1,2828 @@
+import { render } from 'preact';
+import { act } from 'preact/test-utils';
+import { useLayoutEffect } from 'preact/hooks';
+import {
+  addKeyEvent,
+  addServerLogs,
+  addCommLogs,
+  subscribe,
+  getSnapshot,
+  patch,
+  useStore,
+  EMPTY_STATUS,
+  EMPTY_PAGE_STATE,
+} from '../src/web/client/lib/store.js';
+import { DOCK_IDENTITY } from './helpers/dock-fixture.js';
+import { hydrate } from '../src/web/client/lib/hydrate.js';
+import { CopyChip } from '../src/web/client/simple/controls.js';
+import { LogConsolePanel } from '../src/web/client/advanced/log-panel.js';
+import { DeviceTuningPanel } from '../src/web/client/simple/device-tuning.js';
+import { DiagnosticsPanel } from '../src/web/client/simple/diagnostics-panel.js';
+import { PushApiPanel } from '../src/web/client/simple/push-api-panel.js';
+import { MultiDeckPanel } from '../src/web/client/simple/multi-deck-panel.js';
+import { UpdatePanel } from '../src/web/client/simple/update-panel.js';
+import { Collapsible } from '../src/web/client/components/Collapsible.js';
+import { runDeckPage } from './client-deck.js';
+import { runPairingFlow } from './client-pairing.js';
+import { runDocsLinks } from './client-docs.js';
+import { runWslHydrateRace, runWslRelay } from './client-wsl.js';
+import { runSurvey } from './client-survey.js';
+import { runStatistics } from './client-statistics.js';
+import { runModalShells } from './client-modal.js';
+import { runPagesPanel } from './client-pages.js';
+import { runVerifyWizard } from './client-verify.js';
+import { StandbyPanel } from '../src/web/client/simple/standby-panel.js';
+import type { StandbyView } from '../src/web/contract-standby.js';
+import { ElgatoAppPanel } from '../src/web/client/simple/elgato-app-panel.js';
+import { KeymapLearn } from '../src/web/client/simple/keymap-learn.js';
+import { DockList } from '../src/web/client/simple/dock-cards.js';
+import { SimpleApp } from '../src/web/client/simple/SimpleApp.js';
+import { DEVICE_MODELS, advertisedTouchStrip } from '../src/devices/registry.js';
+import { emulationProfiles } from '../src/devices/model-overrides.js';
+import { BROWSER_DECK_MK2_MODEL } from '../src/devices/virtual/browser-deck-profiles.js';
+import { showDeviceAction } from '../src/web/client/device-test-mode.js';
+import { ExtraKeysPanel } from '../src/web/client/simple/extra-keys-panel.js';
+import { ChipRadioGroup } from '../src/web/client/components/ChipRadioGroup.js';
+import { updateBadgeVersion } from '../src/web/client/ui-helpers.js';
+import { popoverShift } from '../src/web/client/lib/ui-hooks.js';
+import { KeyGridPreview } from '../src/web/client/components/KeyGridPreview.js';
+import { applyImage, clearImageStore } from '../src/web/client/key-preview.js';
+import {
+  applyTouchImage,
+  attachTouchCanvas,
+  resetTouchStrip,
+} from '../src/web/client/touch-strip-preview.js';
+import {
+  applyStripWrite,
+  attachZoneCanvas,
+  resetStripZones,
+} from '../src/web/client/strip-zone-preview.js';
+import type {
+  DeviceOverridesView,
+  DockUi,
+  ElgatoAutoRestartState,
+  UpdateInfo,
+  WidgetDisplayInfo,
+} from '../src/web/client/ui-types.js';
+
+const root = document.createElement('div');
+document.body.appendChild(root);
+const results: string[] = [];
+const noop = (): void => {};
+
+function check(condition: boolean, message: string): void {
+  if (!condition) throw new Error(message);
+  results.push(message);
+}
+
+function SelectedValue({ field }: Readonly<{ field: 'brightness' | 'touchStripRepaintMs' }>) {
+  const value = useStore((s) => s[field]);
+  return <output>{value}</output>;
+}
+
+function UpdateDuringMount() {
+  useLayoutEffect(() => patch({ brightness: 42 }), []);
+  return null;
+}
+
+// Selector rebuilding a fresh object every call: without shallow memoization
+// useSyncExternalStore never sees two Object.is-equal snapshots and loops forever.
+let freshSelectorRenders = 0;
+function FreshObjectSelector() {
+  const { brightness } = useStore((s) => ({ brightness: s.brightness }));
+  freshSelectorRenders++;
+  return <output>{brightness}</output>;
+}
+
+async function click(selector: string): Promise<void> {
+  const button = root.querySelector<HTMLButtonElement>(selector);
+  if (!button) throw new Error(`Missing button: ${selector}`);
+  await act(async () => {
+    button.click();
+    await Promise.resolve();
+  });
+}
+
+function elementText(selector: string): string {
+  return root.querySelector(selector)?.textContent ?? '';
+}
+
+async function run(): Promise<void> {
+  // Cases replace navigator.clipboard; the last installs a pending writeText.
+  // Restore the real descriptor before later tests.
+  const originalClipboard = Object.getOwnPropertyDescriptor(navigator, 'clipboard');
+  patch({ brightness: 10, touchStripRepaintMs: 1234 });
+  await act(() => render(<SelectedValue field="brightness" />, root));
+  check(root.textContent === '10', 'Initial selector reads snapshot');
+  await act(() => render(<SelectedValue field="touchStripRepaintMs" />, root));
+  check(root.textContent === '1234', 'Changed selector updates without store mutation');
+  await act(() => patch({ touchStripRepaintMs: 4321 }));
+  check(root.textContent === '4321', 'Subscription uses latest selector');
+  await act(() => render(null, root));
+  await act(() =>
+    render(
+      <>
+        <SelectedValue field="brightness" />
+        <UpdateDuringMount />
+      </>,
+      root,
+    ),
+  );
+  check(root.textContent === '42', 'Mount-time store mutation is observed');
+  await act(() => render(null, root));
+  await act(() => patch({ brightness: 99 }));
+  check(root.textContent === '', 'Unmounted subscriber stays removed');
+
+  await act(() => render(<FreshObjectSelector />, root));
+  const rendersAfterMount = freshSelectorRenders;
+  check(root.textContent === '99', 'Fresh-object selector reads snapshot');
+  await act(() => patch({ brightness: 7 }));
+  check(root.textContent === '7', 'Fresh-object selector tracks updates');
+  check(
+    freshSelectorRenders - rendersAfterMount <= 2,
+    `Fresh-object selector settles (${freshSelectorRenders - rendersAfterMount} renders per update)`,
+  );
+  await act(() => patch({ touchStripRepaintMs: 999 }));
+  check(
+    freshSelectorRenders - rendersAfterMount <= 2,
+    'Unrelated store change does not re-render a shallow-equal selection',
+  );
+  // Restore the default so later cases (e.g. runSideKeysPanel) that read the
+  // repaint interval without setting it first see the documented default.
+  patch({ touchStripRepaintMs: 5000 });
+  await act(() => render(null, root));
+
+  for (const advanced of [false, true]) {
+    const selector = advanced ? '#copy-logs' : 'button';
+    await act(() =>
+      render(
+        advanced ? <LogConsolePanel /> : <CopyChip label="IP" value="127.0.0.1" cls="chip" />,
+        root,
+      ),
+    );
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: undefined });
+    await click(selector);
+    check(
+      root.querySelector(selector)!.textContent.includes('Copy failed'),
+      `Missing clipboard reports failure (${advanced})`,
+    );
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText: () => Promise.reject(new Error('denied')) },
+    });
+    await click(selector);
+    check(
+      root.querySelector(selector)!.textContent.includes('Copy failed'),
+      `Denied clipboard reports failure (${advanced})`,
+    );
+    let written = '';
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: {
+        writeText: (text: string) => {
+          written = text;
+          return Promise.resolve();
+        },
+      },
+    });
+    await click(selector);
+    check(
+      root.querySelector(selector)!.textContent.includes('Copied'),
+      `Successful clipboard reports success (${advanced})`,
+    );
+    check(
+      advanced ? written.includes('SERVER LOGS') : written === '127.0.0.1',
+      `Clipboard receives intended content (${advanced})`,
+    );
+    await act(() => render(null, root));
+  }
+
+  // Failed copies must restore both idle labels instead of leaving "Copy failed".
+  // Render both consumers together so one shared wait covers both.
+  const originalSetTimeout = globalThis.setTimeout;
+  const resets: Array<() => void> = [];
+  // Offset the fake handles: `clearTimeout` is left real, and useCopyText's unmount
+  // cleanup passes these back to it. Small ids would collide with genuine browser timer
+  // ids (which also start at 1) and cancel an unrelated timer.
+  const FAKE_TIMER_ID_BASE = 1_000_000;
+  globalThis.setTimeout = ((handler: TimerHandler): number => {
+    if (typeof handler === 'function') resets.push(handler as () => void);
+    return FAKE_TIMER_ID_BASE + resets.length;
+  }) as typeof setTimeout;
+  try {
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText: () => Promise.reject(new Error('denied')) },
+    });
+    await act(() =>
+      render(
+        <>
+          <CopyChip label="IP" value="127.0.0.1" cls="chip" />
+          <LogConsolePanel />
+        </>,
+        root,
+      ),
+    );
+    await click('button');
+    await click('#copy-logs');
+    check(
+      elementText('button').includes('Copy failed') &&
+        elementText('#copy-logs').includes('Copy failed'),
+      'Both consumers show the copy failure',
+    );
+    await act(() => resets.forEach((reset) => reset()));
+    check(elementText('button').includes('IP'), 'Chip restores its label after a copy failure');
+    check(
+      elementText('#copy-logs').includes('Copy All'),
+      'Copy All restores its label after a failure',
+    );
+    await act(() => render(null, root));
+  } finally {
+    globalThis.setTimeout = originalSetTimeout;
+  }
+
+  let finish: () => void = noop;
+  Object.defineProperty(navigator, 'clipboard', {
+    configurable: true,
+    value: {
+      writeText: () =>
+        new Promise<void>((resolve) => {
+          finish = resolve;
+        }),
+    },
+  });
+  await act(() => render(<CopyChip label="IP" value="127.0.0.1" cls="chip" />, root));
+  await click('button');
+  await act(() => render(null, root));
+  await act(async () => {
+    finish();
+    await Promise.resolve();
+  });
+  check(root.textContent === '', 'Late clipboard completion respects unmount');
+
+  if (originalClipboard) Object.defineProperty(navigator, 'clipboard', originalClipboard);
+  else delete (navigator as { clipboard?: unknown }).clipboard;
+
+  await runSettingsPanels();
+  await runDocsLinks(root, check);
+  await runWslRelay(root, check);
+  await runModalShells(root, check);
+  await runSurvey(root, check);
+  await runVerifyWizard(root, check);
+  await runStatistics(check);
+  await runKeymapAndDiagnosticsPanels();
+  await runMultiDockCards();
+  await runMultiDockConfiguration();
+  await runSideKeysPanel();
+  await runChipRadioGroup();
+  await runTouchStripPreview();
+  await runStripZonePreview();
+  await runPreviewBacklog();
+  await runLogBatches();
+  runUpdateBadge();
+  await runHydrateRegression();
+}
+
+// B4: WS reconnect used to re-apply only images, leaving extraKeys/encoders/
+// touchStripMode/brightnessOverride/updateInfo stale after an app restart.
+// hydrate() is now the single entry point for both first load and reconnect.
+async function runHydrateRegression(): Promise<void> {
+  patch({
+    extraKeys: {},
+    touchStripMode: 'elgato',
+    brightnessOverride: true,
+    updateInfo: undefined,
+  });
+  const state: Parameters<typeof hydrate>[0] = {
+    ...EMPTY_STATUS,
+    driverConnected: true,
+    elgatoConnected: true,
+    keyEvents: [],
+    stats: { uptimeMs: 1, imagesSent: 0 },
+    mockConfig: { ...DOCK_IDENTITY },
+    deviceModels: [],
+    deviceIdentity: { ...DOCK_IDENTITY },
+    extraKeys: { '11': { widget: 'command', param: 'date' } },
+    pages: [],
+    pageState: EMPTY_PAGE_STATE,
+    touchStripMode: 'deckbridge-repaint',
+    touchStripRepaintMs: 5000,
+    encoders: {},
+    brightnessOverride: false,
+    logLevel: 'info',
+    logFilePath: '',
+    multiDeck: false,
+    keyPressEnabled: false,
+    updateInfo: { enabled: true, current: '0.14.1', updateAvailable: true, latest: '0.15.0' },
+    elgatoAutoRestart: { enabled: true, delayS: 10, supported: true },
+    extensions: { dir: '/ext', extensions: [] },
+  };
+  hydrate(state);
+  const snap = getSnapshot();
+  check(
+    JSON.stringify(snap.extraKeys) ===
+      JSON.stringify({ '11': { widget: 'command', param: 'date' } }),
+    'hydrate() re-applies extraKeys',
+  );
+  check(snap.touchStripMode === 'deckbridge-repaint', 'hydrate() re-applies touchStripMode');
+  check(!snap.brightnessOverride, 'hydrate() re-applies brightnessOverride');
+  check(snap.updateInfo?.latest === '0.15.0', 'hydrate() re-applies updateInfo');
+  check(snap.extensions.dir === '/ext', 'hydrate() re-applies extensions');
+  await runWslHydrateRace(() => hydrate(state), check);
+  patch({
+    extraKeys: {},
+    touchStripMode: 'elgato',
+    brightnessOverride: true,
+    updateInfo: undefined,
+  });
+}
+
+/** Base64 JPEG body of a solid w×h block. */
+function solidJpeg(w: number, h: number, color: string): string {
+  const c = document.createElement('canvas');
+  c.width = w;
+  c.height = h;
+  const ctx = c.getContext('2d')!;
+  ctx.fillStyle = color;
+  ctx.fillRect(0, 0, w, h);
+  return c.toDataURL('image/jpeg', 1).split(',')[1]!;
+}
+
+/** Red channel at (x, y) once the async paint chain has drawn it. */
+async function stripRed(x: number, y: number, want: (r: number) => boolean): Promise<number> {
+  let r = -1;
+  for (let i = 0; i < 50; i++) {
+    const canvas = root.querySelector<HTMLCanvasElement>('canvas.touch-strip-preview');
+    r = canvas?.getContext('2d')?.getImageData(x, y, 1, 1).data[0] ?? -1;
+    if (want(r)) return r;
+    await new Promise((res) => setTimeout(res, 10));
+  }
+  return r;
+}
+
+async function runTouchStripPreview(): Promise<void> {
+  await act(() => render(<KeyGridPreview keyCount={8} columns={4} dimmed={false} />, root));
+  check(!root.querySelector('canvas.touch-strip-preview'), 'No strip canvas without a strip');
+
+  applyTouchImage({ data: solidJpeg(40, 10, '#ff0000') });
+  await act(() =>
+    render(
+      <KeyGridPreview
+        keyCount={8}
+        columns={4}
+        dimmed={false}
+        touchStrip={{ width: 40, height: 10 }}
+      />,
+      root,
+    ),
+  );
+  const canvas = root.querySelector<HTMLCanvasElement>('canvas.touch-strip-preview');
+  check(canvas?.width === 40 && canvas.height === 10, 'Strip canvas uses the advertised size');
+  check((await stripRed(5, 5, (r) => r > 200)) > 200, 'A frame seen before mount is painted');
+
+  applyTouchImage({ data: solidJpeg(20, 10, '#0000ff'), region: { x: 20, y: 0, w: 20, h: 10 } });
+  check((await stripRed(30, 5, (r) => r < 50)) < 50, 'A partial window lands at its region');
+  check((await stripRed(5, 5, (r) => r > 200)) > 200, 'A partial window leaves the rest');
+
+  resetTouchStrip();
+  const alpha = canvas!.getContext('2d')!.getImageData(5, 5, 1, 1).data[3];
+  check(alpha === 0, 'Dock switch clears the strip');
+  await act(() => render(null, root));
+}
+
+/** Base64 JPEG of a black w×h block with coloured rects `[x, y, w, h, color]`. */
+function rectsJpeg(w: number, h: number, rects: Array<[number, number, number, number, string]>) {
+  const c = document.createElement('canvas');
+  c.width = w;
+  c.height = h;
+  const ctx = c.getContext('2d')!;
+  ctx.fillStyle = '#000000';
+  ctx.fillRect(0, 0, w, h);
+  for (const [x, y, rw, rh, color] of rects) {
+    ctx.fillStyle = color;
+    ctx.fillRect(x, y, rw, rh);
+  }
+  return c.toDataURL('image/jpeg', 1).split(',')[1]!;
+}
+
+type Rgba = readonly [number, number, number, number];
+const isRed = ([r, g, b]: Rgba) => r > 200 && g < 60 && b < 60;
+const isBlue = ([r, g, b]: Rgba) => b > 200 && r < 60 && g < 60;
+const isBlack = ([r, g, b, a]: Rgba) => a > 200 && r < 40 && g < 40 && b < 40;
+const isBlank = ([, , , a]: Rgba) => a === 0;
+
+/** Pixel at (x, y) once the async zone paint chain has drawn what `want` expects. */
+async function zonePixel(
+  canvas: HTMLCanvasElement,
+  x: number,
+  y: number,
+  want: (p: Rgba) => boolean,
+) {
+  let p: Rgba = [0, 0, 0, 0];
+  for (let i = 0; i < 50; i++) {
+    const d = canvas.getContext('2d')!.getImageData(x, y, 1, 1).data;
+    p = [d[0]!, d[1]!, d[2]!, d[3]!];
+    if (want(p)) return true;
+    await new Promise((res) => setTimeout(res, 10));
+  }
+  return false;
+}
+
+function zone(wireId: number, stripX: number, rotate: 0 | 180 = 0): WidgetDisplayInfo {
+  const label = `Zone ${wireId}`;
+  return { wireId, label, width: 176, height: 112, stripX, rotate, flipH: false, flipV: false };
+}
+
+function zoneCanvas(z: WidgetDisplayInfo): { canvas: HTMLCanvasElement; detach: () => void } {
+  const canvas = document.createElement('canvas');
+  canvas.width = z.width;
+  canvas.height = z.height;
+  return { canvas, detach: attachZoneCanvas(canvas, z) };
+}
+
+// Device strip mirror (strip-zone-preview.ts): what each zone shows is exactly what
+// the device received — slots, full-strip uploads sliced at stripX, orientation undone.
+async function runStripZonePreview(): Promise<void> {
+  resetStripZones();
+  const z1 = zoneCanvas(zone(1, 0));
+  const z2 = zoneCanvas(zone(2, 204));
+  check(z2.canvas.dataset.empty === 'true', 'A zone with no device write is marked empty');
+
+  applyStripWrite({ wireId: 2, data: solidJpeg(176, 112, '#ff0000') });
+  check(await zonePixel(z2.canvas, 88, 56, isRed), 'A slot write paints its zone');
+  check(z2.canvas.dataset.empty === undefined, 'A painted zone is not marked empty');
+  check(z1.canvas.dataset.empty === 'true', 'A slot write leaves other zones alone');
+
+  const z3 = zoneCanvas(zone(3, 406, 180));
+  const topRed = rectsJpeg(176, 112, [
+    [0, 0, 176, 56, '#ff0000'],
+    [0, 56, 176, 56, '#0000ff'],
+  ]);
+  applyStripWrite({ wireId: 3, data: topRed });
+  check(
+    (await zonePixel(z3.canvas, 88, 100, isRed)) && (await zonePixel(z3.canvas, 88, 10, isBlue)),
+    'A rotate-180 zone is drawn upright (device top half lands at the bottom)',
+  );
+
+  applyStripWrite({ wireId: 1, data: solidJpeg(176, 112, '#0000ff') });
+  check(await zonePixel(z1.canvas, 88, 56, isBlue), 'Slot 1 write paints zone 1');
+  const full = rectsJpeg(800, 112, [[204, 0, 176, 112, '#ff0000']]);
+  applyStripWrite({ wireId: 1, data: full, full: true });
+  check(await zonePixel(z2.canvas, 88, 56, isRed), 'A full write is sliced at the zone stripX');
+  check(
+    await zonePixel(z1.canvas, 88, 56, isBlack),
+    'A full write replaces an earlier slot write (zone 1 shows the strip, not the slot)',
+  );
+  applyStripWrite({ wireId: 2, data: solidJpeg(176, 112, '#0000ff') });
+  check(await zonePixel(z2.canvas, 88, 56, isBlue), 'A slot write after a full write overrides it');
+
+  applyStripWrite({ clear: true });
+  check(
+    (await zonePixel(z2.canvas, 88, 56, isBlank)) && z2.canvas.dataset.empty === 'true',
+    'A clear blanks the zones and marks them empty',
+  );
+
+  applyStripWrite({ wireId: 4, data: solidJpeg(176, 112, '#ff0000') });
+  const z4 = zoneCanvas(zone(4, 610));
+  check(await zonePixel(z4.canvas, 88, 56, isRed), 'A canvas attached after a write paints it');
+  resetStripZones();
+  check(
+    (await zonePixel(z4.canvas, 88, 56, isBlank)) && z4.canvas.dataset.empty === 'true',
+    'Dock switch blanks the zones',
+  );
+  for (const z of [z1, z2, z3, z4]) z.detach();
+}
+
+/** Count Image.decode calls (the expensive step) while `fn` runs. */
+async function countDecodes(fn: () => Promise<void>): Promise<number> {
+  const proto = HTMLImageElement.prototype;
+  // eslint-disable-next-line @typescript-eslint/unbound-method -- re-called with the right this
+  const origDecode = proto.decode;
+  let n = 0;
+  proto.decode = function (this: HTMLImageElement) {
+    n++;
+    return origDecode.call(this);
+  };
+  try {
+    await fn();
+  } finally {
+    proto.decode = origDecode;
+  }
+  return n;
+}
+
+const idle = (ms = 150) => new Promise((res) => setTimeout(res, ms));
+
+// F10: queued preview work stays bounded and obsolete work is never decoded.
+async function runPreviewBacklog(): Promise<void> {
+  resetTouchStrip();
+  const canvas = document.createElement('canvas');
+  canvas.width = 40;
+  canvas.height = 10;
+  const red = solidJpeg(40, 10, '#ff0000');
+  const detach = attachTouchCanvas(canvas);
+  await idle();
+
+  let decodes = await countDecodes(async () => {
+    for (let i = 0; i < 100; i++) applyTouchImage({ data: red });
+    await idle();
+  });
+  check(decodes <= 3, `A burst of 100 full frames decodes a bounded number (${decodes})`);
+
+  decodes = await countDecodes(async () => {
+    for (let i = 0; i < 100; i++) applyTouchImage({ data: red });
+    resetTouchStrip();
+    await idle();
+  });
+  check(decodes <= 1, `A reset during a backlog decodes no obsolete frames (${decodes})`);
+
+  // Distinct partial windows keep their order: the later patch lands on top.
+  const blue = solidJpeg(20, 10, '#0000ff');
+  const green = solidJpeg(20, 10, '#00ff00');
+  applyTouchImage({ data: solidJpeg(40, 10, '#000000') });
+  applyTouchImage({ data: blue, region: { x: 0, y: 0, w: 20, h: 10 } });
+  applyTouchImage({ data: green, region: { x: 10, y: 0, w: 20, h: 10 } });
+  await idle();
+  const px = (x: number) => canvas.getContext('2d')!.getImageData(x, 5, 1, 1).data;
+  check(px(5)[2]! > 200 && px(25)[1]! > 200, 'Queued partial patches composite in order');
+  check(px(15)[1]! > 200, 'The later overlapping patch lands on top');
+
+  // Detach: nothing is painted to (or decoded for) a canvas that left.
+  detach();
+  const before = canvas.getContext('2d')!.getImageData(5, 5, 1, 1).data.join();
+  decodes = await countDecodes(async () => {
+    applyTouchImage({ data: red });
+    await idle();
+  });
+  check(decodes === 0, 'No decode while no canvas is attached');
+  check(
+    canvas.getContext('2d')!.getImageData(5, 5, 1, 1).data.join() === before,
+    'A detached canvas is not painted',
+  );
+  const again = attachTouchCanvas(canvas);
+  check(await stripRed(5, 5, (r) => r > 200).then(() => true), 'Reattach repaints from cache');
+  again();
+
+  // Zone previews: reset during a backlog decodes nothing obsolete.
+  resetStripZones();
+  const z = zoneCanvas(zone(2, 204));
+  const slotRed = solidJpeg(176, 112, '#ff0000');
+  decodes = await countDecodes(async () => {
+    for (let i = 0; i < 100; i++) applyStripWrite({ wireId: 2, data: slotRed });
+    await idle();
+  });
+  check(decodes <= 3, `A burst of 100 slot writes decodes a bounded number (${decodes})`);
+  check(await zonePixel(z.canvas, 88, 56, isRed), 'The newest slot write is painted');
+  decodes = await countDecodes(async () => {
+    for (let i = 0; i < 100; i++) applyStripWrite({ wireId: 2, data: slotRed, full: true });
+    resetStripZones();
+    await idle();
+  });
+  check(decodes <= 1, `Zone reset during a backlog decodes no obsolete writes (${decodes})`);
+  z.detach();
+  decodes = await countDecodes(async () => {
+    applyStripWrite({ wireId: 2, data: slotRed });
+    await idle();
+  });
+  check(decodes === 0, 'A detached zone canvas is not decoded for');
+  resetStripZones();
+}
+
+const logEntry = (i: number) => ({
+  ts: i,
+  level: 'info' as const,
+  component: 'c',
+  message: `m${i}`,
+});
+
+// F19: a log batch is one copy + one notify, and the panel keeps up past the cap.
+async function runLogBatches(): Promise<void> {
+  let notifies = 0;
+  const unsub = subscribe(() => notifies++);
+  const seq0 = getSnapshot().serverLogSeq;
+  addServerLogs(Array.from({ length: 500 }, (_, i) => logEntry(i)));
+  check(notifies === 1, 'A 500-entry batch notifies once');
+  check(getSnapshot().serverLogSeq === seq0 + 500, 'The append sequence counts the batch');
+  addServerLogs(Array.from({ length: 2500 }, (_, i) => logEntry(1000 + i)));
+  const logs = getSnapshot().serverLogs;
+  check(logs.length === 2000 && logs[1999]!.message === 'm3499', 'The cap keeps the newest 2000');
+  addCommLogs([]);
+  check(notifies === 2, 'An empty batch does not notify');
+  unsub();
+
+  await act(() => render(<LogConsolePanel />, root));
+  await new Promise((res) => requestAnimationFrame(res));
+  const pre = root.querySelector('pre')!;
+  check(pre.children.length === 2000, 'The panel renders the capped log');
+  addServerLogs([logEntry(9001), logEntry(9002)]);
+  await new Promise((res) => requestAnimationFrame(res));
+  await new Promise((res) => requestAnimationFrame(res));
+  check(
+    pre.children.length === 2000 && pre.lastElementChild!.textContent.includes('m9002'),
+    'The panel keeps appending once the log is at the cap',
+  );
+  await act(() => render(null, root));
+}
+
+// Device tuning + diagnostics panels (simple/device-tuning.tsx,
+// simple/diagnostics-panel.tsx). Both are fetch-driven, so each case installs a
+// stub `fetch` and asserts on what the panel rendered / what it posted.
+
+// Mirrors a real GET /api/device-overrides payload: `effective` carries the full
+// spec (protocol facts included), `tunable` is the projection the form seeds from.
+const OVERRIDES_VIEW: DeviceOverridesView = {
+  modelId: 'mirabox-293',
+  modelName: 'Mirabox 293V3',
+  defaults: { image: { rotate: 0, width: 112, height: 112, quality: 0.8 } },
+  overrides: {},
+  safeMode: false,
+  effective: {
+    image: {
+      format: 'jpeg',
+      colorMode: 'rgb',
+      rotate: 180,
+      width: 112,
+      height: 112,
+      quality: 0.8,
+      resizeMode: 'resize',
+    },
+    keyMap: { inputOffset: 1 },
+  },
+  tunable: {
+    image: { rotate: 180, width: 112, height: 112, quality: 0.8, resizeMode: 'resize' },
+    keyMap: { inputOffset: 1 },
+  },
+  profiles: [],
+  sourceSize: { width: 72, height: 72 },
+};
+
+const SECOND_OVERRIDES_VIEW: DeviceOverridesView = {
+  ...OVERRIDES_VIEW,
+  modelId: 'mirabox-293s',
+  modelName: 'Mirabox 293S',
+  defaults: { ...OVERRIDES_VIEW.defaults, wire: { batchImageTransfers: true } },
+  tunable: { ...OVERRIDES_VIEW.tunable, wire: { batchImageTransfers: true } },
+};
+
+interface StubCall {
+  url: string;
+  method: string;
+  body: unknown;
+}
+
+/** Install a stub fetch; returns the recorded calls and a restore function. */
+function stubFetch(handler: (url: string, init?: RequestInit) => unknown): {
+  calls: StubCall[];
+  restore: () => void;
+} {
+  const calls: StubCall[] = [];
+  const original = globalThis.fetch;
+  globalThis.fetch = (async (url: string, init?: RequestInit) => {
+    calls.push({
+      url,
+      method: init?.method ?? 'GET',
+      body: typeof init?.body === 'string' ? JSON.parse(init.body) : undefined,
+    });
+    const result = (await handler(url, init)) as { status?: number; payload?: unknown };
+    const status = result.status ?? 200;
+    return {
+      ok: status < 400,
+      status,
+      json: () => Promise.resolve(result.payload ?? {}),
+      text: () => Promise.resolve(JSON.stringify(result.payload ?? {})),
+    };
+  }) as typeof fetch;
+  return { calls, restore: () => (globalThis.fetch = original) };
+}
+
+/** Let the panel's mount-time fetch chain settle before asserting. */
+async function settle(): Promise<void> {
+  await act(async () => {
+    for (let i = 0; i < 10; i++) await Promise.resolve();
+  });
+}
+
+/** Minimum status the learn-mode grid prompts need. */
+const baseStatus = {
+  ...EMPTY_STATUS,
+  driverConnected: true,
+  elgatoConnected: true,
+  docks: [] as DockUi[],
+};
+
+async function checkBatchImageTransferTuning(): Promise<void> {
+  for (const [modelId, enabled] of [
+    ['mirabox-293s', true],
+    ['ajazz-akp153', false],
+  ] as const) {
+    const view: DeviceOverridesView = {
+      ...SECOND_OVERRIDES_VIEW,
+      modelId,
+      tunable: { ...SECOND_OVERRIDES_VIEW.tunable, wire: { batchImageTransfers: enabled } },
+      overrides: { wire: { chunkDelayMs: 2 } },
+    };
+    const stub = stubFetch((_url, init) => ({
+      payload: init?.method === 'POST' ? { reconnecting: true } : view,
+    }));
+    try {
+      await act(() => patch({ status: { ...baseStatus, modelId } }));
+      await act(() => render(<DeviceTuningPanel />, root));
+      await settle();
+      const checkbox = root.querySelector<HTMLInputElement>('#tuning-batch-image-transfers');
+      check(
+        checkbox !== null && checkbox.checked === enabled,
+        `${modelId} batching toggle seeds correctly`,
+      );
+      await act(() => checkbox!.click());
+      await click('#tuning-apply');
+      await settle();
+      const posted = stub.calls.find((call) => call.method === 'POST')?.body as {
+        modelId: string;
+        overrides: { wire: Record<string, unknown> };
+      };
+      check(
+        posted.modelId === modelId && posted.overrides.wire.batchImageTransfers === !enabled,
+        `${modelId} batching toggle posts edited value`,
+      );
+      check(
+        posted.overrides.wire.chunkDelayMs === 2,
+        'Batch toggle preserves other wire overrides',
+      );
+    } finally {
+      stub.restore();
+      await act(() => render(null, root));
+      await act(() => patch({ status: baseStatus }));
+    }
+  }
+}
+
+// "Copy for bug report" puts a JSON report on the clipboard: model, app version, the saved
+// overrides and recent raw wire ids. The pure shape is covered by bug-report-export.test.ts.
+async function checkBugReportCopy(): Promise<void> {
+  const view: DeviceOverridesView = { ...OVERRIDES_VIEW, overrides: { image: { quality: 0.6 } } };
+  const stub = stubFetch(() => ({ payload: view }));
+  const original = Object.getOwnPropertyDescriptor(navigator, 'clipboard');
+  let copied = '';
+  Object.defineProperty(navigator, 'clipboard', {
+    configurable: true,
+    value: { writeText: (text: string) => ((copied = text), Promise.resolve()) },
+  });
+  try {
+    await act(() => patch({ status: { ...baseStatus, modelId: view.modelId } }));
+    await act(() => render(<DeviceTuningPanel />, root));
+    await settle();
+    await act(() => {
+      addKeyEvent({ ts: 1, mk2Index: 3, state: 'down', wireId: 4 });
+    });
+    await click('#tuning-copy-report');
+    await settle();
+    const report = JSON.parse(copied) as Record<string, unknown>;
+    check(report.modelId === 'mirabox-293', 'Bug report names the model');
+    check(report.appVersion === 'test', 'Bug report carries the app version');
+    check(
+      JSON.stringify(report.overrides) === JSON.stringify(view.overrides),
+      'Bug report carries the saved overrides verbatim',
+    );
+    check(
+      JSON.stringify(report.rawInputSamples) ===
+        JSON.stringify([{ state: 'down', wireId: 4, mk2Index: 3 }]),
+      'Bug report carries recent raw wire ids',
+    );
+    check(elementText('#tuning-copy-report') === 'Copied', 'Bug report button confirms the copy');
+  } finally {
+    stub.restore();
+    if (original) Object.defineProperty(navigator, 'clipboard', original);
+    else Reflect.deleteProperty(navigator, 'clipboard');
+    await act(() => render(null, root));
+    await act(() => patch({ status: baseStatus, keyEvents: [] }));
+  }
+}
+
+// Picking an emulation profile must not post the old grid's image draft: an explicit
+// image override wins over the profile's transform (it undid the Plus 180° rotation).
+async function checkEmulationProfileSwitch(): Promise<void> {
+  const view: DeviceOverridesView = {
+    ...OVERRIDES_VIEW,
+    modelId: 'ajazz-akp05e',
+    modelName: 'AJAZZ AKP05E',
+    overrides: { image: { quality: 0.7 } },
+    tunable: { image: { rotate: 0, width: 112, height: 112 }, cora: { productId: 0x80 } },
+    profiles: [{ id: 'stream-deck-plus', name: 'Stream Deck +', productId: 0x84 }],
+  };
+  const stub = stubFetch((_url, init) => ({
+    payload: init?.method === 'POST' ? { reconnecting: true } : view,
+  }));
+  try {
+    await act(() => patch({ status: { ...baseStatus, modelId: 'ajazz-akp05e' } }));
+    await act(() => render(<DeviceTuningPanel />, root));
+    await settle();
+    const select = root.querySelector<HTMLSelectElement>('#tuning-emulation-profile');
+    check(select !== null && select.value === '', 'Emulation profile seeds as native');
+    await act(() => {
+      select!.value = 'stream-deck-plus';
+      select!.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+    await click('#tuning-apply');
+    await settle();
+    const posted = stub.calls.find((call) => call.method === 'POST')?.body as {
+      overrides: Record<string, unknown>;
+    };
+    check(
+      JSON.stringify(posted.overrides.cora) ===
+        JSON.stringify({ advertiseAs: 'stream-deck-plus', productId: 0x84 }),
+      'Profile switch posts the cora target',
+    );
+    check(
+      !('image' in posted.overrides) && !('keyMap' in posted.overrides),
+      'Profile switch drops the previous grid image/keyMap overrides',
+    );
+  } finally {
+    stub.restore();
+    await act(() => render(null, root));
+    await act(() => patch({ status: baseStatus }));
+  }
+}
+
+async function setCropRect(values: readonly string[]): Promise<void> {
+  const inputs = root.querySelectorAll<HTMLInputElement>('.tuning-crop-rect input');
+  for (const [i, value] of values.entries()) {
+    await act(() => {
+      inputs[i]!.value = value;
+      inputs[i]!.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+  }
+}
+
+const chip = (name: string, value: string): HTMLInputElement | null =>
+  root.querySelector<HTMLInputElement>(`input[name="${name}"][value="${value}"]`);
+
+async function checkImageFitApplicability(): Promise<void> {
+  const view: DeviceOverridesView = {
+    ...OVERRIDES_VIEW,
+    modelId: 'ajazz-akp05e',
+    modelName: 'AJAZZ AKP05E',
+    sourceSize: { width: 120, height: 120 },
+  };
+  const stub = stubFetch(() => ({ payload: view }));
+  try {
+    await act(() => patch({ status: { ...baseStatus, modelId: 'ajazz-akp05e' } }));
+    await act(() => render(<DeviceTuningPanel />, root));
+    await settle();
+    check(chip('image-fit', 'pad')?.disabled === true, '120→112: pad disabled (no effect)');
+    check(chip('image-fit', 'crop')?.disabled === false, '120→112: crop enabled');
+    check(chip('pad-fill', 'edge')?.disabled === true, 'resize mode: pad fill disabled');
+    await click('#image-fit-help-btn');
+    check(
+      root.querySelector('#image-fit-source')?.textContent === '120×120 px' &&
+        root.querySelector('#image-fit-target')?.textContent === '112×112 px',
+      'Image fit help shows source and key sizes',
+    );
+    await act(() => {
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+    });
+    check(root.querySelector('#image-fit-help') === null, 'Escape closes image fit help');
+    await setCropRect(['4', '4', '112', '112']);
+    check(chip('image-fit', 'crop')?.disabled === true, 'Crop region 112×112: crop has no effect');
+    await click('#tuning-apply');
+    await settle();
+    const posted = stub.calls.find((c) => c.method === 'POST')?.body as
+      | { overrides?: { image?: { cropRect?: unknown } } }
+      | undefined;
+    check(
+      JSON.stringify(posted?.overrides?.image?.cropRect) ===
+        JSON.stringify({ x: 4, y: 4, width: 112, height: 112 }),
+      'Apply posts the crop region',
+    );
+    await setCropRect(['', '', '', '']);
+    check(chip('image-fit', 'crop')?.disabled === false, 'Blank crop region: whole image again');
+  } finally {
+    stub.restore();
+    await act(() => render(null, root));
+    await act(() => patch({ status: baseStatus }));
+  }
+}
+
+/** A 120×120 JPEG (base64), as the Elgato app would send for a Stream Deck + key. */
+function keyFrameBase64(): string {
+  const canvas = document.createElement('canvas');
+  canvas.width = 120;
+  canvas.height = 120;
+  const ctx = canvas.getContext('2d')!;
+  ctx.fillStyle = '#c33';
+  ctx.fillRect(0, 0, 120, 120);
+  return canvas.toDataURL('image/jpeg').split(',')[1]!;
+}
+
+async function openCropEditor(): Promise<void> {
+  await click('#crop-open');
+  // The frame loads through an <img>; give it a macrotask.
+  await act(() => new Promise<void>((resolve) => setTimeout(resolve, 50)));
+}
+
+async function checkCropEditor(): Promise<void> {
+  const view: DeviceOverridesView = {
+    ...OVERRIDES_VIEW,
+    overrides: { image: { quality: 0.7 } },
+    sourceSize: { width: 120, height: 120 },
+    tunable: {
+      ...OVERRIDES_VIEW.tunable,
+      image: { ...OVERRIDES_VIEW.tunable.image, crop: 6, resizeMode: 'crop' },
+    },
+  };
+  const stub = stubFetch((_url, init) => ({ payload: init?.method === 'POST' ? {} : view }));
+  const posts = (): Array<{ overrides?: { image?: Record<string, unknown> } }> =>
+    stub.calls.filter((c) => c.method === 'POST').map((c) => c.body as never);
+  try {
+    await act(() => patch({ status: { ...baseStatus, keyCount: 15 } }));
+    applyImage(2, { data: keyFrameBase64(), format: 'jpeg' });
+    await act(() => render(<DeviceTuningPanel />, root));
+    await settle();
+    await openCropEditor();
+    check(root.querySelector('#image-crop-editor') !== null, 'Crop… opens the crop editor');
+    check(
+      root.querySelectorAll('.crop-key').length === 1,
+      'Crop editor lists only keys that have a frame',
+    );
+    const rect = root.querySelector<HTMLElement>('#crop-rect')!;
+    await act(() => {
+      rect.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
+    });
+    check(rect.style.left === `${5 * 4}px`, 'Arrow key moves the crop region by 1 source px');
+    await click('#crop-save');
+    await settle();
+    const saved = posts()[0]?.overrides?.image;
+    check(
+      JSON.stringify(saved?.cropRect) === JSON.stringify({ x: 5, y: 4, width: 112, height: 112 }),
+      'Save posts the crop region (key size 1:1 by default, moved 1 px)',
+    );
+    check(saved?.crop === 0, 'A crop region replaces the symmetric crop');
+    check(root.querySelector('#image-crop-editor') === null, 'Save closes the editor');
+
+    await openCropEditor();
+    await click('#crop-try');
+    await settle();
+    await click('#crop-cancel');
+    await settle();
+    const [, tried, restored] = posts();
+    check(tried?.overrides?.image?.cropRect !== undefined, 'Try on device posts the draft');
+    check(
+      JSON.stringify(restored?.overrides) === JSON.stringify(view.overrides),
+      'Cancel after Try restores the original override',
+    );
+  } finally {
+    stub.restore();
+    clearImageStore();
+    await act(() => render(null, root));
+    await act(() => patch({ status: baseStatus }));
+  }
+}
+
+async function runSettingsPanels(): Promise<void> {
+  // Device tuning: renders the effective spec, not a blank form.
+  {
+    const stub = stubFetch(() => ({ payload: OVERRIDES_VIEW }));
+    try {
+      await act(() => render(<DeviceTuningPanel />, root));
+      await settle();
+      check(root.textContent.includes('Mirabox 293V3'), 'Device tuning names the model');
+      check(
+        root.querySelector('#tuning-batch-image-transfers') === null,
+        'Batching control is absent on unsupported models',
+      );
+      const tuningBody = root.querySelector('#device-tuning-body')!;
+      check(!tuningBody.classList.contains('open'), 'Device tuning is collapsed by default');
+      await click('#device-tuning > .collapse-header');
+      check(tuningBody.classList.contains('open'), 'Device tuning opens from its header');
+      const rotation = root.querySelector<HTMLInputElement>('input[name="rotation"]:checked');
+      check(rotation?.value === '180', 'Rotation seeds from the effective spec, not the default');
+      check(
+        root.querySelector('#tuning-apply') !== null &&
+          root.querySelector('#tuning-reset') !== null,
+        'Apply and Reset are both reachable',
+      );
+    } finally {
+      stub.restore();
+      await act(() => render(null, root));
+    }
+  }
+
+  await checkBatchImageTransferTuning();
+  await checkBugReportCopy();
+  await checkEmulationProfileSwitch();
+  await checkImageFitApplicability();
+  await checkCropEditor();
+
+  // A validation failure surfaces the server's error list.
+  {
+    const stub = stubFetch((url, init) =>
+      init?.method === 'POST'
+        ? { status: 400, payload: { error: 'image.rotate: must be one of 0, 90, 180, 270' } }
+        : { payload: OVERRIDES_VIEW },
+    );
+    try {
+      await act(() => render(<DeviceTuningPanel />, root));
+      await settle();
+      await click('#tuning-apply');
+      await settle();
+      check(
+        root.textContent.includes('image.rotate'),
+        'Validation errors from the server are shown verbatim',
+      );
+      const posted = stub.calls.find((c) => c.method === 'POST');
+      const body = posted?.body as { overrides?: { image?: Record<string, unknown> } } | undefined;
+      const postedImage = body?.overrides?.image;
+      // Regression: the form used to seed from `effective`, so Apply posted the
+      // protocol facts back and every save failed with "image.format: unknown field".
+      check(
+        postedImage !== undefined && !('format' in postedImage) && !('colorMode' in postedImage),
+        'Apply posts only tunable fields, never the protocol facts',
+      );
+    } finally {
+      stub.restore();
+      await act(() => render(null, root));
+    }
+  }
+
+  // Reset posts the model id — reachable even when the device looks dead.
+  {
+    const stub = stubFetch((url) =>
+      url.includes('/reset') ? { payload: { ok: true } } : { payload: OVERRIDES_VIEW },
+    );
+    try {
+      await act(() => render(<DeviceTuningPanel />, root));
+      await settle();
+      await click('#tuning-reset');
+      await settle();
+      const reset = stub.calls.find((c) => c.url.includes('/api/device-overrides/reset'));
+      check(reset !== undefined, 'Reset posts to /api/device-overrides/reset');
+      check(
+        (reset?.body as { modelId?: string } | undefined)?.modelId === 'mirabox-293',
+        'Reset names the model being reset',
+      );
+    } finally {
+      stub.restore();
+      await act(() => render(null, root));
+    }
+  }
+
+  // Changing selected dock reloads tuning for that model. Before this regression
+  // fix, the settings panel kept its mount-time primary model forever.
+  {
+    const docks = [
+      {
+        index: 0,
+        ...DOCK_IDENTITY,
+        modelId: OVERRIDES_VIEW.modelId,
+        modelName: OVERRIDES_VIEW.modelName,
+        keyCount: 15,
+        columns: 5,
+        rows: 3,
+        primaryPort: 5325,
+        primaryConnected: true,
+        elgatoConnected: true,
+        brightness: 100,
+      },
+      {
+        index: 1,
+        ...DOCK_IDENTITY,
+        modelId: SECOND_OVERRIDES_VIEW.modelId,
+        modelName: SECOND_OVERRIDES_VIEW.modelName,
+        keyCount: 18,
+        columns: 6,
+        rows: 3,
+        primaryPort: 5345,
+        primaryConnected: true,
+        elgatoConnected: true,
+        brightness: 100,
+      },
+    ];
+    const stub = stubFetch((url) => ({
+      payload: url.includes(encodeURIComponent(SECOND_OVERRIDES_VIEW.modelId))
+        ? SECOND_OVERRIDES_VIEW
+        : OVERRIDES_VIEW,
+    }));
+    try {
+      await act(() => patch({ status: { ...baseStatus, selectedDock: 0, docks } }));
+      await act(() => render(<DeviceTuningPanel />, root));
+      await settle();
+      check(root.textContent.includes('Mirabox 293V3'), 'Primary tuning loads initially');
+
+      await act(() => patch({ status: { ...baseStatus, selectedDock: 1, docks } }));
+      await settle();
+      check(root.textContent.includes('Mirabox 293S'), 'Tuning reloads after dock selection');
+      check(
+        stub.calls.some((call) => call.url.includes('modelId=mirabox-293s')),
+        'Selected model id is explicit in tuning request',
+      );
+
+      await click('#tuning-apply');
+      await settle();
+      const posted = stub.calls.find((call) => call.method === 'POST');
+      check(
+        (posted?.body as { modelId?: string } | undefined)?.modelId === 'mirabox-293s',
+        'Apply targets selected dock model',
+      );
+      check(
+        root.textContent.includes('Applied to the device.'),
+        'Apply shows selected model status',
+      );
+
+      await act(() => patch({ status: { ...baseStatus, selectedDock: 0, docks } }));
+      await settle();
+      check(
+        !root.textContent.includes('Applied to the device.'),
+        'Dock selection clears stale status',
+      );
+    } finally {
+      stub.restore();
+      await act(() => render(null, root));
+    }
+  }
+
+  // A refetch started by Apply may resolve after the user selects another dock.
+  // Its response must not replace the selected dock's newer view.
+  {
+    let primaryGets = 0;
+    let resolveStale!: (value: { payload: DeviceOverridesView }) => void;
+    const stale = new Promise<{ payload: DeviceOverridesView }>((resolve) => {
+      resolveStale = resolve;
+    });
+    const docks = [
+      {
+        index: 0,
+        ...DOCK_IDENTITY,
+        modelId: OVERRIDES_VIEW.modelId,
+        modelName: OVERRIDES_VIEW.modelName,
+        keyCount: 15,
+        columns: 5,
+        rows: 3,
+        primaryPort: 5325,
+        primaryConnected: true,
+        elgatoConnected: true,
+        brightness: 100,
+      },
+      {
+        index: 1,
+        ...DOCK_IDENTITY,
+        modelId: SECOND_OVERRIDES_VIEW.modelId,
+        modelName: SECOND_OVERRIDES_VIEW.modelName,
+        keyCount: 18,
+        columns: 6,
+        rows: 3,
+        primaryPort: 5345,
+        primaryConnected: true,
+        elgatoConnected: true,
+        brightness: 100,
+      },
+    ];
+    const stub = stubFetch((url, init) => {
+      if (init?.method === 'POST') return { payload: { ok: true } };
+      if (url.includes('modelId=mirabox-293s')) return { payload: SECOND_OVERRIDES_VIEW };
+      primaryGets++;
+      return primaryGets === 1 ? { payload: OVERRIDES_VIEW } : stale;
+    });
+    try {
+      await act(() => patch({ status: { ...baseStatus, selectedDock: 0, docks } }));
+      await act(() => render(<DeviceTuningPanel />, root));
+      await settle();
+      await click('#tuning-apply');
+
+      await act(() => patch({ status: { ...baseStatus, selectedDock: 1, docks } }));
+      await settle();
+      check(root.textContent.includes('Mirabox 293S'), 'New selection wins during stale reload');
+
+      resolveStale({ payload: OVERRIDES_VIEW });
+      await settle();
+      check(root.textContent.includes('Mirabox 293S'), 'Stale tuning response is ignored');
+    } finally {
+      stub.restore();
+      await act(() => render(null, root));
+    }
+  }
+}
+
+async function runKeymapAndDiagnosticsPanels(): Promise<void> {
+  await runCollapsedHeaderStatuses();
+  await runTuningHeaderStatuses();
+  await runKeymapLearnHappyPath();
+  await runKeymapLearnNoWireId();
+  await runDiagnosticsPanel();
+  await runMultiDeckPanel();
+  await runPushApiPanel();
+  await runDeckPage(root, check);
+  await runPairingFlow(root, check);
+  await runElgatoAutoRestartPanel();
+  await runElgatoAutoRestartUnsupported();
+  await runStandbyPanel();
+  await runPagesPanel(root, check);
+}
+
+async function runCollapsedHeaderStatuses(): Promise<void> {
+  try {
+    await act(() =>
+      render(
+        <Collapsible title="Example" status="Disabled">
+          Content
+        </Collapsible>,
+        root,
+      ),
+    );
+    check(elementText('.collapse-status').includes('Disabled'), 'Collapsed headers show status');
+    await click('.collapse-header');
+    check(root.querySelector('.collapse-status') === null, 'Expanded headers omit status');
+    await act(() =>
+      render(
+        <Collapsible title="Example" status="Enabled">
+          Content
+        </Collapsible>,
+        root,
+      ),
+    );
+    await click('.collapse-header');
+    check(elementText('.collapse-status').includes('Enabled'), 'Collapsing shows latest status');
+  } finally {
+    await act(() => render(null, root));
+  }
+
+  const stub = stubFetch(() => ({ status: 500, payload: { error: 'Save failed' } }));
+  try {
+    await act(() => render(<UpdatePanel info={null} />, root));
+    check(
+      elementText('.collapse-status').includes('Loading'),
+      'Unknown update status shows loading',
+    );
+    await act(() => render(<UpdatePanel info={{ ...baseUpdateInfo(), enabled: false }} />, root));
+    check(
+      elementText('.collapse-status').includes('Disabled'),
+      'Updates header reflects disabled checks',
+    );
+    await click('#toggle-update-check');
+    await settle();
+    check(
+      elementText('.collapse-status').includes('Disabled'),
+      'Failed saves retain confirmed status',
+    );
+  } finally {
+    stub.restore();
+    await act(() => render(null, root));
+  }
+}
+
+async function runTuningHeaderStatuses(): Promise<void> {
+  const previousStatus = getSnapshot().status;
+  const cases = [
+    { safeMode: false, overrides: {}, expected: 'Defaults' },
+    { safeMode: false, overrides: { image: { blur: 1 } }, expected: 'Custom' },
+    { safeMode: true, overrides: { image: { blur: 1 } }, expected: 'Safe mode' },
+  ];
+  for (const { safeMode, overrides, expected } of cases) {
+    const stub = stubFetch(() => ({ payload: { ...OVERRIDES_VIEW, safeMode, overrides } }));
+    try {
+      await act(() => patch({ status: baseStatus }));
+      await act(() => render(<DeviceTuningPanel />, root));
+      await settle();
+      check(
+        elementText('#device-tuning > .collapse-header .collapse-status').includes(expected),
+        `Device tuning header distinguishes ${expected}`,
+      );
+    } finally {
+      stub.restore();
+      await act(() => render(null, root));
+      await act(() => patch({ status: previousStatus }));
+    }
+  }
+}
+
+// Key-map learn mode: the derived array IS the deliverable (it gets pasted into
+// a registry PR), so drive it with real key events and assert the exact shape.
+async function runKeymapLearnHappyPath(): Promise<void> {
+  // A 2x2 grid whose wire codes are mk2 index + 1 and row-flipped — the
+  // AKP153E rev. 2 shape that motivated learn mode in the first place.
+  {
+    const PRESSES = [
+      { wireId: 3, position: 0 },
+      { wireId: 4, position: 1 },
+      { wireId: 1, position: 2 },
+      { wireId: 2, position: 3 },
+    ];
+    const stub = stubFetch(() => ({ payload: { ok: true } }));
+    try {
+      patch({ status: { ...baseStatus, keyCount: 4, columns: 2 }, keyEvents: [] });
+      await act(() => render(<KeymapLearn view={OVERRIDES_VIEW} onSaved={noop} />, root));
+      await click('#keymap-learn-start');
+      check(
+        elementText('#keymap-learn-prompt').includes('row 1, column 1'),
+        'Learn mode prompts for the first grid position',
+      );
+
+      let ts = 1000;
+      for (const press of PRESSES) {
+        // down+up, as real hardware sends: only 'down' may advance a position.
+        await act(() =>
+          addKeyEvent({ ts: ts++, mk2Index: 0, state: 'down', wireId: press.wireId }),
+        );
+        await act(() => addKeyEvent({ ts: ts++, mk2Index: 0, state: 'up', wireId: press.wireId }));
+      }
+
+      const derived = JSON.parse(elementText('#keymap-learn-result')) as {
+        wireInputToCora: number[];
+      };
+      // Indexed BY WIRE ID: index 0 was never reported, so it is -1 (ignored).
+      check(
+        JSON.stringify(derived.wireInputToCora) === JSON.stringify([-1, 2, 3, 0, 1]),
+        `Derived map is indexed by wire id with -1 gaps (got ${JSON.stringify(derived.wireInputToCora)})`,
+      );
+      check(
+        root.querySelector('#keymap-learn-save') !== null,
+        'Save appears once every position is recorded',
+      );
+      check(
+        root.querySelector('#keymap-learn-prompt') === null,
+        'The prompt stops once the walk is complete',
+      );
+
+      await click('#keymap-learn-save');
+      await settle();
+      const posted = stub.calls.find((c) => c.method === 'POST');
+      const postedBody = posted?.body as
+        | { overrides?: { keyMap?: Record<string, unknown> } }
+        | undefined;
+      const keyMap = postedBody?.overrides?.keyMap;
+      check(
+        JSON.stringify(keyMap?.wireInputToCora) === JSON.stringify([-1, 2, 3, 0, 1]),
+        'Save posts the derived map',
+      );
+      // The two are alternative encodings of the same direction; leaving a stale
+      // offset beside an explicit map is a trap for the next reader.
+      check(
+        !('inputOffset' in (keyMap ?? {})),
+        'Save drops inputOffset alongside the explicit map',
+      );
+    } finally {
+      stub.restore();
+      await act(() => render(null, root));
+    }
+  }
+}
+
+// A key event with no wireId (identity-mapped model / mock) aborts rather than
+// silently recording a map derived from mk2 indices.
+async function runKeymapLearnNoWireId(): Promise<void> {
+  {
+    const stub = stubFetch(() => ({ payload: { ok: true } }));
+    try {
+      patch({ status: { ...baseStatus, keyCount: 4, columns: 2 }, keyEvents: [] });
+      await act(() => render(<KeymapLearn view={OVERRIDES_VIEW} onSaved={noop} />, root));
+      await click('#keymap-learn-start');
+      await act(() => addKeyEvent({ ts: 9000, mk2Index: 2, state: 'down' }));
+      check(
+        root.textContent.includes('no raw wire id'),
+        'A device without wire ids reports why learn mode cannot run',
+      );
+      check(root.querySelector('#keymap-learn-prompt') === null, 'Learn mode stopped');
+    } finally {
+      stub.restore();
+      await act(() => render(null, root));
+    }
+  }
+}
+
+// Diagnostics: the debug toggle reflects state and posts the opposite level.
+async function runDiagnosticsPanel(): Promise<void> {
+  {
+    // DiagnosticsPanel takes logLevel/logFilePath as props — SettingsPage owns the
+    // single /api/state read and drills them down, so there is no fetch to stub here.
+    const stub = stubFetch(() => ({ payload: { ok: true } }));
+    try {
+      await act(() =>
+        render(
+          <DiagnosticsPanel
+            logLevel="info"
+            logFilePath="/home/u/.cache/deckbridge/logs/deckbridge.log"
+          />,
+          root,
+        ),
+      );
+      await settle();
+      check(
+        elementText('#toggle-debug-logging').includes('off'),
+        'Debug toggle reflects the current level',
+      );
+      check(
+        elementText('.collapse-status').includes('Debug disabled'),
+        'Diagnostics header identifies debug state',
+      );
+      check(
+        root.textContent.includes('/home/u/.cache/deckbridge/logs/deckbridge.log'),
+        'The log file path is shown so a reporter can find it',
+      );
+      await click('#toggle-debug-logging');
+      await settle();
+      const post = stub.calls.find((c) => c.url === '/api/log-level');
+      check(
+        (post?.body as { level?: string } | undefined)?.level === 'debug',
+        'Toggling posts the debug level',
+      );
+      check(
+        elementText('#toggle-debug-logging').includes('on'),
+        'The toggle updates after a successful post',
+      );
+      check(
+        elementText('.collapse-status').includes('Debug enabled'),
+        'Diagnostics header updates after saving',
+      );
+    } finally {
+      stub.restore();
+      await act(() => render(null, root));
+    }
+  }
+}
+
+// Multi-deck: the opt-in toggle reflects state and posts the opposite value.
+async function runMultiDeckPanel(): Promise<void> {
+  {
+    const stub = stubFetch(() => ({ payload: { ok: true } }));
+    try {
+      await act(() => render(<MultiDeckPanel enabled={false} />, root));
+      await settle();
+      const box = (): HTMLInputElement | null => root.querySelector('#toggle-multi-deck');
+      check(box()?.checked === false, 'Multi-deck toggle starts off (the default)');
+      check(
+        elementText('.collapse-status').includes('Disabled'),
+        'Multiple decks header starts disabled',
+      );
+
+      await click('#toggle-multi-deck');
+      await settle();
+      const post = stub.calls.find((c) => c.url === '/api/multi-deck');
+      check(
+        (post?.body as { enabled?: boolean } | undefined)?.enabled === true,
+        'Enabling posts enabled:true',
+      );
+      check(box()?.checked === true, 'The toggle updates after a successful post');
+      check(
+        elementText('.collapse-status').includes('Enabled'),
+        'Multiple decks header updates after saving',
+      );
+    } finally {
+      stub.restore();
+      await act(() => render(null, root));
+    }
+  }
+}
+
+// Push API panel: the token reveal is one-time, lists never show hashes, WS channel
+// updates reach the table, and Clear posts to the channel route.
+async function runPushApiPanel(): Promise<void> {
+  const token = 'dbp_SECRETSECRETSECRETSECRETSECRETSECRETSECRET1';
+  const row = { id: 'ab12cd34', name: 'curl', scopes: ['push'], prefix: 'SECRET', createdAt: 'x' };
+  const stub = stubFetch((url, init) => {
+    if (url === '/api/push-tokens' && init?.method === 'POST') {
+      return { payload: { ...row, token } };
+    }
+    if (url === '/api/push-tokens') return { payload: { tokens: [row] } };
+    if (url === '/api/push-channels') return { payload: { channels: [] } };
+    return { payload: { ok: true } };
+  });
+  try {
+    await act(() => render(<PushApiPanel />, root));
+    await settle();
+    check(
+      elementText('.collapse-status').includes('Enabled'),
+      'Push API header reflects usable push tokens',
+    );
+    check(root.textContent.includes('dbp_SECRET…'), 'Token list shows name prefix');
+    check(!root.textContent.includes('hash'), 'Token list never shows a hash');
+
+    const input = root.querySelector<HTMLInputElement>('input[aria-label="New push token name"]')!;
+    input.value = 'curl';
+    await act(() => {
+      input.dispatchEvent(new Event('input'));
+    });
+    await click('.push-test button');
+    await settle();
+    check(
+      root.querySelector('.push-token')?.textContent === token,
+      'Create reveals the token once',
+    );
+    await click('.push-reveal button:last-child');
+    check(!root.textContent.includes(token), 'Closing the reveal removes the plaintext');
+
+    await act(() =>
+      patch({
+        pushChannels: [
+          { channel: 'obs-rec', text: 'REC', updatedAt: 0, expiresAt: null, bound: 1 },
+        ],
+      }),
+    );
+    check(root.textContent.includes('obs-rec'), 'A channel update reaches the table');
+    await click('.push-channels button');
+    await settle();
+    check(
+      stub.calls.some((c) => c.url === '/api/push-channels/obs-rec/clear'),
+      'Clear posts to the channel clear route',
+    );
+  } finally {
+    stub.restore();
+    await act(() => patch({ pushChannels: [] }));
+    await act(() => render(null, root));
+  }
+
+  const deckOnly = stubFetch((url) => ({
+    payload:
+      url === '/api/push-tokens' ? { tokens: [{ ...row, scopes: ['deck'] }] } : { channels: [] },
+  }));
+  try {
+    await act(() => render(<PushApiPanel />, root));
+    await settle();
+    check(
+      elementText('.collapse-status').includes('Disabled'),
+      'Browser-deck tokens cannot enable the Push API summary',
+    );
+  } finally {
+    deckOnly.restore();
+    await act(() => render(null, root));
+  }
+}
+
+// Elgato-app auto-restart panel: toggle posts + reflects state, and the delay
+// field disables with the toggle.
+async function runElgatoAutoRestartPanel(): Promise<void> {
+  {
+    const state: ElgatoAutoRestartState = { enabled: true, delayS: 10, supported: true };
+    const stub = stubFetch(() => ({ payload: { enabled: false, delayS: 10 } }));
+    try {
+      await act(() => render(<ElgatoAppPanel state={state} />, root));
+      await settle();
+      const box = (): HTMLInputElement | null => root.querySelector('#toggle-elgato-auto-restart');
+      const delayInput = (): HTMLInputElement | null =>
+        root.querySelector('.tuning-field input[type="number"]');
+      check(box()?.checked === true, 'Elgato auto-restart toggle starts on (the fixture state)');
+      check(
+        elementText('.collapse-status').includes('Enabled'),
+        'Elgato header reflects enabled auto-restart',
+      );
+      check(delayInput()?.disabled === false, 'Delay field is enabled while the toggle is on');
+
+      await click('#toggle-elgato-auto-restart');
+      await settle();
+      const post = stub.calls.find((c) => c.url === '/api/elgato-auto-restart');
+      check(
+        (post?.body as { enabled?: boolean } | undefined)?.enabled === false,
+        'Disabling posts enabled:false',
+      );
+      check(box()?.checked === false, 'The toggle updates after a successful post');
+      check(
+        elementText('.collapse-status').includes('Disabled'),
+        'Elgato header updates after saving',
+      );
+      check(delayInput()?.disabled === true, 'Delay field disables once the toggle is off');
+    } finally {
+      stub.restore();
+      await act(() => render(null, root));
+    }
+  }
+}
+
+// An unsupported platform shows the note and disables every control.
+async function runElgatoAutoRestartUnsupported(): Promise<void> {
+  {
+    const unsupported: ElgatoAutoRestartState = { enabled: true, delayS: 10, supported: false };
+    try {
+      await act(() => render(<ElgatoAppPanel state={unsupported} />, root));
+      await settle();
+      check(
+        root.textContent.includes('Only on macOS and Windows'),
+        'Unsupported platform shows the note',
+      );
+      const box = (): HTMLInputElement | null => root.querySelector('#toggle-elgato-auto-restart');
+      check(box()?.disabled === true, 'Toggle is disabled on an unsupported platform');
+      check(
+        elementText('.collapse-status').includes('Unsupported'),
+        'Elgato header distinguishes unsupported platforms',
+      );
+      const restartBtn = Array.from(root.querySelectorAll('button')).find((b) =>
+        b.textContent.includes('Restart Elgato app now'),
+      );
+      check(restartBtn?.disabled === true, '"Restart now" is disabled on an unsupported platform');
+    } finally {
+      await act(() => render(null, root));
+    }
+  }
+}
+
+// Multi-dock tabs: selection mounts only the active deck’s live controls.
+const DOCKS: DockUi[] = [
+  {
+    index: 0,
+    ...DOCK_IDENTITY,
+    modelId: 'mirabox-293s',
+    modelName: 'Mirabox 293S',
+    keyCount: 15,
+    columns: 5,
+    rows: 3,
+    primaryPort: 5343,
+    primaryConnected: true,
+    elgatoConnected: true,
+    brightness: 100,
+  },
+  {
+    index: 1,
+    ...DOCK_IDENTITY,
+    modelId: 'fifine-d6',
+    modelName: 'Fifine D6',
+    keyCount: 6,
+    columns: 3,
+    rows: 2,
+    primaryPort: 5345,
+    primaryConnected: true,
+    elgatoConnected: true,
+    brightness: 100,
+  },
+];
+
+function dockCard(index: number): HTMLElement {
+  const card = root.querySelector<HTMLElement>(`[aria-labelledby="dock-tab-${index}"] .dock-card`);
+  if (!card) throw new Error(`Missing dock card ${index}`);
+  return card;
+}
+
+/** Live grids are built by KeyPreview (`<button class="key-cell">`); the static
+ *  branch renders plain `<div class="key-cell">`. */
+function cellCounts(card: HTMLElement): { live: number; inert: number } {
+  return {
+    live: card.querySelectorAll('button.key-cell').length,
+    inert: card.querySelectorAll('div.key-cell').length,
+  };
+}
+
+function baseUpdateInfo(): UpdateInfo {
+  return { enabled: true, current: '0.14.1', updateAvailable: false };
+}
+
+function runUpdateBadge(): void {
+  check(updateBadgeVersion(undefined) === null, 'Update badge: no state yet renders nothing');
+  check(
+    updateBadgeVersion({ ...baseUpdateInfo(), updateAvailable: false, latest: '0.15.0' }) === null,
+    'Update badge: hidden when no update is available',
+  );
+  check(
+    updateBadgeVersion({ ...baseUpdateInfo(), updateAvailable: true, latest: '0.15.0' }) ===
+      '0.15.0',
+    'Update badge: shown when an update is available',
+  );
+  check(
+    updateBadgeVersion({
+      ...baseUpdateInfo(),
+      updateAvailable: true,
+      latest: '0.15.0',
+      dismissedVersion: '0.15.0',
+    }) === null,
+    'Update badge: hidden once the current latest version was dismissed',
+  );
+  check(
+    updateBadgeVersion({
+      ...baseUpdateInfo(),
+      updateAvailable: true,
+      latest: '0.16.0',
+      dismissedVersion: '0.15.0',
+    }) === '0.16.0',
+    'Update badge: reappears for a newer version than the one dismissed',
+  );
+}
+
+async function runMultiDockCards(): Promise<void> {
+  const stub = stubFetch(() => ({ payload: { ok: true } }));
+  try {
+    await act(() => patch({ status: { ...baseStatus, docks: DOCKS, selectedDock: 0 } }));
+    await act(() => render(<DockList docks={DOCKS} onHelp={noop} />, root));
+    await settle();
+    const tabs = root.querySelectorAll<HTMLButtonElement>('[role="tab"]');
+    check(tabs.length === 2, 'Both deck tabs render');
+    check(root.querySelectorAll('.dock-card').length === 1, 'Only the selected deck panel renders');
+    check(
+      cellCounts(dockCard(0)).live === 15 && cellCounts(dockCard(0)).inert === 0,
+      'The selected deck panel renders a live grid',
+    );
+    check(
+      tabs[0]!.querySelectorAll('.key-cell').length === 15 &&
+        tabs[1]!.querySelectorAll('.key-cell').length === 6,
+      'Tab previews reflect each deck’s key layout',
+    );
+    check(
+      root.querySelector('.dock-tabs button button') === null,
+      'Tab previews contain no nested interactive keys',
+    );
+    check(
+      tabs[0]!.tabIndex === 0 && tabs[1]!.tabIndex === -1,
+      'Only the selected tab is in the tab order',
+    );
+    await act(() => tabs[1]!.click());
+    await settle();
+    const post = stub.calls.find((c) => c.url === '/api/select-dock');
+    check(
+      (post?.body as { index?: number } | undefined)?.index === 1,
+      'Clicking an unselected tab posts its dock index',
+    );
+
+    await act(() => patch({ status: { ...baseStatus, docks: DOCKS, selectedDock: 1 } }));
+    await settle();
+    check(cellCounts(dockCard(1)).live === 6, 'Switching decks builds the new live grid');
+    check(
+      dockCard(1).querySelector('.preview')?.classList.contains('compact') === true,
+      'The selected 6-key preview keeps its compact layout',
+    );
+    check(
+      root.querySelector('[aria-labelledby="dock-tab-0"]') === null,
+      'The previous deck panel is unmounted',
+    );
+    check(tabs[0]!.tabIndex === -1 && tabs[1]!.tabIndex === 0, 'Switching updates the tab order');
+
+    await act(() => {
+      tabs[1]!.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true, cancelable: true }),
+      );
+    });
+    check(document.activeElement?.id === tabs[0]!.id, 'ArrowRight wraps focus to the first tab');
+    check(
+      (
+        stub.calls.filter((c) => c.url === '/api/select-dock').at(-1)?.body as
+          | { index: number }
+          | undefined
+      )?.index === 0,
+      'ArrowRight selects the focused deck',
+    );
+    await act(() => {
+      tabs[1]!.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'Home', bubbles: true, cancelable: true }),
+      );
+    });
+    check(document.activeElement?.id === tabs[0]!.id, 'Home focuses the first tab');
+    await act(() => {
+      tabs[0]!.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'End', bubbles: true, cancelable: true }),
+      );
+    });
+    check(document.activeElement?.id === tabs[1]!.id, 'End focuses the last tab');
+    await act(() => {
+      tabs[0]!.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'ArrowLeft', bubbles: true, cancelable: true }),
+      );
+    });
+    check(document.activeElement?.id === tabs[1]!.id, 'ArrowLeft wraps focus to the last tab');
+
+    await act(() => render(<DockList docks={[DOCKS[0]!]} onHelp={noop} />, root));
+    await settle();
+    check(root.querySelector('[role="tablist"]') === null, 'Single decks need no tabs');
+    check(
+      root.querySelectorAll('button.key-cell').length === 15,
+      'A missing selection falls back to the remaining deck',
+    );
+  } finally {
+    stub.restore();
+    await act(() => render(null, root));
+  }
+}
+
+// Side keys + touch strip (simple/extra-keys-panel.tsx): every row sits on the
+// shared grid, and the strip's rows/knobs follow the selected mode.
+const AKP05E_DOCK: DockUi = {
+  index: 0,
+  ...DOCK_IDENTITY,
+  modelId: 'ajazz-akp05e',
+  modelName: 'AJAZZ AKP05E',
+  coraProfile: 'stream-deck-plus',
+  keyCount: 8,
+  columns: 5,
+  rows: 2,
+  primaryPort: 5343,
+  primaryConnected: true,
+  elgatoConnected: true,
+  brightness: 100,
+  extraKeys: [15, 10],
+  pressableExtraKeys: [15, 10],
+  widgetDisplays: [20, 21, 22, 23].map((wireId, i) => ({
+    wireId,
+    label: `Zone ${i + 1}`,
+    width: 176,
+    height: 112,
+    stripX: [0, 204, 406, 610][i],
+    rotate: 180 as const,
+    flipH: false,
+    flipV: false,
+  })),
+  encoderCount: 4,
+};
+
+function checkTabBadges(docks: DockUi[], label: string): void {
+  for (const dock of docks) {
+    const badge = root.querySelector(`#dock-tab-${dock.index} .dock-chip--waiting`);
+    check((badge !== null) === !dock.elgatoConnected, `${label}: only unpaired tabs have badges`);
+    if (badge) check(badge.textContent.includes('Unpaired'), `${label}: badge says Unpaired`);
+  }
+}
+
+async function checkDockPreview(
+  panel: Element,
+  selected: DockUi,
+  docks: DockUi[],
+  label: string,
+  secondRow: string[],
+): Promise<void> {
+  const plus = selected.modelId === 'ajazz-akp05' || selected.modelId === 'ajazz-akp05e';
+  const expectedKeys = plus ? 8 : selected.keyCount;
+  const expectedColumns = plus ? 4 : selected.columns;
+  const grid = panel.querySelector<HTMLElement>('.preview .key-grid')!;
+  if (docks.length > 1) {
+    check(root.querySelector('.stage-title') === null, `${label}: no multi-deck heading`);
+    checkTabBadges(docks, label);
+  }
+  check(
+    grid.children.length === expectedKeys &&
+      grid.style.gridTemplateColumns === `repeat(${expectedColumns}, 1fr)`,
+    `${label}: live preview uses Elgato key layout`,
+  );
+  const tabGrid = root.querySelector<HTMLElement>(`#dock-tab-${selected.index} .key-grid`);
+  check(
+    tabGrid === null ||
+      (tabGrid.children.length === expectedKeys &&
+        tabGrid.style.gridTemplateColumns === `repeat(${expectedColumns}, 1fr)`),
+    `${label}: tab preview matches live key layout`,
+  );
+  if (plus) {
+    await act(() =>
+      secondRow.forEach((frame, i) => applyImage(4 + i, { data: frame, format: 'jpeg' })),
+    );
+    check(
+      secondRow.every(
+        (frame, i) =>
+          grid.children[4 + i]?.querySelector('img')?.getAttribute('src') ===
+          `data:image/jpeg;base64,${frame}`,
+      ),
+      `${label}: second row keeps black key before screenshot and recording keys`,
+    );
+  }
+}
+
+async function runMultiDockConfiguration(): Promise<void> {
+  const before = getSnapshot();
+  const stub = stubFetch((url) => ({
+    payload:
+      url === '/api/survey'
+        ? {
+            sv: 1,
+            questions: [],
+            context: { v: '0.20.0', os: 'unknown', ov: 'unknown', dv: 'none' },
+            prefill: {},
+            nudge: false,
+            state: {},
+          }
+        : { dir: '', files: [], status: {} },
+  }));
+  const peer = { ...DOCKS[1]!, index: 0 };
+  const models = [...DEVICE_MODELS, BROWSER_DECK_MK2_MODEL];
+  const secondRow = ['#000000', '#4499ff', '#dd77cc', '#000000'].map((color) =>
+    solidJpeg(72, 72, color),
+  );
+  try {
+    for (const [index, model] of models.entries()) {
+      const extraKeys = model.keyMap.extraKeys ?? [];
+      const dock: DockUi = {
+        ...DOCK_IDENTITY,
+        index: index + 1,
+        modelId: model.id,
+        modelName: model.name,
+        keyCount: model.keyCount,
+        columns: model.columns,
+        rows: model.rows,
+        primaryPort: 5343 + (index + 1) * 2,
+        primaryConnected: true,
+        elgatoConnected: true,
+        brightness: 75,
+        extraKeys,
+        pressableExtraKeys: extraKeys.filter(
+          (_, i) => model.keyMap.extraKeyInputs?.[i] !== undefined,
+        ),
+        widgetDisplays: model.widgetDisplays?.map((display) => ({
+          wireId: display.wireId,
+          label: display.label,
+          width: display.image.width,
+          height: display.image.height,
+          stripX: display.stripX,
+          rotate: display.image.rotate,
+          flipH: display.image.flipH,
+          flipV: display.image.flipV,
+        })),
+        encoderCount: Math.max(
+          model.encoderCount ?? 0,
+          ...emulationProfiles(model).map((profile) => profile.encoderCount ?? 0),
+        ),
+        coraProfile: model.cora.advertiseAs,
+        ...advertisedTouchStrip(model),
+      };
+      const primary = { ...dock, index: 0 };
+      const views = [
+        { name: 'single primary', selected: primary, docks: [primary] },
+        { name: 'single secondary', selected: dock, docks: [dock] },
+        { name: 'fully paired', selected: dock, docks: [peer, dock] },
+        {
+          name: 'mixed pairing',
+          selected: dock,
+          docks: [{ ...peer, elgatoConnected: false }, dock],
+        },
+      ];
+      for (const view of views) {
+        await act(() => {
+          patch({
+            status: {
+              ...baseStatus,
+              ...view.selected,
+              docks: view.docks,
+              selectedDock: view.selected.index,
+            },
+            extraKeys: {},
+            pages: [],
+            layoutScope: null,
+            touchStripMode: 'elgato',
+            encoders: { connectToApp: true },
+          });
+          render(<SimpleApp />, root);
+        });
+        await settle();
+        const panel = root.querySelector('#dock-panel') ?? root.querySelector('#stage')!;
+        const label = `${model.id} (${view.name})`;
+        await checkDockPreview(panel, view.selected, view.docks, label, secondRow);
+        check(
+          panel.querySelector('input[aria-label="Screen brightness"]') !== null,
+          `${label}: selected paired deck has brightness controls`,
+        );
+        check(
+          panel.querySelectorAll('.xkey-card').length === extraKeys.length,
+          `${label}: selected deck owns every available side-key control`,
+        );
+        check(
+          panel.querySelectorAll('select[aria-label="Touch strip mode"]').length ===
+            (dock.widgetDisplays?.length ? 1 : 0),
+          `${label}: touch-strip controls match device capabilities`,
+        );
+        check(
+          panel.querySelectorAll('.xkeys-knobs').length === (dock.encoderCount ? 1 : 0),
+          `${label}: knob controls match device capabilities`,
+        );
+        check(
+          panel.querySelectorAll('select[aria-label$="side key press action"]').length ===
+            dock.pressableExtraKeys!.length,
+          `${label}: press actions appear only for side keys with switches`,
+        );
+        check(
+          root.querySelectorAll('.xkey-card').length === extraKeys.length &&
+            root.querySelectorAll('select[aria-label="Touch strip mode"]').length ===
+              (dock.widgetDisplays?.length ? 1 : 0),
+          `${label}: controls are not duplicated outside the selected panel`,
+        );
+      }
+    }
+    await act(() =>
+      patch({
+        status: {
+          ...baseStatus,
+          docks: [peer, { ...AKP05E_DOCK, index: 1, elgatoConnected: false }],
+          selectedDock: 1,
+        },
+      }),
+    );
+    await settle();
+    check(
+      root.querySelector('.xkey-card, select[aria-label="Touch strip mode"], .xkeys-knobs') ===
+        null,
+      'Unpaired selected decks show pairing instead of configuration controls',
+    );
+    check(
+      root.querySelector('.dock-pairing-note') !== null,
+      'Unpaired selected decks retain connection guidance',
+    );
+    checkTabBadges(getSnapshot().status.docks, 'Unpaired selected deck');
+    await act(() =>
+      patch({
+        status: {
+          ...getSnapshot().status,
+          docks: [peer, { ...AKP05E_DOCK, index: 1, elgatoConnected: true }],
+        },
+      }),
+    );
+    await settle();
+    checkTabBadges(getSnapshot().status.docks, 'Newly paired selected deck');
+    check(
+      root.querySelector('.stage-title') === null,
+      'Pairing preserves hidden multi-deck heading',
+    );
+  } finally {
+    clearImageStore();
+    stub.restore();
+    await act(() => render(null, root));
+    await act(() => patch(before));
+  }
+}
+
+async function checkSideKeysHelp(): Promise<void> {
+  await click('button[aria-label="Side keys help"]');
+  await settle();
+  const help = root.querySelector<HTMLDialogElement>('dialog.side-keys-help');
+  check(help?.open === true, 'Side keys help opens modal dialog');
+  check(
+    help?.querySelectorAll('.side-keys-device-grid .side-keys-device-key').length === 8 &&
+      help.querySelectorAll('.side-keys-device-column .side-keys-device-key').length === 2,
+    'Help diagram uses selected dock grid and side keys',
+  );
+  check(
+    [...help!.querySelectorAll('.side-keys-device-grid .side-keys-device-key')]
+      .map((key) => key.textContent)
+      .join(',') === '1,2,3,4,5,6,7,8',
+    'Plus mode numbers Elgato keys consecutively across both rows',
+  );
+  check(
+    [...help!.querySelectorAll('.side-keys-device-column .side-keys-device-key')]
+      .map((key) => key.textContent)
+      .join(',') === 'Top,Bottom',
+    'Plus mode labels physical side keys',
+  );
+  check(
+    help!.querySelector('.side-keys-device')?.getAttribute('aria-label') ===
+      '5 by 2 device grid; 4 by 2 Elgato grid, with 2 side keys in right column',
+    'Plus mode shows four Elgato columns and one side-key column',
+  );
+  await click('.side-keys-help .docs-modal-open');
+  check(
+    root.querySelector<HTMLDialogElement>('.docs-modal')?.matches(':modal') === true,
+    'Docs opens above native side-keys dialog',
+  );
+  await click('.docs-modal-close');
+  check(help?.open === true, 'Closing docs preserves native side-keys dialog');
+  await click('button[aria-label="Close side keys help"]');
+  check(root.querySelector('dialog.side-keys-help') === null, 'Side keys help closes');
+}
+
+async function checkDeviceTestMode(): Promise<void> {
+  const toast = document.createElement('div');
+  toast.id = 'toast';
+  document.body.appendChild(toast);
+  const input = root.querySelector<HTMLInputElement>('.device-test-option input')!;
+  check(!input.checked, 'Device test mode defaults off');
+  showDeviceAction({ dockIndex: 0, message: 'Key 1 pressed' });
+  check(toast.textContent === '', 'Disabled test mode stays quiet');
+  await act(() => input.click());
+  check(getSnapshot().deviceTestMode, 'Test checkbox enables local observer');
+  showDeviceAction({ dockIndex: 1, message: 'Other dock action' });
+  check(toast.textContent === '', 'Test mode ignores other docks');
+  showDeviceAction({ dockIndex: 0, message: 'Knob 1 touch tap (100, 50)' });
+  check(
+    toast.textContent === 'Knob 1 touch tap (100, 50)' && toast.classList.contains('show'),
+    'Selected device action shows notification',
+  );
+  showDeviceAction({ dockIndex: 0, message: 'Knob 1 turned right (1)' });
+  check(toast.textContent === 'Knob 1 turned right (1)', 'Repeated actions update notification');
+  await act(() => input.click());
+  showDeviceAction({ dockIndex: 0, message: 'Key 2 pressed' });
+  check(
+    toast.textContent === 'Knob 1 turned right (1)',
+    'Disabling observer stops new notifications',
+  );
+  toast.remove();
+}
+
+const PREVIEW_SIZES = ['fit', -2, -1, 0, 1, 2] as const;
+
+type Stub = ReturnType<typeof stubFetch>;
+const lastPost = (stub: Stub, url: string): Record<string, unknown> | undefined =>
+  stub.calls.findLast((c) => c.url === url)?.body as Record<string, unknown> | undefined;
+
+const postedStyle = (stub: Stub): Record<string, unknown> =>
+  (lastPost(stub, '/api/extra-key')?.style as Record<string, unknown> | undefined) ?? {};
+
+async function checkTextSize(stub: Stub): Promise<void> {
+  const cards = [...root.querySelectorAll('.xkey-card')];
+  const size = (label: string): HTMLButtonElement =>
+    cards[1]!.querySelector<HTMLButtonElement>(`.xkey-size button[aria-label="${label}"]`)!;
+  check(
+    cards[0]!.querySelector('.xkey-size') === null &&
+      cards[1]!.querySelector('.xkey-size') !== null,
+    'Text size control shows only on keys with a widget',
+  );
+  await act(() =>
+    patch({ extraKeys: { '10': { widget: 'command', param: 'date', style: { textSize: 2 } } } }),
+  );
+  check(size('Larger text').disabled && !size('Smaller text').disabled, 'A+ disabled at +2');
+  await act(() => size('Smaller text').click());
+  check(
+    JSON.stringify(lastPost(stub, '/api/extra-key')) ===
+      JSON.stringify({ wireId: 10, widget: 'command', param: 'date', style: { textSize: 1 } }),
+    'A− posts one step smaller with the rest of the widget config',
+  );
+  await act(() => size('Fit text').click());
+  check(postedStyle(stub).textSize === 'fit', 'Fit posts fit');
+  await act(() => size('Default text size').click());
+  check(postedStyle(stub).textSize === 0, 'A posts the default size (the server drops it)');
+
+  await act(() =>
+    patch({ extraKeys: { '10': { widget: 'command', param: 'date', style: { textSize: -1 } } } }),
+  );
+  await click('button[aria-label="Bottom side key command settings"]');
+  const configPop = root.querySelector('.xkey-popover');
+  check(
+    configPop?.getAttribute('role') === 'dialog' &&
+      configPop.getAttribute('aria-label') === 'Bottom command settings',
+    'The side-key config popover is a named dialog',
+  );
+  const interval = root.querySelector<HTMLInputElement>('.xkey-popover input')!;
+  interval.value = '30';
+  await act(() => {
+    interval.dispatchEvent(new Event('change'));
+  });
+  check(
+    lastPost(stub, '/api/extra-key')?.intervalMs === 30_000 && postedStyle(stub).textSize === -1,
+    'Changing another widget setting keeps the text size',
+  );
+  await click('button[aria-label="Bottom side key command settings"]');
+  await checkTextSizePicker(stub, cards[1]!);
+  await checkWrapSelect(stub, cards[1]!);
+  await checkTextStyle(stub, cards[1]!);
+}
+
+async function checkWrapSelect(stub: Stub, card: Element): Promise<void> {
+  await act(() =>
+    patch({ extraKeys: { '10': { widget: 'command', param: 'date', style: { textSize: 1 } } } }),
+  );
+  const select = card.querySelector<HTMLSelectElement>(
+    'select[aria-label="Bottom line wrapping"]',
+  )!;
+  check(select.value === 'off', 'Wrap select defaults to off on a free-text widget');
+  select.value = 'chars';
+  await act(() => {
+    select.dispatchEvent(new Event('change'));
+  });
+  check(
+    JSON.stringify(lastPost(stub, '/api/extra-key')) ===
+      JSON.stringify({
+        wireId: 10,
+        widget: 'command',
+        param: 'date',
+        style: { textSize: 1, wrap: 'chars' },
+      }),
+    'Wrap select posts the mode with the text size',
+  );
+  await act(() =>
+    patch({ extraKeys: { '10': { widget: 'command', param: 'date', style: { wrap: 'words' } } } }),
+  );
+  await act(() =>
+    card.querySelector<HTMLButtonElement>('button[aria-label="Larger text"]')!.click(),
+  );
+  check(postedStyle(stub).wrap === 'words', 'Size buttons keep the wrap mode');
+  await act(() => patch({ extraKeys: { '10': { widget: 'clock', style: { wrap: 'words' } } } }));
+  check(
+    card.querySelector('select[aria-label="Bottom line wrapping"]') === null,
+    'No wrap select on clock/date/weather',
+  );
+  const pushed = {
+    widget: 'external' as const,
+    param: 'obs-rec',
+    expire: 'text' as const,
+    fallbackText: 'Waiting',
+    style: { textSize: 1 as const, color: '#00ff00', wrap: 'words' as const },
+  };
+  await act(() => patch({ extraKeys: { '10': pushed } }));
+  const pushWrap = card.querySelector<HTMLSelectElement>(
+    'select[aria-label="Bottom line wrapping"]',
+  );
+  check(pushWrap?.value === 'words', 'Push API exposes its saved line wrapping mode');
+  for (const mode of ['chars', 'words', 'off']) {
+    pushWrap!.value = mode;
+    await act(() => {
+      pushWrap!.dispatchEvent(new Event('change'));
+    });
+    check(
+      JSON.stringify(lastPost(stub, '/api/extra-key')) ===
+        JSON.stringify({
+          wireId: 10,
+          ...pushed,
+          style: { ...pushed.style, wrap: mode === 'off' ? undefined : mode },
+        }),
+      `Push API wrap ${mode} preserves channel, expiry, fallback and other styling`,
+    );
+  }
+  await act(() => patch({ extraKeys: { '10': { widget: 'command', param: 'date' } } }));
+}
+
+const box = (left: number, top: number, w: number, h: number) => ({
+  left,
+  top,
+  right: left + w,
+  bottom: top + h,
+});
+
+function checkPopoverShift(): void {
+  const app = { left: 0, right: 500, top: 0, bottom: 800 };
+  const anchor = box(20, 600, 40, 30);
+  check(
+    JSON.stringify(popoverShift(box(-210, 100, 270, 494), anchor, app)) ===
+      JSON.stringify({ dx: 218, down: false }),
+    "A popover cut at the app's left edge shifts right, 8 px in",
+  );
+  check(
+    popoverShift(box(100, 100, 270, 494), anchor, app).dx === 0,
+    'A popover inside the app stays put',
+  );
+  check(
+    popoverShift(box(300, 100, 270, 494), anchor, app).dx === -78,
+    'A popover cut at the right edge shifts left',
+  );
+  const high = box(20, 40, 40, 30);
+  check(
+    popoverShift(box(0, -460, 270, 494), high, app).down,
+    'A popover cut at the top opens below when there is more room there',
+  );
+  check(
+    !popoverShift(box(100, 4, 270, 494), box(20, 504, 40, 30), app).down,
+    'It stays above when the room above is larger',
+  );
+}
+
+async function checkTextStyle(stub: Stub, card: Element): Promise<void> {
+  checkPopoverShift();
+  const base = { widget: 'command' as const, param: 'date' };
+  await act(() =>
+    patch({ extraKeys: { '10': { ...base, style: { textSize: 1, wrap: 'words' } } } }),
+  );
+  const pop = (): Element | null => card.querySelector('.xkey-style-popover');
+  const inPop = (sel: string): HTMLInputElement => pop()!.querySelector<HTMLInputElement>(sel)!;
+  await act(() =>
+    card.querySelector<HTMLButtonElement>('button[aria-label="Bottom text style"]')!.click(),
+  );
+  check(pop() !== null, 'Aa opens the text style popover');
+  const keeps = (want: Record<string, unknown>): boolean =>
+    JSON.stringify(lastPost(stub, '/api/extra-key')) ===
+    JSON.stringify({ wireId: 10, ...base, style: { textSize: 1, wrap: 'words', ...want } });
+
+  const cases: Array<[string, Record<string, unknown>]> = [
+    ['[aria-label="Font"] button:nth-child(2)', { font: 'narrow' }],
+    ['[aria-label="Font"] button:nth-child(3)', { font: 'slim' }],
+    ['[aria-label="Align"] button:nth-child(1)', { align: 'left' }],
+    ['[aria-label="Vertical"] button:nth-child(3)', { valign: 'bottom' }],
+    ['button[aria-label="Text colour #ffd60a"]', { color: '#ffd60a' }],
+    ['button[aria-label="Background #000000"]', { background: '#000000' }],
+  ];
+  for (const [sel, want] of cases) {
+    await act(() => inPop(sel).click());
+    check(keeps(want), `Style control posts ${JSON.stringify(want)} and keeps the rest`);
+  }
+  const custom = inPop('input[aria-label="Text colour custom colour"]');
+  custom.value = '#ABCDEF';
+  await act(() => {
+    custom.dispatchEvent(new Event('change'));
+  });
+  check(keeps({ color: '#abcdef' }), 'Custom colour posts #rrggbb');
+  const padding = inPop('.xkey-popover-field input');
+  padding.value = '4';
+  await act(() => {
+    padding.dispatchEvent(new Event('change'));
+  });
+  check(keeps({ padding: 4 }), 'Padding posts px');
+  padding.value = '99';
+  await act(() => {
+    padding.dispatchEvent(new Event('change'));
+  });
+  check(keeps({ padding: 4 }), 'Out-of-range padding is not posted');
+  const gap = pop()!.querySelectorAll<HTMLInputElement>('.xkey-popover-field input')[1]!;
+  gap.value = '-3';
+  await act(() => {
+    gap.dispatchEvent(new Event('change'));
+  });
+  check(keeps({ lineGap: -3 }), 'Line gap accepts a negative value');
+  gap.value = '-9';
+  await act(() => {
+    gap.dispatchEvent(new Event('change'));
+  });
+  check(keeps({ lineGap: -3 }), 'Line gap below -8 is not posted');
+  const boxes = [...pop()!.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')];
+  await act(() => boxes[0]!.click());
+  check(keeps({ tightLines: true }), 'Tight lines posts tightLines');
+  await act(() => boxes[1]!.click());
+  check(keeps({ bold: true }), 'Bold posts bold');
+  await act(() => boxes[2]!.click());
+  check(keeps({ outline: '#000000' }), 'Outline posts a black outline');
+  await act(() => boxes[3]!.click());
+  check(keeps({ ellipsis: false }), 'Ellipsis off posts false');
+  const reset = [...pop()!.querySelectorAll('button')].find(
+    (b) => b.textContent === 'Reset style',
+  )!;
+  await act(() => reset.click());
+  check(
+    JSON.stringify(lastPost(stub, '/api/extra-key')) === JSON.stringify({ wireId: 10, ...base }),
+    'Reset style posts no style',
+  );
+  await act(() =>
+    card.querySelector<HTMLButtonElement>('button[aria-label="Bottom text style"]')!.click(),
+  );
+  await act(() => patch({ extraKeys: { '10': base } }));
+}
+
+async function checkPressAction(stub: Stub): Promise<void> {
+  const card = [...root.querySelectorAll('.xkey-card')][1]!;
+  const action = (): HTMLSelectElement =>
+    card.querySelector<HTMLSelectElement>('select[aria-label="Bottom side key press action"]')!;
+  const command = (): HTMLInputElement =>
+    card.querySelector<HTMLInputElement>('input[aria-label="Bottom side key press command"]')!;
+  check(
+    action().value === 'refresh' && command().disabled,
+    'Press action defaults to Refresh without a command; the command input is greyed out',
+  );
+  await act(() =>
+    patch({ extraKeys: { '10': { widget: 'command', param: 'date', pressCommand: 'ls' } } }),
+  );
+  check(
+    action().value === 'command' && !command().disabled && command().value === 'ls',
+    'Press action defaults to Command when a press command is set',
+  );
+  action().value = 'both';
+  await act(() => {
+    action().dispatchEvent(new Event('change'));
+  });
+  check(
+    JSON.stringify(lastPost(stub, '/api/extra-key/press')) ===
+      JSON.stringify({ wireId: 10, action: 'both' }),
+    'Press action select posts only the action, keeping the command',
+  );
+  await act(() => patch({ extraKeys: { '10': { widget: 'command', param: 'date' } } }));
+}
+
+async function checkTextSizePicker(stub: Stub, card: Element): Promise<void> {
+  const size = (label: string): HTMLButtonElement =>
+    card.querySelector<HTMLButtonElement>(`.xkey-size button[aria-label="${label}"]`)!;
+  check(card.querySelector('.xkey-clipped') === null, 'No clipped badge by default');
+  await act(() => patch({ extraKeyClipped: { '10': true } }));
+  check(card.querySelector('.xkey-tile .xkey-clipped') !== null, 'Clipped badge on the tile');
+  await act(() => patch({ extraKeyClipped: {} }));
+
+  await act(() => size('Bottom text size previews').click());
+  await settle();
+  const thumbs = [...card.querySelectorAll<HTMLButtonElement>('.xkey-size-thumb')];
+  check(
+    lastPost(stub, '/api/extra-key/preview')?.wireId === 10 &&
+      thumbs.length === 6 &&
+      thumbs[1]!.getAttribute('aria-pressed') === 'false' &&
+      thumbs[2]!.getAttribute('aria-pressed') === 'true' &&
+      thumbs[5]!.textContent.includes('clipped'),
+    'Size picker shows a thumbnail per size, marks the current one and clipped ones',
+  );
+  await act(() => thumbs[4]!.click());
+  check(
+    postedStyle(stub).textSize === 1 && card.querySelector('.xkey-size-picker') === null,
+    'Picking a thumbnail posts that size and closes the picker',
+  );
+  await act(() => patch({ extraKeys: { '10': { widget: 'command', param: 'date' } } }));
+}
+
+function checkElgatoStripZones(strip: Element): void {
+  check(
+    strip.querySelectorAll('[role="list"] .strip-zone-canvas').length === 4 &&
+      strip.querySelector('[role="tablist"]') === null &&
+      strip.querySelector('[role="tabpanel"]') === null &&
+      [...strip.querySelectorAll('.strip-zone-type')].every((t) => t.textContent === 'Elgato app'),
+    'Elgato strip mode keeps the 4 zone previews, labelled Elgato app, with no tabs or panel',
+  );
+}
+
+const zoneTabs = (strip: Element): HTMLButtonElement[] => [
+  ...strip.querySelectorAll<HTMLButtonElement>('[role="tablist"] [role="tab"]'),
+];
+const selectedTab = (strip: Element): number =>
+  zoneTabs(strip).findIndex((t) => t.getAttribute('aria-selected') === 'true');
+const zoneTypes = (strip: Element): string =>
+  [...strip.querySelectorAll('.strip-zone-type')].map((t) => t.textContent).join(',');
+
+async function pressZoneKey(strip: Element, key: string): Promise<void> {
+  const target = document.activeElement ?? zoneTabs(strip)[0]!;
+  await act(() => {
+    target.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true }));
+  });
+}
+
+async function checkZoneKeyboard(strip: Element): Promise<void> {
+  const tabs = (): Element[] => zoneTabs(strip);
+  const at = (i: number): boolean =>
+    selectedTab(strip) === i && tabs().indexOf(document.activeElement!) === i;
+  zoneTabs(strip)[1]!.focus();
+  await pressZoneKey(strip, 'ArrowRight');
+  check(at(2), 'ArrowRight selects and focuses the next zone');
+  await pressZoneKey(strip, 'End');
+  check(at(3), 'End selects the last zone');
+  await pressZoneKey(strip, 'Home');
+  check(at(0), 'Home selects the first zone');
+  await pressZoneKey(strip, 'ArrowLeft');
+  check(at(3), 'ArrowLeft from the first zone wraps to the last');
+  check(
+    zoneTabs(strip).every((t, i) => t.tabIndex === (i === 3 ? 0 : -1)),
+    'Only the selected tab is in the tab order',
+  );
+}
+
+async function checkStripZoneTabs(stub: Stub, strip: Element): Promise<void> {
+  const configs = {
+    '10': { widget: 'command' as const, param: 'date' },
+    '20': { widget: 'date' as const },
+    '21': {
+      widget: 'command' as const,
+      param: 'uptime',
+      style: { textSize: 1 as const, wrap: 'chars' as const },
+    },
+  };
+  check(
+    zoneTabs(strip).length === 4 && strip.querySelectorAll('[role="tabpanel"]').length === 1,
+    'Override mode shows 4 zone tabs and exactly one settings panel',
+  );
+  await act(() => patch({ extraKeys: configs }));
+  check(
+    zoneTypes(strip) === 'Date,Command,App controls,App controls',
+    'Zone indicators name each widget; unassigned zones show the app in repaint mode',
+  );
+  await act(() => patch({ touchStripMode: 'deckbridge-ignore' }));
+  check(zoneTypes(strip) === 'Date,Command,Blank,Blank', 'Unassigned zones read Blank in ignore');
+  await act(() => patch({ touchStripMode: 'deckbridge-repaint' }));
+
+  const panel = (): Element => strip.querySelector('[role="tabpanel"]')!;
+  const tabs = zoneTabs(strip);
+  check(
+    selectedTab(strip) === 0 &&
+      panel().getAttribute('aria-labelledby') === tabs[0]!.id &&
+      panel().querySelector('.strip-zone-title')?.textContent === 'Zone 1 zone',
+    'The first zone is selected by default and labels the settings panel',
+  );
+
+  const canvases = [...strip.querySelectorAll('.strip-zone-canvas')];
+  const callsBefore = stub.calls.length;
+  await act(() => tabs[1]!.click());
+  check(
+    selectedTab(strip) === 1 &&
+      panel().querySelector<HTMLInputElement>('.xkey-value input')?.value === 'uptime' &&
+      stub.calls.length === callsBefore,
+    'Clicking a zone selects it and shows its value, without posting anything',
+  );
+  const after = [...strip.querySelectorAll('.strip-zone-canvas')];
+  check(
+    after.length === 4 && after.every((c, i) => c === canvases[i]),
+    'Selecting a zone keeps every preview canvas mounted',
+  );
+
+  const shows = panel().querySelector<HTMLSelectElement>('select.xkey-select')!;
+  shows.value = 'clock';
+  await act(() => {
+    shows.dispatchEvent(new Event('change'));
+  });
+  check(
+    JSON.stringify(lastPost(stub, '/api/extra-key')) ===
+      JSON.stringify({ wireId: 21, widget: 'clock', style: { textSize: 1, wrap: 'chars' } }),
+    'The panel edits the selected zone and keeps its display prefs',
+  );
+  check(
+    panel().querySelector('button[aria-label$=" text style"]') !== null,
+    'Strip zone panels show the Aa text style button',
+  );
+
+  const navBefore = stub.calls.length;
+  await checkZoneKeyboard(strip);
+  check(
+    stub.calls.length === navBefore &&
+      !stub.calls.some((c) => c.url === '/api/extra-key/run') &&
+      stub.calls.filter((c) => c.url === '/api/extra-key/press').length ===
+        stub.calls.filter((c, i) => i < callsBefore && c.url === '/api/extra-key/press').length,
+    'Zone selection and keyboard navigation never post, run, or press',
+  );
+
+  await act(() => patch({ extraKeys: { ...configs, '23': { widget: 'clock' } } }));
+  check(
+    selectedTab(strip) === 3 && zoneTypes(strip).endsWith('Clock'),
+    'A live config update keeps the selected zone',
+  );
+
+  const status = getSnapshot().status;
+  await act(() =>
+    patch({ status: { ...status, docks: [AKP05E_DOCK, { ...AKP05E_DOCK, index: 1 }] } }),
+  );
+  await act(() => patch({ status: { ...getSnapshot().status, selectedDock: 1 } }));
+  check(selectedTab(strip) === 0, 'Switching docks resets the selection to the first zone');
+  await act(() => patch({ status, extraKeys: { '10': configs['10'] } }));
+}
+
+async function checkSideKeyCards(sideKeys: Element): Promise<void> {
+  const cards = [...sideKeys.querySelectorAll('.xkey-card')];
+  check(
+    cards.length === 2 &&
+      cards.every(
+        (card) =>
+          card.querySelector('.xkey-tile') !== null &&
+          card.querySelector('.xkey-press-label:last-of-type')?.textContent === 'On press',
+      ),
+    'Every side-key card has a preview tile and an on-press line',
+  );
+  check(
+    cards[0]!.querySelector('.xkey-value') === null &&
+      cards[1]!.querySelector('.xkey-value:not(.xkey-wide)') !== null &&
+      cards[1]!.querySelector('.xkey-config-btn') !== null,
+    'Value line shows only for widgets with a value, beside its settings button',
+  );
+  check(
+    sideKeys.querySelector('.xkey-grid-head') === null &&
+      cards.map((card) => card.querySelector('.xkey-tile-empty')?.textContent).join(',') ===
+        'Top,Bottom',
+    'Empty preview tiles show the key position',
+  );
+  await act(() => patch({ extraKeyImages: { '10': 'Qk0=' } }));
+  check(
+    cards[1]!.querySelector<HTMLImageElement>('.xkey-tile img')?.src ===
+      'data:image/bmp;base64,Qk0=' && cards[0]!.querySelector('.xkey-tile img') === null,
+    'Side-key tile shows the live widget image',
+  );
+  await act(() => patch({ extraKeyImages: {} }));
+}
+
+const section = (title: string): Element =>
+  root.querySelector(`[role="group"][aria-label="${title}"]`)!;
+const rows = (title: string, extra = ''): Element[] => [
+  ...section(title).querySelectorAll(`.xkey-row:not(.xkey-grid-head)${extra}`),
+];
+
+async function runSideKeysPanel(): Promise<void> {
+  const stub = stubFetch((url) =>
+    url === '/api/extra-key/preview'
+      ? {
+          payload: {
+            wireId: 10,
+            previews: PREVIEW_SIZES.map((textSize) => ({
+              textSize,
+              data: 'Qk0=',
+              clipped: textSize === 2,
+            })),
+          },
+        }
+      : { payload: { dir: '', files: [], status: {} } },
+  );
+  try {
+    await act(() =>
+      patch({
+        status: { ...baseStatus, docks: [AKP05E_DOCK], selectedDock: 0 },
+        extraKeys: { '10': { widget: 'command', param: 'date' } },
+        touchStripMode: 'elgato',
+        encoders: { connectToApp: true },
+      }),
+    );
+    await act(() => render(<ExtraKeysPanel />, root));
+    await settle();
+
+    await checkSideKeysHelp();
+    await act(() =>
+      patch({
+        status: {
+          ...baseStatus,
+          docks: [{ ...AKP05E_DOCK, modelId: 'ajazz-akp05', modelName: 'AJAZZ AKP05' }],
+          selectedDock: 0,
+        },
+      }),
+    );
+    await checkSideKeysHelp();
+    await act(() => patch({ status: { ...baseStatus, docks: [AKP05E_DOCK], selectedDock: 0 } }));
+    await checkDeviceTestMode();
+    await checkTextSize(stub);
+    await checkPressAction(stub);
+
+    await checkSideKeyCards(section('Extra buttons'));
+    check(
+      rows('Touch strip').length === 0 &&
+        !section('Touch strip').textContent.includes('DeckBridge widgets are off') &&
+        section('Touch strip').querySelector('.xkeys-option') === null,
+      'Elgato strip mode hides zone rows and the repaint interval',
+    );
+    checkElgatoStripZones(section('Touch strip'));
+
+    const modeSelect = root.querySelector<HTMLSelectElement>(
+      'select[aria-label="Touch strip mode"]',
+    )!;
+    modeSelect.value = 'deckbridge-repaint';
+    await act(() => {
+      modeSelect.dispatchEvent(new Event('change'));
+    });
+    await settle();
+    const modePost = stub.calls.find((c) => c.url === '/api/touch-strip-mode');
+    check(
+      (modePost?.body as { mode?: string } | undefined)?.mode === 'deckbridge-repaint',
+      'Touch strip mode select posts the picked mode',
+    );
+
+    await act(() => patch({ touchStripMode: 'deckbridge-repaint' }));
+    const repaintInput =
+      section('Touch strip').querySelector<HTMLInputElement>('.xkeys-option input');
+    check(repaintInput?.value === '5', 'Repaint mode shows the repaint interval, default 5 s');
+    repaintInput!.value = '2';
+    await act(() => {
+      repaintInput!.dispatchEvent(new Event('change'));
+    });
+    await settle();
+    const repaintPost = stub.calls.find((c) => c.url === '/api/touch-strip-repaint');
+    check(
+      (repaintPost?.body as { ms?: number } | undefined)?.ms === 2000,
+      'Repaint interval posts milliseconds',
+    );
+    check(
+      rows('Touch strip', '.xkey-knob-row').length === 0,
+      'Connected knobs show no command grid',
+    );
+    await checkStripZoneTabs(stub, section('Touch strip'));
+    await act(() => patch({ encoders: { connectToApp: false } }));
+    check(
+      rows('Touch strip', '.xkey-knob-row').length === 4 &&
+        rows('Touch strip', '.xkey-knob-row').every(
+          (row) => row.querySelectorAll('input').length === 3,
+        ),
+      'Disconnected knobs show one press/right/left row per knob',
+    );
+  } finally {
+    stub.restore();
+    await act(() => render(null, root));
+    await act(() => patch({ status: baseStatus, extraKeys: {}, touchStripMode: 'elgato' }));
+  }
+}
+
+const STANDBY_VIEW: StandbyView = {
+  dock: 0,
+  settings: {
+    idleDim: false,
+    idleMinutes: 5,
+    idleLevel: 10,
+    offWhenIdle: false,
+    offMinutes: 30,
+    offMode: 'auto',
+    wakePress: 'swallow',
+    appGoneAction: 'none',
+    clockLevel: 20,
+    night: false,
+    nightStart: '23:00',
+    nightEnd: '07:00',
+    nightLevel: 10,
+    nightOffWhenIdle: true,
+    pixelShift: false,
+  },
+  serverTime: '12:34',
+  canSleep: false,
+  canShowClock: true,
+  hasCommands: false,
+};
+
+const field = (label: string): HTMLInputElement | null =>
+  Array.from(root.querySelectorAll('.tuning-field'))
+    .find((f) => f.querySelector('span')?.textContent === label)
+    ?.querySelector('input') ?? null;
+
+// Standby panel: defaults, toggle POST, disabled fields, status text, time field POST,
+// and a rejected save keeping the previous values.
+async function runStandbyPanel(): Promise<void> {
+  const dimmed: DockUi = {
+    ...DOCKS[0]!,
+    brightness: 80,
+    displayState: 'dimmed',
+    effectiveBrightness: 10,
+  };
+  let reject = false;
+  let server = STANDBY_VIEW;
+  const stub = stubFetch((_url, init) => {
+    if (init?.method !== 'POST') return { payload: server };
+    const sent = JSON.parse(init.body as string) as { settings: Partial<StandbyView['settings']> };
+    if (reject) return { status: 400, payload: { error: 'Night start and end must differ.' } };
+    // The real server merges the posted keys into the stored ones.
+    server = { ...server, settings: { ...server.settings, ...sent.settings } };
+    return { payload: server };
+  });
+  const posts = (): number => stub.calls.filter((c) => c.method === 'POST').length;
+  const lastPosted = (): Partial<StandbyView['settings']> | undefined =>
+    (
+      stub.calls.findLast((c) => c.method === 'POST')?.body as
+        | { settings: StandbyView['settings'] }
+        | undefined
+    )?.settings;
+  try {
+    await act(() => patch({ status: { ...baseStatus, docks: [dimmed], selectedDock: 0 } }));
+    await act(() => render(<StandbyPanel />, root));
+    await settle();
+    check(
+      elementText('.collapse-status').includes('Dimmed to 10%'),
+      'Standby header summarizes the dimmed state',
+    );
+    check(
+      root.textContent.includes('Now: Dimmed to 10% (requested 80%)'),
+      'Standby status line shows effective and requested levels',
+    );
+    check(
+      root.querySelector<HTMLInputElement>('#toggle-standby-idle-dim')?.checked === false,
+      'Standby renders the defaults from GET',
+    );
+    check(
+      field('After (minutes)')?.disabled === true && field('From')?.disabled === true,
+      'Standby fields are disabled while their toggle is off',
+    );
+    check(root.textContent.includes('DeckBridge time now: 12:34'), 'Standby shows the host time');
+
+    await click('#toggle-standby-idle-dim');
+    await settle();
+    check(
+      JSON.stringify(lastPosted()) === '{"idleDim":true}',
+      'Dim toggle posts only the changed key',
+    );
+    check(field('After (minutes)')?.disabled === false, 'Dim fields enable after the toggle');
+
+    // Two edits before the first save returns must both survive (no stale-view revert).
+    await act(async () => {
+      root.querySelector<HTMLButtonElement>('#toggle-standby-night')?.click();
+      root.querySelector<HTMLButtonElement>('#toggle-standby-pixel-shift')?.click();
+      await Promise.resolve();
+    });
+    await settle();
+    check(
+      root.querySelector<HTMLInputElement>('#toggle-standby-night')?.checked === true &&
+        root.querySelector<HTMLInputElement>('#toggle-standby-pixel-shift')?.checked === true,
+      'Two quick standby edits both stick',
+    );
+    check(
+      server.settings.night && server.settings.pixelShift,
+      'Both quick edits reached the server',
+    );
+    await click('#toggle-standby-pixel-shift');
+    await settle();
+
+    // Levels start at 1: 0 would read as screen off but is not a dim level.
+    const level = field('Dimmed brightness (%)')!;
+    check(level.min === '1', 'Standby level fields start at 1');
+    const before = posts();
+    await act(() => {
+      level.value = '0';
+      level.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    await settle();
+    check(posts() === before, 'A level of 0 is ignored, not posted');
+
+    const from = field('From')!;
+    await act(() => {
+      from.value = '22:30';
+      from.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+    await settle();
+    check(lastPosted()?.nightStart === '22:30', 'Night time change posts nightStart');
+
+    reject = true;
+    await click('#toggle-standby-pixel-shift');
+    await settle();
+    check(
+      elementText('.settings-error').includes('must differ'),
+      'A rejected save shows the server error',
+    );
+    check(
+      root.querySelector<HTMLInputElement>('#toggle-standby-pixel-shift')?.checked === false &&
+        field('From')?.value === '22:30',
+      'A rejected save keeps the previous values',
+    );
+  } finally {
+    stub.restore();
+    await act(() => render(null, root));
+    await act(() => patch({ status: baseStatus }));
+  }
+}
+
+async function runChipRadioGroup(): Promise<void> {
+  let picked: number | undefined;
+  await act(() =>
+    render(
+      <ChipRadioGroup
+        name="chip-test"
+        label="Chip test"
+        value={0}
+        options={[0, 90].map((value) => ({ value, label: String(value) }))}
+        onChange={(value) => (picked = value)}
+      />,
+      root,
+    ),
+  );
+  check(
+    root.querySelector<HTMLInputElement>('input[name="chip-test"]:checked')?.value === '0',
+    'ChipRadioGroup checks the current value',
+  );
+  await act(() => root.querySelector<HTMLInputElement>('input[value="90"]')!.click());
+  check(picked === 90, 'ChipRadioGroup reports the typed option value');
+  await act(() => render(null, root));
+}
+
+void run()
+  .then(() => {
+    document.body.dataset.result = 'pass';
+    document.body.textContent = results.join('\n');
+    return undefined;
+  })
+  .catch((error: unknown) => {
+    document.body.dataset.result = 'fail';
+    document.body.textContent = String(error);
+  });

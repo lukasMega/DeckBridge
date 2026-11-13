@@ -4,7 +4,10 @@ mise.local.toml
 # Node.js
 ts/node_modules/
 docs-site/node_modules/
+e2e/node_modules/
 video/node_modules/
+src-tauri/node_modules/
+.pnpm-store/
 video/
 
 # Build outputs
@@ -23,7 +26,7 @@ src-tauri/target/
 
 # Compiled binary
 deckbridge
-deckbridge-lite
+deckbridge-advanced
 
 # Tauri sidecar binaries (placed by CI or mise run bundle)
 src-tauri/binaries/deckbridge-*
@@ -44,6 +47,10 @@ video/out/
 docs-site/build/
 docs-site/.docusaurus/
 
+# Playwright e2e run artifacts
+e2e/test-results/
+e2e/playwright-report/
+
 # macOS
 .DS_Store
 
@@ -61,7 +68,16 @@ docs-site/.docusaurus/
 .mcp.json
 .codegraph/
 graphify-out/
+.playwright-mcp/
 tmp/
+# oxfmt/oxlint atomic-write leftovers from a crashed run
+_tmp_*
 **/.cmd-history.txt
 bundle-sizes*.csv
 CLAUDE.md
+
+# Device reference photos (copyrighted vendor/eshop imagery — reference only, never committed)
+.cache/
+/ts/src/dev/akp05-strip-guided-probe.ts
+/ts/src/dev/akp05-strip-probe.html
+/ts/src/dev/akp05-strip-probe.ts

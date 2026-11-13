@@ -55,7 +55,8 @@ const INPUT_CATEGORY_WIDE = 0x00;
  *  hence ShowTitle: false. */
 export interface FontStyle {
   Align: string;
-  Color: string;
+  /** 0xRRGGBB as an integer: Ulanzi Studio and every implementation send a number. */
+  Color: number;
   FontName: string;
   ShowTitle: boolean;
   Size: number;
@@ -64,7 +65,7 @@ export interface FontStyle {
 
 export const DEFAULT_FONT: FontStyle = {
   Align: 'center',
-  Color: '#FFFFFF',
+  Color: 0xffffff,
   FontName: 'Regular',
   ShowTitle: false,
   Size: 12,
@@ -143,6 +144,9 @@ export function chunkBoundaryOffsets(payloadLen: number): number[] {
  *  it like every other DeckBridge HID write — so the retry counter this guards
  *  is logged: if it stays at 0 on hardware, the workaround can go (plan O8). */
 export function isPayloadSafe(payload: Uint8Array): boolean {
+  // Ulanzi Studio never ends a payload exactly on a chunk edge; udeck rejects it too.
+  const tail = payload.length - FIRST_CHUNK_DATA;
+  if (tail > 0 && tail % PACKET_SIZE === 0) return false;
   for (const off of chunkBoundaryOffsets(payload.length)) {
     const b = payload[off];
     if (b === 0x00 || b === 0x7c) return false;
@@ -159,7 +163,8 @@ export function encodeBrightness(pct: number): Uint8Array {
   return ASCII.encode(String(clamped));
 }
 
-const num = (v: number | undefined): string => (v === undefined ? '' : String(Math.round(v)));
+// Zero, not empty: every capture sends numeric stats fields.
+const num = (v: number | undefined): string => String(Math.round(v ?? 0));
 const pad2 = (n: number): string => String(n).padStart(2, '0');
 
 /** Pipe-separated ASCII: mode|cpu|mem|hh:mm:ss|gpu|hourFormat|suffix. Trailing

@@ -2,7 +2,7 @@
 // Used by the simple dock cards (via DockChip) and the advanced header pills.
 // Styling rides the existing .dock-chip classes in ui-simple.css.
 import type { ComponentChildren } from 'preact';
-import { Icon } from '../simple/Icon.js';
+import { Icon } from './Icon.js';
 
 export type StatusChipVariant = 'ok' | 'wait' | 'accent' | 'dim';
 

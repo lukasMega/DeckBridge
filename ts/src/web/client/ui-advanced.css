@@ -124,11 +124,15 @@ body.no-anim * {
 .resize-handle.active {
   background: var(--accent);
 }
-.panels {
-  flex: 1 1 0;
+.panels,
+.log-panel,
+.log-content {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+}
+.panels {
+  flex: 1 1 0;
   background: var(--surface);
   border-left: 1px solid var(--border);
 }
@@ -155,14 +159,7 @@ body.no-anim * {
   display: flex;
   gap: 8px;
 }
-.ke .dn {
-  color: var(--accent);
-}
-.ke .up {
-  color: var(--fg-dim);
-}
 .ke .kt {
-  color: var(--fg-dim);
   font-size: 11px;
 }
 
@@ -200,21 +197,9 @@ body.no-anim * {
   margin-top: 8px;
 }
 
-/* ── settings (raw JSON) panel ── */
-#settings-textarea {
-  width: 100%;
-  resize: vertical;
-}
-#settings-save {
-  margin-top: 8px;
-}
-
 /* ── Log panel ── */
 .log-panel {
   flex: 1;
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
   border-bottom: none;
   padding: 0;
 }
@@ -262,28 +247,24 @@ body.no-anim * {
 /* log content areas */
 .log-content {
   flex: 1;
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
   min-height: 0;
 }
-#log-console {
+#log-console,
+#comm-console {
   flex: 1;
   overflow-y: auto;
   font-family: var(--mono);
   font-size: 11px;
-  line-height: 1.5;
   background: var(--inset);
+}
+#log-console {
+  line-height: 1.5;
   padding: 6px 8px;
-  margin: 0;
   white-space: pre-wrap;
   word-break: break-all;
 }
 .li {
   color: var(--fg-muted);
-}
-.lw {
-  color: var(--wait);
 }
 .le {
   color: var(--warn);
@@ -291,12 +272,7 @@ body.no-anim * {
 
 /* comm log */
 #comm-console {
-  flex: 1;
-  overflow-y: auto;
-  background: var(--inset);
   padding: 4px 0;
-  font-family: var(--mono);
-  font-size: 11px;
   line-height: 1.7;
 }
 .ce {
@@ -308,15 +284,9 @@ body.no-anim * {
 .ce:hover {
   background: var(--surface-2);
 }
-.ct {
-  color: var(--fg-dim);
-}
 .cd {
   font-weight: 600;
   margin: 0 4px;
-}
-.cd-rx {
-  color: var(--accent);
 }
 .cd-tx {
   color: var(--ok);
@@ -328,17 +298,25 @@ body.no-anim * {
   border-radius: 2px;
   font-weight: 500;
 }
-.cp-elgato {
-  color: var(--accent);
-}
-.cp-mirabox {
-  color: var(--wait);
-}
 .ch {
   color: var(--fg);
 }
 .cx {
-  color: var(--fg-dim);
   font-size: 10px;
   margin-left: 8px;
+}
+.ke .dn,
+.cd-rx,
+.cp-elgato {
+  color: var(--accent);
+}
+.ke .up,
+.ke .kt,
+.ct,
+.cx {
+  color: var(--fg-dim);
+}
+.lw,
+.cp-mirabox {
+  color: var(--wait);
 }

@@ -4,6 +4,9 @@
 // present, so it's cfg_attr'd instead. No-op on macOS/Linux.
 #![cfg_attr(windows, windows_subsystem = "windows")]
 
+mod notify;
+
+use image::{Rgba, RgbaImage};
 use serde::{Deserialize, Serialize};
 use std::io::{BufRead, BufReader, Write};
 use std::net::TcpListener;
@@ -19,13 +22,9 @@ use tray_icon::{
 #[cfg(target_os = "macos")]
 use tao::platform::macos::{ActivationPolicy, EventLoopExtMacOS};
 
-// ── embedded icon bytes ─────────────────────────────────────────────────────
-
 const ICON_FULL_BYTES: &[u8] = include_bytes!("../icons/icon-full.png");
 const ICON_USB_ONLY_BYTES: &[u8] = include_bytes!("../icons/icon-usb-only.png");
 const ICON_DISCONNECTED_BYTES: &[u8] = include_bytes!("../icons/icon-disconnected.png");
-
-// ── types ───────────────────────────────────────────────────────────────────
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -36,6 +35,19 @@ struct TrayState {
     status: String,
     #[serde(default)]
     reconnect_attempts: u32,
+    #[serde(default)]
+    update_available: bool,
+    #[serde(default = "default_update_text")]
+    update_text: String,
+    #[serde(default)]
+    version: String,
+    // Optional so a line from an older app (no key) still parses.
+    #[serde(default)]
+    notify: Option<notify::Notify>,
+}
+
+fn default_update_text() -> String {
+    "Checking for updates…".to_owned()
 }
 
 #[derive(Debug, Serialize)]
@@ -52,8 +64,6 @@ enum UserEvent {
     Quit,
 }
 
-// ── helpers ─────────────────────────────────────────────────────────────────
-
 // Tray lifecycle chatter (waiting/connected/disconnected) is only useful when
 // debugging — gated behind DECKBRIDGE_LOG=debug (set by the `mise run d` task), which
 // the tray process inherits from its parent. Errors always print.
@@ -61,6 +71,10 @@ fn debug_log_enabled() -> bool {
     std::env::var("DECKBRIDGE_LOG")
         .map(|v| v.eq_ignore_ascii_case("debug"))
         .unwrap_or(false)
+}
+
+fn parse_state(line: &str) -> serde_json::Result<TrayState> {
+    serde_json::from_str(line)
 }
 
 fn emit(event: &'static str, port: Option<u16>) {
@@ -85,15 +99,13 @@ fn open_browser(url: &str) {
     let _ = Command::new("xdg-open").arg(url).spawn();
 }
 
-/// Load a PNG file from bytes and return an `Icon`.
-fn icon_from_bytes(data: &[u8]) -> Option<Icon> {
+fn rgba_from_bytes(data: &[u8]) -> Option<(Vec<u8>, u32, u32)> {
     let decoder = png::Decoder::new(std::io::Cursor::new(data));
     let mut reader = decoder.read_info().ok()?;
     let mut buf = vec![0u8; reader.output_buffer_size()?];
     let info = reader.next_frame(&mut buf).ok()?;
     let bytes = &buf[..info.buffer_size()];
 
-    // Convert to RGBA if needed
     let rgba = match info.color_type {
         png::ColorType::Rgba => bytes.to_vec(),
         png::ColorType::Rgb => {
@@ -107,57 +119,113 @@ fn icon_from_bytes(data: &[u8]) -> Option<Icon> {
         _ => return None,
     };
 
-    Icon::from_rgba(rgba, info.width, info.height).ok()
+    Some((rgba, info.width, info.height))
 }
 
 /// Load icon: try next to executable first, fall back to embedded bytes.
-fn load_icon(name: &str, embedded: &[u8]) -> Option<Icon> {
+fn load_icon_rgba(name: &str, embedded: &[u8]) -> Option<(Vec<u8>, u32, u32)> {
     if let Ok(exe) = std::env::current_exe() {
         if let Some(dir) = exe.parent() {
             if let Ok(data) = std::fs::read(dir.join(name)) {
-                if let Some(icon) = icon_from_bytes(&data) {
-                    return Some(icon);
+                if let Some(rgba) = rgba_from_bytes(&data) {
+                    return Some(rgba);
                 }
             }
         }
     }
-    icon_from_bytes(embedded)
+    rgba_from_bytes(embedded)
+}
+
+fn icon_from_rgba(rgba: Vec<u8>, width: u32, height: u32) -> Icon {
+    Icon::from_rgba(rgba, width, height).expect("failed to create tray icon")
+}
+
+fn icon_with_update_dot(rgba: &[u8], width: u32, height: u32) -> Icon {
+    let mut image =
+        RgbaImage::from_raw(width, height, rgba.to_vec()).expect("invalid tray icon RGBA buffer");
+    let dot_radius = (width.min(height) as i32 * 3 / 20).max(2);
+    let ring_radius = dot_radius + 1;
+    let center_x = width as i32 - ring_radius - 1;
+    let center_y = height as i32 - ring_radius - 1;
+
+    for y in (center_y - ring_radius)..=(center_y + ring_radius) {
+        for x in (center_x - ring_radius)..=(center_x + ring_radius) {
+            let dx = x - center_x;
+            let dy = y - center_y;
+            let distance_squared = dx * dx + dy * dy;
+            if distance_squared <= ring_radius * ring_radius {
+                let color = if distance_squared <= dot_radius * dot_radius {
+                    Rgba([220, 38, 38, 255])
+                } else {
+                    Rgba([255, 255, 255, 190])
+                };
+                image.put_pixel(x as u32, y as u32, color);
+            }
+        }
+    }
+
+    icon_from_rgba(image.into_raw(), width, height)
 }
 
 struct Icons {
     full: Icon,
+    full_update: Icon,
     usb_only: Icon,
+    usb_only_update: Icon,
     disconnected: Icon,
+    disconnected_update: Icon,
 }
 
 impl Icons {
     fn load() -> Self {
+        let (full_rgba, full_width, full_height) =
+            load_icon_rgba("icon-full.png", ICON_FULL_BYTES).expect("failed to load icon-full.png");
+        let (usb_only_rgba, usb_only_width, usb_only_height) =
+            load_icon_rgba("icon-usb-only.png", ICON_USB_ONLY_BYTES)
+                .expect("failed to load icon-usb-only.png");
+        let (disconnected_rgba, disconnected_width, disconnected_height) =
+            load_icon_rgba("icon-disconnected.png", ICON_DISCONNECTED_BYTES)
+                .expect("failed to load icon-disconnected.png");
         Icons {
-            full: load_icon("icon-full.png", ICON_FULL_BYTES)
-                .expect("failed to load icon-full.png"),
-            usb_only: load_icon("icon-usb-only.png", ICON_USB_ONLY_BYTES)
-                .expect("failed to load icon-usb-only.png"),
-            disconnected: load_icon("icon-disconnected.png", ICON_DISCONNECTED_BYTES)
-                .expect("failed to load icon-disconnected.png"),
+            full: icon_from_rgba(full_rgba.clone(), full_width, full_height),
+            full_update: icon_with_update_dot(&full_rgba, full_width, full_height),
+            usb_only: icon_from_rgba(usb_only_rgba.clone(), usb_only_width, usb_only_height),
+            usb_only_update: icon_with_update_dot(&usb_only_rgba, usb_only_width, usb_only_height),
+            disconnected: icon_from_rgba(
+                disconnected_rgba.clone(),
+                disconnected_width,
+                disconnected_height,
+            ),
+            disconnected_update: icon_with_update_dot(
+                &disconnected_rgba,
+                disconnected_width,
+                disconnected_height,
+            ),
         }
     }
 
-    fn for_name(&self, name: &str) -> &Icon {
-        match name {
-            "full" => &self.full,
-            "usb_only" => &self.usb_only,
-            _ => &self.disconnected,
+    fn for_name(&self, name: &str, update_available: bool) -> &Icon {
+        match (name, update_available) {
+            ("full", false) => &self.full,
+            ("full", true) => &self.full_update,
+            ("usb_only", false) => &self.usb_only,
+            ("usb_only", true) => &self.usb_only_update,
+            (_, false) => &self.disconnected,
+            (_, true) => &self.disconnected_update,
         }
     }
 }
 
-// ── tray builder ─────────────────────────────────────────────────────────────
+// tray builder
 
 struct TrayHandles {
     tray: tray_icon::TrayIcon,
+    header_item: MenuItem,
     status_item: MenuItem,
+    update_item: MenuItem,
     open_ui_id: tray_icon::menu::MenuId,
     check_req_id: tray_icon::menu::MenuId,
+    restart_elgato_id: tray_icon::menu::MenuId,
     quit_id: tray_icon::menu::MenuId,
 }
 
@@ -166,21 +234,26 @@ fn build_tray(icons: &Icons) -> TrayHandles {
 
     let header_item = MenuItem::new("DeckBridge", false, None);
     let status_item = MenuItem::new("Status: \u{2014}", false, None);
+    let update_item = MenuItem::new("Checking for updates…", false, None);
     let open_ui_item = MenuItem::new("Open Web UI", true, None);
     let check_req_item = MenuItem::new("Check Requirements", true, None);
+    let restart_elgato_item = MenuItem::new("Restart Elgato App", true, None);
     let quit_item = MenuItem::new("Quit", true, None);
 
     let open_ui_id = open_ui_item.id().clone();
     let check_req_id = check_req_item.id().clone();
+    let restart_elgato_id = restart_elgato_item.id().clone();
     let quit_id = quit_item.id().clone();
 
     tray_menu
         .append_items(&[
             &header_item,
             &status_item,
+            &update_item,
             &PredefinedMenuItem::separator(),
             &open_ui_item,
             &check_req_item,
+            &restart_elgato_item,
             &PredefinedMenuItem::separator(),
             &quit_item,
         ])
@@ -195,14 +268,17 @@ fn build_tray(icons: &Icons) -> TrayHandles {
 
     TrayHandles {
         tray,
+        header_item,
         status_item,
+        update_item,
         open_ui_id,
         check_req_id,
+        restart_elgato_id,
         quit_id,
     }
 }
 
-// ── main ─────────────────────────────────────────────────────────────────────
+// main
 
 fn main() {
     // Bind listener before touching the event loop so accept() is ready
@@ -215,7 +291,6 @@ fn main() {
         }
     };
 
-    // Build event loop
     #[cfg_attr(not(target_os = "macos"), allow(unused_mut))]
     let mut event_loop = EventLoopBuilder::<UserEvent>::with_user_event().build();
 
@@ -223,7 +298,6 @@ fn main() {
     event_loop.set_activation_policy(ActivationPolicy::Accessory);
     let proxy = event_loop.create_proxy();
 
-    // Forward menu events into our event loop
     let proxy_menu = proxy.clone();
     MenuEvent::set_event_handler(Some(move |ev: tray_icon::menu::MenuEvent| {
         let _ = proxy_menu.send_event(UserEvent::Menu(ev));
@@ -251,7 +325,7 @@ fn main() {
                 for line in reader.lines() {
                     match line {
                         Err(_) => break,
-                        Ok(l) => match serde_json::from_str::<TrayState>(&l) {
+                        Ok(l) => match parse_state(&l) {
                             Ok(state) => {
                                 let _ = proxy_accept.send_event(UserEvent::State(state));
                             }
@@ -269,7 +343,6 @@ fn main() {
         }
     });
 
-    // Load icons
     let icons = Icons::load();
 
     // On macOS/Windows: build tray before run; on Linux: defer to NewEvents(Init)
@@ -293,9 +366,12 @@ fn main() {
                 emit("ready", Some(port));
             }
 
-            Event::UserEvent(UserEvent::State(state)) => {
+            Event::UserEvent(UserEvent::State(mut state)) => {
+                if let Some(n) = state.notify.take() {
+                    notify::show(n);
+                }
                 if let Some(handles) = &tray_handles {
-                    let icon = icons.for_name(&state.icon);
+                    let icon = icons.for_name(&state.icon, state.update_available);
                     let _ = handles.tray.set_icon(Some(icon.clone()));
                     let label = if state.reconnect_attempts > 0 {
                         format!(
@@ -306,6 +382,12 @@ fn main() {
                         format!("Status: {}", state.status)
                     };
                     handles.status_item.set_text(&label);
+                    handles.update_item.set_text(&state.update_text);
+                    if !state.version.is_empty() {
+                        handles
+                            .header_item
+                            .set_text(format!("DeckBridge v{}", state.version));
+                    }
                 }
             }
 
@@ -317,6 +399,11 @@ fn main() {
                     } else if ev.id == handles.check_req_id {
                         open_browser("http://localhost:3000/requirements");
                         emit("check_requirements", None);
+                    } else if ev.id == handles.restart_elgato_id {
+                        // TS owns the restart flow (settings, isElgatoAppRunning,
+                        // logging) — no browser open or work here, unlike the two
+                        // items above.
+                        emit("restart_elgato_app", None);
                     } else if ev.id == handles.quit_id {
                         emit("quit", None);
                         tray_handles.take();
@@ -334,4 +421,39 @@ fn main() {
             _ => {}
         }
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn old_state_line_has_no_notification() {
+        let line = r#"{"icon":"full","status":"ok","reconnectAttempts":0,"updateAvailable":false,"updateText":"x","version":"1.0.0"}"#;
+        let state = parse_state(line).unwrap();
+        assert_eq!(state.icon, "full");
+        assert!(state.notify.is_none());
+    }
+
+    #[test]
+    fn new_state_line_carries_notification() {
+        let line = r#"{"icon":"full","status":"ok","reconnectAttempts":0,"updateAvailable":false,"updateText":"x","version":"1.0.0","notify":{"title":"DeckBridge","body":"b","url":"http://localhost:3000/?survey=1"}}"#;
+        let state = parse_state(line).unwrap();
+        assert_eq!(state.status, "ok");
+        assert_eq!(
+            state.notify,
+            Some(notify::Notify {
+                title: "DeckBridge".into(),
+                body: "b".into(),
+                url: "http://localhost:3000/?survey=1".into(),
+            })
+        );
+    }
+
+    #[test]
+    fn unknown_keys_are_ignored() {
+        let state = parse_state(r#"{"icon":"usb_only","future":{"a":1}}"#).unwrap();
+        assert_eq!(state.icon, "usb_only");
+        assert!(state.notify.is_none());
+    }
 }

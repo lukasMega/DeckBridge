@@ -18,6 +18,7 @@ import {
   EXPECTED_ROUTES,
   SITE_DIR,
   baseUrlFromSitemap,
+  expectedBlogRoutes,
   sitemapUrls,
 } from './lib.mts';
 
@@ -36,16 +37,25 @@ test('landing page and 404 are emitted', () => {
   assert.ok(existsSync(join(BUILD_DIR, '404.html')), 'build/404.html missing');
 });
 
-test('sitemap lists exactly the expected routes', () => {
-  const routes = sitemapUrls()
+function sitemapRoutes(): string[] {
+  return sitemapUrls()
     .map((u) => new URL(u).pathname.slice(EXPECTED_BASE_URL.length).replace(/\/$/, ''))
     .sort();
+}
+
+test('sitemap lists exactly the expected non-blog routes', () => {
+  const routes = sitemapRoutes().filter((route) => !route.startsWith('blog'));
 
   assert.deepEqual(
     routes,
     [...EXPECTED_ROUTES].sort(),
-    'sitemap routes drifted — update EXPECTED_ROUTES in lib.ts if this was intentional',
+    'non-blog sitemap routes drifted — update EXPECTED_ROUTES in lib.mts if intentional',
   );
+});
+
+test('sitemap lists exactly the expected blog routes', () => {
+  const routes = sitemapRoutes().filter((route) => route === 'blog' || route.startsWith('blog/'));
+  assert.deepEqual(routes, expectedBlogRoutes(), 'blog sitemap routes drifted from blog source');
 });
 
 test('baseUrl in the sitemap matches the configured baseUrl', () => {

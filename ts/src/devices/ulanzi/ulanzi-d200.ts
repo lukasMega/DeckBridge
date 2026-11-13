@@ -1,6 +1,5 @@
 import type { DeviceModel } from '../driver.js';
-import { ELGATO_MK2_PID } from '../../types.js';
-import { MK2_CHILD_GEOMETRY } from '../../capabilities.js';
+import { ELGATO_MK2_PID } from '../../shared/types.js';
 
 /** Ulanzi Stream Controller D200 — the first PAGE-protocol device in DeckBridge.
  *
@@ -87,12 +86,12 @@ export const ULANZI_D200_MODEL: DeviceModel = {
   },
   cora: {
     productId: ELGATO_MK2_PID,
-    advertiseGeometry: MK2_CHILD_GEOMETRY, // 5×3/15 — the desktop draws 15, we light 13
+    advertiseAs: 'mk2', // 5×3/15 — the desktop draws 15, we light 13
     usePhysicalIdentity: false,
   },
+  // Fixed by the protocol (ulanzi-protocol.ts PACKET_SIZE), both directions.
+  wire: { packetSize: 1024, inSize: 1024 },
   page: {
-    packetSize: 1024,
-    inSize: 1024,
     // Any outbound write resets the firmware watchdog; sources put the blanking
     // timeout at ~5–10 s, so 2 s satisfies the strictest of them.
     keepaliveMs: 2000,
@@ -103,9 +102,9 @@ export const ULANZI_D200_MODEL: DeviceModel = {
     // but realhidden reports ghost/white keys from it and uses full pages only.
     // If keys render as white blocks on hardware, flip this to false first.
     partialUpdates: true,
-    maxZipBytes: 196 * 1024,
+    // A 199,642 B archive failed on hardware, 190,268 B rendered (aleyvag §12.9).
+    maxZipBytes: 190 * 1024,
     smallWindowMode: 203, // firmware digital clock, time only
     smallWindowSlot: { col: 3, row: 2 },
   },
-  driverKind: 'ulanzi',
 };

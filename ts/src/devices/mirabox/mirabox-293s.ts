@@ -1,6 +1,5 @@
 import type { DeviceModel } from '../driver.js';
-import { ELGATO_MK2_PID } from '../../types.js';
-import { MK2_CHILD_GEOMETRY } from '../../capabilities.js';
+import { ELGATO_MK2_PID } from '../../shared/types.js';
 
 export const MIRABOX_293S_MODEL: DeviceModel = {
   id: 'mirabox-293s',
@@ -43,6 +42,7 @@ export const MIRABOX_293S_MODEL: DeviceModel = {
     heartbeatMs: 8000,
     synthesizeKeyUp: true,
     sendStpAfterImage: false,
+    batchImageTransfers: true,
     // v1 firmware reports the same hardcoded serial on every unit — see
     // DeviceWireSpec.sharedSerial. All 7 rebadge clones inherit this by spreading
     // this model's wire spec (ts/src/devices/rebadge/akp153-v1-clones.ts).
@@ -61,13 +61,11 @@ export const MIRABOX_293S_MODEL: DeviceModel = {
   },
   cora: {
     productId: ELGATO_MK2_PID,
-    // Advertise as a Stream Deck MK.2 (72×72). The Elgato app keys image resolution
-    // off the PID profile, not the advertised keyWidth/keyHeight: a 2026-06-15 test
-    // advertising 85×85 here still made the app send 72×72. See findings doc
-    // "mirabox-293s-slow-image-render.md".
-    advertiseGeometry: MK2_CHILD_GEOMETRY,
+    // Advertise as a Stream Deck MK.2 (72×72). The Elgato app keys image resolution off the
+    // PID profile, not the advertised keyWidth/keyHeight: a 2026-06-15 test advertising 85×85
+    // here still made the app send 72×72. See findings doc "mirabox-293s-slow-image-render.md".
+    advertiseAs: 'mk2',
     usePhysicalIdentity: false,
   },
   splash: { transformOverride: { rotate: 270 } },
-  driverKind: 'mirabox',
 };

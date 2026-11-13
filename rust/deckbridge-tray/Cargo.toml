@@ -9,11 +9,14 @@ name = "deckbridge-tray"
 path = "src/main.rs"
 
 [dependencies]
-tray-icon = "0.24"
+tray-icon = "0.26"
 tao        = "0.37"
 png        = "0.18"
+image      = { version = "0.25", default-features = false }
 serde      = { version = "1", features = ["derive"] }
 serde_json = "1"
+# `d` = libdbus on Linux, already linked by tao, so no zbus tree; no `images`.
+notify-rust = { version = "4.18", default-features = false, features = ["d"] }
 
 [lints]
 workspace = true

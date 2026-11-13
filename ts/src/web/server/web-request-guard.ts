@@ -7,18 +7,36 @@ const ALLOWED_HOSTNAMES = ['localhost', '127.0.0.1', '[::1]'];
 
 // This machine's own non-internal IPv4 addresses (mirrors app.ts's localIp detection) —
 // with --bind 0.0.0.0 the WebUI is reachable at one of these, so a Host/Origin naming one
-// of them literally must be allowed too. Cached at first use, not refreshed per request:
-// cheap, and correct except across a DHCP renew mid-process (rare enough on a bridge that
-// otherwise reconnects its own USB/CORA state on any network hiccup — not worth polling
-// tjs.system.networkInterfaces on every request for).
+// of them literally must be allowed too. Cached with a short TTL, not per request: a phone
+// reaches the browser deck by LAN IP, so a DHCP renew must not lock it out until restart,
+// while polling tjs.system.networkInterfaces on every request would be wasteful.
+export const OWN_IP_CACHE_TTL_MS = 60_000;
 let ownInterfaceIps: string[] | null = null;
-function ownInterfaceAddresses(): string[] {
-  if (!ownInterfaceIps) {
+let ownInterfaceIpsAt = 0;
+export function ownInterfaceAddresses(): string[] {
+  const now = Date.now();
+  if (!ownInterfaceIps || now - ownInterfaceIpsAt > OWN_IP_CACHE_TTL_MS) {
     ownInterfaceIps = tjs.system.networkInterfaces
       .filter((i) => !i.internal && !i.address.includes(':'))
       .map((i) => i.address);
+    ownInterfaceIpsAt = now;
   }
   return ownInterfaceIps;
+}
+
+/** Test seam: forget the cached addresses. */
+export function resetOwnIpCache(): void {
+  ownInterfaceIps = null;
+}
+
+/** The Origin half of the guard: a browser-sent Origin must name this WebUI. Also the first
+ *  check of the token-authenticated push API, which skips the Host check. */
+export function isAllowedOrigin(origin: string, port: number): boolean {
+  const originLower = origin.toLowerCase();
+  const candidates: readonly string[] = [...ALLOWED_HOSTNAMES, ...ownInterfaceAddresses()];
+  return candidates.some(
+    (h) => originLower === `http://${h}` || originLower === `http://${h}:${port}`,
+  );
 }
 
 // Guards against DNS rebinding and cross-site requests (CSRF/WS hijack): the WebUI binds to
@@ -48,17 +66,7 @@ export function isAllowedWebRequest(
     return false;
   }
 
-  if (origin !== null) {
-    const originLower = origin.toLowerCase();
-    if (
-      !candidates.some(
-        (h) => originLower === `http://${h}` || originLower === `http://${h}:${port}`,
-      )
-    ) {
-      return false;
-    }
-  }
-
+  if (origin !== null && !isAllowedOrigin(origin, port)) return false;
   return true;
 }
 
@@ -78,4 +86,16 @@ export const FALLBACK_PORT_ATTEMPTS = 5;
 
 export function pickFallbackPort(): number {
   return FALLBACK_PORT_MIN + Math.floor(Math.random() * FALLBACK_PORT_RANGE); // eslint-disable-line sonarjs/pseudo-random
+}
+
+/** `preferred` if free, else the first free random high port within
+ *  FALLBACK_PORT_ATTEMPTS tries — else `preferred` anyway, letting tjs.serve
+ *  report the real bind error. */
+export async function resolveListenPort(preferred: number): Promise<number> {
+  if (!(await isPortInUse(preferred))) return preferred;
+  for (let attempt = 0; attempt < FALLBACK_PORT_ATTEMPTS; attempt++) {
+    const candidate = pickFallbackPort();
+    if (!(await isPortInUse(candidate))) return candidate;
+  }
+  return preferred;
 }

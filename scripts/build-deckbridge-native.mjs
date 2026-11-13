@@ -5,7 +5,7 @@
 // rust/deckbridge-native (mise task `dir`).
 import { execFileSync } from 'node:child_process';
 
-const args = ['build', '--release'];
+const args = ['build', '-q', '--release'];
 if (process.env.JPEG_FORK === '1') {
   args.push('--no-default-features', '--features', 'jpeg-fork,usb');
 }

@@ -1,0 +1,58 @@
+{
+  "version": 1,
+  "model": "ajazz-akp05e",
+  "pid": "0x3004",
+  "firmware": null,
+  "interface": {
+    "usagePage": 65440,
+    "usage": 1
+  },
+  "source": "synthetic",
+  "assumeOpen": true,
+  "note": "Tap codes 0x40-0x43 land on their zone centre of the 800 px strip; swipes span the strip.",
+  "steps": [
+    {
+      "op": "read",
+      "dir": "in",
+      "hex": "41434b00004f4b000040000000000000",
+      "expect": [
+        {
+          "type": "touch",
+          "kind": "tap",
+          "x": 100,
+          "y": 50
+        }
+      ]
+    },
+    {
+      "op": "read",
+      "dir": "in",
+      "hex": "41434b00004f4b000038000000000000",
+      "expect": [
+        {
+          "type": "touch",
+          "kind": "swipe",
+          "x": 750,
+          "y": 50,
+          "endX": 50,
+          "endY": 50
+        }
+      ]
+    },
+    {
+      "op": "read",
+      "dir": "in",
+      "hex": "41434b00004f4b000039000000000000",
+      "expect": [
+        {
+          "type": "touch",
+          "kind": "swipe",
+          "x": 50,
+          "y": 50,
+          "endX": 750,
+          "endY": 50
+        }
+      ]
+    }
+  ]
+}

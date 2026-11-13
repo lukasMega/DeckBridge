@@ -1,23 +1,10 @@
 // Module-level handlers (no closure capture — hoisted out of components).
 import { deeplink, showToast } from '../ui-helpers.js';
-
-export function openSdApp(e: MouseEvent): void {
-  e.preventDefault();
-  deeplink('streamdeck://');
-  showToast('Opening Elgato Stream Deck…');
-}
+import { fire, postJson } from '../lib/ui-api.js';
 
 export function quitElgatoApp(): void {
   deeplink('streamdeck://app/quit');
   showToast('Quit command sent — reconnect your Stream Deck if needed.');
-}
-
-// The Elgato app only re-dials docks on launch, so quit then relaunch to make
-// it rediscover a dock that restarted while the app kept running.
-export function restartElgatoApp(): void {
-  deeplink('streamdeck://app/quit');
-  showToast('Restarting Elgato app…');
-  window.setTimeout(() => deeplink('streamdeck://open/mainwindow'), 1500);
 }
 
 export function switchToAdvanced(): void {
@@ -26,9 +13,13 @@ export function switchToAdvanced(): void {
 }
 
 export function postBrightnessOverride(e: Event): void {
-  fetch('/api/brightness-override', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ enabled: (e.target as HTMLSelectElement).value === 'ignore' }),
-  }).catch(() => undefined);
+  fire('/api/brightness-override', { enabled: (e.target as HTMLSelectElement).value === 'ignore' });
+}
+
+/** Press a key on the SELECTED dock from the preview. A 403 (feature off) shows the server's
+ *  own message, since the toggle lives in Settings. */
+export function pressKey(index: number): void {
+  postJson(`/api/key/${index}`, undefined, 'Key press failed').catch((e: unknown) =>
+    showToast((e as Error).message),
+  );
 }

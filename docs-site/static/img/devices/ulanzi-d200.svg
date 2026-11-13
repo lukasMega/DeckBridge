@@ -1,0 +1,47 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 442 320" width="442" height="320" role="img" aria-label="Ulanzi Stream Controller D200 — 5×3 key stream deck">
+  <title>Ulanzi Stream Controller D200</title>
+  <defs>
+    <linearGradient id="bodyulanzid200" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#23252b"/>
+      <stop offset="1" stop-color="#121317"/>
+    </linearGradient>
+    <linearGradient id="idleulanzid200" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#1e2027"/>
+      <stop offset="1" stop-color="#0e0f13"/>
+    </linearGradient>
+    <linearGradient id="glossulanzid200" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.14"/>
+      <stop offset="0.45" stop-color="#ffffff" stop-opacity="0.02"/>
+      <stop offset="1" stop-color="#000000" stop-opacity="0.18"/>
+    </linearGradient>
+    <linearGradient id="knobulanzid200" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#23252b"/>
+      <stop offset="1" stop-color="#08090b"/>
+    </linearGradient>
+    <filter id="shadowulanzid200" x="-20%" y="-20%" width="140%" height="150%">
+      <feDropShadow dx="0" dy="6" stdDeviation="9" flood-color="#000000" flood-opacity="0.35"/>
+    </filter>
+  </defs>
+
+  <!-- stand -->
+  <path d="M 32 266 H 410 L 420 306 H 22 Z" fill="#121317" opacity="0.95"/>
+
+  <!-- chassis -->
+  <g filter="url(#shadowulanzid200)">
+    <rect x="28" y="28" width="386" height="264" rx="16" fill="url(#bodyulanzid200)"/>
+    <rect x="28.5" y="28.5" width="385" height="263" rx="15.5" fill="none" stroke="#ffffff" stroke-opacity="0.10"/>
+  </g>
+  
+
+  <!-- key panel recess -->
+  <rect x="45" y="61" width="352" height="214" rx="14" fill="#000000" opacity="0.22"/>
+
+  <!-- keys -->
+  <g><g transform="translate(52,68)"><rect width="62" height="62" rx="9" fill="#08090b"/><rect x="1" y="1" width="60" height="60" rx="8" fill="url(#idleulanzid200)"/><rect x="1" y="1" width="60" height="60" rx="8" fill="url(#glossulanzid200)"/><rect x="1.5" y="1.5" width="59" height="59" rx="7.5" fill="none" stroke="#ffffff" stroke-opacity="0.07"/></g><g transform="translate(121,68)"><rect width="62" height="62" rx="9" fill="#08090b"/><rect x="1" y="1" width="60" height="60" rx="8" fill="url(#idleulanzid200)"/><rect x="1" y="1" width="60" height="60" rx="8" fill="#1c7ed6" opacity="0.88"/><rect x="1" y="1" width="60" height="60" rx="8" fill="url(#glossulanzid200)"/><rect x="1.5" y="1.5" width="59" height="59" rx="7.5" fill="none" stroke="#ffffff" stroke-opacity="0.07"/></g><g transform="translate(190,68)"><rect width="62" height="62" rx="9" fill="#08090b"/><rect x="1" y="1" width="60" height="60" rx="8" fill="url(#idleulanzid200)"/><rect x="1" y="1" width="60" height="60" rx="8" fill="url(#glossulanzid200)"/><rect x="1.5" y="1.5" width="59" height="59" rx="7.5" fill="none" stroke="#ffffff" stroke-opacity="0.07"/></g><g transform="translate(259,68)"><rect width="62" height="62" rx="9" fill="#08090b"/><rect x="1" y="1" width="60" height="60" rx="8" fill="url(#idleulanzid200)"/><rect x="1" y="1" width="60" height="60" rx="8" fill="url(#glossulanzid200)"/><rect x="1.5" y="1.5" width="59" height="59" rx="7.5" fill="none" stroke="#ffffff" stroke-opacity="0.07"/></g><g transform="translate(328,68)"><rect width="62" height="62" rx="9" fill="#08090b"/><rect x="1" y="1" width="60" height="60" rx="8" fill="url(#idleulanzid200)"/><rect x="1" y="1" width="60" height="60" rx="8" fill="url(#glossulanzid200)"/><rect x="1.5" y="1.5" width="59" height="59" rx="7.5" fill="none" stroke="#ffffff" stroke-opacity="0.07"/></g><g transform="translate(52,137)"><rect width="62" height="62" rx="9" fill="#08090b"/><rect x="1" y="1" width="60" height="60" rx="8" fill="url(#idleulanzid200)"/><rect x="1" y="1" width="60" height="60" rx="8" fill="url(#glossulanzid200)"/><rect x="1.5" y="1.5" width="59" height="59" rx="7.5" fill="none" stroke="#ffffff" stroke-opacity="0.07"/></g><g transform="translate(121,137)"><rect width="62" height="62" rx="9" fill="#08090b"/><rect x="1" y="1" width="60" height="60" rx="8" fill="url(#idleulanzid200)"/><rect x="1" y="1" width="60" height="60" rx="8" fill="#1c7ed6" opacity="0.82"/><rect x="1" y="1" width="60" height="60" rx="8" fill="url(#glossulanzid200)"/><rect x="1.5" y="1.5" width="59" height="59" rx="7.5" fill="none" stroke="#ffffff" stroke-opacity="0.07"/></g><g transform="translate(190,137)"><rect width="62" height="62" rx="9" fill="#08090b"/><rect x="1" y="1" width="60" height="60" rx="8" fill="url(#idleulanzid200)"/><rect x="1" y="1" width="60" height="60" rx="8" fill="url(#glossulanzid200)"/><rect x="1.5" y="1.5" width="59" height="59" rx="7.5" fill="none" stroke="#ffffff" stroke-opacity="0.07"/></g><g transform="translate(259,137)"><rect width="62" height="62" rx="9" fill="#08090b"/><rect x="1" y="1" width="60" height="60" rx="8" fill="url(#idleulanzid200)"/><rect x="1" y="1" width="60" height="60" rx="8" fill="url(#glossulanzid200)"/><rect x="1.5" y="1.5" width="59" height="59" rx="7.5" fill="none" stroke="#ffffff" stroke-opacity="0.07"/></g><g transform="translate(328,137)"><rect width="62" height="62" rx="9" fill="#08090b"/><rect x="1" y="1" width="60" height="60" rx="8" fill="url(#idleulanzid200)"/><rect x="1" y="1" width="60" height="60" rx="8" fill="#1c7ed6" opacity="0.91"/><rect x="1" y="1" width="60" height="60" rx="8" fill="url(#glossulanzid200)"/><rect x="1.5" y="1.5" width="59" height="59" rx="7.5" fill="none" stroke="#ffffff" stroke-opacity="0.07"/></g><g transform="translate(52,206)"><rect width="62" height="62" rx="9" fill="#08090b"/><rect x="1" y="1" width="60" height="60" rx="8" fill="url(#idleulanzid200)"/><rect x="1" y="1" width="60" height="60" rx="8" fill="url(#glossulanzid200)"/><rect x="1.5" y="1.5" width="59" height="59" rx="7.5" fill="none" stroke="#ffffff" stroke-opacity="0.07"/></g><g transform="translate(121,206)"><rect width="62" height="62" rx="9" fill="#08090b"/><rect x="1" y="1" width="60" height="60" rx="8" fill="url(#idleulanzid200)"/><rect x="1" y="1" width="60" height="60" rx="8" fill="#1c7ed6" opacity="0.78"/><rect x="1" y="1" width="60" height="60" rx="8" fill="url(#glossulanzid200)"/><rect x="1.5" y="1.5" width="59" height="59" rx="7.5" fill="none" stroke="#ffffff" stroke-opacity="0.07"/></g><g transform="translate(190,206)"><rect width="62" height="62" rx="9" fill="#08090b"/><rect x="1" y="1" width="60" height="60" rx="8" fill="url(#idleulanzid200)"/><rect x="1" y="1" width="60" height="60" rx="8" fill="#1c7ed6" opacity="0.86"/><rect x="1" y="1" width="60" height="60" rx="8" fill="url(#glossulanzid200)"/><rect x="1.5" y="1.5" width="59" height="59" rx="7.5" fill="none" stroke="#ffffff" stroke-opacity="0.07"/></g><g transform="translate(259,206)"><rect width="62" height="62" rx="9" fill="#08090b"/><rect x="1" y="1" width="60" height="60" rx="8" fill="url(#idleulanzid200)"/><rect x="1" y="1" width="60" height="60" rx="8" fill="url(#glossulanzid200)"/><rect x="1.5" y="1.5" width="59" height="59" rx="7.5" fill="none" stroke="#ffffff" stroke-opacity="0.07"/></g><g transform="translate(328,206)"><rect width="62" height="62" rx="9" fill="#08090b"/><rect x="1" y="1" width="60" height="60" rx="8" fill="url(#idleulanzid200)"/><rect x="1" y="1" width="60" height="60" rx="8" fill="url(#glossulanzid200)"/><rect x="1.5" y="1.5" width="59" height="59" rx="7.5" fill="none" stroke="#ffffff" stroke-opacity="0.07"/></g></g>
+  
+  
+
+  <!-- wordmark + grid caption -->
+  <text x="221" y="53" text-anchor="middle" font-family="Inter, Helvetica Neue, Arial, sans-serif" font-size="13" font-weight="600" letter-spacing="2.4" fill="#848a96">ULANZI</text>
+  <text x="390" y="53" text-anchor="end" font-family="Inter, Helvetica Neue, Arial, sans-serif" font-size="12" fill="#848a96" opacity="0.7">5×3</text>
+</svg>

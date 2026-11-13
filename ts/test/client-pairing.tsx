@@ -1,0 +1,701 @@
+// Browser regressions for boot/stale-connection feedback and the compact pairing flow.
+// Called from run() in client-regressions.tsx (real Chrome via CDP, see scripts/test-client.mjs).
+import { render } from 'preact';
+import { act } from 'preact/test-utils';
+import { DOCK_IDENTITY } from './helpers/dock-fixture.js';
+import { EMPTY_PAGE_STATE, EMPTY_STATUS, getSnapshot, patch } from '../src/web/client/lib/store.js';
+import { connectWS } from '../src/web/client/lib/ui-ws.js';
+import { BootScreen } from '../src/web/client/simple/boot-screen.js';
+import { ConnectionPath } from '../src/web/client/components/ConnectionPath.js';
+import { SimpleApp } from '../src/web/client/simple/SimpleApp.js';
+import { DockList } from '../src/web/client/simple/dock-cards.js';
+import { StageConflict, StageDeviceNoElgato, StageReady } from '../src/web/client/simple/stages.js';
+import type { DockUi } from '../src/web/client/ui-types.js';
+
+type Check = (condition: boolean, message: string) => void;
+
+const settle = (): Promise<void> =>
+  act(async () => {
+    for (let i = 0; i < 10; i++) await Promise.resolve();
+  });
+
+async function refreshAppStatus(): Promise<void> {
+  await act(() => {
+    window.dispatchEvent(new Event('focus'));
+  });
+  await settle();
+}
+
+const sockets: FakeWs[] = [];
+
+class FakeWs {
+  closed = 0;
+  private readonly handlers = new Map<string, Array<(e: unknown) => void>>();
+  constructor() {
+    sockets.push(this);
+  }
+  addEventListener(type: string, fn: (e: unknown) => void): void {
+    this.handlers.set(type, [...(this.handlers.get(type) ?? []), fn]);
+  }
+  close(): void {
+    this.closed++;
+  }
+  emit(type: string): void {
+    for (const fn of this.handlers.get(type) ?? []) fn({});
+  }
+}
+
+const STATE = {
+  ...EMPTY_STATUS,
+  driverConnected: true,
+  stats: { uptimeMs: 0, imagesSent: 0 },
+  extensions: { dir: '', extensions: [] },
+  brightness: 50,
+  brightnessOverride: true,
+  deviceModels: [],
+  extraKeys: {},
+  pages: [],
+  pageState: EMPTY_PAGE_STATE,
+  touchStripMode: 'elgato',
+  touchStripRepaintMs: 0,
+  encoders: {},
+  keyPressEnabled: false,
+  keyEvents: [],
+  logs: [],
+  commLogs: [],
+};
+
+async function runBootAndStale(root: HTMLElement, check: Check): Promise<void> {
+  let retries = 0;
+  const retry = (): void => {
+    retries++;
+  };
+  await act(() => render(<BootScreen failed={false} onRetry={retry} />, root));
+  check(root.textContent.includes('Connecting to DeckBridge'), 'Boot: loading state is visible');
+  check(root.querySelector('button') === null, 'Boot: no retry button while loading');
+  await act(() => render(<BootScreen failed onRetry={retry} />, root));
+  check(root.textContent.includes('Cannot reach DeckBridge'), 'Boot: failure state is visible');
+  await act(() => root.querySelector<HTMLButtonElement>('button')!.click());
+  check(retries === 1, 'Boot: Retry connection re-runs the boot request');
+
+  const storeBefore = getSnapshot(); // hydrate() overwrites most of the store
+  const original = {
+    fetch: globalThis.fetch,
+    ws: globalThis.WebSocket,
+    timeout: globalThis.setTimeout,
+  };
+  let stateStatus = 200;
+  globalThis.fetch = ((url: string) =>
+    Promise.resolve({
+      ok: stateStatus < 400,
+      status: stateStatus,
+      json: () =>
+        Promise.resolve(
+          url === '/api/survey'
+            ? {
+                sv: 1,
+                questions: [],
+                context: { v: 'test', os: 'unknown', ov: 'unknown', dv: 'none' },
+                prefill: {},
+                nudge: false,
+                state: {},
+              }
+            : STATE,
+        ),
+    })) as unknown as typeof fetch;
+  globalThis.WebSocket = FakeWs as unknown as typeof WebSocket;
+  // The close handler schedules a reconnect; keep it from opening real sockets.
+  globalThis.setTimeout = () => 0;
+  try {
+    await act(() =>
+      patch({ status: { ...EMPTY_STATUS, driverConnected: true, elgatoConnected: true } }),
+    );
+    await act(() => render(<SimpleApp />, root));
+    check(root.querySelector('#connBanner') === null, 'Stale: no banner while connected');
+    check(!root.querySelector('#stage')!.hasAttribute('inert'), 'Stale: stage is interactive');
+
+    connectWS();
+    const ws = sockets.at(-1)!;
+    ws.emit('open');
+    await settle();
+    check(getSnapshot().connection === 'live', 'Stale: first open needs no rehydrate');
+
+    await act(() => ws.emit('close'));
+    check(root.querySelector('#connBanner') !== null, 'Stale: closing the socket shows the banner');
+    check(root.querySelector('#stage')!.hasAttribute('inert'), 'Stale: stage controls are inert');
+
+    stateStatus = 500;
+    connectWS();
+    const retried = sockets.at(-1)!;
+    check(retried !== ws, 'Stale: reconnect opens a new socket');
+    retried.emit('open');
+    await settle();
+    check(
+      getSnapshot().connection === 'stale' && retried.closed === 1,
+      'Stale: a failed rehydrate stays stale and drops the socket to retry',
+    );
+
+    stateStatus = 200;
+    connectWS();
+    sockets.at(-1)!.emit('open');
+    await settle();
+    check(getSnapshot().connection === 'live', 'Stale: a fresh snapshot clears the stale marker');
+    check(root.querySelector('#connBanner') === null, 'Stale: banner disappears after rehydrate');
+    check(
+      !root.querySelector('#stage')!.hasAttribute('inert'),
+      'Stale: stage is interactive again',
+    );
+  } finally {
+    globalThis.fetch = original.fetch;
+    globalThis.WebSocket = original.ws;
+    globalThis.setTimeout = original.timeout;
+    await act(() => render(null, root));
+    await act(() => patch(storeBefore));
+  }
+}
+
+async function runConnectionPath(root: HTMLElement, check: Check): Promise<void> {
+  await act(() =>
+    render(<ConnectionPath device="done" app="active" deviceName="Mirabox 293S" />, root),
+  );
+  const nodes = [...root.querySelectorAll('.conn-node')];
+  check(nodes.length === 3, 'Path: device, bridge and app nodes render');
+  check(
+    nodes[0]!.textContent.includes('Mirabox 293S: connected'),
+    'Path: device node names its state',
+  );
+  check(nodes[2]!.querySelector('.ico-spin') !== null, 'Path: waiting app node shows a spinner');
+  check(nodes[2]!.textContent.includes('waiting'), 'Path: state is also available as text');
+  await act(() => render(<ConnectionPath device="active" app="pending" />, root));
+  check(
+    root.querySelectorAll('.conn-node')[2]!.querySelector('.ico-pending') !== null,
+    'Path: pending node shows a ring',
+  );
+  await act(() => render(null, root));
+}
+
+async function runConflictStage(root: HTMLElement, check: Check): Promise<void> {
+  await act(() => render(<StageConflict />, root));
+  const diagram = root.querySelector('.own-diagram');
+  check(diagram?.getAttribute('role') === 'img', 'Conflict: ownership diagram is a named image');
+  check(
+    diagram?.getAttribute('aria-label')?.includes('DeckBridge') === true,
+    'Conflict: diagram label states the outcome in text',
+  );
+  check(
+    root.querySelectorAll('.own-link:not(.own-new)').length === 1 &&
+      root.querySelectorAll('.own-new[stroke-dasharray]').length === 1,
+    'Conflict: held link is solid, pending link is dashed',
+  );
+  await act(() => render(null, root));
+}
+
+/** Single-device preview must honour click-to-press like the dock cards do. */
+async function runSinglePress(root: HTMLElement, check: Check): Promise<void> {
+  const urls: string[] = [];
+  const original = globalThis.fetch;
+  globalThis.fetch = ((url: string) => {
+    urls.push(url);
+    return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({}) });
+  }) as unknown as typeof fetch;
+  try {
+    await act(() => patch({ keyPressEnabled: true }));
+    await settle();
+    const cell = root.querySelector<HTMLElement>('.key-cell[data-key="0"]')!;
+    check(cell.classList.contains('clickable'), 'Press: enabled + paired marks keys clickable');
+    cell.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
+    cell.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    await settle();
+    check(
+      urls.filter((u) => u === '/api/key/0').length === 2,
+      'Press: double-click and Enter each send a key request',
+    );
+    await act(() => patch({ keyPressEnabled: false }));
+    await settle();
+    check(
+      !root.querySelector('.key-cell[data-key="0"]')!.classList.contains('clickable'),
+      'Press: disabling the setting makes keys inert again',
+    );
+  } finally {
+    globalThis.fetch = original;
+  }
+}
+
+async function runReadyStage(root: HTMLElement, check: Check): Promise<void> {
+  const storeBefore = getSnapshot();
+  await act(() => {
+    patch({
+      status: {
+        ...STATE,
+        modelName: 'Mirabox 293S',
+        keyCount: 15,
+        columns: 5,
+        elgatoConnected: true,
+        clientApp: 'elgato',
+      },
+    });
+    render(<StageReady />, root);
+  });
+  check(
+    root.querySelector('.stage-title')?.textContent === 'Connected to the Elgato app',
+    'Ready: one status line names the app',
+  );
+  check(
+    root.querySelector('.ready-status-device')?.textContent === 'Mirabox 293S',
+    'Ready: compact summary identifies the connected device',
+  );
+  check(root.querySelector('.hero') === null, 'Ready: no hero block');
+  await runSinglePress(root, check);
+  await act(() => render(null, root));
+  await act(() => patch(storeBefore));
+}
+
+const pending = (index: number): DockUi => ({
+  index,
+  ...DOCK_IDENTITY,
+  modelId: 'mirabox-293s',
+  modelName: `Deck ${index}`,
+  keyCount: 15,
+  columns: 5,
+  rows: 3,
+  primaryPort: 5343 + index,
+  primaryConnected: false,
+  elgatoConnected: false,
+  brightness: 100,
+});
+
+async function runPairingDockCards(root: HTMLElement, check: Check): Promise<void> {
+  const docks = [pending(0), pending(1)];
+  const posts: Array<{ url: string; body: unknown }> = [];
+  const original = globalThis.fetch;
+  globalThis.fetch = ((url: string, init?: RequestInit) => {
+    posts.push({ url, body: typeof init?.body === 'string' ? JSON.parse(init.body) : undefined });
+    return Promise.resolve({
+      ok: true,
+      status: 200,
+      json: () => Promise.resolve({}),
+      text: () => Promise.resolve('{}'),
+    });
+  }) as unknown as typeof fetch;
+  try {
+    await act(() =>
+      patch({ status: { ...EMPTY_STATUS, driverConnected: true, docks, selectedDock: 0 } }),
+    );
+    await act(() => render(<DockList docks={docks} onHelp={() => {}} />, root));
+    await settle();
+    const card = root.querySelector<HTMLElement>('.dock-card')!;
+    const tabs = root.querySelectorAll<HTMLButtonElement>('[role="tab"]');
+    check(tabs.length === 2, 'Dock pairing: both decks have tabs');
+    check(
+      root.querySelectorAll('.dock-card').length === 1 &&
+        card.querySelector('.pairing-flow') !== null,
+      'Dock pairing: only the selected panel shows pairing controls',
+    );
+    check(
+      tabs[0]!.getAttribute('aria-selected') === 'true' &&
+        tabs[1]!.getAttribute('aria-selected') === 'false',
+      'Dock pairing: tabs expose the selection',
+    );
+    check(
+      root.querySelector('[role="tabpanel"]')?.getAttribute('aria-labelledby') === tabs[0]!.id,
+      'Dock pairing: the panel is labelled by its tab',
+    );
+    check(card.getAttribute('role') === null, 'Dock pairing: controls have no wrapping button');
+
+    await act(() =>
+      card.querySelectorAll<HTMLButtonElement>('.pairing-answers button')[1]!.click(),
+    );
+    check(
+      card.querySelector<HTMLDetailsElement>('.manual-add')?.open === true,
+      'Dock pairing: No opens manual pairing on the selected dock',
+    );
+    check(card.textContent.includes('5343'), 'Dock pairing: manual pairing uses this dock’s port');
+
+    const chip = card.querySelector<HTMLButtonElement>('.addr-port-chip')!;
+    const enter = new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true });
+    chip.dispatchEvent(enter);
+    check(!enter.defaultPrevented, 'Dock pairing: Enter on a copy chip keeps its own activation');
+    await act(() => chip.click());
+    check(
+      posts.every((p) => p.url !== '/api/select-dock'),
+      'Dock pairing: a nested control click does not select',
+    );
+
+    await act(() => tabs[1]!.click());
+    check(
+      posts.some((p) => p.url === '/api/select-dock' && (p.body as { index: number }).index === 1),
+      'Dock pairing: the tab selects its dock',
+    );
+    await act(() =>
+      patch({ status: { ...EMPTY_STATUS, driverConnected: true, docks, selectedDock: 1 } }),
+    );
+    await settle();
+    check(
+      root.querySelector('[role="tabpanel"]')?.getAttribute('aria-labelledby') === tabs[1]!.id,
+      'Dock pairing: switching updates the panel label',
+    );
+    check(
+      root.querySelector('.manual-add') === null,
+      'Dock pairing: switching resets pairing instructions',
+    );
+    await act(() =>
+      root.querySelectorAll<HTMLButtonElement>('.pairing-answers button')[1]!.click(),
+    );
+    check(
+      root.querySelector('.manual-add')!.textContent.includes('5344'),
+      'Dock pairing: switched instructions use the new port',
+    );
+    await act(() =>
+      patch({
+        status: {
+          ...EMPTY_STATUS,
+          driverConnected: true,
+          docks: docks.map((dock) => ({ ...dock, primaryConnected: true })),
+          selectedDock: 1,
+          elgatoAutoRestartPending: { remainingMs: 4000, docks: [1] },
+        },
+      }),
+    );
+    await settle();
+    check(
+      root
+        .querySelector('.pairing-flow [role="status"]')
+        ?.textContent.includes('Reconnecting your deck') === true &&
+        root.querySelector('.pairing-controls') === null &&
+        root.querySelector('.address-link') === null,
+      'Dock pairing: automatic restart replaces pairing choices with focused status',
+    );
+    await act(() =>
+      patch({
+        status: {
+          ...EMPTY_STATUS,
+          driverConnected: true,
+          docks,
+          selectedDock: 0,
+          elgatoAutoRestartPending: { remainingMs: 4000, docks: [1] },
+        },
+      }),
+    );
+    await settle();
+    check(
+      root.querySelector('.pairing-question') !== null &&
+        root.querySelector('.pairing-auto') === null &&
+        root.querySelector('.address-link') !== null,
+      'Dock pairing: a dock outside the pending restart keeps its pairing controls',
+    );
+  } finally {
+    globalThis.fetch = original;
+    await act(() => render(null, root));
+    await act(() => patch({ status: EMPTY_STATUS }));
+  }
+}
+
+async function runPairingChoices(root: HTMLElement, check: Check): Promise<void> {
+  const original = globalThis.fetch;
+  const originalSetTimeout = globalThis.setTimeout;
+  let finishMinimumWait: (() => void) | undefined;
+  const tenSecondTimers: Array<() => void> = [];
+  globalThis.setTimeout = ((handler: TimerHandler, delay?: number, ...args: unknown[]): number => {
+    if (delay === 10_000 && typeof handler === 'function') {
+      // The refresh hint shares this delay, so fire every ten-second timer together.
+      tenSecondTimers.push(() => (handler as (...values: unknown[]) => void)(...args));
+      finishMinimumWait = () => tenSecondTimers.splice(0).forEach((fire) => fire());
+      return 1_000_000;
+    }
+    return originalSetTimeout(handler, delay, ...args);
+  }) as typeof globalThis.setTimeout;
+  const storeBefore = getSnapshot();
+  const requests: Array<{ url: string; method: string }> = [];
+  let running = false;
+  let supported = true;
+  let statusCode = 200;
+  let restartOk = true;
+  let finishAction: (() => void) | undefined;
+  globalThis.fetch = ((url: string, init?: RequestInit) => {
+    requests.push({ url, method: init?.method ?? 'GET' });
+    if (url === '/api/elgato-app/restart') {
+      return new Promise((resolve) => {
+        finishAction = () => {
+          running = true;
+          resolve({
+            ok: true,
+            status: 200,
+            json: () => Promise.resolve({ ok: restartOk, reason: 'launch-failed' }),
+          });
+        };
+      });
+    }
+    return Promise.resolve({
+      ok: statusCode === 200,
+      status: statusCode,
+      json: () => Promise.resolve({ running, supported }),
+    });
+  }) as unknown as typeof fetch;
+  const choose = async (yes: boolean): Promise<void> => {
+    await act(() =>
+      root.querySelectorAll<HTMLButtonElement>('.pairing-answers button')[yes ? 0 : 1]!.click(),
+    );
+    await settle();
+  };
+  try {
+    await act(() => {
+      patch({ status: { ...EMPTY_STATUS, driverConnected: true, localIp: '127.0.0.1' } });
+      render(<StageDeviceNoElgato onHelp={() => {}} />, root);
+    });
+    check(
+      root.textContent.includes('Already paired with your control app?'),
+      'Pairing: question names the control app',
+    );
+    const choices = root.querySelectorAll<HTMLButtonElement>('.pairing-answers button');
+    check(
+      choices[0]!.textContent === 'Yes, already pairedOpen or restart Elgato app.',
+      'Pairing: Yes explains its next step',
+    );
+    check(
+      choices[1]!.textContent === 'No, set up pairingShow pairing steps and address.',
+      'Pairing: No explains its next step',
+    );
+    check(requests.length === 0, 'Pairing: choosing Yes or No never launches the app');
+    check(
+      root.querySelector('.manual-add, .primary') === null,
+      'Pairing: no branch before choosing',
+    );
+    await choose(false);
+    check(
+      root.querySelector<HTMLDetailsElement>('.manual-add')?.open === true,
+      'Pairing: No opens manual instructions',
+    );
+    check(
+      root.querySelector('.addr-chip .addr-text')?.textContent === '127.0.0.1',
+      'Pairing: manual instructions show the IP',
+    );
+    check(
+      root.querySelectorAll('[aria-pressed="true"]').length === 1,
+      'Pairing: only No is selected',
+    );
+    await act(() => root.querySelector<HTMLElement>('.manual-add > summary')!.click());
+    check(
+      root.querySelector<HTMLDetailsElement>('.manual-add')?.open === false,
+      'Pairing: manual instructions still collapse',
+    );
+    await choose(true);
+    check(root.querySelector('.manual-add') === null, 'Pairing: Yes hides manual instructions');
+    check(
+      root.querySelector('.primary')?.textContent === 'Open Elgato app',
+      'Pairing: stopped process shows Open',
+    );
+    check(
+      requests.every((r) => r.method === 'GET'),
+      'Pairing: Yes only reads process status',
+    );
+    const open = root.querySelector<HTMLButtonElement>('.primary')!;
+    await act(() => open.click());
+    check(
+      root.querySelector('.primary') === null &&
+        root.querySelector('[role="progressbar"]') !== null,
+      'Pairing: progress bar replaces the button while launching',
+    );
+    check(
+      requests.filter((r) => r.method === 'POST').length === 1,
+      'Pairing: one click sends one action',
+    );
+    await act(() => finishAction!());
+    await settle();
+    check(
+      root.querySelector('[role="progressbar"]') !== null,
+      'Pairing: progress stays after fast launch until ten seconds pass',
+    );
+    check(finishMinimumWait !== undefined, 'Pairing: opening starts a ten-second progress');
+    await act(() => finishMinimumWait!());
+    await settle();
+    check(
+      root.querySelector('.primary')?.textContent === 'Restart Elgato app',
+      'Pairing: running process shows Restart after progress',
+    );
+    check(root.textContent.includes('Elgato app opened.'), 'Pairing: launch completion is visible');
+    running = false;
+    await refreshAppStatus();
+    check(
+      root.querySelector('.primary')?.textContent === 'Open Elgato app',
+      'Pairing: focus refresh detects an app that quit',
+    );
+    await act(() => root.querySelector<HTMLButtonElement>('.primary')!.click());
+    await act(() => finishMinimumWait!());
+    await settle();
+    check(
+      root.querySelector('[role="progressbar"]') !== null,
+      'Pairing: slow launch keeps progress after ten seconds while request is pending',
+    );
+    await act(() => finishAction!());
+    await settle();
+    check(
+      root.querySelector('.primary') !== null,
+      'Pairing: slow launch shows the button when request finishes',
+    );
+    running = true;
+    await choose(false);
+    await choose(true);
+    check(
+      root.querySelector('.primary')?.textContent === 'Restart Elgato app',
+      'Pairing: Yes detects an already running app',
+    );
+    restartOk = false;
+    await act(() => root.querySelector<HTMLButtonElement>('.primary')!.click());
+    await act(() => finishAction!());
+    await settle();
+    check(
+      root.querySelector('.settings-error')?.textContent.includes('launch-failed') === true,
+      'Pairing: failed app control shows the server reason',
+    );
+    check(
+      !root.querySelector<HTMLButtonElement>('.primary')!.disabled,
+      'Pairing: failed action can be retried',
+    );
+    statusCode = 500;
+    await refreshAppStatus();
+    check(
+      root.querySelector('.primary') === null,
+      'Pairing: failed detection never guesses an action',
+    );
+    check(
+      root.textContent.includes('Cannot check Elgato app.'),
+      'Pairing: failed status read is visible',
+    );
+    statusCode = 200;
+    await act(() =>
+      [...root.querySelectorAll<HTMLButtonElement>('button')]
+        .find((b) => b.textContent === 'Retry')!
+        .click(),
+    );
+    await settle();
+    check(
+      root.querySelector('.primary')?.textContent === 'Restart Elgato app',
+      'Pairing: Retry restores process detection',
+    );
+    supported = false;
+    await refreshAppStatus();
+    check(
+      root.querySelector('.primary') === null && root.textContent.includes('on its computer'),
+      'Pairing: unsupported hosts guide users to the app’s computer',
+    );
+    await act(() => render(null, root));
+    const before = requests.length;
+    await refreshAppStatus();
+    check(requests.length === before, 'Pairing: leaving the branch removes the focus listener');
+    check(
+      requests.filter((r) => r.method === 'POST').every((r) => r.url === '/api/elgato-app/restart'),
+      'Pairing: app actions use the existing server controller',
+    );
+  } finally {
+    await act(() => render(null, root));
+    globalThis.setTimeout = originalSetTimeout;
+    globalThis.fetch = original;
+    await act(() => patch(storeBefore));
+  }
+}
+
+async function runPairingAutoRestart(root: HTMLElement, check: Check): Promise<void> {
+  const before = getSnapshot();
+  const originalFetch = globalThis.fetch;
+  const originalNow = Date.now;
+  let now = originalNow();
+  Date.now = () => now;
+  let launches = 0;
+  globalThis.fetch = ((url: string, init?: RequestInit) => {
+    if (init?.method === 'POST') launches++;
+    return Promise.resolve({
+      ok: true,
+      json: () => Promise.resolve({ running: true, supported: true }),
+    });
+  }) as unknown as typeof fetch;
+  const paused = (): boolean =>
+    root.querySelector('.pairing-controls, .manual-add, .primary') === null;
+  const advance = async (ms: number): Promise<void> => {
+    now += ms;
+    await act(() => new Promise<void>((resolve) => window.setTimeout(resolve, 1100)));
+  };
+  try {
+    await act(() => {
+      patch({ status: { ...EMPTY_STATUS, driverConnected: true } });
+      render(<StageDeviceNoElgato onHelp={() => {}} />, root);
+    });
+    await act(() =>
+      root.querySelectorAll<HTMLButtonElement>('.pairing-answers button')[1]!.click(),
+    );
+    check(
+      root.querySelector('.manual-add') !== null,
+      'Auto-restart: manual pairing initially available',
+    );
+    await act(() =>
+      patch({
+        status: {
+          ...getSnapshot().status,
+          elgatoAutoRestartPending: { remainingMs: 4000, docks: [0] },
+        },
+      }),
+    );
+    await settle();
+    check(paused(), 'Auto-restart: pairing choices pause during grace period');
+    check(
+      root.querySelector('.pairing-question') === null,
+      'Auto-restart: no redundant pairing question',
+    );
+    check(root.querySelector('.manual-add') === null, 'Auto-restart: manual instructions paused');
+    check(
+      root.querySelector('.pairing-auto .dock-chip')?.textContent === '4s',
+      'Auto-restart: shows server countdown',
+    );
+    await advance(1000);
+    check(
+      root.querySelector('.pairing-auto .dock-chip')?.textContent === '3s',
+      'Auto-restart: countdown decreases',
+    );
+    await advance(3000);
+    check(
+      paused() &&
+        root.textContent.includes('Restarting Elgato app…') &&
+        root.querySelector('.pairing-auto .ico-spin') !== null,
+      'Auto-restart: active restart keeps spinner and paused pairing',
+    );
+    await act(() => patch({ status: { ...getSnapshot().status, elgatoAutoRestartPending: null } }));
+    check(
+      !paused() && root.querySelector('.manual-add') !== null,
+      'Auto-restart: completion restores manual pairing',
+    );
+    await act(() =>
+      root.querySelectorAll<HTMLButtonElement>('.pairing-answers button')[0]!.click(),
+    );
+    await settle();
+    await act(() =>
+      patch({
+        status: {
+          ...getSnapshot().status,
+          elgatoAutoRestartPending: { remainingMs: 4000, docks: [0] },
+        },
+      }),
+    );
+    check(paused(), 'Auto-restart: existing app action pauses too');
+    check(launches === 0, 'Auto-restart: manual app control cannot race automatic restart');
+    await act(() => patch({ status: { ...getSnapshot().status, elgatoAutoRestartPending: null } }));
+    await settle();
+    check(
+      root.querySelector('.primary') !== null,
+      'Auto-restart: previous Yes choice resumes afterward',
+    );
+  } finally {
+    await act(() => render(null, root));
+    Date.now = originalNow;
+    globalThis.fetch = originalFetch;
+    await act(() => patch(before));
+  }
+}
+
+export async function runPairingFlow(root: HTMLElement, check: Check): Promise<void> {
+  await runBootAndStale(root, check);
+  await runConnectionPath(root, check);
+  await runConflictStage(root, check);
+  await runReadyStage(root, check);
+  await runPairingChoices(root, check);
+  await runPairingDockCards(root, check);
+  await runPairingAutoRestart(root, check);
+}

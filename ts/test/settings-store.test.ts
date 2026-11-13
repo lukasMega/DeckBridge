@@ -1,24 +1,11 @@
 import assert from 'tjs:assert';
-import { settingsPath, loadSettings, saveSettings } from '../src/settings-store.js';
-import type { Settings } from '../src/settings-store.js';
-
-let passed = 0;
-let failed = 0;
-
-async function test(name: string, fn: () => void | Promise<void>): Promise<void> {
-  try {
-    await fn();
-    console.log(`  ✓ ${name}`);
-    passed++;
-  } catch (e) {
-    console.error(`  ✗ ${name}: ${(e as Error).message}`);
-    failed++;
-  }
-}
+import { settingsPath, loadSettings, saveSettings } from '../src/infra/settings-store.js';
+import type { Settings } from '../src/infra/settings-store.js';
+import { testAsync as test, summary } from './helpers/harness.js';
 
 const ROOT = `${tjs.tmpDir}/settings-store-test-${tjs.pid}`;
 
-// ── settingsPath ──────────────────────────────────────────────────────────────
+// settingsPath
 
 console.log('\nsettingsPath');
 
@@ -26,7 +13,7 @@ await test('joins cacheRoot with settings.json', () => {
   assert.equal(settingsPath(ROOT), `${ROOT}/settings.json`);
 });
 
-// ── loadSettings ──────────────────────────────────────────────────────────────
+// loadSettings
 
 console.log('\nloadSettings');
 
@@ -51,7 +38,7 @@ await test('JSON array → {}', async () => {
   assert.deepEqual(result, {});
 });
 
-// ── saveSettings / loadSettings round-trip ───────────────────────────────────
+// saveSettings / loadSettings round-trip
 
 console.log('\nsaveSettings/loadSettings round-trip');
 
@@ -68,7 +55,6 @@ await test('write then read back returns identical data', async () => {
         childSerial: 'A7FZA5191ILSNQ',
         brightness: 42,
         brightnessOverride: true,
-        imageModeOverride: 'pad-edge',
       },
     ],
   };
@@ -115,7 +101,6 @@ await test('devices[] with per-device settings round-trips through save/load', a
         childSerial: 'A7FZA5191ILSNQ',
         brightness: 24,
         brightnessOverride: true,
-        imageModeOverride: null,
       },
       {
         deviceKey: '/dev/hidraw5',
@@ -125,7 +110,6 @@ await test('devices[] with per-device settings round-trips through save/load', a
         childSerial: 'A7FZA5191I01NQ',
         brightness: 55,
         brightnessOverride: true,
-        imageModeOverride: 'pad-edge',
       },
     ],
   };
@@ -134,11 +118,59 @@ await test('devices[] with per-device settings round-trips through save/load', a
   assert.deepEqual(result, data, 'devices[] entries survive a save/load round-trip verbatim');
 });
 
-// ── Cleanup + summary ─────────────────────────────────────────────────────────
+await test('logLevel and modelOverrides round-trip through save/load', async () => {
+  const dir = `${ROOT}/tuning-roundtrip`;
+  const data: Settings = {
+    selectedDock: 0,
+    logLevel: 'debug',
+    multiDeck: true,
+    modelOverrides: {
+      'ajazz-akp153e-rev2': {
+        image: { rotate: 180, flipV: true },
+        keyMap: { wireInputToCora: [-1, 10, 11, 12] },
+      },
+    },
+  };
+  await saveSettings(data, dir);
+  assert.deepEqual(await loadSettings(dir), data);
+});
+
+await test('a file without the new keys still loads (purely additive schema)', async () => {
+  const dir = `${ROOT}/legacy-file`;
+  await tjs.makeDir(dir, { recursive: true });
+  await tjs.writeFile(settingsPath(dir), JSON.stringify({ selectedDock: 1 }));
+  const result = await loadSettings(dir);
+  assert.equal(result.selectedDock, 1);
+  assert.equal(result.logLevel, undefined);
+  assert.equal(result.multiDeck, undefined, 'absent multiDeck means the single-deck default');
+  assert.equal(result.modelOverrides, undefined);
+});
+
+await test('pairedAt on a devices[] entry and elgatoAutoRestart* round-trip through save/load', async () => {
+  const dir = `${ROOT}/elgato-auto-restart-roundtrip`;
+  const data: Settings = {
+    selectedDock: 0,
+    elgatoAutoRestart: false,
+    elgatoAutoRestartDelayS: 30,
+    devices: [
+      {
+        deviceKey: '/dev/hidraw3',
+        mdnsServiceName: 'Network Stream Deck',
+        macAddress: '02:1a:2b:3c:4d:5e',
+        dockSerial: 'A7FZA5190ILSAA',
+        childSerial: 'A7FZA5191ILSNQ',
+        pairedAt: '2026-09-27T10:00:00.000Z',
+      },
+    ],
+  };
+  await saveSettings(data, dir);
+  assert.deepEqual(await loadSettings(dir), data);
+});
+
+// Cleanup + summary
 
 try {
   await tjs.remove(ROOT, { recursive: true });
 } catch {}
 
-console.log(`\n${passed} passed, ${failed} failed`);
-if (failed > 0) tjs.exit(1);
+summary();

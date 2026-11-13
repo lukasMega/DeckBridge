@@ -42,9 +42,14 @@ behaviours = "behaviours"
 behavioural = "behavioural"
 colour = "colour"
 colours = "colours"
+coloured = "coloured"
+colourful = "colourful"
 centre = "centre"
+centres = "centres"
 centred = "centred"
 centring = "centring"
+metre = "metre"
+metres = "metres"
 honour = "honour"
 honours = "honours"
 honouring = "honouring"
@@ -55,11 +60,14 @@ labelled = "labelled"
 normalise = "normalise"
 normalises = "normalises"
 signalling = "signalling"
+licence = "licence"
+defence = "defence"
 # Legit domain tokens flagged as typos.
 IST = "IST"      # India Standard Time (worldclock example)
 Nd = "Nd"        # "N days" shorthand (countdown plugin)
 WRK = "WRK"      # Mermaid node-id prefix in ARCHITECTURE.md
 abd = "abd"      # deliberate test-data string ("abc" vs "abd")
+rotat = "rotat"  # deliberate unknown-field test-data key (model-overrides.test.ts)
 alls = "alls"    # "catch-alls" (plural of catch-all)
 
 [default.extend-identifiers]

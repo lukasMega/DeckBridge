@@ -1,0 +1,485 @@
+// Validate + merge user model overrides on top of a registry-resolved DeviceModel.
+// Pure — no I/O/FFI — runs on main thread and USB worker. Applied ON TOP of a resolved
+// model, never in place of one; excluded fields mean it can't smuggle in a different driver.
+import {
+  CORA_OVERRIDE_KEYS,
+  IMAGE_OVERRIDE_KEYS,
+  tunableWireKeys,
+  WIRE_OVERRIDE_KEYS,
+  type DeviceCoraSpec,
+  type DeviceImageSpec,
+  type DeviceKeyMap,
+  type DeviceModel,
+  type DeviceModelOverride,
+  type DeviceSplashSpec,
+  type DeviceWireSpec,
+} from './driver.js';
+import { fnv1aHex } from '../shared/types.js';
+import { findModelById } from './registry.js';
+
+export type ValidationResult =
+  | { ok: true; value: DeviceModelOverride }
+  | { ok: false; errors: string[] };
+
+const ROTATIONS = [0, 90, 180, 270];
+const RESIZE_FILTERS = ['triangle', 'nearest', 'lanczos3'];
+const RESIZE_MODES = ['resize', 'pad', 'crop'];
+const PAD_FILLS = ['black', 'average', 'edge'];
+const TRANSFORMS = ['passthrough', 'sidecar'];
+const PACKET_SIZES = [512, 1024];
+
+const KEYMAP_KEYS = [
+  'coraToWireImage',
+  'wireInputToCora',
+  'inputOffset',
+  'imageOffset',
+  'extraKeys',
+] as const;
+const SECTION_KEYS = ['image', 'keyMap', 'wire', 'splash', 'cora'] as const;
+
+type WireOverrideKey = (typeof WIRE_OVERRIDE_KEYS)[number];
+
+/** Bounds chosen to keep a typo from producing a device-bricking spec while
+ *  still covering every panel we know of (64×64 K1 Pro … 112×112 293V3). */
+const MIN_DIMENSION = 8;
+const MAX_DIMENSION = 1024;
+/** Ceiling on `inSize` (USB worker read buffer) — without one, `inSize: 2e9` in
+ *  settings.json is a one-line OOM. Every known device asks for 512. */
+const MAX_IN_SIZE = 4096;
+// 0 = "not applicable", as for maxBytes: BMP models never JPEG-encode (the Mini ships
+// `quality: 0`). Rejecting it would make a device's own registry value an invalid
+// override — see the tunableDefaults invariant.
+const MIN_QUALITY = 0;
+const MAX_QUALITY = 1;
+
+type Errors = string[];
+
+function isPlainObject(v: unknown): v is Record<string, unknown> {
+  return typeof v === 'object' && v !== null && !Array.isArray(v);
+}
+
+/** Unknown keys are rejected, not silently dropped — a typo must surface in the
+ *  UI rather than vanish and leave the user wondering why nothing changed. */
+function rejectUnknownKeys(
+  obj: Record<string, unknown>,
+  allowed: readonly string[],
+  path: string,
+  errors: Errors,
+): void {
+  for (const key of Object.keys(obj)) {
+    if (!allowed.includes(key)) errors.push(`${path}.${key}: unknown field`);
+  }
+}
+
+/** One rule per tunable field. The tables below are the single source for both the
+ *  per-field checks and the allowed-key list of their section. */
+type FieldSpec =
+  | { kind: 'enum'; values: readonly (string | number)[] }
+  | { kind: 'string'; max?: number }
+  | { kind: 'boolean' }
+  | { kind: 'number'; min?: number; max?: number; integer?: boolean }
+  | { kind: 'ints'; min: number; length?: (model: DeviceModel) => number }
+  | { kind: 'object'; fields: SectionFields };
+
+type SectionFields = Record<string, FieldSpec>;
+
+const CROP_RECT_FIELDS = {
+  x: { kind: 'number', min: 0, max: MAX_DIMENSION, integer: true },
+  y: { kind: 'number', min: 0, max: MAX_DIMENSION, integer: true },
+  width: { kind: 'number', min: MIN_DIMENSION, max: MAX_DIMENSION, integer: true },
+  height: { kind: 'number', min: MIN_DIMENSION, max: MAX_DIMENSION, integer: true },
+} satisfies SectionFields;
+
+const IMAGE_FIELDS: Record<(typeof IMAGE_OVERRIDE_KEYS)[number], FieldSpec> = {
+  rotate: { kind: 'enum', values: ROTATIONS },
+  flipH: { kind: 'boolean' },
+  flipV: { kind: 'boolean' },
+  width: { kind: 'number', min: MIN_DIMENSION, max: MAX_DIMENSION, integer: true },
+  height: { kind: 'number', min: MIN_DIMENSION, max: MAX_DIMENSION, integer: true },
+  quality: { kind: 'number', min: MIN_QUALITY, max: MAX_QUALITY },
+  // 0 = no cap (BMP is fixed-size), so the floor is 0, not 1.
+  maxBytes: { kind: 'number', min: 0, integer: true },
+  blur: { kind: 'number', min: 0 },
+  sharpen: { kind: 'number', min: 0 },
+  crop: { kind: 'number', min: 0, integer: true },
+  cropRect: { kind: 'object', fields: CROP_RECT_FIELDS },
+  resizeFilter: { kind: 'enum', values: RESIZE_FILTERS },
+  resizeMode: { kind: 'enum', values: RESIZE_MODES },
+  padFill: { kind: 'enum', values: PAD_FILLS },
+  transform: { kind: 'enum', values: TRANSFORMS },
+};
+
+const KEYMAP_FIELDS: Record<(typeof KEYMAP_KEYS)[number], FieldSpec> = {
+  // One entry per emulated key, in CORA index order — a short array would leave
+  // keys unmapped with no error at render time. -1 = no display (Ulanzi D200 holes).
+  coraToWireImage: { kind: 'ints', min: -1, length: (model) => model.keyCount },
+  wireInputToCora: { kind: 'ints', min: -1 },
+  inputOffset: { kind: 'number', integer: true },
+  imageOffset: { kind: 'number', integer: true },
+  extraKeys: { kind: 'ints', min: 0 },
+};
+
+const WIRE_FIELDS: Record<WireOverrideKey, FieldSpec> = {
+  packetSize: { kind: 'enum', values: PACKET_SIZES },
+  inSize: { kind: 'number', min: 1, max: MAX_IN_SIZE, integer: true },
+  heartbeatMs: { kind: 'number', min: 0, integer: true },
+  reportId: { kind: 'number', min: 0, max: 255, integer: true },
+  chunkDelayMs: { kind: 'number', min: 0, integer: true },
+  chunkPadByte: { kind: 'boolean' },
+  synthesizeKeyUp: { kind: 'boolean' },
+  sendStpAfterImage: { kind: 'boolean' },
+  batchImageTransfers: { kind: 'boolean' },
+};
+
+const TRANSFORM_OVERRIDE_FIELDS: SectionFields = {
+  rotate: { kind: 'enum', values: ROTATIONS },
+  flipH: { kind: 'boolean' },
+  flipV: { kind: 'boolean' },
+};
+
+type CoraOverrideKey = (typeof CORA_OVERRIDE_KEYS)[number];
+
+const CORA_FIELDS: Record<CoraOverrideKey, FieldSpec> = {
+  advertiseAs: { kind: 'string', max: 64 },
+  productId: { kind: 'number', min: 0, max: 0xffff, integer: true },
+  dockSerialNumber: { kind: 'string', max: 64 },
+  childSerialNumber: { kind: 'string', max: 64 },
+  macAddress: { kind: 'string', max: 17 },
+  dockFirmwareVersion: { kind: 'string', max: 32 },
+  childFirmwareVersion: { kind: 'string', max: 32 },
+};
+
+/** Shape-check, then pin `advertiseAs` to a target this model has a mapping for and
+ *  `productId` to that target's PID — an unknown id would make advertisedModel()
+ *  throw on every connect, and a foreign profile would scramble the panel. */
+function validateCora(raw: unknown, model: DeviceModel, errors: Errors): void {
+  if (!validateSection(raw, CORA_FIELDS, 'cora', model, errors)) return;
+  const { advertiseAs, productId } = raw;
+  const targets = coraTargets(model);
+  if (typeof advertiseAs === 'string' && !targets.has(advertiseAs)) {
+    const allowed = [...targets.keys()].join(', ') || 'none';
+    errors.push(`cora.advertiseAs: not supported on ${model.name} (allowed: ${allowed})`);
+    return;
+  }
+  const expectedPid =
+    typeof advertiseAs === 'string' ? targets.get(advertiseAs)! : model.cora.productId;
+  if (typeof productId === 'number' && productId !== expectedPid) {
+    errors.push(`cora.productId: must be 0x${expectedPid.toString(16).padStart(4, '0')}`);
+  }
+  if (
+    typeof raw.macAddress === 'string' &&
+    !/^(?:[0-9a-f]{2}:){5}[0-9a-f]{2}$/i.test(raw.macAddress)
+  ) {
+    errors.push('cora.macAddress: must be six hex bytes separated by colons');
+  }
+  for (const key of [
+    'dockSerialNumber',
+    'childSerialNumber',
+    'dockFirmwareVersion',
+    'childFirmwareVersion',
+  ] as const) {
+    const value = raw[key];
+    if (typeof value === 'string' && !/^[\x20-\x7e]*$/.test(value)) {
+      errors.push(`cora.${key}: must contain printable ASCII characters only`);
+    }
+  }
+}
+
+const SPLASH_FIELDS: SectionFields = {
+  keys: { kind: 'ints', min: 0 },
+  transformOverride: { kind: 'object', fields: TRANSFORM_OVERRIDE_FIELDS },
+};
+
+function checkNumber(
+  value: unknown,
+  spec: { min?: number; max?: number; integer?: boolean },
+  path: string,
+  errors: Errors,
+): void {
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    errors.push(`${path}: must be a finite number`);
+    return;
+  }
+  if (spec.integer && !Number.isInteger(value)) errors.push(`${path}: must be an integer`);
+  if (spec.min !== undefined && value < spec.min) errors.push(`${path}: must be ≥ ${spec.min}`);
+  if (spec.max !== undefined && value > spec.max) errors.push(`${path}: must be ≤ ${spec.max}`);
+}
+
+/** `spec.min` is -1 for an ignored key (293S 6th column) or a key with no display (D200). */
+function checkIntArray(
+  value: unknown,
+  spec: { min: number; length?: (model: DeviceModel) => number },
+  path: string,
+  model: DeviceModel,
+  errors: Errors,
+): void {
+  if (!Array.isArray(value)) {
+    errors.push(`${path}: must be an array of integers`);
+    return;
+  }
+  const length = spec.length?.(model);
+  if (length !== undefined && value.length !== length) {
+    errors.push(`${path}: must have exactly ${length} entries (got ${value.length})`);
+  }
+  if (!value.every((v) => typeof v === 'number' && Number.isInteger(v) && v >= spec.min)) {
+    errors.push(`${path}: every entry must be an integer ≥ ${spec.min}`);
+  }
+}
+
+function checkField(
+  value: unknown,
+  spec: FieldSpec,
+  path: string,
+  model: DeviceModel,
+  errors: Errors,
+): void {
+  if (value === undefined) return;
+  switch (spec.kind) {
+    case 'number':
+      return checkNumber(value, spec, path, errors);
+    case 'ints':
+      return checkIntArray(value, spec, path, model, errors);
+    case 'object':
+      validateSection(value, spec.fields, path, model, errors);
+      return;
+    case 'boolean':
+      if (typeof value !== 'boolean') errors.push(`${path}: must be a boolean`);
+      return;
+    case 'string':
+      if (typeof value !== 'string') errors.push(`${path}: must be a string`);
+      else if (spec.max !== undefined && value.length > spec.max)
+        errors.push(`${path}: must be ≤ ${spec.max} characters`);
+      return;
+    case 'enum':
+      if (!spec.values.includes(value as string)) {
+        errors.push(`${path}: must be one of ${spec.values.join(', ')}`);
+      }
+  }
+}
+
+/** Returns whether `raw` was an object at all, so a caller with extra section-level
+ *  rules (validateWire) can skip them on a non-object. */
+function validateSection(
+  raw: unknown,
+  fields: SectionFields,
+  path: string,
+  model: DeviceModel,
+  errors: Errors,
+): raw is Record<string, unknown> {
+  if (!isPlainObject(raw)) {
+    errors.push(`${path}: must be an object`);
+    return false;
+  }
+  rejectUnknownKeys(raw, Object.keys(fields), path, errors);
+  for (const [key, spec] of Object.entries(fields)) {
+    checkField(raw[key], spec, `${path}.${key}`, model, errors);
+  }
+  return true;
+}
+
+/** cropRect rules that span fields. The source size is unknown here (it depends on the
+ *  advertised profile), so an oversize rect is clamped in transform.rs instead. */
+function validateImage(raw: unknown, model: DeviceModel, errors: Errors): void {
+  if (!validateSection(raw, IMAGE_FIELDS, 'image', model, errors)) return;
+  const rect = raw.cropRect;
+  if (!isPlainObject(rect)) return;
+  const missing = Object.keys(CROP_RECT_FIELDS).filter((key) => rect[key] === undefined);
+  if (missing.length > 0) errors.push(`image.cropRect: missing ${missing.join(', ')}`);
+  // transform.rs lets the region silently win over the symmetric crop.
+  const crop = raw.crop ?? model.image.crop ?? 0;
+  if (typeof crop === 'number' && crop > 0) {
+    errors.push(`image.cropRect: cannot combine with image.crop (${crop}) — set crop to 0`);
+  }
+  if ((raw.transform ?? model.image.transform) === 'passthrough') {
+    errors.push(`image.cropRect: needs transform 'sidecar' — passthrough sends the image as-is`);
+  }
+}
+
+function validateWire(raw: unknown, model: DeviceModel, errors: Errors): void {
+  if (!validateSection(raw, WIRE_FIELDS, 'wire', model, errors)) return;
+  const tunable = tunableWireKeys(model.protocol);
+  for (const key of WIRE_OVERRIDE_KEYS) {
+    if (raw[key] !== undefined && !tunable.includes(key)) {
+      errors.push(
+        `wire.${key}: not tunable on ${model.name} — fixed by the ${model.protocol} protocol`,
+      );
+    }
+  }
+}
+
+/** Strict, model-aware validation. Returns every error found (not just the first)
+ *  so the UI can show the whole list at once. */
+export function validateModelOverride(raw: unknown, model: DeviceModel): ValidationResult {
+  if (!isPlainObject(raw)) return { ok: false, errors: ['override must be an object'] };
+  const errors: Errors = [];
+  rejectUnknownKeys(raw, SECTION_KEYS, 'override', errors);
+  if (raw.image !== undefined) validateImage(raw.image, model, errors);
+  // An emulated grid has its own key count (Plus = 8), so coraToWireImage is sized to it;
+  // the registry's own advertiseAs selects one too (AKP05 family) when the override doesn't.
+  const advertiseAs =
+    (isPlainObject(raw.cora) ? raw.cora.advertiseAs : undefined) ?? model.cora.advertiseAs;
+  const profile = selectedEmulation(model, advertiseAs)
+    ? findModelById(advertiseAs as string)
+    : null;
+  const keyModel = profile ? { ...model, keyCount: profile.keyCount } : model;
+  if (raw.keyMap !== undefined)
+    validateSection(raw.keyMap, KEYMAP_FIELDS, 'keyMap', keyModel, errors);
+  if (raw.wire !== undefined) validateWire(raw.wire, model, errors);
+  if (raw.splash !== undefined) validateSection(raw.splash, SPLASH_FIELDS, 'splash', model, errors);
+  if (raw.cora !== undefined) validateCora(raw.cora, model, errors);
+  if (errors.length > 0) return { ok: false, errors };
+  return { ok: true, value: raw };
+}
+
+/** Drop `undefined` values so they can never overwrite a real model default
+ *  (`{...spec, ...patch}` would otherwise set the field to undefined). */
+function defined<T extends object>(patch: T | undefined): Partial<T> {
+  if (!patch) return {};
+  return Object.fromEntries(Object.entries(patch).filter(([, v]) => v !== undefined)) as Partial<T>;
+}
+
+/** The CORA profiles `model` may re-pair as (its `cora.emulations`), resolved. */
+export function emulationProfiles(model: DeviceModel): DeviceModel[] {
+  return Object.keys(model.cora.emulations ?? {})
+    .map((id) => findModelById(id))
+    .filter((profile): profile is DeviceModel => profile !== null);
+}
+
+/** Every `cora.advertiseAs` value `model` accepts, mapped to the PID it must advertise:
+ *  its own registry value (a no-op override) plus each resolvable emulation. */
+function coraTargets(model: DeviceModel): Map<string, number> {
+  const targets = new Map<string, number>();
+  if (model.cora.advertiseAs) targets.set(model.cora.advertiseAs, model.cora.productId);
+  for (const profile of emulationProfiles(model)) targets.set(profile.id, profile.cora.productId);
+  return targets;
+}
+
+/** The emulation `advertiseAs` selects on `model`, or undefined for native/geometry-only. */
+function selectedEmulation(model: DeviceModel, advertiseAs: unknown) {
+  const emulations = model.cora.emulations;
+  // hasOwn: an id like 'toString' must not resolve through the prototype.
+  if (typeof advertiseAs !== 'string' || !emulations || !Object.hasOwn(emulations, advertiseAs))
+    return undefined;
+  return emulations[advertiseAs];
+}
+
+/** Apply `ov` on top of `model`, returning a NEW model (inputs untouched).
+ *  Per-section shallow merge; arrays replace wholesale. `undefined` never wins.
+ *  A `cora.advertiseAs` naming one of the model's `cora.emulations` also adopts that
+ *  emulation's `image` + `keyMap` (the AKP05E re-pairing as a Stream Deck + needs a
+ *  180° transform + 4×2 key map) and the profile's PID, with any explicit user
+ *  `image`/`keyMap` override still winning on top. */
+export function applyModelOverrides(model: DeviceModel, ov?: DeviceModelOverride): DeviceModel {
+  if (!ov || Object.keys(ov).length === 0) return model;
+  const cora: DeviceCoraSpec = { ...model.cora, ...defined(ov.cora) };
+  const emulation = selectedEmulation(model, cora.advertiseAs);
+  if (emulation && ov.cora?.productId === undefined) {
+    cora.productId = findModelById(cora.advertiseAs!)?.cora.productId ?? cora.productId;
+  }
+  const image: DeviceImageSpec = { ...(emulation?.image ?? model.image), ...defined(ov.image) };
+  const keyMap: DeviceKeyMap = { ...(emulation?.keyMap ?? model.keyMap), ...defined(ov.keyMap) };
+  const wire: DeviceWireSpec = { ...model.wire, ...defined(ov.wire) };
+  const splash: DeviceSplashSpec | undefined = ov.splash ?? model.splash;
+  return {
+    ...model,
+    image,
+    keyMap,
+    wire,
+    cora,
+    ...(splash ? { splash } : {}),
+  };
+}
+
+/** One-line summary for logs and the diagnostics header, so a bug report from a
+ *  tuned device never reads as default behaviour. */
+export function overrideSummary(ov?: DeviceModelOverride): string {
+  if (!ov) return 'none';
+  const parts: string[] = [];
+  for (const section of SECTION_KEYS) {
+    const value = ov[section];
+    if (!value) continue;
+    const keys = Object.keys(value);
+    if (keys.length > 0) parts.push(`${section}{${keys.join(',')}}`);
+  }
+  return parts.length > 0 ? parts.join(' ') : 'none';
+}
+
+/** What applying a new override over the previous one costs the live device.
+ *  'live' = image-transform fields only, swappable in place (no driver reads
+ *  model.image — only image-render.ts/translator.ts do); 'reopen' = keyMap,
+ *  wire or splash changed, all of which are read at open(). */
+export type OverrideChangeKind = 'none' | 'live' | 'reopen';
+
+const OPEN_TIME_SECTIONS = ['keyMap', 'wire', 'splash', 'cora'] as const;
+
+/** Canonical form of one override section: key order and absent-vs-undefined
+ *  normalized, so `{}`, `undefined` and `{ rotate: undefined }` all compare equal. */
+function sectionKey(
+  ov: DeviceModelOverride | undefined,
+  section: (typeof SECTION_KEYS)[number],
+): string {
+  const value = ov?.[section];
+  if (!value || typeof value !== 'object') return '';
+  const entries = Object.entries(value as Record<string, unknown>)
+    .filter(([, v]) => v !== undefined)
+    .toSorted(([a], [b]) => (a < b ? -1 : 1));
+  return entries.length > 0 ? JSON.stringify(entries) : '';
+}
+
+export function classifyOverrideChange(
+  prev: DeviceModelOverride | undefined,
+  next: DeviceModelOverride | undefined,
+): OverrideChangeKind {
+  for (const section of OPEN_TIME_SECTIONS) {
+    if (sectionKey(prev, section) !== sectionKey(next, section)) return 'reopen';
+  }
+  return sectionKey(prev, 'image') === sectionKey(next, 'image') ? 'none' : 'live';
+}
+
+/** Short stable hash of an override, mixed into the image-cache key so a spec
+ *  change can't be served a stale entry (see image-render.ts). '' when there is
+ *  no override, keeping cache keys identical to the pre-override format. */
+export function overrideRevision(ov?: DeviceModelOverride): string {
+  if (!ov || Object.keys(ov).length === 0) return '';
+  // Only the image section can change transform output; keyMap/wire/splash
+  // affect routing and framing, not the encoded bytes.
+  return fnv1aHex(JSON.stringify(ov.image ?? {}));
+}
+
+/** Copy exactly `keys` from `src`, skipping absent ones. Spreading the whole object
+ *  would drag in non-tunable siblings (`image.format`, `wire.sharedSerial`, …), which
+ *  validateModelOverride then rejects when the tuning form posts them back. */
+function project<T extends object, K extends keyof T>(
+  src: T,
+  keys: readonly K[],
+): Partial<Pick<T, K>> {
+  const out: Partial<Pick<T, K>> = {};
+  for (const key of keys) {
+    if (src[key] !== undefined) out[key] = src[key];
+  }
+  return out;
+}
+
+/** Tunable fields at their current (post-override) values — seeds the Device tuning
+ *  form so every control starts at what the device actually uses. */
+export function tunableDefaults(model: DeviceModel): DeviceModelOverride {
+  const { image, keyMap, wire, splash, cora } = model;
+  return {
+    image: project(image, IMAGE_OVERRIDE_KEYS),
+    keyMap: project(keyMap, KEYMAP_KEYS),
+    wire: project(wire, tunableWireKeys(model.protocol)),
+    ...(splash ? { splash } : {}),
+    cora: project(cora, CORA_OVERRIDE_KEYS),
+  };
+}
+
+/** Shape guard for a persisted/imported `modelOverrides` map. Model-aware
+ *  validation needs the registry, so this only checks the outer shape; the full
+ *  check runs in validateModelOverride at the route/probe boundary. */
+export function isModelOverridesRecord(v: unknown): v is Record<string, DeviceModelOverride> {
+  if (!isPlainObject(v)) return false;
+  return Object.values(v).every(
+    (entry) =>
+      isPlainObject(entry) && Object.keys(entry).every((k) => SECTION_KEYS.includes(k as never)),
+  );
+}

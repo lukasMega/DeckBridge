@@ -241,6 +241,8 @@ export function buildPageZip(slots: PageSlot[], opts: PageZipOptions): Uint8Arra
     if (slotKey(slot.slotId, opts.columns) === wideKey) continue;
     entries.push(entry(iconName(slot.slotId, opts.flushSeq, slot.png), slot.png));
   }
+  // The firmware can drop the final entry (marcelobrake protocol.md), so it is a throwaway.
+  entries.push(entry('sentinel.txt', new Uint8Array(0)));
 
   return writeZip(entries);
 }

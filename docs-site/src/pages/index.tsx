@@ -9,16 +9,17 @@ import { BridgeMark } from './_home/BridgeMark';
 import { Flow } from './_home/Flow';
 import { Comparison } from './_home/Comparison';
 import { Quickstart } from './_home/Quickstart';
+import { Devices } from './_home/Devices';
 import { FEATURES } from './_home/features';
-import { GITHUB_URL, BRANDS, DEVICES, HIGHLIGHTS } from './_home/content';
+import { GITHUB_URL, BRANDS, HIGHLIGHTS } from './_home/content';
 
 const SHOTS = [
   {
     id: 'simple',
     light: '/img/webui-simple.png',
     dark: '/img/webui-simple-dark.png',
-    width: 1440,
-    height: 955,
+    width: 500,
+    height: 705,
     alt: 'DeckBridge simple web UI: a step-by-step pairing card showing the connected Stream Deck MK.2 and the network address to enter in the Elgato app.',
     caption: <>connect the deck, copy the address, pair.</>,
     label: 'Simple view',
@@ -42,18 +43,6 @@ export default function Home(): ReactNode {
       document.body.style.overflow = prev;
     };
   }, [zoom]);
-  useEffect(() => {
-    if (open === null) return;
-    if (!window.matchMedia('(max-width: 900px)').matches) return;
-    const id = setTimeout(
-      () =>
-        document
-          .getElementById('feature-detail')
-          ?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }),
-      0,
-    );
-    return () => clearTimeout(id);
-  }, [open]);
   return (
     <Layout
       title="DeckBridge — USB Stream Deck over WiFi"
@@ -63,37 +52,83 @@ export default function Home(): ReactNode {
         <div className={styles.inner}>
           {/* ---- hero ---- */}
           <section className={styles.hero}>
-            <div className={styles.mark}>
-              <BridgeMark />
+            <div className={styles.heroCopy}>
+              <div className={styles.mark}>
+                <BridgeMark />
+              </div>
+              <h1 className={styles.title}>
+                <span className={styles.titleLead}>
+                  Your{' '}
+                  <span className={styles.accent}>
+                    <RotatingWord words={BRANDS} />
+                  </span>
+                </span>{' '}
+                <span className={styles.titleLine}>stream deck,</span>{' '}
+                <span className={styles.accent}>over WiFi.</span>
+              </h1>
+              <p className={styles.subtitle}>
+                Control supported non-Elgato decks using Elgato software. DeckBridge connects them
+                over network. No Network Dock ($70+) required.
+              </p>
+              <div className={styles.cta}>
+                <Link className={styles.ctabtn} to="/getting-started">
+                  Get started
+                </Link>
+                <Link className={`${styles.ghostbtn} ${styles.demobtn}`} to="/demo">
+                  <svg
+                    className={styles.demoPlay}
+                    width="22"
+                    height="22"
+                    viewBox="0 0 24 24"
+                    aria-hidden="true"
+                  >
+                    <circle cx="12" cy="12" r="10" fill="currentColor" fillOpacity="0.12" />
+                    <path d="M10 7.5v9l7-4.5Z" fill="currentColor" />
+                  </svg>
+                  Try the live demo
+                </Link>
+                <a className={styles.textLink} href={GITHUB_URL} target="_blank" rel="noreferrer">
+                  GitHub ↗
+                </a>
+              </div>
+              <div className={styles.trust}>
+                <span>free</span>
+                <span>open source</span>
+                <span>single &lt; 5 MB binary</span>
+                <span>
+                  no <code>sudo</code>
+                </span>
+              </div>
             </div>
-            <h1 className={styles.title}>
-              Your{' '}
-              <span className={styles.accent}>
-                <RotatingWord words={BRANDS} />
-              </span>{' '}
-              stream deck,
-              <br /> <span className={styles.accent}>over WiFi.</span>
-            </h1>
-            <p className={styles.subtitle}>
-              <strong>DeckBridge</strong> runs on your computer and appears to the Elgato app as a
-              network device - your buttons work there. No Network Dock required.
-            </p>
-            <div className={styles.cta}>
-              <Link className={styles.ctabtn} to="/getting-started">
-                Get started
-              </Link>
-              <a className={styles.ghostbtn} href={GITHUB_URL} target="_blank" rel="noreferrer">
-                GitHub ↗
-              </a>
-            </div>
-            <div className={styles.trust}>
-              <span>free</span>
-              <span>open source</span>
-              <span>single &lt; 5 MB binary</span>
-              <span>
-                no <code>sudo</code>
-              </span>
-            </div>
+            <figure className={styles.heroPreview}>
+              <button
+                type="button"
+                className={`${styles.shotFrame} ${styles.heroInterface}`}
+                onClick={() => setZoom(0)}
+                aria-label="Enlarge pairing interface"
+              >
+                <ThemedImage
+                  sources={{
+                    light: withBaseUrl(SHOTS[0].light),
+                    dark: withBaseUrl(SHOTS[0].dark),
+                  }}
+                  alt={SHOTS[0].alt}
+                  width={SHOTS[0].width}
+                  height={SHOTS[0].height}
+                />
+                <span className={styles.shotZoom} aria-hidden="true">
+                  ⤢
+                </span>
+              </button>
+              <img
+                className={styles.heroDevice}
+                src={withBaseUrl('/img/devices/mirabox-293.svg')}
+                alt="MiraBox 293V3 hardware"
+                width="494"
+                height="346"
+              />
+              <figcaption className={styles.heroCaption}>Real hardware. Guided pairing.</figcaption>
+            </figure>
           </section>
 
           {/* ---- quick start ---- */}
@@ -112,7 +147,7 @@ export default function Home(): ReactNode {
             <h2 className={styles.sectionTitle}>One bridge, two protocols</h2>
             <p className={styles.sectionLead}>
               DeckBridge speaks USB HID to your deck and emulates an Elgato Network Dock on the LAN.
-              The app discovers it like real hardware.
+              The Elgato desktop app discovers it like real hardware.
             </p>
             <div className={styles.panel}>
               <Flow />
@@ -131,52 +166,52 @@ export default function Home(): ReactNode {
               {FEATURES.map((f, idx) => {
                 const isOpen = open === idx;
                 return (
-                  <div className={styles.feature} data-open={isOpen} key={f.title}>
-                    <div className={styles.featureIco}>{f.icon}</div>
-                    <h3 className={styles.featureTitle}>{f.title}</h3>
-                    <p className={styles.featureText}>{f.text}</p>
-                    <button
-                      type="button"
-                      className={styles.learnBtn}
-                      aria-expanded={isOpen}
-                      aria-controls="feature-detail"
-                      onClick={() => setOpen((o) => (o === idx ? null : idx))}
-                    >
-                      {isOpen ? 'Show less' : 'Learn more'}
-                      <svg
-                        className={styles.chev}
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        aria-hidden="true"
+                  <article className={styles.feature} data-open={isOpen} key={f.title}>
+                    <div className={styles.featureIco}>{f.anim}</div>
+                    <div className={styles.featureCopy}>
+                      <h3 className={styles.featureTitle} id={`feature-title-${idx}`}>
+                        {f.title}
+                      </h3>
+                      <p className={styles.featureText}>{f.text}</p>
+                      <button
+                        type="button"
+                        className={styles.learnBtn}
+                        aria-expanded={isOpen}
+                        aria-controls={`feature-detail-${idx}`}
+                        aria-describedby={`feature-title-${idx}`}
+                        onClick={() => setOpen((o) => (o === idx ? null : idx))}
                       >
-                        <path
-                          d="M6 9l6 6 6-6"
-                          stroke="currentColor"
-                          strokeWidth="2.2"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                        />
-                      </svg>
-                    </button>
-                  </div>
+                        {isOpen ? 'Show less' : 'Learn more'}
+                        <svg
+                          className={styles.chev}
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          aria-hidden="true"
+                        >
+                          <path
+                            d="M6 9l6 6 6-6"
+                            stroke="currentColor"
+                            strokeWidth="2.2"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          />
+                        </svg>
+                      </button>
+                    </div>
+                    {isOpen && (
+                      <div
+                        className={styles.featureDetail}
+                        id={`feature-detail-${idx}`}
+                        role="region"
+                        aria-labelledby={`feature-title-${idx}`}
+                      >
+                        <p className={styles.detailText}>{f.detail}</p>
+                      </div>
+                    )}
+                  </article>
                 );
               })}
             </div>
-            {open !== null && (
-              <div
-                className={styles.featureDetail}
-                id="feature-detail"
-                role="region"
-                aria-label={FEATURES[open].title}
-                key={open}
-              >
-                <div className={styles.detailAnim}>{FEATURES[open].anim}</div>
-                <div className={styles.detailBody}>
-                  <h3 className={styles.detailTitle}>{FEATURES[open].title}</h3>
-                  <p className={styles.detailText}>{FEATURES[open].detail}</p>
-                </div>
-              </div>
-            )}
           </section>
 
           {/* ---- screenshots ---- */}
@@ -233,18 +268,7 @@ export default function Home(): ReactNode {
           <section className={`${styles.section} ${styles.reveal}`}>
             <p className={styles.sectionLabel}>Hardware</p>
             <h2 className={styles.sectionTitle}>Supported devices</h2>
-            <div className={styles.devices}>
-              {DEVICES.map((d) => (
-                <span className={styles.chip} key={d.name}>
-                  {d.name}{' '}
-                  <span
-                    className={`${styles.chipBadge} ${d.tested ? styles.chipBadgeOk : styles.chipBadgeMuted}`}
-                  >
-                    {d.tested ? '✓ tested' : 'untested'}
-                  </span>
-                </span>
-              ))}
-            </div>
+            <Devices />
             <p className={styles.devicesNote}>
               Tested on macOS — the Linux / Windows builds are implemented but not
               hardware-verified.

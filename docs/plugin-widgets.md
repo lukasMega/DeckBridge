@@ -1,8 +1,8 @@
 # Plugin widgets
 
 A **plugin widget** shows the value returned by a small JavaScript file you write, on one
-of a deck's display-only side keys (the 293S sixth column). The plugin polls, fetches or
-computes a short string, and DeckBridge renders it on the key as centered text.
+of a deck's display-only side keys or device-native display zones. The plugin polls, fetches
+or computes a short string, and DeckBridge renders it as centered text.
 
 Plugins run in a **dedicated worker thread**, isolated from the network ACK loop, so a
 slow, looping, or throwing plugin can never stall image delivery or the web UI.
@@ -12,13 +12,13 @@ slow, looping, or throwing plugin can never stall image delivery or the web UI.
 Drop your `*.js` files in the `plugins/` directory next to DeckBridge's cache/settings
 store:
 
-| OS | Plugins directory |
-|---|---|
-| macOS | `~/Library/Caches/deckbridge/plugins/` |
+| OS    | Plugins directory                                                                                      |
+| ----- | ------------------------------------------------------------------------------------------------------ |
+| macOS | `~/Library/Caches/deckbridge/plugins/`                                                                 |
 | Linux | `$XDG_CACHE_HOME/deckbridge/plugins/` (or `~/.cache/deckbridge/plugins/` if `XDG_CACHE_HOME` is unset) |
 
 Each file is one plugin. The file name (e.g. `worldclock.js`) is what you assign to a
-side key.
+display zone.
 
 Alternatively, pick **Custom path…** in the plugin dropdown and enter an absolute path
 to a plugin file anywhere on disk (e.g. a plugin kept in your dotfiles repo). Bare file
@@ -32,7 +32,7 @@ function:
 ```js
 // <plugins dir>/myplugin.js
 export default {
-  interval: 30_000,          // optional; poll period in ms (see below)
+  interval: 30_000, // optional; poll period in ms (see below)
   async fetch(ctx) {
     const res = await ctx.fetch('http://example.local/api/value');
     const { value } = await res.json();
@@ -46,11 +46,11 @@ on every poll tick. It may be `async` (return a `Promise`) or synchronous.
 
 ### `ctx` reference
 
-| Property | Type | Description |
-|---|---|---|
-| `ctx.param` | `string` | The per-key argument you set for this key. Empty string if none. Use it to parameterize one plugin file across keys (a location, an entity id, an offset…). |
+| Property                | Type                                              | Description                                                                                                                                                                              |
+| ----------------------- | ------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ctx.param`             | `string`                                          | The per-key argument you set for this key. Empty string if none. Use it to parameterize one plugin file across keys (a location, an entity id, an offset…).                              |
 | `ctx.fetch(url, init?)` | `(string, {method?, headers?, body?}) => Promise` | Proxied HTTP request. Resolves to `{ ok, status, text(), json() }` — `text()` returns the body string, `json()` parses it as JSON. **`http://` only** (see [Limitations](#limitations)). |
-| `ctx.log(message)` | `(string) => void` | Write a line to DeckBridge's log, tagged `plugin:<filename>`. |
+| `ctx.log(message)`      | `(string) => void`                                | Write a line to DeckBridge's log, tagged `plugin:<filename>`.                                                                                                                            |
 
 ### Return value
 
@@ -77,12 +77,12 @@ max(1000, perKeyOverride ?? plugin.interval ?? 5000)
 The worker starts lazily when the first plugin key is configured and stops when no
 plugin keys remain. What the key shows reflects the plugin's state:
 
-| On the key | Meaning |
-|---|---|
-| `…` | No value yet — the plugin has been configured but its first `fetch` hasn't returned. |
-| *(your text)* | The most recent string the plugin returned. |
-| *(blank)* | The plugin returned `null`. |
-| `ERR` | The plugin failed to load, threw, returned a non-string, or was disabled (below). The failure is also warn-logged with the plugin name. |
+| On the key    | Meaning                                                                                                                                 |
+| ------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| `…`           | No value yet — the plugin has been configured but its first `fetch` hasn't returned.                                                    |
+| _(your text)_ | The most recent string the plugin returned.                                                                                             |
+| _(blank)_     | The plugin returned `null`.                                                                                                             |
+| `ERR`         | The plugin failed to load, threw, returned a non-string, or was disabled (below). The failure is also warn-logged with the plugin name. |
 
 Failure handling:
 
@@ -103,18 +103,27 @@ Failure handling:
 - **Do not use the global `fetch` or `WebSocket`.** They are removed from the plugin
   worker on startup — calling them throws (in the underlying runtime they would abort the
   whole process). Always use `ctx.fetch` for HTTP.
-- **Value length cap.** Returned strings are truncated to 256 characters. A side key only
-  fits a few short lines anyway.
+- **`ctx.fetch` limits.** Each request gets 10 seconds in total, from sending it to
+  the last byte of the response. Request and response bodies are each capped at 1 MiB.
+  At most 4 requests run at the same time; another request fails at once and is not
+  queued. A request over a limit rejects with an `Error` that names the limit, for
+  example `fetch timeout`, `response exceeds 1048576 bytes` or
+  `too many concurrent requests (max 4)`. Requests still running when the plugin is
+  removed, or when DeckBridge quits, are aborted.
+- **Value length cap.** Returned strings are truncated to 256 characters. Each display zone
+  fits a few short lines.
 - **Absolute paths only for imports.** DeckBridge imports your file by its on-disk path;
   don't rely on `file://` URLs or relative imports of sibling files.
+
+For a value another tool already has, prefer the [Push API](./push-api.md) over a polling plugin.
 
 ## Security
 
 A plugin is **arbitrary code with the same trust level as the command widget** — full
 filesystem, process-spawn, and native-library access via the runtime. The worker is a
 crash/CPU isolation boundary, **not a capability sandbox**. The web UI has no auth and
-binds all interfaces by default, so anyone who can reach it could point a key at a plugin
-file on the host. Plugin widgets are **opt-in per key** and meant for a **trusted personal
+binds `127.0.0.1` unless you pass `--bind`, so anyone who can reach it could point a key
+at a plugin file on the host. Plugin widgets are **opt-in per key** and meant for a **trusted personal
 LAN**. Only run plugin files you wrote or trust.
 
 ## Examples
@@ -123,8 +132,14 @@ Ready-to-use example plugins live in
 [`examples/plugins/`](https://github.com/lukasMega/DeckBridge/tree/main/deckbridge/examples/plugins)
 in the repository:
 
-- **`worldclock.js`** — the minimal plugin: shows `HH:MM` at a fixed UTC offset passed via
-  `ctx.param` (e.g. `-5`, `+9`, `5.5`). Pure computation, no network.
+- **`hello.js`** — the smallest possible plugin: shows `ctx.param` (or `"hi"`) plus a tick
+  counter, re-rendered on the default 5 s interval. Copy this file to start a new plugin.
+- **`worldclock.js`** — shows `HH:MM` at a fixed UTC offset passed via `ctx.param`
+  (e.g. `-5`, `+9`, `5.5`). Pure computation, no network.
+- **`countdown.js`** — counts down to a target timestamp, or up from a past one (prefixed
+  `+`). `ctx.param` is the target with an optional `|label`: `2026-12-31T23:59`,
+  `2026-08-01|vacation`, or a bare `15:30` for today at that time. Runs at a 1 s interval
+  and repaints only when the text changes.
 - **`home-assistant.js`** — fetches a Home Assistant entity's state over the REST API
   (`GET {baseUrl}/api/states/{entity}` with a bearer token) and shows its state and unit.
   `ctx.param` format: `baseUrl|token|entity` (plain http — no TLS).

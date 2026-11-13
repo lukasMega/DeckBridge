@@ -6,25 +6,12 @@ import {
   CORA_FLAG_RESULT,
   CORA_FLAG_VERBATIM,
   CoraFrameReader,
-} from '../src/cora-frame.js';
-import { MAX_RECEIVE_BUFFER } from '../src/types.js';
-import { setWebUILog, type LogLevel } from '../src/logger.js';
+} from '../src/cora/frame.js';
+import { MAX_RECEIVE_BUFFER } from '../src/cora/protocol.js';
+import { setWebUILog, type LogLevel } from '../src/shared/logger.js';
+import { test, summary } from './helpers/harness.js';
 
-let passed = 0;
-let failed = 0;
-
-function test(name: string, fn: () => void): void {
-  try {
-    fn();
-    console.log(`  ✓ ${name}`);
-    passed++;
-  } catch (e) {
-    console.error(`  ✗ ${name}: ${(e as Error).message}`);
-    failed++;
-  }
-}
-
-// ── Helpers ──────────────────────────────────────────────────────────────────
+// Helpers
 
 /** Build a Buffer that contains no CORA_MAGIC sequence. */
 function makeSafeGarbage(len: number, seed = 0xab): Buffer {
@@ -44,7 +31,7 @@ function makeSafeGarbage(len: number, seed = 0xab): Buffer {
   return buf;
 }
 
-// ── Multi-frame drain ─────────────────────────────────────────────────────────
+// Multi-frame drain
 
 console.log('\nCoraFrameReader – multi-frame and split-frame');
 
@@ -87,7 +74,7 @@ test('two complete frames: flags and hidOp preserved on each', () => {
   assert.equal(frames[1]!.hidOp, 0x03);
 });
 
-// ── Garbage prefix / indexOf resync ──────────────────────────────────────────
+// Garbage prefix / indexOf resync
 
 console.log('\nCoraFrameReader – garbage-prefix resync');
 
@@ -130,7 +117,7 @@ test('garbage larger than CORA_HEADER_SIZE triggers the tail-retain path, then a
   assert.deepEqual(Array.from(second[0]!.payload), [0x99]);
 });
 
-// ── Frame split across two appends ───────────────────────────────────────────
+// Frame split across two appends
 
 console.log('\nCoraFrameReader – split-frame across appends');
 
@@ -185,7 +172,7 @@ test('frame split at the very last byte → reassembles on next append', () => {
   assert.deepEqual(Array.from(frames[0]!.payload), [0x77, 0x88]);
 });
 
-// ── Trailing partial header retained between drains ──────────────────────────
+// Trailing partial header retained between drains
 
 console.log('\nCoraFrameReader – partial header retention');
 
@@ -229,7 +216,7 @@ test('partial header across multiple appends accumulates correctly', () => {
   assert.deepEqual(Array.from(frames[0]!.payload), [0x10, 0x20, 0x30]);
 });
 
-// ── Combined: [garbage][frame A][partial frame B] ────────────────────────────
+// Combined: [garbage][frame A][partial frame B]
 
 console.log('\nCoraFrameReader – combined garbage + partial');
 
@@ -286,7 +273,7 @@ test('[garbage][frame A][garbage][frame B] in one append → returns both frames
   assert.equal(frames[1]!.messageId, 2);
 });
 
-// ── Receive-buffer overflow ──────────────────────────────────────────────────
+// Receive-buffer overflow
 
 console.log('\nCoraFrameReader – receive-buffer overflow');
 
@@ -312,7 +299,7 @@ test('append() beyond MAX_RECEIVE_BUFFER drops oldest bytes and logs a warn', ()
   }
 });
 
-// ── Oversized declared payloadLength ─────────────────────────────────────────
+// Oversized declared payloadLength
 
 console.log('\nCoraFrameReader – oversized declared payloadLength');
 
@@ -351,7 +338,36 @@ test('oversized payloadLength header is dropped, logs one warn, resyncs to next 
   }
 });
 
-// ── Summary ───────────────────────────────────────────────────────────────────
+test('oversized single chunk is capped at MAX_RECEIVE_BUFFER', () => {
+  const reader = new CoraFrameReader();
+  reader.append(makeSafeGarbage(MAX_RECEIVE_BUFFER * 2));
+  assert.ok(reader.getBufferedLength() <= MAX_RECEIVE_BUFFER);
+});
 
-console.log(`\n${passed} passed, ${failed} failed`);
-if (failed > 0) tjs.exit(1);
+test('drained buffer releases its backing allocation', () => {
+  const reader = new CoraFrameReader();
+  const payload = Buffer.alloc(48 * 1024, 7);
+  const frame = encodeCoraFrame(payload, 0, 1, 5);
+  reader.append(frame);
+  const frames = reader.drainFrames();
+  assert.equal(frames.length, 1);
+  assert.equal(reader.getBufferedLength(), 0);
+  assert.ok(reader.retainedBytes() < 1024, `retained ${reader.retainedBytes()}`);
+});
+
+test('fragmented large frame still decodes', () => {
+  const reader = new CoraFrameReader();
+  const payload = Buffer.alloc(60 * 1024, 9);
+  const frame = encodeCoraFrame(payload, 0, 1, 6);
+  let out = 0;
+  for (let i = 0; i < frame.length; i += 1000) {
+    reader.append(Buffer.from(frame.subarray(i, i + 1000)));
+    out += reader.drainFrames().length;
+  }
+  assert.equal(out, 1);
+  assert.equal(reader.getBufferedLength(), 0);
+});
+
+// Summary
+
+summary();

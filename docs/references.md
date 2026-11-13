@@ -1,7 +1,9 @@
 # References: existing projects
 
-DeckBridge wires together prior open-source work — nothing reverse-engineered. The USB
-HID framing and Elgato CORA protocol come from the projects below, credited here.
+Upstream projects inform protocol implementations.
+Local captures refine model-specific behavior.
+Device notes distinguish those evidence sources.
+Links below identify historical research sources.
 
 ---
 
@@ -21,12 +23,29 @@ HID framing and Elgato CORA protocol come from the projects below, credited here
 |---|---|
 | [4ndv/mirajazz](https://github.com/4ndv/mirajazz) | Mirabox/Ajazz protocol library — primary reference for the non-Elgato decks. |
 | [4ndv/opendeck-akp153](https://github.com/4ndv/opendeck-akp153) | AKP153 (293-series) driver details. |
+| [ambiso/opendeck-akp05](https://github.com/ambiso/opendeck-akp05) | AKP05-family plugin (AKP05/AKP05E, Mirabox N4/N4E/N4 Pro, Mars MSD-PRO, Redragon SS552, Soomfon, Streonor) — VID/PID table, per-connect init, 10 s `CRT CONNECT` keepalive, encoder/key input codes. |
+| [zeccola/ajazz-akp05](https://github.com/zeccola/ajazz-akp05) | AKP05E Python SDK — hardware-confirmed notes that the `DIS`/`LIG`/`CLE`/`STP` init unlocks key reporting, and that the keepalive tick needs the `DIS` + `LIG` wake pair. |
 | [Uriziel01/Ajazz-AKP153-reverse-engineering](https://github.com/Uriziel01/Ajazz-AKP153-reverse-engineering) | AKP153 USB protocol teardown. |
 | [crusardri/MiraboxStreamController](https://github.com/crusardri/MiraboxStreamController) | Mirabox controller — image and input handling. |
-| [MiraboxSpace/StreamDock-Device-SDK](https://github.com/MiraboxSpace/StreamDock-Device-SDK) | Vendor SDK — image format and report IDs. |
+| [MiraboxSpace/StreamDock-Device-SDK](https://github.com/MiraboxSpace/StreamDock-Device-SDK) | Vendor SDK — image format and report IDs; N4/N4E key and second-screen constants (`StreamDockN4`). |
 | [teras/keydeck](https://github.com/teras/keydeck) | Cross-platform deck driver. |
 | [rigor789/mirabox-streamdock-node](https://github.com/rigor789/mirabox-streamdock-node) | Node Mirabox driver. |
 | [kebot/mirabox-ts](https://github.com/kebot/mirabox-ts) | TypeScript Mirabox driver. |
+| [ValentinTorassa/VT-Ragnaros](https://github.com/ValentinTorassa/VT-Ragnaros) | Ragnaros (Redragon SS552, `0200:3001`) Linux driver — reverse-engineered Mirabox/Ajazz v3 1024-byte protocol, 10 keys, 4 knobs, touch strip. |
+
+<!-- Promote into the table above once upHere support lands (.claude/plans/2026-10-22_uphere-293v3-support.md):
+| [androme13/JIB](https://github.com/androme13/JIB) | Windows deck host (binary releases, no public source) — issue #2 and its device catalog: upHere 293V3 is `1200:2012`, driven by the vendor SDK's `StreamDock293V3` class (same board as the Mirabox 293V3). |
+-->
+
+## Fifine devices
+
+| Project | What it gave us |
+|---|---|
+| [shugotekitten/opendeck-ampgd6](https://github.com/shugotekitten/opendeck-ampgd6) | D6 driver — key remap, JPEG geometry, protocol versions, and 1024-byte packets for PID `0x0060`. |
+| [Phoenix557/FifineOpenSource](https://github.com/Phoenix557/FifineOpenSource) | Independent confirmation of the same D6 constants. |
+| [Lyagva/companion-surface-mirabox-stream-dock](https://github.com/Lyagva/companion-surface-mirabox-stream-dock) | Companion fork that added the D6; PR #49 is the hardware-verified `0x0007` model we cloned. |
+| [jasonkoon/sd-connect](https://github.com/jasonkoon/sd-connect) | Live-probed `0x0060` notes — key remap on write, raw 1-based indexes on input. |
+| [TripleU613/Ampligame_D6_Pro_Linux](https://github.com/TripleU613/Ampligame_D6_Pro_Linux) | libusb notes on CRT opcodes, `STP` commit, and 180° rotation (treat as a different firmware reading). |
 
 ## Fifine devices
 
@@ -56,7 +75,7 @@ which are not copyrightable — and its code was **not** used as an implementati
 | [jcalado/companion-surface-d200](https://github.com/jcalado/companion-surface-d200) | The most complete writeup: interface 0 endpoints and 1024-byte interrupt reports, the report-id byte node-hid prepends, the chunk-boundary-byte rule, the manifest fields the EasyUI firmware needs (`ViewParam[0].Font`, the `3_2` entry with `SmallViewMode`), the `0x0303` identity JSON, the 75 ms flush debounce and first-full-then-partial strategy, and — from disassembly — that brightness is `strtol()`'d ASCII. Its issue #8 is the ~17-minute sustained-write stall. |
 | [marcelobrake/ulanzi-linux](https://github.com/marcelobrake/ulanzi-linux) | Independent Python implementation of the same wire format: manufacturer `Zkswe`, product `ulanzi`, a per-unit serial, the ~5 s firmware watchdog reset by any outbound write, and the `manifest.json` + `Images/<name>.png` archive layout. |
 | [aleyvag/ulanzi-d200h-linux](https://github.com/aleyvag/ulanzi-d200h-linux) | The rigorous one, and the only source for the *other* firmware generation (Qt `UlanziDeckKey` on RK3308). Capture-verified: the unnumbered Consumer-page (`0x0c`/`0x01`) report descriptor on interface 0, the **handshake ordering rule** we implement (clock → drain the reply → first ZIP, else the firmware ACKs and renders nothing), `0x010b` = ZIP ACK and `0x0103` = ~1 Hz heartbeat, the 196×196 icon requirement, the ~196 KB page cap, that empty manifest slots break later page changes, and the per-key input byte layout. |
-| [doitian/ulanzi-studio-niri](https://github.com/doitian/ulanzi-studio-niri) | USB-sniffed D200X notes: the input-streaming unlock opcode and the encoder wire ids. DeckBridge deliberately does **not** send that opcode — see the non-goals in the plan. |
+| [doitian/ulanzi-studio-niri](https://github.com/doitian/ulanzi-studio-niri) | USB-sniffed D200X notes: the input-streaming unlock opcode and the encoder wire ids. DeckBridge deliberately does **not** send that opcode: D200X encoders and page buttons are out of scope for now. |
 | [realhidden/node-unlanzi-d200](https://github.com/realhidden/node-unlanzi-d200) | The counter-evidence on partial updates: reports ghost/white buttons from the 0x000d opcode and uses full pages only. Why `page.partialUpdates` is a one-line flag. |
 | [puritysb/AgentDeck](https://github.com/puritysb/AgentDeck) | That a D200H reports `DeviceType:"D200"` and is protocol-compatible, and that the device only enters HID mode a few seconds after plug-in. |
 | [racerxdl/ulanzi-d200-linux](https://github.com/racerxdl/ulanzi-d200-linux) | Corroboration of the same constants; its PR #11 is the finding that a padding entry only fixes the chunk-boundary problem when it is placed *first* in the archive. |
@@ -67,6 +86,7 @@ which are not copyrightable — and its code was **not** used as an implementati
 | Project                                                              | What it gave us                                                               |
 |----------------------------------------------------------------------|-------------------------------------------------------------------------------|
 | [saghul/txiki.js](https://github.com/saghul/txiki.js)                | The JS runtime DeckBridge compiles to — QuickJS-ng + libuv + libffi, no Node. |
+| [lukasMega/txiki.js-with-slim-builds](https://github.com/lukasMega/txiki.js-with-slim-builds) | Slim `tjs` builds DeckBridge vendors (`slim-ffi` assets, pinned as `$TXIKI_VERSION`). |
 | [@julusian/node-image-rs](https://github.com/Julusian/node-image-rs) | Reference for the Rust JPEG resize/rotate path (`deckbridge-native`).         |
 
 ---

@@ -1,25 +1,16 @@
 import assert from 'tjs:assert';
-import { renderImage } from '../src/image-render.js';
+import { hashJpeg } from '../src/shared/image-hash.js';
+import { renderImage, TouchStripCanvas } from '../src/transform/image-render.js';
+import { imageCache } from '../src/transform/image-cache.js';
+import { blitImage, canvasSliceToBmp } from '../src/transform/translator.js';
+import { AJAZZ_AKP05E_MODEL } from '../src/devices/ajazz/akp05e.js';
 import { MIRABOX_293_MODEL } from '../src/devices/mirabox/mirabox-293.js';
-import type { DeviceModel } from '../src/devices/driver.js';
+import { testAsync as test, summaryExit } from './helpers/harness.js';
+import { SOLID_RED_16X16_JPEG, makePassthroughModel } from './helpers/fixtures.js';
 
 const coraToWireImage = MIRABOX_293_MODEL.keyMap.coraToWireImage!;
 
-let passed = 0;
-let failed = 0;
-
-async function test(name: string, fn: () => void | Promise<void>): Promise<void> {
-  try {
-    await fn();
-    console.log(`  ✓ ${name}`);
-    passed++;
-  } catch (e: unknown) {
-    console.error(`  ✗ ${name}: ${(e as Error).message}`);
-    failed++;
-  }
-}
-
-// ── Fake driver (records every sendImage call) ────────────────────────────────
+// Fake driver (records every sendImage call)
 
 type SendImageCall = { keyIndex: number; bytes: Uint8Array };
 
@@ -35,100 +26,16 @@ function makeFakeDriver(): {
   };
 }
 
-/** Minimal gen2-style DeviceModel with a passthrough JPEG transform and empty
- *  keyMap (identity key mapping). Shape copied from image-pipeline.test.ts. */
-function makePassthroughModel(): DeviceModel {
-  return {
-    id: 'test-passthrough',
-    vendor: 'elgato',
-    protocol: 'elgato-gen2',
-    name: 'Test Passthrough Device',
-    usbVendorId: 0x0fd9,
-    usbProductIds: [0x00a5],
-    keyCount: 15,
-    columns: 5,
-    rows: 3,
-    keyWidth: 96,
-    keyHeight: 96,
-    image: {
-      format: 'jpeg',
-      width: 96,
-      height: 96,
-      rotate: 0,
-      flipH: false,
-      flipV: false,
-      colorMode: 'rgb',
-      maxBytes: 0,
-      quality: 0.9,
-      transform: 'passthrough',
-    },
-    keyMap: {},
-    cora: {
-      productId: 0x00a5,
-      usePhysicalIdentity: true,
-    },
-    driverKind: 'elgato-hid',
-  };
-}
-
-// A valid 16×16 solid-red JPEG (same fixture as translator.test.ts; verified
-// decodable by the Rust image-proc sidecar).
-const SOLID_RED_16X16_JPEG = Buffer.from([
-  0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46, 0x00, 0x01, 0x02, 0x00, 0x00, 0x01,
-  0x00, 0x01, 0x00, 0x00, 0xff, 0xc0, 0x00, 0x11, 0x08, 0x00, 0x10, 0x00, 0x10, 0x03, 0x01, 0x11,
-  0x00, 0x02, 0x11, 0x01, 0x03, 0x11, 0x01, 0xff, 0xdb, 0x00, 0x43, 0x00, 0x03, 0x02, 0x02, 0x03,
-  0x02, 0x02, 0x03, 0x03, 0x03, 0x03, 0x04, 0x03, 0x03, 0x04, 0x05, 0x08, 0x05, 0x05, 0x04, 0x04,
-  0x05, 0x0a, 0x07, 0x07, 0x06, 0x08, 0x0c, 0x0a, 0x0c, 0x0c, 0x0b, 0x0a, 0x0b, 0x0b, 0x0d, 0x0e,
-  0x12, 0x10, 0x0d, 0x0e, 0x11, 0x0e, 0x0b, 0x0b, 0x10, 0x16, 0x10, 0x11, 0x13, 0x14, 0x15, 0x15,
-  0x15, 0x0c, 0x0f, 0x17, 0x18, 0x16, 0x14, 0x18, 0x12, 0x14, 0x15, 0x14, 0xff, 0xdb, 0x00, 0x43,
-  0x01, 0x03, 0x04, 0x04, 0x05, 0x04, 0x05, 0x09, 0x05, 0x05, 0x09, 0x14, 0x0d, 0x0b, 0x0d, 0x14,
-  0x14, 0x14, 0x14, 0x14, 0x14, 0x14, 0x14, 0x14, 0x14, 0x14, 0x14, 0x14, 0x14, 0x14, 0x14, 0x14,
-  0x14, 0x14, 0x14, 0x14, 0x14, 0x14, 0x14, 0x14, 0x14, 0x14, 0x14, 0x14, 0x14, 0x14, 0x14, 0x14,
-  0x14, 0x14, 0x14, 0x14, 0x14, 0x14, 0x14, 0x14, 0x14, 0x14, 0x14, 0x14, 0x14, 0x14, 0x14, 0x14,
-  0x14, 0xff, 0xc4, 0x00, 0x1f, 0x00, 0x00, 0x01, 0x05, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x00,
-  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09,
-  0x0a, 0x0b, 0xff, 0xc4, 0x00, 0xb5, 0x10, 0x00, 0x02, 0x01, 0x03, 0x03, 0x02, 0x04, 0x03, 0x05,
-  0x05, 0x04, 0x04, 0x00, 0x00, 0x01, 0x7d, 0x01, 0x02, 0x03, 0x00, 0x04, 0x11, 0x05, 0x12, 0x21,
-  0x31, 0x41, 0x06, 0x13, 0x51, 0x61, 0x07, 0x22, 0x71, 0x14, 0x32, 0x81, 0x91, 0xa1, 0x08, 0x23,
-  0x42, 0xb1, 0xc1, 0x15, 0x52, 0xd1, 0xf0, 0x24, 0x33, 0x62, 0x72, 0x82, 0x09, 0x0a, 0x16, 0x17,
-  0x18, 0x19, 0x1a, 0x25, 0x26, 0x27, 0x28, 0x29, 0x2a, 0x34, 0x35, 0x36, 0x37, 0x38, 0x39, 0x3a,
-  0x43, 0x44, 0x45, 0x46, 0x47, 0x48, 0x49, 0x4a, 0x53, 0x54, 0x55, 0x56, 0x57, 0x58, 0x59, 0x5a,
-  0x63, 0x64, 0x65, 0x66, 0x67, 0x68, 0x69, 0x6a, 0x73, 0x74, 0x75, 0x76, 0x77, 0x78, 0x79, 0x7a,
-  0x83, 0x84, 0x85, 0x86, 0x87, 0x88, 0x89, 0x8a, 0x92, 0x93, 0x94, 0x95, 0x96, 0x97, 0x98, 0x99,
-  0x9a, 0xa2, 0xa3, 0xa4, 0xa5, 0xa6, 0xa7, 0xa8, 0xa9, 0xaa, 0xb2, 0xb3, 0xb4, 0xb5, 0xb6, 0xb7,
-  0xb8, 0xb9, 0xba, 0xc2, 0xc3, 0xc4, 0xc5, 0xc6, 0xc7, 0xc8, 0xc9, 0xca, 0xd2, 0xd3, 0xd4, 0xd5,
-  0xd6, 0xd7, 0xd8, 0xd9, 0xda, 0xe1, 0xe2, 0xe3, 0xe4, 0xe5, 0xe6, 0xe7, 0xe8, 0xe9, 0xea, 0xf1,
-  0xf2, 0xf3, 0xf4, 0xf5, 0xf6, 0xf7, 0xf8, 0xf9, 0xfa, 0xff, 0xc4, 0x00, 0x1f, 0x01, 0x00, 0x03,
-  0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01,
-  0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0xff, 0xc4, 0x00, 0xb5, 0x11, 0x00,
-  0x02, 0x01, 0x02, 0x04, 0x04, 0x03, 0x04, 0x07, 0x05, 0x04, 0x04, 0x00, 0x01, 0x02, 0x77, 0x00,
-  0x01, 0x02, 0x03, 0x11, 0x04, 0x05, 0x21, 0x31, 0x06, 0x12, 0x41, 0x51, 0x07, 0x61, 0x71, 0x13,
-  0x22, 0x32, 0x81, 0x08, 0x14, 0x42, 0x91, 0xa1, 0xb1, 0xc1, 0x09, 0x23, 0x33, 0x52, 0xf0, 0x15,
-  0x62, 0x72, 0xd1, 0x0a, 0x16, 0x24, 0x34, 0xe1, 0x25, 0xf1, 0x17, 0x18, 0x19, 0x1a, 0x26, 0x27,
-  0x28, 0x29, 0x2a, 0x35, 0x36, 0x37, 0x38, 0x39, 0x3a, 0x43, 0x44, 0x45, 0x46, 0x47, 0x48, 0x49,
-  0x4a, 0x53, 0x54, 0x55, 0x56, 0x57, 0x58, 0x59, 0x5a, 0x63, 0x64, 0x65, 0x66, 0x67, 0x68, 0x69,
-  0x6a, 0x73, 0x74, 0x75, 0x76, 0x77, 0x78, 0x79, 0x7a, 0x82, 0x83, 0x84, 0x85, 0x86, 0x87, 0x88,
-  0x89, 0x8a, 0x92, 0x93, 0x94, 0x95, 0x96, 0x97, 0x98, 0x99, 0x9a, 0xa2, 0xa3, 0xa4, 0xa5, 0xa6,
-  0xa7, 0xa8, 0xa9, 0xaa, 0xb2, 0xb3, 0xb4, 0xb5, 0xb6, 0xb7, 0xb8, 0xb9, 0xba, 0xc2, 0xc3, 0xc4,
-  0xc5, 0xc6, 0xc7, 0xc8, 0xc9, 0xca, 0xd2, 0xd3, 0xd4, 0xd5, 0xd6, 0xd7, 0xd8, 0xd9, 0xda, 0xe2,
-  0xe3, 0xe4, 0xe5, 0xe6, 0xe7, 0xe8, 0xe9, 0xea, 0xf2, 0xf3, 0xf4, 0xf5, 0xf6, 0xf7, 0xf8, 0xf9,
-  0xfa, 0xff, 0xda, 0x00, 0x0c, 0x03, 0x01, 0x00, 0x02, 0x11, 0x03, 0x11, 0x00, 0x3f, 0x00, 0xf9,
-  0xd2, 0xbf, 0x0c, 0x3f, 0xd5, 0x30, 0xa0, 0x02, 0x80, 0x0a, 0x00, 0xff, 0xd9,
-]);
-
-// ── renderImage tests (uses the real Rust image-proc FFI transform) ───────────
-//
-// NOTE: `imageCache` is a module singleton shared across every case in this
-// file. Each case below uses a distinct source image (the fixture mutated at
-// one byte, or unique passthrough bytes) and/or a fresh model id so that no two
-// cases collide on the same cache key.
+// renderImage tests (uses the real Rust image-proc
+// FFI transform) NOTE: `imageCache` is a module
+// singleton shared across every case in this file.
 
 console.log('\nimage-render: renderImage (Rust sidecar)');
 
 // 1. sidecar model produces a valid JPEG ≤ maxBytes.
-await test('sidecar model produces a valid JPEG ≤ maxBytes', async () => {
+await test('sidecar model produces a valid JPEG ≤ maxBytes', () => {
   const fake = makeFakeDriver();
-  await renderImage(fake, MIRABOX_293_MODEL, 0, SOLID_RED_16X16_JPEG, 'jpeg');
+  renderImage(fake, MIRABOX_293_MODEL, 0, SOLID_RED_16X16_JPEG, 'jpeg');
 
   assert.equal(fake.calls.length, 1, 'sendImage should be called once');
   const bytes = fake.calls[0]!.bytes;
@@ -143,16 +50,16 @@ await test('sidecar model produces a valid JPEG ≤ maxBytes', async () => {
 // 2. cache hit returns identical bytes (transform runs once).
 // Uses a distinct source image (one mutated byte deep in the entropy-coded
 // scan) so it cannot collide with case 1/3's cache entry.
-await test('second identical image is a cache hit (same bytes)', async () => {
+await test('second identical image is a cache hit (same bytes)', () => {
   const distinct = Buffer.from(SOLID_RED_16X16_JPEG);
   distinct[distinct.length - 5] = (distinct[distinct.length - 5]! ^ 0x55) & 0xff;
   const fake = makeFakeDriver();
 
-  await renderImage(fake, MIRABOX_293_MODEL, 1, distinct, 'jpeg');
+  renderImage(fake, MIRABOX_293_MODEL, 1, distinct, 'jpeg');
   assert.equal(fake.calls.length, 1, 'first render should call sendImage once');
   const firstBytes = fake.calls[0]!.bytes;
 
-  await renderImage(fake, MIRABOX_293_MODEL, 1, distinct, 'jpeg');
+  renderImage(fake, MIRABOX_293_MODEL, 1, distinct, 'jpeg');
   assert.equal(fake.calls.length, 2, 'second render should call sendImage again');
   const secondBytes = fake.calls[1]!.bytes;
 
@@ -163,10 +70,25 @@ await test('second identical image is a cache hit (same bytes)', async () => {
   );
 });
 
-// 3. key remap: sendImage keyIndex equals coraToWireImage[0] (NOT 0).
-await test('key remap: sendImage receives mapped device key index', async () => {
+await test('returns the raw frame hash on a miss, a hit and a skipped key', () => {
+  imageCache.clear(); // earlier cases cached this frame
   const fake = makeFakeDriver();
-  await renderImage(fake, MIRABOX_293_MODEL, 0, SOLID_RED_16X16_JPEG, 'jpeg');
+  const expected = hashJpeg(SOLID_RED_16X16_JPEG);
+  const miss = renderImage(fake, MIRABOX_293_MODEL, 0, SOLID_RED_16X16_JPEG, 'jpeg');
+  const hit = renderImage(fake, MIRABOX_293_MODEL, 0, SOLID_RED_16X16_JPEG, 'jpeg');
+  const skipped = renderImage(fake, MIRABOX_293_MODEL, 99, SOLID_RED_16X16_JPEG, 'jpeg');
+  assert.equal(miss.hash, expected);
+  assert.equal(hit.hash, expected);
+  assert.equal(skipped.hash, expected);
+  assert.equal(miss.cached, false);
+  assert.equal(hit.cached, true);
+  assert.equal(skipped.cached, true);
+});
+
+// 3. key remap: sendImage keyIndex equals coraToWireImage[0] (NOT 0).
+await test('key remap: sendImage receives mapped device key index', () => {
+  const fake = makeFakeDriver();
+  renderImage(fake, MIRABOX_293_MODEL, 0, SOLID_RED_16X16_JPEG, 'jpeg');
 
   assert.equal(fake.calls.length, 1, 'sendImage should be called once');
   assert.equal(
@@ -177,9 +99,9 @@ await test('key remap: sendImage receives mapped device key index', async () => 
 });
 
 // 4. out-of-range key (coraToWireImage[99] === undefined → -1) is skipped.
-await test('out-of-range key is skipped (no sendImage)', async () => {
+await test('out-of-range key is skipped (no sendImage)', () => {
   const fake = makeFakeDriver();
-  await renderImage(fake, MIRABOX_293_MODEL, 99, SOLID_RED_16X16_JPEG, 'jpeg');
+  renderImage(fake, MIRABOX_293_MODEL, 99, SOLID_RED_16X16_JPEG, 'jpeg');
 
   assert.equal(
     fake.calls.length,
@@ -189,14 +111,14 @@ await test('out-of-range key is skipped (no sendImage)', async () => {
 });
 
 // 5. passthrough model forwards original bytes unchanged (no transform).
-await test('passthrough model forwards original bytes unchanged', async () => {
+await test('passthrough model forwards original bytes unchanged', () => {
   const model = makePassthroughModel();
   const fake = makeFakeDriver();
   // Distinct bytes that begin like a JPEG but are not a real image — proves no
   // transform ran (a transform would reject/alter these).
   const someBytes = Buffer.from([0xff, 0xd8, 0x11, 0x22, 0x33, 0x44, 0x55, 0xff, 0xd9]);
 
-  await renderImage(fake, model, 1, someBytes, 'jpeg');
+  renderImage(fake, model, 1, someBytes, 'jpeg');
 
   assert.equal(fake.calls.length, 1, 'sendImage should be called once');
   const call = fake.calls[0]!;
@@ -208,7 +130,146 @@ await test('passthrough model forwards original bytes unchanged', async () => {
   );
 });
 
-// ── Summary ───────────────────────────────────────────────────────────────────
+console.log('\nimage-render: TouchStripCanvas');
 
-console.log(`\n${passed} passed, ${failed} failed`);
-tjs.exit(failed > 0 ? 1 : 0);
+const STRIP = AJAZZ_AKP05E_MODEL.touchStripDisplay!;
+const SLOTS = AJAZZ_AKP05E_MODEL.widgetDisplays!;
+
+/** SOF0 frame size of a baseline JPEG. */
+function jpegSize(jpeg: Uint8Array): { width: number; height: number } {
+  for (let i = 0; i < jpeg.length - 8; i++) {
+    if (jpeg[i] === 0xff && jpeg[i + 1] === 0xc0) {
+      return {
+        height: (jpeg[i + 5]! << 8) | jpeg[i + 6]!,
+        width: (jpeg[i + 7]! << 8) | jpeg[i + 8]!,
+      };
+    }
+  }
+  throw new Error('no SOF0 marker');
+}
+
+/** An 800×100 BMP of random pixels — the worst case for the JPEG byte cap. */
+function noisyStripBmp(): Uint8Array {
+  const rgb = new Uint8Array(800 * 100 * 3);
+  let seed = 1;
+  for (let i = 0; i < rgb.length; i++) {
+    seed = (seed * 1103515245 + 12345) & 0x7fffffff;
+    rgb[i] = seed >> 16;
+  }
+  return canvasSliceToBmp(rgb, 800, 100, 0, 800);
+}
+
+/** Red pixels in a device JPEG (decoded through the same blit the canvas uses). */
+function redPixels(jpeg: Uint8Array): number {
+  const { width, height } = jpegSize(jpeg);
+  const rgb = new Uint8Array(width * height * 3);
+  blitImage(rgb, width, height, jpeg, 0, 0);
+  let red = 0;
+  for (let o = 0; o < rgb.length; o += 3) if (rgb[o]! > 128 && rgb[o + 1]! < 80) red++;
+  return red;
+}
+
+await test('a full window is one wire-1 upload, 800×112, within the byte cap', () => {
+  const driver = makeFakeDriver();
+  new TouchStripCanvas().apply(driver, AJAZZ_AKP05E_MODEL, noisyStripBmp());
+  assert.deepEqual(
+    driver.calls.map((c) => c.keyIndex),
+    [STRIP.wireId],
+  );
+  const jpeg = driver.calls[0]!.bytes;
+  assert.deepEqual(jpegSize(jpeg), { width: 800, height: 112 });
+  assert.ok(jpeg.length <= 10_100, `${jpeg.length} B fits the 10 100 B firmware cap`);
+});
+
+await test('a region covering the whole window is a full-strip upload too', () => {
+  const driver = makeFakeDriver();
+  new TouchStripCanvas().apply(driver, AJAZZ_AKP05E_MODEL, SOLID_RED_16X16_JPEG, {
+    x: 0,
+    y: 0,
+    w: 800,
+    h: 100,
+  });
+  assert.equal(driver.calls.length, 1);
+  assert.equal(jpegSize(driver.calls[0]!.bytes).width, 800);
+});
+
+await test('a partial window re-sends only the slots it touches, each 176×112', () => {
+  const canvas = new TouchStripCanvas();
+  const driver = makeFakeDriver();
+  const patch = (x: number): void =>
+    canvas.apply(driver, AJAZZ_AKP05E_MODEL, SOLID_RED_16X16_JPEG, { x, y: 40, w: 16, h: 16 });
+  patch(416);
+  patch(192); // straddles zones 1 and 2
+  assert.deepEqual(
+    driver.calls.map((c) => c.keyIndex),
+    [SLOTS[2]!.wireId, SLOTS[0]!.wireId, SLOTS[1]!.wireId],
+  );
+  for (const call of driver.calls) {
+    assert.deepEqual(jpegSize(call.bytes), { width: 176, height: 112 });
+  }
+});
+
+await test("'always' sends every patch as a full-strip upload", () => {
+  const canvas = new TouchStripCanvas();
+  canvas.setOptions({ zoneFit: 'crop', upload: 'always' });
+  const driver = makeFakeDriver();
+  canvas.apply(driver, AJAZZ_AKP05E_MODEL, SOLID_RED_16X16_JPEG, { x: 416, y: 40, w: 16, h: 16 });
+  assert.deepEqual(
+    driver.calls.map((c) => [c.keyIndex, jpegSize(c.bytes).width]),
+    [[STRIP.wireId, 800]],
+  );
+});
+
+await test('a masked zone turns a full window into per-slot uploads of the rest', () => {
+  const canvas = new TouchStripCanvas();
+  const driver = makeFakeDriver();
+  canvas.setMask(driver, AJAZZ_AKP05E_MODEL, [SLOTS[1]!.wireId]);
+  canvas.apply(driver, AJAZZ_AKP05E_MODEL, SOLID_RED_16X16_JPEG);
+  assert.deepEqual(
+    driver.calls.map((c) => c.keyIndex),
+    [SLOTS[0]!.wireId, SLOTS[2]!.wireId, SLOTS[3]!.wireId],
+  );
+});
+
+// A 16-px red patch at `x`; the first upload is the leftmost slot it touches.
+const redIn = (zoneFit: 'crop' | 'scale', x: number): number => {
+  const canvas = new TouchStripCanvas();
+  canvas.setOptions({ zoneFit, upload: 'full-frames' });
+  const driver = makeFakeDriver();
+  canvas.apply(driver, AJAZZ_AKP05E_MODEL, SOLID_RED_16X16_JPEG, { x, y: 40, w: 16, h: 16 });
+  return redPixels(driver.calls[0]!.bytes);
+};
+
+await test("'crop' shows the slot window's own pixels; 'scale' shows the whole zone", () => {
+  assert.equal(redIn('crop', 190), 0, 'x 190–205 is zone 1 and gap only: slot 1 ends at 176');
+  assert.ok(redIn('scale', 184) > 0, 'scale keeps zone 1 x 184–199');
+  assert.ok(redIn('crop', 203) > 0, 'crop shows slot 2 x 203+');
+});
+
+await test('restoring every zone is one full-strip upload; fewer go per slot', () => {
+  const canvas = new TouchStripCanvas();
+  const driver = makeFakeDriver();
+  canvas.restore(
+    driver,
+    AJAZZ_AKP05E_MODEL,
+    SLOTS.map((d) => d.wireId),
+  );
+  canvas.restore(driver, AJAZZ_AKP05E_MODEL, [SLOTS[3]!.wireId]);
+  assert.deepEqual(
+    driver.calls.map((c) => [c.keyIndex, jpegSize(c.bytes).width]),
+    [
+      [STRIP.wireId, 800],
+      [SLOTS[3]!.wireId, 176],
+    ],
+  );
+});
+
+await test('an undecodable window sends nothing', () => {
+  const driver = makeFakeDriver();
+  new TouchStripCanvas().apply(driver, AJAZZ_AKP05E_MODEL, new Uint8Array([1, 2, 3]));
+  assert.equal(driver.calls.length, 0);
+});
+
+// Summary
+
+summaryExit();

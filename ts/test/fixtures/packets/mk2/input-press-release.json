@@ -1,0 +1,34 @@
+{
+  "version": 1,
+  "model": "mk2",
+  "pid": "0x0080",
+  "firmware": null,
+  "interface": null,
+  "source": "synthetic",
+  "assumeOpen": true,
+  "note": "Report 0x01, type 0x00, key count u16 LE, one state byte per key from byte 4; events are edge-detected.",
+  "steps": [
+    {
+      "op": "read",
+      "dir": "in",
+      "hex": "01000f00000001000000000000000000000000",
+      "expect": [
+        {
+          "type": "press",
+          "key": 2
+        }
+      ]
+    },
+    {
+      "op": "read",
+      "dir": "in",
+      "hex": "01000f00000000000000000000000000000000",
+      "expect": [
+        {
+          "type": "release",
+          "key": 2
+        }
+      ]
+    }
+  ]
+}

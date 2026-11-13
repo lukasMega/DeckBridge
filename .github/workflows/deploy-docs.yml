@@ -6,12 +6,22 @@ on:
     paths:
       - 'docs/**'
       - 'docs-site/**'
+      - 'patches/**'
+      - 'ts/src/**'
+      - 'ts/scripts/build-demo.mjs'
+      - 'ts/package.json'
+      - 'ts/pnpm-lock.yaml'
       - '.github/workflows/deploy-docs.yml'
   # Build + test docs changes before merge. The deploy job is skipped on PRs.
   pull_request:
     paths:
       - 'docs/**'
       - 'docs-site/**'
+      - 'patches/**'
+      - 'ts/src/**'
+      - 'ts/scripts/build-demo.mjs'
+      - 'ts/package.json'
+      - 'ts/pnpm-lock.yaml'
       - '.github/workflows/deploy-docs.yml'
   workflow_dispatch:
 
@@ -44,7 +54,9 @@ jobs:
           # by `node --test` via native type stripping (needs 22.18+).
           node-version: 24
           cache: pnpm
-          cache-dependency-path: docs-site/pnpm-lock.yaml
+          cache-dependency-path: |
+            docs-site/pnpm-lock.yaml
+            ts/pnpm-lock.yaml
 
       - name: Install Chrome (for mermaid prerender)
         id: chrome
@@ -69,6 +81,14 @@ jobs:
           # Chrome comes from setup-chrome; skip puppeteer's own download.
           PUPPETEER_SKIP_DOWNLOAD: 'true'
 
+      - name: Install ts deps (demo bundle)
+        working-directory: ts
+        run: pnpm install --frozen-lockfile
+
+      - name: Build live demo bundle
+        working-directory: ts
+        run: node scripts/build-demo.mjs
+
       - name: Test
         run: pnpm run test
         env:
@@ -88,10 +108,42 @@ jobs:
           COLLECTOR_ORIGIN: ${{ vars.COLLECTOR_ORIGIN }}
           COLLECTOR_SITE_ID: ${{ vars.COLLECTOR_SITE_ID }}
 
-      # Build already ran above; test:build would rebuild, so run the three
+      # Build already ran above; test:build would rebuild, so run the four
       # layers that read build/ instead. A failure here blocks the deploy.
       - name: Test
-        run: pnpm run test:links && pnpm run test:content && pnpm run test:output
+        run: pnpm run test:links && pnpm run test:content && pnpm run test:output && pnpm run test:feeds
+
+      # Browser layer: everything above is static regex over build/. These specs
+      # drive the built site in Lightpanda and cover hydration only — client-side
+      # routing, the DeviceTable filter/sort, colour-mode and animation prefs.
+      # Lightpanda covers DOM behavior; the demo orientation regression uses
+      # the Chrome installed above because CSS transforms need a renderer.
+      - name: Cache Lightpanda binary
+        uses: actions/cache@v6
+        with:
+          path: ~/.cache/lightpanda-node
+          key: lightpanda-${{ hashFiles('e2e/.lightpanda-version') }}
+
+      - name: Install e2e deps
+        working-directory: e2e
+        run: pnpm install --frozen-lockfile
+        env:
+          # Real-renderer checks use the Chrome installed above.
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
+
+      - name: Browser e2e (docs)
+        working-directory: e2e
+        run: pnpm run test:docs
+        env:
+          CHROME_BIN: ${{ steps.chrome.outputs.chrome-path }}
+
+      - name: Upload Playwright report on failure
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: playwright-report-docs
+          path: e2e/test-results
+          retention-days: 7
 
       - uses: actions/configure-pages@v6
         if: github.event_name != 'pull_request'

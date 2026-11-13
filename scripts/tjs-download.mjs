@@ -8,21 +8,12 @@
 // No macos-x86_64 asset exists in that release — Intel macOS must build from
 // source (TJS_FROM_SOURCE=1 -> scripts/tjs-build.mjs).
 import { execSync } from 'node:child_process';
-import { existsSync, mkdirSync, chmodSync, rmSync, copyFileSync, writeFileSync, readdirSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { mkdirSync, rmSync, writeFileSync, readdirSync } from 'node:fs';
+import { join } from 'node:path';
 import { tmpdir, platform, arch } from 'node:os';
+import { requireTjsEnv, installTjs } from './tjs-common.mjs';
 
-const { TJS, TXIKI_VERSION } = process.env;
-
-if (!TJS || !TXIKI_VERSION) {
-  console.error('TJS and TXIKI_VERSION env vars must be set');
-  process.exit(1);
-}
-
-if (existsSync(TJS)) {
-  console.log(`tjs already present: ${TJS}`);
-  process.exit(0);
-}
+const { TJS, TXIKI_VERSION } = requireTjsEnv();
 
 const OS_MAP = { darwin: 'macos', linux: 'linux', win32: 'windows' };
 const ARCH_MAP = { x64: 'x86_64', arm64: 'arm64' };
@@ -95,13 +86,7 @@ try {
     : execSync(`find "${outDir}" -name "${binName}" -type f`).toString().trim().split('\n').filter(Boolean)[0];
   if (!found) { console.error(`${binName} binary not found in zip`); process.exit(1); }
 
-  mkdirSync(dirname(TJS), { recursive: true });
-  if (isWin) {
-    copyFileSync(found, TJS);
-  } else {
-    execSync(`cp "${found}" "${TJS}"`);
-  }
-  chmodSync(TJS, 0o755);
+  installTjs(found, TJS);
 
   // Strip debug + non-global symbols (~355 KB smaller; the runtime still runs).
   // macOS/Linux only — Windows has no `strip` and the prebuilt is a .exe.

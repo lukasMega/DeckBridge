@@ -1,70 +1,128 @@
+<img src="src-tauri/icons/128x128.png" alt="DeckBridge icon" width="96" align="right" />
+
 # DeckBridge
 
 [![views](https://tst.lukasmega.deno.net/badge?site=deckbridge&total=1&label=docs%20views%2030d%20%2B%20all)](https://lukasmega.github.io/deno-kv-analytics/badge)
 
 Use a USB Stream Deck with the Elgato Stream Deck app **over your local network** — no
-[Elgato Network Dock](https://www.elgato.com/us/en/p/network-dock-stream-deck) (>60 USD)
+[Elgato Network Dock](https://www.elgato.com/us/en/p/network-dock-stream-deck) (>70 USD)
 required.
 
 Plug your deck into any computer, run DeckBridge there, and the Elgato app on any machine
 on the same network finds it like real Elgato hardware. One small program (<5 MB), nothing
 else to install.
 
+Try it in your browser: [live demo](https://lukasmega.github.io/DeckBridge/demo/).
+
+<img src="docs/readme-flow.svg" alt="Data flow: USB Stream Deck to your computer running DeckBridge, then to the Elgato app or Bitfocus Companion over WiFi" width="680" />
+
 **📖 Documentation:** <https://lukasmega.github.io/DeckBridge/>
+
+> [!WARNING]
+> **⚠ Experimental project:** DeckBridge is experimental. The author does not plan to add
+> support for devices beyond those already listed as supported, but will accept reasonable
+> pull requests for new devices when they include proof that the hardware works. DeckBridge
+> supports only 6-button (3×2) grids like the Stream Deck Mini and grids with up to 15
+> buttons (5×3) like the Stream Deck MK.2.
+
+> [!IMPORTANT]
+> **Use Elgato Stream Deck app 7.6.0.** Version 7.6.1 closes the connection to DeckBridge
+> when both run on the same computer, so the deck never pairs
+> ([#257](https://github.com/lukasMega/DeckBridge/issues/257)). If you already updated,
+> reinstall 7.6.0 until a fix is released.
+
+> **🛠 How it was built:** DeckBridge started as a small personal project. The code was
+> written largely with [Claude Code](https://claude.com/claude-code) (mostly Opus), but the
+> author spent a significant amount of their free time debugging it and testing against
+> real hardware — protocol quirks, per-device HID report formats and image pipelines only
+> show up on an actual deck.
+
+
+[//]: # (<img src="docs/readme-overview.svg" alt="DeckBridge overview: USB Stream Deck exchanges HID with DeckBridge, which exchanges CORA/TCP over the LAN with the Elgato Stream Deck app and serves HTTP/WS to a local Web UI" width="720" />)
+
+DeckBridge sits between the USB deck and the Elgato app: it speaks HID to the deck
+and CORA (Elgato's network-dock protocol) to the app, so the app treats it like real
+Elgato hardware over the network. The Web UI is a side channel for status/config.
+
+You still use the Elgato Stream Deck app as normal — DeckBridge just lets it drive
+third-party USB decks (Mirabox, Ajazz, Fifine, …) that Elgato's app doesn't natively
+support. Set it up once, then forget it: run DeckBridge in the background (tray icon)
+and it stays out of the way.
 
 ## Supported devices
 
-- Mirabox 293V3 (also matches the HSV293SV3 / "293S V3" refresh — untested)
-- Mirabox 293S
-- Mirabox K1 Pro
-- Ajazz AKP153E (rev. 2) — untested
-- Ajazz AKP153R (rev. 2) — untested
-- Fifine AmpliGame D6 — untested
-- Fifine AmpliGame D6 (rev. 2) — untested
-- Ajazz AKP153 — untested
-- Ajazz AKP153E (rev. 1) — untested
-- Ajazz AKP153R (rev. 1) — untested
-- Mars Gaming MSD-ONE — untested
-- Mad Dog GK150K — untested
-- Risemode Vision 01 — untested
-- TMICE Stream Controller — untested
-- Ulanzi Stream Controller D200 — untested
-- Stream Deck MK.2
-- Stream Deck Mini
+See **[Supported devices](https://lukasmega.github.io/DeckBridge/devices)**. Selected registry fields: **[Device specs](https://lukasmega.github.io/DeckBridge/device-specs)**.
 
-Hardware-tested on macOS: 293V3, 293S, K1 Pro, and Stream Deck Mini. MK.2, the Ajazz
-AKP153 rev. 2 models, both Fifine AmpliGame D6 revisions, the 7 v1 rebadges of the 293S
-board (Ajazz AKP153/E/R rev. 1, Mars Gaming MSD-ONE, Mad Dog GK150K, Risemode Vision 01,
-TMICE Stream Controller), and the Linux/Windows builds are implemented but not
-hardware-verified. The Ajazz rev. 2 boards and the Fifine D6 are the same hardware as the
-293V3 behind a different USB VID/PID, so they reuse the 293V3 model verbatim (the D6
-ships in two revisions that differ only in USB packet size: 512 bytes for PID `0x0007`,
-1024 bytes for PID `0x0060`); the 7 v1 rebadges are the same hardware as the 293S behind
-a different USB VID/PID, so they reuse the 293S model verbatim — report anything that
-misbehaves.
+| Device | Grid | Image size | Protocol |
+|---|---|---|---|
+| Stream Deck MK.2 | 15 buttons (5×3) | 72×72 | elgato-gen2 |
+| Stream Deck Mini | 6 buttons (3×2) | 80×80 | elgato-gen1 |
+| Mirabox 293V3 | 15 buttons (5×3) | 112×112 | mirabox-cora |
+| Mirabox 293S | 15 buttons (5×3) | 85×85 | mirabox-cora-v1 |
+| Mirabox K1 Pro | 6 buttons (3×2) | 64×64 | mirabox-cora |
+| Fifine AmpliGame D6 (rev. 2) | 15 buttons (5×3) | 112×112 | mirabox-cora |
+| Ajazz AKP153E (rev. 2) | 15 buttons (5×3) | 95×95 | mirabox-cora |
+| Ajazz AKP05E | 10 buttons (5×2) | 112×112 | ajazz-akp05 |
 
-The **Ulanzi Stream Controller D200** is the odd one out: it is not a per-key image deck
-at all but a small Linux appliance that repaints its screen from a ZIP archive the host
-sends it, so it has its own driver rather than reusing an existing model. It is
-implemented from public documentation and has never been run against the hardware — the
-13 LCD keys are driven; the wide slot keeps the firmware's own clock.
+<details>
+<summary>untested devices</summary>
 
-> **Platform status:** DeckBridge is currently **tested on macOS only**, and the
-> GitHub releases currently ship **macOS builds only**. Linux and Windows support
-> exists in the code but is untested and not yet released — build from source at
-> your own risk.
+| Device | Grid | Image size | Protocol |
+|---|---|---|---|
+| Fifine AmpliGame D6 | 15 buttons (5×3) | 112×112 | mirabox-cora |
+| Ajazz AKP153R (rev. 2) | 15 buttons (5×3) | 112×112 | mirabox-cora |
+| Ajazz AKP05 | 10 buttons (5×2) | 112×112 | ajazz-akp05 |
+| Ajazz AKP153 | 15 buttons (5×3) | 85×85 | mirabox-cora-v1 |
+| Ajazz AKP153E (rev. 1) | 15 buttons (5×3) | 85×85 | mirabox-cora-v1 |
+| Ajazz AKP153R (rev. 1) | 15 buttons (5×3) | 85×85 | mirabox-cora-v1 |
+| Mars Gaming MSD-ONE | 15 buttons (5×3) | 85×85 | mirabox-cora-v1 |
+| Mad Dog GK150K | 15 buttons (5×3) | 85×85 | mirabox-cora-v1 |
+| Risemode Vision 01 | 15 buttons (5×3) | 85×85 | mirabox-cora-v1 |
+| TMICE Stream Controller | 15 buttons (5×3) | 85×85 | mirabox-cora-v1 |
+| Ulanzi Stream Controller D200 | 13 buttons (5×3) | 196×196 | ulanzi-zk |
+
+</details>
+
+Mirabox 293V3 also matches the HSV293SV3 / "293S V3" refresh — untested.
+
+> [!NOTE] <details><summary>details about supported devices</summary>
+> Hardware-tested on macOS: Stream Deck MK.2, Stream Deck Mini, 293V3, 293S, K1 Pro,
+> Fifine AmpliGame D6 (rev. 2), and Ajazz AKP05E.
+> <br/><br>
+> The Ajazz AKP153 rev. 2 models, the Fifine AmpliGame D6 rev. 1, the 7 v1
+> rebadges of the 293S board (Ajazz AKP153/E/R rev. 1, Mars Gaming MSD-ONE, Mad Dog GK150K,
+> Risemode Vision 01, TMICE Stream Controller), and the Linux/Windows builds are implemented
+> but not hardware-verified. The Ajazz rev. 2 boards and the Fifine D6 are the same hardware
+> as the 293V3 behind a different USB VID/PID, so they reuse the 293V3 model verbatim (the
+> D6 ships in two revisions that differ only in USB packet size: 512 bytes for PID `0x0007`,
+> 1024 bytes for PID `0x0060`); the 7 v1 rebadges are the same hardware as the 293S behind
+> a different USB VID/PID, so they reuse the 293S model verbatim — report anything that
+> misbehaves.
+> <br/><br>
+> The Ulanzi Stream Controller D200 shares no board with the others: it repaints its
+> screen from a ZIP of PNGs the host sends, so it has its own driver. It is implemented
+> from public documentation and is not hardware-tested yet; its 13 LCD keys are driven,
+> and the wide slot keeps the firmware's own clock.
+
+</details>
+
+> **Platform status:** DeckBridge is currently **tested on macOS only**.
 
 ## Quick start
 
 1. Download the release for your OS, unzip, and run `deckbridge`.
 2. Plug in your deck.
-3. Open the Elgato Stream Deck app on any machine on the same network — it discovers
-   DeckBridge automatically.
+3. Open the Elgato Stream Deck app on any machine in LAN (or in the same machine as DeckBridge).
+   Pair it in the app first; next time, it will discover DeckBridge automatically.
 
 A web page at <http://localhost:3000> shows your deck's keys and a live log.
 
 Full install and troubleshooting steps:
 [Getting Started](https://lukasmega.github.io/DeckBridge/getting-started).
+
+**Privacy:** DeckBridge checks GitHub for updates and sends one aggregate usage ping a day
+(no ids, no serials); each can be turned off. See
+[what is sent](https://lukasmega.github.io/DeckBridge/privacy#the-deckbridge-app).
 
 ## CLI usage
 
@@ -74,20 +132,35 @@ deckbridge [command] [flags]
 Commands:
   run                 Start the bridge (default when no command given)
   devices             List detected stream deck HID devices, then exit
+  diagnose            Write a diagnostics report (for bug reports), then exit
+  push                Send text to a push channel of a running bridge, then exit
   version             Print version/build info, then exit
   help                Print usage, then exit
 
 Flags (for run):
-  --mock                    Start with the mock driver (no hardware)
   --bind <addr>             Listen address for CORA + WebUI  [default 0.0.0.0]
   --webui-port <n>          WebUI HTTP/WS port               [default 3000]
   --no-webui                Do not start the WebUI server
   --open                    Auto-open browser (desktop convenience)
   --headless                Shorthand: no tray, no browser open, skip Elgato-app poll
   --log-level <lvl>         debug|info|warn|error|silent (runtime override)
+  --no-overrides            Safe mode: ignore settings.json modelOverrides
   --cache-dir <path>        Settings + native-lib extraction root (default: XDG cache dir)
   -h, --help                Show this help
   -V, --version             Show version
+
+Flags (for diagnose):
+  --out <path>              Write the report here instead of the cache dir
+  --redact-commands         Replace extra-key commands/plugin args with <redacted>
+
+Usage (for push):
+  deckbridge push <channel> <text> [--ttl <s>] [--color #rrggbb] [--background #rrggbb]
+  deckbridge push <channel> --clear
+  --url <base>              Bridge WebUI address  [default http://127.0.0.1:3000]
+  --token <t>               Push token (default $DECKBRIDGE_PUSH_TOKEN; visible in the process list)
+
+Log level precedence: --log-level > $DECKBRIDGE_LOG_LEVEL > settings.json
+"logLevel" > the level baked in at build time.
 ```
 
 For unattended Linux (Raspberry Pi / DietPi) under systemd, see
@@ -116,4 +189,7 @@ Technical guides:
 
 [MIT](LICENSE). The vendored [`rust/jpeg-encoder`](rust/jpeg-encoder) fork keeps its
 upstream license ((MIT OR Apache-2.0) AND IJG); third-party notices in
-[`scripts/LICENSE-hidapi.txt`](scripts/LICENSE-hidapi.txt).
+[`scripts/LICENSE-hidapi.txt`](scripts/LICENSE-hidapi.txt),
+[`scripts/LICENSE-spleen.txt`](scripts/LICENSE-spleen.txt),
+[`scripts/LICENSE-helvetica.txt`](scripts/LICENSE-helvetica.txt) and
+[`scripts/LICENSE-barlow.txt`](scripts/LICENSE-barlow.txt) (widget fonts).

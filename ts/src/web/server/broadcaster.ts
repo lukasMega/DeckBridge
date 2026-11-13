@@ -1,4 +1,9 @@
-import { SSE_KEEPALIVE_INTERVAL_MS, STATS_BROADCAST_INTERVAL_MS } from '../../types.js';
+import { clearRepeating } from '../../shared/types.js';
+import { WS_KEEPALIVE_INTERVAL_MS, STATS_BROADCAST_INTERVAL_MS } from './constants.js';
+import type { WsEvents } from '../contract.js';
+
+/** A browser that lets this much queue up is stalled; dropping it beats unbounded growth. */
+export const WS_MAX_BUFFERED_BYTES = 4 * 1024 * 1024;
 
 function wsMsg(event: string, data: unknown): string {
   return JSON.stringify({ event, data });
@@ -41,15 +46,13 @@ export class Broadcaster {
   start(emitStats: () => void): void {
     this.keepaliveTimer = setInterval(() => {
       this.send(wsMsg('ping', null));
-    }, SSE_KEEPALIVE_INTERVAL_MS);
+    }, WS_KEEPALIVE_INTERVAL_MS);
     this.statsTimer = setInterval(emitStats, STATS_BROADCAST_INTERVAL_MS);
   }
 
   stop(): void {
-    if (this.keepaliveTimer !== null) clearInterval(this.keepaliveTimer);
-    if (this.statsTimer !== null) clearInterval(this.statsTimer);
-    this.keepaliveTimer = null;
-    this.statsTimer = null;
+    this.keepaliveTimer = clearRepeating(this.keepaliveTimer);
+    this.statsTimer = clearRepeating(this.statsTimer);
     for (const ws of this.clients) {
       try {
         ws.close();
@@ -60,17 +63,26 @@ export class Broadcaster {
     this.clients.clear();
   }
 
-  broadcast(event: string, data: unknown): void {
+  broadcast<K extends keyof WsEvents>(event: K, data: WsEvents[K]): void {
+    // Skip the JSON.stringify, not just the send loop: with no browser open,
+    // ActivityBuffers.flush() serialized up to 500 comm entries every 100 ms for
+    // nothing. sendTo() is unaffected — it targets a socket that exists.
+    if (this.clients.size === 0) return;
     this.send(wsMsg(event, data));
   }
 
-  sendTo(ws: ServerWebSocket, event: string, data: unknown): void {
+  sendTo<K extends keyof WsEvents>(ws: ServerWebSocket, event: K, data: WsEvents[K]): void {
     ws.sendText(wsMsg(event, data));
   }
 
   private send(msg: string): void {
     for (const ws of this.clients) {
       try {
+        if ((ws.bufferedAmount ?? 0) > WS_MAX_BUFFERED_BYTES) {
+          this.clients.delete(ws);
+          ws.close(1013, 'client too slow');
+          continue;
+        }
         ws.sendText(msg);
       } catch {
         this.clients.delete(ws);

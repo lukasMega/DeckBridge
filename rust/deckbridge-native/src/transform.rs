@@ -2,12 +2,67 @@ use crate::bmp::encode_bmp;
 use crate::jpeg::encode_jpeg;
 use crate::pad::pad_to_canvas;
 use crate::png::encode_png;
-use crate::util::write_err;
-use image::imageops::FilterType;
+use crate::util::{ffi_guard, write_err};
+use image::imageops::{self, FilterType};
+use image::{DynamicImage, RgbaImage};
 use std::io::Cursor;
-use std::panic::{catch_unwind, AssertUnwindSafe};
 
-/// Private transform helper: decode, rotate/flip, resize, encode (JPEG, BMP or PNG).
+/// Decode with decompression-bomb limits (S3) — bytes arrive from the LAN
+/// unauthenticated. Shared by `transform` and the touch-strip blit.
+///
+/// Returns RGBA8 whatever the source: the whole pipeline then runs on one concrete
+/// pixel type, so the `image` ops are instantiated once instead of once per
+/// `DynamicImage` variant (about 70 KB of code, and faster). Resize, rotate, flip, crop
+/// and blur treat channels independently, so RGB output is bit-identical.
+pub(crate) fn decode_limited(input: &[u8]) -> Result<RgbaImage, String> {
+    let mut reader = image::ImageReader::new(Cursor::new(input))
+        .with_guessed_format()
+        .map_err(|e| format!("Image format error: {}", e))?;
+    let mut limits = image::Limits::default();
+    // Raised to 800 wide for the Stream Deck + window strip (800×100); height and
+    // alloc stay bounded so the 800×480 full LCD is still rejected by max_alloc.
+    limits.max_image_width = Some(800);
+    limits.max_image_height = Some(500);
+    limits.max_alloc = Some(900 * 1024);
+    reader.limits(limits);
+    let img = reader
+        .decode()
+        .map_err(|e| format!("Image load error: {}", e))?;
+    // JPEG and BMP are the only codecs enabled and both decode to 8-bit. Matching these
+    // four instead of `into_rgba8()` keeps the 16-bit/float conversions out of the build.
+    match img {
+        DynamicImage::ImageRgba8(b) => Ok(b),
+        DynamicImage::ImageRgb8(b) => widen(b.width(), b.height(), b.as_raw(), 3, |d, p| {
+            d[..3].copy_from_slice(p)
+        }),
+        DynamicImage::ImageLuma8(b) => widen(b.width(), b.height(), b.as_raw(), 1, |d, p| {
+            d[..3].fill(p[0])
+        }),
+        DynamicImage::ImageLumaA8(b) => widen(b.width(), b.height(), b.as_raw(), 2, |d, p| {
+            d[..3].fill(p[0]);
+            d[3] = p[1];
+        }),
+        _ => Err("Image load error: unsupported pixel format".to_string()),
+    }
+}
+
+/// Expand `step`-byte pixels to RGBA. Alpha starts at 255; `fill` overwrites it only
+/// for sources that carry their own.
+fn widen(
+    w: u32,
+    h: u32,
+    raw: &[u8],
+    step: usize,
+    fill: impl Fn(&mut [u8], &[u8]),
+) -> Result<RgbaImage, String> {
+    let mut out = vec![255u8; raw.len() / step * 4];
+    for (d, p) in out.chunks_exact_mut(4).zip(raw.chunks_exact(step)) {
+        fill(d, p);
+    }
+    RgbaImage::from_raw(w, h, out).ok_or_else(|| "Image load error: bad buffer size".to_string())
+}
+
+/// Private transform helper: decode, rotate/flip, resize, encode (JPEG or BMP).
 /// EXIF auto-rotate is intentionally not performed (dropped for binary size — see plan).
 // The flat parameter list mirrors the FFI ABI of image_proc_transform.
 #[allow(clippy::too_many_arguments)]
@@ -28,82 +83,72 @@ pub(crate) fn transform(
     sharpen_sigma_tenths: u32,
     fill_mode: u32,
     crop_px: u32,
+    crop_x: u32,
+    crop_y: u32,
+    crop_w: u32,
+    crop_h: u32,
 ) -> Result<Vec<u8>, String> {
-    // Decompression-bomb defense: cap dimensions and intermediate allocations
-    // before decoding (S3) — bytes arrive from the LAN unauthenticated.
-    let mut reader = image::ImageReader::new(Cursor::new(input))
-        .with_guessed_format()
-        .map_err(|e| format!("Image format error: {}", e))?;
-    let mut limits = image::Limits::default();
-    limits.max_image_width = Some(500);
-    limits.max_image_height = Some(500);
-    limits.max_alloc = Some(900 * 1024);
-    reader.limits(limits);
-    let mut img = match reader.decode() {
-        Ok(i) => i,
-        Err(e) => return Err(format!("Image load error: {}", e)),
-    };
+    let mut img = decode_limited(input)?;
 
-    // Crop the source frame symmetrically before any rotate/flip/resize (the K1 Pro
-    // is fed an 80×80 Mini BMP whose outer ~10 px is dead border). Skip when the crop
-    // would leave nothing — guards tiny inputs and the no-op (crop_px == 0) case.
-    if crop_px > 0 {
+    // Region crop (DeviceImageSpec.cropRect) takes precedence over the symmetric crop.
+    // Region bounds are clamped to the source.
+    if crop_w > 0 && crop_h > 0 {
+        let (w, h) = (img.width(), img.height());
+        let x = crop_x.min(w.saturating_sub(1));
+        let y = crop_y.min(h.saturating_sub(1));
+        let rw = crop_w.min(w - x);
+        let rh = crop_h.min(h - y);
+        img = imageops::crop_imm(&img, x, y, rw, rh).to_image();
+    } else if crop_px > 0 {
+        // Crop the source frame symmetrically before any rotate/flip/resize (the K1 Pro
+        // is fed an 80×80 Mini BMP whose outer ~10 px is dead border). Skip when the crop
+        // would leave nothing — guards tiny inputs and the no-op (crop_px == 0) case.
         let (w, h) = (img.width(), img.height());
         if w > 2 * crop_px && h > 2 * crop_px {
-            img = img.crop_imm(crop_px, crop_px, w - 2 * crop_px, h - 2 * crop_px);
+            img = imageops::crop_imm(&img, crop_px, crop_px, w - 2 * crop_px, h - 2 * crop_px)
+                .to_image();
         }
     }
 
-    if fill_mode == 0 {
-        // unchanged: rotate → flip → (optional) resize
-        img = match rotate {
-            90 => img.rotate90(),
-            180 => img.rotate180(),
-            270 => img.rotate270(),
-            _ => img,
-        };
-        if flip_h {
-            img = img.fliph();
-        }
-        if flip_v {
-            img = img.flipv();
-        }
+    let filter = match resize_filter {
+        1 => FilterType::Nearest,
+        2 => FilterType::Lanczos3,
+        _ => FilterType::Triangle,
+    };
 
-        if !skip_resize {
-            let filter = match resize_filter {
-                1 => FilterType::Nearest,
-                2 => FilterType::Lanczos3,
-                _ => FilterType::Triangle,
-            };
-            img = img.resize_exact(width, height, filter);
-        }
-    } else {
-        // Pad in the SOURCE frame (bias is anchored pre-rotation), then rotate/flip.
-        img = pad_to_canvas(&img, width, height, fill_mode);
-        img = match rotate {
-            90 => img.rotate90(),
-            180 => img.rotate180(),
-            270 => img.rotate270(),
-            _ => img,
-        };
-        if flip_h {
-            img = img.fliph();
-        }
-        if flip_v {
-            img = img.flipv();
-        }
+    // Pad in the SOURCE frame (bias is anchored pre-rotation), then rotate/flip.
+    if fill_mode != 0 {
+        img = pad_to_canvas(&img, width, height, fill_mode, filter);
+    }
+
+    img = match rotate {
+        90 => imageops::rotate90(&img),
+        180 => imageops::rotate180(&img),
+        270 => imageops::rotate270(&img),
+        _ => img,
+    };
+    if flip_h {
+        img = imageops::flip_horizontal(&img);
+    }
+    if flip_v {
+        img = imageops::flip_vertical(&img);
+    }
+
+    // Resize only in fill_mode 0 — a pad already produced a width×height canvas.
+    if fill_mode == 0 && !skip_resize {
+        img = imageops::resize(&img, width, height, filter);
     }
 
     if blur_sigma_tenths > 0 {
         let sigma = blur_sigma_tenths as f32 / 10.0;
-        img = image::DynamicImage::ImageRgba8(image::imageops::blur(&img, sigma));
+        img = imageops::blur(&img, sigma);
     }
 
     // Unsharp mask after resize to recover crispness lost to upscaling (e.g. the
     // 293S's 72→85 enlarge). threshold 0 = sharpen every pixel.
     if sharpen_sigma_tenths > 0 {
         let sigma = sharpen_sigma_tenths as f32 / 10.0;
-        img = image::DynamicImage::ImageRgba8(image::imageops::unsharpen(&img, sigma, 0));
+        img = imageops::unsharpen(&img, sigma, 0);
     }
 
     // Only true passthrough (skip_resize with no padding) is exempt from max_bytes
@@ -111,31 +156,31 @@ pub(crate) fn transform(
     // rarely triggers).
     let lenient = skip_resize && fill_mode == 0;
     match format {
-        1 => encode_bmp(img, bmp_ppm),
-        // PNG: page-protocol devices (Ulanzi D200) whose firmware unzips PNGs
-        // out of a manifest. max_bytes is a budget, not a hard limit — see
-        // encode_png.
-        2 => encode_png(img, if lenient { 0 } else { max_bytes }),
-        _ => encode_jpeg(img, quality, max_bytes, lenient),
+        1 => encode_bmp(&img, bmp_ppm),
+        // Page-protocol devices (Ulanzi D200): max_bytes is a budget, not a hard
+        // limit — see encode_png.
+        2 => encode_png(&img, if lenient { 0 } else { max_bytes }),
+        _ => encode_jpeg(&img, quality, max_bytes, lenient),
     }
 }
 
 /// Transform an image: explicit rotate/flip, optional resize to width×height,
-/// then encode as JPEG (iterative quality down to <= max_bytes), BMP or PNG.
-/// Result into `out_buf`.
+/// then encode as JPEG (iterative quality down to <= max_bytes), BMP or PNG. Result into
+/// `out_buf`.
 /// (EXIF auto-rotate is intentionally not performed.)
 ///
-/// format: 0 = JPEG, 1 = BMP, 2 = PNG. max_bytes: size cap (0 = no cap; ignored for
-/// BMP). For JPEG it is enforced by walking the quality ladder and is an error if
-/// unreachable; for PNG it is a budget that selects a palette step (see png.rs).
+/// format: 0 = JPEG, 1 = BMP, 2 = PNG. max_bytes: size cap (0 = no cap; ignored for BMP);
+/// an error if JPEG can't reach it, a palette-step budget for PNG (png.rs).
 /// quality: 1..=100 percent (JPEG only). skip_resize / flip_h / flip_v: 0 or 1.
-/// resize_filter: 0 = Triangle (default), 1 = Nearest.
+/// resize_filter: 0 = Triangle (default), 1 = Nearest, 2 = Lanczos3.
 /// fill_mode: 0 = resize (current behaviour, honours skip_resize); 1 = pad with a
 /// black border; 2 = pad with an average-colour border; 3 = pad with an edge-clamp
 /// (replicate) border. Pad modes (>0) keep the source pixels 1:1, centre them in a
 /// width×height canvas with a floor-split (top-left bias) offset, fill the border
 /// per the mode, and pad BEFORE rotate/flip so the centring bias is anchored to the
-/// source frame. Inputs larger than the canvas in either axis fall back to a resize.
+/// source frame. Inputs larger than the canvas in either axis fall back to a resize
+/// (with `resize_filter`), unless bit 4 is set (5/6/7 = crop + black/average/edge):
+/// then the oversize axes are centre-cropped 1:1 instead.
 /// crop_px: pixels trimmed from every side of the source before rotate/flip/resize
 /// (0 = none); ignored when it would leave a non-positive dimension.
 ///
@@ -164,16 +209,20 @@ pub unsafe extern "C" fn image_proc_transform(
     format: i32,      // 0 = JPEG, 1 = BMP, 2 = PNG
     bmp_ppm: i32,
     blur_sigma_tenths: u32,    // Gaussian sigma × 10; 0 = no blur
-    resize_filter: u32,        // 0 = Triangle (default), 1 = Nearest
+    resize_filter: u32,        // 0 = Triangle (default), 1 = Nearest, 2 = Lanczos3
     sharpen_sigma_tenths: u32, // unsharp-mask sigma × 10; 0 = no sharpen
-    fill_mode: u32,            // 0 = resize; 1 = pad-black; 2 = pad-average; 3 = pad-edge-clamp
-    crop_px: u32, // pixels to crop from every side of the source before resize; 0 = none
+    fill_mode: u32, // 0 = resize; 1-3 = pad black/average/edge; +4 = centre-crop oversize
+    crop_px: u32,   // pixels to crop from every side of the source before resize; 0 = none
+    crop_x: u32,    // region-crop left offset (used when crop_w/crop_h > 0)
+    crop_y: u32,    // region-crop top offset
+    crop_w: u32,    // region-crop width (0 = no region crop)
+    crop_h: u32,    // region-crop height (0 = no region crop)
     out_buf: *mut u8,
     out_cap: usize,
     err_buf: *mut u8,
     err_cap: usize,
 ) -> i32 {
-    let result = catch_unwind(AssertUnwindSafe(|| {
+    ffi_guard(-3, || {
         if jpeg_in.is_null() || out_buf.is_null() {
             write_err("null pointer argument", err_buf, err_cap);
             return -1i32;
@@ -199,6 +248,10 @@ pub unsafe extern "C" fn image_proc_transform(
             sharpen_sigma_tenths,
             fill_mode,
             crop_px,
+            crop_x,
+            crop_y,
+            crop_w,
+            crop_h,
         ) {
             Ok(bytes) => {
                 if bytes.len() > out_cap {
@@ -217,6 +270,5 @@ pub unsafe extern "C" fn image_proc_transform(
                 -1
             }
         }
-    }));
-    result.unwrap_or(-3)
+    })
 }

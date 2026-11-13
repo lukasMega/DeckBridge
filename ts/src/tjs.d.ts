@@ -16,7 +16,8 @@ declare module 'virtual:native-libs' {
   export interface EmbeddedNativeLib {
     name: string;
     rawSize: number;
-    gzB64: string;
+    /** The raw bytes, one latin1 char (U+0000..U+00FF) per byte. */
+    data: string;
   }
   export const NATIVE_LIBS: EmbeddedNativeLib[];
   export const NATIVE_LIBS_HASH: string;
@@ -28,8 +29,19 @@ declare module 'virtual:hid-worker' {
   export default s;
 }
 
+declare module 'virtual:hid-scan-worker' {
+  const s: string;
+  export default s;
+}
+
 // esbuild virtual module: the bundled plugin worker (runs user plugin JS)
 declare module 'virtual:plugin-worker' {
+  const s: string;
+  export default s;
+}
+
+// esbuild virtual module: the bundled extension worker (runs one extension's server.js)
+declare module 'virtual:extension-worker' {
   const s: string;
   export default s;
 }
@@ -117,6 +129,22 @@ declare module 'tjs:ffi' {
     static createRef(type: FfiType, value: unknown): NativePointer;
   }
 
+  /** Scalar reads at a native address — the only way to dereference a pointer
+   *  returned by a call (there is no bulk memory-read API). */
+  export const read: {
+    u8(ptr: unknown): number;
+    i8(ptr: unknown): number;
+    u16(ptr: unknown): number;
+    i16(ptr: unknown): number;
+    u32(ptr: unknown): number;
+    i32(ptr: unknown): number;
+    f32(ptr: unknown): number;
+    f64(ptr: unknown): number;
+  };
+
+  /** Address of a TypedArray's backing bytes — test seam for the read helpers. */
+  export function bufferToPointer(buf: Uint8Array): NativePointer;
+
   type TypeAlias = string | FfiType | PointerType | StructType;
 
   export interface DlopenSymbolDef {
@@ -142,6 +170,8 @@ declare module 'tjs:ffi' {
     PointerType: typeof PointerType;
     Pointer: typeof Pointer;
     dlopen: typeof dlopen;
+    read: typeof read;
+    bufferToPointer: typeof bufferToPointer;
   };
   export default FFI;
 }
@@ -231,6 +261,8 @@ interface TjsTCPServerSocket {
 
 interface ServerWebSocket {
   readonly data: unknown;
+  /** Bytes queued by sendText/sendBinary that the socket has not flushed yet. */
+  readonly bufferedAmount?: number;
   sendText(data: string): void;
   sendBinary(data: Uint8Array): void;
   close(code?: number, reason?: string): void;
@@ -244,7 +276,9 @@ interface WebSocketHandlers {
 }
 
 interface TjsServeServer {
-  stop(): void;
+  /** Closes the listener; resolves once the native handle is closed. (No `stop()`:
+   *  txiki's httpserver.js Server only has close().) */
+  close(): Promise<void>;
   upgrade(request: Request, options?: { data?: unknown }): boolean;
 }
 
@@ -281,23 +315,42 @@ declare module '*.js' {
   export default s;
 }
 
+interface TjsFileHandle {
+  /** `position`: absolute file offset (pread); omitted reads at the current offset. */
+  read(buf: Uint8Array, position?: number): Promise<number>;
+  write(data: Uint8Array | string): Promise<number>;
+  stat(): Promise<{ isFile: boolean; isDirectory: boolean; size: number; mode: number }>;
+  close(): Promise<void>;
+  readonly path: string;
+}
+
 declare const tjs: {
+  readonly stdin: ReadableStream<Uint8Array>;
   readonly version: string;
   exit(code?: number): never;
   addSignalListener(signal: string, listener: () => void): void;
   removeSignalListener(signal: string, listener: () => void): void;
   readFile(path: string): Promise<Uint8Array>;
-  readFile(path: string, options: { encoding: 'utf-8' } | 'utf-8'): Promise<string>;
+  // NOTE: no string-returning overload — this txiki build ignores the `encoding`
+  // argument and always resolves to Uint8Array. Decode with TextDecoder.
   writeFile(path: string, data: Uint8Array | string, options?: { mode?: number }): Promise<void>;
   stat(
     path: string,
   ): Promise<{ isFile: boolean; isDirectory: boolean; size: number; mode: number }>;
   makeDir(path: string, options?: { recursive?: boolean; mode?: number }): Promise<void>;
+  /** Mode strings follow fopen(3): 'a' append, 'r' read, 'w' truncate. */
+  open(path: string, mode: string): Promise<TjsFileHandle>;
   rename(path: string, newPath: string): Promise<void>;
   remove(path: string, options?: { recursive?: boolean }): Promise<void>;
-  readDir(
-    path: string,
-  ): Promise<AsyncIterableIterator<{ name: string; isFile: boolean; isDirectory: boolean }>>;
+  readDir(path: string): Promise<
+    AsyncIterableIterator<{
+      name: string;
+      isFile: boolean;
+      isDirectory: boolean;
+      isSymbolicLink: boolean;
+    }>
+  >;
+  symlink(target: string, path: string): Promise<void>;
   readonly homeDir: string;
   readonly tmpDir: string;
   readonly exePath: string;
@@ -309,7 +362,12 @@ declare const tjs: {
     readonly networkInterfaces: NetworkInterface[];
     readonly cpus: CpuInfo[];
   };
-  connect(transport: 'tcp', host: string, port: number): Promise<TjsTCPSocket>;
+  connect(
+    transport: 'tcp',
+    host: string,
+    port: number,
+    options?: { signal?: AbortSignal },
+  ): Promise<TjsTCPSocket>;
   listen(transport: 'tcp', host: string, port: number): Promise<TjsTCPServerSocket>;
   serve(options: TjsServeOptions): TjsServeServer;
 };

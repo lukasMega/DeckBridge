@@ -1,135 +1,152 @@
+import type { ExtraKeyConfig, DockStatus } from '../../shared/types.js';
+import type { PageDefinition } from '../../shared/page-config.js';
+import type { DetectedDecksView } from '../contract-decks.js';
 import type {
-  KeyState,
-  CommEntry,
-  ExtraKeyConfig,
-  ImageModeOverride,
-  DockStatus,
-  ClientApp,
-} from '../../types.js';
-import type { PluginStatus } from '../../plugin-host.js';
+  ExtraKeyPressAction,
+  MockDeviceConfig,
+  StateResponse,
+  WsBroadcast,
+} from '../contract.js';
+import type { OverrideChangeKind } from '../../devices/model-overrides.js';
+import type { PersistedSettings } from '../../infra/settings.js';
+import type { SurveyController } from './survey-controller.js';
+import type { UpdateController } from './update-controller.js';
+import type { ElgatoAppController } from './elgato-app-controller.js';
+import type { StandbyController } from './standby-controller.js';
+import type { DevicePrefsController } from './device-prefs-controller.js';
+import type { EncodersController } from './encoders-controller.js';
+import type { ExtraKeysController } from './extra-keys-controller.js';
+import type { PagesController } from './pages-controller.js';
+import type { ModelOverridesController } from './model-overrides-controller.js';
+import type { VerifyController } from './verify-controller.js';
+import type { LoggingController } from './logging-controller.js';
+import type { ExtensionsController } from './extensions-controller.js';
+import type { PushController } from './push-controller.js';
+import type { VirtualDeckController } from './virtual-deck/virtual-deck-controller.js';
+import type { SettingsFileController } from './settings-file-controller.js';
+import type { WslRelayController } from './wsl-relay-controller.js';
+import type { RawMockInput } from './mock-input.js';
+// Canonical LogLevel lives in logger.ts (derived from cli.ts's LOG_LEVELS);
+// re-exported below so existing web-server call sites keep importing from types.js.
+import type { LogLevel } from '../../shared/logger.js';
 
-/** Payload for GET /api/plugins — the extra-key plugin widget's WebUI data:
- *  the plugins dir (for the empty-state hint), the *.js files found there
- *  (dropdown), and the live status of each plugin-widget key on the selected
- *  dock (keyed by wire id). */
-export interface PluginsInfo {
-  dir: string;
-  files: string[];
-  status: Record<string, PluginStatus>;
+/** Result of a persisted device-tuning change: how the live session applies it
+ *  (see classifyOverrideChange). */
+export interface OverrideChange {
+  kind: OverrideChangeKind;
 }
 
-export interface Stats {
-  uptimeMs: number;
-  elgatoRxPkts: number;
-  elgatoTxPkts: number;
-  imagesSent: number;
+/** One POST to an extra key: a full widget config, or only its press command. */
+export type ExtraKeyUpdate = ExtraKeyConfig | ExtraKeyPressUpdate;
+
+/** The press side of an extra key; an absent field keeps its stored value. */
+export interface ExtraKeyPressUpdate {
+  pressCommand?: string;
+  pressAction?: ExtraKeyPressAction;
 }
 
-export interface MockDeviceConfig {
-  dockFirmwareVersion: string;
-  childFirmwareVersion: string;
-  serialNumber: string;
-  childSerialNumber: string;
-  productId: number;
-  macAddress: string;
+/** What ExtraKeysController needs from PagesController (no controller-to-controller import). */
+export interface PageLayoutPort {
+  selectedActivePage(): PageDefinition | undefined;
+  tryEditLayout(
+    pageId: string,
+    edit: (map: Record<string, ExtraKeyConfig>) => Record<string, ExtraKeyConfig>,
+  ): ReqError | null;
 }
 
-/** The identifiers actually sent to the Elgato Stream Deck app over the
- *  network (mDNS advertisement + CORA device-info/capabilities frames) for
- *  whichever device is currently active — `mockConfig` while driverMode is
- *  'mock', the real dock's fixed identity otherwise. Read-only, shown under
- *  Settings for reference. */
-export interface DeviceIdentity extends MockDeviceConfig {
-  mdnsServiceName: string;
-  // Present only for a real (non-mock) dock with a persisted identity — lets
-  // the WebUI edit mdnsServiceName via POST /api/device-identity/mdns-name.
-  deviceKey?: string;
+/** A rejected request: the message the WebUI shows, plus its HTTP status. */
+export interface ReqError {
+  error: string;
+  status: number;
 }
 
-export type LogLevel = 'debug' | 'info' | 'warn' | 'error';
-export type DriverMode = 'real' | 'mock';
+/** Shared guard for the WebUI's integer index/id fields (dock, wireId, …). */
+export const isNonNegInt = (v: unknown): v is number =>
+  typeof v === 'number' && Number.isInteger(v) && v >= 0;
 
-export interface LogEntry {
-  ts: number;
-  level: LogLevel;
-  component: string;
-  message: string;
+/** The single wording every such field is rejected with — asserted verbatim by tests. */
+export const nonNegIntMessage = (field: string): string =>
+  `${field} must be a non-negative integer`;
+
+export const nonNegIntError = (field: string): ReqError => ({
+  error: nonNegIntMessage(field),
+  status: 400,
+});
+
+/** The dependency set every WebUI controller needs: persisted settings, the two
+ *  event sinks (WS broadcast / EventEmitter emit) and the selected-dock lookups.
+ *  Built once by {@link WebUIServer} so a controller ctor carries only its own
+ *  specific deps — see web-ui-server.ts's constructor. */
+export interface ControllerHost {
+  readonly settings: PersistedSettings;
+  emit(event: string, ...args: unknown[]): boolean;
+  broadcast: WsBroadcast;
+  selectedDeviceKey(): string;
+  selectedDock(): number;
+  selectedDockStatus(): DockStatus | undefined;
+  trySelectDock(index: unknown): ReqError | null;
+  /** Re-push the selected dock's per-device values (none are in the status snapshot). */
+  broadcastSelected(): void;
+  /** Re-broadcast the status snapshot (a field outside the dock list changed). */
+  publishStatus(): void;
 }
 
-export interface KeyEventEntry {
-  ts: number;
-  mk2Index: number;
-  state: KeyState;
-}
+// Wire DTOs shared with the browser live in the `web-contract` leaf
+// (../contract.ts); re-exported so server call sites keep importing from here.
+export type {
+  PluginsInfo,
+  Stats,
+  MockDeviceConfig,
+  DeviceIdentity,
+  KeyEventEntry,
+  DeviceModelInfo,
+  UpdateInfo,
+  DriverMode,
+  LogEntry,
+  StatusSnapshot,
+  StateResponse,
+  ElgatoAutoRestartState,
+  PageStateMsg,
+  PageSummary,
+} from '../contract.js';
+export type { ExtensionInfo, ExtensionsView } from '../contract-extensions.js';
 
-export interface DeviceModelInfo {
-  id: string;
-  name: string;
-  keyCount: number;
-}
+export type { LogLevel };
 
-export interface StatusSnapshot {
-  driverMode: DriverMode;
-  driverConnected: boolean;
-  elgatoConnected: boolean;
-  elgatoRemoteAddr: string | null;
-  clientApp: ClientApp;
-  brightness: number;
-  modelId: string;
-  modelName: string;
-  keyCount: number;
-  columns: number;
-  rows: number;
-  elgatoAppRunning: boolean;
-  /** True when an Elgato-branded device (MK.2/Mini) is enumerated on USB —
-   *  independent of whether we could open it. Gates the "Elgato app is
-   *  blocking access" screen so it doesn't fire for non-Elgato hardware. */
-  elgatoDevicePresent: boolean;
-  localIp: string;
-  imageModeOverride: ImageModeOverride;
-  docks: DockStatus[];
-  selectedDock: number;
-}
-
-export interface StateResponse extends StatusSnapshot {
-  images: Record<string, number>;
-  logs: LogEntry[];
-  commLogs: CommEntry[];
-  keyEvents: KeyEventEntry[];
-  stats: Stats;
-  mockConfig: MockDeviceConfig;
-  resizeEnabled: boolean;
-  brightnessOverride: boolean;
-  deviceModels: DeviceModelInfo[];
-  deviceIdentity: DeviceIdentity;
-  // The SELECTED dock's extra-key assignments, keyed by device wire id.
-  extraKeys: Record<string, ExtraKeyConfig>;
+/** The per-concern WebUI controllers; route handlers get them on RouteContext. */
+export interface WebUIControllers {
+  readonly settings: PersistedSettings;
+  readonly devicePrefs: DevicePrefsController;
+  readonly encoders: EncodersController;
+  readonly extraKeys: ExtraKeysController;
+  readonly pages: PagesController;
+  readonly modelOverrides: ModelOverridesController;
+  readonly verify: VerifyController;
+  readonly logging: LoggingController;
+  readonly updates: UpdateController;
+  readonly survey: SurveyController;
+  readonly settingsFile: SettingsFileController;
+  readonly elgatoApp: ElgatoAppController;
+  readonly standby: StandbyController;
+  readonly push: PushController;
+  readonly virtualDeck: VirtualDeckController;
+  readonly extensions: ExtensionsController;
+  readonly wslRelay: WslRelayController;
 }
 
 /**
- * The narrow view of {@link WebUIServer} that HTTP route handlers depend on.
- * Handlers import this interface — never the concrete class — so routing stays
- * decoupled from server internals and there is no runtime import cycle.
+ * What route handlers need from {@link WebUIServer} itself: state that spans
+ * controllers (full state, dock selection, mock device). Handlers import this
+ * interface — never the concrete class — so there is no runtime import cycle.
  */
 export interface WebUIController {
   emit(event: string, ...args: unknown[]): boolean;
-  readonly resizeEnabled: boolean;
-  readonly brightnessOverride: boolean;
-  readonly imageModeOverride: ImageModeOverride;
   readonly selectedDock: number;
   fullState(): StateResponse;
-  getImage(key: number): Buffer | undefined;
+  detectedDecks(): DetectedDecksView;
   notifyBrightness(level: number): void;
-  notifyResizeToggle(enabled: boolean): void;
-  notifyBrightnessOverride(enabled: boolean): void;
-  notifyImageMode(mode: ImageModeOverride): void;
   applyMockConfig(parsed: Partial<MockDeviceConfig>): MockDeviceConfig;
-  trySimulateKey(n: number): { error: string; status: number } | null;
-  trySelectDock(index: unknown): { error: string; status: number } | null;
-  trySetExtraKey(wireId: number, cfg: ExtraKeyConfig): { error: string; status: number } | null;
-  tryRunExtraKeyNow(wireId: number): { error: string; status: number } | null;
-  pluginsInfo(): Promise<PluginsInfo>;
-  getSettingsJson(): string;
-  applySettingsJson(raw: string): void;
-  openSettingsFile(): Promise<void>;
+  trySimulateKey(n: number): ReqError | null;
+  trySimulateInput(raw: RawMockInput): ReqError | null;
+  trySelectDock(index: unknown): ReqError | null;
 }

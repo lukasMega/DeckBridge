@@ -3,29 +3,40 @@
 // No top-level DOM access — the pure helpers are unit-tested on txiki.js.
 
 export interface ImageEntry {
-  v: number;
-  data?: string;
-  format?: string;
+  /** base64 */
+  data: string;
+  format: 'jpeg' | 'bmp';
 }
 
 export interface KeyPreviewOptions {
   showIndex?: boolean;
   flash?: boolean;
   onKeyClick?: (index: number) => void;
+  /** 'click' (default): one click fires. 'dblclick': double-click or Enter/Space fires, so a
+   *  single click stays free (the simple view's dock card selects on it). */
+  gesture?: 'click' | 'dblclick';
 }
 
 const KEY_FLASH_MS = 200;
 
 const imageStore = new Map<number, ImageEntry>();
 const instances = new Set<KeyPreview>();
+const imageListeners = new Set<() => void>();
 
-/** data: URL (correct MIME) when bytes were pushed over WS, else versioned server URL. */
-export function imageSrc(index: number, entry: ImageEntry): string {
-  if (entry.data) {
-    const mime = entry.format === 'bmp' ? 'image/bmp' : 'image/jpeg';
-    return `data:${mime};base64,${entry.data}`;
-  }
-  return `/api/image/${index}?v=${entry.v}`;
+/** Preact grids that show live key images re-render through this (the store is imperative). */
+export function subscribeImages(listener: () => void): () => void {
+  imageListeners.add(listener);
+  return () => imageListeners.delete(listener);
+}
+
+function notifyImages(): void {
+  for (const listener of imageListeners) listener();
+}
+
+/** data: URL with the frame's MIME type. */
+export function imageSrc(entry: ImageEntry): string {
+  const mime = entry.format === 'bmp' ? 'image/bmp' : 'image/jpeg';
+  return `data:${mime};base64,${entry.data}`;
 }
 
 export function getImageEntry(index: number): ImageEntry | undefined {
@@ -35,15 +46,12 @@ export function getImageEntry(index: number): ImageEntry | undefined {
 export function applyImage(index: number, entry: ImageEntry): void {
   imageStore.set(index, entry);
   broadcast((p) => p.refreshKey(index));
-}
-
-export function clearImage(index: number): void {
-  imageStore.delete(index);
-  broadcast((p) => p.refreshKey(index));
+  notifyImages();
 }
 
 export function clearImageStore(): void {
   imageStore.clear();
+  notifyImages();
 }
 
 /** Wipe every cached image and blank all mounted grids — used when the
@@ -52,6 +60,7 @@ export function clearImageStore(): void {
 export function resetPreviews(): void {
   imageStore.clear();
   broadcast((p) => p.refreshAll());
+  notifyImages();
 }
 
 export function flashKey(index: number): void {
@@ -93,16 +102,24 @@ export class KeyPreview {
     for (let i = 0; i < keyCount; i++) this.refreshKey(i);
   }
 
-  setModel(modelId?: string): void {
+  setModel(modelId?: string, coraProfile?: string): void {
     if (modelId) this.root.dataset['model'] = modelId;
+    if (coraProfile) this.root.dataset['cora'] = coraProfile;
+    else delete this.root.dataset['cora'];
   }
 
   refreshAll(): void {
     for (let i = 0; i < this.keyCount; i++) this.refreshKey(i);
   }
 
-  setClickable(clickable: boolean): void {
-    for (const c of this.root.children) c.classList.toggle('clickable', clickable);
+  /** `title` (when given) becomes every cell's tooltip, e.g. why the grid is inert. */
+  setClickable(clickable: boolean, title?: string): void {
+    for (const c of this.root.children) {
+      c.classList.toggle('clickable', clickable);
+      if (title === undefined) continue;
+      if (title === '') c.removeAttribute('title');
+      else c.setAttribute('title', title);
+    }
   }
 
   refreshKey(index: number): void {
@@ -119,7 +136,7 @@ export class KeyPreview {
       img = document.createElement('img');
       cell.insertBefore(img, cell.firstChild);
     }
-    img.src = imageSrc(index, entry);
+    img.src = imageSrc(entry);
     cell.classList.add('lit');
   }
 
@@ -144,11 +161,22 @@ export class KeyPreview {
       cell.appendChild(idx);
     }
     const onKeyClick = this.opts.onKeyClick;
-    if (onKeyClick) {
-      cell.addEventListener('click', () => {
-        if (!cell.classList.contains('clickable')) return;
-        onKeyClick(index);
+    if (!onKeyClick) return cell;
+    const fire = (): void => {
+      if (cell.classList.contains('clickable')) onKeyClick(index);
+    };
+    if (this.opts.gesture === 'dblclick') {
+      cell.addEventListener('dblclick', fire);
+      // Handled on keydown: the dock card's own Enter/Space handler would otherwise swallow
+      // the keystroke before the button turns it into a click.
+      cell.addEventListener('keydown', (e) => {
+        if ((e.key !== 'Enter' && e.key !== ' ') || !cell.classList.contains('clickable')) return;
+        e.preventDefault();
+        e.stopPropagation();
+        if (!e.repeat) fire();
       });
+    } else {
+      cell.addEventListener('click', fire);
     }
     return cell;
   }

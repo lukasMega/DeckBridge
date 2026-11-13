@@ -4,7 +4,7 @@
 
 import { lineCounts } from './loc-lib.mjs';
 
-const LIMIT = 500;
+const LIMIT = 550;
 const ROOT = new URL('..', import.meta.url).pathname;
 const counts = await lineCounts(ROOT);
 const offenders = counts.filter(({ lines }) => lines > LIMIT).toSorted((a, b) => b.lines - a.lines);

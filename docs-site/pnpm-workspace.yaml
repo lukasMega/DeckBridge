@@ -9,8 +9,15 @@ allowBuilds:
 # no in-range upgrade, so Dependabot's security update bails with
 # `security_update_not_possible`. pnpm reads overrides here, NOT from a top-level
 # `overrides` key in package.json (that is npm syntax and is silently ignored).
-# All three are build/dev-time only — none ship in the static site.
+# These are build/dev-time only — none ship in the static site.
 #
+#   extract-zip          — Puppeteer uses the abandoned, unpatched 2.0.1 package.
+#                          Substitute Electron's hardened, API-compatible fork.
+#                          Drop once Puppeteer stops depending on extract-zip.
+#   fast-uri             — ajv@8 allows v3 patches (fix: 3.1.8).
+#                          Drop once ajv resolves fast-uri >= 3.1.8 itself.
+#   colord               — cssnano allows v2 patches (fix: 2.9.4).
+#                          Drop once cssnano resolves colord >= 2.9.4 itself.
 #   qs                   — express@4 / body-parser@1 pin `qs: ~6.15.1` (fix: 6.16.0).
 #                          Drop once express depends on qs >= 6.16.0.
 #   serialize-javascript — copy-webpack-plugin@11 pins `^6.0.0` (fix: 7.0.5).
@@ -18,7 +25,31 @@ allowBuilds:
 #   uuid                 — sockjs@0.3.24 (via webpack-dev-server) pins `^8.3.2`
 #                          (fix: 11.1.1). Dev server only. Drop once sockjs
 #                          depends on uuid >= 11.1.1.
+#   tinypool             — Docusaurus pins `^1.0.2`; both prototype-pollution
+#                          gadgets are fixed in 2.1.2. Node >=24.13 supports v2.
+#                          Drop once Docusaurus depends on tinypool >=2.1.2.
+#   postcss-selector-parser — cssnano's plugins still require v6 (fix: 7.1.6).
+#                          Drop once every parent permits a fixed release.
+#   source-map-js        — PostCSS allows v1 patches (fix: 1.2.2).
+#                          Drop once all parents resolve >=1.2.2 themselves.
+#   katex                — Mermaid and its CLI require v0.16 (fix: 0.18.2).
+#                          Drop once every parent permits a fixed release.
 overrides:
+  # Diagrams use CLI prerendering, not the theme's optional Mermaid 11 ELK engine.
+  "@docusaurus/theme-mermaid>@mermaid-js/layout-elk": "-"
+  extract-zip: "npm:@electron-internal/extract-zip@1.0.5"
+  fast-uri: "^3.1.8"
+  colord: "^2.9.4"
   qs: "^6.16.0"
   serialize-javascript: "^7.0.5"
   uuid: "^11.1.1"
+  tinypool: "^2.1.2"
+  postcss-selector-parser: "^7.1.6"
+  source-map-js: "^1.2.2"
+  katex: "0.18.2"
+
+# Temporary mitigations for CVE-2026-93687 and CVE-2026-93748.
+# Remove once upstream releases address these issues; see README.md.
+patchedDependencies:
+  braces@3.0.3: ../patches/braces@3.0.3.patch
+  http-cache-semantics@4.3.0: ../patches/http-cache-semantics@4.3.0.patch

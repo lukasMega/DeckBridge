@@ -10,12 +10,11 @@
  *  NOT HARDWARE-TESTED. See .claude/plans/2026-09-10_ulanzi-d200-support.md
  *  (Phase B is the bring-up runbook) and docs/references.md. */
 
-import { findHidPath, isNullPtr, IS_MACOS } from '../../ffi/hidapi.js';
-import { HidDeviceBase } from '../hid-connection.js';
-import { debug, info, warn } from '../../logger.js';
-import { formatCommHex } from '../../comm-format.js';
-import { DEFAULT_BRIGHTNESS, HID_REPORT_ID_BYTE } from '../../types.js';
-import type { KeyEvent } from '../../types.js';
+import { HidDeviceBase } from '../hid-device-base.js';
+import { debug, info, warn } from '../../shared/logger.js';
+import { DEFAULT_BRIGHTNESS } from '../../shared/types.js';
+import type { KeyEvent } from '../../shared/types.js';
+import { HID_REPORT_ID_BYTE } from '../mirabox/protocol.js';
 import type { DeviceModel, DevicePageSpec } from '../driver.js';
 import {
   CMD,
@@ -55,10 +54,6 @@ const BLACK_PNG = new Uint8Array([
 ]);
 
 export class UlanziDriver extends HidDeviceBase {
-  /** HID path this instance was opened with — the per-device identity source,
-   *  same contract as MiraboxDriver.hidPath. */
-  hidPath: string | undefined = undefined;
-
   private readonly page: UlanziPage;
   private readonly scheduler: FlushScheduler;
   private readonly spec: DevicePageSpec;
@@ -71,7 +66,7 @@ export class UlanziDriver extends HidDeviceBase {
   private brightness = DEFAULT_BRIGHTNESS;
   private _writeScratch: Buffer = Buffer.alloc(0);
 
-  constructor(private readonly model: DeviceModel) {
+  constructor(readonly model: DeviceModel) {
     super();
     this.spec = model.page!;
     this.page = new UlanziPage(this.spec.partialUpdates);
@@ -81,63 +76,14 @@ export class UlanziDriver extends HidDeviceBase {
     );
   }
 
-  async open(hidPath?: string): Promise<void> {
-    this._writeScratch = Buffer.alloc(this.spec.packetSize + 1);
-    const hid = this._acquireLib();
-
-    const vid = this.model.usbVendorId;
-    const pids = this.model.usbProductIds;
-    const usagePage = this.model.usagePage!;
-    const usage = this.model.usage!;
-
-    // Path-based open, filtered by usage_page/usage — for the D200 that selects
-    // interface 0 (Consumer page 0x0c / usage 0x01), NOT the boot-keyboard
-    // collection it also exposes. Explicit hidPath (multi-device) skips
-    // enumeration and opens that exact interface.
-    let dev: unknown = null;
-    const path = hidPath ?? this.findDevicePath(vid, pids, usagePage, usage);
-    if (path) {
-      debug('hid', `hid_open_path(${path})`);
-      dev = hid.hid_open_path(path);
-      if (!isNullPtr(dev)) {
-        debug('hid', 'hid_open_path succeeded');
-        this.hidPath = path;
-      } else if (IS_MACOS) {
-        // Same rule as MiraboxDriver.open(): the device enumerated but the open
-        // was refused, and falling through to hid_open(VID/PID) on macOS opens
-        // the FIRST IOKit interface — here a keyboard collection — where a
-        // permission-denied open SIGBUSes the whole process. Release the
-        // IOHIDManager so the host's worker.terminate() is safe, then fail loudly.
-        this._releaseLibAfterFailedOpen();
-        throw new Error(
-          `device present but hid_open_path failed (path=${path}). On macOS this is ` +
-            `almost always a missing Input Monitoring permission — grant it to your ` +
-            `terminal app (or the tjs binary) under System Settings → Privacy & Security → ` +
-            `Input Monitoring, then restart that app.`,
-        );
-      } else {
-        warn('hid', 'hid_open_path returned null — falling back to hid_open(VID/PID)');
-      }
-    }
-
-    if (isNullPtr(dev) && !IS_MACOS && hidPath === undefined) {
-      for (const pid of pids) {
-        debug('hid', `hid_open(vid=0x${vid.toString(16)}, pid=0x${pid.toString(16)})`);
-        dev = hid.hid_open(vid, pid, null);
-        if (!isNullPtr(dev)) break;
-      }
-    }
-
-    if (isNullPtr(dev)) {
-      this._releaseLibAfterFailedOpen();
-      throw new Error(
-        `Ulanzi device not found (VID=0x${vid.toString(16)} PIDs=${Array.from(pids).join(',')})`,
-      );
-    }
+  async open(hidPath: string): Promise<void> {
+    this._writeScratch = Buffer.alloc(this.model.wire.packetSize + 1);
+    // Discovery matched usagePage/usage, so this is interface 0 (Consumer 0x0c /
+    // usage 0x01), not the boot-keyboard collection whose writes time out.
+    const hid = this._openPath(hidPath);
     info('hid', 'device opened successfully');
-    this.device = dev;
 
-    this._startReadLoop(hid, this.spec.inSize, READ_POLL_MS, (readBuf, n) =>
+    this._startReadLoop(hid, this.model.wire.inSize, READ_POLL_MS, (readBuf, n) =>
       this.parseInput(readBuf.subarray(0, n)),
     );
 
@@ -145,28 +91,16 @@ export class UlanziDriver extends HidDeviceBase {
     this.startKeepalive();
   }
 
-  /** Ordering is load-bearing: clock → drain the device's replies → brightness →
-   *  first full page. See HANDSHAKE_DRAIN_MS. */
+  /** Ordering is load-bearing: clock → drain the device's replies → unlock →
+   *  brightness → first full page. See HANDSHAKE_DRAIN_MS. */
   private async handshake(): Promise<void> {
     this.sendClock();
     await new Promise((resolve) => setTimeout(resolve, HANDSHAKE_DRAIN_MS));
+    this.sendUnlock();
     this.setBrightness(this.brightness);
     // Establish the grid immediately, even with no images yet: this replaces the
     // Ulanzi logo screen and installs the info-window entry.
     this.writePage(this.page.takeBatch() ?? { slots: [], full: true });
-  }
-
-  private findDevicePath(
-    vid: number,
-    pids: readonly number[],
-    usagePage: number,
-    usage: number,
-  ): string | null {
-    for (const pid of pids) {
-      const path = findHidPath(vid, usagePage, usage, pid);
-      if (path) return path;
-    }
-    return null;
   }
 
   private startKeepalive(): void {
@@ -182,6 +116,7 @@ export class UlanziDriver extends HidDeviceBase {
         // more — redo the init writes and repaint the whole remembered page.
         info('hid', `sleep/wake detected (gap=${gap}ms) — re-initializing device`);
         this.sendClock();
+        this.sendUnlock();
         this.setBrightness(this.brightness);
         this.page.restoreAll();
         this.scheduler.schedule();
@@ -192,6 +127,12 @@ export class UlanziDriver extends HidDeviceBase {
       // the cheapest one that also keeps the info window ticking.
       this.sendClock();
     }, keepaliveMs);
+  }
+
+  /** Our close() sends LOCK, and the panel stays locked until UNLOCK (jcalado
+   *  FIRMWARE.md) — without this a second session shows nothing until a replug. */
+  private sendUnlock(): void {
+    this.writePacket(buildPacket(CMD.UNLOCK, 0));
   }
 
   private sendClock(): void {
@@ -210,15 +151,20 @@ export class UlanziDriver extends HidDeviceBase {
   /** keyIndex here is the device slot id (image-render.ts has already mapped the
    *  CORA index through keyMap.coraToWireImage and dropped the -1 holes). */
   sendImage(slotId: number, png: Uint8Array): void {
-    if (!this.device || !this.hidLib) return;
+    if (!this.device || !this.hidLib || !this.isKeySlot(slotId)) return;
     this.page.stage(slotId, png);
     this.scheduler.schedule();
   }
 
   clearKey(slotId: number): void {
-    if (!this.device || !this.hidLib) return;
+    if (!this.device || !this.hidLib || !this.isKeySlot(slotId)) return;
     this.page.stage(slotId, BLACK_PNG);
     this.scheduler.schedule();
+  }
+
+  /** Real LCD keys only: a staged hole or the info-window slot would land in the manifest. */
+  private isKeySlot(slotId: number): boolean {
+    return this.model.keyMap.coraToWireImage?.includes(slotId) === true && slotId >= 0;
   }
 
   setBrightness(level: number): void {
@@ -273,10 +219,14 @@ export class UlanziDriver extends HidDeviceBase {
     const cmd = batch.full ? CMD.SET_BUTTONS : CMD.PARTIAL_UPDATE;
     const packets = buildChunks(cmd, zip);
     const delayMs = this.spec.chunkDelayMs ?? 0;
+    let failed = 0;
+    // A failed chunk still lets the rest go out: the firmware counts bytes against the
+    // header length, and a short upload would swallow the next page as its tail.
     for (let i = 0; i < packets.length; i++) {
-      this.writePacket(packets[i]!);
+      if (!this.writePacket(packets[i]!)) failed++;
       if (delayMs > 0 && i < packets.length - 1) this._busyWait(delayMs);
     }
+    if (failed > 0) throw new Error(`page upload: ${failed}/${packets.length} writes failed`);
     info(
       'hid',
       `page ${batch.full ? 'full' : 'partial'}: ${batch.slots.length} slots, ` +
@@ -294,35 +244,27 @@ export class UlanziDriver extends HidDeviceBase {
     }
   }
 
-  private writePacket(pkt: Buffer): void {
-    if (pkt.length !== this.spec.packetSize) {
-      throw new Error(`Packet must be ${this.spec.packetSize} bytes, got ${pkt.length}`);
+  /** False when hid_write failed (already logged by _writeRaw). */
+  private writePacket(pkt: Buffer): boolean {
+    if (pkt.length !== this.model.wire.packetSize) {
+      throw new Error(`Packet must be ${this.model.wire.packetSize} bytes, got ${pkt.length}`);
     }
-    if (!this.device || !this.hidLib) return;
+    if (!this.device || !this.hidLib) return false;
     // hidapi wants the report-id byte in front of every write, exactly as on the
     // Mirabox path — the D200's reports are unnumbered, so it is 0x00.
     const arr = this._writeScratch;
     arr[0] = HID_REPORT_ID_BYTE;
     arr.set(pkt, 1);
-    this._writeRaw(arr, 'hid', (n, errStr) => `hid_write returned ${n}: ${errStr}`);
-    this.emitComm(describeOutgoing(pkt), pkt, 'tx');
-  }
-
-  private emitComm(human: string, data: Uint8Array, direction: 'rx' | 'tx'): void {
-    this.emit('comm', {
-      direction,
-      protocol: 'ulanzi',
-      component: 'ulanzi',
-      human,
-      hex: formatCommHex(Buffer.from(data)),
-      totalBytes: data.length,
-    });
+    const n = this._writeRaw(arr, 'hid', (r, errStr) => `hid_write returned ${r}: ${errStr}`);
+    // Framed packets only: a page's ~180 raw chunks would bury the log.
+    if (pkt[0] === 0x7c && pkt[1] === 0x7c) debug('hid', `tx ${describeOutgoing(pkt)}`);
+    return n >= 0;
   }
 
   private parseInput(data: Uint8Array): void {
     const parsed = parseIncoming(data);
     // Heartbeats arrive ~1 Hz; logging every one would drown the comm log.
-    if (parsed?.kind !== 'heartbeat') this.emitComm(describeIncoming(parsed), data, 'rx');
+    if (parsed?.kind !== 'heartbeat') debug('hid', `rx ${describeIncoming(parsed)}`);
     if (!parsed) return;
 
     if (parsed.kind === 'info') {

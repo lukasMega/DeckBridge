@@ -1,60 +1,102 @@
 // Stage renderers — one per device state (see deriveState in ui-helpers).
-import { useState, useEffect } from 'preact/hooks';
-import { useStore } from '../store.js';
-import { ICON } from '../ui-icons.js';
+import { useState } from 'preact/hooks';
+import { OwnershipDiagram } from '../components/OwnershipDiagram.js';
+import { useStore } from '../lib/store.js';
+import { useFetched } from '../lib/ui-api.js';
+import { ICON, Icon } from '../components/Icon.js';
 import type { DockUi } from '../ui-types.js';
-import { Icon } from './Icon.js';
-import { Step, Brightness, ManualAddPanel, RestartNote } from './controls.js';
+import { Brightness } from './controls.js';
+import { PairingFlow } from './pairing-flow.js';
+import { ConnectionPath } from '../components/ConnectionPath.js';
 import { KeyGridPreview } from '../components/KeyGridPreview.js';
 import { ExtraKeysPanel } from './extra-keys-panel.js';
-import { DockList } from './dock-cards.js';
-import { openSdApp, quitElgatoApp } from './handlers.js';
-import { isMultiDockView, clientAppName } from '../ui-helpers.js';
+import { DockList, keyPressTitle } from './dock-cards.js';
+import { VerifyOffer } from './verify-wizard/verify-entry.js';
+import { WslReadyLine, WslRelayCard } from './wsl-relay-card.js';
+import { pressKey, quitElgatoApp } from './handlers.js';
+import {
+  isMultiDockView,
+  clientAppName,
+  selectedCoraProfile,
+  selectedTouchStripSize,
+} from '../ui-helpers.js';
+
+function ReadyStatus({
+  title,
+  deviceName,
+}: Readonly<{ title: string; deviceName?: string }>): preact.JSX.Element | null {
+  const [hidden, setHidden] = useState(false);
+  if (hidden) return null;
+  return (
+    <div class="ready-status">
+      <span class="ready-status-icon" aria-hidden="true">
+        <Icon html={ICON.check} />
+      </span>
+      <h1 class="stage-title" title={title}>
+        {title}
+      </h1>
+      {deviceName && (
+        <span class="ready-status-device" title={deviceName}>
+          {deviceName}
+        </span>
+      )}
+      <WslReadyLine />
+      <button
+        class="iconbtn circle ready-status-dismiss"
+        type="button"
+        aria-label="Hide connection status"
+        title="Hide connection status"
+        onClick={() => setHidden(true)}
+      >
+        <Icon html={ICON.close} />
+      </button>
+    </div>
+  );
+}
 
 export function StageReady({
   docks,
   onHelp,
 }: Readonly<{ docks?: DockUi[]; onHelp?: (id: string) => void }> = {}): preact.JSX.Element {
-  const keyCount = useStore((s) => s.status.keyCount ?? 15);
-  const columns = useStore((s) => s.status.columns ?? 5);
+  const keyCount = useStore((s) => s.status.keyCount);
+  const columns = useStore((s) => s.status.columns);
   const modelId = useStore((s) => s.status.modelId);
-  const selectedDock = useStore((s) => s.status.selectedDock ?? 0);
+  const coraProfile = useStore((s) => selectedCoraProfile(s.status));
+  const touchStrip = useStore((s) => selectedTouchStripSize(s.status));
+  const selectedDock = useStore((s) => s.status.selectedDock);
   const appName = useStore((s) => clientAppName(s.status.clientApp));
+  const modelName = useStore((s) => s.status.modelName);
+  const keyPressEnabled = useStore((s) => s.keyPressEnabled);
+  const paired = useStore((s) => s.status.elgatoConnected);
 
   if (docks !== undefined && isMultiDockView(docks) && onHelp !== undefined) {
     const sel = docks.find((d) => d.index === selectedDock) ?? docks[0]!;
-    const summary =
-      docks.length > 1
-        ? `All ${docks.length} decks are connected${appName} and ready to use.`
-        : `${sel.modelName} is connected${appName} and ready to use.`;
+    const many = docks.length > 1;
     return (
       <>
-        <div class="hero">
-          {/* eslint-disable-next-line @eslint-react/dom-no-dangerously-set-innerhtml -- static trusted SVG icon markup */}
-          <div class="hero-badge circle" dangerouslySetInnerHTML={{ __html: ICON.check }} />
-          <h1>Everything&apos;s working</h1>
-          <p>{summary}</p>
-        </div>
+        {!many && <ReadyStatus title={`Connected${appName}`} deviceName={sel.modelName} />}
         <DockList docks={docks} onHelp={onHelp} />
-        {docks.length > 1 && (
-          <p class="step-sub">Click a deck to see its live preview and adjust its brightness.</p>
-        )}
-        <Brightness dock={sel.index} level={sel.brightness} deviceName={sel.modelName} />
-        <ExtraKeysPanel />
       </>
     );
   }
 
   return (
     <>
-      <div class="hero">
-        {/* eslint-disable-next-line @eslint-react/dom-no-dangerously-set-innerhtml -- static trusted SVG icon markup */}
-        <div class="hero-badge circle" dangerouslySetInnerHTML={{ __html: ICON.check }} />
-        <h1>Everything&apos;s working</h1>
-        <p>Your Stream Deck is connected{appName} and ready to use.</p>
-      </div>
-      <KeyGridPreview keyCount={keyCount} columns={columns} dimmed={false} modelId={modelId} />
-      <Brightness />
+      <ReadyStatus title={`Connected${appName}`} deviceName={modelName} />
+      <VerifyOffer index={selectedDock} />
+      <KeyGridPreview
+        keyCount={keyCount}
+        columns={columns}
+        dimmed={false}
+        modelId={modelId}
+        coraProfile={coraProfile}
+        touchStrip={touchStrip}
+        onKeyClick={pressKey}
+        gesture="dblclick"
+        clickable={keyPressEnabled && paired}
+        clickTitle={keyPressTitle(keyPressEnabled, paired)}
+        footer={<Brightness compact />}
+      />
       <ExtraKeysPanel />
     </>
   );
@@ -64,17 +106,13 @@ export function StageMultiPairing({
   docks,
   onHelp,
 }: Readonly<{ docks: DockUi[]; onHelp: (id: string) => void }>): preact.JSX.Element {
-  const left = docks.filter((d) => !d.elgatoConnected).length;
-
   return (
     <>
-      <h1 class="stage-title">
-        {docks.length} decks connected — {left} left to pair
-      </h1>
+      {docks.length === 1 && <h1 class="stage-title">Deck connected — not paired yet</h1>}
       <DockList docks={docks} onHelp={onHelp} />
-      <p class="step-sub">
-        Each deck appears as its own Network Dock in the Elgato app — pair them one at a time.
-      </p>
+      {docks.length > 1 && (
+        <p class="step-sub">Each deck pairs as its own Network Dock. Select one to pair it.</p>
+      )}
     </>
   );
 }
@@ -82,44 +120,28 @@ export function StageMultiPairing({
 export function StageDeviceNoElgato({
   onHelp,
 }: Readonly<{ onHelp: (id: string) => void }>): preact.JSX.Element {
-  const keyCount = useStore((s) => s.status.keyCount ?? 15);
-  const columns = useStore((s) => s.status.columns ?? 5);
+  const keyCount = useStore((s) => s.status.keyCount);
+  const columns = useStore((s) => s.status.columns);
   const modelId = useStore((s) => s.status.modelId);
+  const coraProfile = useStore((s) => selectedCoraProfile(s.status));
+  const touchStrip = useStore((s) => selectedTouchStripSize(s.status));
   const modelName = useStore((s) => s.status.modelName);
 
   return (
     <>
-      {/* eslint-disable @eslint-react/dom-no-dangerously-set-innerhtml -- static trusted HTML string literal */}
-      <h1
-        class="stage-title"
-        dangerouslySetInnerHTML={{
-          __html: 'Almost there — <span class="accent">1 step left</span>',
-        }}
+      <h1 class="stage-title">Connect your control app</h1>
+      <ConnectionPath device="done" app="active" deviceName={modelName} />
+      <PairingFlow onHelp={onHelp} />
+      <WslRelayCard />
+      <VerifyOffer index={0} />
+      <KeyGridPreview
+        keyCount={keyCount}
+        columns={columns}
+        dimmed={true}
+        modelId={modelId}
+        coraProfile={coraProfile}
+        touchStrip={touchStrip}
       />
-      {/* eslint-enable @eslint-react/dom-no-dangerously-set-innerhtml */}
-      <div class="checklist">
-        <Step kind="done" title="Stream Deck connected">
-          {modelName !== undefined && <div class="step-sub">{modelName}</div>}
-        </Step>
-        <Step
-          kind="active"
-          title={
-            <a
-              href="streamdeck://"
-              id="openSdApp"
-              class="app-link"
-              title="Open Elgato Stream Deck"
-              onClick={openSdApp}
-            >
-              Open the Elgato Stream Deck app
-            </a>
-          }
-        >
-          <ManualAddPanel onHelp={onHelp} />
-          <RestartNote />
-        </Step>
-      </div>
-      <KeyGridPreview keyCount={keyCount} columns={columns} dimmed={true} modelId={modelId} />
     </>
   );
 }
@@ -127,45 +149,21 @@ export function StageDeviceNoElgato({
 export function StageNoDevice({
   onHelp,
 }: Readonly<{ onHelp: (id: string) => void }>): preact.JSX.Element {
-  const [hidapiMissing, setHidapiMissing] = useState(false);
-
-  useEffect(() => {
-    const controller = new AbortController();
-    fetch('/api/requirements', { signal: controller.signal })
-      .then((r) => (r.ok ? (r.json() as Promise<Array<{ name: string; ok: boolean }>>) : null))
-      .then((results) => {
-        if (!results) return undefined;
-        const hidapi = results.find((r) => r.name === 'libhidapi');
-        if (hidapi !== undefined && !hidapi.ok) setHidapiMissing(true);
-        return undefined;
-      })
-      .catch((err: unknown) => {
-        if (err instanceof Error && err.name === 'AbortError') return;
-      });
-    return () => controller.abort();
-  }, []);
+  // Best-effort: a failed read leaves data null, so the warning stays hidden.
+  const requirements = useFetched<Array<{ name: string; ok: boolean }>>('/api/requirements');
+  const hidapi = requirements.data?.find((r) => r.name === 'libhidapi');
+  const hidapiMissing = hidapi !== undefined && !hidapi.ok;
 
   return (
     <>
-      <h1 class="stage-title">Let&apos;s get you set up</h1>
-      <div class="checklist">
-        <Step kind="active" title="Plug in your Stream Deck" helpId="plug-in" onHelp={onHelp}>
-          <div class="step-sub">
-            Connect it via USB. Make sure the Elgato desktop app is not running.
-          </div>
-        </Step>
-        <Step
-          kind="pending"
-          title="Open the Elgato Stream Deck app"
-          helpId="open-app"
-          onHelp={onHelp}
-        >
-          <div class="step-sub">Once your deck is detected, this lights up next.</div>
-        </Step>
-      </div>
-      <div class="status-line">
-        <span class="ico-spin" /> Waiting for a device…
-      </div>
+      <h1 class="stage-title">Connect your device</h1>
+      <ConnectionPath device="active" app="pending" />
+      <p class="step-sub">
+        Plug it in via USB and quit the Elgato app.{' '}
+        <button class="linkbtn accent" type="button" onClick={() => onHelp('plug-in')}>
+          Help
+        </button>
+      </p>
       {hidapiMissing && (
         <div class="warnrow">
           <Icon class="w-ico" html={ICON.warn} />
@@ -186,16 +184,14 @@ export function StageConflict(): preact.JSX.Element {
     <div class="conflict">
       {/* eslint-disable-next-line @eslint-react/dom-no-dangerously-set-innerhtml -- static trusted SVG icon markup */}
       <div class="conflict-badge circle" dangerouslySetInnerHTML={{ __html: ICON.warn }} />
-      <h1>Elgato app is blocking access</h1>
-      <p class="conflict-body">
-        The Elgato Stream Deck app is running and has claimed the USB device. Quit it so DeckBridge
-        can take over.
-      </p>
+      <h1>Elgato app owns the USB device</h1>
+      <OwnershipDiagram />
+      <p class="conflict-body">Quit the Elgato app so DeckBridge can take over.</p>
       <button class="ctabtn" id="quitElgatoBtn" type="button" onClick={quitElgatoApp}>
-        Quit Elgato App
+        Quit Elgato app
       </button>
       <p class="conflict-after">
-        After quitting, reconnect your Stream Deck if it isn&apos;t detected automatically.
+        Quits the app on this computer only. Then reconnect your deck if it is not detected.
       </p>
     </div>
   );

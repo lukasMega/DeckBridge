@@ -1,0 +1,86 @@
+---
+sidebar_position: 1
+sidebar_label: Introduction
+title: DeckBridge
+slug: /introduction
+description: What DeckBridge is — use a USB Stream Deck with the Elgato app over your local network.
+---
+
+import DeviceSummaryTable from '@site/src/components/DeviceSummaryTable';
+import deviceData from '@site/src/data/devices.generated.json';
+
+**DeckBridge** lets you use a USB Stream Deck with the Elgato Stream Deck app over your
+local network. It runs on your computer and appears to the app as a network device, so your
+keys and button images work over WiFi — no
+[Elgato Network Dock](https://www.elgato.com/us/en/p/network-dock-stream-deck) required.
+
+It's a free, community-built tool for personal and hobby use, shipped as a **standalone
+binary** (&lt;5MB, no Node.js runtime needed).
+
+> New here? Head to **[Getting Started](/getting-started)** to install and connect a deck.
+
+:::caution[Experimental project]
+DeckBridge is experimental. The author does not plan to add support for devices beyond
+those already listed as supported, but will accept reasonable pull requests for new
+devices when they include proof that the hardware works. DeckBridge supports only
+6-button (3×2) grids like the Stream Deck Mini and grids with up to 15 buttons (5×3)
+like the Stream Deck MK.2.
+:::
+
+## How it works
+
+DeckBridge speaks USB HID to the deck and emulates an Elgato Network Dock on the LAN
+(TCP/CORA, advertised over mDNS). The Elgato app discovers it like real hardware — key
+presses travel up, button images travel down (resized/rotated per device before the USB
+write).
+
+## Supported devices
+
+Search below, then open any device for its details. Compare USB IDs and panel sizes on
+**[Supported devices](/devices)**. Selected registry fields appear in
+**[Device specs](/device-specs)**. All three views come from the device registry.
+
+<DeviceSummaryTable data={deviceData} />
+
+Hardware-tested on macOS: Stream Deck MK.2, Stream Deck Mini, 293V3, 293S, K1 Pro, and
+Fifine AmpliGame D6 (rev. 2). The Ajazz AKP153 rev. 2 models, the Fifine AmpliGame D6 rev. 1, the 7 v1
+rebadges of the 293S board (Ajazz AKP153/E/R rev. 1, Mars Gaming MSD-ONE, Mad Dog GK150K,
+Risemode Vision 01, TMICE Stream Controller), and the Linux/Windows builds are implemented
+but not hardware-verified. The Ajazz rev. 2 boards and the Fifine D6 are the same hardware as the
+293V3 behind a different USB VID/PID, so they reuse the 293V3 model verbatim (the D6
+ships in two revisions that differ only in USB packet size: 512 bytes for PID `0x0007`,
+1024 bytes for PID `0x0060`); the 7 v1 rebadges are the same hardware as the 293S behind
+a different USB VID/PID, so they reuse the 293S model verbatim.
+
+The **Ulanzi Stream Controller D200** shares no board with the others. Its firmware
+repaints the whole grid from a ZIP archive (`manifest.json` + `Images/*.png`) the host
+sends, so it has its own driver (`ts/src/devices/ulanzi/`). It is implemented from public
+documentation and is not hardware-tested yet. The 13 LCD keys are driven; the wide
+bottom-right slot keeps the firmware's own clock.
+
+:::caution[Platform status]
+DeckBridge is **hardware-tested on macOS only**. The GitHub releases ship macOS
+(`arm64`, `x86_64`), Linux (`x86_64`, `arm64`) and Windows (`x86_64`, NSIS installer)
+builds, but the Linux and Windows ones get far less real-world use — see
+[Headless Linux](./headless-linux.md) for the Linux caveats (glibc 2.38+).
+:::
+
+:::warning[Disclaimer]
+Not affiliated with or endorsed by Elgato / Corsair ("Stream Deck" and "Elgato" are
+their trademarks). For **hobby and personal use only**; it **does not replace the Elgato
+Network Dock**. For professional setups, use official Elgato hardware.
+:::
+
+:::note[How it was built]
+DeckBridge started as a small personal project — one person wanting a Stream Deck on the
+network without buying a dock. The code was written largely with
+[Claude Code](https://claude.com/claude-code) (mostly Opus), but the author spent a
+significant amount of their free time debugging it and testing against real hardware:
+protocol quirks, per-device HID report formats, and image pipelines only show up on an
+actual deck, not in a model's output.
+:::
+
+:::info[Nothing reverse-engineered]
+The USB HID and Elgato CORA handling is **reused from existing open-source projects** —
+DeckBridge only wires them together. Credits: [References](/references).
+:::

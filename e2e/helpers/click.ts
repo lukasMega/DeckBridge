@@ -1,0 +1,106 @@
+import type { Locator, Page } from '@playwright/test';
+
+/**
+ * Lightpanda has no layout engine, so `boundingBox()` is a stub 5x5 rect and the
+ * actionability check for `locator.click()` never passes. `dispatchEvent('click')` is the
+ * usual workaround but delivers the event **twice** here, so anything that toggles ends up
+ * back where it started — call the element's own `click()`, which fires exactly once.
+ * Under E2E_BROWSER=chromium (the triage path) we use the genuine click instead.
+ */
+export const usingChromium = process.env.E2E_BROWSER === 'chromium';
+
+export async function click(locator: Locator): Promise<void> {
+  if (usingChromium) {
+    await locator.click();
+    return;
+  }
+  await locator
+    .evaluate((el) => {
+      (el as HTMLElement).click();
+    })
+    .catch((err: unknown) => {
+      // Lightpanda occasionally loses the reply to callFunctionOn when the handler
+      // re-renders the node it was invoked on. The click itself was delivered — only the
+      // acknowledgement is gone — and the assertion that follows is what proves it
+      // landed, so this one error is not a failure.
+      if (!/promise was garbage collected/i.test(String(err))) throw err;
+    });
+}
+
+/** Double-click. Lightpanda has no `dblclick()` either, so dispatch the one event the handler listens for. */
+export async function doubleClick(locator: Locator): Promise<void> {
+  if (usingChromium) {
+    await locator.dblclick();
+    return;
+  }
+  await locator.evaluate((el) => {
+    el.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
+  });
+}
+
+/** Type into an input. `fill()` dispatches `input` itself, which React and Preact both honour. */
+export async function typeInto(locator: Locator, value: string): Promise<void> {
+  await locator.fill(value);
+}
+
+async function dispatchEscape(page: Page): Promise<void> {
+  if (usingChromium) {
+    await page.keyboard.press('Escape');
+    return;
+  }
+  await page.evaluate(() => {
+    // The app binds Escape on `window` (overlays.tsx `useEscape`) and the docs site on
+    // `document` (Root.tsx). A synthetic event dispatched on one does not reach listeners
+    // on the other, so fire both rather than guessing.
+    const mk = () =>
+      new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true });
+    window.dispatchEvent(mk());
+    document.dispatchEvent(mk());
+  });
+}
+
+/**
+ * Fire Escape at the overlay dismiss handlers, retrying until `until` reports the overlay
+ * is gone.
+ *
+ * The retry is not defensive padding — it closes a real race. `useEscape` registers its
+ * listener from a `useEffect`, and Preact defers effects until after the commit, so the
+ * overlay's DOM (which is what a test waits on) exists for a beat *before* anything is
+ * listening for Escape. A single dispatch lands in that gap often enough to flake; it did,
+ * on the About popover.
+ *
+ * Callers without an `until` predicate get one best-effort dispatch.
+ */
+export async function pressEscape(
+  page: Page,
+  until?: () => Promise<boolean>,
+  timeoutMs = 5000,
+): Promise<void> {
+  if (!until) {
+    await dispatchEscape(page);
+    return;
+  }
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    await dispatchEscape(page);
+    if (await until()) return;
+    if (Date.now() > deadline) return; // let the caller's assertion report the failure
+    await new Promise((r) => setTimeout(r, 150));
+  }
+}
+
+/**
+ * Pick an option in a <select>. Preact binds `onChange`, so set the value and fire the
+ * one `change` event the handler listens for; Chromium triage uses the real API.
+ */
+export async function selectValue(locator: Locator, value: string): Promise<void> {
+  if (usingChromium) {
+    await locator.selectOption(value);
+    return;
+  }
+  await locator.evaluate((el, v) => {
+    const select = el as HTMLSelectElement;
+    select.value = v;
+    select.dispatchEvent(new Event('change', { bubbles: true }));
+  }, value);
+}

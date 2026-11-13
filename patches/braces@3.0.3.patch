@@ -1,0 +1,15 @@
+diff --git a/lib/parse.js b/lib/parse.js
+index 3a6988e629f52aee6609dc5ec290a5e9ff47cecb..4d64f07a5d7cf54f6f95a1fbbf6bd2f6f417f962 100644
+--- a/lib/parse.js
++++ b/lib/parse.js
+@@ -55,6 +55,10 @@ const parse = (input, options = {}) => {
+ 
+   const advance = () => input[index++];
+   const push = node => {
++    if (node.nodes && stack.length > 100) {
++      throw new SyntaxError('Pattern nesting depth exceeds max of 100');
++    }
++
+     if (node.type === 'text' && prev.type === 'dot') {
+       prev.type = 'text';
+     }

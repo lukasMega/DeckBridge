@@ -9,9 +9,9 @@
 //       (href=/DeckBridge/features), so a `href="..."` regex matches nothing.
 //   G2  internal links carry the baseUrl prefix and are extensionless
 //       (/DeckBridge/features -> build/features/index.html).
-// See .claude/plans/docs-site-test-plan.md for the full write-up.
+// See .claude/plans/.done/2026-07-29_docs-site-test-plan.md for the full write-up.
 
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { dirname, extname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -27,21 +27,77 @@ export const EXPECTED_BASE_URL = '/DeckBridge/';
 export const DOC_ROUTES: readonly string[] = [
   // Standalone page (docs/ARCHITECTURE.md), not in either sidebar.
   'ARCHITECTURE',
+  'mirabox-293s-slow-image-render',
   'introduction',
+  'devices',
   'getting-started',
   'features',
+  'browser-deck',
   'headless-linux',
+  'verify-device',
+  'troubleshooting',
+  'elgato-same-computer',
+  'virustotal',
+  'virustotal-v0.17.0',
   'privacy',
+  'device-specs',
   'adding-a-device',
+  'new-protocol',
+  'akp05-guided-probe',
   'side-keys',
   'plugin-widgets',
+  'extensions',
+  'push-api',
   'hidapi-ffi',
   'image-flow',
   'references',
 ];
 
 /** Every route the sitemap should contain: the docs, the landing page, search. */
-export const EXPECTED_ROUTES: readonly string[] = ['', 'search', ...DOC_ROUTES];
+export const EXPECTED_ROUTES: readonly string[] = ['', 'search', 'demo', ...DOC_ROUTES];
+
+export const FEED_FILES = ['blog/rss.xml', 'blog/atom.xml', 'blog/feed.json'] as const;
+
+/** Blog post slugs, read from docs-site/blog/*.md frontmatter. Drafts are excluded:
+ * the production build omits them, so they emit no route. */
+export function blogPostSlugs(): string[] {
+  const blogDir = join(SITE_DIR, 'blog');
+
+  return readdirSync(blogDir)
+    .filter((file) => file.endsWith('.md') || file.endsWith('.mdx'))
+    .flatMap((file) => {
+      const source = readFileSync(join(blogDir, file), 'utf8');
+      const frontmatter = source.match(/^---\n([\s\S]*?)\n---/)?.[1];
+      if (/^draft:\s*true\s*$/m.test(frontmatter ?? '')) return [];
+      const slug = frontmatter?.match(/^slug:\s*([^\s#]+)\s*$/m)?.[1];
+      if (!slug) throw new Error(`blog post '${file}' has no frontmatter slug`);
+      return [slug];
+    })
+    .sort();
+}
+
+/** Routes emitted by the blog plugin, derived from blog source content. */
+export function expectedBlogRoutes(): string[] {
+  const tags = [
+    ...readFileSync(join(SITE_DIR, 'blog', 'tags.yml'), 'utf8').matchAll(/^(\w[\w-]*):$/gm),
+  ].map((match) => match[1] as string);
+  const slugs = blogPostSlugs();
+  const pageCount = Math.ceil(slugs.length / 10);
+  const pagination = Array.from(
+    { length: Math.max(0, pageCount - 1) },
+    (_, i) => `blog/page/${i + 2}`,
+  );
+
+  return [
+    'blog',
+    'blog/archive',
+    'blog/authors',
+    'blog/tags',
+    ...tags.map((tag) => `blog/tags/${tag}`),
+    ...slugs.map((slug) => `blog/${slug}`),
+    ...pagination,
+  ].sort();
+}
 
 /** Where an in-site link points, once the baseUrl and route shape are resolved. */
 export interface ResolvedHref {

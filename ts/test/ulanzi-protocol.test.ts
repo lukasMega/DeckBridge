@@ -138,6 +138,11 @@ test('a payload with safe boundary bytes is accepted', () => {
   assert.equal(isPayloadSafe(payload), true);
 });
 
+test('a payload ending exactly on a chunk edge is rejected', () => {
+  assert.equal(isPayloadSafe(new Uint8Array(1016 + 1024).fill(0x41)), false);
+  assert.equal(isPayloadSafe(new Uint8Array(1016 + 1025).fill(0x41)), true);
+});
+
 test('a payload short enough to need no raw chunks is always safe', () => {
   const payload = new Uint8Array(500).fill(0x00);
   assert.equal(isPayloadSafe(payload), true);
@@ -160,7 +165,7 @@ test('encodeBrightness clamps out-of-range levels', () => {
 
 test('encodeSmallWindow keeps every field position, defaulting the hour format', () => {
   const s = new TextDecoder().decode(encodeSmallWindow({ mode: 203, time: '09:41:07' }));
-  assert.equal(s, '203|||09:41:07||24H|');
+  assert.equal(s, '203|0|0|09:41:07|0|24H|');
 });
 
 test('encodeSmallWindow fills the stats fields when supplied', () => {

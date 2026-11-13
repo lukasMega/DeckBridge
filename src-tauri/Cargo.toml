@@ -26,7 +26,11 @@ tauri-plugin-shell = "2"
 
 [profile.release]
 opt-level = "z"
-lto = true
-codegen-units = 1
+# Thin LTO keeps most cross-crate optimization while avoiding fat-LTO's long
+# whole-program link. Tauri is only a supervisor shell, so runtime throughput is
+# not performance-sensitive. Cargo's normal non-incremental default of 16 codegen
+# units also lets LLVM process this dependency-heavy graph in parallel.
+lto = "thin"
+codegen-units = 16
 panic = "abort"
 strip = true

@@ -1,0 +1,73 @@
+name: CodeQL
+
+# Replaces GitHub's "default setup" so the slow Rust analysis (~5 min vs ~1-2 min for the
+# others) can be skipped on PRs that don't touch Rust. Default setup has no path filter.
+# Push to main and the weekly schedule always analyze every language.
+on:
+  pull_request:
+  push:
+    branches: [main]
+  schedule:
+    - cron: '23 4 * * 1'
+
+concurrency:
+  group: codeql-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  analyze:
+    # Same names as default setup, so branch-protection check names keep matching.
+    name: Analyze (${{ matrix.language }})
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write
+      actions: read
+      packages: read
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - language: actions
+            paths: ''
+          - language: javascript-typescript
+            paths: ''
+          - language: rust
+            paths: '^(rust/(deckbridge-native/|Cargo\.|rust-toolchain)|\.github/(workflows/codeql\.yml|codeql/))'
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # PR checkout is a merge commit; HEAD^1 is the base, so depth 2 is enough to diff.
+          fetch-depth: 2
+
+      # A skipped job would leave a required check pending; skipping steps reports success.
+      - name: Decide whether to analyze
+        id: gate
+        env:
+          EVENT: ${{ github.event_name }}
+          PATHS: ${{ matrix.paths }}
+        run: |
+          if [ "$EVENT" != pull_request ] || [ -z "$PATHS" ] \
+            || git diff --name-only HEAD^1 HEAD | grep -qE "$PATHS"; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "run=false" >> "$GITHUB_OUTPUT"
+            echo "No ${{ matrix.language }} changes; skipping analysis." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Initialize CodeQL
+        if: steps.gate.outputs.run == 'true'
+        uses: github/codeql-action/init@v4
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: none
+          config-file: ./.github/codeql/codeql-config.yml
+
+      - name: Perform CodeQL Analysis
+        if: steps.gate.outputs.run == 'true'
+        uses: github/codeql-action/analyze@v4
+        with:
+          category: /language:${{ matrix.language }}

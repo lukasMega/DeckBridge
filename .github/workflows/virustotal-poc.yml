@@ -1,0 +1,96 @@
+name: Build VirusTotal isolation samples
+
+on:
+  workflow_dispatch:
+  workflow_call:
+    inputs:
+      scan:
+        type: boolean
+        required: true
+    secrets:
+      VIRUSTOTAL_API_KEY:
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    strategy:
+      max-parallel: 2 # Builds only; the single scan job owns the API key.
+      matrix:
+        include:
+          - os: windows-latest
+            name: windows-x64
+          - os: macos-15
+            name: macos-arm64
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        working-directory: .github/virustotal-poc
+    steps:
+      - uses: actions/checkout@v7
+      # Inline instead of ilammy/msvc-dev-cmd: that action still ships on node20.
+      - name: Load MSVC environment
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+          $vs = & $vswhere -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
+          if (-not $vs) { throw 'MSVC build tools not found' }
+          cmd /c "`"$vs\VC\Auxiliary\Build\vcvars64.bat`" >nul && set" | ForEach-Object {
+            if ($_ -match '^([^=]+)=(.*)$' -and [Environment]::GetEnvironmentVariable($Matches[1]) -ne $Matches[2]) {
+              "$($Matches[1])=$($Matches[2])" >> $env:GITHUB_ENV
+            }
+          }
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: jdx/mise-action@v5
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+      - name: Require VirusTotal key
+        if: inputs.scan
+        shell: bash
+        env:
+          VT_API_KEY: ${{ secrets.VIRUSTOTAL_API_KEY }}
+        run: test -n "$VT_API_KEY"
+      - name: Build samples
+        run: python build.py --tauri
+      - uses: actions/upload-artifact@v7
+        with:
+          name: virustotal-poc-${{ matrix.name }}
+          path: .github/virustotal-poc/artifacts/*
+          if-no-files-found: error
+
+  # One process, one limiter: parallel scanners would share the key's quota.
+  scan:
+    needs: build
+    if: inputs.scan
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: .github/virustotal-poc
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
+        with:
+          name: virustotal-poc-windows-x64
+          path: .github/virustotal-poc/samples-windows-x64
+      - uses: actions/download-artifact@v8
+        with:
+          name: virustotal-poc-macos-arm64
+          path: .github/virustotal-poc/samples-macos-arm64
+      - name: Scan samples
+        env:
+          VT_API_KEY: ${{ secrets.VIRUSTOTAL_API_KEY }}
+        run: node scan.mjs windows-x64=samples-windows-x64 macos-arm64=samples-macos-arm64
+      - uses: actions/upload-artifact@v7
+        with:
+          name: virustotal-poc-results-windows-x64
+          path: .github/virustotal-poc/results-windows-x64.*
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v7
+        with:
+          name: virustotal-poc-results-macos-arm64
+          path: .github/virustotal-poc/results-macos-arm64.*
+          if-no-files-found: error

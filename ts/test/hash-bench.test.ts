@@ -1,7 +1,7 @@
 // Benchmark: BigInt FNV-64 (current) vs plain-number FNV-32 (candidate)
 // Run via: node build.mjs --test hash-bench && $TJS run dist/test/hash-bench.js
 
-// ── Implementations under test ────────────────────────────────────────────────
+// Implementations under test
 
 function hashBigInt(buf: Uint8Array): string {
   let h = 0xcbf29ce484222325n;
@@ -18,7 +18,7 @@ function hashFnv32(buf: Uint8Array): string {
   return h.toString(16).padStart(8, '0');
 }
 
-// ── Buffers: small (test fixture), medium (light key JPEG), large (heavy key JPEG) ──
+// Buffers: small (test fixture), medium (light key JPEG), large (heavy key JPEG)
 
 const S = 570; // 16×16 JPEG
 const M = 16_000; // ~16 KB — typical 120×120 key image
@@ -27,7 +27,7 @@ const L = 40_000; // ~40 KB — high-quality 120×120 key image
 const bufs = [new Uint8Array(S), new Uint8Array(M), new Uint8Array(L)];
 for (const b of bufs) for (let i = 0; i < b.length; i++) b[i] = (i * 31 + 17) & 0xff;
 
-// ── Benchmark harness ─────────────────────────────────────────────────────────
+// Benchmark harness
 
 function bench(label: string, fn: () => void, iters: number): number {
   // warm-up
@@ -42,7 +42,7 @@ function bench(label: string, fn: () => void, iters: number): number {
   return ms;
 }
 
-// ── Run ───────────────────────────────────────────────────────────────────────
+// Run
 
 console.log('\n=== hashJpeg benchmark (QuickJS / txiki.js) ===\n');
 
@@ -84,7 +84,7 @@ const bF = bench(
 );
 console.log(`  speedup: ${(bB / bF).toFixed(1)}×\n`);
 
-// ── Correctness: both must be deterministic and collision-resistant enough ────
+// Correctness: both must be deterministic and collision-resistant enough
 
 let failed = 0;
 

@@ -1,0 +1,371 @@
+/** Worker-side image rendering: transform a CORA image to the device-native
+ *  format, cache it, and write it to the device. Runs on the USB worker thread
+ *  so the synchronous FFI transform and hid_write burst never stall the main thread's
+ *  CORA ACK loop or the WebUI (P1). The main thread forwards raw CORA bytes via
+ *  the 'image' worker message; this module owns the transform + the LRU cache. */
+import { debug, info, warn } from '../shared/logger.js';
+import { blitImage, canvasSliceToBmp, transformImageForDevice } from './translator.js';
+import { mk2IndexToDeviceImgId } from '../shared/key-map.js';
+import { DumpDir, DumpQueue, newDumpTag } from './image-dump.js';
+import { hashJpeg } from '../shared/image-hash.js';
+import { imageCache, makeCacheKey, specRevision } from './image-cache.js';
+import type { DeviceImageFormat, DeviceImageSpec, DeviceModel } from '../devices/driver.js';
+import type { TouchStripOptions, TouchWindowRegion } from '../shared/types.js';
+import {
+  DEFAULT_TOUCH_STRIP_OPTIONS,
+  PLUS_TOUCH_WIDTH,
+  PLUS_TOUCH_HEIGHT,
+} from '../shared/types.js';
+
+/** The slice of a driver this module needs: the native-bytes write. The model
+ *  is passed separately because the low-level drivers keep `model` private. */
+interface RenderTarget {
+  sendImage(keyIndex: number, bytes: Uint8Array): void;
+}
+
+// Diagnostic image dumps: off unless an env var is set, checked once at module load so
+// the normal case has zero overhead. Queue/ring mechanics live in image-dump.ts.
+const DUMP_KEEP = 200;
+const RAW_DUMP_KEEP = 60; // 30 in/out pairs
+const dumpEnv = tjs.env['DECKBRIDGE_DUMP_DIR'] || undefined;
+const rawDumpEnv = tjs.env['DECKBRIDGE_RAW_DUMP_DIR'] || undefined;
+const dumpQueue = new DumpQueue();
+const dumpTag = newDumpTag();
+
+// DECKBRIDGE_DUMP_DIR: every device-bound image produced by the transform, for
+// offline diffing.
+const DUMP_DIR = dumpEnv ? new DumpDir(dumpEnv, DUMP_KEEP, dumpQueue, dumpTag) : undefined;
+// DECKBRIDGE_RAW_DUMP_DIR: each received CORA image beside its transform result, paired
+// by seq. Independent of DECKBRIDGE_DUMP_DIR (transform output only, own naming).
+const RAW_DUMP_DIR = rawDumpEnv
+  ? new DumpDir(rawDumpEnv, RAW_DUMP_KEEP, dumpQueue, dumpTag)
+  : undefined;
+let _dumpSeq = 0;
+let _rawSeq = 0;
+
+function seqTag(seq: number): string {
+  return String(seq).padStart(4, '0');
+}
+
+function dumpExt(format: DeviceImageFormat): string {
+  return format === 'jpeg' ? 'jpg' : format;
+}
+
+/** Wait for queued dumps (call on worker close, before the thread exits). */
+export function drainImageDumps(): Promise<void> {
+  return dumpQueue.drain();
+}
+
+/** Drop dumps that have not started yet. */
+export function discardImageDumps(): void {
+  dumpQueue.discard();
+}
+
+function dumpNativeBytes(keyIndex: number, nativeBytes: Buffer): void {
+  DUMP_DIR?.write(`key${keyIndex}-${seqTag(_dumpSeq++)}.jpg`, nativeBytes);
+}
+
+/** Save the raw CORA image and return its seq so the transform output can be paired,
+ *  or null when unset or the dump was dropped (then the pair is skipped whole). */
+function dumpRawReceived(
+  keyIndex: number,
+  coraBytes: Uint8Array,
+  format: 'jpeg' | 'bmp',
+): number | null {
+  if (!RAW_DUMP_DIR) return null;
+  const seq = _rawSeq++;
+  const ok = RAW_DUMP_DIR.write(`${seqTag(seq)}_key${keyIndex}_in.${dumpExt(format)}`, coraBytes);
+  return ok ? seq : null;
+}
+
+/** Save the device-bound transform output beside its raw input (same seq). */
+function dumpTransformed(
+  seq: number | null,
+  keyIndex: number,
+  nativeBytes: Uint8Array,
+  devFormat: DeviceImageFormat,
+): void {
+  if (seq === null) return;
+  RAW_DUMP_DIR?.write(`${seqTag(seq)}_key${keyIndex}_out.${dumpExt(devFormat)}`, nativeBytes);
+}
+
+// Worker-side render performance tracking
+// Logs first-image → 15th-image device-side latency (transform + write) so the
+// device batch can be compared against the main-thread "WebUI 15-key batch".
+const PERF_BATCH_N = 15;
+let _pt0 = 0;
+let _pCount = 0;
+let _pIdleTimer: number | null = null;
+
+function perfReset(): void {
+  _pt0 = 0;
+  _pCount = 0;
+  if (_pIdleTimer !== null) clearTimeout(_pIdleTimer);
+  _pIdleTimer = null;
+}
+
+function perfOnRender(transformMs: number): void {
+  const now = Date.now();
+  if (!_pt0) _pt0 = now;
+  if (++_pCount === PERF_BATCH_N) {
+    info('perf', `device 15-key batch: +${now - _pt0}ms total; last transform ${transformMs}ms`);
+    perfReset();
+    return;
+  }
+  if (_pIdleTimer !== null) clearTimeout(_pIdleTimer);
+  _pIdleTimer = setTimeout(perfReset, 3000);
+}
+
+// Device-tuning revision of the model's image spec, mixed into the cache key so
+// an override change can't be served a stale entry. Memoized per model object:
+// applyModelOverrides() returns a NEW object whenever the spec changes, so a
+// WeakMap hit is exactly "same effective spec as last time".
+const _specRevisions = new WeakMap<DeviceModel, string>();
+
+function revisionFor(model: DeviceModel): string {
+  let rev = _specRevisions.get(model);
+  if (rev === undefined) {
+    rev = specRevision(model.image);
+    _specRevisions.set(model, rev);
+  }
+  return rev;
+}
+
+/** Transform (if needed), cache, key-remap, and write one CORA image to the
+ *  device. Returns the raw-frame hash and whether the LRU served it, once the device
+ *  write has been dispatched; throws on a transform failure (the worker turns that into an 'error' message). */
+export function renderImage(
+  driver: RenderTarget,
+  model: DeviceModel,
+  keyIndex: number,
+  coraBytes: Uint8Array,
+  format: 'jpeg' | 'bmp',
+): { hash: string; cached: boolean } {
+  // Capture the raw input first so it's saved even if the transform throws.
+  const rawDump = dumpRawReceived(keyIndex, coraBytes, format);
+
+  // Effective image spec is the model's own (device tuning already merged in
+  // at open()/'setOverrides' time — see devices/model-overrides.ts).
+  const eff = model.image;
+  const frameHash = hashJpeg(coraBytes);
+  const hash = makeCacheKey(model.id, frameHash, 'def', revisionFor(model));
+  let entry = imageCache.get(hash);
+  const cached = entry !== undefined;
+
+  if (!entry) {
+    const tStart = Date.now();
+    let nativeBytes: Buffer;
+
+    // Forward the input bytes unchanged when no re-encode is needed: either a
+    // true gen1 device (the desktop already sent native BMP) or a model whose
+    // CORA JPEG is already in the correct device format ('passthrough').
+    if ((format === 'bmp' && eff.format === 'bmp') || eff.transform === 'passthrough') {
+      nativeBytes = Buffer.from(coraBytes);
+      perfOnRender(0);
+    } else {
+      // Includes K1 Pro: advertised as a Mini, so the app sends gen1 BMP, but the
+      // device needs JPEG — decode the BMP and re-encode to native.
+      // (image::load_from_memory auto-detects BMP vs JPEG input.)
+      nativeBytes = transformImageForDevice(coraBytes, eff);
+      perfOnRender(Date.now() - tStart);
+    }
+
+    // debug, not info: fires on every cache-miss transform (once per frame on any
+    // animated key) and each info line becomes a WS broadcast. The 15-key batch perf
+    // counters above stay at info — they are the shipped evidence.
+    debug('image', `key=${keyIndex} jpeg=${nativeBytes.length}B q=${eff.quality}`);
+    dumpNativeBytes(keyIndex, nativeBytes);
+    entry = { nativeBytes };
+    imageCache.set(hash, entry);
+  } else {
+    perfOnRender(0);
+  }
+
+  // Pair the device-bound bytes with the raw input under one seq (cache hit or miss).
+  dumpTransformed(rawDump, keyIndex, entry.nativeBytes, model.image.format);
+
+  // Map CORA key index → device-native key index (mk2IndexToDeviceImgId already
+  // falls back to identity when the model has no keyMap array/offset).
+  const deviceKeyIndex = mk2IndexToDeviceImgId(keyIndex, model);
+  if (deviceKeyIndex < 0) {
+    // Debug, not warn: the D200 maps two advertised cells to -1 on purpose, per frame.
+    debug('image', `skipping image for unmapped key ${keyIndex}`);
+    return { hash: frameHash, cached };
+  }
+
+  driver.sendImage(deviceKeyIndex, entry.nativeBytes);
+  return { hash: frameHash, cached };
+}
+
+/** Every strip zone a region touches: the Elgato app's 200-px zones, the same split
+ *  ExtraKeyWidgets.noteTouchFrame uses. No region = the whole strip. */
+function touchedZones(count: number, region?: TouchWindowRegion): number[] {
+  const zoneWidth = Math.floor(PLUS_TOUCH_WIDTH / count);
+  const x = region?.x ?? 0;
+  const w = region?.w ?? PLUS_TOUCH_WIDTH;
+  const zones: number[] = [];
+  for (let i = 0; i < count; i++) {
+    if (x < (i + 1) * zoneWidth && x + w > i * zoneWidth) zones.push(i);
+  }
+  return zones;
+}
+
+function coversStrip(region?: TouchWindowRegion): boolean {
+  return (
+    !region ||
+    (region.x <= 0 &&
+      region.y <= 0 &&
+      region.x + region.w >= PLUS_TOUCH_WIDTH &&
+      region.y + region.h >= PLUS_TOUCH_HEIGHT)
+  );
+}
+
+/** Lossless intermediate for 'scale': the zone fitted into the slot, which the slot
+ *  spec then pads. */
+const ZONE_FIT_SPEC: DeviceImageSpec = {
+  format: 'bmp',
+  width: 0,
+  height: 0,
+  rotate: 0,
+  flipH: false,
+  flipV: false,
+  colorMode: 'rgb',
+  maxBytes: 0,
+  quality: 1,
+  resizeFilter: 'lanczos3',
+  transform: 'sidecar',
+};
+
+/** One dock's Stream Deck + window (800×100, RGB). The app sends full frames and
+ *  small patches (dial feedback); each is drawn into this canvas, then sent as one
+ *  full-strip upload or as every zone it touches, re-sent whole — a patch sent alone
+ *  would be stretched over its zone. Zones in the mask (DeckBridge widgets own them)
+ *  are drawn but never sent. See docs/side-keys.md. */
+export class TouchStripCanvas {
+  private readonly rgb = new Uint8Array(PLUS_TOUCH_WIDTH * PLUS_TOUCH_HEIGHT * 3);
+  private mask = new Set<number>();
+  private options: TouchStripOptions = DEFAULT_TOUCH_STRIP_OPTIONS;
+
+  /** A new device (or none): black strip, the app owns every zone, default options. */
+  reset(): void {
+    this.rgb.fill(0);
+    this.mask = new Set();
+    this.options = DEFAULT_TOUCH_STRIP_OPTIONS;
+  }
+
+  setOptions(options: TouchStripOptions): void {
+    this.options = options;
+  }
+
+  apply(
+    driver: RenderTarget,
+    model: DeviceModel,
+    bytes: Uint8Array,
+    region?: TouchWindowRegion,
+  ): void {
+    const displays = model.widgetDisplays;
+    if (!displays || displays.length === 0) return;
+    try {
+      blitImage(
+        this.rgb,
+        PLUS_TOUCH_WIDTH,
+        PLUS_TOUCH_HEIGHT,
+        bytes,
+        region?.x ?? 0,
+        region?.y ?? 0,
+      );
+    } catch (err) {
+      warn('touch', `touch window blit failed: ${(err as Error).message}`);
+      return;
+    }
+    if (this.options.upload === 'always' || coversStrip(region)) {
+      if (this.sendFullStrip(driver, model)) return;
+    }
+    for (const i of touchedZones(displays.length, region)) {
+      if (!this.mask.has(displays[i]!.wireId)) this.sendZone(driver, model, i);
+    }
+  }
+
+  /** Swap in a new ownership mask; every released zone gets the app's image back. */
+  setMask(driver: RenderTarget, model: DeviceModel, wireIds: readonly number[]): void {
+    const released = [...this.mask].filter((wireId) => !wireIds.includes(wireId));
+    this.mask = new Set(wireIds);
+    this.restore(driver, model, released);
+  }
+
+  /** Put the app's image back on these zones (black where it never drew). */
+  restore(driver: RenderTarget, model: DeviceModel, wireIds: readonly number[]): void {
+    const displays = model.widgetDisplays ?? [];
+    if (wireIds.length === 0) return;
+    if (displays.every(({ wireId }) => wireIds.includes(wireId))) {
+      if (this.sendFullStrip(driver, model)) return;
+    }
+    displays.forEach(({ wireId }, i) => {
+      if (wireIds.includes(wireId)) this.sendZone(driver, model, i);
+    });
+  }
+
+  /** One upload for the whole strip. False when the model has no full-strip surface
+   *  or a masked zone would be painted over — the caller sends per zone instead. */
+  private sendFullStrip(driver: RenderTarget, model: DeviceModel): boolean {
+    const strip = model.touchStripDisplay;
+    if (!strip || this.mask.size > 0) return false;
+    try {
+      const bmp = canvasSliceToBmp(
+        this.rgb,
+        PLUS_TOUCH_WIDTH,
+        PLUS_TOUCH_HEIGHT,
+        0,
+        PLUS_TOUCH_WIDTH,
+      );
+      driver.sendImage(strip.wireId, transformImageForDevice(bmp, strip.image));
+    } catch (err) {
+      warn('touch', `touch strip render failed: ${(err as Error).message}`);
+    }
+    return true;
+  }
+
+  private sendZone(driver: RenderTarget, model: DeviceModel, index: number): void {
+    const display = model.widgetDisplays![index]!;
+    try {
+      driver.sendImage(
+        display.wireId,
+        transformImageForDevice(this.zoneBmp(model, index), display.image),
+      );
+    } catch (err) {
+      warn('touch', `touch segment ${index} render failed: ${(err as Error).message}`);
+    }
+  }
+
+  /** The canvas part one zone shows. Without a full-strip surface the Elgato zone is
+   *  stretched into its display, as before the strip geometry was known. */
+  private zoneBmp(model: DeviceModel, index: number): Uint8Array {
+    const displays = model.widgetDisplays!;
+    const display = displays[index]!;
+    const strip = model.touchStripDisplay;
+    if (strip && display.stripX !== undefined && this.options.zoneFit === 'crop') {
+      const ratio = PLUS_TOUCH_WIDTH / strip.image.width;
+      const x = Math.round(display.stripX * ratio);
+      const w = Math.min(Math.round(display.image.width * ratio), PLUS_TOUCH_WIDTH - x);
+      return canvasSliceToBmp(this.rgb, PLUS_TOUCH_WIDTH, PLUS_TOUCH_HEIGHT, x, w);
+    }
+    const zoneWidth = Math.floor(PLUS_TOUCH_WIDTH / displays.length);
+    const zone = canvasSliceToBmp(
+      this.rgb,
+      PLUS_TOUCH_WIDTH,
+      PLUS_TOUCH_HEIGHT,
+      index * zoneWidth,
+      zoneWidth,
+    );
+    if (!strip) return zone;
+    const scale = Math.min(
+      display.image.width / zoneWidth,
+      display.image.height / PLUS_TOUCH_HEIGHT,
+    );
+    return transformImageForDevice(zone, {
+      ...ZONE_FIT_SPEC,
+      width: Math.round(zoneWidth * scale),
+      height: Math.round(PLUS_TOUCH_HEIGHT * scale),
+    });
+  }
+}

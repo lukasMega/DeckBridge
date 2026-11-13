@@ -1,0 +1,549 @@
+import { sanitizeSurveySettings } from './settings-store.js';
+import { isTapFeedback, loadSettings, saveSettings, settingsPath } from './settings-store.js';
+import type {
+  ExtensionGrant,
+  Settings,
+  DeviceIdentitySettings,
+  PersistedLogLevel,
+} from './settings-store.js';
+import { isLogLevel } from '../shared/cli.js';
+import { openPathInOS } from './os-utils.ts';
+import {
+  getOrCreateDeviceIdentity as getOrCreateDeviceIdentityPure,
+  isStableDeviceKey,
+} from './device-identity.js';
+import type { DeviceModelOverride } from '../devices/driver.js';
+import { log } from '../shared/logger.js';
+import {
+  isExtraKeysRecord,
+  isOneOf,
+  isTouchStripRepaintMs,
+  MAX_MULTI_DECK_DOCKS,
+  normalizeExtraKeyConfig,
+  TOUCH_STRIP_MODES,
+  TOUCH_STRIP_UPLOADS,
+  TOUCH_STRIP_ZONE_FITS,
+} from '../shared/types.js';
+import type { DockStatus, ExtraKeyConfig } from '../shared/types.js';
+import type { UpdateState } from './update-check.js';
+import { encoderSettingsError } from '../shared/encoder-settings.js';
+import { isPageDefinition, MAX_PAGES, sanitizePages } from '../shared/page-config.js';
+import { standbySettingsError } from '../shared/standby-settings.js';
+import {
+  DEFAULT_BROWSER_DECK_PROFILE,
+  isBrowserDeckProfile,
+} from '../devices/virtual/browser-deck-profiles.js';
+import {
+  clampAutoRestartDelayS,
+  ELGATO_AUTO_RESTART_DELAY_S_DEFAULT,
+  sanitizeActiveDecks,
+  sanitizeDocsSeen,
+  sanitizeExtensionGrants,
+  sanitizeModelOverrides,
+  sanitizeVerifyDismissed,
+  sanitizeVirtualDeck,
+  sanitizeWslRelay,
+  wslRelayEntry,
+} from './settings-sanitize.js';
+import { ACCESS_TOKENS_MAX, isPushTokenRecord, type PushTokenRecord } from './push-tokens.js';
+import { DockPrefs, defaultRuntimePrefs } from './dock-prefs.js';
+import type { DockPrefsStore } from './dock-prefs.js';
+
+const MAX_DOCS_SEEN = 32;
+
+/** Optional per-device fields shared by stripInvalidDeviceSettings and
+ *  hasValidDeviceSettings — one table so both stay in sync and neither trips
+ *  the complexity limit on a long if-chain. */
+const OPTIONAL_DEVICE_FIELDS: ReadonlyArray<{ key: string; isValid: (v: unknown) => boolean }> = [
+  { key: 'brightness', isValid: (v) => typeof v === 'number' },
+  { key: 'brightnessOverride', isValid: (v) => typeof v === 'boolean' },
+  { key: 'extraKeys', isValid: isExtraKeysRecord },
+  { key: 'touchStripMode', isValid: (v) => isOneOf(TOUCH_STRIP_MODES, v) },
+  { key: 'touchStripRepaintMs', isValid: isTouchStripRepaintMs },
+  { key: 'touchStripZoneFit', isValid: (v) => isOneOf(TOUCH_STRIP_ZONE_FITS, v) },
+  { key: 'touchStripUpload', isValid: (v) => isOneOf(TOUCH_STRIP_UPLOADS, v) },
+  { key: 'encoders', isValid: (v) => !encoderSettingsError(v) },
+  { key: 'tapFeedback', isValid: isTapFeedback },
+  { key: 'pairedAt', isValid: (v) => typeof v === 'string' },
+  { key: 'standby', isValid: (v) => standbySettingsError(v) === null },
+  {
+    key: 'pages',
+    isValid: (v) => Array.isArray(v) && v.length <= MAX_PAGES && v.every(isPageDefinition),
+  },
+];
+
+/** A hand-edited bad page drops only itself, not the rest of the list. */
+function dropInvalidPages(r: Record<string, unknown>): void {
+  if (r.pages === undefined) return;
+  const kept = sanitizePages(r.pages);
+  if (!kept) return;
+  const dropped = (r.pages as unknown[]).length - kept.length;
+  if (dropped > 0) log('warn', 'settings', `settings: dropped ${dropped} invalid saved page(s)`);
+  r.pages = kept;
+}
+
+/** Strip bad optional per-device fields so they can't fail isDeviceIdentitySettings
+ *  and drop the whole identity entry — that would regenerate MAC/serial and force an
+ *  Elgato re-pair. extraKeys: migration 2026-07-16 (action→widget model);
+ *  touchStripDisabled: replaced by touchStripMode 2026-09-22, no migration;
+ *  imageModeOverride: replaced by overrides.image.resizeMode/padFill, no migration. */
+function stripInvalidDeviceSettings(d: unknown): void {
+  if (typeof d !== 'object' || d === null) return;
+  const r = d as Record<string, unknown>;
+  dropInvalidPages(r);
+  for (const { key, isValid } of OPTIONAL_DEVICE_FIELDS) {
+    if (r[key] !== undefined && !isValid(r[key])) delete r[key];
+  }
+  delete r.touchStripDisabled;
+  delete r.imageModeOverride;
+}
+
+const normalizeLayout = (map: Record<string, ExtraKeyConfig>): Record<string, ExtraKeyConfig> =>
+  Object.fromEntries(
+    Object.entries(map).map(([wireId, cfg]) => [wireId, normalizeExtraKeyConfig(cfg)]),
+  );
+
+/** Fold pre-`style` text fields of a valid entry's extraKeys (and its pages') into `style`. */
+function normalizeDeviceExtraKeys(d: DeviceIdentitySettings): DeviceIdentitySettings {
+  const out = d.extraKeys ? { ...d, extraKeys: normalizeLayout(d.extraKeys) } : d;
+  if (!out.pages?.some((p) => p.extraKeys)) return out;
+  const pages = out.pages.map((p) =>
+    p.extraKeys ? { ...p, extraKeys: normalizeLayout(p.extraKeys) } : p,
+  );
+  return { ...out, pages };
+}
+
+/** The optional per-device settings half of isDeviceIdentitySettings. */
+function hasValidDeviceSettings(r: Record<string, unknown>): boolean {
+  return OPTIONAL_DEVICE_FIELDS.every(
+    ({ key, isValid }) => r[key] === undefined || isValid(r[key]),
+  );
+}
+
+/** Shape guard for a persisted/imported `devices` entry: identity fields are
+ *  required strings; per-device settings are optional but must be well-typed.
+ *  Applied on both disk load and raw-JSON import, so a corrupt entry can't
+ *  poison runtime state. */
+function isDeviceIdentitySettings(d: unknown): d is DeviceIdentitySettings {
+  if (typeof d !== 'object' || d === null) return false;
+  const r = d as Record<string, unknown>;
+  return (
+    typeof r.deviceKey === 'string' &&
+    typeof r.mdnsServiceName === 'string' &&
+    typeof r.macAddress === 'string' &&
+    typeof r.dockSerial === 'string' &&
+    typeof r.childSerial === 'string' &&
+    hasValidDeviceSettings(r)
+  );
+}
+
+/** settings.json in memory: process-wide prefs and the per-physical-device
+ *  entries (identity + brightness/override/extraKeys/…), keyed by
+ *  device-identity.ts's deviceKeyFor(). Loaded once by app.ts before anything
+ *  else reads it; this class is the sole settings.json writer. */
+export class PersistedSettings implements DockPrefsStore {
+  selectedDock = 0;
+  /** undefined = not persisted; the level then comes from the CLI flag / env /
+   *  the build-time default (see PersistedLogLevel). */
+  logLevel: PersistedLogLevel | undefined = undefined;
+  /** Opt-in second dock; false = single dock and no dock scan (types.ts
+   *  MAX_MULTI_DECK_DOCKS, dock-scanner.ts). */
+  multiDeck = false;
+  /** User-chosen device keys among the detected decks (deck-selection.ts). */
+  activeDecks: string[] = [];
+  webuiKeyPress = false;
+  virtualDeck = { enabled: false, profile: DEFAULT_BROWSER_DECK_PROFILE as string };
+  /** GitHub-release update check opt-out (see update-check.ts). undefined = enabled. */
+  updateCheck: boolean | undefined = undefined;
+  updateState: UpdateState | undefined = undefined;
+  a7s: boolean | undefined = undefined;
+  a7sDay: string | undefined = undefined;
+  survey: Settings['survey'] = {};
+  docsSeen: string[] = []; // Docs topics opened since last ping.
+  verifyDismissed: string[] = []; // Model ids the verify wizard is never offered for again.
+  wslRelay: NonNullable<Settings['wslRelay']> = { enabled: false }; // Windows same-PC WSL relay switch.
+  /** Elgato-app auto-restart opt-out + grace delay (see elgato-auto-restart.ts).
+   *  undefined = enabled / default delay. */
+  elgatoAutoRestart: boolean | undefined = undefined;
+  elgatoAutoRestartDelayS: number | undefined = undefined;
+  /** Switched-on extensions (id → grant); machine-local, a settings import never sets it. */
+  extensionGrants: Record<string, ExtensionGrant> = {};
+  /** Browser's navigator.language (dailyPing's OS-locale fallback). Ephemeral —
+   *  deliberately absent from current()/persist(), since the browser resends it
+   *  on every load. */
+  browserLocale: string | undefined = undefined;
+  /** Browser-resolved timezone. Ephemeral like browserLocale. */
+  browserTimeZone: string | undefined = undefined;
+  /** Prefs of a dock with no settings.json entry (mock mode, pre-connect). Never persisted. */
+  readonly runtime = defaultRuntimePrefs();
+  private devices: DeviceIdentitySettings[] = [];
+  private accessTokens: PushTokenRecord[] = [];
+  private modelOverrides: Record<string, DeviceModelOverride> = {};
+  /** Serializes writes: overlapping write+rename pairs could land out of order. */
+  private saveChain: Promise<void> = Promise.resolve();
+  private pendingSave: Settings | undefined;
+  /** Outcome of the newest write that ran; false until a failed write is replaced. */
+  private lastSaveOk = true;
+  /** Set by close(): later mutations stay in memory and are never written. */
+  private closed = false;
+
+  /** `cacheRoot` is overridable so tests never touch the real user cache dir;
+   *  production passes undefined and settings-store.ts picks the default. */
+  constructor(readonly cacheRoot?: string) {}
+
+  private loadAutoRestart(saved: Settings): void {
+    if (typeof saved.elgatoAutoRestart === 'boolean') {
+      this.elgatoAutoRestart = saved.elgatoAutoRestart;
+    }
+    if (typeof saved.elgatoAutoRestartDelayS === 'number') {
+      this.elgatoAutoRestartDelayS = clampAutoRestartDelayS(saved.elgatoAutoRestartDelayS);
+    }
+  }
+
+  /** Apply settings.json (if present) over the defaults. Malformed device
+   *  entries are dropped (same guard as import). Legacy path-keyed entries are
+   *  pruned too: the IOKit path is volatile, so they can never re-match a
+   *  device and would accumulate one phantom row per replug. */
+  async load(): Promise<void> {
+    const saved = await loadSettings(this.cacheRoot);
+    if (typeof saved.selectedDock === 'number') this.selectedDock = saved.selectedDock;
+    if (isLogLevel(saved.logLevel)) this.logLevel = saved.logLevel;
+    if (typeof saved.multiDeck === 'boolean') this.multiDeck = saved.multiDeck;
+    this.activeDecks = sanitizeActiveDecks(saved.activeDecks, MAX_MULTI_DECK_DOCKS);
+    if (typeof saved.webuiKeyPress === 'boolean') this.webuiKeyPress = saved.webuiKeyPress;
+    this.virtualDeck = sanitizeVirtualDeck(saved.virtualDeck) ?? this.virtualDeck;
+    if (typeof saved.updateCheck === 'boolean') this.updateCheck = saved.updateCheck;
+    if (saved.updateState) this.updateState = saved.updateState;
+    if (typeof saved.a7s === 'boolean') this.a7s = saved.a7s;
+    if (typeof saved.a7sDay === 'string') this.a7sDay = saved.a7sDay;
+    this.survey = sanitizeSurveySettings(saved.survey);
+    this.docsSeen = sanitizeDocsSeen(saved.docsSeen, MAX_DOCS_SEEN);
+    this.wslRelay = sanitizeWslRelay(saved.wslRelay) ?? this.wslRelay;
+    this.loadAutoRestart(saved);
+    this.verifyDismissed = sanitizeVerifyDismissed(saved.verifyDismissed);
+    this.extensionGrants = sanitizeExtensionGrants(saved.extensions);
+    this.modelOverrides = sanitizeModelOverrides(saved.modelOverrides);
+    if (Array.isArray(saved.accessTokens)) {
+      const valid = saved.accessTokens.filter(isPushTokenRecord);
+      this.accessTokens = valid.slice(0, ACCESS_TOKENS_MAX);
+      if (valid.length !== saved.accessTokens.length) {
+        log(
+          'warn',
+          'settings',
+          `settings: dropped ${saved.accessTokens.length - valid.length} invalid access token(s)`,
+        );
+      }
+    }
+    if (Array.isArray(saved.devices)) {
+      saved.devices.forEach(stripInvalidDeviceSettings);
+      this.devices = saved.devices
+        .filter(isDeviceIdentitySettings)
+        .filter((d) => isStableDeviceKey(d.deviceKey))
+        .map(normalizeDeviceExtraKeys);
+    }
+  }
+
+  /** Fire-and-forget write-through — called after every mutation of a persisted
+   *  field. Errors are logged inside saveSettings(), never thrown. */
+  persist(): void {
+    if (this.closed) return;
+    void this.queueSave(this.current());
+  }
+
+  /** Resolves once every queued snapshot is on disk. */
+  async flush(): Promise<void> {
+    await this.saveChain;
+  }
+
+  /** Shutdown: stop persisting, wait for the queued newest snapshot to be written
+   *  (write + rename), and report whether that last write succeeded. The failure itself
+   *  was already logged by saveSettings(). */
+  async close(): Promise<boolean> {
+    this.closed = true;
+    await this.saveChain;
+    return this.lastSaveOk;
+  }
+
+  /** A burst of saves coalesces onto one write of the newest snapshot. */
+  private queueSave(snapshot: Settings): Promise<void> {
+    this.pendingSave = snapshot;
+    this.saveChain = this.saveChain.then(() => this.writePending());
+    return this.saveChain;
+  }
+
+  private async writePending(): Promise<void> {
+    const pending = this.pendingSave;
+    if (pending === undefined) return;
+    this.pendingSave = undefined;
+    this.lastSaveOk = await saveSettings(pending, this.cacheRoot);
+  }
+
+  json(): string {
+    // Export/import never carry credentials (JSON.stringify drops undefined).
+    return JSON.stringify({ ...this.current(), accessTokens: undefined }, null, 2);
+  }
+
+  /** Open settings.json in the OS default handler. Writes current settings
+   *  first — the file may not exist yet and `open` fails silently on a missing
+   *  path. Failures beyond that are swallowed in os-utils.ts. */
+  async openFile(): Promise<void> {
+    await this.queueSave(this.current());
+    await openPathInOS(settingsPath(this.cacheRoot));
+  }
+
+  /** Live per-device prefs of the dock with `deviceKey` ('' = no entry → runtime fallback). */
+  for(deviceKey: string): DockPrefs {
+    return new DockPrefs(this, deviceKey);
+  }
+
+  entryFor(deviceKey: string): DeviceIdentitySettings | undefined {
+    return deviceKey ? this.devices.find((d) => d.deviceKey === deviceKey) : undefined;
+  }
+
+  /** Look up (or generate + persist) the stable identity for `deviceKey`.
+   *  Pure generation lives in device-identity.ts. */
+  getOrCreateIdentity(deviceKey: string, defaultMdnsName: string): DeviceIdentitySettings {
+    const result = getOrCreateDeviceIdentityPure(deviceKey, defaultMdnsName, this.devices);
+    if (result.created) {
+      this.devices = result.devices;
+      this.persist();
+    }
+    return result.identity;
+  }
+
+  /** Rename `deviceKey`'s persisted mDNS name; false if it has no entry yet. */
+  updateMdnsName(deviceKey: string, name: string): boolean {
+    const entry = this.entryFor(deviceKey);
+    if (!entry) return false;
+    entry.mdnsServiceName = name;
+    this.persist();
+    return true;
+  }
+
+  /** Replace devices[] from a raw-JSON import; false (and ignored, not thrown)
+   *  if malformed. */
+  importDevices(devices: unknown): boolean {
+    if (!Array.isArray(devices)) return false;
+    devices.forEach(stripInvalidDeviceSettings);
+    if (!devices.every(isDeviceIdentitySettings)) return false;
+    this.devices = devices.map(normalizeDeviceExtraKeys);
+    this.persist();
+    return true;
+  }
+
+  /** Copy each real dock's live brightness into its persisted device entry.
+   *  Persists only on actual change; docks without a deviceKey are skipped. */
+  syncDockBrightness(docks: DockStatus[]): void {
+    let changed = false;
+    for (const dock of docks) {
+      const e = this.entryFor(dock.deviceKey);
+      if (e && e.brightness !== dock.brightness) {
+        e.brightness = dock.brightness;
+        changed = true;
+      }
+    }
+    if (changed) this.persist();
+  }
+
+  /** Persist a new log level (WebUI "Debug logging"). `undefined` clears it, so
+   *  the CLI flag / env / build-time default takes over again. */
+  setLogLevel(level: PersistedLogLevel | undefined): void {
+    this.logLevel = level;
+    this.persist();
+  }
+
+  setWslRelay(v: NonNullable<Settings['wslRelay']>): void {
+    this.wslRelay = { ...v };
+    this.persist();
+  }
+
+  /** Persist the multi-deck opt-in (WebUI "Use two decks at once"). */
+  setMultiDeck(enabled: boolean): void {
+    this.multiDeck = enabled;
+    this.persist();
+  }
+
+  /** Persist which detected decks run (WebUI multi-deck checkbox list). */
+  setActiveDecks(keys: string[]): void {
+    this.activeDecks = keys;
+    this.persist();
+  }
+
+  /** Persist the click-to-press opt-in (WebUI Settings). */
+  setWebuiKeyPress(enabled: boolean): void {
+    this.webuiKeyPress = enabled;
+    this.persist();
+  }
+
+  /** Switch an extension on with the digest and events the user approved. */
+  grantExtension(id: string, grant: ExtensionGrant): void {
+    this.extensionGrants = { ...this.extensionGrants, [id]: grant };
+    this.persist();
+  }
+
+  /** Switch an extension off. */
+  revokeExtension(id: string): void {
+    this.extensionGrants = Object.fromEntries(
+      Object.entries(this.extensionGrants).filter(([x]) => x !== id),
+    );
+    this.persist();
+  }
+
+  /** Persist the browser-deck opt-in and layout (WebUI "Browser deck" panel). */
+  setVirtualDeck(next: { enabled: boolean; profile: string }): void {
+    this.virtualDeck = {
+      enabled: next.enabled,
+      profile: isBrowserDeckProfile(next.profile) ? next.profile : DEFAULT_BROWSER_DECK_PROFILE,
+    };
+    this.persist();
+  }
+
+  accessTokenRecords(): readonly PushTokenRecord[] {
+    return this.accessTokens;
+  }
+
+  setAccessTokens(records: PushTokenRecord[]): void {
+    this.accessTokens = records;
+    this.persist();
+  }
+
+  /** Persist the update-check opt-out (WebUI "Check for updates" toggle). */
+  setUpdateCheck(enabled: boolean): void {
+    this.updateCheck = enabled;
+    this.persist();
+  }
+
+  setUpdateState(state: UpdateState): void {
+    this.updateState = state;
+    this.persist();
+  }
+
+  /** Record the UTC day of the latest usage ping (daily-ping.ts). */
+  setDailyPingDay(day: string): void {
+    this.a7sDay = day;
+    // The ping snapshots docsSeen before calling this, so clearing here loses nothing.
+    this.docsSeen = [];
+    this.persist();
+  }
+
+  /** Remember that a docs topic was opened (sent with the next daily ping). */
+  addDocsSeen(topic: string): void {
+    if (this.docsSeen.includes(topic) || this.docsSeen.length >= MAX_DOCS_SEEN) return;
+    this.docsSeen.push(topic);
+    this.persist();
+  }
+
+  /** Replace the verify-wizard opt-outs (dismiss "never", a save, a settings import). */
+  setVerifyDismissed(ids: string[]): void {
+    this.verifyDismissed = ids;
+    this.persist();
+  }
+
+  // Elgato-app auto-restart (see main/elgato-auto-restart.ts)
+
+  /** Persist the auto-restart opt-out + grace delay (WebUI "Elgato app" panel). An
+   *  omitted `delayS` leaves the current delay untouched. */
+  setElgatoAutoRestart(enabled: boolean, delayS?: number): void {
+    this.elgatoAutoRestart = enabled;
+    if (delayS !== undefined) this.elgatoAutoRestartDelayS = clampAutoRestartDelayS(delayS);
+    this.persist();
+  }
+
+  /** Whether the auto-restart feature is on. Absent setting = on. */
+  elgatoAutoRestartEnabled(): boolean {
+    return this.elgatoAutoRestart ?? true;
+  }
+
+  /** Grace-period seconds before an auto-restart fires. Absent setting = the default. */
+  elgatoAutoRestartDelaySeconds(): number {
+    return clampAutoRestartDelayS(
+      this.elgatoAutoRestartDelayS ?? ELGATO_AUTO_RESTART_DELAY_S_DEFAULT,
+    );
+  }
+
+  /** Set `pairedAt` on `deviceKey`'s entry the first time the Elgato child client
+   *  attaches to it. No-op (returns false) if the entry doesn't exist yet (mock mode,
+   *  deviceKey === '') or already has a pairedAt — only stable keys ever reach
+   *  devices[], so no isStableDeviceKey re-check is needed here (load() prunes
+   *  path-keyed entries already). */
+  markPaired(deviceKey: string): boolean {
+    const entry = this.entryFor(deviceKey);
+    if (!entry || entry.pairedAt !== undefined) return false;
+    entry.pairedAt = new Date().toISOString();
+    this.persist();
+    return true;
+  }
+
+  /** Whether `deviceKey` has ever completed an Elgato pairing (markPaired ran). */
+  wasPaired(deviceKey: string): boolean {
+    return this.entryFor(deviceKey)?.pairedAt !== undefined;
+  }
+
+  // Model overrides (device tuning) — see devices/model-overrides.ts
+
+  /** Every model's override, by model id. Read by DriverManager at probe time. */
+  allModelOverrides(): Record<string, DeviceModelOverride> {
+    return this.modelOverrides;
+  }
+
+  overrideFor(modelId: string): DeviceModelOverride | undefined {
+    return this.modelOverrides[modelId];
+  }
+
+  /** Store (or, with undefined, clear) one model's override. Callers validate
+   *  first — this is the write half only. */
+  setModelOverride(modelId: string, override: DeviceModelOverride | undefined): void {
+    if (override === undefined || Object.keys(override).length === 0) {
+      delete this.modelOverrides[modelId];
+    } else {
+      this.modelOverrides[modelId] = override;
+    }
+    this.persist();
+  }
+
+  /** Replace the whole map from a raw-JSON import; invalid entries are dropped
+   *  (not thrown), same policy as importDevices. */
+  importModelOverrides(raw: unknown): void {
+    this.modelOverrides = sanitizeModelOverrides(raw);
+    this.persist();
+  }
+
+  private optionalEntries(): Partial<Settings> {
+    return {
+      ...(this.updateCheck !== undefined ? { updateCheck: this.updateCheck } : {}),
+      ...(this.updateState ? { updateState: this.updateState } : {}),
+      ...(this.a7s !== undefined ? { a7s: this.a7s } : {}),
+      ...(this.a7sDay ? { a7sDay: this.a7sDay } : {}),
+      ...(this.verifyDismissed.length > 0 ? { verifyDismissed: this.verifyDismissed } : {}),
+      ...(this.elgatoAutoRestart !== undefined
+        ? { elgatoAutoRestart: this.elgatoAutoRestart }
+        : {}),
+      ...(this.elgatoAutoRestartDelayS !== undefined
+        ? { elgatoAutoRestartDelayS: this.elgatoAutoRestartDelayS }
+        : {}),
+      ...(Object.keys(this.extensionGrants).length > 0 ? { extensions: this.extensionGrants } : {}),
+    };
+  }
+
+  private current(): Settings {
+    return {
+      selectedDock: this.selectedDock,
+      ...(this.logLevel !== undefined ? { logLevel: this.logLevel } : {}),
+      ...(this.multiDeck ? { multiDeck: true } : {}),
+      ...(this.activeDecks.length > 0 ? { activeDecks: this.activeDecks } : {}),
+      ...(this.webuiKeyPress ? { webuiKeyPress: true } : {}),
+      ...(this.virtualDeck.enabled || this.virtualDeck.profile !== DEFAULT_BROWSER_DECK_PROFILE
+        ? { virtualDeck: this.virtualDeck }
+        : {}),
+      ...(Object.keys(this.survey ?? {}).length ? { survey: this.survey } : {}),
+      ...(this.docsSeen.length > 0 ? { docsSeen: this.docsSeen } : {}),
+      ...wslRelayEntry(this.wslRelay),
+      ...this.optionalEntries(),
+      ...(this.accessTokens.length > 0 ? { accessTokens: this.accessTokens } : {}),
+      ...(this.devices.length > 0 ? { devices: this.devices } : {}),
+      ...(Object.keys(this.modelOverrides).length > 0
+        ? { modelOverrides: this.modelOverrides }
+        : {}),
+    };
+  }
+}

@@ -71,8 +71,19 @@ struct TrayState {
     icon: String,               // "full" | "usb_only" | "disconnected"
     status: String,             // human-readable label for menu item
     reconnect_attempts: u32,    // informational only; Rust ignores it
+    notify: Option<Notify>,     // optional: show one OS notification (see below)
 }
 ```
+
+`notify` (`{ title, body, url }`) is an extra key on a normal state line, not a separate
+line shape. An older tray ignores the unknown key and still applies the state; a newer tray
+parses older lines (no key) as before. The notification runs on a spawned thread so the
+event loop never blocks, and a click opens `url` (only `http://localhost:` or
+`http://127.0.0.1:` URLs are accepted). Library: `notify-rust` (libdbus on Linux, already
+linked by `tao`). Sender identity comes from `DECKBRIDGE_APP_ID`, which the Tauri shell sets
+to the bundle identifier; without it macOS shows "Finder" and Windows "Windows PowerShell".
+Click handling: macOS and Windows deliver the body click; on Linux it needs a server that
+supports the `default` action. With no notification service the tray stays silent.
 
 | `icon` | Icon file | Condition |
 |---|---|---|
@@ -96,6 +107,7 @@ struct TrayEvent {
 | `"ready"` | tray initialised | TCP-connect to `port` |
 | `"open_webui"` | "Open Web UI" clicked | *(informational — Rust already opened browser)* |
 | `"check_requirements"` | "Check Requirements" clicked | *(informational)* |
+| `"restart_elgato_app"` | "Restart Elgato App" clicked | TS restarts the Elgato app via the same code path as the WebUI button. Unlike the two rows above, Rust does no work of its own here — no browser open, just the emit — because the restart needs settings, logging and `isElgatoAppRunning()`, which live on the TS side. |
 | `"quit"` | "Quit" clicked | call `shutdown()` → `tjs.exit(0)` |
 
 ---
@@ -139,6 +151,7 @@ Status: Mirabox + Elgato connected  ← disabled, updated by TrayState.status
 ────────────────────────────────
 Open Web UI                     → opens http://localhost:3000
 Check Requirements              → opens http://localhost:3000/requirements
+Restart Elgato App              → emit "restart_elgato_app" (TS does the restart)
 ────────────────────────────────
 Quit                            → emit "quit", exit process
 ```
@@ -204,4 +217,4 @@ rust/deckbridge-tray/
     └── icon-disconnected.png — 22×22 gray circle (no device)
 ```
 
-TypeScript side: `ts/src/tray.ts` — `TrayProcess` class + `startTray()` factory.
+TypeScript side: `ts/src/infra/tray.ts` — `TrayProcess` class + `startTray()` factory.

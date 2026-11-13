@@ -1,34 +1,28 @@
+[settings]
+# No "Finished in Ns" line after every task: silent on success.
+quiet = true
+
 [tools]
 node = "24"
-# Default aqua backend. This was `"npm:pnpm" = "11"` because pnpm 11 dropped the
-# `pnpm-macos-x64` standalone binary, so aqua:pnpm/pnpm@11 had no darwin/amd64
-# asset and `mise install` died on the macos-15-intel release job ("unsupported
-# env: darwin/amd64"). pnpm 12 reverses both halves of that trade:
-#
-#   - v12.1.0 ships `pnpm-darwin-x64.tar.gz` again, so aqua resolves on intel macOS.
-#   - the npm backend is now the broken one. pnpm's npm tarball ships a
-#     placeholder `bin/pnpm` ("This is a placeholder. pnpm's native binary
-#     replaces this file during …") that only a postinstall swaps for the real
-#     binary; mise's npm backend links the package without that step, so
-#     `mise x -- pnpm --version` dies with `SyntaxError: Unexpected identifier 'is'`.
+# Default aqua backend, NOT `npm:pnpm`: pnpm's npm tarball ships a placeholder `bin/pnpm`
+# that only a postinstall swaps for the real binary, and mise's npm backend skips that, so
+# `pnpm --version` dies with `SyntaxError: Unexpected identifier 'is'`. v12 is the floor —
+# 12.1.0 restored `pnpm-darwin-x64`, without which aqua has no intel-macOS asset.
 pnpm = "12"
 
-# No `[tools."github:lukasMega/txiki.js"]` entry: $TJS is a vendor/ path filled
-# by `mise run tjs-setup`, not a mise-managed tool — mise-action's blind
-# `mise install` failed on platforms with no matching asset (kept linux out
-# of release.yml).
+# No `[tools."github:lukasMega/txiki.js"]` entry: $TJS is a vendor/ path filled by
+# `mise run tjs-setup`, not a mise-managed tool — mise-action's blind `mise install`
+# failed on platforms with no matching asset (kept linux out of release.yml).
 
 [env]
-# rustup installs cargo here; CI (dtolnay/rust-toolchain) adds it to PATH itself,
-# but a plain interactive shell may not (no `source $HOME/.cargo/env` in rc files
-# — confirmed missing here). mise's `_.path` prepends it with the OS-correct
-# separator, so tasks can call plain `cargo` on every platform without
-# hardcoding a POSIX-only ${HOME}/.cargo/bin/cargo path (broken on Windows).
+# rustup's cargo. CI adds it to PATH itself but an interactive shell may not, and `_.path`
+# prepends with the OS-correct separator — so tasks call plain `cargo` everywhere instead
+# of a POSIX-only ${HOME}/.cargo/bin path.
 _.path = ["~/.cargo/bin"]
 # Release tag of lukasMega/txiki.js-with-slim-builds. Used by BOTH runtime paths:
 # scripts/tjs-download.mjs (downloads the prebuilt `slim-ffi` asset) and
 # scripts/tjs-build.mjs (clones this tag and builds it).
-TXIKI_VERSION  = "slim-v26.6.0-6"
+TXIKI_VERSION  = "slim-v26.11.0-1"
 # Portable default: vendored build/download destination, per-platform exe suffix.
 # Local overrides (a pre-built $TJS path, TJS_FROM_SOURCE=1) go in mise.local.toml
 # (gitignored) — see that file's comment.
@@ -46,25 +40,50 @@ echo " - version: $($TJS --version)"
 echo " - size:    $(du -k "$TJS" | cut -f1) kB"
 '''
 
-# DECKBRIDGE_NATIVE_LIB / DECKBRIDGE_TRAY_BIN come from [env] above — mise already
-# exports them into every task, so the run lines don't repeat them.
 [tasks.s]
 alias = ["start", "run"]
-description = "Build and run"
+description = "Build and run (default UI: simple-only, no advanced/debug view)"
 quiet = true
-depends = ["build"]
+depends = ["build", "extensions"]
+# Dev runs load the extensions just built; enable them under Settings > Extensions.
+env = { DECKBRIDGE_EXTENSIONS_DIR = "{{config_root}}/ts/dist/extensions" }
 run = "$TJS run ts/dist/bundle.js"
 
-[tasks.s-simple]
-alias = ["start-simple", "run-simple"]
-description = "Build and run the simple-only UI (no advanced/debug view)"
+[tasks.s-advanced]
+alias = ["start-advanced", "run-advanced"]
+description = "Build and run with the advanced/debug view included"
 quiet = true
-depends = ["build-simple"]
+depends = ["build-advanced", "extensions"]
+env = { DECKBRIDGE_EXTENSIONS_DIR = "{{config_root}}/ts/dist/extensions" }
 run = "$TJS run ts/dist/bundle.js"
+
+[tasks.spike-docks]
+description = "Throwaway: 3 mock docks with distinct identities for the Elgato pairing-limit spike"
+depends = ["build-mock"]
+run = "node scripts/spike-docks.mjs"
+
+[tasks.mock-akp05]
+description = "Build and run mock AKP05 paired as Stream Deck + at http://127.0.0.1:3000"
+depends = ["build-mock"]
+run = "node scripts/mock-akp05.mjs"
 
 [tasks.d]
-description = "Rebuild at debug log level and run"
-run = "LOG_LEVEL=debug mise run build && $TJS run ts/dist/bundle.js"
+description = "Rebuild at debug log level (readable WebUI class names) and run"
+depends = ["extensions"]
+env = { DECKBRIDGE_EXTENSIONS_DIR = "{{config_root}}/ts/dist/extensions" }
+run = "LOG_LEVEL=debug DECKBRIDGE_NO_MANGLE=1 mise run build && $TJS run ts/dist/bundle.js"
+
+[tasks.extensions]
+description = "Build the extensions in ts/src/extensions/ into ts/dist/extensions/ (not part of the binary)"
+quiet = true
+dir = "ts"
+depends = ["ts-install"]
+run = "node scripts/build-extensions.mjs"
+
+[tasks.package-extensions]
+description = "Zip each built extension for a release: dist/deckbridge-ext-<id>-v<version>.zip"
+depends = ["extensions"]
+run = "node scripts/package-extensions.mjs"
 
 [tasks.gen-splash]
 description = "Regenerate on-connect splash JPEG assets (run once after design changes)"
@@ -74,10 +93,8 @@ run = "node scripts/gen-splash.mjs"
 [tasks.tjs-setup]
 description = "Acquire the slim txiki.js runtime: prebuilt download by default, from-source build when TJS_FROM_SOURCE=1"
 quiet = true
-# Default (no env): download the prebuilt `slim-ffi` asset of $TXIKI_VERSION —
-# no C/C++ toolchain needed, so a contributor can always `mise run build`.
-# TJS_FROM_SOURCE=1 builds the same runtime from source instead (needed on
-# macos-x86_64, which has no prebuilt slim asset).
+# Downloading by default keeps `mise run build` toolchain-free for contributors.
+# TJS_FROM_SOURCE=1 is needed on macos-x86_64, which has no prebuilt slim asset.
 run = "node scripts/tjs-setup.mjs"
 
 [tasks.tjs-build]
@@ -95,96 +112,115 @@ description = "Build Rust system tray binary"
 quiet = true
 dir = "{{config_root}}/rust/deckbridge-tray"
 depends = ["deckbridge-native"]
-run = "cargo build --release"
+run = "cargo build -q --release"
 
 [tasks.ts-install]
 description = "Install TypeScript/esbuild dev dependencies"
 quiet = true
 dir = "ts"
-run = "pnpm install --silent && echo pnpm install OK"
+run = "pnpm install --silent"
 
 [tasks.ts]
-description = "Bundle TypeScript with esbuild"
+description = "Bundle TypeScript with esbuild (simple-only UI: excludes the advanced view + its CSS)"
 quiet = true
 dir = "ts"
 depends = ["ts-install", "deckbridge-native"]
-run = "node build.mjs"
+run = "node ../scripts/quiet.mjs --fail-only -- node build.mjs"
+
+[tasks.ts-mock]
+description = "Bundle TypeScript with mock driver and simulation routes"
+quiet = true
+dir = "ts"
+depends = ["ts-install", "deckbridge-native"]
+run = "DECKBRIDGE_BUILD_MOCK=1 node ../scripts/quiet.mjs --fail-only -- node build.mjs"
 
 [tasks.build]
-description = "Build everything"
+description = "Build everything (simple-only UI)"
 quiet = true
 depends = ["tjs-setup", "deckbridge-native", "tray-rs", "ts"]
 
+[tasks.build-mock]
+description = "Build local mock variant without replacing release bundle"
+quiet = true
+depends = ["tjs-setup", "deckbridge-native", "tray-rs", "ts-mock"]
+
 [tasks.compile]
-description = "Compile to standalone binary"
+description = "Compile to standalone binary (simple-only UI — this is what release.yml ships)"
 depends = ["build"]
 run = "node scripts/compile.mjs"
+
+[tasks.icons]
+description = "Regenerate app + tray icons from the BridgeMark vector (needs rsvg-convert; commit the result)"
+run = "node scripts/gen-icons.mjs"
 
 [tasks.sync-version]
 description = "Stamp ts/package.json's version into Cargo.toml/tauri.conf.json (CI-only, don't commit the result)"
 run = "node scripts/sync-version.mjs"
 
-[tasks.ts-simple]
-description = "Bundle TypeScript (simple-only: excludes advanced view + its CSS)"
+[tasks.ts-advanced]
+description = "Bundle TypeScript with the advanced/debug view included (opt-in, not shipped)"
 quiet = true
 dir = "ts"
 depends = ["ts-install", "deckbridge-native"]
-run = "node build.mjs --simple-only"
+run = "node build.mjs --advanced"
 
-[tasks.build-simple]
-description = "Build everything with the simple-only UI (no advanced/debug view)"
+[tasks.build-advanced]
+description = "Build everything with the advanced/debug view included"
 quiet = true
-depends = ["tjs-setup", "deckbridge-native", "tray-rs", "ts-simple"]
+depends = ["tjs-setup", "deckbridge-native", "tray-rs", "ts-advanced"]
 
-[tasks.compile-simple]
-description = "Compile the simple-only standalone binary → deckbridge-lite"
-depends = ["build-simple"]
-run = "$TJS compile ts/dist/bundle.js deckbridge-lite"
+[tasks.compile-advanced]
+description = "Compile the advanced-view standalone binary → deckbridge-advanced"
+depends = ["build-advanced"]
+run = "$TJS compile ts/dist/bundle.js deckbridge-advanced"
 
 [tasks.package]
 description = "Package compiled binary into a distributable zip (usage: mise run package -- v1.2.3)"
 depends = ["compile"]
 run = "node scripts/package.mjs ${1:-dev}"
 
-[tasks.package-simple]
-description = "Package the simple-only (lite) binary into a distributable zip (usage: mise run package-simple -- v1.2.3)"
-depends = ["compile-simple"]
-run = "SRC_BIN=deckbridge-lite node scripts/package.mjs ${1:-dev}"
+[tasks.package-advanced]
+description = "Package the advanced-view binary into a distributable zip (usage: mise run package-advanced -- v1.2.3)"
+depends = ["compile-advanced"]
+run = "SRC_BIN=deckbridge-advanced node scripts/package.mjs ${1:-dev}"
 
 [tasks.lint]
-description = "Lint with oxlint"
+description = "Lint with oxlint + eslint (silent unless findings)"
+quiet = true
 depends = ["ts-install"]
-run = "./ts/node_modules/.bin/oxlint ts && ./ts/node_modules/.bin/eslint ts"
+run = """
+node scripts/quiet.mjs -- ./ts/node_modules/.bin/oxlint ts
+node scripts/quiet.mjs --ok=lint -- ./ts/node_modules/.bin/eslint ts
+"""
 
 [tasks.tauri-build]
-description = "Build Windows NSIS installer via Tauri (runs: compile + tray + copy sidecars + cargo tauri build)"
-depends = ["compile", "tray-rs"]
+description = "Build Windows NSIS installer via Tauri (compile + stage sidecars + pinned npm CLI)"
+depends = ["compile", "tauri-install"]
 run = "node scripts/tauri-build.mjs"
 
+[tasks.tauri-install]
+description = "Install pinned prebuilt Tauri CLI"
+quiet = true
+dir = "src-tauri"
+run = "pnpm install --frozen-lockfile --silent"
+
 [tasks.tauri-build-macos]
-description = "Build macOS .app + .dmg via Tauri (compile + tray + sidecars renamed to apple-darwin triple + cargo tauri build --bundles app,dmg)"
-depends = ["compile", "tray-rs"]
-# macOS = Tauri Model A, ad-hoc (no Apple Developer ID). The macOS bundle.targets
-# (app,dmg) + signingIdentity "-" + hardenedRuntime false live in
-# src-tauri/tauri.macos.conf.json, which Tauri auto-merges on macOS (RFC 7396 —
-# its targets array REPLACES the base ["nsis"], so nsis never leaks here). We also
-# pass --bundles app,dmg explicitly as belt-and-suspenders. hardenedRuntime stays
-# OFF so the relay's extract+dlopen of libhidapi/libdeckbridge_native isn't blocked by
-# library validation (plan gotcha G3).
+description = "Build macOS .app + .dmg via Tauri (compile + stage sidecars + pinned npm CLI)"
+depends = ["compile", "tauri-install"]
+# macOS = Tauri Model A, ad-hoc (no Apple Developer ID). bundle.targets (app,dmg) +
+# signingIdentity "-" + hardenedRuntime false live in src-tauri/tauri.macos.conf.json,
+# auto-merged on macOS. hardenedRuntime stays OFF or library validation blocks the
+# relay's extract+dlopen of libhidapi/libdeckbridge_native (plan gotcha G3).
 #
-# DO NOT re-codesign the relay binary: `tjs compile` appends the bytecode payload
-# AFTER the Mach-O __LINKEDIT, and ships a linker-signed ad-hoc signature the
-# kernel runs leniently (the appended bytes are never mapped). `codesign --force`
-# replaces that special signature with a normal one and runs strict validation,
-# which rejects the trailing data → "main executable failed strict validation".
-# So the relay keeps its as-compiled linker-signed signature; only deckbridge-tray (a
+# DO NOT re-codesign the relay binary. `tjs compile` appends the bytecode payload after
+# the Mach-O __LINKEDIT under a linker-signed ad-hoc signature the kernel treats
+# leniently; `codesign --force` swaps in a normal one, which strict-validates and rejects
+# the trailing data → "main executable failed strict validation". Only deckbridge-tray (a
 # plain Mach-O) is ad-hoc signed.
 #
-# chmod +x: `cp` over a pre-existing destination keeps the OLD file's mode, so a
-# leftover non-executable stub would yield a non-runnable sidecar in the bundle.
-# CI=true: skips bundle_dmg.sh's AppleScript/Finder window-styling pass, which
-# needs a GUI/Automation grant and fails in a plain terminal (GitHub Actions sets
-# CI automatically, so the release job is unaffected either way).
+# chmod +x: `cp` onto an existing destination keeps the OLD mode, so a leftover
+# non-executable stub would ship a non-runnable sidecar. CI=true skips bundle_dmg.sh's
+# AppleScript window-styling pass, which needs a GUI/Automation grant.
 run = """
 TRIPLE="$(uname -m | sed 's/x86_64/x86_64/;s/arm64/aarch64/')-apple-darwin"
 mkdir -p src-tauri/binaries
@@ -192,7 +228,7 @@ cp deckbridge                                  "src-tauri/binaries/deckbridge-${
 cp rust/target/release/deckbridge-tray                "src-tauri/binaries/deckbridge-tray-${TRIPLE}"
 chmod +x "src-tauri/binaries/deckbridge-${TRIPLE}" "src-tauri/binaries/deckbridge-tray-${TRIPLE}"
 codesign --force --sign - --timestamp=none "src-tauri/binaries/deckbridge-tray-${TRIPLE}"
-cd src-tauri && CI=true cargo tauri build --bundles app,dmg
+cd src-tauri && CI=true pnpm tauri build --bundles app,dmg
 open target/release/bundle/macos
 """
 
@@ -204,36 +240,52 @@ run = "node ../scripts/tauri-check-stubs.mjs && cargo check"
 # fmt-check (member crates only — the vendored jpeg-encoder fork is excluded),
 # clippy for both mutually-exclusive JPEG backends, then the unit tests.
 # Sequential: parallel cargo races on rustup component downloads.
+#
+# The last clippy pass is the only one that sees mdns_windows.rs (it is
+# `#[cfg(target_os = "windows")]`, so a host-only run skips the module entirely
+# and a `-D warnings` failure there stays invisible until a Windows build).
+# `usb` is off because hidapi's build script needs a real Windows toolchain to
+# cross-compile; mdns_windows does not depend on it. Target comes from
+# rust/rust-toolchain.toml, so rustup installs it on first use.
 [tasks.rust-lint]
 description = "Rust fmt-check + clippy + tests"
+quiet = true
 dir = "rust"
 run = """
-cargo fmt --check -p deckbridge-native -p deckbridge-tray
-cargo clippy --workspace --all-targets -- -D warnings
-cargo clippy -p deckbridge-native --no-default-features --features jpeg-fork,usb --all-targets -- -D warnings
-cargo test --workspace
+Q="node ../scripts/quiet.mjs --fail-only --"
+$Q cargo fmt --check -p deckbridge-native -p deckbridge-tray
+$Q cargo clippy -q --workspace --all-targets -- -D warnings
+$Q cargo clippy -q -p deckbridge-native --no-default-features --features jpeg-fork,usb --all-targets -- -D warnings
+$Q cargo test -q --workspace
+$Q cargo clippy -q -p deckbridge-native --target x86_64-pc-windows-msvc --no-default-features --features jpeg-upstream --all-targets -- -D warnings
+echo '✔ rust-lint'
 """
 
 [tasks.format]
 description = "Format with oxfmt (single quotes)"
+quiet = true
 depends = ["ts-install"]
-run = "./ts/node_modules/.bin/oxfmt ts/src ts/test docs-site/src docs-site/scripts"
+run = "node scripts/quiet.mjs --ok=format -- ./ts/node_modules/.bin/oxfmt ts/src ts/test docs-site/src docs-site/scripts e2e/fixtures e2e/helpers e2e/scripts e2e/tests e2e/playwright.config.ts e2e/global-setup.ts e2e/global-teardown.ts"
 
 [tasks.check]
 description = "Typecheck + lint + format check"
+quiet = true
 depends = ["types", "lint", "format"]
+run = "echo '✔ check'"
 
 [tasks.types]
 description = "Type-check TypeScript (no emit)"
+quiet = true
 dir = "ts"
 depends = ["ts-install"]
-run = "pnpm exec tsgo --noEmit"
+run = "node ../scripts/quiet.mjs --ok=types -- pnpm exec tsgo --noEmit"
 
 [tasks.knip]
 description = "Find unused files, exports, types, and dependencies (knip)"
+quiet = true
 dir = "ts"
 depends = ["ts-install"]
-run = "pnpm exec knip"
+run = "node ../scripts/quiet.mjs --ok=knip -- pnpm exec knip"
 
 [tasks.loc]
 description = "Top 10 largest .ts/.tsx files under ts/src by line count (excl. node_modules/dist/test, .d.ts)"
@@ -242,21 +294,59 @@ run = "node scripts/loc.mjs"
 
 [tasks.check-loc]
 description = "Fail (exit 1) if any .ts/.tsx file under ts/src exceeds 500 lines (test/ excluded)"
+quiet = true
 dir = "ts"
-run = "node scripts/check-loc.mjs"
+run = "node scripts/check-loc.mjs && echo '✔ check-loc'"
 
+[tasks.size-report]
+description = "Minified/gzip size per bundle, shipped CSS, web/client LOC, worker leak detector, binary minus runtime (no native build needed; `-- --json` for JSON)"
+depends = ["ts-install"]
+run = "node scripts/size-report.mjs"
+
+[tasks.check-size]
+description = "Fail (exit 1) if ui.js, deck.js, the shipped CSS or any worker exceeds its minified size budget (scripts/check-size.mjs)"
+quiet = true
+depends = ["ts-install"]
+run = "node scripts/check-size.mjs && echo '✔ check-size'"
+
+[tasks.devices-generate]
+description = "Regenerate device docs, device SVGs and the Linux udev rules from DEVICE_MODELS"
+alias = ["docs-devices"]
+dir = "ts"
+depends = ["ts-install"]
+run = "node scripts/gen-device-docs.mjs && node scripts/gen-device-svgs.mjs && node scripts/gen-udev-rules.mjs"
+
+[tasks.devices-check]
+description = "Fail if the generated device docs, device SVGs or udev rules are stale vs DEVICE_MODELS"
+alias = ["docs-devices-check"]
+quiet = true
+dir = "ts"
+depends = ["ts-install"]
+run = "node ../scripts/quiet.mjs --fail-only --ok=docs-devices -- node scripts/gen-device-docs.mjs --check && node ../scripts/quiet.mjs --fail-only --ok=device-svgs -- node scripts/gen-device-svgs.mjs --check && node ../scripts/quiet.mjs --fail-only --ok=udev-rules -- node scripts/gen-udev-rules.mjs --check"
+
+[tasks.device-new]
+description = "Scaffold a known-family device: model file + notes stub, prints the registry lines (see docs/adding-a-device.md)"
+dir = "ts"
+depends = ["ts-install"]
+run = "node scripts/device-new.mjs"
 
 [tasks.ci-checks]
-description = "Lint, typecheck, test, knip (unused files/exports/deps), and check-loc in parallel (after format)"
-depends = ["lint", "types", "test", "knip", "check-loc"]
+description = "Lint, typecheck, core/browser tests, knip, check-loc, check-size, and generated device docs in parallel"
+quiet = true
+depends = ["lint", "types", "test", "test-client", "test-security", "knip", "check-loc", "check-size", "devices-check"]
+run = "echo '✔ ci-checks'"
 timeout = "120s"
 
 [tasks.beforeCommit]
-description = "Format, lint, types, test, and compile — run before committing"
-depends = ["format", "ci-checks", "rust-lint", "docs-check", "compile"]
+description = "Format, lint, types, test, browser e2e, and compile — run before committing"
+quiet = true
+# e2e-browser is e2e-app + e2e-docs. e2e-docs carries `wait_for = ["docs-check"]`, so in
+# this run it starts only once docs-check has produced docs-site/build/.
+depends = ["format", "ci-checks", "rust-lint", "docs-check", "e2e-types", "e2e-browser", "compile"]
 dir = "ts"
-# run = "pnpm run beforeCommit"
-timeout = "150s"
+run = "echo '✔ beforeCommit'"
+# 300s, not 150s: e2e-docs can't start until docs-check's Docusaurus build finishes.
+timeout = "360s"
 
 [tasks.smoke]
 description = "Build and run USB HID smoke test (requires Mirabox device connected)"
@@ -268,58 +358,196 @@ run = """
 """
 
 [tasks.k1pro-probe]
-description = "K1 Pro JPEG size-threshold probe - same pixels, COM-padded sizes (requires K1 Pro; Input Monitoring/sudo)"
+description = "K1 Pro JPEG size-threshold probe - same pixels, COM-padded sizes (requires K1 Pro; Input Monitoring). Usage: mise run k1pro-probe [-- /path/to/jpeg-dir]"
 depends = ["tjs-setup", "deckbridge-native"]
 dir = "ts"
 run = """
-  node build.mjs --probe
-  DECKBRIDGE_NATIVE_LIB=$DECKBRIDGE_NATIVE_LIB $TJS run dist/k1pro-probe.js
+  node build.mjs --probe k1pro-probe
+  DECKBRIDGE_NATIVE_LIB=$DECKBRIDGE_NATIVE_LIB $TJS run dist/k1pro-probe.js ${1:-}
+"""
+
+[tasks.d6-capture]
+description = "Fifine D6 hardware capture: report descriptor + brightness sweep + JPEG size ladder (requires a D6; Input Monitoring). Usage: mise run d6-capture [-- s1,s3]"
+depends = ["tjs-setup", "deckbridge-native"]
+dir = "ts"
+run = """
+  node build.mjs --probe d6-capture
+  DECKBRIDGE_NATIVE_LIB=$DECKBRIDGE_NATIVE_LIB $TJS run dist/d6-capture.js ${1:-}
+"""
+
+[tasks.akp05-capture]
+description = "Ajazz AKP05/AKP05E raw input trace: encoder + touch-strip report codes (requires the device; Input Monitoring)"
+depends = ["tjs-setup", "deckbridge-native"]
+dir = "ts"
+run = """
+  node build.mjs --probe akp05-capture
+  DECKBRIDGE_NATIVE_LIB=$DECKBRIDGE_NATIVE_LIB $TJS run dist/akp05-capture.js
+"""
+
+[tasks.device-capture]
+description = "Write a packet-fixture skeleton for a connected device (enumeration only, never opens or writes). Usage: mise run device-capture -- --model <id> [--out <dir>]; exits non-zero with no hardware"
+depends = ["tjs-setup", "deckbridge-native"]
+dir = "ts"
+run = """
+  node build.mjs --probe device-capture
+  DECKBRIDGE_NATIVE_LIB=$DECKBRIDGE_NATIVE_LIB $TJS run dist/device-capture.js "$@"
+"""
+
+[tasks.akp05-strip-probe]
+description = "Ajazz AKP05/AKP05E touch-strip output: JPEG size ladder (byte cap), slot origins and size, feature report 0x01 key check; answer in the browser page it opens on 127.0.0.1:3077 (requires the device; stop DeckBridge first)"
+depends = ["tjs-setup", "deckbridge-native"]
+dir = "ts"
+run = """
+  node build.mjs --probe akp05-strip-probe
+  DECKBRIDGE_NATIVE_LIB=$DECKBRIDGE_NATIVE_LIB $TJS run dist/akp05-strip-probe.js
+"""
+
+[tasks.akp05-strip-guided-probe]
+description = "Guided AKP05 strip probe: answer yes/no or numbers in terminal. Stop DeckBridge first. Optional: --dry-run"
+depends = ["tjs-setup", "deckbridge-native"]
+dir = "ts"
+run = """
+  node build.mjs --probe akp05-strip-guided-probe
+  DECKBRIDGE_NATIVE_LIB=$DECKBRIDGE_NATIVE_LIB $TJS run dist/akp05-strip-guided-probe.js ${1:-}
 """
 
 [tasks.e2e]
 description = "Black-box smoke test of a packaged release zip (usage: mise run e2e -- dist/foo.zip)"
+quiet = true
 run = "./scripts/e2e-smoke.sh ${1:-}"
 timeout = "30s"
+
+# Playwright + Lightpanda browser e2e (e2e/)
+# Lightpanda has no rendering/layout engine, so it boots in ~50ms but supports no
+# screenshots, no boundingBox and no `locator.click()` — see e2e/helpers/click.ts.
+[tasks.e2e-install]
+description = "Install the Playwright e2e suite's dependencies"
+quiet = true
+dir = "e2e"
+# The bundled Chromium is never launched (Lightpanda is the runtime; the E2E_BROWSER=chromium
+# triage path uses $CHROME_BIN / a system install), so skip the ~150 MB download.
+env = { PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD = "1" }
+run = "pnpm install --silent"
+
+[tasks.e2e-app]
+description = "Browser e2e: the DeckBridge Web UI in mock mode"
+quiet = true
+dir = "e2e"
+depends = ["build-mock", "e2e-install"]
+run = "pnpm --silent run test:app"
+timeout = "180s"
+
+[tasks.e2e-docs]
+description = "Browser e2e: the built Docusaurus site (run `mise run docs-build` first)"
+quiet = true
+dir = "e2e"
+depends = ["e2e-install"]
+# wait_for, not `depends`: standalone this task must fail in seconds with "run mise run
+# docs-build first" instead of silently triggering a multi-minute Docusaurus build. Within
+# beforeCommit, docs-check produces docs-site/build/ and wait_for stops the two racing.
+wait_for = ["docs-check"]
+run = "pnpm --silent run test:docs"
+timeout = "180s"
+
+[tasks.e2e-browser]
+alias = ["e2e-all"]
+description = "All browser e2e suites (app + docs)"
+quiet = true
+depends = ["e2e-app", "e2e-docs"]
+
+[tasks.e2e-types]
+description = "Type-check the e2e suite"
+quiet = true
+dir = "e2e"
+depends = ["e2e-install"]
+run = "node ../scripts/quiet.mjs --ok=e2e-types -- pnpm --silent run types"
 
 [tasks.test]
 description = "Run tests (TJS)"
 quiet = true
 depends = ["ts-install", "tjs-setup", "deckbridge-native"]
+# Selected aggregate tasks finish first: short process deadlines need CPU slack,
+# and test bundles must not overwrite dist files while compilation is running.
+wait_for = ["lint", "compile", "docs-check", "e2e-browser", "test-client"]
+env = { DECKBRIDGE_BUILD_MOCK = "1" }
 run = "node scripts/run-tests.mjs"
-timeout = "90s"
+timeout = "240s"
+
+[tasks.test-client]
+description = "Run Preact browser regression tests"
+quiet = true
+dir = "ts"
+depends = ["ts-install"]
+run = "node ../scripts/quiet.mjs --fail-only --ok=test-client -- pnpm --silent run test:client"
+# The script's own browser budget is 90s; keep this clear of it so a browser timeout
+# fails with the script's diagnostic (Chrome path + stderr) instead of a bare task kill.
+timeout = "150s"
+
+[tasks.test-security]
+description = "Check dependency security regressions"
+quiet = true
+dir = "ts"
+depends = ["ts-install"]
+run = "node ../scripts/quiet.mjs --fail-only --ok=test-security -- pnpm --silent run test:security"
 
 [tasks.docs-install]
 description = "Install docs-site pnpm dependencies"
+quiet = true
 dir = "docs-site"
 run = "pnpm install"
+
+[tasks.demo-build]
+description = "Build the in-browser docs demo"
+dir = "ts"
+depends = ["ts-install"]
+run = "node scripts/build-demo.mjs"
 
 [tasks.docs-dev]
 description = "Start Docusaurus dev server (docs-site)"
 dir = "docs-site"
-# --port pins 3001 so an ambient PORT (e.g. PORT=/dev/cu.usbserial-* from idf.py flash) can't make Docusaurus parse port NaN
-# pnpm exec (not `pnpm run start --`): pnpm forwards the bare `--` on, and Docusaurus takes it as the positional siteDir
+depends = ["demo-build"]
+# --port pins 3001 so an ambient PORT (e.g. from idf.py flash) can't make Docusaurus
+# parse port NaN. `pnpm exec`, not `pnpm run start --`: pnpm forwards the bare `--` and
+# Docusaurus reads it as the positional siteDir.
 run = "pnpm exec docusaurus start --port 3001 --host 0.0.0.0"
+
+[tasks.docs-screenshots]
+description = "Refresh docs Web UI screenshots in light and dark themes"
+dir = "e2e"
+depends = ["build-mock", "e2e-install"]
+run = "pnpm run screenshots:docs"
+timeout = "120s"
+
+[tasks.ui-screens]
+description = "Visual baseline of the WebUI + browser deck in real Chrome (mock mode): `-- --baseline` captures, no flag captures and pixel-compares (e2e/scripts/ui-screens.mjs)"
+dir = "e2e"
+depends = ["build-mock", "e2e-install"]
+run = "node scripts/ui-screens.mjs"
+timeout = "900s"
 
 [tasks.docs-check]
 description = "docs-site: typecheck + tests (build/links/content/output)"
+quiet = true
 dir = "docs-site"
-depends = ["docs-install"]
-run = "pnpm run beforeCommit"
+depends = ["docs-install", "demo-build"]
+run = "node ../scripts/quiet.mjs --fail-only --ok=docs-check -- pnpm run beforeCommit"
 
 [tasks.docs-build]
 description = "Build Docusaurus static HTML (docs-site/build/)"
 dir = "docs-site"
+depends = ["demo-build"]
 run = "pnpm run test && pnpm run build"
 
 [tasks.docs-serve]
 description = "Serve the built Docusaurus site locally"
 dir = "docs-site"
-run = "pnpm run serve -- --port 3000"
+run = "node scripts/serve.mjs --port 3000"
 
 [tasks.coverage]
 description = "Run the tjs test suite with Istanbul instrumentation and emit a merged coverage report (text/html/lcov)"
 dir = "ts"
 depends = ["deckbridge-native"]
+env = { DECKBRIDGE_BUILD_MOCK = "1" }
 run = """
   rm -rf coverage/.tmp && mkdir -p coverage/.tmp
   for f in test/*.test.ts; do
@@ -340,11 +568,31 @@ description = "Recapture the web UI screenshots the video zooms into (needs Deck
 dir = "video"
 run = "node scripts/shots.mjs"
 
+[tasks.video-clips]
+description = "Record the real web UI as video clips for the tour (needs DeckBridge running)"
+dir = "video"
+run = "node scripts/clips.mjs"
+timeout = "1800s"
+
+[tasks.video-manual]
+description = "Placeholders for the hand-taken captures (tray, Elgato app) — see video/MANUAL.md"
+dir = "video"
+run = "node scripts/manual-placeholders.mjs"
+
 [tasks.video-render]
-description = "Render the product video, both cuts -> video/out/"
+description = "Render the footage tour, both cuts -> video/out/"
 dir = "video"
 run = """
   npm run render
   npm run render:vertical
+"""
+timeout = "1800s"
+
+[tasks.video-render-teaser]
+description = "Render the 30 s teaser, both cuts -> video/out/"
+dir = "video"
+run = """
+  npm run render:teaser
+  npm run render:teaser-vertical
 """
 timeout = "1800s"

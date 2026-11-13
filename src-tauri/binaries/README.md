@@ -10,7 +10,7 @@ Tauri bundles the binary whose name matches the build's target triple
 - `deckbridge-tray-x86_64-pc-windows-msvc.exe` — copy of
   `rust/target/release/deckbridge-tray.exe`.
 
-**macOS** (`build-macos-tauri` job; `<arch>` = `aarch64` on Apple Silicon,
+**macOS** (`build` matrix; `<arch>` = `aarch64` on Apple Silicon,
 `x86_64` on Intel — no `.exe` suffix):
 
 - `deckbridge-<arch>-apple-darwin` — copy of the `mise run compile` output.
@@ -18,7 +18,7 @@ Tauri bundles the binary whose name matches the build's target triple
   `rust/target/release/deckbridge-tray`.
 
 Both macOS sidecars are ad-hoc signed (`codesign --force --sign -`) before
-`cargo tauri build`.
+`pnpm tauri build`.
 
 All are referenced by `bundle.externalBin` in `../tauri.conf.json` as
 `binaries/deckbridge` and `binaries/deckbridge-tray` (the triple, and `.exe` suffix

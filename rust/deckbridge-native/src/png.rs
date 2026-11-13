@@ -1,4 +1,4 @@
-use image::{DynamicImage, RgbImage};
+use image::{RgbImage, RgbaImage};
 
 /// Palette ladder walked when a truecolor PNG overshoots `max_bytes`: levels per
 /// channel (R, G, B). Each step keeps the product <= 256 so the palette fits an
@@ -15,8 +15,15 @@ const PALETTE_LADDER: [(u32, u32, u32); 4] = [(6, 7, 6), (5, 5, 5), (4, 4, 4), (
 /// Unlike `encode_jpeg`, exceeding the cap is NOT an error: PNG has no quality
 /// knob to blame, and a slightly oversized icon still renders. The smallest
 /// candidate is returned instead.
-pub(crate) fn encode_png(img: DynamicImage, max_bytes: usize) -> Result<Vec<u8>, String> {
-    let rgb = img.to_rgb8();
+pub(crate) fn encode_png(img: &RgbaImage, max_bytes: usize) -> Result<Vec<u8>, String> {
+    // Alpha dropped by hand: DynamicImage conversions pull 16-bit/float code into the build.
+    let raw: Vec<u8> = img
+        .as_raw()
+        .chunks_exact(4)
+        .flat_map(|p| [p[0], p[1], p[2]])
+        .collect();
+    let rgb = RgbImage::from_raw(img.width(), img.height(), raw)
+        .ok_or_else(|| "PNG encode error: bad buffer size".to_string())?;
 
     let truecolor = encode_rgb(&rgb)?;
     if max_bytes == 0 || truecolor.len() <= max_bytes {
@@ -130,19 +137,19 @@ fn build_palette(levels: (u32, u32, u32)) -> Vec<u8> {
 mod tests {
     use super::*;
 
-    fn solid(w: u32, h: u32, c: [u8; 3]) -> DynamicImage {
-        DynamicImage::ImageRgb8(RgbImage::from_pixel(w, h, image::Rgb(c)))
+    fn solid(w: u32, h: u32, c: [u8; 3]) -> RgbaImage {
+        RgbaImage::from_pixel(w, h, image::Rgba([c[0], c[1], c[2], 255]))
     }
 
     #[test]
     fn emits_a_png_signature() {
-        let out = encode_png(solid(196, 196, [10, 20, 30]), 0).unwrap();
+        let out = encode_png(&solid(196, 196, [10, 20, 30]), 0).unwrap();
         assert_eq!(&out[..8], &[0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
     }
 
     #[test]
     fn round_trips_through_the_decoder() {
-        let out = encode_png(solid(8, 4, [200, 100, 50]), 0).unwrap();
+        let out = encode_png(&solid(8, 4, [200, 100, 50]), 0).unwrap();
         let decoder = ::png::Decoder::new(std::io::Cursor::new(&out));
         let mut reader = decoder.read_info().unwrap();
         let mut buf = vec![0; reader.output_buffer_size().unwrap()];
@@ -154,16 +161,17 @@ mod tests {
     #[test]
     fn palette_ladder_shrinks_a_noisy_image() {
         // Per-pixel noise defeats the filters, so truecolor is genuinely large.
-        let mut img = RgbImage::new(96, 96);
+        let mut img = RgbaImage::new(96, 96);
         for (x, y, p) in img.enumerate_pixels_mut() {
-            *p = image::Rgb([
+            *p = image::Rgba([
                 (x * 7 % 256) as u8,
                 (y * 13 % 256) as u8,
                 ((x * y) % 256) as u8,
+                255,
             ]);
         }
-        let full = encode_png(DynamicImage::ImageRgb8(img.clone()), 0).unwrap();
-        let capped = encode_png(DynamicImage::ImageRgb8(img), full.len() / 2).unwrap();
+        let full = encode_png(&img, 0).unwrap();
+        let capped = encode_png(&img, full.len() / 2).unwrap();
         assert!(
             capped.len() < full.len(),
             "{} !< {}",

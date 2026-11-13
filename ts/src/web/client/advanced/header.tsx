@@ -1,0 +1,215 @@
+/**
+ * AdvHeader — back button, status chips, mode/model/anim controls, stats,
+ * theme button. Brightness moved to a panels-column card (simple Brightness
+ * component) in AdvancedApp.
+ *
+ * Split out of AdvancedApp.tsx (file-size refactor, no behavior change).
+ */
+import { useState, useEffect, useRef } from 'preact/hooks';
+import { useStore } from '../lib/store.js';
+import { StatusChip, type StatusChipVariant } from '../components/StatusChip.js';
+import { ThemeButton } from '../components/ThemeButton.js';
+import { fire } from '../lib/ui-api.js';
+import type { DeviceModel, Stats, Status } from '../ui-types.js';
+
+// Uptime formatter (mirrors ui-status.ts)
+
+function fmtUp(ms: number): string {
+  const s = Math.floor(ms / 1000);
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const sc = s % 60;
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(sc).padStart(2, '0')}`;
+}
+
+// Module-level handlers (hoisted out of components — no closure capture)
+
+function switchToSimple(): void {
+  document.documentElement.setAttribute('data-mode', 'simple');
+  localStorage.setItem('deckbridge.mode', 'simple');
+}
+
+function handleModelChange(e: Event): void {
+  fire('/api/device-model', { modelId: (e.target as HTMLSelectElement).value });
+}
+
+interface HeaderChips {
+  mbVariant: StatusChipVariant;
+  mbText: string;
+  modeBtnText: string;
+  modeBtnActive: boolean;
+  elVariant: StatusChipVariant;
+  elText: string;
+}
+
+// Chip derivation (mirrors ui-status.ts applyStatus)
+function deriveChips(status: Status): HeaderChips {
+  let mbVariant: StatusChipVariant = 'dim';
+  let mbText = 'REAL · DISCONNECTED';
+  let modeBtnText = __MOCK_BUILD__ ? 'Switch to Mock' : '';
+  let modeBtnActive = false;
+  if (__MOCK_BUILD__ && status.driverMode === 'mock') {
+    mbVariant = 'accent';
+    mbText = 'MOCK · ACTIVE';
+    modeBtnText = 'Switch to Real Device';
+    modeBtnActive = true;
+  } else if (status.driverConnected) {
+    mbVariant = 'ok';
+    mbText = 'REAL · CONNECTED';
+  }
+  const elVariant: StatusChipVariant = status.elgatoConnected ? 'ok' : 'dim';
+  const elText = status.elgatoConnected
+    ? `ELGATO · ${status.elgatoRemoteAddr ?? 'CONNECTED'}`
+    : 'ELGATO · WAITING';
+  return { mbVariant, mbText, modeBtnText, modeBtnActive, elVariant, elText };
+}
+
+/** Live uptime string: server-supplied uptimeMs, ticked locally each second. */
+function useUptime(uptimeMs: number): string {
+  const [uptime, setUptime] = useState(() => fmtUp(uptimeMs));
+  // Initialized to 0; the uptimeMs effect fires on mount (before the interval) and sets the real value.
+  const uptimeBaseRef = useRef(0);
+  const uptimeMsRef = useRef(uptimeMs);
+
+  useEffect(
+    function syncUptimeFromServer() {
+      uptimeMsRef.current = uptimeMs;
+      uptimeBaseRef.current = Date.now();
+      // eslint-disable-next-line @eslint-react/set-state-in-effect -- syncing display from server data; must stay in effect
+      setUptime(fmtUp(uptimeMs));
+    },
+    [uptimeMs],
+  );
+
+  useEffect(function startUptimeTicker() {
+    const tid = setInterval(function tickUptime() {
+      setUptime(fmtUp(uptimeMsRef.current + (Date.now() - uptimeBaseRef.current)));
+    }, 1000);
+    return function stopUptimeTicker() {
+      clearInterval(tid);
+    };
+  }, []);
+
+  return uptime;
+}
+
+/** Anim toggle (local — not in store; body class side effect). */
+function useAnimToggle(): [boolean, () => void] {
+  const [animEnabled, setAnimEnabled] = useState(
+    () => localStorage.getItem('animEnabled') !== 'false',
+  );
+  useEffect(
+    function applyAnimBodyClass() {
+      document.body.classList.toggle('no-anim', !animEnabled);
+    },
+    [animEnabled],
+  );
+
+  function toggleAnim(): void {
+    const next = !animEnabled;
+    setAnimEnabled(next);
+    localStorage.setItem('animEnabled', String(next));
+  }
+
+  return [animEnabled, toggleAnim];
+}
+
+function ModelSelect({
+  deviceModels,
+  status,
+}: Readonly<{
+  deviceModels: DeviceModel[];
+  status: Status;
+}>): preact.JSX.Element | null {
+  if (deviceModels.length === 0) return null;
+  return (
+    <select
+      id="model-select"
+      class="input"
+      onChange={handleModelChange}
+      disabled={status.driverMode === 'real' && status.driverConnected}
+      value={status.modelId}
+    >
+      {deviceModels.map((m: DeviceModel) => (
+        <option key={m.id} value={m.id}>
+          {m.name} ({m.keyCount} key{m.keyCount !== 1 ? 's' : ''})
+        </option>
+      ))}
+    </select>
+  );
+}
+
+function HeaderStats({
+  stats,
+  uptime,
+}: Readonly<{ stats: Stats; uptime: string }>): preact.JSX.Element {
+  return (
+    <div id="stats-in-header">
+      <div class="si">
+        <span class="sl">UPTIME</span>
+        <span class="sv" id="s-up-hdr">
+          {uptime}
+        </span>
+      </div>
+      <div class="si">
+        <span class="sl">IMGS</span>
+        <span class="sv" id="s-img-hdr">
+          {stats.imagesSent}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+// AdvHeader
+
+export function AdvHeader(): preact.JSX.Element {
+  const status = useStore((s) => s.status);
+  const stats = useStore((s) => s.stats);
+  const deviceModels = useStore((s) => s.deviceModels);
+
+  const uptime = useUptime(stats.uptimeMs);
+  const [animEnabled, toggleAnim] = useAnimToggle();
+
+  const { mbVariant, mbText, modeBtnText, modeBtnActive, elVariant, elText } = deriveChips(status);
+
+  return (
+    <header>
+      <button class="ghostbtn" id="simpleBtn" type="button" onClick={switchToSimple}>
+        ← Simple
+      </button>
+      <h1>DeckBr: advanced</h1>
+      <StatusChip id="mb-pill" variant={mbVariant}>
+        {mbText}
+      </StatusChip>
+      <StatusChip id="el-pill" variant={elVariant}>
+        {elText}
+      </StatusChip>
+      {__MOCK_BUILD__ && (
+        <>
+          <button
+            id="mode-toggle"
+            type="button"
+            class={modeBtnActive ? 'ghostbtn active' : 'ghostbtn'}
+            onClick={() =>
+              fire('/api/driver-mode', { mode: status.driverMode === 'mock' ? 'real' : 'mock' })
+            }
+          >
+            {modeBtnText}
+          </button>
+          <ModelSelect deviceModels={deviceModels} status={status} />
+        </>
+      )}
+      <button
+        id="anim-toggle"
+        type="button"
+        class={animEnabled ? 'ghostbtn active' : 'ghostbtn'}
+        onClick={toggleAnim}
+      >
+        FX
+      </button>
+      <HeaderStats stats={stats} uptime={uptime} />
+      <ThemeButton />
+    </header>
+  );
+}

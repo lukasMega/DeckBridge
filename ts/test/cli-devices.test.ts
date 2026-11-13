@@ -1,23 +1,10 @@
 import assert from 'tjs:assert';
-import { toDeviceRow, formatDeviceTable } from '../src/cli-devices.js';
-import type { EnumeratedDevice } from '../src/cli-devices.js';
+import { toDeviceRow, formatDeviceTable } from '../src/cli/devices.js';
+import type { EnumeratedDevice } from '../src/cli/devices.js';
 import { MK2_MODEL } from '../src/devices/elgato/mk2.js';
+import { test, summary } from './helpers/harness.js';
 
-let passed = 0;
-let failed = 0;
-
-function test(name: string, fn: () => void): void {
-  try {
-    fn();
-    console.log(`  ✓ ${name}`);
-    passed++;
-  } catch (e) {
-    console.error(`  ✗ ${name}: ${(e as Error).message}`);
-    failed++;
-  }
-}
-
-// ── toDeviceRow ───────────────────────────────────────────────────────────────
+// toDeviceRow
 
 console.log('\ntoDeviceRow');
 
@@ -55,6 +42,21 @@ test('unknown VID/PID → "unknown" model, not supported', () => {
   assert.equal(row.supported, 'no');
 });
 
+// `deckbridge devices` is the first D200 bring-up step; a D200H also enumerates two
+// Genesys hubs, so the deck's own row must come back supported and named.
+test('Ulanzi D200 resolves to a supported row', () => {
+  const row = toDeviceRow({
+    vendorId: 0x2207,
+    productId: 0x0019,
+    serial: '02C37A015U3672742',
+    path: null,
+  });
+  assert.equal(row.vidPid, '2207:0019');
+  assert.equal(row.supported, 'yes');
+  assert.equal(row.model, 'Ulanzi Stream Controller D200');
+  assert.equal(row.serial, '02C37A015U3672742');
+});
+
 // Phase B0 pre-flight for the Fifine D6: `deckbridge devices` is how the unit gets
 // identified before any bring-up step, so the two PIDs must resolve to DISTINCT model
 // names — the revisions differ in packet size, and mixing them up renders black keys.
@@ -74,23 +76,7 @@ test('Fifine D6 PIDs resolve to distinct, supported rows', () => {
   assert.equal(rev2.serial, '81D0DA784037');
 });
 
-// Phase B0 pre-flight for the Ulanzi D200: `deckbridge devices` is the first
-// bring-up step, and a D200H additionally enumerates two Genesys hubs, so the
-// row for the deck itself has to come back supported and named.
-test('Ulanzi D200 resolves to a supported row', () => {
-  const row = toDeviceRow({
-    vendorId: 0x2207,
-    productId: 0x0019,
-    serial: '02C37A015U3672742',
-    path: null,
-  });
-  assert.equal(row.vidPid, '2207:0019');
-  assert.equal(row.supported, 'yes');
-  assert.equal(row.model, 'Ulanzi Stream Controller D200');
-  assert.equal(row.serial, '02C37A015U3672742');
-});
-
-// ── formatDeviceTable ─────────────────────────────────────────────────────────
+// formatDeviceTable
 
 console.log('\nformatDeviceTable');
 
@@ -116,7 +102,6 @@ test('non-empty list → header + one line per row, columns aligned', () => {
   assert.ok(lines[1]!.includes('0fd9:0080'));
 });
 
-// ── Summary ───────────────────────────────────────────────────────────────────
+// Summary
 
-console.log(`\n${passed} passed, ${failed} failed`);
-if (failed > 0) tjs.exit(1);
+summary();

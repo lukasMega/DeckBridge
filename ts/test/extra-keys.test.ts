@@ -1,30 +1,24 @@
 import assert from 'tjs:assert';
-import { EventEmitter } from 'node:events';
+import type { ExternalView, PushedValue } from '../src/shared/push-channels.js';
+import { ExtraKeyWidgets, FLASH_MS } from '../src/main/extra-keys.js';
+import { renderWidgetLines } from '../src/main/widget-lines.js';
+import { parseLatLon, WEATHER_FORCE_MIN_MS } from '../src/main/widget-refresh.js';
 import {
-  ExtraKeyWidgets,
-  composeWidgetBmp,
-  parseLatLon,
-  renderWidgetLines,
-} from '../src/extra-keys.js';
-import { isExtraKeyConfig } from '../src/types.js';
+  TOUCH_STRIP_MODES,
+  isExtraKeyConfig,
+  type ExtraKeyConfig,
+  type TouchStripMode,
+  type TouchStripUpload,
+} from '../src/shared/types.js';
 import { MIRABOX_293S_MODEL } from '../src/devices/mirabox/mirabox-293s.js';
-import type { DeviceImageSpec } from '../src/devices/driver.js';
+import { AJAZZ_AKP05E_MODEL } from '../src/devices/ajazz/akp05e.js';
+import { NATIVE_AKP05E_MODEL } from './helpers/native-akp05e.js';
+import type { DeviceImageSpec, DeviceModel } from '../src/devices/driver.js';
+import type { WidgetPaint } from '../src/shared/widget-layout.js';
+import { testAsync as test, summary } from './helpers/harness.js';
+import { StubDockDriver } from './helpers/stub-dock-driver.js';
 
-let passed = 0;
-let failed = 0;
-
-async function test(name: string, fn: () => void | Promise<void>): Promise<void> {
-  try {
-    await fn();
-    console.log(`  ✓ ${name}`);
-    passed++;
-  } catch (e) {
-    console.error(`  ✗ ${name}: ${(e as Error).message}`);
-    failed++;
-  }
-}
-
-// ── renderWidgetLines ─────────────────────────────────────────────────────────
+// renderWidgetLines
 
 console.log('\nrenderWidgetLines');
 
@@ -131,7 +125,7 @@ await test('plugin: no value yet → placeholder; value → lines; null → clea
   );
 });
 
-// ── parseLatLon ───────────────────────────────────────────────────────────────
+// parseLatLon
 
 console.log('\nparseLatLon');
 
@@ -147,70 +141,27 @@ await test('garbage / out-of-range / missing → null', () => {
   assert.equal(parseLatLon('0,181'), null);
 });
 
-// ── composeWidgetBmp ──────────────────────────────────────────────────────────
+// ExtraKeyWidgets
 
-console.log('\ncomposeWidgetBmp');
-
-const SIZE = 85;
-
-await test('produces a well-formed 24-bit BMP of the key size', () => {
-  const bmp = composeWidgetBmp([{ text: '8', big: true }], SIZE);
-  const buf = Buffer.from(bmp);
-  assert.equal(buf.toString('ascii', 0, 2), 'BM');
-  assert.equal(buf.readUInt32LE(2), buf.length, 'declared file size matches');
-  assert.equal(buf.readUInt32LE(18), SIZE, 'width');
-  assert.equal(buf.readUInt32LE(22), SIZE, 'height');
-  assert.equal(buf.readUInt16LE(28), 24, 'bpp');
-});
-
-/** Count foreground pixels, honouring the 4-byte BMP row padding. */
-function countFg(buf: ReturnType<typeof Buffer.from>): number {
-  const rowSize = Math.ceil((SIZE * 3) / 4) * 4;
-  let fg = 0;
-  for (let row = 0; row < SIZE; row++) {
-    for (let x = 0; x < SIZE; x++) {
-      const o = 54 + row * rowSize + x * 3;
-      if (buf[o] === 0xec && buf[o + 1] === 0xe8 && buf[o + 2] === 0xe8) fg++;
-    }
+class FakeDriver extends StubDockDriver {
+  constructor(model: DeviceModel = MIRABOX_293S_MODEL) {
+    super(model);
   }
-  return fg;
-}
-
-await test('background + glyph foreground pixels present', () => {
-  const bmp = composeWidgetBmp([{ text: '8', big: true }], SIZE);
-  const buf = Buffer.from(bmp);
-  const rowSize = Math.ceil((SIZE * 3) / 4) * 4;
-  // (0,0) top-left = last stored row (bottom-up) → background #101014 (BGR).
-  const corner = 54 + (SIZE - 1) * rowSize;
-  assert.deepEqual([...buf.subarray(corner, corner + 3)], [0x14, 0x10, 0x10]);
-  const fg = countFg(buf);
-  assert.ok(fg > 50, `glyph pixels rendered (got ${fg})`);
-});
-
-await test('blank text renders pure background', () => {
-  const bmp = composeWidgetBmp([{ text: ' ', big: true }], SIZE);
-  assert.equal(countFg(Buffer.from(bmp)), 0);
-});
-
-// ── ExtraKeyWidgets ───────────────────────────────────────────────────────────
-
-class FakeDriver extends EventEmitter {
-  model = MIRABOX_293S_MODEL;
   splashed: Array<{ keyIndex: number; bytes: Uint8Array; spec: DeviceImageSpec }> = [];
   cleared: number[] = [];
-  open(): Promise<void> {
-    return Promise.resolve();
-  }
-  close(): Promise<void> {
-    return Promise.resolve();
-  }
-  sendImage(): void {}
-  setBrightness(): void {}
-  clearKey(keyIndex: number): void {
+  masks: number[][] = [];
+  restored: number[][] = [];
+  override clearKey(keyIndex: number): void {
     this.cleared.push(keyIndex);
   }
-  sendSplashImage(keyIndex: number, bytes: Uint8Array, spec: DeviceImageSpec): void {
+  override sendSplashImage(keyIndex: number, bytes: Uint8Array, spec: DeviceImageSpec): void {
     this.splashed.push({ keyIndex, bytes, spec });
+  }
+  override setTouchStripMask(wireIds: readonly number[]): void {
+    this.masks.push([...wireIds]);
+  }
+  override restoreTouchSegments(wireIds: readonly number[]): void {
+    this.restored.push([...wireIds]);
   }
 }
 
@@ -277,7 +228,334 @@ await test('model without extraKeys → no device I/O, no timer', () => {
   assert.equal(d.splashed.length, 0);
 });
 
-// ── isExtraKeyConfig (migration guard) ────────────────────────────────────────
+await test('every widget paint is mirrored for the WebUI; strip zones flagged as zones', () => {
+  const d = new FakeDriver();
+  d.model = {
+    ...AJAZZ_AKP05E_MODEL,
+    keyMap: { ...AJAZZ_AKP05E_MODEL.keyMap, extraKeys: [15, 10] },
+  };
+  const mirrored: Array<[number, WidgetPaint | null]> = [];
+  const w = new ExtraKeyWidgets(
+    d,
+    (wireId) => (wireId === 15 || wireId === 1 ? { widget: 'text', param: 'Hi' } : undefined),
+    'deckbridge-ignore',
+    undefined,
+    (wireId, paint) => mirrored.push([wireId, paint]),
+  );
+  w.start();
+  w.stop();
+  assert.deepEqual(
+    mirrored.map(([wireId, paint]) => [wireId, paint?.zone ?? null]),
+    [
+      [15, false],
+      [10, null],
+      [1, true],
+      [2, null],
+      [3, null],
+      [4, null],
+    ],
+  );
+  const side = mirrored[0]![1]!;
+  assert.equal(side.bmp, d.splashed.find((p) => p.keyIndex === 15)!.bytes);
+  assert.deepEqual(side.lines, [{ text: 'Hi', big: true }]);
+  assert.equal(side.clipped, false);
+  assert.equal(mirrored[2]![1]!.width, 176);
+});
+
+await test('wrap applies to free-text widgets only and repaints on change', () => {
+  const d = new FakeDriver();
+  let cfg: ExtraKeyConfig = { widget: 'text', param: 'The quick brown fox' };
+  const paints: WidgetPaint[] = [];
+  const w = new ExtraKeyWidgets(
+    d,
+    (wireId) => (wireId === 16 ? cfg : undefined),
+    undefined,
+    undefined,
+    (_id, paint) => {
+      if (paint) paints.push(paint);
+    },
+  );
+  w.start();
+  cfg = { ...cfg, style: { wrap: 'words' } };
+  tick(w);
+  cfg = { widget: 'clock', style: { wrap: 'words' } };
+  tick(w);
+  w.stop();
+  assert.deepEqual(
+    paints.map((p) => [p.style.wrap, p.clipped]),
+    [
+      [undefined, true],
+      ['words', false],
+      [undefined, false],
+    ],
+  );
+});
+
+await test('a text size change alone repaints; the paint reports clipping', () => {
+  const d = new FakeDriver();
+  let cfg: ExtraKeyConfig = { widget: 'text', param: 'Hello' };
+  const paints: WidgetPaint[] = [];
+  const w = new ExtraKeyWidgets(
+    d,
+    (wireId) => (wireId === 16 ? cfg : undefined),
+    undefined,
+    undefined,
+    (_id, paint) => {
+      if (paint) paints.push(paint);
+    },
+  );
+  w.start();
+  assert.equal(paints.length, 1);
+  assert.equal(paints[0]!.clipped, false);
+  cfg = { ...cfg, style: { textSize: 2 } };
+  tick(w);
+  w.stop();
+  assert.equal(paints.length, 2, 'size change repaints');
+  assert.equal(paints[1]!.clipped, true, '"Hello" at 32×64 does not fit 85 px');
+});
+
+await test('AKP05E touch-strip widgets use all four zones and their image spec', () => {
+  const d = new FakeDriver();
+  d.model = NATIVE_AKP05E_MODEL;
+  const w = new ExtraKeyWidgets(
+    d,
+    (wireId) => (wireId === 1 ? { widget: 'text', param: 'Hi' } : undefined),
+    'deckbridge-ignore',
+  );
+  w.start();
+  w.stop();
+  assert.deepEqual(d.cleared, [2, 3, 4]);
+  assert.equal(d.splashed.length, 1);
+  assert.equal(d.splashed[0]!.keyIndex, 1);
+  assert.equal(d.splashed[0]!.spec.width, 176);
+  assert.equal(d.splashed[0]!.spec.height, 112);
+  assert.equal(d.splashed[0]!.spec.rotate, 180);
+  const bmp = Buffer.from(d.splashed[0]!.bytes);
+  assert.deepEqual(
+    [bmp.readUInt32LE(18), bmp.readUInt32LE(22)],
+    [176, 112],
+    'BMP drawn at slot size',
+  );
+});
+
+console.log('\nExtraKeyWidgets touch-strip mode');
+
+// Zone 1 has a widget, zone 2 is explicitly 'none', zones 3/4 unconfigured.
+const zone1Only = (wireId: number): ExtraKeyConfig | undefined => {
+  if (wireId === 1) return { widget: 'text', param: 'Hi' };
+  return wireId === 2 ? { widget: 'none' } : undefined;
+};
+
+function stripDock(mode?: TouchStripMode): { d: FakeDriver; w: ExtraKeyWidgets } {
+  const d = new FakeDriver();
+  d.model = NATIVE_AKP05E_MODEL;
+  return { d, w: new ExtraKeyWidgets(d, zone1Only, mode) };
+}
+
+await test("default 'elgato' paints no strip widgets and pushes an empty mask", () => {
+  const { d, w } = stripDock();
+  w.start();
+  tick(w);
+  w.stop();
+  assert.equal(d.splashed.length, 0);
+  assert.deepEqual(d.cleared, []);
+  assert.deepEqual(d.masks, [[]]);
+});
+
+await test("'deckbridge-ignore' clears empty zones and masks the whole strip", () => {
+  const { d, w } = stripDock('deckbridge-ignore');
+  w.start();
+  tick(w);
+  w.stop();
+  assert.deepEqual(
+    d.splashed.map((s) => s.keyIndex),
+    [1],
+  );
+  assert.deepEqual(d.cleared, [2, 3, 4]);
+  assert.deepEqual(d.masks, [[1, 2, 3, 4]], 'unchanged mask is not re-pushed per tick');
+});
+
+await test("'deckbridge-repaint' paints owned zones, leaves the rest to the app, masks nothing", () => {
+  const { d, w } = stripDock('deckbridge-repaint');
+  w.start();
+  tick(w);
+  w.stop();
+  assert.deepEqual(
+    d.splashed.map((s) => s.keyIndex),
+    [1],
+  );
+  assert.deepEqual(d.cleared, [], 'Elgato content shows through unowned zones');
+  assert.deepEqual(d.masks, [[]], 'app frames reach every zone');
+});
+
+for (const mode of TOUCH_STRIP_MODES) {
+  await test(`side keys with no widget clear under '${mode}'`, () => {
+    const d = new FakeDriver();
+    const w = new ExtraKeyWidgets(d, () => undefined, mode);
+    w.start();
+    w.stop();
+    assert.deepEqual(d.cleared, [16, 17, 18]);
+    assert.deepEqual(d.masks, [], 'no strip → no mask traffic');
+  });
+}
+
+await test('start() re-pushes the mask even when unchanged (worker reset it on open)', () => {
+  const { d, w } = stripDock('deckbridge-ignore');
+  w.start();
+  w.stop();
+  w.start();
+  w.stop();
+  assert.deepEqual(d.masks, [
+    [1, 2, 3, 4],
+    [1, 2, 3, 4],
+  ]);
+});
+
+console.log('\nExtraKeyWidgets repaint hold-off');
+
+/** Repaint-mode dock whose zone 1 widget is `zone1()`; hold-off `holdMs`. */
+function repaintDock(
+  zone1: () => ExtraKeyConfig | undefined,
+  holdMs: number,
+  upload: TouchStripUpload = 'full-frames',
+): { d: FakeDriver; w: ExtraKeyWidgets } {
+  const d = new FakeDriver();
+  d.model = NATIVE_AKP05E_MODEL;
+  d.touchStripOptions = { zoneFit: 'crop', upload };
+  const configFor = (wireId: number) => (wireId === 1 ? zone1() : undefined);
+  return { d, w: new ExtraKeyWidgets(d, configFor, 'deckbridge-repaint', () => holdMs) };
+}
+const HI: ExtraKeyConfig = { widget: 'text', param: 'Hi' };
+
+await test('an Elgato frame holds the widget off its zone until the interval passes', () => {
+  const { d, w } = repaintDock(() => HI, 3_600_000);
+  w.start();
+  w.noteTouchFrame({ x: 0, y: 0, w: 48, h: 48 });
+  tick(w);
+  w.stop();
+  assert.equal(d.splashed.length, 1, 'only the first paint; the app frame then wins');
+});
+
+await test('after the hold-off the widget is painted again, even unchanged', () => {
+  const { d, w } = repaintDock(() => HI, 0);
+  w.start();
+  w.noteTouchFrame({ x: 0, y: 0, w: 48, h: 48 });
+  tick(w);
+  w.stop();
+  assert.equal(d.splashed.length, 2);
+});
+
+await test('a frame on another zone does not hold zone 1 off', () => {
+  const { d, w } = repaintDock(() => HI, 3_600_000);
+  w.start();
+  w.noteTouchFrame({ x: 416, y: 40, w: 48, h: 48 });
+  w.repaint();
+  w.stop();
+  assert.equal(d.splashed.length, 2, 'zone 1 repainted by repaint()');
+});
+
+await test("under 'always' a frame on another zone holds zone 1 off too", () => {
+  const { d, w } = repaintDock(() => HI, 3_600_000, 'always');
+  w.start();
+  w.noteTouchFrame({ x: 416, y: 40, w: 48, h: 48 });
+  w.repaint();
+  w.stop();
+  assert.equal(d.splashed.length, 1, 'the whole-strip upload covered zone 1');
+});
+
+await test('frames are ignored outside repaint mode', () => {
+  const { d, w } = stripDock('deckbridge-ignore');
+  w.start();
+  w.noteTouchFrame();
+  w.repaint();
+  w.stop();
+  assert.equal(d.splashed.length, 2);
+});
+
+await test('un-assigning a painted zone puts the app image back', () => {
+  let zone1: ExtraKeyConfig | undefined = HI;
+  const { d, w } = repaintDock(() => zone1, 0);
+  w.start();
+  zone1 = undefined;
+  tick(w);
+  tick(w);
+  w.stop();
+  assert.deepEqual(d.restored, [[1]], 'restored once');
+  assert.deepEqual(d.cleared, []);
+});
+
+await test('re-assigning the same content to a released zone repaints it', () => {
+  let zone1: ExtraKeyConfig | undefined = HI;
+  const { d, w } = repaintDock(() => zone1, 0);
+  w.start();
+  zone1 = undefined;
+  tick(w);
+  zone1 = { widget: 'text', param: 'Hi' };
+  tick(w);
+  w.stop();
+  assert.equal(d.splashed.length, 2);
+});
+
+await test('leaving repaint for elgato restores zones showing a widget', () => {
+  const { d, w } = repaintDock(() => HI, 0);
+  w.start();
+  w.setTouchStripMode('elgato');
+  w.stop();
+  assert.deepEqual(d.restored, [[1]]);
+});
+
+await test('a zone the app drew over needs no restore when leaving repaint', () => {
+  const { d, w } = repaintDock(() => HI, 3_600_000);
+  w.start();
+  w.noteTouchFrame();
+  w.setTouchStripMode('elgato');
+  w.stop();
+  assert.deepEqual(d.restored, []);
+});
+
+await test('leaving an override mode unmasks without clearing the strip', () => {
+  const { d, w } = stripDock('deckbridge-ignore');
+  w.start();
+  d.cleared.length = 0;
+  w.setTouchStripMode('elgato');
+  tick(w);
+  w.stop();
+  assert.deepEqual(d.cleared, []);
+  assert.deepEqual(d.masks, [[1, 2, 3, 4], []]);
+  assert.equal(d.splashed.length, 1, 'no strip repaint in elgato mode');
+});
+
+await test('switching ignore → repaint unmasks the strip and repaints the owned zone', () => {
+  const { d, w } = stripDock('deckbridge-ignore');
+  w.start();
+  w.setTouchStripMode('deckbridge-repaint');
+  w.stop();
+  assert.deepEqual(d.masks, [[1, 2, 3, 4], []]);
+  assert.equal(d.splashed.length, 2, 'owned zone repainted after the switch');
+  assert.deepEqual(d.cleared, [2, 3, 4], 'only the ignore-mode clears');
+});
+
+await test('enabling an override on a dock that started idle starts painting it', () => {
+  // AKP05E has no side keys, so start() in 'elgato' has nothing to tick.
+  const { d, w } = stripDock();
+  w.start();
+  assert.equal(d.splashed.length, 0);
+  w.setTouchStripMode('deckbridge-ignore');
+  const ticking = (w as unknown as { timer: unknown }).timer !== undefined;
+  w.stop();
+  assert.ok(ticking, 'timer started');
+  assert.equal(d.splashed.length, 1);
+  assert.deepEqual(d.masks, [[], [1, 2, 3, 4]]);
+});
+
+await test('setTouchStripMode before start() paints and pushes nothing', () => {
+  const { d, w } = stripDock();
+  w.setTouchStripMode('deckbridge-ignore');
+  assert.equal(d.splashed.length, 0);
+  assert.deepEqual(d.masks, []);
+});
+
+// isExtraKeyConfig (migration guard)
 
 console.log('\nisExtraKeyConfig');
 
@@ -323,7 +601,7 @@ await test('accepts command widget intervalMs/timeoutMs in range, rejects out of
   );
 });
 
-// ── ExtraKeyWidgets.forceRun ("Run now") ───────────────────────────────────────
+// ExtraKeyWidgets.forceRun ("Run now")
 
 console.log('\nExtraKeyWidgets.forceRun');
 
@@ -356,5 +634,410 @@ await test('forceRun is a no-op for a non-command (or unconfigured) key', () => 
   assert.equal(d.splashed.length, before, 'no repaint scheduled');
 });
 
-console.log(`\n${passed} passed, ${failed} failed`);
-if (failed > 0) tjs.exit(1);
+// ExtraKeyWidgets.refresh (tap to refresh)
+
+console.log('\nExtraKeyWidgets.refresh');
+
+/** Records each run and holds it open until the test settles it. */
+class FakeRunner {
+  readonly runs: string[] = [];
+  private readonly pending: PromiseWithResolvers<string>[] = [];
+  readonly run = (cmd: string): Promise<string> => {
+    this.runs.push(cmd);
+    const deferred = Promise.withResolvers<string>();
+    this.pending.push(deferred);
+    return deferred.promise;
+  };
+  async finishNext(out = 'ok', fail = false): Promise<void> {
+    const deferred = this.pending.shift();
+    if (fail) deferred?.reject(new Error('boom'));
+    else deferred?.resolve(out);
+    await macrotask();
+  }
+}
+
+const macrotask = (): Promise<void> => new Promise((r) => setTimeout(r, 0));
+
+await test('refresh() is false for none/unassigned keys, true for a widget', () => {
+  const d = new FakeDriver();
+  const configs: Record<number, ExtraKeyConfig> = { 16: { widget: 'none' }, 17: HI };
+  const w = new ExtraKeyWidgets(d, (wireId) => configs[wireId]);
+  w.start();
+  assert.equal(w.refresh(16), false, "'none'");
+  assert.equal(w.refresh(18), false, 'unassigned');
+  assert.equal(w.refresh(99), false, 'not a widget key of this dock');
+  assert.equal(w.refresh(17), true);
+  w.stop();
+});
+
+await test('clock / text refresh repaints once, nothing fetched', () => {
+  for (const cfg of [HI, { widget: 'clock' } as ExtraKeyConfig]) {
+    const d = new FakeDriver();
+    const runner = new FakeRunner();
+    const w = new ExtraKeyWidgets(
+      d,
+      (id) => (id === 16 ? cfg : undefined),
+      undefined,
+      undefined,
+      undefined,
+      {
+        run: runner.run,
+      },
+    );
+    w.start();
+    const before = d.splashed.length;
+    assert.equal(w.refresh(16), true);
+    w.stop();
+    assert.equal(d.splashed.length, before + 1, `${cfg.widget} repainted once`);
+    assert.equal(runner.runs.length, 0);
+  }
+});
+
+await test('command refresh reruns immediately; taps mid-run queue exactly one follow-up', async () => {
+  const d = new FakeDriver();
+  const runner = new FakeRunner();
+  const cfg: ExtraKeyConfig = { widget: 'command', param: 'refresh-coalesce-marker' };
+  const t = 1_000_000;
+  const w = new ExtraKeyWidgets(
+    d,
+    (id) => (id === 16 ? cfg : undefined),
+    undefined,
+    undefined,
+    undefined,
+    {
+      run: runner.run,
+      now: () => t,
+    },
+  );
+  w.start();
+  assert.equal(runner.runs.length, 1, 'first tick runs it');
+  await runner.finishNext('A');
+  assert.equal(w.refresh(16), true);
+  assert.equal(runner.runs.length, 2, 'bypasses the 10 s interval');
+  w.refresh(16);
+  w.refresh(16);
+  w.forceRun(16);
+  assert.equal(runner.runs.length, 2, 'one run at a time');
+  await runner.finishNext('B');
+  assert.equal(runner.runs.length, 3, 'exactly one follow-up');
+  await runner.finishNext('C');
+  w.stop();
+  assert.equal(runner.runs.length, 3, 'no further runs');
+});
+
+await test('weather refresh refetches only once 60 s passed since the last fetch', async () => {
+  const realFetch = globalThis.fetch;
+  let fetches = 0;
+  (globalThis as { fetch: unknown }).fetch = () => {
+    fetches++;
+    const body = { current_weather: { temperature: 20 + fetches } };
+    return Promise.resolve(new Response(JSON.stringify(body)));
+  };
+  try {
+    const d = new FakeDriver();
+    let t = 5_000_000;
+    const cfg: ExtraKeyConfig = { widget: 'weather', param: '12.5,34.5' };
+    const w = new ExtraKeyWidgets(
+      d,
+      (id) => (id === 16 ? cfg : undefined),
+      undefined,
+      undefined,
+      undefined,
+      {
+        now: () => t,
+      },
+    );
+    w.start();
+    await macrotask();
+    assert.equal(fetches, 1, 'first tick fetches');
+    t += 30_000;
+    const before = d.splashed.length;
+    assert.equal(w.refresh(16), true);
+    assert.equal(fetches, 1, 'inside the floor → repaint only');
+    assert.equal(d.splashed.length, before + 1);
+    t += WEATHER_FORCE_MIN_MS - 30_000;
+    w.refresh(16);
+    await macrotask();
+    w.stop();
+    assert.equal(fetches, 2, 'refetched after 60 s, under the 10 min interval');
+  } finally {
+    (globalThis as { fetch: unknown }).fetch = realFetch;
+  }
+});
+
+// Tap feedback (flash / placeholder)
+
+console.log('\nExtraKeyWidgets tap feedback');
+
+/** BGR of the first stored pixel (bottom-left corner — always background). */
+const cornerBgr = (bmp: Uint8Array): number[] => [...bmp.subarray(54, 57)];
+const PANEL_BG = [0x14, 0x10, 0x10];
+const PANEL_FG = [0xec, 0xe8, 0xe8];
+const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
+
+await test('default feedback (tapFeedback absent) flashes inverted, then repaints after 150 ms', async () => {
+  const d = new FakeDriver();
+  const w = new ExtraKeyWidgets(d, (id) => (id === 16 ? HI : undefined));
+  w.start();
+  assert.deepEqual(cornerBgr(d.splashed[0]!.bytes), PANEL_BG);
+  w.refresh(16);
+  assert.equal(d.splashed.length, 2, 'flash painted at once');
+  assert.deepEqual(cornerBgr(d.splashed[1]!.bytes), PANEL_FG, 'colours swapped');
+  await sleep(FLASH_MS + 50);
+  assert.equal(d.splashed.length, 3, 'normal paint after the flash');
+  assert.deepEqual(cornerBgr(d.splashed[2]!.bytes), PANEL_BG);
+  w.stop();
+});
+
+await test('flash off + placeholder on: "…" until the command completes, then its output', async () => {
+  const d = new FakeDriver();
+  const runner = new FakeRunner();
+  const lines: string[][] = [];
+  const cfg: ExtraKeyConfig = { widget: 'command', param: 'placeholder-marker' };
+  const w = new ExtraKeyWidgets(
+    d,
+    (id) => (id === 16 ? cfg : undefined),
+    undefined,
+    undefined,
+    (id, paint) => {
+      if (id === 16) lines.push(paint ? paint.lines.map((l) => l.text) : []);
+    },
+    { run: runner.run, now: () => 1e6, tapFeedback: () => ({ flash: false, placeholder: true }) },
+  );
+  w.start();
+  await runner.finishNext('A');
+  w.refresh(16);
+  assert.deepEqual(lines.at(-1), ['…'], 'placeholder painted at once');
+  await runner.finishNext('B');
+  w.stop();
+  assert.deepEqual(lines.at(-1), ['B'], 'result replaces the placeholder');
+});
+
+await test('placeholder clears when the refresh fails', async () => {
+  const d = new FakeDriver();
+  const runner = new FakeRunner();
+  const lines: string[][] = [];
+  const cfg: ExtraKeyConfig = { widget: 'command', param: 'placeholder-fail-marker' };
+  const w = new ExtraKeyWidgets(
+    d,
+    (id) => (id === 16 ? cfg : undefined),
+    undefined,
+    undefined,
+    (id, paint) => {
+      if (id === 16) lines.push(paint ? paint.lines.map((l) => l.text) : []);
+    },
+    { run: runner.run, now: () => 1e6, tapFeedback: () => ({ flash: false, placeholder: true }) },
+  );
+  w.start();
+  await runner.finishNext('A');
+  w.refresh(16);
+  await runner.finishNext('', true);
+  w.stop();
+  assert.deepEqual(lines.at(-1), ['A'], 'last good value back, no "…" left');
+});
+
+await test('both flags: flash first, then "…" until done; repaint-only widgets skip the placeholder', async () => {
+  const d = new FakeDriver();
+  const runner = new FakeRunner();
+  const lines: string[][] = [];
+  const configs: Record<number, ExtraKeyConfig> = {
+    16: { widget: 'command', param: 'both-flags-marker' },
+    17: HI,
+  };
+  const w = new ExtraKeyWidgets(
+    d,
+    (id) => configs[id],
+    undefined,
+    undefined,
+    (id, paint) => {
+      if (id === 16 || id === 17) lines.push(paint ? paint.lines.map((l) => l.text) : []);
+    },
+    { run: runner.run, now: () => 1e6, tapFeedback: () => ({ flash: true, placeholder: true }) },
+  );
+  w.start();
+  await runner.finishNext('A');
+  const painted = d.splashed.length;
+  w.refresh(16);
+  w.refresh(17);
+  assert.equal(d.splashed.length, painted + 2, 'two flashes');
+  await sleep(FLASH_MS + 50);
+  assert.deepEqual(lines.slice(-2), [['…'], ['Hi']], 'command shows "…", text just repaints');
+  await runner.finishNext('B');
+  w.stop();
+  assert.deepEqual(lines.at(-2), ['B'], 'command result (then the text key)');
+});
+
+console.log('\nexternal (push) widget');
+
+class FakePush {
+  v: ExternalView = { state: 'waiting' };
+  view(): ExternalView {
+    return this.v;
+  }
+}
+
+const liveValue = (text: string, extra: Partial<PushedValue> = {}): PushedValue => ({
+  text,
+  updatedAt: 0,
+  expiresAt: null,
+  ...extra,
+});
+
+const externalCfg = (c: Partial<ExtraKeyConfig> = {}): ExtraKeyConfig => ({
+  widget: 'external',
+  param: 'a',
+  ...c,
+});
+
+await test('renderWidgetLines external: waiting, live, expired dim/blank/text', () => {
+  const ctx = (external: ExternalView): { now: Date; external: ExternalView } => ({
+    now: NOW,
+    external,
+  });
+  assert.deepEqual(renderWidgetLines(externalCfg(), { now: NOW }), [{ text: '…', big: true }]);
+  assert.deepEqual(
+    renderWidgetLines(externalCfg(), ctx({ state: 'live', value: liveValue('OK') })),
+    [{ text: 'OK', big: true }],
+  );
+  const expired: ExternalView = { state: 'expired', value: liveValue('OK') };
+  assert.deepEqual(renderWidgetLines(externalCfg(), ctx(expired)), [{ text: 'OK', big: true }]);
+  assert.equal(renderWidgetLines(externalCfg({ expire: 'blank' }), ctx(expired)), null);
+  assert.deepEqual(
+    renderWidgetLines(externalCfg({ expire: 'text', fallbackText: 'off' }), ctx(expired)),
+    [{ text: 'off', big: true }],
+  );
+  assert.deepEqual(renderWidgetLines(externalCfg({ expire: 'text' }), ctx(expired)), [
+    { text: '--', big: true },
+  ]);
+});
+
+await test('paintChanged paints only changed keys; same text twice sends nothing; before start is a no-op', () => {
+  const d = new FakeDriver();
+  const push = new FakePush();
+  const cfgs: Record<number, ExtraKeyConfig> = {
+    16: { widget: 'external', param: 'a' },
+    17: { widget: 'text', param: 'static' },
+  };
+  const w = new ExtraKeyWidgets(d, (id) => cfgs[id], undefined, undefined, undefined, { push });
+  w.paintChanged();
+  assert.equal(d.splashed.length, 0, 'no-op before start');
+  w.start();
+  const painted = d.splashed.length;
+  assert.equal(painted, 2, 'waiting placeholder + static text');
+  push.v = { state: 'live', value: liveValue('REC') };
+  w.paintChanged();
+  assert.equal(d.splashed.length, painted + 1);
+  assert.equal(d.splashed.at(-1)!.keyIndex, 16);
+  w.paintChanged();
+  assert.equal(d.splashed.length, painted + 1, 'unchanged text sends nothing');
+  push.v = { state: 'live', value: liveValue('REC', { color: '#ff0000' }) };
+  w.paintChanged();
+  assert.equal(d.splashed.length, painted + 2, 'colour-only push repaints');
+  push.v = { state: 'expired', value: liveValue('REC') };
+  w.paintChanged();
+  assert.equal(d.splashed.length, painted + 3, 'expiry flips to the dim style once');
+  w.stop();
+});
+
+console.log('\nExtraKeyWidgets pixel shift');
+
+const PERIOD = 300_000;
+const T0 = PERIOD * 6_000_000; // epoch-aligned, so the orbit starts at step 0 mod 8
+
+function shiftWidgets(cfg: ExtraKeyConfig, on: boolean, clock: { t: number }) {
+  const d = new FakeDriver();
+  const w = new ExtraKeyWidgets(
+    d,
+    (id) => (id === 16 ? cfg : undefined),
+    undefined,
+    undefined,
+    undefined,
+    {
+      now: () => clock.t,
+      pixelShift: () => on,
+      pixelShiftPeriodMs: PERIOD,
+    },
+  );
+  w.start();
+  return { d, w };
+}
+
+const painted16 = (d: FakeDriver) => d.splashed.filter((p) => p.keyIndex === 16);
+
+await test('pixel shift off: nothing repaints across periods and the BMP is stable', () => {
+  const clock = { t: T0 };
+  const { d, w } = shiftWidgets({ widget: 'text', param: 'static' }, false, clock);
+  for (let i = 0; i < 3; i++) {
+    clock.t += PERIOD;
+    tick(w);
+  }
+  w.stop();
+  assert.equal(painted16(d).length, 1);
+});
+
+await test('pixel shift on: a static widget repaints once per period, with a moved BMP', () => {
+  const clock = { t: T0 };
+  const { d, w } = shiftWidgets({ widget: 'text', param: 'static' }, true, clock);
+  tick(w);
+  assert.equal(painted16(d).length, 1, 'same period: no repaint');
+  clock.t += PERIOD - 1;
+  tick(w);
+  assert.equal(painted16(d).length, 1);
+  clock.t += 1;
+  tick(w);
+  w.stop();
+  const p = painted16(d);
+  assert.equal(p.length, 2);
+  assert.notEqual(
+    Buffer.from(p[0]!.bytes).toString('hex'),
+    Buffer.from(p[1]!.bytes).toString('hex'),
+  );
+});
+
+await test('a clock minute change that lands on a period change paints once', () => {
+  const clock = { t: T0 + PERIOD - 1000 };
+  const { d, w } = shiftWidgets({ widget: 'clock' }, true, clock);
+  assert.equal(painted16(d).length, 1);
+  clock.t = T0 + PERIOD;
+  tick(w);
+  assert.equal(painted16(d).length, 2, 'minute + offset changed on one tick: one upload');
+  tick(w);
+  assert.equal(painted16(d).length, 2);
+  w.stop();
+});
+
+await test('shifted text is never clipped at any orbit offset', () => {
+  const clock = { t: T0 };
+  const wide = {
+    widget: 'text',
+    param: 'WWWWWWWWWWWW',
+    style: { color: '#ffffff', background: '#000000' },
+  } as const;
+  const { d, w } = shiftWidgets(wide, true, clock);
+  for (let i = 1; i < 8; i++) {
+    clock.t += PERIOD;
+    tick(w);
+  }
+  w.stop();
+  const lit = painted16(d).map(({ bytes }) => {
+    let n = 0;
+    for (let o = 54; o < bytes.length; o += 3) if (bytes[o] !== 0) n++;
+    return n;
+  });
+  assert.equal(lit.length, 8);
+  assert.ok(lit[0]! > 0);
+  assert.deepEqual(new Set(lit).size, 1, 'same glyph pixel count at every offset');
+});
+
+await test('appOwnedZones: strip zones without a DeckBridge widget; none in elgato-mode ownership', () => {
+  const d = new FakeDriver(NATIVE_AKP05E_MODEL);
+  const ids = NATIVE_AKP05E_MODEL.widgetDisplays!.map((x) => x.wireId);
+  const cfg = (id: number): ExtraKeyConfig | undefined =>
+    id === ids[0] ? { widget: 'text', param: 'x' } : undefined;
+  const ignore = new ExtraKeyWidgets(d, cfg, 'deckbridge-ignore');
+  assert.deepEqual(ignore.appOwnedZones(), ids.slice(1));
+  const elgato = new ExtraKeyWidgets(d, cfg, 'elgato');
+  assert.deepEqual(elgato.appOwnedZones(), ids);
+});
+
+summary();

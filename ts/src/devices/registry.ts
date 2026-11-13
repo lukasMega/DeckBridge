@@ -1,54 +1,59 @@
-import type { DeviceModel } from './driver.js';
+import type { ChildGeometry, DeviceModel } from './driver.js';
 import { MK2_MODEL } from './elgato/mk2.js';
 import { MINI_MODEL } from './elgato/mini.js';
 import { MIRABOX_293_MODEL } from './mirabox/mirabox-293.js';
 import { MIRABOX_293S_MODEL } from './mirabox/mirabox-293s.js';
 import { MIRABOX_K1PRO_MODEL } from './mirabox/mirabox-k1pro.js';
 import { AJAZZ_AKP153E_REV2_MODEL, AJAZZ_AKP153R_REV2_MODEL } from './ajazz/akp153-rev2.js';
+import { AJAZZ_AKP05E_MODEL } from './ajazz/akp05e.js';
+import { AJAZZ_AKP05_MODEL } from './ajazz/akp05.js';
 import { FIFINE_D6_MODEL, FIFINE_D6_REV2_MODEL } from './fifine/fifine-d6.js';
 import { ULANZI_D200_MODEL } from './ulanzi/ulanzi-d200.js';
-import {
-  AJAZZ_AKP153_MODEL,
-  AJAZZ_AKP153E_MODEL,
-  AJAZZ_AKP153R_MODEL,
-  MARS_MSD_ONE_MODEL,
-  MADDOG_GK150K_MODEL,
-  RISEMODE_VISION_01_MODEL,
-  TMICE_STREAM_CONTROLLER_MODEL,
-} from './rebadge/akp153-v1-clones.js';
+import { UPHERE_293V3_MODEL } from './uphere/uphere-293v3.js';
+import { AKP153_V1_CLONE_MODELS } from './rebadge/akp153-v1-clones.js';
+import { AKP05_CLONE_MODELS } from './rebadge/akp05-clones.js';
+import { K1PRO_CLONE_MODELS } from './rebadge/k1pro-clones.js';
+import { STREAM_DECK_PLUS_MODEL } from './elgato/plus.js';
 
-// Elgato models first so they take priority over Mirabox in the probe loop.
-// 293V3 before 293S within Mirabox (existing device probed first).
-// Ajazz rev. 2 next — its VID (0x0300) is unique among the v3 models.
-// Fifine D6 next — VID 0x3142 is unique, so probe position is cosmetic; it sits with
-// the other v3-family boards. rev. 1 (0x0007) before rev. 2 (0x0060); PIDs don't overlap.
-// Ulanzi D200 after the v3 family — VID 0x2207 (Rockchip) is unique here, and it is the
-// only page/ZIP-protocol model, so its probe position is cosmetic.
-// The 7 v1 rebadges (akp153-v1-clones.ts) last — probe order is irrelevant for them,
-// every VID is unique except 0x5548 (shared with the 293S, but PIDs 0x6670/0x6674 don't
-// overlap).
+// Probe order: Elgato first (priority over Mirabox), then 293V3 before 293S. Everything
+// after that has a unique VID/PID pair, so its position is cosmetic — the one near-clash,
+// 0x5548 (293S vs. two v1 rebadges), is separated by PID.
 export const DEVICE_MODELS: DeviceModel[] = [
   MK2_MODEL,
   MINI_MODEL,
   MIRABOX_293_MODEL,
   MIRABOX_293S_MODEL,
   MIRABOX_K1PRO_MODEL,
+  AJAZZ_AKP05E_MODEL,
+  AJAZZ_AKP05_MODEL,
   AJAZZ_AKP153E_REV2_MODEL,
   AJAZZ_AKP153R_REV2_MODEL,
   FIFINE_D6_MODEL,
   FIFINE_D6_REV2_MODEL,
   ULANZI_D200_MODEL,
-  AJAZZ_AKP153_MODEL,
-  AJAZZ_AKP153E_MODEL,
-  AJAZZ_AKP153R_MODEL,
-  MARS_MSD_ONE_MODEL,
-  MADDOG_GK150K_MODEL,
-  RISEMODE_VISION_01_MODEL,
-  TMICE_STREAM_CONTROLLER_MODEL,
+  ...AKP153_V1_CLONE_MODELS,
+  ...AKP05_CLONE_MODELS,
+  ...K1PRO_CLONE_MODELS,
+  UPHERE_293V3_MODEL,
 ];
 
 /** Fallback model used when nothing is connected / before a real device is probed. */
 export const DEFAULT_MODEL: DeviceModel = MK2_MODEL;
+
+/** CORA emulation profiles: registry entries resolved as `cora.advertiseAs` targets
+ *  only, never probed over USB. A device re-pairs as one of these by setting
+ *  `cora.advertiseAs` (and matching `cora.productId`) via a model override. */
+export const CORA_PROFILES: readonly DeviceModel[] = [STREAM_DECK_PLUS_MODEL];
+
+/** Every resolvable model id: probeable devices + emulation profiles. */
+const ALL_MODELS: readonly DeviceModel[] = [...DEVICE_MODELS, ...CORA_PROFILES];
+
+/** The registry entry with this model id, or null. Model ids are the key of
+ *  settings.json's `modelOverrides`, so this is the lookup that turns a persisted
+ *  override back into the model it applies to. */
+export function findModelById(id: string): DeviceModel | null {
+  return ALL_MODELS.find((m) => m.id === id) ?? null;
+}
 
 /** Identifies which model matches a VID+PID pair, or null if unknown. */
 export function findModel(vid: number, pid: number): DeviceModel | null {
@@ -58,4 +63,45 @@ export function findModel(vid: number, pid: number): DeviceModel | null {
     }
   }
   return null;
+}
+
+export function modelToChildGeometry(model: DeviceModel): ChildGeometry {
+  return {
+    rows: model.rows,
+    columns: model.columns,
+    keyCount: model.keyCount,
+    keyWidth: model.keyWidth,
+    keyHeight: model.keyHeight,
+    productName: model.name,
+    encoderCount: model.encoderCount ?? 0,
+    touchWidth: model.touchWidth ?? 0,
+    touchHeight: model.touchHeight ?? 0,
+  };
+}
+
+/** The model whose geometry `model` emulates over CORA — itself unless it sets
+ *  `cora.advertiseAs`. Resolved through registry ids, never copied dimensions, so an
+ *  emulating model can't drift from the one it impersonates. device-models.test.ts
+ *  asserts every `advertiseAs` resolves, so the throw is a can't-happen guard. */
+export function advertisedModel(model: DeviceModel): DeviceModel {
+  if (!model.cora.advertiseAs) return model;
+  const advertised = findModelById(model.cora.advertiseAs);
+  if (!advertised) {
+    throw new Error(`${model.id}: unknown advertised model '${model.cora.advertiseAs}'`);
+  }
+  return advertised;
+}
+
+export function advertisedGeometry(model: DeviceModel): ChildGeometry {
+  return modelToChildGeometry(advertisedModel(model));
+}
+
+/** DockStatus `touchStripSize` spread: the advertised strip, or nothing. */
+export function advertisedTouchStrip(model: DeviceModel): {
+  touchStripSize?: { width: number; height: number };
+} {
+  const { touchWidth, touchHeight } = advertisedGeometry(model);
+  return touchWidth && touchHeight
+    ? { touchStripSize: { width: touchWidth, height: touchHeight } }
+    : {};
 }

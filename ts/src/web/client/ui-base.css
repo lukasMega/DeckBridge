@@ -12,14 +12,15 @@
   --inset: light-dark(oklch(0.935 0.009 72), oklch(0.175 0.008 64));
   --border: light-dark(oklch(0.895 0.01 72), oklch(0.33 0.01 64));
   --border-strong: light-dark(oklch(0.855 0.012 70), oklch(0.4 0.012 64));
+  --control-border: light-dark(oklch(0.6 0.01 72), oklch(0.58 0.01 64));
   --fg: light-dark(oklch(0.285 0.012 62), oklch(0.935 0.006 78));
-  --fg-muted: light-dark(oklch(0.505 0.012 64), oklch(0.73 0.01 72));
-  --fg-dim: light-dark(oklch(0.625 0.01 66), oklch(0.595 0.01 70));
-  --accent: light-dark(oklch(0.655 0.168 258), oklch(0.715 0.15 256));
+  --fg-muted: light-dark(oklch(0.44 0.012 64), oklch(0.73 0.01 72));
+  --fg-dim: light-dark(oklch(0.5 0.01 66), oklch(0.66 0.01 70));
+  --accent: light-dark(oklch(0.52 0.168 258), oklch(0.715 0.15 256));
   --accent-ink: light-dark(oklch(0.99 0.01 258), oklch(0.16 0.02 258));
-  --ok: light-dark(oklch(0.66 0.142 152), oklch(0.74 0.145 153));
+  --ok: light-dark(oklch(0.48 0.142 152), oklch(0.74 0.145 153));
   --wait: light-dark(oklch(0.72 0.135 75), oklch(0.78 0.13 78));
-  --warn: light-dark(oklch(0.6 0.18 32), oklch(0.7 0.165 35));
+  --warn: light-dark(oklch(0.52 0.18 32), oklch(0.7 0.165 35));
   --accent-soft: color-mix(in oklab, var(--accent), transparent 85%);
   --ok-soft: color-mix(in oklab, var(--ok), transparent 85%);
   --wait-soft: color-mix(in oklab, var(--wait), transparent 85%);
@@ -54,9 +55,6 @@ body {
   color: var(--fg);
   background: radial-gradient(120% 90% at 50% -10%, var(--bg) 0%, var(--bg-2) 100%) fixed;
   min-height: 100dvh;
-  display: flex;
-  align-items: center;
-  justify-content: center;
   padding: 28px 20px;
 }
 
@@ -74,23 +72,17 @@ html[data-mode='advanced'] body {
 }
 
 /* ---- view visibility ---- */
-#simple-view {
+#simple-view,
+html[data-mode='advanced'] #advanced-view,
+:is(.side-keys-device-grid, .side-keys-device-column) {
   display: contents;
 }
-#advanced-view {
-  display: none;
-}
+#advanced-view,
 html[data-mode='advanced'] #simple-view {
   display: none;
 }
-html[data-mode='advanced'] #advanced-view {
-  display: contents;
-}
 
 /* ---- shared key preview grid (simple + advanced views) ---- */
-.key-grid {
-  display: grid;
-}
 .key-grid .key-cell {
   aspect-ratio: 1;
   position: relative;
@@ -115,4 +107,810 @@ html[data-mode='advanced'] #advanced-view {
 }
 .key-grid[data-model='mirabox-k1pro'] .key-cell img {
   transform: rotate(90deg) rotateX(180deg);
+}
+/* The Stream Deck + desktop sends key art upright (no MK.2 180° pre-rotation). */
+.key-grid[data-cora='stream-deck-plus'] .key-cell img {
+  transform: none;
+}
+/* Label kept for assistive tech where a surrounding group already names the field. */
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* Shared layout, controls, typography, and surfaces (property-grouped). */
+:is(.app, .fader, .xkey-tile, .xkey-config-anchor, .popover, .chip-radio, .crop-source),
+.help-back svg,
+.diag-section > .collapse-header {
+  position: relative;
+}
+:is(.app, .preview, .side-keys-device, .xkey-popover-run, .addr-chip, .popover),
+.push-channels,
+.xkey-popover-arg input,
+.tuning-field .input {
+  width: 100%;
+}
+:is(.app, .dock-card-name, .strip-zone-type, .xkey-tile, .settings-file-input, .collapsible),
+:is(.collapse-body, .crop-key) {
+  overflow: hidden;
+}
+:is(.side-keys-legend, .tuning-checkboxes, .crop-stage, .xkey-card, .xkey-card-span),
+.dock-tabs,
+.xkey-value,
+.help-steps li {
+  display: flex;
+}
+:is(.topbar, .brightness, .fader, .status-line, .tuning-label-row, .chip-radio),
+:is(.device-test-option, .xkey-display, .xkey-swatches, .xkey-style-outline),
+.collapse-header,
+.xkeys-toggle,
+.side-keys-legend span {
+  display: flex;
+  align-items: center;
+}
+:is(.app, .help, .strip-zone, .tuning-field, .tuning-group),
+:is(.help-steps, .identity-list, .push-tokens),
+.docs-modal[open] {
+  display: flex;
+  flex-direction: column;
+}
+:is(.brand, .brand-home, .topbar-left, .topbar-actions, .warnrow, .xkeys-option) {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+:is(.xkey-card, .addr-chip) {
+  gap: 10px;
+}
+:is(.app-version, .strip-zone-title, .side-keys-legend, .manual-add-head, .manual-add-docs),
+:is(.addr-port-chip, .settings-json-preview, .input),
+.warnrow code,
+.xkeys-compact .input.xkey-select,
+:is(.help-steps .num, .tuning-checkboxes .settings-checkbox, .diag-section .fine) {
+  font-size: 12px;
+}
+:is(.disclaimer, .xkeys-sub, .xkey-press-label, .device-test-option),
+.popover .about-version {
+  font-size: 12px;
+  color: var(--fg-dim);
+}
+:is(.app-version, .dock-card-name, .strip-zone-type),
+.tuning-checkboxes .settings-checkbox {
+  white-space: nowrap;
+}
+:is(.update-dot, .circle, .ico-spin, .ico-pending) {
+  border-radius: 50%;
+}
+:is(.update-dot, .dock-chip, .chip-dot, .xkey-pos, .b-mode-select, .b-val),
+:is(.xkey-config-anchor, .step-help, .addr-label),
+:is(.brightness .b-ico, .warnrow .w-ico, .warnrow .fix, .help-steps .num),
+.xkey-card-span .input.xkey-press-action,
+.manual-add-docs svg {
+  flex: none;
+}
+:is(.brand-home, .strip-zone-tab, .xkey-size-btn, .identity-sensitive, .xkeys-toggle) {
+  border: 0;
+  cursor: pointer;
+}
+:is(.brand-home, .strip-zone-tab, .identity-sensitive, .tuning-help, .xkeys-toggle) {
+  background: transparent;
+}
+:is(.iconbtn, .pop-close, .step-help, .xkey-config-btn, .addr-port-chip) {
+  background: transparent;
+  cursor: pointer;
+  appearance: none;
+  color: var(--fg-dim);
+}
+:is(.xkey-size-thumb, .xkey-swatch, .chip-radio, .collapse-header, .crop-key),
+.key-grid .key-cell.clickable,
+:is(.manual-add, .addr-other) > summary {
+  cursor: pointer;
+}
+:is(.ghostbtn, .ctabtn, .addr-chip, .linkbtn, .b-mode-select, .tuning-help),
+select.input {
+  cursor: pointer;
+  appearance: none;
+}
+:is(.mark, .side-keys-device-key, .xkey-config-btn, .xkey-size, .addr-chip, .tuning-group) {
+  border-radius: 8px;
+}
+:is(.mark, .ghostbtn, .surface-card, .step-help, .addr-chip) {
+  box-shadow: var(--shadow-1);
+}
+:is(.wordmark, .stage-title, .b-val, .manual-add-head, .help-section-label),
+:is(.conflict h1, .help h1, .popover h2, .about-notice h3),
+.help-steps li b {
+  font-weight: 650;
+}
+:is(.iconbtn, .pop-close, .linkbtn, .ctabtn) {
+  border: none;
+}
+:is(.preview-label, .addr-label, .addr-copy, .conflict-after, .collapse-header),
+.cfg-subtitle-hdr,
+:is(.brightness .b-ico, .key-cell .kidx),
+.preview.dimmed .live-dot {
+  color: var(--fg-dim);
+}
+:is(.dock-pairing-note, .xkey-pos, .multi-deck-note),
+.crop-preview figcaption {
+  font-size: 12px;
+  color: var(--fg-muted);
+}
+:is(.xkey-config-btn, .linkbtn, .conflict-body, .help-lead, .strip-zone-type),
+:is(.xkey-size-btn, .xkey-size-thumb, .pop-close, .identity-label, .chip-radio),
+.tuning-help,
+.image-fit-sizes dt {
+  color: var(--fg-muted);
+}
+:is(.ghostbtn, .b-mode-select, .xkeys-option, .xkey-popover-field, .xkey-popover-status),
+:is(.xkey-size-note, .xkey-style-row, .tuning-field, .settings-checkbox, .step-sub),
+.status-line,
+:is(.popover p, .about-notice h3, .about-notice p),
+.popover .about-usage {
+  color: var(--fg-muted);
+  font-size: 13px;
+}
+:is(.ghostbtn, .b-mode-select, .xkey-config-btn, .surface-card, .xkey-size, .addr-chip),
+:is(.floating-surface, .app),
+.step-help:hover,
+.xkeys-option input,
+.input.xkey-select {
+  background: var(--surface);
+}
+:is(.ghostbtn, .b-mode-select, .xkey-config-btn, .addr-chip, .addr-port-chip, .input) {
+  border: 1px solid var(--control-border);
+}
+:is(.ghostbtn, .ctabtn),
+.xkeys-option input,
+.input.xkey-select {
+  font-family: var(--font);
+}
+:is(.dock-card-name, .side-keys-help-button, .conflict-after, .settings-error),
+:is(.settings-status, .image-fit-sizes, .toast),
+:is(.xkeys-option input, .identity-list li),
+:is(.b-val, .warnrow),
+.help-steps li,
+.docs-link,
+.input.xkey-select {
+  font-size: 13px;
+}
+:is(.ghostbtn, .dock-chip, .live-dot, .xkey-swatches, .xkey-style-outline, .manual-add-docs) {
+  gap: 5px;
+}
+:is(.preview-head, .xkey-popover-field, .identity-edit-row, .settings-actions, .addr-row),
+:is(.crop-tools, .push-reveal),
+.push-tokens li {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+:is(.chip-radio-group, .push-test, .crop-keys, .address-tabs),
+.identity-list li {
+  display: flex;
+  gap: 12px;
+}
+:is(.ghostbtn, .strip-zone-tab, .strip-zone-canvas, .strip-zone-panel, .warnrow, .ctabtn),
+.input {
+  border-radius: var(--r-sm);
+}
+.stage-title .accent,
+:is(.help-section-label, .tuning-group-label),
+:is(.linkbtn:hover, .linkbtn.accent),
+:is(.step-help:hover, .tuning-help:hover),
+.tuning-section > .collapse-header:hover {
+  color: var(--accent);
+}
+.step-sub a,
+.docs-link,
+.manual-add-docs {
+  color: var(--accent);
+  font-weight: 600;
+}
+.docs-link-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  vertical-align: baseline;
+}
+.docs-link-block,
+.manual-add-docs {
+  margin-top: 11px;
+}
+.docs-modal-open,
+.docs-modal-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  background: var(--surface);
+  color: var(--accent);
+}
+.docs-modal-open:hover,
+.docs-modal-close:hover {
+  background: var(--accent-soft);
+}
+.docs-modal {
+  width: min(1100px, calc(100vw - 32px));
+  height: calc(100dvh - 32px);
+  max-width: none;
+  max-height: none;
+  margin: auto;
+  padding: 0;
+  color: var(--fg);
+  overflow: hidden;
+}
+.scrim,
+.side-keys-help::backdrop,
+.docs-modal::backdrop {
+  background: oklch(0.2 0.02 60 / 0.42);
+  backdrop-filter: blur(3px);
+}
+.docs-modal-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+}
+.docs-modal-header h2 {
+  flex: 1;
+  min-width: 0;
+  font-size: 16px;
+}
+.docs-modal iframe {
+  flex: 1;
+  width: 100%;
+  min-height: 0;
+  border: 0;
+  background: var(--surface);
+}
+:is(.disclaimer, .step-sub, .settings-json-preview),
+:is(.popover p, .help-steps li),
+.docs-link {
+  line-height: 1.5;
+}
+:is(.disclaimer, .strip-zone-type, .conflict, .toast) {
+  text-align: center;
+}
+:is(.disclaimer, .conflict-body, .help-lead, .stage-title, .step-sub),
+.conflict-after,
+:is(.popover p, .help h1, .help-steps li) {
+  text-wrap: pretty;
+}
+:is(.linkbtn, .xkey-size-btn, .xkey-size-thumb, .xkey-swatch-custom) {
+  background: none;
+}
+:is(.preview-label, .dock-chip, .live-dot, .dock-card-name, .xkey-pos, .b-mode-select),
+:is(.xkey-tile-empty, .strip-zone-title, .side-keys-device-key, .addr-text),
+:is(.ctabtn, .collapse-header) {
+  font-weight: 600;
+}
+:is(.topbar, .preview-head, .dock-card-head, .manual-add-head, .xkey-popover-field),
+:is(.collapse-header, .addr-chip),
+.identity-list li {
+  justify-content: space-between;
+}
+:is(.push-tokens, .xkey-style-popover, .dock-list, .tuning-group) {
+  gap: 12px;
+}
+.side-keys-legend span,
+:is(.tuning-label-row, .xkey-press, .strip-zones, .side-keys-device, .xkey-display),
+.page-keys {
+  gap: 6px;
+}
+:is(.dock-card-head, .manual-add-head, .toggle-row, .settings-checkbox),
+:is(.pairing-auto-head, .pairing-controls, .pairing-answers) {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+:is(.ghostbtn, .ctabtn, .addr-chip, .addr-port-chip, .dock-chip, .live-dot),
+:is(.manual-add-docs, .tuning-help) {
+  display: inline-flex;
+  align-items: center;
+}
+:is(.mark, .xkey-tile, .xkey-config-btn, .step-ico, .addr-copy) {
+  flex: none;
+  display: grid;
+}
+:is(.circle, .b-ico, .w-ico, .help-stage, .side-keys-device-key, .dock-list),
+:is(.strip-zones, .side-keys-device, .xkey-row, .xkey-size-thumb, .xkey-style-popover),
+:is(.scrim, .tuning-grid, .image-fit-sizes, .key-grid) {
+  display: grid;
+}
+:is(.xkey-size-grid, .xkey-style-row, .tuning-dimensions) {
+  display: grid;
+  gap: 8px;
+}
+.strip-zone-canvas,
+:is(.help-stage svg, .xkey-tile img, .crop-key img) {
+  width: 100%;
+  display: block;
+}
+.mark,
+.conflict-badge svg,
+.xkeys-compact .xkey-config-btn {
+  width: 28px;
+}
+:is(.iconbtn, .side-keys-help-button, .ico-spin) {
+  width: 22px;
+  height: 22px;
+}
+:is(.tuning-field, .xkey-value, .addr-port-chip, .identity-list, .dock-tabs, .dock-tab) {
+  gap: 8px;
+}
+.xkey-popover-curl,
+.xkey-size-thumb img,
+.xkey-pos .xkey-clipped {
+  display: block;
+}
+:is(.panel-inset, .strip-zone-canvas, .strip-zone-panel, .side-keys-device, .step-help),
+.pop-close {
+  background: var(--inset);
+}
+:is(
+  .panel-inset,
+  .surface-card,
+  .xkey-size,
+  .xkey-swatch,
+  .step-help,
+  .tuning-group,
+  .pairing-auto
+),
+:is(.chip-radio, .tuning-help, .floating-surface, .app),
+:is(.crop-source canvas, .crop-preview canvas) {
+  border: 1px solid var(--border);
+}
+:is(.panel-inset, .surface-card, .side-keys-device, .diag-section, .pairing-auto) {
+  border-radius: var(--r-md);
+}
+:is(.xkeys-compact .xkey-press-label, .strip-zone-panel .xkey-press-label) {
+  text-align: left;
+}
+:is(.xkeys-head .settings-checkbox, .xkey-style-popover .xkey-popover-field),
+:is(.xkey-style-popover .settings-checkbox, .addr-row > .step-sub),
+:is(.settings-actions .address-link, .identity-error-row .settings-error),
+:is(.toggle-row .settings-checkbox, .tuning-checkboxes .settings-checkbox),
+:is(.tuning-section > .collapse-header, .diag-section > .collapse-header),
+.device-test-option .settings-checkbox,
+.dock-card .preview,
+.settings-group .collapsible {
+  margin: 0;
+}
+:is(.live-dot, .xkey-status-ok, .settings-status),
+:is(.addr-chip, .addr-port-chip).copied,
+.addr-chip.copied :is(.addr-text, .addr-copy) {
+  color: var(--ok);
+}
+:is(.addr-chip, .identity-value) {
+  font-size: 13px;
+  color: var(--fg);
+}
+:is(.conflict-body, .help-lead, .ctabtn),
+.popover .about-intro {
+  font-size: 14px;
+}
+:is(.preview-label, .addr-label, .help-section-label, .tuning-group-label, .collapse-header) {
+  text-transform: uppercase;
+  font-size: 11px;
+}
+:is(.live-dot, .dock-chip, .strip-zone-type, .side-keys-device-key, .xkey-popover-curl),
+.key-cell .kidx {
+  font-size: 11px;
+}
+:is(.preview, .manual-add, .tuning-group, .diag-section) {
+  padding: 12px;
+}
+:is(.dock-card-name, .xkey-card-span, .strip-zone, .side-keys-device-key, .xkey-value),
+:is(.xkey-mode, .xkey-display, .identity-edit-row),
+.identity-edit-row .input {
+  min-width: 0;
+}
+:is(.addr-text, .xkey-param),
+:is(.xkeys-compact .xkey-card-fields, .xkey-card-span .input),
+.page-name,
+.layout-scope-picker select {
+  min-width: 0;
+  flex: 1;
+}
+:is(.dock-chip, .help-back, .tuning-help, .toast) {
+  border-radius: 99px;
+}
+:is(.b-mode-select, .addr-port-chip, .chip-radio, .crop-key) {
+  border-radius: 6px;
+}
+.fader {
+  flex: 1;
+}
+:is(.fader, .xkey-size-btn, .pop-close, .chip-radio),
+.xkeys-compact .xkey-config-btn {
+  height: 26px;
+}
+:is(.floating-surface, .input),
+:is(.popover.side-keys-help, .popover .about-intro),
+.ghostbtn:hover,
+.collapse-header:hover,
+.strip-zone-tab[aria-selected='true'] .strip-zone-type,
+.xkey-size-btn:hover:not(:disabled) {
+  color: var(--fg);
+}
+:is(.b-val, .xkey-press-label, .identity-value) {
+  text-align: right;
+}
+.xkeys-compact .xkey-press-label,
+:is(.xkey-tile-empty, .icon-radio-label, .collapse-arrow, .cfg-subtitle-hdr) {
+  font-size: 10px;
+}
+:is(.xkey-card, .crop-stage),
+.help-steps li {
+  align-items: flex-start;
+}
+:is(.strip-zone, .xkey-size-thumb, .chip-radio),
+.tuning-checkboxes .settings-checkbox {
+  gap: 4px;
+}
+.popover.side-keys-help,
+:is(.scrim, .toast) {
+  position: fixed;
+}
+:is(.side-keys-legend i, .manual-add-docs svg),
+.crop-handle {
+  width: 12px;
+  height: 12px;
+}
+:is(.xkey-popover, .pop-close, .settings-file-input, .crop-rect, .crop-handle),
+:is(.xkey-tile .xkey-clipped, .key-cell .kidx),
+.chip-radio input,
+.diag-section > .collapse-header .collapse-arrow {
+  position: absolute;
+}
+:is(.xkey-status-pending, .xkey-clipped-mark),
+.help-steps .num.you {
+  color: var(--wait);
+}
+.stage-title,
+:is(.conflict h1, .help h1) {
+  font-size: 19px;
+}
+:is(.warnrow, .conflict-badge, .diag-section) {
+  background: var(--warn-soft);
+}
+:is(.warnrow code, .image-fit-sizes dd),
+:is(.addr-chip, .addr-port-chip, .identity-value, .icon-radio-label, .settings-json-preview),
+.input,
+.key-cell .kidx {
+  font-family: var(--mono);
+}
+:is(.conflict-badge, .xkey-status-err, .xkey-status-disabled, .settings-error),
+:is(.warnrow .w-ico, .diag-section > .collapse-header),
+.diag-section > .collapse-header:hover {
+  color: var(--warn);
+}
+.conflict h1,
+:is(.settings-checkbox, .settings-json-preview, .collapse-header) {
+  margin: 0 0 8px;
+}
+:is(.tuning-section, .diag-section, .push-tokens, .push-reveal, .push-test) {
+  margin: 12px 0;
+}
+:is(.iconbtn:hover, .pop-close:hover) {
+  color: var(--fg);
+  background: var(--inset);
+}
+.ghostbtn {
+  font-weight: 550;
+  padding: 7px 11px;
+}
+.ghostbtn:hover,
+.step-help:hover,
+.tuning-help:hover,
+:is(.addr-chip:hover, .addr-port-chip:hover),
+.crop-key[aria-pressed='true'] {
+  border-color: var(--accent);
+}
+/* toggled-on state (header toggles, selected tabs; same recipe as .tab-btn.active) */
+:is(.ghostbtn.active, .ghostbtn[aria-selected='true']) {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+/* recessed panel shared by preview, manual-add, help-stage, identity + JSON */
+.panel-inset {
+  box-shadow: var(--inset-shadow);
+}
+.preview-head {
+  margin: 0 2px 9px;
+}
+.live-dot {
+  letter-spacing: 0.04em;
+}
+.live-dot::before,
+.chip-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+}
+.live-dot::before {
+  content: '';
+  background: var(--ok);
+  box-shadow: 0 0 0 0 var(--ok-soft);
+  animation: live 1.8s ease-out infinite;
+}
+@keyframes live {
+  0% {
+    box-shadow: 0 0 0 0 var(--ok-soft);
+  }
+  70% {
+    box-shadow: 0 0 0 5px transparent;
+  }
+  100% {
+    box-shadow: 0 0 0 0 transparent;
+  }
+}
+.preview {
+  margin: 22px auto 4px;
+  .key-grid {
+    gap: 17px;
+  }
+  .key-cell {
+    max-width: 80px;
+  }
+  .key-cell.lit {
+    box-shadow:
+      inset 0 1px 0 oklch(1 0 0 / 0.22),
+      0 1px 3px oklch(0 0 0 / 0.18);
+  }
+  .touch-strip-preview {
+    display: block;
+    width: 100%;
+    margin-top: 17px;
+  }
+  &.compact {
+    width: 280px;
+  }
+  &.dimmed {
+    width: 60%;
+  }
+  &.dimmed :is(.key-grid, .touch-strip-preview) {
+    filter: saturate(0.4) brightness(0.92);
+    opacity: 0.55;
+  }
+  &.dimmed .live-dot::before {
+    background: var(--fg-dim);
+    animation: none;
+  }
+}
+.dock-chip {
+  padding: 4px 9px;
+  /* variants just set --c */
+  --c: var(--fg-dim);
+  color: var(--c);
+  background: color-mix(in oklab, var(--c), transparent 85%);
+}
+.dock-chip svg {
+  width: 10px;
+  height: 10px;
+}
+.dock-chip .ico-spin {
+  border-width: 2px;
+}
+/* plain leading dot for chips without an icon/spinner (StatusChip) */
+.chip-dot {
+  background: currentColor;
+}
+.xkey-popover-field input {
+  width: 60px;
+}
+.ico-spin {
+  border: 2.5px solid var(--wait-soft);
+  border-top-color: var(--wait);
+  animation: spin 0.9s linear infinite;
+}
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+.ico-pending {
+  width: 16px;
+  height: 16px;
+  border: 2px solid var(--border-strong);
+}
+/* per-step help button */
+.step-help {
+  width: 19px;
+  height: 19px;
+  margin-left: auto;
+}
+.step-help:active {
+  transform: translateY(1px) scale(0.96);
+}
+@keyframes rise {
+  from {
+    transform: translateY(7px);
+  }
+  to {
+    transform: none;
+  }
+}
+.scrim {
+  z-index: 40;
+  animation: fade 0.18s ease both;
+  inset: 0;
+  place-items: center;
+  padding: 24px;
+}
+@keyframes fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+.popover {
+  max-width: 420px;
+  max-height: calc(100dvh - 48px);
+  overflow-y: auto;
+  padding: 26px;
+  animation: rise 0.22s cubic-bezier(0.2, 0.9, 0.3, 1.1) both;
+}
+.popover h2 {
+  margin: 0 36px 14px 0;
+  font-size: 20px;
+}
+.pop-close {
+  top: 14px;
+  right: 14px;
+  width: 26px;
+}
+.pop-close:hover {
+  background: var(--border);
+}
+.settings-file-input,
+.key-cell .kidx,
+.toast {
+  pointer-events: none;
+}
+.settings-file-input {
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+}
+.identity-list {
+  margin: 0 0 24px;
+  padding: 12px 16px;
+}
+.identity-list li {
+  align-items: baseline;
+}
+.identity-sensitive {
+  filter: blur(5px);
+  user-select: none;
+  transition: filter 0.15s ease;
+}
+:is(.identity-sensitive:hover, .identity-sensitive:focus-visible) {
+  filter: blur(3px);
+}
+.identity-sensitive.revealed {
+  filter: none;
+}
+.identity-edit-row .input {
+  width: 180px;
+}
+.identity-list li.identity-error-row {
+  justify-content: flex-end;
+}
+.tuning-grid {
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 12px 16px;
+  margin: 0 0 12px;
+}
+.tuning-group-label {
+  letter-spacing: 0.08em;
+}
+.tuning-dimensions {
+  grid-template-columns: repeat(2, minmax(0, 80px));
+}
+.tuning-crop-rect {
+  grid-template-columns: repeat(4, minmax(0, 72px));
+}
+.chip-radio {
+  min-width: 30px;
+  padding: 0 6px;
+}
+.chip-radio:has(input:checked) {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.chip-radio input {
+  opacity: 0;
+}
+.chip-radio.is-disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.image-fit-sizes {
+  grid-template-columns: auto 1fr;
+  gap: 4px 12px;
+  margin: 0 0 14px;
+}
+.settings-json-preview {
+  padding: 12px 16px;
+  overflow-x: auto;
+  max-height: 260px;
+  overflow-y: auto;
+}
+/* small token-based input/select/textarea (cfg form, log filters) */
+.input {
+  background: var(--bg);
+}
+.input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+/* collapsible sections (Collapsible component) */
+
+.collapse-header {
+  letter-spacing: 1px;
+  user-select: none;
+}
+.collapse-arrow {
+  transition: transform 0.2s ease;
+}
+.collapse-header.collapsed .collapse-arrow,
+.xkeys-toggle[aria-expanded='false'] .collapse-arrow {
+  transform: rotate(-90deg);
+}
+.collapse-body {
+  padding: 4px 0;
+  transition: 0.25s ease;
+  max-height: 0;
+  opacity: 0;
+}
+.collapse-body.open {
+  max-height: 2000px;
+  opacity: 1;
+  border-left: 2px dashed var(--border-strong);
+  padding-left: 12px;
+}
+.cfg-subtitle-hdr {
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: normal;
+}
+/* key-grid debug extras (index badge + press flash — advanced grid) */
+.key-cell .kidx {
+  bottom: 4px;
+  right: 6px;
+  z-index: 1;
+}
+.key-cell.flash {
+  border-color: var(--ok) !important;
+  transition: none;
+}
+/* toast */
+.toast {
+  left: 50%;
+  bottom: 24px;
+  transform: translateX(-50%) translateY(8px);
+  z-index: 50;
+  background: var(--fg);
+  color: var(--bg);
+  padding: 10px 15px;
+  font-weight: 550;
+  box-shadow: var(--shadow-3);
+  opacity: 0;
+  transition: 0.2s;
+  max-width: 90vw;
 }

@@ -1,27 +1,19 @@
 import assert from 'tjs:assert';
-import { ElgatoServer, ElgatoChildServer } from '../src/elgato.js';
-import { ELGATO_VID, ELGATO_PKT_SIZE_RX, ELGATO_CHILD_PORT } from '../src/types.js';
-import { CORA_FLAG_VERBATIM, CORA_FLAG_REQACK, CORA_FLAG_ACKNAK } from '../src/cora-frame.js';
+import { ElgatoServer } from '../src/cora/primary-server.js';
+import { ElgatoChildServer } from '../src/cora/child-server.js';
+import { ELGATO_CHILD_PORT } from '../src/shared/types.js';
+import { ELGATO_VID, ELGATO_PKT_SIZE_RX } from '../src/cora/protocol.js';
+import { CORA_FLAG_VERBATIM, CORA_FLAG_REQACK, CORA_FLAG_ACKNAK } from '../src/cora/frame.js';
 import { connect, waitForValue, closeAndWait, sendPkt, sendFrame } from './helpers/cora-framer.js';
+import { modelToChildGeometry } from '../src/devices/registry.js';
+import { MK2_MODEL } from '../src/devices/elgato/mk2.js';
+import { testAsync as runTest, summaryExit } from './helpers/harness.js';
 
 const PRIMARY_PAIRING_PORT = 25543;
 const CHILD_PAIRING_PORT = 25544;
+const MK2_GEOMETRY = modelToChildGeometry(MK2_MODEL);
 
-// ── Setup / teardown ─────────────────────────────────────────────────────────
-
-let passed = 0;
-let failed = 0;
-
-async function runTest(name: string, fn: () => Promise<void>): Promise<void> {
-  try {
-    await fn();
-    console.log(`  ✓ ${name}`);
-    passed++;
-  } catch (e) {
-    console.error(`  ✗ ${name}: ${(e as Error).message}`);
-    failed++;
-  }
-}
+// Setup / teardown
 
 console.log(
   '\npairing: full pairing flow (specific to pairing as Elgato Stream Dec MK.2 to Elgato desktop app',
@@ -29,10 +21,11 @@ console.log(
 
 /* oxlint-disable no-console no-control-regex */
 await runTest('primary double-probe + child double-probe + operational', async () => {
-  const pairingServer = new ElgatoServer(PRIMARY_PAIRING_PORT, true);
+  const pairingServer = new ElgatoServer(MK2_GEOMETRY, PRIMARY_PAIRING_PORT, true);
   pairingServer.keepaliveIntervalMs = 100;
   await pairingServer.start();
   const pairingChildServer = new ElgatoChildServer(
+    MK2_GEOMETRY,
     CHILD_PAIRING_PORT,
     pairingServer.deviceConfig,
     false,
@@ -265,7 +258,6 @@ await runTest('primary double-probe + child double-probe + operational', async (
   }
 });
 
-// ── Summary ──────────────────────────────────────────────────────────────────
+// Summary
 
-console.log(`\n${passed} passed, ${failed} failed`);
-tjs.exit(failed > 0 ? 1 : 0);
+summaryExit();

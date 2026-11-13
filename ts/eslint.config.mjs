@@ -101,7 +101,7 @@ export default defineConfig([
     const c = eslintReact.configs['recommended-typescript'];
     return {
       ...c,
-      files: ['src/web/client/**/*.ts', 'src/web/client/**/*.tsx'],
+      files: ['src/web/client/**/*.ts', 'src/web/client/**/*.tsx', 'src/extensions/**/*.tsx'],
       settings: { ...c.settings, 'react-x': { importSource: 'preact', version: '18.3.1' } },
       rules: Object.fromEntries(
         Object.entries(c.rules).map(([k, v]) => {
@@ -113,7 +113,7 @@ export default defineConfig([
     };
   })(),
   {
-    files: ['src/web/client/**/*.ts', 'src/web/client/**/*.tsx'],
+    files: ['src/web/client/**/*.ts', 'src/web/client/**/*.tsx', 'src/extensions/**/*.tsx'],
     rules: {
       // Genuine bugs, not style — keep these blocking.
       '@eslint-react/rules-of-hooks': 'error',
@@ -141,33 +141,47 @@ export default defineConfig([
         customSourcePatterns: ['tjs', 'tjs:*', 'virtual:*'],
       },
       // `mode: 'full'` is deprecated in v7 (its replacement, `partialMatch`, only
-      // classifies folders), but it is the only way to keep single-file element types
-      // (worker, worker-host, app, cora globs, …). The v7-native alternative —
+      // classifies folders), but it is the only way to keep the file-glob element types
+      // that share a folder (worker/*-host.ts, worker/*-protocol.ts, plugin/ likewise). The v7-native alternative —
       // `boundaries/files` descriptors + file selectors in every policy — would mean
       // rewriting all policies below. Revisit if v8 removes `mode`.
       'boundaries/legacy-warnings': false,
       'boundaries/elements': [
         { type: 'web-client', mode: 'full', pattern: 'src/web/client/**' },
+        { type: 'demo', mode: 'full', pattern: 'src/demo/**' },
+        { type: 'webhid', mode: 'full', pattern: 'src/webhid/**' },
         { type: 'web-server', mode: 'full', pattern: 'src/web/server/**' },
+        // Zero-import leaf of HTTP/WS wire DTOs (contract.ts + contract-tuning.ts); the single G1 exception (type-only)
+        // so browser and server share one declaration instead of mirroring each other.
+        { type: 'web-contract', mode: 'full', pattern: 'src/web/contract*.ts' },
         { type: 'ffi', mode: 'full', pattern: 'src/ffi/**' },
         { type: 'platform', mode: 'full', pattern: 'src/platform/**' },
         { type: 'assets', mode: 'full', pattern: 'src/assets/**' },
-        { type: 'devices', mode: 'full', pattern: ['src/devices/**', 'src/mirabox.ts'] },
-        { type: 'worker', mode: 'full', pattern: 'src/hid-worker.ts' },
-        { type: 'worker-host', mode: 'full', pattern: 'src/hid-worker-host.ts' },
-        { type: 'worker-ipc', mode: 'full', pattern: 'src/hid-worker-protocol.ts' },
-        { type: 'plugin-worker', mode: 'full', pattern: 'src/plugin-worker.ts' },
-        { type: 'plugin-worker-host', mode: 'full', pattern: 'src/plugin-host.ts' },
-        { type: 'plugin-worker-ipc', mode: 'full', pattern: 'src/plugin-worker-protocol.ts' },
-        { type: 'transform', mode: 'full', pattern: ['src/translator.ts', 'src/image-render.ts', 'src/splash-sender.ts'] },
-        { type: 'image-main', mode: 'full', pattern: ['src/image-pipeline.ts', 'src/image-cache.ts', 'src/image-assembler.ts'] },
-        { type: 'cora', mode: 'full', pattern: ['src/cora-*.ts', 'src/elgato*.ts', 'src/feature-response.ts'] },
-        { type: 'infra', mode: 'full', pattern: ['src/native-libs.ts', 'src/mdns-advertiser.ts', 'src/tray.ts', 'src/settings-store.ts', 'src/device-identity.ts', 'src/os-utils.ts'] },
-        { type: 'app', mode: 'full', pattern: ['src/app.ts', 'src/driver-manager*.ts', 'src/cora-startup.ts', 'src/device-session.ts', 'src/extra-keys.ts'] },
-        { type: 'dev-entry', mode: 'full', pattern: ['src/mirabox-smoke.ts', 'src/k1pro-probe.ts'] },
-        { type: 'cli', mode: 'full', pattern: 'src/cli-devices.ts' },
-        { type: 'shared', mode: 'full', pattern: ['src/types.ts', 'src/logger.ts', 'src/capabilities.ts', 'src/comm-format.ts', 'src/cli.ts']
-        },
+        { type: 'devices', mode: 'full', pattern: 'src/devices/**' },
+        // First match wins: hosts and protocols before the worker entries they share a folder with.
+        { type: 'worker-host', mode: 'full', pattern: 'src/worker/*-host.ts' },
+        { type: 'worker-ipc', mode: 'full', pattern: 'src/worker/*-protocol.ts' },
+        { type: 'worker', mode: 'full', pattern: 'src/worker/**' },
+        { type: 'plugin-worker-host', mode: 'full', pattern: 'src/plugin/*-host.ts' },
+        { type: 'plugin-worker-ipc', mode: 'full', pattern: 'src/plugin/*-protocol.ts' },
+        { type: 'plugin-worker', mode: 'full', pattern: 'src/plugin/**' },
+        { type: 'extension-host', mode: 'full', pattern: 'src/extension/*-host.ts' },
+        { type: 'extension-ipc', mode: 'full', pattern: 'src/extension/*-protocol.ts' },
+        // The public extension API (types + EXTENSION_API_VERSION) that extensions build against.
+        { type: 'extension-api', mode: 'full', pattern: 'src/extension/api.ts' },
+        { type: 'extension-worker', mode: 'full', pattern: 'src/extension/**' },
+        // Extensions themselves (shipped as separate zips, loaded at runtime): see docs/extensions.md.
+        { type: 'extension', mode: 'full', pattern: 'src/extensions/**' },
+        { type: 'transform', mode: 'full', pattern: 'src/transform/**' },
+        { type: 'cora', mode: 'full', pattern: 'src/cora/**' },
+        { type: 'infra', mode: 'full', pattern: 'src/infra/**' },
+        { type: 'app', mode: 'full', pattern: 'src/main/**' },
+        { type: 'dev-entry', mode: 'full', pattern: 'src/dev/**' },
+        { type: 'cli', mode: 'full', pattern: 'src/cli/**' },
+        // shared/ holds zero-FFI leaves any tier may import: worker-lifecycle.ts (spawn +
+        // deferred terminate for every worker host), key-map.ts + splash-sender.ts (pure, so
+        // main never pulls translator.ts's ffi/image-proc onto the main thread).
+        { type: 'shared', mode: 'full', pattern: 'src/shared/**' },
       ],
     },
     rules: {
@@ -178,6 +192,15 @@ export default defineConfig([
         {
           default: 'disallow',
           policies: [
+            { from: { element: { type: 'webhid' } }, allow: { to: { element: { type: 'webhid' } } }, message: 'webhid modules share browser transport helpers' },
+            { from: { element: { type: 'webhid' } }, allow: { to: { element: { type: 'devices' } } }, message: 'pure cores (devices/core) + registry only; build-demo.mjs fails on any tjs:* import' },
+            { from: { element: { type: 'webhid' } }, allow: { to: { element: { type: 'shared' } } }, message: 'webhid uses pure key mappings and shared types' },
+            { from: { element: { type: 'demo' } }, allow: { to: { element: { type: 'webhid' } } }, message: 'demo drives hardware through browser WebHID sessions' },
+            { from: { element: { type: 'demo' } }, allow: { to: { element: { type: 'demo' } } }, message: 'demo modules share the in-browser backend.' },
+            { from: { element: { type: 'demo' } }, allow: { to: { element: { type: 'web-client' } } }, message: 'demo boots the WebUI and installs its transport seam.' },
+            { from: { element: { type: 'demo' } }, allow: { to: { element: { type: 'web-contract' } }, dependency: { kind: 'type' } }, message: 'demo uses the type-only WebUI wire contract.' },
+            { from: { element: { type: 'demo' } }, allow: { to: { element: { type: 'shared' } } }, message: 'demo uses pure shared data.' },
+            { from: { element: { type: 'demo' } }, allow: { to: { element: { type: 'devices' } } }, message: 'registry data only (DEVICE_MODELS); device I/O goes through webhid.' },
             // same-element internal imports always allowed
             { allow: { dependency: { relationship: { to: 'internal' } } } },
             // Multi-file element types: same-type imports are always allowed (e.g. one
@@ -192,6 +215,8 @@ export default defineConfig([
             { from: { element: { type: 'infra' } }, allow: { to: { element: { type: 'infra' } } } },
             { from: { element: { type: 'app' } }, allow: { to: { element: { type: 'app' } } } },
             { from: { element: { type: 'ffi' } }, allow: { to: { element: { type: 'ffi' } } } },
+            { from: { element: { type: 'cli' } }, allow: { to: { element: { type: 'cli' } } } },
+            { from: { element: { type: 'dev-entry' } }, allow: { to: { element: { type: 'dev-entry' } } } },
             // mdns-advertiser.ts (infra) needs the native Windows mDNS advertise
             // (ffi/mdns.ts) — a fire-and-forget dlopen call (register) / a blocking
             // dlopen call only on stop(), never device I/O. Other infra files gain
@@ -202,12 +227,50 @@ export default defineConfig([
               message:
                 "infra may import ffi ONLY for mdns-advertiser.ts's native Windows mDNS advertise (ffi/mdns.ts) — fire-and-forget dlopen, never device I/O.",
             },
+            // settings.ts validates persisted modelOverrides against the static registry.
+            {
+              from: { element: { type: 'infra' } },
+              allow: { to: { element: { type: 'devices' } } },
+              message:
+                'infra may import devices ONLY for settings.ts: the static registry + pure model-override validation — never device I/O.',
+            },
 
             // ── universal leaves (excluding web-client: G1 keeps the browser tier importing
             //    only web-client — see the dedicated web-client rule below) ──
             {
               from: { element: { type: '!web-client' } },
               allow: { to: { element: { type: ['shared', 'worker-ipc'] } } },
+            },
+            // The one G1 exception: `web/contract.ts` is a zero-import leaf of WebUI wire
+            // DTOs, and this edge is *type-only*, so it grants no capability and cannot
+            // cycle. A type not sent over the wire does not belong in it.
+            {
+              from: {
+                element: {
+                  type: [
+                    'web-client',
+                    'web-server',
+                    'web-contract',
+                    'shared',
+                    'plugin-worker-host',
+                    'extension-api',
+                    'infra',
+                  ],
+                },
+              },
+              allow: { to: { element: { type: 'web-contract' } }, dependency: { kind: 'type' } },
+              message:
+                'web/contract*.ts is the type-only WebUI wire contract; only web-client, ' +
+                'web-server, its sibling contract files, shared (types.ts), plugin-host.ts, ' +
+                'the extension API (DockStatus/KeyState) and infra (wsl-relay*.ts status types) ' +
+                'may import it.',
+            },
+            // The second G1 exception: the browser hands extensions the UI API typed by
+            // extension/api.ts. Type-only, so no worker/host code reaches the browser.
+            {
+              from: { element: { type: 'web-client' } },
+              allow: { to: { element: { type: 'extension-api' } }, dependency: { kind: 'type' } },
+              message: 'web-client may import extension/api.ts for types only (the UI API it hands out).',
             },
             // `devices/driver.ts` defines the cross-tier DeviceDriver/DeviceModel contract types;
             // any non-browser tier may depend on it for *types only*, never for runtime device code.
@@ -218,6 +281,12 @@ export default defineConfig([
             {
               from: { element: { type: ['platform', 'ffi', 'shared', 'worker-ipc'] } },
               allow: { to: { element: { type: 'platform' } } },
+            },
+            // splash-sender.ts (shared) embeds the "connected" splash image.
+            {
+              from: { element: { type: 'shared' } },
+              allow: { to: { element: { type: 'assets' } } },
+              message: 'shared may import assets ONLY for splash-sender.ts\'s splash image data.',
             },
 
             // ── tier A (main thread) ──
@@ -230,44 +299,61 @@ export default defineConfig([
                       'cora',
                       'web-server',
                       'infra',
-                      'image-main',
                       'worker-host',
                       'devices',
-                      'transform',
+                      // driver-manager*.ts read cached HID discovery results (ffi/hid-discovery.js)
                       'ffi',
                       // extra-keys.ts composes widget key images from the packed bitmap font
                       'assets',
                       // extra-keys.ts reads plugin-widget values via the plugin-worker host
                       'plugin-worker-host',
-                      // the `devices` subcommand (cli-devices.ts)
+                      // the `devices` subcommand (cli/devices.ts)
                       'cli',
                     ],
                   },
                 },
               },
             },
-            // cli-devices.ts (the `devices` subcommand) needs native-lib setup (infra),
+            // cli/devices.ts (the `devices` subcommand) needs native-lib setup (infra),
             // HID enumeration (ffi — enumeration only, never hid_open), and the device
             // registry to match VID/PID against known models (devices).
             {
               from: { element: { type: 'cli' } },
               allow: { to: { element: { type: ['ffi', 'devices', 'infra'] } } },
               message:
-                'cli-devices.ts may import ffi/devices/infra for enumeration-only HID listing ' +
+                'cli/devices.ts may import ffi/devices/infra for enumeration-only HID listing ' +
                 '(never hid_open) and native-lib setup — mirrors the devices tier\'s own ffi access.',
+            },
+            // cli/diagnose.ts shares the diagnostics builder + the requirements probe with
+            // the HTTP route, so one report shape serves both the server path and the
+            // no-server path (`deckbridge diagnose`, the freeze case). Pure/read-only
+            // modules only — the CLI never starts a WebUIServer.
+            {
+              from: { element: { type: 'cli' } },
+              allow: { to: { element: { type: 'web-server' } } },
+              message:
+                'cli/diagnose.ts may import web-server ONLY for the pure diagnostics builder ' +
+                'and the read-only requirements probe — never to start or drive the server.',
             },
             {
               from: { element: { type: 'cora' } },
-              allow: { to: { element: { type: ['image-main', 'infra', 'platform'] } } },
+              allow: { to: { element: { type: ['infra', 'platform'] } } },
             },
-            // capabilities.ts (shared) needs the DeviceConfig type from elgato-types.ts (cora) —
-            // type-only, defines the shared CORA child-device capability shape.
+            // main/relay/relay.ts listens with raw tjs (it needs half-close) and shares the
+            // accept-crash guard with platform/tcp.ts.
             {
-              from: { element: { type: 'shared' } },
-              allow: { to: { element: { type: 'cora' } }, dependency: { kind: 'type' } },
+              from: { element: { type: 'app' } },
+              allow: { to: { element: { type: 'platform' } } },
+              message: 'app may import platform ONLY for platform/accept-guard.ts.',
             },
             // web-server may read FFI capability candidates (path enumeration only — no device I/O),
             // and the device registry (for DEFAULT_MODEL) — never live device I/O.
+            {
+              from: { element: { type: 'web-server' } },
+              allow: { to: { element: { type: 'assets' } } },
+              message:
+                'web-server may import assets ONLY for deck-icons.ts (the browser deck home-screen icons).',
+            },
             {
               from: { element: { type: 'web-server' } },
               allow: { to: { element: { type: ['ffi', 'devices', 'infra'] } } },
@@ -279,22 +365,31 @@ export default defineConfig([
             // never to drive the plugin worker.
             {
               from: { element: { type: 'web-server' } },
+              allow: { to: { element: { type: 'cli' } } },
+              message:
+                'web-server may import cli-devices ONLY for the pure enumeration + row formatting ' +
+                'the diagnostics report shares with `deckbridge devices` — never hid_open.',
+            },
+            {
+              from: { element: { type: 'web-server' } },
               allow: { to: { element: { type: 'plugin-worker-host' } } },
               message:
                 'web-server may import plugin-host ONLY for the read-only WebUI surface (listPluginFiles, pluginKeyStatus, PluginStatus type) — never to drive the plugin worker.',
             },
-            // image-main (image-pipeline.ts) takes type-only references to the cora and web-server
-            // composition surfaces it's wired into (ElgatoChildServer, WebUIServer) — orchestration
-            // typing only, no runtime dependency.
-            {
-              from: { element: { type: 'image-main' } },
-              allow: { to: { element: { type: ['cora', 'web-server'] } }, dependency: { kind: 'type' } },
-            },
-
             // ── bridge ──
             {
               from: { element: { type: 'worker-host' } },
               allow: { to: { element: { type: 'worker-ipc' } } },
+            },
+            {
+              from: { element: { type: 'worker-host' } },
+              allow: { to: { element: { type: 'worker-host' } } },
+              message:
+                'hid-worker-host.ts may import hid-work-queue-host.ts, its pure main-thread admission queue (same tier, no worker code).',
+            },
+            {
+              from: { element: { type: 'worker-host' } },
+              allow: { to: { element: { type: 'ffi' } }, dependency: { kind: 'type' } },
             },
 
             // ── plugin worker (crash/CPU isolation for user plugin JS) ──
@@ -310,15 +405,47 @@ export default defineConfig([
             },
             {
               from: { element: { type: 'plugin-worker-host' } },
+              allow: { to: { element: { type: 'plugin-worker-host' } } },
+              message:
+                'plugin-host.ts may import plugin-fetch-host.ts, its main-thread ctx.fetch proxy (same tier).',
+            },
+            {
+              from: { element: { type: 'plugin-worker-host' } },
               allow: { to: { element: { type: 'infra' } } },
               message:
                 'plugin-host may import infra ONLY for the plugins-dir location (settings-store.pluginsDir) — never device I/O.',
             },
 
+            // ── extensions (one worker per extension, docs/extensions.md) ──
+            {
+              from: { element: { type: ['extension-worker', 'extension-host', 'extension-ipc'] } },
+              allow: { to: { element: { type: ['extension-ipc', 'extension-api'] } } },
+            },
+            {
+              from: { element: { type: ['web-server', 'app'] } },
+              allow: { to: { element: { type: 'extension-api' } } },
+              message: 'the main thread builds extension events and reads EXTENSION_API_VERSION.',
+            },
+            {
+              from: { element: { type: 'web-server' } },
+              allow: { to: { element: { type: 'extension-host' } } },
+              message: 'extensions-controller.ts owns one ExtensionHost per enabled extension.',
+            },
+            // An extension builds against the public API only, never DeckBridge internals:
+            // it ships separately and must keep working across DeckBridge releases.
+            {
+              from: { element: { type: 'extension' } },
+              allow: { to: { element: { type: 'extension' } } },
+            },
+            {
+              from: { element: { type: 'extension' } },
+              allow: { to: { element: { type: 'extension-api' } }, dependency: { kind: 'type' } },
+            },
+
             // ── tier B (USB worker) ──
             {
               from: { element: { type: 'worker' } },
-              allow: { to: { element: { type: ['devices', 'transform'] } } },
+              allow: { to: { element: { type: ['devices', 'transform', 'ffi'] } } },
             },
             {
               from: { element: { type: 'devices' } },
@@ -326,13 +453,25 @@ export default defineConfig([
             },
             {
               from: { element: { type: 'transform' } },
-              allow: { to: { element: { type: ['ffi', 'image-main', 'assets'] } } },
+              allow: { to: { element: { type: ['ffi', 'assets'] } } },
             },
 
             // ── dev entries can reach worker-tier code directly ──
             {
               from: { element: { type: 'dev-entry' } },
-              allow: { to: { element: { type: ['devices', 'transform', 'ffi', 'image-main'] } } },
+              // assets: k1pro-probe.ts paints the splash checkmark when it has no input files
+              allow: {
+                to: { element: { type: ['devices', 'transform', 'ffi', 'assets'] } },
+              },
+            },
+            // A probe bundle embeds the native libs but has no app.ts to extract them,
+            // so probe-utils.ts must run native-libs.ts's setup itself or hidapi
+            // resolution falls through to whatever the host system happens to have.
+            {
+              from: { element: { type: 'dev-entry' } },
+              allow: { to: { element: { type: 'infra' } } },
+              message:
+                'dev-entry may import infra ONLY for native-libs.ts (extracting the embedded libs a probe bundle carries).',
             },
 
             // ── tier C (browser): web-client is isolated; only same-element (internal) above. ──

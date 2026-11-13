@@ -162,28 +162,44 @@ html.db-hide-sidebar .theme-doc-sidebar-container {
 html.db-hide-toc .db-toc-col {
   display: none;
 }
-html.db-hide-toc [class*='docItemCol'] {
-  max-width: 100% !important;
-}
-/* the content col lives in a centered .container capped at --ifm-container-width;
-   uncap it so hiding the TOC actually fills the main area */
-html.db-hide-toc [class*='docItemWrapper'] {
-  max-width: none !important;
-}
 
-/* resize: right TOC column (left uses native --doc-sidebar-width, set via JS) */
-@media (min-width: 997px) {
-  html:not(.db-hide-toc) .db-toc-col {
-    flex: 0 0 var(--db-toc-width);
-    max-width: var(--db-toc-width);
-  }
-  /* let the content col take the remaining width via flex-grow + min-width:0
-     (overrides the theme's 75% cap). Sizing it with calc(100% - toc) instead
-     ties content + toc to exactly 100%, which overflows the row padding at
-     narrow desktop widths and wraps the TOC underneath. */
-  html:not(.db-hide-toc) [class*='docItemCol'] {
-    min-width: 0;
-    max-width: 100% !important;
+/* The width overrides below MUST live in the theme's cascade layer. Docusaurus ships
+   theme-classic inside `@layer docusaurus.theme-classic` and caps the content column
+   with `max-width: 75% !important`; for !important declarations the cascade REVERSES
+   layer order, so a layered !important beats an unlayered one. Unlayered, these rules
+   lose and hiding a panel leaves the content at its old width with dead space beside
+   it. Joining the same layer puts them back on equal footing, where our higher
+   specificity wins. */
+@layer docusaurus.theme-classic {
+  @media (min-width: 997px) {
+    /* The theme sizes the main area as calc(100% - var(--doc-sidebar-width)), which
+       keeps reserving room for a sidebar we just removed from the flow. */
+    html.db-hide-sidebar {
+      --doc-sidebar-width: 0px !important;
+    }
+    html.db-hide-toc [class*='docItemCol'] {
+      max-width: 100% !important;
+    }
+    /* the content col lives in a centered .container capped at --ifm-container-width;
+       uncap it so hiding a panel actually fills the main area */
+    html.db-hide-toc [class*='docItemWrapper'],
+    html.db-hide-toc [class*='docMainContainer'] .container,
+    html.db-hide-sidebar [class*='docMainContainer'] .container {
+      max-width: none !important;
+    }
+    /* resize: right TOC column (left uses native --doc-sidebar-width, set via JS) */
+    html:not(.db-hide-toc) .db-toc-col {
+      flex: 0 0 var(--db-toc-width);
+      max-width: var(--db-toc-width);
+    }
+    /* let the content col take the remaining width via flex-grow + min-width:0
+       (overrides the theme's 75% cap). Sizing it with calc(100% - toc) instead
+       ties content + toc to exactly 100%, which overflows the row padding at
+       narrow desktop widths and wraps the TOC underneath. */
+    html:not(.db-hide-toc) [class*='docItemCol'] {
+      min-width: 0;
+      max-width: 100% !important;
+    }
   }
 }
 
@@ -296,6 +312,34 @@ html.db-no-anim *::after {
 .db-anim-toggle svg {
   width: 1.25rem;
   height: 1.25rem;
+}
+
+/* ---- Theme-matched Web UI captures (docs/features.md) ----
+   features.md is CommonMark (`markdown.format: 'detect'`), so it can't use
+   <ThemedImage> like getting-started.mdx does — each state ships as a plain
+   Markdown image pair instead. The variants are keyed off the alt-text suffix,
+   not the URL: Markdown image URLs go through the asset pipeline, which appends
+   a content hash and drops any query string, so `src`-based selectors can't
+   match. Keep the `, light theme` / `, dark theme` alt suffixes in sync. */
+html[data-theme='light'] img[alt$='dark theme'],
+html[data-theme='dark'] img[alt$='light theme'] {
+  display: none;
+}
+
+.db-dock-compare {
+  margin: 0.25rem 0 0.75rem;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.db-dock-compare > summary {
+  width: fit-content;
+  color: var(--ifm-link-color);
+  cursor: pointer;
+  font-size: 0.875rem;
+  text-decoration: underline;
 }
 
 /* ---- Interactive pairing stepper (docs/features.md) ----
@@ -485,4 +529,244 @@ html.db-no-anim *::after {
 #db-s4:checked ~ .db-controls .dot4 {
   background: var(--ifm-color-primary);
   border-color: var(--ifm-color-primary);
+}
+
+/* Blog index: quiet typography, readable measure, and a compact archive. */
+.blog-list-page .container.margin-vert--lg {
+  max-width: 1080px;
+  margin-top: 4rem;
+  margin-bottom: 5rem;
+  padding-inline: 2rem;
+}
+
+.blog-list-page .container > .row {
+  flex-wrap: nowrap;
+  gap: 3.5rem;
+}
+
+.blog-list-page aside.col {
+  flex: 0 0 200px;
+  max-width: 200px;
+  padding-top: 0.25rem;
+}
+
+.blog-list-page aside nav > div:first-child {
+  color: var(--ifm-color-content-secondary);
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.blog-list-page aside nav ul {
+  padding-left: 0;
+}
+
+.blog-list-page aside nav li {
+  margin-block: 0.75rem;
+  line-height: 1.5;
+}
+
+.blog-list-page aside nav a {
+  color: var(--ifm-color-content-secondary);
+  font-size: 0.875rem;
+}
+
+.blog-list-page aside nav a:hover,
+.blog-list-page aside nav a[aria-current='page'] {
+  color: var(--ifm-color-primary);
+}
+
+.blog-list-page main.col {
+  flex: 1;
+  min-width: 0;
+  max-width: 700px;
+}
+
+.db-blog-intro {
+  margin-bottom: 3rem;
+  padding-bottom: 2.5rem;
+  border-bottom: 1px solid var(--ifm-color-emphasis-200);
+}
+
+.db-blog-eyebrow {
+  color: var(--ifm-color-primary);
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+}
+
+.db-blog-intro h1 {
+  margin: 0.75rem 0;
+  font-size: clamp(2.75rem, 5vw, 3.5rem);
+  font-weight: 600;
+  letter-spacing: -0.045em;
+  line-height: 1.1;
+}
+
+.db-blog-intro p {
+  margin: 0;
+  color: var(--ifm-color-content-secondary);
+  font-size: 1rem;
+  line-height: 1.7;
+}
+
+.blog-list-page main article {
+  margin-bottom: 2.25rem;
+  padding-bottom: 2.25rem;
+  border-bottom: 1px solid var(--ifm-color-emphasis-200);
+}
+
+.blog-list-page article header h2 {
+  margin-bottom: 0.75rem;
+  font-size: clamp(1.5rem, 3vw, 1.9rem);
+  font-weight: 600;
+  letter-spacing: -0.03em;
+  line-height: 1.25;
+}
+
+.blog-list-page article header h2 a {
+  color: var(--ifm-heading-color);
+}
+
+.blog-list-page article header h2 a:hover {
+  color: var(--ifm-color-primary);
+  text-decoration: none;
+}
+
+.blog-list-page article header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.blog-list-page article header h2 {
+  flex-basis: 100%;
+}
+
+.blog-list-page article header > div {
+  margin: 0;
+  font-size: 0.8125rem;
+  color: var(--ifm-color-content-secondary);
+}
+
+.blog-list-page article header time,
+.blog-list-page article header time + span {
+  color: var(--ifm-color-content-secondary);
+  font-size: 0.8125rem;
+}
+
+.blog-list-page article header .row {
+  width: auto;
+  margin: 0;
+}
+
+.blog-list-page article header .row > .col {
+  width: auto;
+  padding: 0;
+}
+
+.blog-list-page article header .avatar {
+  margin-bottom: 0;
+}
+
+.blog-list-page article .avatar__name,
+.blog-list-page article .avatar__name span {
+  font-size: 0.8125rem;
+  font-weight: 500;
+}
+
+.blog-list-page article .avatar__subtitle,
+.blog-list-page article .avatar__intro > small,
+.blog-list-page article .avatar__intro > div:last-child:not(.avatar__name) {
+  display: none;
+}
+
+.blog-list-page article .markdown {
+  font-size: 1rem;
+  line-height: 1.8;
+  color: var(--ifm-color-content-secondary);
+}
+
+.blog-list-page article .markdown p:last-child {
+  margin-bottom: 0;
+}
+
+.blog-list-page article footer.row {
+  align-items: center;
+  margin-top: 1.5rem;
+  font-size: 0.8125rem;
+}
+
+.blog-list-page article footer .col:first-child {
+  width: auto;
+  flex: 1;
+  max-width: none;
+}
+
+.blog-list-page article footer .col.text--right {
+  width: auto;
+  flex: 0 0 auto;
+  max-width: none;
+}
+
+.blog-list-page article footer .col:first-child > b {
+  display: none;
+}
+
+.blog-list-page article footer a[rel='tag'] {
+  padding: 0.25rem 0.65rem;
+  border-color: transparent;
+  border-radius: 6px;
+  background: var(--ifm-background-surface-color);
+  font-size: 0.75rem;
+}
+
+@media (max-width: 996px) {
+  .blog-list-page .container.margin-vert--lg {
+    max-width: 760px;
+    margin-top: 2.5rem;
+    padding-inline: 1.5rem;
+  }
+
+  .blog-list-page .container > .row {
+    flex-direction: column;
+    gap: 1.5rem;
+  }
+
+  .blog-list-page main.col {
+    width: 100%;
+    max-width: none;
+  }
+}
+
+@media (max-width: 480px) {
+  .blog-list-page .container.margin-vert--lg {
+    padding-inline: 1.25rem;
+  }
+
+  .db-blog-intro {
+    margin-bottom: 2rem;
+    padding-bottom: 2rem;
+  }
+
+  .blog-list-page article footer.row {
+    flex-wrap: wrap;
+    gap: 1rem;
+  }
+
+  .blog-list-page article footer .col:first-child {
+    flex-basis: 100%;
+  }
+}
+
+/* screenshots read better centered in the column; the blog rule stays below the
+   alt-suffix theme switcher's specificity, so hidden variants stay hidden */
+.img-center,
+.blog-wrapper .markdown img,
+.blog-wrapper .markdown video {
+  display: block;
+  margin: 1rem auto;
 }

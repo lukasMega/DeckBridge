@@ -1,18 +1,39 @@
 import { assets } from './assets.js';
 import { checkRequirements } from './requirements.js';
-import { get, post } from './router.js';
+import { get, post, postJson } from './router.js';
 import type { Route, RouteContext } from './router.js';
-import { badRequest, css, html, jpeg, js, json, noContent, notFound } from './http.js';
+import { badRequest, css, html, js, json, noContent, notFound, readJson, text } from './http.js';
+import { docsTrackingAllowed, docsUrl, isDocsTopic, isOwnNavigation } from './docs-links.js';
+import type { RawMockInput } from './mock-input.js';
+import { pushAdminRoutes } from './push-routes.js';
+import { virtualDeckRoutes } from './virtual-deck/virtual-deck-routes.js';
+import { pairingAddressRoutes } from './pairing-address-routes.js';
+import { wslRelayRoutes } from './wsl-relay-routes.js';
+import { pageRoutes } from './page-routes.js';
+import { extensionRoutes } from './extension-routes.js';
+import { verifyRoutes } from './verify-routes.js';
+import type { ExternalExpire } from '../contract.js';
+import { isNonNegInt, nonNegIntMessage } from './types.js';
 import type { MockDeviceConfig } from './types.js';
 import {
-  EXTRA_KEY_WIDGETS,
-  EXTRA_KEY_PARAM_MAX,
-  COMMAND_INTERVAL_MIN_MS,
-  COMMAND_INTERVAL_MAX_MS,
-  COMMAND_TIMEOUT_MIN_MS,
-  COMMAND_TIMEOUT_MAX_MS,
-} from '../../types.js';
-import type { ExtraKeyConfig, ExtraKeyWidget, ImageModeOverride } from '../../types.js';
+  EXTRA_KEY_PRESS_ACTIONS,
+  ENCODER_COMMAND_MAX,
+  MAX_MULTI_DECK_DOCKS,
+  TOUCH_STRIP_MODES,
+  TOUCH_STRIP_REPAINT_MIN_MS,
+  TOUCH_STRIP_REPAINT_MAX_MS,
+  compactTextStyle,
+  extraKeyConfigError,
+  isOneOf,
+  isTouchStripRepaintMs,
+} from '../../shared/types.js';
+import type {
+  EncoderSettings,
+  ExtraKeyConfig,
+  ExtraKeyTextStyle,
+  ExtraKeyWidget,
+} from '../../shared/types.js';
+import { encoderSettingsError } from '../../shared/encoder-settings.js';
 
 // The complete HTTP surface, declarative. WebSocket upgrade (/api/ws) is handled
 // before dispatch in WebUIServer; everything else lives here.
@@ -21,54 +42,255 @@ export const routes: Route[] = [
   get('/ui.css', () => css(assets.css)),
   get('/ui.js', () => js(assets.js)),
   get('/requirements', () => html(assets.requirementsHtml)),
+  // Framed by the pairing QR (simple/pairing-qr.tsx); its CSP is set in security-headers.ts.
+  get('/qr-sandbox', () => html(assets.qrSandboxHtml)),
+  // Counts the docs open, then hands off to the docs site (see docs-links.ts).
+  get('/go/docs/:topic', ({ params, req, settings }) => {
+    const topic = params.topic ?? '';
+    if (!isDocsTopic(topic)) return notFound();
+    if (isOwnNavigation(req.headers) && docsTrackingAllowed(settings.a7s, tjs.env)) {
+      settings.addDocsSeen(topic);
+    }
+    return new Response(null, {
+      status: 302,
+      headers: {
+        Location: docsUrl(topic),
+        'Cache-Control': 'no-store',
+        'Referrer-Policy': 'no-referrer',
+      },
+    });
+  }),
   get('/api/requirements', async () => json(await checkRequirements())),
   get('/api/state', ({ ui }) => json(ui.fullState())),
-  get('/api/plugins', async ({ ui }) => json(await ui.pluginsInfo())),
-  get('/api/settings', ({ ui }) => json(JSON.parse(ui.getSettingsJson()))),
-  get('/api/image/:key', ({ ui, params }) => {
-    const buf = ui.getImage(Number(params.key));
-    return buf ? jpeg(buf) : notFound();
-  }),
+  get('/api/plugins', async ({ extraKeys }) => json(await extraKeys.pluginsInfo())),
+  get('/api/settings', ({ settings }) => json(JSON.parse(settings.json()))),
 
-  post('/api/driver-mode', setDriverMode),
-  post('/api/mock-config', setMockConfig),
-  post('/api/device-model', setDeviceModel),
-  post('/api/brightness', setBrightness),
-  post('/api/brightness-override', setBrightnessOverride),
-  post('/api/resize-toggle', ({ ui }) => {
-    ui.notifyResizeToggle(!ui.resizeEnabled);
-    return json({ ok: true, enabled: ui.resizeEnabled });
-  }),
-  post('/api/image-mode', setImageMode),
+  ...(__MOCK_BUILD__
+    ? [
+        postJson('/api/driver-mode', setDriverMode),
+        postJson('/api/mock-config', setMockConfig),
+        postJson('/api/device-model', setDeviceModel, 'invalid request'),
+        post('/api/mock/extra-key/:wireId', ({ ui, params }) =>
+          simulate(ui, { kind: 'extraKey', wireId: Number(params.wireId) }),
+        ),
+        post('/api/mock/dial', async ({ ui, req }) =>
+          simulate(ui, { kind: 'dial', event: await bodyOrUndefined(req) }),
+        ),
+        post('/api/mock/touch', async ({ ui, req }) =>
+          simulate(ui, { kind: 'touch', event: await bodyOrUndefined(req) }),
+        ),
+      ]
+    : []),
   post('/api/key/:n', ({ ui, params }) => {
     const err = ui.trySimulateKey(Number(params.n));
     return err ? json({ error: err.error }, err.status) : noContent();
   }),
-  post('/api/select-dock', selectDock),
-  post('/api/extra-key', setExtraKey),
-  post('/api/extra-key/run', runExtraKeyNow),
+  postJson('/api/webui-key-press', setWebuiKeyPress),
+  postJson('/api/brightness', setBrightness),
+  postJson('/api/brightness-override', setBrightnessOverride),
+  postJson('/api/select-dock', selectDock),
+  postJson('/api/extra-key', setExtraKey),
+  postJson('/api/extra-key/run', runExtraKeyNow),
+  postJson('/api/extra-key/preview', previewExtraKey),
+  postJson('/api/extra-key/press', setExtraKeyPress),
+  ...pageRoutes,
+  ...pushAdminRoutes,
+  ...virtualDeckRoutes,
+  ...pairingAddressRoutes,
+  ...wslRelayRoutes,
+  ...extensionRoutes,
+  ...verifyRoutes,
+  postJson('/api/touch-strip-mode', setTouchStripMode),
+  postJson('/api/touch-strip-repaint', setTouchStripRepaint),
+  postJson('/api/encoders', setEncoders),
   post('/api/settings', setSettings),
-  post('/api/settings/open-in-os', async ({ ui }) => {
-    await ui.openSettingsFile();
+  post('/api/settings/open-in-os', async ({ settings }) => {
+    await settings.openFile();
     return json({ ok: true });
   }),
-  post('/api/device-identity/mdns-name', setDeviceMdnsName),
+  postJson('/api/device-identity/mdns-name', setDeviceMdnsName),
+  postJson('/api/log-level', setLogLevelRoute),
+  postJson('/api/multi-deck', setMultiDeckRoute),
+  get('/api/detected-decks', ({ ui }) => json(ui.detectedDecks())),
+  postJson('/api/active-decks', setActiveDecksRoute),
+  postJson('/api/browser-locale', setBrowserLocaleRoute),
+  post('/api/logs/open-in-os', async ({ logging }) => {
+    await logging.openFolder();
+    return json({ ok: true });
+  }),
+
+  get('/api/device-overrides', ({ modelOverrides, url }) => {
+    const modelId = url.searchParams.get('modelId') ?? undefined;
+    const view = modelOverrides.view(modelId);
+    return 'error' in view ? json({ error: view.error }, view.status) : json(view);
+  }),
+  postJson('/api/device-overrides', setDeviceOverrides),
+  postJson('/api/device-overrides/reset', resetDeviceOverrides),
+
+  get('/api/survey', async ({ survey }) => json(await survey.view())),
+  postJson('/api/survey', async (body: unknown, { survey }) => json(await survey.submit(body))),
+  postJson('/api/survey/dismiss', (body: { never?: unknown }, { survey }) => {
+    if (typeof body.never !== 'boolean') return badRequest('never must be a boolean');
+    survey.dismiss(body.never);
+    return json({ ok: true });
+  }),
+
+  get('/api/update', ({ updates }) => json(updates.info())),
+  post('/api/update/check', async ({ updates }) => json(await updates.check(true))),
+  postJson('/api/update/dismiss', dismissUpdate),
+  postJson('/api/update-check-enabled', setUpdateCheckEnabled),
+
+  postJson('/api/elgato-auto-restart', setElgatoAutoRestart),
+  get('/api/standby', ({ standby }) => json(standby.view())),
+  postJson('/api/standby', setStandby),
+  get('/api/elgato-app/status', async ({ elgatoApp }) => json(await elgatoApp.status())),
+  post('/api/elgato-app/restart', async ({ elgatoApp }) => json(await elgatoApp.restartNow())),
+
+  // text/plain, not JSON: the report is meant to be pasted verbatim into an issue.
+  get('/api/diagnostics', async ({ logging, url }) => {
+    const redact = url.searchParams.get('redactCommands') === '1';
+    return text(await logging.buildReport({ redactCommands: redact }));
+  }),
+  post('/api/diagnostics/save', saveDiagnostics),
 ];
 
-async function setBrightness({ req, ui }: RouteContext): Promise<Response> {
-  let level: unknown;
-  let dock: unknown;
+/** Persist one model's device tuning. A validation failure returns the whole
+ *  error list so the UI can show every bad field at once. */
+function setDeviceOverrides(
+  body: { modelId?: unknown; overrides?: unknown },
+  { modelOverrides }: RouteContext,
+): Response {
+  const r = modelOverrides.trySet(body.modelId, body.overrides ?? {});
+  if ('error' in r) return json({ error: r.error }, r.status);
+  // An image-only change is swapped into the running session and the deck is
+  // repainted; keyMap/wire/splash need the next open(), so the session reopens
+  // and the UI shows a brief "reapplying…" state on this flag.
+  return json({ ok: true, reconnecting: r.kind === 'reopen' });
+}
+
+function resetDeviceOverrides(
+  { modelId }: { modelId: unknown },
+  { modelOverrides }: RouteContext,
+): Response {
+  const r = modelOverrides.tryReset(modelId);
+  if ('error' in r) return json({ error: r.error }, r.status);
+  return json({ ok: true, reconnecting: r.kind === 'reopen' });
+}
+
+/** Write the report next to settings.json and reveal it in the OS file manager —
+ *  the path for users who would rather attach a file than paste text. */
+async function saveDiagnostics({ req, logging }: RouteContext): Promise<Response> {
+  let redactCommands = false;
   try {
-    ({ level, dock } = JSON.parse(await req.text()) as { level: unknown; dock?: unknown });
+    const raw = await req.text();
+    if (raw) ({ redactCommands = false } = JSON.parse(raw) as { redactCommands?: boolean });
   } catch {
     return badRequest('invalid JSON');
   }
+  const path = await logging.saveReport({ redactCommands });
+  return path ? json({ ok: true, path }) : json({ error: 'could not write report' }, 500);
+}
+
+/** WebUI "Check for updates" close-button: remembers the version so the badge
+ *  doesn't reappear until a newer one ships. */
+function dismissUpdate({ version }: { version: unknown }, { updates }: RouteContext): Response {
+  if (typeof version !== 'string' || !version)
+    return badRequest('version must be a non-empty string');
+  return json(updates.dismiss(version));
+}
+
+/** WebUI "Check for updates" toggle (opt-out; settings.json `updateCheck`). */
+function setUpdateCheckEnabled(
+  { enabled }: { enabled: unknown },
+  { updates }: RouteContext,
+): Response {
+  if (typeof enabled !== 'boolean') return badRequest('enabled must be a boolean');
+  updates.setEnabled(enabled);
+  return json({ ok: true, enabled });
+}
+
+/** WebUI "Elgato app" panel toggle + grace-delay field (settings.json
+ *  `elgatoAutoRestart`/`elgatoAutoRestartDelayS`). An omitted `delayS` leaves
+ *  the persisted delay untouched — see PersistedSettings.setElgatoAutoRestart. */
+function setElgatoAutoRestart(
+  { enabled, delayS }: { enabled: unknown; delayS?: unknown },
+  { elgatoApp }: RouteContext,
+): Response {
+  if (typeof enabled !== 'boolean') return badRequest('enabled must be a boolean');
+  if (delayS !== undefined && typeof delayS !== 'number') {
+    return badRequest('delayS must be a number');
+  }
+  elgatoApp.set(enabled, delayS);
+  const state = elgatoApp.state();
+  return json({ ok: true, enabled: state.enabled, delayS: state.delayS });
+}
+
+/** WebUI "Debug logging" toggle. Levels are validated against cli.ts's LOG_LEVELS
+ *  (the single source of truth, shared with --log-level and settings.json). */
+function setLogLevelRoute({ level }: { level: unknown }, { logging }: RouteContext): Response {
+  const err = logging.trySetLevel(level);
+  return err ? json({ error: err.error }, err.status) : json({ ok: true, level });
+}
+
+/** WebUI "Use two decks at once" toggle. Disabling it also disconnects a live
+ *  second dock (DriverManager.setMultiDeck). */
+function setMultiDeckRoute(
+  { enabled }: { enabled: unknown },
+  { settingsFile }: RouteContext,
+): Response {
+  if (typeof enabled !== 'boolean') return badRequest('enabled must be a boolean');
+  settingsFile.setMultiDeck(enabled);
+  return json({ ok: true, enabled });
+}
+
+/** WebUI deck picker: which detected decks run. Capped at the active-deck limit here, not
+ *  only in the UI, so a hand-made request cannot lift it. */
+function setActiveDecksRoute(
+  { keys }: { keys: unknown },
+  { settingsFile }: RouteContext,
+): Response {
+  const valid = Array.isArray(keys) && keys.every((k) => typeof k === 'string' && k !== '');
+  if (!valid) return badRequest('keys must be an array of device keys');
+  const unique = [...new Set(keys as string[])];
+  if (unique.length > MAX_MULTI_DECK_DOCKS) {
+    return badRequest(`at most ${MAX_MULTI_DECK_DOCKS} decks can be active`);
+  }
+  settingsFile.setActiveDecks(unique);
+  return json({ ok: true, keys: unique });
+}
+
+/** WebUI Settings "Click to press" opt-in. */
+function setWebuiKeyPress({ enabled }: { enabled: unknown }, { settings }: RouteContext): Response {
+  if (typeof enabled !== 'boolean') return badRequest('enabled must be a boolean');
+  settings.setWebuiKeyPress(enabled);
+  return json({ ok: true, enabled });
+}
+
+/** Browser's `navigator.language`, sent once on WebUI load. Fallback for
+ *  daily-ping.ts's locale dim when the OS-level probe fails. Length-capped —
+ *  same reasoning as daily-ping.ts's other closed-vocabulary fields: an
+ *  unbounded string is an unbounded fingerprint, not just an unbounded key. */
+function setBrowserLocaleRoute(
+  { locale, timeZone }: { locale: unknown; timeZone?: unknown },
+  { settings }: RouteContext,
+): Response {
+  if (typeof locale !== 'string' || !locale || locale.length > 35)
+    return badRequest('locale must be a non-empty string of at most 35 characters');
+  if (timeZone !== undefined && (typeof timeZone !== 'string' || timeZone.length > 64))
+    return badRequest('timeZone must be a string of at most 64 characters');
+  settings.browserLocale = locale;
+  settings.browserTimeZone = timeZone || undefined;
+  return json({ ok: true });
+}
+
+function setBrightness(
+  { level, dock }: { level: unknown; dock?: unknown },
+  { ui }: RouteContext,
+): Response {
   if (typeof level !== 'number' || level < 0 || level > 100 || !Number.isFinite(level)) {
     return badRequest('level must be a number 0–100');
   }
-  if (dock !== undefined && (typeof dock !== 'number' || !Number.isInteger(dock) || dock < 0)) {
-    return badRequest('dock must be a non-negative integer');
-  }
+  if (dock !== undefined && !isNonNegInt(dock)) return badRequest(nonNegIntMessage('dock'));
   const dockIndex = typeof dock === 'number' ? dock : 0;
   const rounded = Math.round(level);
   ui.emit('setBrightness', rounded, dockIndex);
@@ -86,71 +308,38 @@ interface ExtraKeyBody {
   intervalMs?: unknown;
   timeoutMs?: unknown;
   pluginArg?: unknown;
-}
-
-/** null when `v` is undefined or a number within [min, max]; else an error message. */
-function validateOptionalMs(v: unknown, field: string, min: number, max: number): string | null {
-  if (v === undefined) return null;
-  if (typeof v !== 'number' || v < min || v > max) {
-    return `${field} must be a number between ${min} and ${max}`;
-  }
-  return null;
+  expire?: unknown;
+  fallbackText?: unknown;
+  style?: unknown;
+  pageId?: unknown;
 }
 
 /** Field validation for POST /api/extra-key; returns an error message or null. */
-function validateExtraKeyBody({
-  wireId,
-  widget,
-  param,
-  intervalMs,
-  timeoutMs,
-  pluginArg,
-}: ExtraKeyBody): string | null {
-  if (typeof wireId !== 'number' || !Number.isInteger(wireId) || wireId < 0) {
-    return 'wireId must be a non-negative integer';
-  }
-  if (typeof widget !== 'string' || !(EXTRA_KEY_WIDGETS as readonly string[]).includes(widget)) {
-    return `widget must be one of: ${EXTRA_KEY_WIDGETS.join(', ')}`;
-  }
-  if (param !== undefined && (typeof param !== 'string' || param.length > EXTRA_KEY_PARAM_MAX)) {
-    return `param must be a string ≤ ${EXTRA_KEY_PARAM_MAX} chars`;
-  }
-  if (
-    pluginArg !== undefined &&
-    (typeof pluginArg !== 'string' || pluginArg.length > EXTRA_KEY_PARAM_MAX)
-  ) {
-    return `pluginArg must be a string ≤ ${EXTRA_KEY_PARAM_MAX} chars`;
-  }
-  return (
-    validateOptionalMs(
-      intervalMs,
-      'intervalMs',
-      COMMAND_INTERVAL_MIN_MS,
-      COMMAND_INTERVAL_MAX_MS,
-    ) ?? validateOptionalMs(timeoutMs, 'timeoutMs', COMMAND_TIMEOUT_MIN_MS, COMMAND_TIMEOUT_MAX_MS)
-  );
+function extraKeyBodyError(body: ExtraKeyBody): string | null {
+  if (!isNonNegInt(body.wireId)) return nonNegIntMessage('wireId');
+  if (body.pageId !== undefined && typeof body.pageId !== 'string')
+    return 'pageId must be a string';
+  return extraKeyConfigError(body);
 }
 
 /** Assign a display widget to one of the selected dock's extra keys (293S 6th
- *  column — display-only). The server renders and refreshes the key itself. */
-async function setExtraKey({ req, ui }: RouteContext): Promise<Response> {
-  let body: ExtraKeyBody;
-  try {
-    body = JSON.parse(await req.text()) as ExtraKeyBody;
-  } catch {
-    return badRequest('invalid JSON');
-  }
-  const invalid = validateExtraKeyBody(body);
+ *  column, AKP05E right column). The server renders and refreshes the key itself. */
+function setExtraKey(body: ExtraKeyBody, { extraKeys }: RouteContext): Response {
+  const invalid = extraKeyBodyError(body);
   if (invalid) return badRequest(invalid);
-  const { wireId, widget, param, intervalMs, timeoutMs, pluginArg } = body;
+  const { wireId, widget, param, intervalMs, timeoutMs, pluginArg, expire, fallbackText } = body;
+  const style = body.style === undefined ? {} : compactTextStyle(body.style as ExtraKeyTextStyle);
   const cfg: ExtraKeyConfig = {
     widget: widget as ExtraKeyWidget,
     ...(typeof param === 'string' && param ? { param } : {}),
     ...(typeof intervalMs === 'number' ? { intervalMs } : {}),
     ...(typeof timeoutMs === 'number' ? { timeoutMs } : {}),
     ...(typeof pluginArg === 'string' && pluginArg ? { pluginArg } : {}),
+    ...(typeof expire === 'string' ? { expire: expire as ExternalExpire } : {}),
+    ...(typeof fallbackText === 'string' && fallbackText ? { fallbackText } : {}),
+    ...(Object.keys(style).length > 0 ? { style } : {}),
   };
-  const err = ui.trySetExtraKey(wireId as number, cfg);
+  const err = extraKeys.trySet(wireId as number, cfg, body.pageId as string | undefined);
   return err ? json({ error: err.error }, err.status) : json({ ok: true, wireId, widget });
 }
 
@@ -159,107 +348,141 @@ interface RunExtraKeyBody {
 }
 
 /** Force an immediate re-run of a command-widget extra key (WebUI "Run now"). */
-async function runExtraKeyNow({ req, ui }: RouteContext): Promise<Response> {
-  let body: RunExtraKeyBody;
-  try {
-    body = JSON.parse(await req.text()) as RunExtraKeyBody;
-  } catch {
-    return badRequest('invalid JSON');
-  }
-  const { wireId } = body;
-  if (typeof wireId !== 'number' || !Number.isInteger(wireId) || wireId < 0) {
-    return badRequest('wireId must be a non-negative integer');
-  }
-  const err = ui.tryRunExtraKeyNow(wireId);
+function runExtraKeyNow({ wireId }: RunExtraKeyBody, { extraKeys }: RouteContext): Response {
+  if (!isNonNegInt(wireId)) return badRequest(nonNegIntMessage('wireId'));
+  const err = extraKeys.tryRunNow(wireId);
   return err ? json({ error: err.error }, err.status) : json({ ok: true });
 }
 
-async function selectDock({ req, ui }: RouteContext): Promise<Response> {
-  let index: unknown;
-  try {
-    ({ index } = JSON.parse(await req.text()) as { index: unknown });
-  } catch {
-    return badRequest('invalid JSON');
+/** Text-size picker: the widget's last paint rendered at every text size (nothing saved). */
+function previewExtraKey({ wireId }: RunExtraKeyBody, { extraKeys }: RouteContext): Response {
+  if (!isNonNegInt(wireId)) return badRequest(nonNegIntMessage('wireId'));
+  const res = extraKeys.tryPreview(wireId);
+  return 'error' in res ? json({ error: res.error }, res.status) : json(res);
+}
+
+/** A pressable extra key's press side: the shell command it runs ('' clears it) and/or
+ *  its action (refresh / command / both); an omitted field is kept. Separate from the
+ *  widget POST so neither overwrites the other. */
+function setExtraKeyPress(
+  {
+    wireId,
+    command,
+    action,
+    pageId,
+  }: { wireId: unknown; command: unknown; action: unknown; pageId?: unknown },
+  { extraKeys }: RouteContext,
+): Response {
+  if (!isNonNegInt(wireId)) return badRequest(nonNegIntMessage('wireId'));
+  if (pageId !== undefined && typeof pageId !== 'string')
+    return badRequest('pageId must be a string');
+  if (command === undefined && action === undefined) {
+    return badRequest('command or action is required');
   }
+  if (
+    command !== undefined &&
+    (typeof command !== 'string' || command.length > ENCODER_COMMAND_MAX)
+  ) {
+    return badRequest(`command must be a string ≤ ${ENCODER_COMMAND_MAX} chars`);
+  }
+  if (action !== undefined && !isOneOf(EXTRA_KEY_PRESS_ACTIONS, action)) {
+    return badRequest(`action must be one of: ${EXTRA_KEY_PRESS_ACTIONS.join(', ')}`);
+  }
+  const err = extraKeys.trySet(
+    wireId,
+    {
+      ...(command !== undefined ? { pressCommand: command } : {}),
+      ...(action !== undefined ? { pressAction: action } : {}),
+    },
+    pageId,
+  );
+  return err ? json({ error: err.error }, err.status) : json({ ok: true });
+}
+
+/** Who paints the touch strip: the Elgato app only, or DeckBridge widgets over it. */
+function setTouchStripMode({ mode }: { mode: unknown }, { devicePrefs }: RouteContext): Response {
+  if (!isOneOf(TOUCH_STRIP_MODES, mode)) {
+    return badRequest(`mode must be one of: ${TOUCH_STRIP_MODES.join(', ')}`);
+  }
+  const err = devicePrefs.trySetTouchStripMode(mode);
+  return err ? json({ error: err.error }, err.status) : json({ ok: true, mode });
+}
+
+/** How long after the Elgato app's last strip frame 'deckbridge-repaint' brings a widget back. */
+function setTouchStripRepaint({ ms }: { ms: unknown }, { devicePrefs }: RouteContext): Response {
+  if (!isTouchStripRepaintMs(ms)) {
+    return badRequest(
+      `ms must be an integer ${TOUCH_STRIP_REPAINT_MIN_MS}–${TOUCH_STRIP_REPAINT_MAX_MS}`,
+    );
+  }
+  const err = devicePrefs.trySetTouchStripRepaintMs(ms);
+  return err ? json({ error: err.error }, err.status) : json({ ok: true, ms });
+}
+
+/** Knob override: connect to the Elgato app, or run per-knob shell commands. */
+function setEncoders(body: unknown, { encoders }: RouteContext): Response {
+  const invalid = encoderSettingsError(body);
+  if (invalid) return badRequest(invalid);
+  const { connectToApp, commands } = body as EncoderSettings;
+  const err = encoders.trySet({
+    ...(connectToApp !== undefined ? { connectToApp } : {}),
+    ...(commands !== undefined ? { commands } : {}),
+  });
+  return err ? json({ error: err.error }, err.status) : json({ ok: true });
+}
+
+function setStandby(body: unknown, { standby }: RouteContext): Response {
+  const r = standby.trySet(body);
+  return 'error' in r ? json({ error: r.error }, r.status) : json(r.view);
+}
+
+function simulate(ui: RouteContext['ui'], raw: RawMockInput): Response {
+  const err = ui.trySimulateInput(raw);
+  return err ? json({ error: err.error }, err.status) : noContent();
+}
+
+/** Malformed JSON becomes a shape error from checkMockInput, after its mock-mode 404. */
+async function bodyOrUndefined(req: Request): Promise<unknown> {
+  const parsed = await readJson<unknown>(req);
+  return 'error' in parsed ? undefined : parsed.body;
+}
+
+function selectDock({ index }: { index: unknown }, { ui }: RouteContext): Response {
   const err = ui.trySelectDock(index);
   return err ? json({ error: err.error }, err.status) : json({ ok: true, index });
 }
 
-async function setDriverMode({ req, ui }: RouteContext): Promise<Response> {
-  let mode: unknown;
-  try {
-    ({ mode } = JSON.parse(await req.text()) as { mode: unknown });
-  } catch {
-    return badRequest('invalid JSON');
-  }
+function setDriverMode({ mode }: { mode: unknown }, { ui }: RouteContext): Response {
   if (mode !== 'real' && mode !== 'mock') return badRequest('mode must be real or mock');
   ui.emit('switchMode', mode);
   return json({ ok: true, mode });
 }
 
-async function setDeviceModel({ req, ui }: RouteContext): Promise<Response> {
-  try {
-    const { modelId } = JSON.parse(await req.text()) as { modelId: unknown };
-    if (typeof modelId !== 'string') throw new Error('modelId must be string');
-    ui.emit('setModel', modelId);
-    return json({ ok: true, modelId });
-  } catch {
-    return badRequest('invalid request');
-  }
+function setDeviceModel({ modelId }: { modelId: unknown }, { ui }: RouteContext): Response {
+  if (typeof modelId !== 'string') return badRequest('invalid request');
+  ui.emit('setModel', modelId);
+  return json({ ok: true, modelId });
 }
 
-async function setBrightnessOverride({ req, ui }: RouteContext): Promise<Response> {
-  let enabled: unknown;
-  try {
-    ({ enabled } = JSON.parse(await req.text()) as { enabled: unknown });
-  } catch {
-    return badRequest('invalid JSON');
-  }
+function setBrightnessOverride(
+  { enabled }: { enabled: unknown },
+  { devicePrefs }: RouteContext,
+): Response {
   if (typeof enabled !== 'boolean') return badRequest('enabled must be a boolean');
-  ui.notifyBrightnessOverride(enabled);
-  return json({ ok: true, enabled: ui.brightnessOverride });
+  devicePrefs.setBrightnessOverride(enabled);
+  return json({ ok: true, enabled: devicePrefs.brightnessOverride });
 }
 
-const IMAGE_MODE_VALUES = ['resize', 'pad-black', 'pad-average', 'pad-edge', 'default'] as const;
-
-async function setImageMode({ req, ui }: RouteContext): Promise<Response> {
-  let mode: unknown;
-  try {
-    ({ mode } = JSON.parse(await req.text()) as { mode: unknown });
-  } catch {
-    return badRequest('invalid JSON');
-  }
-  if (
-    typeof mode !== 'string' ||
-    !IMAGE_MODE_VALUES.includes(mode as (typeof IMAGE_MODE_VALUES)[number])
-  ) {
-    return badRequest(`mode must be one of: ${IMAGE_MODE_VALUES.join(', ')}`);
-  }
-  const effective: ImageModeOverride = mode === 'default' ? null : (mode as ImageModeOverride);
-  ui.notifyImageMode(effective);
-  return json({ ok: true, mode });
-}
-
-async function setMockConfig({ req, ui }: RouteContext): Promise<Response> {
-  let parsed: Partial<MockDeviceConfig>;
-  try {
-    parsed = JSON.parse(await req.text()) as Partial<MockDeviceConfig>;
-  } catch {
-    return badRequest('invalid JSON');
-  }
-  return json({ ok: true, mockConfig: ui.applyMockConfig(parsed) });
+function setMockConfig(body: Partial<MockDeviceConfig>, { ui }: RouteContext): Response {
+  return json({ ok: true, mockConfig: ui.applyMockConfig(body) });
 }
 
 const MDNS_NAME_MAX_LEN = 63; // sane cap — dns-sd/avahi service instance names aren't unbounded
 
-async function setDeviceMdnsName({ req, ui }: RouteContext): Promise<Response> {
-  let deviceKey: unknown;
-  let name: unknown;
-  try {
-    ({ deviceKey, name } = JSON.parse(await req.text()) as { deviceKey: unknown; name: unknown });
-  } catch {
-    return badRequest('invalid JSON');
-  }
+function setDeviceMdnsName(
+  { deviceKey, name }: { deviceKey: unknown; name: unknown },
+  { ui, settings }: RouteContext,
+): Response {
   if (typeof deviceKey !== 'string' || !deviceKey) {
     return badRequest('deviceKey must be a non-empty string');
   }
@@ -267,16 +490,20 @@ async function setDeviceMdnsName({ req, ui }: RouteContext): Promise<Response> {
     return badRequest('name must be a non-empty string');
   }
   const trimmed = name.trim().slice(0, MDNS_NAME_MAX_LEN);
-  ui.emit('setDeviceMdnsName', deviceKey, trimmed);
+  if (!settings.updateMdnsName(deviceKey, trimmed)) {
+    return json({ error: `no persisted identity for deviceKey ${deviceKey}` }, 404);
+  }
+  // Persisted; app.ts re-advertises the live dock under the new name.
+  ui.emit('mdnsNameChanged', deviceKey, trimmed);
   return json({ ok: true, name: trimmed });
 }
 
-async function setSettings({ req, ui }: RouteContext): Promise<Response> {
+async function setSettings({ req, settings, settingsFile }: RouteContext): Promise<Response> {
   const raw = await req.text();
   try {
-    ui.applySettingsJson(raw);
+    settingsFile.applyJson(raw);
   } catch (e) {
     return badRequest((e as Error).message || 'invalid settings');
   }
-  return json({ ok: true, settings: JSON.parse(ui.getSettingsJson()) as unknown });
+  return json({ ok: true, settings: JSON.parse(settings.json()) as unknown });
 }

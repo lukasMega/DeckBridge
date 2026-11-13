@@ -1,0 +1,34 @@
+{
+  "version": 1,
+  "model": "mk2",
+  "pid": "0x0080",
+  "firmware": "1.05.100",
+  "interface": null,
+  "source": "synthetic",
+  "note": "open reads serial (report 0x06, length in byte 1, text from byte 2) and firmware (report 0x05, text from byte 6), then sends the reset-to-logo feature report.",
+  "steps": [
+    {
+      "op": "feature",
+      "dir": "in",
+      "hex": "0607434c31323334350000000000000000000000000000000000000000000000"
+    },
+    {
+      "op": "feature",
+      "dir": "in",
+      "hex": "050800000000312e30352e313030000000000000000000000000000000000000"
+    },
+    {
+      "op": "call",
+      "call": "open",
+      "expectProps": {
+        "serial": "CL12345",
+        "firmware": "1.05.100"
+      }
+    },
+    {
+      "op": "feature",
+      "dir": "out",
+      "hex": "0302000000000000000000000000000000000000000000000000000000000000"
+    }
+  ]
+}

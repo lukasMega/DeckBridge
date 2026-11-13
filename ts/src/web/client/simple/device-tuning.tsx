@@ -1,0 +1,503 @@
+// Settings-page device tuning over POST /api/device-overrides.
+// Supports runtime calibration before copying values into a registry PR.
+// Key-map wizard lives in keymap-learn.tsx.
+import { DocsLink } from '../components/DocsLink.js';
+import { useCallback, useEffect, useRef, useState } from 'preact/hooks';
+import { ChipRadioGroup } from '../components/ChipRadioGroup.js';
+import type { ChipOption } from '../components/ChipRadioGroup.js';
+import { Collapsible } from '../components/Collapsible.js';
+import { GhostButton } from '../components/GhostButton.js';
+import { CheckField, NumberField, SelectField, TuningGroup } from '../components/Fields.js';
+import { getSnapshot, useStore } from '../lib/store.js';
+import type { StoreState } from '../lib/store.js';
+import { copyLabel, useCopyText } from '../lib/use-copy-text.js';
+import { postJson } from '../lib/ui-api.js';
+import { Feedback, useAsyncAction } from '../lib/ui-async.js';
+import { buildBugReport } from './bug-report-export.js';
+import { KeymapLearn } from './keymap-learn.js';
+import { VerifyButton } from './verify-wizard/verify-entry.js';
+import { ImageCropEditor } from './image-crop-editor.js';
+import { ImageFitHelp, fitApplicability, padFillApplies } from './image-fit-help.js';
+import type { FitApplicability, Size } from './image-fit-help.js';
+import { buildCoraOverride, ElgatoIdentityFields } from './device-tuning-identity.js';
+import type { CoraIdentityDraft } from './device-tuning-identity.js';
+import type { DeviceCropRect, DeviceImageOverride, DeviceOverridesView } from '../ui-types.js';
+
+const ROTATIONS = [0, 90, 180, 270] as const;
+const RESIZE_FILTERS = ['triangle', 'nearest', 'lanczos3'] as const;
+const ROTATION_CHIPS: ReadonlyArray<ChipOption<(typeof ROTATIONS)[number]>> = ROTATIONS.map(
+  (rotate) => ({ value: rotate, label: <span>{rotate}°</span>, title: `Rotate ${rotate} degrees` }),
+);
+
+function iconChips<T extends string>(
+  options: ReadonlyArray<{ value: T; icon: string; description: string }>,
+): ReadonlyArray<ChipOption<T>> {
+  return options.map(({ value, icon, description }) => ({
+    value,
+    title: description,
+    label: (
+      <>
+        <span aria-hidden="true">{icon}</span>
+        <span class="icon-radio-label">{value}</span>
+      </>
+    ),
+  }));
+}
+
+const RESIZE_MODE_CHIPS = iconChips([
+  { value: 'resize', icon: '↔', description: 'Resize image to fit' },
+  { value: 'pad', icon: '□', description: 'Pad image to fit' },
+  { value: 'crop', icon: '⧈', description: 'Crop image centre 1:1' },
+] as const);
+
+/** Fit chips with the no-effect modes disabled, so a choice never silently no-ops. */
+function resizeModeChips(fit: FitApplicability | undefined): typeof RESIZE_MODE_CHIPS {
+  if (!fit) return RESIZE_MODE_CHIPS;
+  return RESIZE_MODE_CHIPS.map((chip) => {
+    if (chip.value === 'pad' && !fit.padApplies) {
+      return { ...chip, disabled: true, title: 'No effect: image is not smaller than the key' };
+    }
+    if (chip.value === 'crop' && !fit.cropApplies) {
+      return { ...chip, disabled: true, title: 'No effect: image is not larger than the key' };
+    }
+    return chip;
+  });
+}
+const PAD_FILL_CHIPS = iconChips([
+  { value: 'black', icon: '●', description: 'Black padding' },
+  { value: 'average', icon: '◐', description: 'Average-color padding' },
+  { value: 'edge', icon: '▣', description: 'Edge-color padding' },
+] as const);
+
+function padFillChips(
+  fit: FitApplicability | undefined,
+  mode: 'resize' | 'pad' | 'crop',
+): typeof PAD_FILL_CHIPS {
+  if (padFillApplies(fit, mode)) return PAD_FILL_CHIPS;
+  return PAD_FILL_CHIPS.map((chip) => ({
+    ...chip,
+    disabled: true,
+    title: 'No effect: nothing to pad',
+  }));
+}
+
+/** Numeric fields rendered as a plain number input, with their bounds. Bounds
+ *  mirror devices/model-overrides.ts — the server re-validates regardless. */
+interface NumberFieldSpec {
+  key: keyof DeviceImageOverride;
+  label: string;
+  min: number;
+  max?: number;
+  step?: number;
+  advanced?: boolean;
+}
+
+const NUMBER_FIELDS: readonly NumberFieldSpec[] = [
+  { key: 'width', label: 'Width (px)', min: 8, max: 1024 },
+  { key: 'height', label: 'Height (px)', min: 8, max: 1024 },
+  { key: 'quality', label: 'JPEG quality (0.05–1)', min: 0.05, max: 1, step: 0.05 },
+  { key: 'maxBytes', label: 'Byte limit (0 = unlimited)', min: 0 },
+  { key: 'sharpen', label: 'Sharpen sigma', min: 0, step: 0.1, advanced: true },
+  { key: 'blur', label: 'Blur sigma', min: 0, step: 0.1, advanced: true },
+  { key: 'crop', label: 'Crop (px per side)', min: 0, advanced: true },
+];
+
+const CROP_RECT_FIELDS: ReadonlyArray<{ key: keyof DeviceCropRect; label: string; min: number }> = [
+  { key: 'x', label: 'X', min: 0 },
+  { key: 'y', label: 'Y', min: 0 },
+  { key: 'width', label: 'Width', min: 8 },
+  { key: 'height', label: 'Height', min: 8 },
+];
+
+/** All four blank = no region crop, so the key drops out of the posted override. */
+function withCropRectField(
+  image: DeviceImageOverride,
+  key: keyof DeviceCropRect,
+  value: number | undefined,
+): DeviceImageOverride {
+  const { cropRect, ...rest } = image;
+  const next: Partial<DeviceCropRect> = { ...cropRect };
+  if (value === undefined) delete next[key];
+  else next[key] = value;
+  return Object.keys(next).length > 0 ? { ...rest, cropRect: next } : rest;
+}
+
+function tuningKeySize(view: DeviceOverridesView, image: DeviceImageOverride): Size {
+  return {
+    width: image.width ?? view.effective.image.width ?? 0,
+    height: image.height ?? view.effective.image.height ?? 0,
+  };
+}
+
+function tuningFit(
+  view: DeviceOverridesView,
+  image: DeviceImageOverride,
+): FitApplicability | undefined {
+  const width = image.width ?? view.effective.image.width;
+  const height = image.height ?? view.effective.image.height;
+  if (!width || !height) return undefined;
+  return fitApplicability(view.sourceSize, { width, height }, image);
+}
+
+function selectedModel(state: StoreState): string | undefined {
+  const selectedDock = state.status.selectedDock;
+  return (
+    state.status.docks.find((dock) => dock.index === selectedDock)?.modelId ?? state.status.modelId
+  );
+}
+
+function matchingView(
+  view: DeviceOverridesView | null,
+  selectedModelId: string | undefined,
+): DeviceOverridesView | null {
+  return view && (!selectedModelId || view.modelId === selectedModelId) ? view : null;
+}
+
+// Key events are read at click time: subscribing would re-render the form per press.
+function bugReportText(view: DeviceOverridesView): string {
+  const { keyEvents, status } = getSnapshot();
+  return JSON.stringify(buildBugReport(view, __VERSION__, keyEvents, status.modelId), null, 2);
+}
+
+function advancedTuningStatus(image: DeviceImageOverride | undefined): 'Custom' | 'Defaults' {
+  return NUMBER_FIELDS.some((field) => field.advanced && image?.[field.key] !== undefined) ||
+    image?.cropRect !== undefined ||
+    image?.resizeFilter !== undefined
+    ? 'Custom'
+    : 'Defaults';
+}
+
+function EmptyDeviceTuningPanel(): preact.JSX.Element {
+  return (
+    <Collapsible
+      title="Device tuning"
+      status="Unavailable"
+      class="tuning-section"
+      id="device-tuning"
+      bodyId="device-tuning-body"
+    >
+      <p class="help-lead">No device model available yet.</p>
+    </Collapsible>
+  );
+}
+
+function ProfileField({
+  view,
+  coraProfile,
+  onChange,
+}: {
+  readonly view: DeviceOverridesView;
+  readonly coraProfile: string;
+  readonly onChange: (value: string) => void;
+}): preact.JSX.Element | null {
+  if (view.profiles.length === 0) return null;
+  const names = new Map([
+    ['', view.defaults.cora?.advertiseAs ? 'Default (Stream Deck +)' : 'Native (default)'],
+    ...view.profiles.map((p): [string, string] => [p.id, p.name]),
+  ]);
+  return (
+    <SelectField
+      id="tuning-emulation-profile"
+      label="Emulation profile"
+      value={coraProfile}
+      options={[...names.keys()]}
+      optionLabel={(id) => names.get(id) ?? id}
+      onChange={onChange}
+    />
+  );
+}
+
+export function DeviceTuningPanel(): preact.JSX.Element {
+  const selectedModelId = useStore(selectedModel);
+  // A wizard save changes the override behind this form: reload when it opens or closes.
+  const verifying = useStore((s) => s.verifyDock !== null);
+  const selectedModelIdRef = useRef(selectedModelId);
+  selectedModelIdRef.current = selectedModelId;
+  const loadSeqRef = useRef(0);
+  const [view, setView] = useState<DeviceOverridesView | null>(null);
+  const [image, setImage] = useState<DeviceImageOverride>({});
+  const [batchImageTransfers, setBatchImageTransfers] = useState(false);
+  const [coraProfile, setCoraProfile] = useState('');
+  const [coraIdentity, setCoraIdentity] = useState<CoraIdentityDraft>({
+    dockSerialNumber: '',
+    childSerialNumber: '',
+    macAddress: '',
+    dockFirmwareVersion: '',
+    childFirmwareVersion: '',
+  });
+  const action = useAsyncAction();
+  const resetFeedback = action.reset;
+  const copy = useCopyText();
+  const reportCopy = useCopyText();
+
+  const load = useCallback(
+    // oxlint-disable-next-line complexity -- request, selection and state guards stay together.
+    async (signal?: AbortSignal): Promise<void> => {
+      const requested = selectedModelId;
+      // Calls retained by an earlier Apply/Reset/learn callback must not start
+      // another request after selection changes.
+      if (requested !== selectedModelIdRef.current) return;
+      const seq = ++loadSeqRef.current;
+      const query = requested ? `?modelId=${encodeURIComponent(requested)}` : '';
+      const r = await fetch(`/api/device-overrides${query}`, signal ? { signal } : {});
+      if (!r.ok) throw new Error(`Could not load device tuning (${r.status})`);
+      const data = (await r.json()) as DeviceOverridesView;
+      if (seq !== loadSeqRef.current || requested !== selectedModelIdRef.current) return;
+      setView(data);
+      // `tunable` mirrors active settable values without rejected protocol facts.
+      // Reloading intentionally discards drafts so edits never follow another dock.
+      setImage({ ...data.tunable.image });
+      setBatchImageTransfers(data.tunable.wire?.batchImageTransfers === true);
+      setCoraProfile(data.tunable.cora?.advertiseAs ?? '');
+      const cora = data.overrides.cora;
+      setCoraIdentity({
+        dockSerialNumber: cora?.dockSerialNumber ?? '',
+        childSerialNumber: cora?.childSerialNumber ?? '',
+        macAddress: cora?.macAddress ?? '',
+        dockFirmwareVersion: cora?.dockFirmwareVersion ?? '',
+        childFirmwareVersion: cora?.childFirmwareVersion ?? '',
+      });
+    },
+    [selectedModelId],
+  );
+
+  useEffect(
+    function loadSelectedModel() {
+      const ctrl = new AbortController();
+      // Selection boundary: feedback for the previous model must disappear before
+      // the next request finishes, and must never describe the newly selected one.
+      resetFeedback();
+      void load(ctrl.signal).catch(function handleLoadError() {
+        if (!ctrl.signal.aborted) setView(null);
+      });
+      return function abortSelectedModelLoad() {
+        ctrl.abort();
+      };
+    },
+    [load, resetFeedback, verifying],
+  );
+
+  // Never leave previous dock's controls actionable while its replacement view
+  // is loading after a selection change.
+  const activeView = matchingView(view, selectedModelId);
+
+  // Both actions report via setStatus and only then reload: a status published
+  // after the reload could outlive the selection it describes.
+  const apply = (): Promise<void> =>
+    action.run(async () => {
+      if (!activeView) return;
+      const overrides: Record<string, unknown> = { ...activeView.overrides, image };
+      const cora = buildCoraOverride(activeView, coraIdentity, coraProfile);
+      if (typeof activeView.tunable.wire?.batchImageTransfers === 'boolean') {
+        overrides.wire = { ...activeView.overrides.wire, batchImageTransfers };
+      }
+      if (activeView.profiles.length) {
+        // Image + key map are per grid: the draft was seeded from the old target and
+        // would override the new target's transform (e.g. undo the Plus 180°).
+        if (coraProfile !== (activeView.tunable.cora?.advertiseAs ?? '')) {
+          delete overrides.image;
+          delete overrides.keyMap;
+        }
+      }
+      if (cora) overrides.cora = cora;
+      else delete overrides.cora;
+      const parsed = await postJson<{ reconnecting?: boolean }>(
+        '/api/device-overrides',
+        { modelId: activeView.modelId, overrides },
+        'Save failed',
+      );
+      action.setStatus(
+        parsed.reconnecting ? 'Reapplying — the device reconnects…' : 'Applied to the device.',
+      );
+      await load();
+    }, 'Save failed.');
+
+  const resetDefaults = (): Promise<void> =>
+    action.run(async () => {
+      if (!activeView) return;
+      const parsed = await postJson<{ reconnecting?: boolean }>(
+        '/api/device-overrides/reset',
+        { modelId: activeView.modelId },
+        'Reset failed',
+      );
+      action.setStatus(
+        parsed.reconnecting
+          ? 'Reset to the built-in defaults — the device reconnects…'
+          : 'Reset to the built-in defaults.',
+      );
+      await load();
+    }, 'Reset failed.');
+
+  if (!activeView) return <EmptyDeviceTuningPanel />;
+
+  const patch = (p: Partial<DeviceImageOverride>): void => setImage({ ...image, ...p });
+  const numberField = (f: NumberFieldSpec, labelHidden?: boolean): preact.JSX.Element => (
+    <NumberField
+      key={f.key}
+      label={f.label}
+      labelHidden={labelHidden}
+      value={image[f.key] as number | undefined}
+      min={f.min}
+      max={f.max}
+      step={f.step}
+      onChange={(v) => patch({ [f.key]: v })}
+    />
+  );
+  const dimensions = NUMBER_FIELDS.filter((f) => f.key === 'width' || f.key === 'height');
+  const basic = NUMBER_FIELDS.filter((f) => !f.advanced && f.key !== 'width' && f.key !== 'height');
+  const advanced = NUMBER_FIELDS.filter((f) => f.advanced);
+  const fit = tuningFit(activeView, image);
+  const fitMode = image.resizeMode ?? 'resize';
+  const overrideStatus = Object.keys(activeView.overrides).length > 0 ? 'Custom' : 'Defaults';
+
+  return (
+    <Collapsible
+      title={`Device tuning — ${activeView.modelName}`}
+      status={activeView.safeMode ? 'Safe mode' : overrideStatus}
+      class="tuning-section"
+      id="device-tuning"
+      bodyId="device-tuning-body"
+    >
+      <p class="help-lead">
+        Applies to every deck of this model. Screen dark? Reset, or restart with{' '}
+        <code>--no-overrides</code>. <DocsLink topic="device-tuning" />
+      </p>
+
+      {activeView.safeMode && (
+        <p class="settings-error" id="tuning-safe-mode">
+          Safe mode: using defaults. Restart without <code>--no-overrides</code> to restore tuning.
+        </p>
+      )}
+
+      <div class="tuning-grid">
+        <TuningGroup title="Layout">
+          <div class="tuning-field">
+            <span>Rotation</span>
+            <ChipRadioGroup
+              name="rotation"
+              label="Rotation"
+
+              value={image.rotate ?? 0}
+              options={ROTATION_CHIPS}
+              onChange={(rotate) => patch({ rotate })}
+            />
+          </div>
+          <div class="tuning-field">
+            <span class="tuning-label-row">
+              Image fit
+              {fit && <ImageFitHelp fit={fit} />}
+              <ImageCropEditor
+                view={activeView}
+                image={image}
+                keySize={tuningKeySize(activeView, image)}
+                onSaved={() => void load()}
+              />
+            </span>
+            <ChipRadioGroup
+              name="image-fit"
+              label="Image fit"
+              value={fitMode}
+              options={resizeModeChips(fit)}
+              onChange={(resizeMode) => patch({ resizeMode })}
+            />
+          </div>
+          <div class="tuning-field">
+            <span>Pad fill</span>
+            <ChipRadioGroup
+              name="pad-fill"
+              label="Pad fill"
+              value={image.padFill ?? 'edge'}
+              options={padFillChips(fit, fitMode)}
+              onChange={(padFill) => patch({ padFill })}
+            />
+          </div>
+        </TuningGroup>
+        <TuningGroup title="Image">
+          <div class="tuning-field" role="group" aria-labelledby="tuning-dimensions-label">
+            <span id="tuning-dimensions-label">Width/Height (px)</span>
+            <div class="tuning-dimensions">{dimensions.map((f) => numberField(f, true))}</div>
+          </div>
+          {basic.map((f) => numberField(f))}
+          <div class="tuning-checkboxes">
+            <CheckField
+              label="Flip horizontal"
+              checked={image.flipH ?? false}
+              onChange={(flipH) => patch({ flipH })}
+            />
+            <CheckField
+              label="Flip vertical"
+              checked={image.flipV ?? false}
+              onChange={(flipV) => patch({ flipV })}
+            />
+          </div>
+        </TuningGroup>
+      </div>
+      {typeof activeView.tunable.wire?.batchImageTransfers === 'boolean' && (
+        <CheckField
+          id="tuning-batch-image-transfers"
+          label="Batch transfers"
+          checked={batchImageTransfers}
+          onChange={setBatchImageTransfers}
+        />
+      )}
+
+      <ProfileField view={activeView} coraProfile={coraProfile} onChange={setCoraProfile} />
+
+      <ElgatoIdentityFields value={coraIdentity} onChange={setCoraIdentity} />
+
+      <Collapsible title="Advanced" status={advancedTuningStatus(activeView.overrides.image)}>
+        <div class="tuning-grid">
+          {advanced.map((f) => numberField(f))}
+          <div class="tuning-field" role="group" aria-labelledby="tuning-crop-rect-label">
+            <span id="tuning-crop-rect-label">Crop region (source px, blank = whole image)</span>
+            <div class="tuning-dimensions tuning-crop-rect">
+              {CROP_RECT_FIELDS.map((f) => (
+                <NumberField
+                  key={f.key}
+                  label={f.label}
+                  value={image.cropRect?.[f.key]}
+                  min={f.min}
+                  max={1024}
+                  onChange={(v) => setImage(withCropRectField(image, f.key, v))}
+                />
+              ))}
+            </div>
+          </div>
+          <SelectField
+            label="Resize filter"
+            value={image.resizeFilter ?? 'triangle'}
+            options={RESIZE_FILTERS}
+            onChange={(resizeFilter) => patch({ resizeFilter })}
+          />
+        </div>
+      </Collapsible>
+
+      <div class="settings-actions">
+        <GhostButton id="tuning-apply" disabled={action.busy} onClick={apply}>
+          Apply
+        </GhostButton>
+        <GhostButton id="tuning-reset" disabled={action.busy} onClick={resetDefaults}>
+          Reset
+        </GhostButton>
+        <GhostButton
+          id="tuning-copy"
+          onClick={() =>
+            copy.copy(JSON.stringify({ [activeView.modelId]: activeView.overrides }, null, 2))
+          }
+        >
+          {copyLabel(copy.status, 'Copy JSON')}
+        </GhostButton>
+        <GhostButton
+          id="tuning-copy-report"
+          onClick={() => reportCopy.copy(bugReportText(activeView))}
+        >
+          {copyLabel(reportCopy.status, 'Copy for bug report')}
+        </GhostButton>
+        <VerifyButton modelId={activeView.modelId} />
+      </div>
+      <Feedback error={action.error} status={action.status} />
+
+      <KeymapLearn view={activeView} onSaved={() => void load()} />
+    </Collapsible>
+  );
+}

@@ -1,23 +1,10 @@
 import assert from 'tjs:assert';
-import { buildArgs, MdnsAdvertiser } from '../src/mdns-advertiser.js';
-import { MDNS_SERVICE_NAME } from '../src/types.js';
-import { platformName } from '../src/os-utils.ts';
+import { buildArgs, MdnsAdvertiser } from '../src/infra/mdns-advertiser.js';
+import { MDNS_SERVICE_NAME } from '../src/shared/types.js';
+import { platformName } from '../src/infra/os-utils.ts';
+import { testAsync as test, summary } from './helpers/harness.js';
 
-let passed = 0;
-let failed = 0;
-
-async function test(name: string, fn: () => void | Promise<void>): Promise<void> {
-  try {
-    await fn();
-    console.log(`  ✓ ${name}`);
-    passed++;
-  } catch (e) {
-    console.error(`  ✗ ${name}: ${(e as Error).message}`);
-    failed++;
-  }
-}
-
-// ── buildArgs ──────────────────────────────────────────────────────────────
+// buildArgs
 
 console.log('\nbuildArgs');
 
@@ -42,7 +29,7 @@ await test('empty/unknown platform falls through to the dns-sd default branch wi
   assert.ok(args.length > 0, 'returns a non-empty arg list');
 });
 
-// ── MdnsAdvertiser serviceName ───────────────────────────────────────────────
+// MdnsAdvertiser serviceName
 
 console.log('\nMdnsAdvertiser serviceName');
 
@@ -81,7 +68,7 @@ await test('serviceName defaults to MDNS_SERVICE_NAME when omitted', async () =>
   assert.ok(spawnLog.includes(MDNS_SERVICE_NAME), 'default serviceName should be in spawn log');
 });
 
-// ── platformName ───────────────────────────────────────────────────────────
+// platformName
 
 console.log('\nplatformName');
 
@@ -90,7 +77,6 @@ await test('returns a string without throwing', () => {
   assert.equal(typeof name, 'string');
 });
 
-// ── Summary ───────────────────────────────────────────────────────────────────
+// Summary
 
-console.log(`\n${passed} passed, ${failed} failed`);
-if (failed > 0) tjs.exit(1);
+summary();

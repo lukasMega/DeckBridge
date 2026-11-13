@@ -1,11 +1,11 @@
 name: Release deckbridge
 
-# Trigger: push a tag like deckbridge-v1.2.3
-# Or dispatch manually for a smoke-test dry run (skips GitHub Release by default).
+# Version bumps run from main so every release can reuse main-scoped caches.
+# The release job creates the immutable deckbridge-v* tag after builds pass.
 on:
   push:
-    tags:
-      - 'deckbridge-v*'
+    branches: [main]
+    paths: ['ts/package.json']
   workflow_dispatch:
     inputs:
       skip_release:
@@ -18,28 +18,69 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: deckbridge-release
+  cancel-in-progress: false
+
+# Packaged release binaries bypass telemetry-env.ts's CI detection.
+env:
+  DECKBRIDGE_NO_TELEMETRY: '1'
+
 jobs:
+  prepare:
+    name: Prepare release metadata
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.version.outputs.tag }}
+      should_build: ${{ steps.version.outputs.should_build }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Read version
+        id: version
+        run: |
+          VERSION=$(node -p "require('./ts/package.json').version")
+          TAG="deckbridge-v$VERSION"
+          if [[ "$GITHUB_EVENT_NAME" == "push" ]] && git rev-parse "$TAG" >/dev/null 2>&1; then
+            SHOULD_BUILD=false
+          else
+            SHOULD_BUILD=true
+          fi
+          {
+            echo "tag=$TAG"
+            echo "should_build=$SHOULD_BUILD"
+          } >> "$GITHUB_OUTPUT"
+
+  virustotal-poc:
+    name: Scan isolation samples
+    needs: prepare
+    if: needs.prepare.outputs.should_build == 'true'
+    uses: ./.github/workflows/virustotal-poc.yml
+    with:
+      scan: true
+    secrets:
+      VIRUSTOTAL_API_KEY: ${{ secrets.VIRUSTOTAL_API_KEY }}
+
   build:
     name: Build ${{ matrix.platform }}
+    needs: prepare
+    if: needs.prepare.outputs.should_build == 'true'
     strategy:
       fail-fast: false
       matrix:
         include:
           - os: macos-latest       # Apple Silicon (arm64)
             platform: macos-arm64
+            triple: aarch64-apple-darwin
+            tauri: '1'
           - os: macos-15-intel     # Intel (x86_64) — no prebuilt slim asset
             platform: macos-x86_64
+            triple: x86_64-apple-darwin
+            tauri: '1'
             from_source: '1'
-          # Linux re-enabled: the old blocker was mise-action blind-installing the
-          # github:lukasMega/txiki.js mise tool (no linux-arm64 asset), and mise.toml
-          # no longer declares that tool at all.
-          # See .claude/plans/2026-07-31_linux-build-support.md.
-          # Both Linux jobs run on 24.04 images on purpose: the prebuilt slim
-          # runtime is itself built on 24.04, so a 22.04 runner dies at
-          # `tjs compile` with "GLIBC_2.38 not found". Consequence: the shipped
-          # Linux binaries need glibc >= 2.38 (Ubuntu 24.04+, Debian 13+). To
-          # lower that floor, set from_source on the job and move it back to a
-          # 22.04 image — the same slim profile then links against glibc 2.35.
+          # Prebuilt Linux runtime needs glibc >= 2.38 (Ubuntu 24.04+).
           - os: ubuntu-24.04
             platform: linux-x86_64
           - os: ubuntu-24.04-arm
@@ -47,35 +88,29 @@ jobs:
 
     runs-on: ${{ matrix.os }}
 
-    # Every platform ships the SLIM txiki.js runtime (no TLS/WASM/SQLite/mimalloc,
-    # MinSizeRel + compressed bytecode + stripped) — but it is *downloaded*
-    # prebuilt, so most platforms need no C/C++ toolchain and no from-source build.
-    # Only macos-x86_64 has no published asset and sets from_source, which makes
-    # tjs-setup run scripts/tjs-build.mjs (same profile, built locally).
+    # Intel macOS builds txiki.js locally; other platforms download it.
     env:
       TJS_FROM_SOURCE: ${{ matrix.from_source }}
 
     steps:
       - uses: actions/checkout@v7
 
+      - name: Sync Tauri version
+        if: matrix.tauri == '1'
+        run: node scripts/sync-version.mjs
+
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
 
       - name: Cache Rust
-        uses: actions/cache@v6
+        uses: Swatinem/rust-cache@v2
         with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            rust/target
-          key: rust-${{ matrix.platform }}-${{ hashFiles('rust/**/Cargo.lock', 'rust/deckbridge-tray/**') }}
-          restore-keys: rust-${{ matrix.platform }}-
+          workspaces: |
+            rust -> target
+            src-tauri -> target
+          shared-key: release-${{ matrix.platform }}
 
-      # Cache the slim txiki.js runtime so it builds once per platform per build
-      # config change (the from-source build clones + compiles txiki.js, which is
-      # slow). On a hit the binary is restored to $TJS and tjs-setup skips the
-      # rebuild. Key is invalidated by the pinned version (mise.toml) or the
-      # build script itself (tjs-build.mjs, e.g. its cmake flags).
+      # Cache invalidates when runtime version or build scripts change.
       - name: Cache slim txiki.js runtime
         uses: actions/cache@v6
         with:
@@ -86,31 +121,21 @@ jobs:
         if: startsWith(matrix.os, 'macos')
         run: brew install hidapi
 
-      # Linux: libhidapi/libudev for the app, libffi for the runtime's tjs:ffi
-      # dlopen, and the GTK/appindicator/xdo trio for the deckbridge-tray crate.
-      # (cmake/build-essential stay: harmless on the download path, and needed if
-      # this job is ever flipped to from_source.)
+      # Keep toolchain packages for possible from-source builds.
       - name: Install system deps (Linux)
         if: startsWith(matrix.os, 'ubuntu')
-        # See the note on ci.yml's apt steps: the runner image's preinstalled
-        # Google Chrome source can fail `apt-get update` outright when Google's
-        # index drifts, and nothing here installs from it.
         run: |
+          # Chrome's preinstalled source sometimes breaks apt-get update.
           sudo rm -f /etc/apt/sources.list.d/google-chrome.list
           sudo apt-get update
-          sudo apt-get install -y libhidapi-dev libudev-dev libffi-dev cmake build-essential libgtk-3-dev libxdo-dev libayatana-appindicator3-dev
+          sudo apt-get install -y libhidapi-dev libudev-dev libffi-dev cmake build-essential libgtk-3-dev libxdo-dev libayatana-appindicator3-dev netcat-openbsd unzip curl
 
-      - uses: jdx/mise-action@v4
+      - uses: jdx/mise-action@v5
 
       - name: Compile
         run: mise run compile
 
-      # Ad-hoc sign deckbridge-tray only. The relay (deckbridge) is NOT re-signed:
-      # `tjs compile` appends the bytecode payload after the Mach-O and ships a
-      # linker-signed ad-hoc signature the kernel runs leniently; `codesign
-      # --force` would replace it and fail strict validation on the trailing data
-      # ("main executable failed strict validation"). The as-compiled signature is
-      # what ships.
+      # Never re-sign relay: its bytecode payload trails the Mach-O signature.
       - name: Ad-hoc sign deckbridge-tray (macOS)
         if: startsWith(matrix.os, 'macos')
         run: |
@@ -118,20 +143,16 @@ jobs:
           codesign -dv deckbridge 2>&1 | head -3
 
       - name: Package
-        run: |
-          if [[ "$GITHUB_REF" == refs/tags/deckbridge-v* ]]; then
-            VERSION="${GITHUB_REF_NAME#deckbridge-}"
-          else
-            VERSION="dev"
-          fi
-          node scripts/package.mjs "$VERSION"
-
-      - name: Smoke-test deps (Linux)
-        if: startsWith(matrix.os, 'ubuntu')
-        run: sudo apt-get install -y netcat-openbsd unzip curl
+        run: node scripts/package.mjs
 
       - name: Smoke test (boots cleanly, serves, shuts down)
-        run: ./scripts/e2e-smoke.sh "$(find dist -maxdepth 1 -name '*.zip' -printf '%T@ %p\n' | sort -rn | head -1 | cut -d' ' -f2-)"
+        run: ./scripts/e2e-smoke.sh
+
+      # Extensions are platform-independent, so one job ships them. After the smoke
+      # test: it boots the newest zip in dist/.
+      - name: Package extensions
+        if: matrix.platform == 'linux-x86_64'
+        run: mise run package-extensions
 
       - uses: actions/upload-artifact@v7
         with:
@@ -139,26 +160,62 @@ jobs:
           path: dist/*.zip
           if-no-files-found: error
 
-  # Windows is packaged differently: instead of a raw zip, the binary is wrapped
-  # in a Tauri v2 supervisor shell (src-tauri/) and shipped as an NSIS installer
-  # (Scoop/winget-friendly, no Gatekeeper/SmartScreen friction via Scoop). The
-  # relay binary + deckbridge-tray ride along as Tauri sidecars (externalBin), so they
-  # must be renamed to the MSVC target triple before `cargo tauri build` (G2).
+      - name: Install pinned Tauri CLI
+        if: matrix.tauri == '1'
+        working-directory: src-tauri
+        run: pnpm install --frozen-lockfile
+
+      - name: Stage Tauri sidecars
+        if: matrix.tauri == '1'
+        run: |
+          mkdir -p src-tauri/binaries
+          cp deckbridge "src-tauri/binaries/deckbridge-${{ matrix.triple }}"
+          cp rust/target/release/deckbridge-tray "src-tauri/binaries/deckbridge-tray-${{ matrix.triple }}"
+          chmod +x "src-tauri/binaries/deckbridge-${{ matrix.triple }}" "src-tauri/binaries/deckbridge-tray-${{ matrix.triple }}"
+          codesign --force --sign - --timestamp=none "src-tauri/binaries/deckbridge-tray-${{ matrix.triple }}"
+
+      # Intel source tree needs removal before DMG creation (~1 GB).
+      - name: Reclaim Tauri disk space
+        if: matrix.tauri == '1' && matrix.from_source == '1'
+        run: |
+          du -sh vendor/txiki.js-src || true
+          rm -rf vendor/txiki.js-src
+          df -h .
+
+      # Retry intermittent hdiutil "Resource busy" failures.
+      - name: Build Tauri dmg
+        if: matrix.tauri == '1'
+        working-directory: src-tauri
+        run: |
+          for attempt in 1 2 3; do
+            if pnpm tauri build --bundles dmg --verbose; then
+              exit 0
+            fi
+            if [[ "$attempt" == 3 ]]; then
+              exit 1
+            fi
+            echo "DMG build failed; retrying in $((attempt * 10)) seconds."
+            sleep $((attempt * 10))
+          done
+
+      - uses: actions/upload-artifact@v7
+        if: matrix.tauri == '1'
+        with:
+          name: ${{ matrix.platform }}-dmg
+          path: src-tauri/target/release/bundle/dmg/*.dmg
+          if-no-files-found: error
+
+  # Windows ships both portable ZIP and Tauri NSIS installer.
   build-windows:
-    name: Build windows-x86_64 (Tauri NSIS)
+    name: Build windows-x86_64 (NSIS + portable)
+    needs: prepare
+    if: needs.prepare.outputs.should_build == 'true'
     runs-on: windows-latest
-    # No TJS_FROM_SOURCE here (unlike the Unix jobs above): the from-source build
-    # (scripts/tjs-build.mjs) is unverified against MSVC-only runners. tjs-setup
-    # downloads the prebuilt `txiki-slim-ffi-windows-x86_64.zip` instead — since
-    # the switch to the slim release that download IS the slim runtime, so this
-    # job is no longer trading size for reliability.
+    # Windows downloads txiki.js; source build is unverified on MSVC.
 
     steps:
       - uses: actions/checkout@v7
 
-      # Stamps ts/package.json's version (the single source of truth) into
-      # src-tauri/Cargo.toml + tauri.conf.json so the NSIS installer version
-      # is correct without a build-time -c override.
       - name: Sync version into Cargo.toml/tauri.conf.json
         run: node scripts/sync-version.mjs
 
@@ -166,15 +223,12 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
 
       - name: Cache Rust
-        uses: actions/cache@v6
+        uses: Swatinem/rust-cache@v2
         with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            rust/target
-            src-tauri/target
-          key: rust-windows-x86_64-${{ hashFiles('rust/**/Cargo.lock', 'rust/deckbridge-tray/**', 'src-tauri/Cargo.lock') }}
-          restore-keys: rust-windows-x86_64-
+          workspaces: |
+            rust -> target
+            src-tauri -> target
+          shared-key: release-windows-x86_64
 
       - name: Cache txiki.js runtime
         uses: actions/cache@v6
@@ -182,92 +236,75 @@ jobs:
           path: vendor/txiki.js/build/tjs.exe
           key: tjs-windows-x86_64-${{ hashFiles('mise.toml') }}
 
-      # Windows ships no system hidapi.dll (B3) — build it from source and point
-      # HIDAPI_LIB at the result so ts/build.mjs's embed step (Phase 2) can find
-      # it; without this the compile step below hard-errors by design (a
-      # Windows binary with no HID backend would silently fail at runtime).
+      - name: Cache hidapi.dll
+        id: hidapi-cache
+        uses: actions/cache@v6
+        with:
+          path: vendor/hidapi/hidapi.dll
+          key: hidapi-0.15.0-windows-x86_64
+
+      # Build hidapi.dll once, then reuse its cache.
       - name: Build hidapi.dll
-        shell: pwsh
+        if: steps.hidapi-cache.outputs.cache-hit != 'true'
         run: |
           git clone --depth 1 --branch hidapi-0.15.0 https://github.com/libusb/hidapi C:\hidapi-src
           cmake -B C:\hidapi-build -S C:\hidapi-src
           cmake --build C:\hidapi-build --config Release
           $dll = Get-ChildItem -Path C:\hidapi-build -Filter hidapi.dll -Recurse | Select-Object -First 1
           if (-not $dll) { Write-Error "hidapi.dll not found after build"; exit 1 }
-          echo "HIDAPI_LIB=$($dll.FullName)" >> $env:GITHUB_ENV
+          New-Item -ItemType Directory -Force -Path "vendor/hidapi" | Out-Null
+          Copy-Item $dll.FullName "vendor/hidapi/hidapi.dll"
 
-      - uses: jdx/mise-action@v4
+      - name: Configure hidapi.dll
+        run: echo "HIDAPI_LIB=${{ github.workspace }}\vendor\hidapi\hidapi.dll" >> $env:GITHUB_ENV
 
-      # Produces the Windows relay binary (deckbridge[.exe]) via the same build
-      # chain the other platforms use. txiki's `compile` emits a PE executable.
+      - uses: jdx/mise-action@v5
+
+      - name: Install pinned Tauri CLI
+        working-directory: src-tauri
+        run: pnpm install --frozen-lockfile
+
+      # Runtime needs icon stamping before relay compilation.
+      - name: Set up txiki.js runtime
+        run: mise run tjs-setup
+
+      # Stamping compiled relay would erase its PE bytecode overlay.
+      - name: Stamp icon + version info into the runtime
+        run: |
+          Invoke-WebRequest -Uri "https://github.com/electron/rcedit/releases/download/v2.0.0/rcedit-x64.exe" -OutFile rcedit.exe
+          ./scripts/stamp-exe.ps1 -Target "vendor/txiki.js/build/tjs.exe" -Rcedit "rcedit.exe"
+
       - name: Compile relay binary
         run: mise run compile
 
-      # Boot the just-compiled binary in mock mode (no HID device needed),
-      # poll the WebUI until it responds, then kill it — mirrors the
-      # boot/serve/shutdown checks in scripts/e2e-smoke.sh (bash, POSIX-only)
-      # for the platform that script can't run on.
-      - name: Smoke test (mock mode, poll WebUI, then kill)
-        shell: pwsh
-        run: |
-          $relay = if (Test-Path "deckbridge.exe") { "deckbridge.exe" } else { "deckbridge" }
-          $env:DECKBRIDGE_MOCK = "1"
-          $proc = Start-Process -FilePath ".\$relay" -PassThru `
-            -RedirectStandardOutput "smoke-stdout.log" -RedirectStandardError "smoke-stderr.log"
-          $ready = $false
-          for ($i = 0; $i -lt 60; $i++) {
-            try {
-              $resp = Invoke-WebRequest -Uri "http://localhost:3000" -UseBasicParsing -TimeoutSec 2
-              if ($resp.StatusCode -eq 200) { $ready = $true; break }
-            } catch {}
-            if ($proc.HasExited) {
-              Write-Host "FAIL: process exited before becoming ready"
-              Get-Content smoke-stderr.log -ErrorAction SilentlyContinue
-              exit 1
-            }
-            Start-Sleep -Milliseconds 500
-          }
-          if (-not $ready) {
-            Write-Host "FAIL: WebUI never responded with 200 after 30s"
-            Get-Content smoke-stderr.log -ErrorAction SilentlyContinue
-            Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
-            exit 1
-          }
-          Write-Host "Smoke test OK: WebUI responded 200"
-          Stop-Process -Id $proc.Id -Force
+      # Tray binary has no overlay; stamp after compilation.
+      - name: Stamp icon + version info into the tray binary
+        run: ./scripts/stamp-exe.ps1 -Target "rust/target/release/deckbridge-tray.exe" -Rcedit "rcedit.exe"
 
-      # deckbridge-tray.exe — the system-tray sidecar (same Rust crate as macOS/Linux).
-      - name: Build deckbridge-tray
-        run: mise run tray-rs
+      - name: Smoke test (real mode, poll WebUI, then kill)
+        run: ./scripts/e2e-smoke.ps1
 
-      # Tauri's bundler only picks up the sidecar whose filename matches the
-      # build's target triple (G2), so copy both binaries into src-tauri/binaries/
-      # with the -x86_64-pc-windows-msvc.exe suffix. `mise run compile` writes
-      # either deckbridge or deckbridge.exe depending on txiki; handle both.
+      # Package portable binaries before staging Tauri sidecars.
+      - name: Package portable zip
+        run: node scripts/package.mjs
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: windows-x86_64-portable
+          path: dist/*.zip
+          if-no-files-found: error
+
+      # Tauri requires sidecars named for the MSVC target triple.
       - name: Stage sidecars for Tauri (target-triple names)
-        shell: pwsh
         run: |
           $relay = if (Test-Path "deckbridge.exe") { "deckbridge.exe" } else { "deckbridge" }
           Copy-Item $relay "src-tauri/binaries/deckbridge-x86_64-pc-windows-msvc.exe" -Force
           Copy-Item "rust/target/release/deckbridge-tray.exe" "src-tauri/binaries/deckbridge-tray-x86_64-pc-windows-msvc.exe" -Force
           Get-ChildItem "src-tauri/binaries/"
 
-      # RUST_MIN_STACK: rustc's codegen thread blows its 8 MB stack building
-      # tauri-utils at opt-level=3 — LLVM's ScopedNoAliasAAResult recurses deep
-      # enough to SIGSEGV (seen on macos-arm64, tauri-cli 2.11.4/tauri-utils
-      # 2.9.3). rustc's own suggested workaround; harmless elsewhere.
-      - name: Install Tauri CLI
-        env:
-          RUST_MIN_STACK: '16777216'
-        run: cargo install tauri-cli --version "^2" --locked
-
-      # tauri.conf.json's version was already stamped from ts/package.json by
-      # the "Sync version" step above — no build-time override needed.
-      # NSIS is fetched by the bundler; WebView2 is preinstalled on the runner.
       - name: Build Tauri NSIS installer
-        shell: pwsh
         working-directory: src-tauri
-        run: cargo tauri build
+        run: pnpm tauri build
 
       - uses: actions/upload-artifact@v7
         with:
@@ -275,147 +312,125 @@ jobs:
           path: src-tauri/target/release/bundle/nsis/*-setup.exe
           if-no-files-found: error
 
-  # macOS Tauri .dmg (ADDITIVE — the zip artifacts in the `build` job above stay
-  # the Homebrew/manual path). Model A: the relay binary + deckbridge-tray ride along as
-  # Tauri sidecars (externalBin), renamed to the apple-darwin target triple (G2),
-  # ad-hoc signed (no Apple Developer ID). The macOS bundle config lives in
-  # src-tauri/tauri.macos.conf.json (targets app,dmg; signingIdentity "-";
-  # hardenedRuntime false — keeps the relay's extract+dlopen of native libs
-  # working, plan gotcha G3). Downloads are unsigned vs Gatekeeper → right-click
-  # "Open" or `xattr -dr com.apple.quarantine` (documented in README-DISTRIBUTION).
-  build-macos-tauri:
-    name: Build ${{ matrix.platform }} (Tauri dmg)
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - os: macos-latest      # Apple Silicon (arm64)
-            platform: macos-arm64
-            triple: aarch64-apple-darwin
-          - os: macos-15-intel    # Intel (x86_64) — no prebuilt slim asset
-            platform: macos-x86_64
-            triple: x86_64-apple-darwin
-            from_source: '1'
-
-    runs-on: ${{ matrix.os }}
-    # Same rule as the `build` job: slim runtime everywhere, downloaded prebuilt
-    # unless the platform has no published asset.
-    env:
-      TJS_FROM_SOURCE: ${{ matrix.from_source }}
-
+  publish-virustotal-docs:
+    name: Publish VirusTotal comparison
+    needs: [prepare, virustotal-poc, build, build-windows]
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    outputs:
+      docs_sha: ${{ steps.commit.outputs.sha }}
+    permissions:
+      contents: write
+      actions: write
     steps:
       - uses: actions/checkout@v7
-
-      # Stamps ts/package.json's version (the single source of truth) into
-      # src-tauri/Cargo.toml + tauri.conf.json so the dmg version is correct
-      # without a build-time -c override.
-      - name: Sync version into Cargo.toml/tauri.conf.json
-        run: node scripts/sync-version.mjs
-
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Cache Rust
-        uses: actions/cache@v6
         with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            rust/target
-            src-tauri/target
-          key: rust-tauri-${{ matrix.platform }}-${{ hashFiles('rust/**/Cargo.lock', 'rust/deckbridge-tray/**', 'src-tauri/Cargo.lock') }}
-          restore-keys: rust-tauri-${{ matrix.platform }}-
-
-      - name: Cache slim txiki.js runtime
-        uses: actions/cache@v6
+          ref: main
+          fetch-depth: 0
+      - uses: actions/download-artifact@v8
         with:
-          path: vendor/txiki.js/build/tjs
-          key: tjs-slim-${{ matrix.platform }}-${{ hashFiles('mise.toml', 'scripts/tjs-build.mjs', 'scripts/tjs-download.mjs') }}
-
-      - name: Install libhidapi (macOS)
-        run: brew install hidapi
-
-      - uses: jdx/mise-action@v4
-
-      - name: Compile relay binary
-        run: mise run compile
-
-      - name: Build deckbridge-tray
-        run: mise run tray-rs
-
-      # Tauri's bundler only picks up the sidecar whose filename matches the
-      # build's target triple (G2). `mise run compile` writes `deckbridge`.
-      - name: Stage sidecars for Tauri (apple-darwin triple)
+          name: virustotal-poc-results-windows-x64
+          path: poc-results/windows
+      - uses: actions/download-artifact@v8
+        with:
+          name: virustotal-poc-results-macos-arm64
+          path: poc-results/macos
+      - name: Generate comparison page
+        run: node .github/virustotal-poc/publish-results.mjs poc-results/windows/results-windows-x64.json poc-results/macos/results-macos-arm64.json
+      - name: Commit comparison page
+        id: commit
+        if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || inputs.skip_release == 'false')
         run: |
-          mkdir -p src-tauri/binaries
-          cp deckbridge                             "src-tauri/binaries/deckbridge-${{ matrix.triple }}"
-          cp rust/target/release/deckbridge-tray "src-tauri/binaries/deckbridge-tray-${{ matrix.triple }}"
-          # cp can leave a non-executable file if the dest already exists; ensure
-          # both sidecars are executable so they spawn from inside the .app.
-          chmod +x "src-tauri/binaries/deckbridge-${{ matrix.triple }}" "src-tauri/binaries/deckbridge-tray-${{ matrix.triple }}"
-          ls -la src-tauri/binaries/
-
-      # Ad-hoc sign deckbridge-tray only. The relay is left with its as-compiled
-      # linker-signed signature — re-signing a `tjs compile` binary (payload
-      # appended after the Mach-O) fails strict validation. The Tauri bundler does
-      # NOT codesign the app either (tauri.macos.conf.json sets no signingIdentity),
-      # since its deep-sign pass would hit the same wall on the relay sidecar; each
-      # Mach-O ships its own ad-hoc signature instead.
-      - name: Ad-hoc sign deckbridge-tray sidecar
-        run: |
-          codesign --force --sign - --timestamp=none "src-tauri/binaries/deckbridge-tray-${{ matrix.triple }}"
-
-      # RUST_MIN_STACK: rustc's codegen thread blows its 8 MB stack building
-      # tauri-utils at opt-level=3 — LLVM's ScopedNoAliasAAResult recurses deep
-      # enough to SIGSEGV (seen on macos-arm64, tauri-cli 2.11.4/tauri-utils
-      # 2.9.3). rustc's own suggested workaround; harmless elsewhere.
-      - name: Install Tauri CLI
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add docs/virustotal.md
+          if ! git diff --cached --quiet; then
+            git commit -m "docs: publish VirusTotal PoC results for ${{ needs.prepare.outputs.tag }}"
+            git push origin HEAD:main
+          fi
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+      # GITHUB_TOKEN pushes do not trigger push workflows.
+      - name: Deploy updated docs and wait
+        if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || inputs.skip_release == 'false')
         env:
-          RUST_MIN_STACK: '16777216'
-        run: cargo install tauri-cli --version "^2" --locked
-
-      # tauri.conf.json's version was already stamped from ts/package.json by
-      # the "Sync version" step above — no build-time override needed.
-      # --bundles dmg is belt-and-suspenders; tauri.macos.conf.json already sets
-      # targets app,dmg (its array REPLACES the base ["nsis"] via RFC 7396 merge).
-      - name: Build Tauri dmg
-        working-directory: src-tauri
-        run: cargo tauri build --bundles dmg
-
-      - uses: actions/upload-artifact@v7
-        with:
-          name: ${{ matrix.platform }}-dmg
-          path: src-tauri/target/release/bundle/dmg/*.dmg
-          if-no-files-found: error
+          GH_TOKEN: ${{ github.token }}
+          DOC_SHA: ${{ steps.commit.outputs.sha }}
+        run: |
+          gh workflow run deploy-docs.yml --ref main
+          run_id=''
+          for _ in {1..30}; do
+            run_id=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/deploy-docs.yml/runs?event=workflow_dispatch&head_sha=$DOC_SHA&per_page=1" --jq '.workflow_runs[0].id // empty')
+            [ -n "$run_id" ] && break
+            sleep 10
+          done
+          [ -n "$run_id" ] || { echo 'Docs deployment run not found'; exit 1; }
+          for _ in {1..180}; do
+            state=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$run_id" --jq '.status + ":" + (.conclusion // "")')
+            if [ "$state" = 'completed:success' ]; then
+              exit 0
+            fi
+            if [[ "$state" == completed:* ]]; then
+              echo "Docs deployment failed: $state"
+              exit 1
+            fi
+            sleep 10
+          done
+          echo 'Docs deployment timed out'
+          exit 1
 
   release:
     name: Publish GitHub Release
-    needs: [build, build-windows, build-macos-tauri]
-    if: github.event_name == 'push' || inputs.skip_release == 'false'
+    needs: [prepare, build, build-windows, publish-virustotal-docs]
     runs-on: ubuntu-latest
     permissions:
       contents: write
 
     steps:
-      # Guards against a stray/manual tag diverging from ts/package.json — the
-      # normal path is auto-tag.yml, which only ever tags the current version.
+      # Needed for release scripts.
       - uses: actions/checkout@v7
-        if: github.event_name == 'push'
-
-      - name: Verify tag matches ts/package.json version
-        if: github.event_name == 'push'
-        run: |
-          TAG_VERSION="${GITHUB_REF_NAME#deckbridge-v}"
-          PKG_VERSION=$(node -p "require('./ts/package.json').version")
-          if [ "$TAG_VERSION" != "$PKG_VERSION" ]; then
-            echo "::error::tag $GITHUB_REF_NAME (version $TAG_VERSION) does not match ts/package.json version $PKG_VERSION"
-            exit 1
-          fi
+        with:
+          sparse-checkout: .github/scripts
+          ref: ${{ github.sha }}
 
       - uses: actions/download-artifact@v8
         with:
-          path: artifacts
-          merge-multiple: true
+          path: downloaded
+
+      # PoC samples (hello-tauri-setup.exe, hello-tauri.dmg) would match the release globs.
+      - name: Collect release files, excluding VirusTotal PoC artifacts
+        run: |
+          mkdir artifacts
+          for dir in downloaded/*/; do
+            case "$(basename "$dir")" in virustotal-poc-*) continue ;; esac
+            mv "$dir"* artifacts/
+          done
+          ls -la artifacts
+
+      # Scan before checksumming and publishing; infections fail release.
+      - name: Install ClamAV and update signatures
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clamav
+          sudo systemctl stop clamav-freshclam.service || true
+          sudo freshclam
+
+      - name: Scan release artifacts for malware
+        run: clamscan --recursive --infected artifacts
+
+      # Per-file retries retain other links after transient failures.
+      - name: Upload release artifacts to VirusTotal
+        continue-on-error: true
+        env:
+          VT_API_KEY: ${{ secrets.VIRUSTOTAL_API_KEY }}
+          VT_OUT: ${{ github.workspace }}/vt-analysis.txt
+        run: |
+          if [ -z "${VT_API_KEY:-}" ]; then
+            echo "::warning::VIRUSTOTAL_API_KEY not set; skipping scan uploads"
+            : > "$VT_OUT"
+            exit 0
+          fi
+          chmod +x .github/scripts/vt-upload.sh
+          .github/scripts/vt-upload.sh artifacts/*.zip artifacts/*-setup.exe artifacts/*.dmg
 
       - name: Generate SHA256SUMS
         run: |
@@ -423,13 +438,21 @@ jobs:
           sha256sum ./*.zip ./*-setup.exe ./*.dmg > SHA256SUMS.txt
           cat SHA256SUMS.txt
 
+      # Include every artifact, even when its VirusTotal scan failed.
+      - name: Build release body
+        env:
+          VT_OUT: ${{ github.workspace }}/vt-analysis.txt
+        run: bash .github/scripts/release-body.sh
+
       - name: Create release
+        if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || inputs.skip_release == 'false')
         uses: softprops/action-gh-release@v3
         with:
           generate_release_notes: true
-          name: "${{ github.ref_name }}"
-          body: |
-            see docs: https://lukasmega.github.io/DeckBridge/
+          tag_name: "${{ needs.prepare.outputs.tag }}"
+          name: "${{ needs.prepare.outputs.tag }}"
+          target_commitish: "${{ needs.publish-virustotal-docs.outputs.docs_sha }}"
+          body_path: release-body.md
           files: |
             artifacts/*.zip
             artifacts/*-setup.exe

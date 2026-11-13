@@ -64,7 +64,6 @@ if (process.env.COVERAGE_ENFORCE === '1') {
   if (failures.length) process.exit(1);
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
 // istanbul-lib-instrument only derives a name/decl for FunctionDeclaration and
 // FunctionExpression nodes that carry an `id` (visitor.js `insertFunctionCounter`).
 // Class/object methods (whose name lives on `node.key`) fall through to an anonymous

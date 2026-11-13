@@ -1,70 +1,40 @@
-import type {
-  Status,
-  Stats,
-  MockConfig,
-  KeyEvent,
-  ServerLog,
-  CommLog,
-  DeviceModel,
-  DeviceIdentity,
-  ExtraKeyCfg,
-} from './ui-types.js';
-import { applyImage } from './key-preview.js';
-import { connectWS } from './ui-ws.js';
-import { mountSimple } from './simple-mount.js';
-import { mountAdvanced } from './advanced-mount.js';
-import * as store from './store.js';
+import { connectWS } from './lib/ui-ws.js';
+import { mountBoot, mountSimple } from './simple/mount.js';
+import { mountAdvanced } from './advanced/mount.js';
+import { hydrate } from './lib/hydrate.js';
+import type { StateResponse } from './ui-types.js';
 
-interface InitialState extends Status {
-  stats: Stats;
-  mockConfig?: MockConfig;
-  images: Record<string, number>;
-  logs?: ServerLog[];
-  commLogs?: CommLog[];
-  keyEvents?: KeyEvent[];
-  resizeEnabled?: boolean;
-  brightnessOverride?: boolean;
-  imageModeOverride?: string | null;
-  deviceModels?: DeviceModel[];
-  deviceIdentity?: DeviceIdentity;
-  extraKeys?: Record<string, ExtraKeyCfg>;
+// Simple-only build: never reach the advanced view. Clear any persisted 'advanced'
+// mode BEFORE the state fetch — ui.html's pre-paint script re-applies
+// data-mode="advanced" from localStorage, and ui-base.css hides #simple-view while
+// that attribute is set, so an upgrading user would stare at a blank page for the
+// whole round-trip (forever, if /api/state never resolves).
+if (__SIMPLE_ONLY__) {
+  document.documentElement.removeAttribute('data-mode');
+  if (!__DEMO__) localStorage.removeItem('deckbridge.mode');
 }
 
-void fetch('/api/state')
-  .then((r) => r.json() as Promise<InitialState>)
-  .then((st) => {
-    // Populate store — both Preact views read from here
-    store.patch({
-      status: st,
-      stats: st.stats,
-      mockConfig: st.mockConfig,
-      brightness: st.brightness ?? 82,
-      resizeEnabled: st.resizeEnabled ?? true,
-      brightnessOverride: st.brightnessOverride ?? true,
-      imageMode: st.imageModeOverride ?? null,
-      deviceModels: st.deviceModels ?? [],
-      deviceIdentity: st.deviceIdentity,
-      extraKeys: st.extraKeys ?? {},
-      serverLogs: st.logs ?? [],
-      commLogs: st.commLogs ?? [],
-      keyEvents: st.keyEvents ?? [],
-    });
-    for (const [k, v] of Object.entries(st.images)) {
-      store.setImage(Number(k), { v });
-      applyImage(Number(k), { v });
-    }
+async function fetchState(): Promise<StateResponse> {
+  const r = await fetch('/api/state');
+  if (!r.ok) throw new Error(`state ${r.status}`);
+  return (await r.json()) as StateResponse;
+}
 
-    // Simple-only build: never reach the advanced view. Clear any persisted
-    // 'advanced' mode so a returning user doesn't land on the (absent) view.
-    if (__SIMPLE_ONLY__) {
-      document.documentElement.removeAttribute('data-mode');
-      localStorage.removeItem('deckbridge.mode');
-    }
+function start(st: StateResponse): void {
+  hydrate(st);
 
-    mountSimple();
-    // __SIMPLE_ONLY__ folds to a constant; esbuild DCEs this branch and tree-shakes
-    // mountAdvanced → AdvancedApp out of the bundle when building --simple-only.
-    if (!__SIMPLE_ONLY__) mountAdvanced();
-    connectWS();
-    return undefined;
-  });
+  mountSimple();
+  // __SIMPLE_ONLY__ folds to a constant; esbuild DCEs this branch and tree-shakes
+  // mountAdvanced → AdvancedApp out of the bundle — which is the default build
+  // (only `node build.mjs --advanced` keeps the advanced view).
+  if (!__SIMPLE_ONLY__) mountAdvanced();
+  connectWS();
+}
+
+function boot(): void {
+  mountBoot(false, boot);
+  // Two-argument then: only a failed fetch shows the retry screen, never a render error.
+  fetchState().then(start, () => mountBoot(true, boot));
+}
+
+boot();

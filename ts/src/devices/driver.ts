@@ -1,48 +1,38 @@
 import type { EventEmitter } from 'node:events';
-import type { ImageModeOverride } from '../types.js';
+import type { TouchStripOptions, TouchWindowRegion } from '../shared/types.js';
+import { PROTOCOLS, WIRE_OVERRIDE_KEYS, type WireOverrideKey } from './protocol-metadata.js';
 
-export type DeviceVendor =
-  | 'mirabox'
-  | 'ajazz'
-  | 'elgato'
-  | 'mars-gaming'
-  | 'mad-dog'
-  | 'risemode'
-  | 'tmice'
-  | 'fifine'
-  | 'ulanzi';
+// Re-exported so importers keep reading it from driver.ts.
+export { WIRE_OVERRIDE_KEYS };
 
-/** Wire protocol — closed; adding a new model almost always reuses an existing one. */
-export type DeviceProtocol =
-  | 'mirabox-cora' // v3, 1024-byte packets, press+release
-  | 'mirabox-cora-v1' // v1, 512-byte packets, keydown-only
-  | 'elgato-gen1' // BMP, 16-byte header, key+1, feature 0x05/0x0B (Mini, original)
-  | 'elgato-gen2' // JPEG, 8-byte header, feature 0x03 (MK.2, XL)
-  // PAGE protocol, not a per-key one: the host ships the WHOLE grid as a ZIP
-  // (manifest.json + Images/*.png) inside a 0x7c7c-framed vendor report and the
-  // firmware repaints from it. There is no "write one key" opcode; per-key CORA
-  // updates are emulated by rebuilding and resending a (partial) page.
-  // See devices/ulanzi/ulanzi-protocol.ts.
-  | 'ulanzi-zk';
+/** Kebab-case slug (checked by validate-model.ts); a new vendor needs no type edit. */
+// eslint-disable-next-line sonarjs/redundant-type-aliases
+export type DeviceVendor = string;
+
+/** Wire protocol — closed; the table is PROTOCOLS in protocol-metadata.ts. */
+export type DeviceProtocol = keyof typeof PROTOCOLS;
 
 /** Stable kebab-case slug used as cache key, UI label, logs. */
 // eslint-disable-next-line sonarjs/redundant-type-aliases
 export type DeviceModelId = string;
 
-/** Native image format the DEVICE consumes (not what CORA sends us — that stays
- *  'jpeg' | 'bmp', see types.ts ImageEvent). 'png' exists for page-protocol
- *  devices whose firmware unzips PNGs out of a manifest (Ulanzi D200). */
+export interface DeviceCropRect {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+/** Image format the device consumes. CORA itself only sends 'jpeg' | 'bmp'; 'png' is
+ *  for page-protocol devices whose firmware unzips PNGs (Ulanzi D200). */
 export type DeviceImageFormat = 'jpeg' | 'bmp' | 'png';
 
 export interface DeviceImageSpec {
   format: DeviceImageFormat;
   width: number;
   height: number;
-  /** Extra CW rotation applied on top of the CORA JPEG before sending to hardware.
-   *  Phase 0 measurement determines the correct value:
-   *  - If CORA images are upright: MK.2 needs 180, Mini needs 90.
-   *  - If CORA images are MK.2-native (already 180°): MK.2 needs 0, Mini needs 270.
-   *  Default assumes CORA images are upright. */
+  /** Extra CW rotation applied to the CORA image before sending. The app pre-orients
+   *  frames per advertised profile (web/server/verify-orientation.ts). */
   rotate: 0 | 90 | 180 | 270;
   flipH: boolean;
   flipV: boolean;
@@ -51,100 +41,139 @@ export interface DeviceImageSpec {
   maxBytes: number; // JPEG size cap; 0 = no cap (BMP is fixed-size)
   quality: number; // JPEG only (0–1)
   blur?: number; // Gaussian blur sigma before JPEG encode (0 = none)
-  /** Unsharp-mask sigma applied after resize (0/undefined = none). Recovers
-   *  crispness lost to upscaling, e.g. the 293S's 72→85 enlarge. Adds high-
-   *  frequency detail → larger JPEG, so keep modest (~0.4–0.8). */
+  /** Unsharp-mask sigma after resize (0 = none). Recovers crispness lost to
+   *  upscaling (293S 72→85). Grows the JPEG, so keep ~0.4–0.8. */
   sharpen?: number;
-  /** Pixels to trim from every side of the source image before rotate/flip/resize
-   *  (0/undefined = none). The K1 Pro is fed an 80×80 Mini BMP whose outer edge
-   *  is dead border; crop 6 → 68×68 before the 64×64 resize. Ignored when it
-   *  would leave a non-positive dimension. */
+  /** Pixels trimmed from every side before rotate/flip/resize (0 = none). K1 Pro is
+   *  fed an 80×80 Mini BMP with a dead outer edge: crop 6 → 68×68, then resize to
+   *  64×64. Ignored when it would leave a non-positive dimension. */
   crop?: number;
-  /** JPEG resize filter; default 'triangle'. K1 Pro uses 'nearest' to match
-   *  the known-good keydeck/mirajazz encoder recipe. 'lanczos3' gives best
-   *  quality for upscaling (e.g. 293: 72→112). */
+  /** Source-pixel region cut out before rotate/flip/fit, so the fit step sees only this
+   *  part of the Elgato app's image (off-centre art, a one-sided dead border). Clamped
+   *  to the source; cannot be combined with `crop`. */
+  cropRect?: DeviceCropRect;
+  /** JPEG resize filter; default 'triangle'. K1 Pro uses 'nearest' to match the
+   *  known-good keydeck/mirajazz recipe; 'lanczos3' upscales best (293: 72→112). */
   resizeFilter?: 'triangle' | 'nearest' | 'lanczos3';
-  /** How the CORA image is fitted to width×height.
-   *  'resize' (default) — interpolate to the panel size (may blur on upscale).
-   *  'pad' — keep source pixels 1:1, centre in the canvas, fill the border per `padFill`.
-   *          Centring uses a floor split (top-left bias). Inputs larger than the canvas
-   *          fall back to 'resize'. Used by the 293S: app sends 72×72, panel is 85×85. */
-  resizeMode?: 'resize' | 'pad';
-  /** Border fill for resizeMode:'pad'. 'edge' (default) = clamp-to-edge replicate;
+  /** How the CORA image is fitted to width×height. 'resize' (default) interpolates;
+   *  'pad' keeps source pixels 1:1 and centres them (floor split, top-left bias),
+   *  falling back to 'resize' when the source is larger. 293S: 72×72 into 85×85.
+   *  'crop' is 'pad' that centre-crops larger axes instead of resizing — 1:1, no
+   *  resampling (Stream Deck + 120×120 art on a 112×112 AKP05E key). */
+  resizeMode?: 'resize' | 'pad' | 'crop';
+  /** Border fill for resizeMode 'pad'/'crop'. 'edge' (default) = clamp-to-edge replicate;
    *  'black' = black border; 'average' = mean source colour. Ignored for 'resize'. */
   padFill?: 'black' | 'average' | 'edge';
-  /** How image-pipeline routes a CORA JPEG to this device's native format.
-   *  'passthrough' — send the CORA JPEG unchanged (only valid when the device
-   *  consumes CORA-native resolution: rotate 0, no flip, no maxBytes cap).
-   *  'sidecar' — resize/rotate/flip via the Rust sidecar.
-   *  The `format: 'bmp'` short-circuit in image-pipeline runs first regardless. */
+  /** How image-pipeline routes a CORA JPEG. 'passthrough' sends it unchanged — only
+   *  valid at CORA-native resolution (rotate 0, no flip, no maxBytes cap); 'sidecar'
+   *  resizes/rotates/flips. The `format: 'bmp'` short-circuit runs first regardless. */
   transform: 'passthrough' | 'sidecar';
 }
 
-/** Low-level wire behavior for the Mirabox CORA protocols (mirabox-cora / -v1). */
+/** Low-level HID behavior. `packetSize`/`inSize` are read by both driver families;
+ *  the quirk flags are Mirabox-only, hence optional. An omitted flag silently reads
+ *  `false`, so device-models.test.ts requires them on Mirabox models. */
 export interface DeviceWireSpec {
-  packetSize: number; // 1024 (v3) / 512 (v1)
+  packetSize: number; // output-report size: 1024 (v3, elgato gen1/gen2) / 512 (v1)
   inSize: number; // HID read buffer size
   heartbeatMs?: number; // undefined = no heartbeat
-  synthesizeKeyUp: boolean; // v1 sends keydown only — synthesize the keyup
-  sendStpAfterImage: boolean; // v3 sends CRT STP after image/clear; v1 doesn't
+  synthesizeKeyUp?: boolean; // v1 sends keydown only — synthesize the keyup
+  /** One STP per image batch on supported 293S-family boards. */
+  batchImageTransfers?: boolean;
+  sendStpAfterImage?: boolean; // v3 sends CRT STP after image/clear; v1 doesn't
   /** HID report-ID prefix byte: 0x00 (293 default) or 0x04 (K1 Pro). Defaults to 0x00. */
   reportId?: number;
-  /** K1 Pro firmware drops the last byte of every full packetSize image chunk.
-   *  When true, sendImage wire-encodes the JPEG with one sacrificial byte after
-   *  every (packetSize - 1) payload bytes, so the drop only ever eats padding.
-   *  Hardware-verified probe round 16 — see jpeg-artifact-findings.md. */
+  /** K1 Pro firmware drops the last byte of every full image chunk. When true,
+   *  sendImage inserts a sacrificial byte every (packetSize - 1) payload bytes so
+   *  the drop only eats padding. See jpeg-artifact-findings.md. */
   chunkPadByte?: boolean;
-  /** v1 firmware reports a hardcoded serial shared by every unit of every v1 model
-   *  (`355499441494`), so a serial alone can't identify a physical device. When true,
-   *  deviceKeyFor() appends the model id to keep two different v1 decks apart.
-   *  See mirajazz README "protocol_version = 1". */
+  /** v1 firmware reports one hardcoded serial (`355499441494`) for every unit of every
+   *  v1 model, so deviceKeyFor() appends the model id to keep two v1 decks apart. */
   sharedSerial?: boolean;
-  /** Milliseconds to busy-wait after each full image chunk (0/undefined = none).
-   *  Some rebadged v3 boards drop image data when chunks arrive back-to-back;
-   *  Lyagva's D6 fork PR #1 pairs `drawChunkDelayMs: 2` with sequential writes on
-   *  the rev. 2 board. That fix targets node-hid's *async* writer firing every chunk
-   *  through `Promise.all`; our worker writes chunks synchronously and in order, so
-   *  no shipped model sets this — it exists so a device that still tears has a knob
-   *  that doesn't need a code change. Costs chunkCount × ms of worker-thread time
-   *  per image; leave it unset unless hardware demonstrably needs it. */
+  /** Busy-wait after each full image chunk (0 = none). Some rebadged v3 boards tear
+   *  on back-to-back chunks, but that fix targets node-hid's async writer — our worker
+   *  already writes sequentially, so no shipped model sets this. Costs
+   *  chunkCount × ms of worker time per image; leave unset unless hardware needs it. */
   chunkDelayMs?: number;
-  /** When set, read the device's real output-report size out of its HID report
-   *  descriptor at open() and use that instead of `packetSize` — but ONLY if the
-   *  probed value is one of these. See devices/hid-report-descriptor.ts.
-   *
-   *  For boards whose packet size we inferred rather than measured. A wrong
-   *  `packetSize` is otherwise undetectable at runtime: short writes are discarded by
-   *  the firmware while `hid_write` still returns success, so the panel goes black with
-   *  no error anywhere (opendeck-ampgd6 PR #7). Listing the sizes the family is known to
-   *  use means the probe can only correct a guess, never invent an untested value. */
+  /** When set, open() reads the real output-report size from the HID report descriptor
+   *  and uses it instead of `packetSize`, but only if it is one of these. For boards
+   *  whose packet size we inferred: a wrong one is otherwise invisible (the firmware
+   *  discards short writes while `hid_write` still succeeds → black panel, no error).
+   *  The whitelist lets the probe correct a guess, never invent an untested value. */
   packetSizeCandidates?: readonly number[];
 }
 
-/** CORA key index (MK.2, 0-based row-major) ↔ device wire ids.
- *
- *  Precedence (per direction, independent): explicit array > offset > identity.
+/** Framing for page protocols (ulanzi-zk), which repaint the whole grid from one
+ *  archive instead of taking a per-key write. Kept out of DeviceWireSpec: none of its
+ *  Mirabox quirk flags mean anything here. */
+export interface DevicePageSpec {
+  /** The firmware reverts to its own screen after ~5–10 s without a write. */
+  keepaliveMs: number;
+  /** CORA pushes one image per key; staged images are coalesced this long per ZIP. */
+  flushDebounceMs: number;
+  /** Floor between flushes: a page is ~180 synchronous HID writes. */
+  minFlushIntervalMs: number;
+  /** Partial-update opcode after the first full page. Disputed on hardware (ghost or
+   *  white keys); false resends the whole remembered page each time. */
+  partialUpdates: boolean;
+  /** Firmware cap on one archive (0 = unknown). Oversized ZIPs are dropped silently,
+   *  so this only drives a warning. */
+  maxZipBytes: number;
+  /** Firmware render mode for the wide info-window slot (203 = digital clock). */
+  smallWindowMode: number;
+  /** Grid position of that slot, as the manifest's "{col}_{row}" key. */
+  smallWindowSlot: { col: number; row: number };
+  /** Busy-wait between page chunks (0/undefined = none), for firmware that drops
+   *  back-to-back writes. */
+  chunkDelayMs?: number;
+}
+
+/** CORA key index (MK.2, 0-based row-major) ↔ device wire ids. Each direction
+ *  resolves independently — explicit array > offset > identity:
  *    image : coraToWireImage[i]    ?? (imageOffset != null ? i + imageOffset : i)
- *    input : wireInputToCora[code] ?? (inputOffset != null ? code - inputOffset : code)
- *  The two directions are resolved separately: mirabox-293 uses an explicit
- *  `coraToWireImage` array for images but an `inputOffset` for input.
- *  Elgato devices omit both → identity mapping. */
+ *    input : wireInputToCora[code] ?? (inputOffset != null ? code - inputOffset : code) */
 export interface DeviceKeyMap {
   coraToWireImage?: readonly number[];
   wireInputToCora?: readonly number[]; // -1 entry = ignored key (293S 6th column)
   inputOffset?: number;
   imageOffset?: number;
-  /** Physical keys outside the emulated CORA grid (device wire ids). They still
-   *  emit key events but map to no mk2 index; DeckBridge-native actions bind to
-   *  them (see extra-keys.ts). 293S right column = [16, 17, 18]. */
+  /** Physical keys outside the emulated CORA grid (device wire ids): they emit key
+   *  events but map to no mk2 index, so DeckBridge-native actions bind to them
+   *  (extra-keys.ts). 293S right column = [16, 17, 18]. */
   extraKeys?: readonly number[];
+  /** Input code of each `extraKeys` entry, same order, for extra keys that have a
+   *  switch (their press runs a DeckBridge command). Absent = display-only keys. */
+  extraKeyInputs?: readonly number[];
 }
 
 /** How this device advertises itself to the Elgato desktop over CORA. */
 export interface DeviceCoraSpec {
   productId: number; // PID advertised in CORA capabilities
-  advertiseGeometry?: ChildGeometry; // omit = derive from this model's own geometry
+  /** Registry model whose geometry this device emulates; omit for own geometry. */
+  advertiseAs?: DeviceModelId;
   usePhysicalIdentity: boolean; // forward the device's real serial/firmware (Elgato true, Mirabox false)
+  /** Firmware version string the CHILD reports over CORA (GET_REPORT 0x05 / 0x87).
+   *  Omit for the shared DEFAULT_CHILD_FIRMWARE_VERSION ('1.01.000'); the Stream Deck +
+   *  profile sets a 2.00.x version because the desktop rejects 1.01.x for PID 0x0084. */
+  childFirmwareVersion?: string;
+  /** Optional identity overrides sent over CORA. Omitted fields use generated or
+   *  physical identity, and the profile's firmware defaults. */
+  dockSerialNumber?: string;
+  childSerialNumber?: string;
+  macAddress?: string;
+  dockFirmwareVersion?: string;
+  /** CORA profiles (registry.ts `CORA_PROFILES` ids) this device may re-pair as via a
+   *  `cora.advertiseAs` override, each with the physical image transform + key map the
+   *  emulated grid needs on this panel. Only these (or the model's own `advertiseAs`)
+   *  validate, so a profile can never land on hardware it has no mapping for. */
+  emulations?: Readonly<Record<DeviceModelId, DeviceEmulation>>;
+}
+
+/** How a device drives its own panel while re-paired as a CORA profile (e.g. the
+ *  AKP05E's 5×2 panel showing a Stream Deck + 4×2 grid). */
+export interface DeviceEmulation {
+  image: DeviceImageSpec;
+  keyMap: DeviceKeyMap;
 }
 
 /** Splash-screen overrides. model.image is calibrated for desktop-pre-rotated CORA
@@ -154,43 +183,26 @@ export interface DeviceSplashSpec {
   transformOverride?: { rotate?: 0 | 90 | 180 | 270; flipH?: boolean; flipV?: boolean };
 }
 
-/** Low-level wire behaviour for PAGE protocols (ulanzi-zk): devices that repaint
- *  the whole grid from one archive rather than accepting a per-key image write.
- *  Deliberately NOT folded into DeviceWireSpec — none of that struct's fields
- *  (sendStpAfterImage, synthesizeKeyUp, chunkPadByte, …) mean anything here, and
- *  keeping them apart stops Mirabox framing fields growing meanings they lack. */
-export interface DevicePageSpec {
-  packetSize: number; // 1024 for the D200 (both directions)
-  inSize: number; // HID read buffer size
-  /** Any outbound write resets the firmware's watchdog; with none it reverts to
-   *  its own screen after ~5–10 s. We send a clock frame at this interval. */
-  keepaliveMs: number;
-  /** Coalescing window: CORA pushes one image per key, the device takes one ZIP
-   *  per page, so staged images are batched for this long before a flush. */
-  flushDebounceMs: number;
-  /** Floor on the gap between two flushes — a page is ~180 synchronous HID
-   *  writes, and unthrottled writers are reported to stall the firmware after
-   *  ~17 min of animation. */
-  minFlushIntervalMs: number;
-  /** Use the partial-update opcode for flushes after the first full page.
-   *  Disputed on hardware (ghost/white keys have been reported); false falls
-   *  back to resending the whole remembered page every time. */
-  partialUpdates: boolean;
-  /** Firmware cap on one page archive (0 = unknown/uncapped). Oversized ZIPs are
-   *  silently dropped rather than rejected, so this is only a diagnostic. */
-  maxZipBytes: number;
-  /** Firmware render mode for the wide info-window slot (203 = digital clock). */
-  smallWindowMode: number;
-  /** Grid position of that wide slot, as the manifest's "{col}_{row}" key. */
-  smallWindowSlot: { col: number; row: number };
-  /** Milliseconds to busy-wait between page chunks (0/undefined = none). Escape
-   *  hatch for firmware that drops back-to-back 1024-byte writes. */
-  chunkDelayMs?: number;
+/** A device-native display outside CORA's key grid, rendered by DeckBridge widgets. */
+export interface DeviceWidgetDisplay {
+  wireId: number;
+  label: string;
+  image: DeviceImageSpec;
+  /** Left edge of this display's window on the full strip, in strip pixels. Only
+   *  meaningful with `DeviceModel.touchStripDisplay`. */
+  stripX?: number;
 }
 
-export type DriverKind = 'elgato-hid' | 'mirabox' | 'ulanzi' | 'custom';
+/** One image across the whole touch strip. Its wire id may also be a widget
+ *  display: the firmware draws each upload at its real size from the slot origin. */
+export interface DeviceTouchStripDisplay {
+  wireId: number;
+  image: DeviceImageSpec;
+}
 
-/** Child geometry advertised to the Elgato desktop over CORA capabilities. */
+/** Child geometry advertised to the Elgato desktop over CORA capabilities. The
+ *  optional fields describe a Stream Deck + (encoders + touch strip); non-Plus
+ *  models omit them (undefined → 0 → "no encoders / no touch" in the packet). */
 export interface ChildGeometry {
   rows: number;
   columns: number;
@@ -198,6 +210,11 @@ export interface ChildGeometry {
   keyWidth: number;
   keyHeight: number;
   productName: string;
+  /** Number of rotaries (Plus = 4). Omitted/0 on key-only models. */
+  encoderCount?: number;
+  /** Touch-strip size in pixels (Plus = 800×100). Omitted/0 on key-only models. */
+  touchWidth?: number;
+  touchHeight?: number;
 }
 
 export interface DeviceModel {
@@ -214,46 +231,145 @@ export interface DeviceModel {
   rows: number;
   keyWidth: number;
   keyHeight: number;
+  /** Stream Deck + only: rotary encoder count (4) and touch-strip size (800×100).
+   *  Omitted/undefined on key-only models → advertised as 0 (no encoders/touch). */
+  encoderCount?: number;
+  touchWidth?: number;
+  touchHeight?: number;
   image: DeviceImageSpec;
-  /** Mirabox-only wire framing (packet sizes, heartbeat, STP/keyup quirks).
-   *  Undefined for elgato-hid models — their framing lives in PROTOCOL_STRATEGY. */
-  wire?: DeviceWireSpec;
-  /** Page-protocol framing (ulanzi-zk only). Mutually exclusive with `wire`. */
+  wire: DeviceWireSpec;
+  /** Page-protocol framing (ulanzi-zk only); `wire` then carries just the packet sizes. */
   page?: DevicePageSpec;
   keyMap: DeviceKeyMap;
   cora: DeviceCoraSpec;
   splash?: DeviceSplashSpec;
-  driverKind: DriverKind;
+  widgetDisplays?: readonly DeviceWidgetDisplay[];
+  touchStripDisplay?: DeviceTouchStripDisplay;
+  /** Hardware screen-off. Set only after the HAN hardware spike passes on that model
+   *  (.claude/plans/2026-09-30_standby-burn-in-care.md, Task 0 item 4); not tunable. */
+  sleep?: 'mirabox-han';
 }
 
-/** Common interface satisfied by every driver (real USB and mock). */
+/** Elgato's own HID protocol (MK.2/Mini/…), as opposed to a Mirabox-family board. */
+export function isElgatoHid(model: DeviceModel): boolean {
+  return PROTOCOLS[model.protocol].family === 'elgato';
+}
+
+// The tunable field names, listed once: they type DeviceModelOverride below and drive
+// the validator/seed tables in devices/model-overrides.ts, which can't drift from them.
+export const IMAGE_OVERRIDE_KEYS = [
+  'rotate',
+  'flipH',
+  'flipV',
+  'width',
+  'height',
+  'quality',
+  'maxBytes',
+  'blur',
+  'sharpen',
+  'crop',
+  'cropRect',
+  'resizeFilter',
+  'resizeMode',
+  'padFill',
+  'transform',
+] as const;
+
+/** Per-protocol tunable wire fields, read from PROTOCOLS (protocol-metadata.ts). */
+export function tunableWireKeys(protocol: DeviceProtocol): readonly WireOverrideKey[] {
+  return PROTOCOLS[protocol].tunableWireKeys;
+}
+
+/** One STP per image batch: decided here once for the worker queue and the driver. */
+export function imageBatchingEnabled(model: DeviceModel): boolean {
+  return (
+    tunableWireKeys(model.protocol).includes('batchImageTransfers') &&
+    model.wire.batchImageTransfers === true
+  );
+}
+
+/** The CORA-emulation fields a user may change to re-pair a device as a different
+ *  Elgato deck (e.g. AKP05E → Stream Deck +). `advertiseAs` must name one of the
+ *  model's `cora.emulations` (or its own advertiseAs); `productId` must match that
+ *  profile's PID. `usePhysicalIdentity` is deliberately absent — it is a
+ *  physical-device fact, not a pairing preference. */
+export const CORA_OVERRIDE_KEYS = [
+  'advertiseAs',
+  'productId',
+  'dockSerialNumber',
+  'childSerialNumber',
+  'macAddress',
+  'dockFirmwareVersion',
+  'childFirmwareVersion',
+] as const;
+
+/** User-tunable subset of a DeviceModel, persisted per model id under settings.json's
+ *  `modelOverrides` (devices/model-overrides.ts). Deep-partial per section, arrays
+ *  replace wholesale. Omissions are deliberate: VID/PID/protocol would
+ *  impersonate a different device, keyCount/rows/columns force a CORA re-pair,
+ *  image.format is a protocol fact, and packetSize/inSize are Mirabox-only.
+ *  The `cora` section is the sanctioned exception: `advertiseAs`/`productId` are
+ *  exactly the "re-pair as a different Elgato deck" knob (opt-in, changes geometry +
+ *  PID → CORA re-pair). */
+export interface DeviceModelOverride {
+  image?: Partial<Pick<DeviceImageSpec, (typeof IMAGE_OVERRIDE_KEYS)[number]>>;
+  keyMap?: Partial<DeviceKeyMap>;
+  wire?: Partial<Pick<DeviceWireSpec, (typeof WIRE_OVERRIDE_KEYS)[number]>>;
+  splash?: DeviceSplashSpec;
+  cora?: Partial<Pick<DeviceCoraSpec, (typeof CORA_OVERRIDE_KEYS)[number]>>;
+}
+
+/** The base driver contract: model + open/close + the two direct writes. */
 export interface DeviceDriver extends EventEmitter {
+  /** The effective model this driver is running. Swapped in place by
+   *  `applyOverrides` for a live (image-only) device-tuning change, so callers
+   *  must read it per use rather than caching `driver.model.image`. */
   readonly model: DeviceModel;
-  /** `hidPath` (optional) opens a SPECIFIC HID interface — used to drive a second
-   *  unit of the same model. Omitted → enumerate + open the first usage-matched
-   *  path (primary probe). Ignored by MockDriver. */
-  open(hidPath?: string): Promise<void>;
+  /** Opens exactly `hidPath`, a usage-matched interface from discovery (one per
+   *  physical unit). Ignored by MockDriver. */
+  open(hidPath: string): Promise<void>;
   close(): Promise<void>;
-  /** keyIndex: CORA logical index (0-based).
-   *  bytes: native image format for the device (JPEG for MK.2, BMP for Mini, JPEG for Mirabox). */
-  sendImage(keyIndex: number, bytes: Uint8Array): void;
   clearKey(keyIndex: number): void;
   setBrightness(level: number): void;
-  /** Present a raw CORA image on the device: transform (resize/rotate/encode),
-   *  cache, and write it. Implemented only by the worker-backed real driver
-   *  (`WorkerHidDriver`), which does the transform off the main thread (P1).
-   *  Omitted by `MockDriver` (virtual device) and the low-level in-worker
-   *  drivers (which only expose the native-bytes `sendImage`). */
-  renderCoraImage?(keyIndex: number, coraBytes: Uint8Array, format: 'jpeg' | 'bmp'): void;
-  /** Set (or clear, with null) a WebUI runtime image-fit override applied on
-   *  top of this model's default resizeMode/padFill for subsequent
-   *  `renderCoraImage` calls. Implemented only by `WorkerHidDriver`; omitted
-   *  by `MockDriver` and the low-level in-worker drivers. */
-  setImageOverride?(mode: ImageModeOverride): void;
-  /** Send a splash source image: the worker transforms it with `spec` (which
-   *  may differ from model.image due to splash orientation overrides) and writes
-   *  the native bytes to the device. Implemented only by `WorkerHidDriver`;
-   *  omitted by `MockDriver` (no USB device to write to). Offloads the
-   *  50–200 ms synchronous FFI transform away from the main thread (P1). */
-  sendSplashImage?(keyIndex: number, bytes: Uint8Array, spec: DeviceImageSpec): void;
+  /** Hardware screen-off / wake. Only drivers whose model sets `sleep` implement it. */
+  setSleep?(asleep: boolean): void;
+}
+
+/** What a Dock drives on the main thread: `WorkerHidDriver` (the USB worker proxy)
+ *  or `MockDriver`, whose versions of the worker-only calls are no-ops. */
+export interface DockDriver extends DeviceDriver {
+  /** Transform (resize/rotate/encode), cache and write a raw CORA image, off the
+   *  main thread; the in-worker drivers take native bytes via their own `sendImage`.
+   *  Emits `'frameHash'(coraKey, hash)` once the frame is rendered. */
+  renderCoraImage(keyIndex: number, coraBytes: Uint8Array, format: 'jpeg' | 'bmp'): void;
+  /** Send a splash source image, transformed with `spec` (which may differ from
+   *  model.image — splash sources are upright), keeping the FFI transform and
+   *  hid_write burst off the main thread. */
+  sendSplashImage(keyIndex: number, bytes: Uint8Array, spec: DeviceImageSpec): void;
+  /** Render a Stream Deck + window image (800×100, or a partial-window region)
+   *  to the device's touch-segment displays. No-op on models without widget displays. */
+  renderTouchImage(bytes: Uint8Array, region?: TouchWindowRegion): void;
+  /** Touch-strip wire ids DeckBridge owns: Elgato strip images skip them, and a
+   *  zone leaving the mask gets the last Elgato image back. */
+  setTouchStripMask(wireIds: readonly number[]): void;
+  /** Put the last Elgato image back on these strip zones (cleared if the app never
+   *  drew one) — a widget leaving an unmasked zone. */
+  restoreTouchSegments(wireIds: readonly number[]): void;
+  /** Zone fit + upload policy for a full-strip model (settings.json, per dock). The
+   *  worker resets them to the defaults on open. */
+  setTouchStripOptions(options: TouchStripOptions): void;
+  /** The options last set (defaults after open). */
+  readonly touchStripOptions: TouchStripOptions;
+  /** Live device-tuning swap — image-transform fields only, no reopen. The
+   *  caller resolves `effectiveModel` (registry + overrides) and must have
+   *  classified the change as 'live' first (classifyOverrideChange). */
+  applyOverrides(overrides: DeviceModelOverride | undefined, effectiveModel: DeviceModel): void;
+  /** Runtime log-level change for the worker (new workers read DECKBRIDGE_LOG_LEVEL). */
+  setLogLevel(level: string): void;
+  /** False on a driver that ignores splash/widget images (the browser deck): standby's
+   *  clock can't show there. Absent = paints. */
+  readonly paintsSplash?: boolean;
+  /** Take images again after an 'overload' event, once the producer has resynced
+   *  (a fresh CORA child session). Absent on drivers without a bounded queue. */
+  resumeImages?(): void;
 }

@@ -1,5 +1,5 @@
 import assert from 'tjs:assert';
-import { fwVersionBuf, buildFeatureResponse } from '../src/feature-response.js';
+import { fwVersionBuf, buildFeatureResponse } from '../src/cora/responses.js';
 import {
   FW_VERSION_FIELD_LEN,
   CORA_FW_VERSION_OFFSET,
@@ -13,24 +13,11 @@ import {
   FEATURE_GET_SERIAL_LEGACY,
   FEATURE_GET_MAC,
   PAYLOAD_TYPE_FEATURE,
-} from '../src/types.js';
-import type { DeviceConfig } from '../src/elgato-types.js';
+} from '../src/cora/protocol.js';
+import type { DeviceConfig } from '../src/cora/types.js';
+import { test, summary } from './helpers/harness.js';
 
-let passed = 0;
-let failed = 0;
-
-function test(name: string, fn: () => void): void {
-  try {
-    fn();
-    console.log(`  ✓ ${name}`);
-    passed++;
-  } catch (e) {
-    console.error(`  ✗ ${name}: ${(e as Error).message}`);
-    failed++;
-  }
-}
-
-// ── fwVersionBuf ─────────────────────────────────────────────────────────────
+// fwVersionBuf
 
 console.log('\nfwVersionBuf');
 
@@ -71,7 +58,7 @@ test('exactly FW_VERSION_FIELD_LEN version is unchanged', () => {
   assert.deepEqual(Array.from(buf), Array.from(Buffer.from(version, 'ascii')));
 });
 
-// ── buildFeatureResponse ─────────────────────────────────────────────────────
+// buildFeatureResponse
 
 console.log('\nbuildFeatureResponse');
 
@@ -239,7 +226,6 @@ test('FEATURE_GET_DOCK_FW and FEATURE_GET_QUICK_PROBE produce the same fw versio
   assert.deepEqual(fwDock, fwQuick);
 });
 
-// ── Summary ──────────────────────────────────────────────────────────────────
+// Summary
 
-console.log(`\n${passed} passed, ${failed} failed`);
-if (failed > 0) tjs.exit(1);
+summary();

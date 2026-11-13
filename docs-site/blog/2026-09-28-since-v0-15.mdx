@@ -1,0 +1,98 @@
+---
+slug: since-v0-15
+title: What's new since 0.15
+authors: [lukas]
+tags: [release, devices]
+date: 2026-09-28
+---
+
+import ThemedImage from '@theme/ThemedImage';
+
+DeckBridge changed considerably since 0.15.0. AJAZZ AKP05 support landed. Widget controls grew more capable. Pairing recovery became more reliable.
+
+{/* truncate */}
+
+## AJAZZ AKP05 joins supported decks
+
+AKP05E support adds ten LCD keys. Four encoders also work. Touch strip adds four zones. Stream Deck + pairing now works. Eight keys reach Elgato software. Remaining two become configurable side keys.
+
+Each side key supports widgets. Key presses can refresh widgets. Presses can also run commands. Encoders forward turns and presses. Strip taps and swipes forward too.
+
+<ThemedImage
+  sources={{
+    light: require('./webui-akp05-plus.png').default,
+    dark: require('./webui-akp05-plus-dark.png').default,
+  }}
+  alt="DeckBridge Web UI with mock AKP05 paired as Stream Deck Plus, showing side keys, touch strip, and knob controls"
+  width={454}
+/>
+
+Screenshot shows mock AKP05 pairing. AKP05E hardware received macOS testing. Retail AKP05 support remains untested. See [device details](/devices#ajazz-akp05-family).
+
+## Touch strip gets widget zones
+
+Each strip zone gets independent widgets. Zone previews double as tabs. Pick one to edit it. Three ownership modes control repainting. Elgato can own every zone. DeckBridge can override app images. Repaint mode restores widgets after feedback.
+
+<ThemedImage
+  sources={{
+    light: require('./webui-touch-strip-zones.png').default,
+    dark: require('./webui-touch-strip-zones-dark.png').default,
+  }}
+  alt="Live DeckBridge mock UI showing four touch strip zone tabs and widget controls"
+  width={454}
+/>
+
+See [touch strip modes](/side-keys#touch-strip-modes).
+
+## Widgets gain precise text controls
+
+Size controls now include Fit. Wrapping handles words or characters. Narrow font fits more text. Colours, alignment, padding, and outlines adjust. Side keys show live previews. Clipped text gets visible warnings.
+
+<ThemedImage
+  sources={{
+    light: require('./webui-widget-text-style.png').default,
+    dark: require('./webui-widget-text-style-dark.png').default,
+  }}
+  alt="Live DeckBridge mock UI showing widget text style popover with font, colour, alignment, and spacing controls"
+  width={454}
+/>
+
+Device key art also gets cropping. Users can position images before upload. See [widget controls](/side-keys#text-style).
+
+## Pairing survives more disruptions
+
+Paired decks now regain connections. DeckBridge watches lost child connections. Local Elgato software can restart automatically. Restart only follows previously paired decks. Settings expose delay and manual restart.
+
+## Tray status gets clearer
+
+Tray header now shows app version. Available updates show one indicator. Release checks still require user action.
+
+## Release status
+
+Version 0.17.0 includes these changes. Screenshots show mock Web UI. [Download 0.17.0](https://github.com/lukasMega/DeckBridge/releases/tag/deckbridge-v0.17.0).
+
+## VirusTotal results
+
+Some scanners flag 0.17.0 downloads. Findings suggest false positives. No clear malicious behavior appeared. Scans cannot prove safety. Verify downloads using [release checksums](https://github.com/lukasMega/DeckBridge/releases/download/deckbridge-v0.17.0/SHA256SUMS.txt). Keep antivirus protection enabled.
+
+<details>
+<summary>Scan results</summary>
+
+| Download | Detections |
+| --- | --- |
+| [Windows portable ZIP](https://www.virustotal.com/gui/file/0222989a41d85d10a39c31dbfa9d5d03c7bbfff254b015d8a5f5af407ed3b493) | 1/51 |
+| [Windows installer](https://www.virustotal.com/gui/file/222cdc96420cd29802f2d38699f8fe97d5e91015ca2ef33dd52d2b7b63ab3c2e) | 3/68 |
+| [macOS Intel DMG](https://www.virustotal.com/gui/file/be7bae75feb6681027644545f32d835988ba8c5f1209a5ed429f1a64bb782855) | 1/58 |
+
+Results checked September 29, 2026. Scanner results can change.
+
+</details>
+
+<details>
+<summary>Bundled components and possible causes</summary>
+
+Windows Tauri launcher scored [3/71](https://www.virustotal.com/gui/file/31240fb02bb852cc05d696eebb4ec1ca08ba763ccb61e85fec7695a8d16163cd). NSIS utility DLL scored [2/71](https://www.virustotal.com/gui/file/5ba143b5db4a87d32d6e7802e033330aae56cbceabe0d1e3ba41948385ad4709). Portable ZIP omits NSIS. Its Txiki relay still scored [2/71](https://www.virustotal.com/gui/file/88f1068edd95e380ecd58533ec5da7c7559f28f28d22368a3282227b2f0c05ca). QuickJS runs inside Txiki. Extracted native DLLs scanned clean. Packaging may trigger scanner heuristics. Exact causes remain unproven.
+
+</details>
+
+[Read complete findings](/virustotal-v0.17.0).

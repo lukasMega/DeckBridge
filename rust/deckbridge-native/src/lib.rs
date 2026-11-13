@@ -4,6 +4,7 @@ mod hid;
 #[cfg(target_os = "windows")]
 mod mdns_windows;
 
+mod blit;
 mod bmp;
 mod jpeg;
 mod pad;
@@ -21,10 +22,11 @@ compile_error!("enable an encoder backend: `jpeg-upstream` (default) or `jpeg-fo
 #[cfg(test)]
 mod tests {
     use crate::bmp::encode_bmp;
-    use crate::pad::pad_to_canvas;
-    use crate::transform::transform;
+    use crate::pad::{pad_to_canvas, FILL_CROP_OVERSIZE};
+    use crate::transform::{decode_limited, transform};
     use crate::util::{write_i32_le, write_u16_le, write_u32_le};
-    use image::DynamicImage;
+    use image::imageops::FilterType;
+    use image::{DynamicImage, RgbaImage};
 
     /// Build a minimal 54-byte BMP header (BITMAPFILEHEADER + BITMAPINFOHEADER)
     /// declaring the given dimensions, with no pixel data — enough for the
@@ -48,13 +50,78 @@ mod tests {
         buf
     }
 
+    fn bmp_of(img: DynamicImage) -> Vec<u8> {
+        let mut out = std::io::Cursor::new(Vec::new());
+        img.write_to(&mut out, image::ImageFormat::Bmp)
+            .expect("write BMP");
+        out.into_inner()
+    }
+
+    #[test]
+    fn decode_expands_every_decodable_layout_to_rgba() {
+        // 8-bit indexed (gray palette) → L8; 24-bit → Rgb8; 32-bit → Rgba8.
+        let gray = image::GrayImage::from_fn(5, 3, |x, y| image::Luma([(x * 40 + y * 7) as u8]));
+        let out = decode_limited(&bmp_of(DynamicImage::ImageLuma8(gray.clone()))).expect("gray");
+        for (x, y, p) in out.enumerate_pixels() {
+            let l = gray.get_pixel(x, y)[0];
+            assert_eq!(*p, image::Rgba([l, l, l, 255]), "gray ({x},{y})");
+        }
+
+        let rgb = image::RgbImage::from_fn(5, 3, |x, y| image::Rgb([x as u8, y as u8, 99]));
+        let out = decode_limited(&bmp_of(DynamicImage::ImageRgb8(rgb.clone()))).expect("rgb");
+        for (x, y, p) in out.enumerate_pixels() {
+            let [r, g, b] = rgb.get_pixel(x, y).0;
+            assert_eq!(*p, image::Rgba([r, g, b, 255]), "rgb ({x},{y})");
+        }
+
+        let rgba = image::RgbaImage::from_fn(5, 3, |x, y| image::Rgba([x as u8, y as u8, 7, 200]));
+        let out = decode_limited(&bmp_of(DynamicImage::ImageRgba8(rgba.clone()))).expect("rgba");
+        assert_eq!(out, rgba);
+    }
+
+    #[test]
+    fn gray_source_resizes_like_luma() {
+        // The RGBA pipeline stands in for per-type resizing; a gray source must give the
+        // same pixels as resizing the L8 buffer itself (channels never mix).
+        let gray = image::GrayImage::from_fn(24, 24, |x, y| image::Luma([(x * 9 + y * 5) as u8]));
+        let want = image::imageops::resize(&gray, 17, 17, FilterType::Lanczos3);
+        let out = transform(
+            &bmp_of(DynamicImage::ImageLuma8(gray)),
+            17,
+            17,
+            0,
+            80,
+            false,
+            0,
+            false,
+            false,
+            1,
+            0,
+            0,
+            2,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+        )
+        .expect("transform");
+        let out = image::load_from_memory(&out).expect("decode BMP").to_rgb8();
+        for (x, y, p) in out.enumerate_pixels() {
+            let l = want.get_pixel(x, y)[0];
+            assert_eq!(*p, image::Rgb([l, l, l]), "({x},{y})");
+        }
+    }
+
     #[test]
     fn bomb_rejected() {
-        // 60000x60000 declared dimensions exceed the 500x500 Limits — must be
+        // 60000x60000 declared dimensions exceed the 800x500 Limits — must be
         // rejected before any pixel-data allocation is attempted.
         let bomb = make_bmp_header(60_000, 60_000);
         let result = transform(
-            &bomb, 64, 64, 0, 80, false, 0, false, false, 0, 0, 0, 0, 0, 0, 0,
+            &bomb, 64, 64, 0, 80, false, 0, false, false, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
         );
         assert!(result.is_err(), "expected oversized BMP to be rejected");
     }
@@ -62,17 +129,15 @@ mod tests {
     #[test]
     fn normal_roundtrip_still_works() {
         // A small in-limits image must still decode and encode fine.
-        let img = DynamicImage::new_rgb8(8, 8);
-        let bmp = encode_bmp(img, 0).expect("encode_bmp should succeed");
+        let img = RgbaImage::new(8, 8);
+        let bmp = encode_bmp(&img, 0).expect("encode_bmp should succeed");
 
         let out = transform(
-            &bmp, 8, 8, 0, 80, true, 0, false, false, 0, 0, 0, 0, 0, 0, 0,
+            &bmp, 8, 8, 0, 80, true, 0, false, false, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
         )
         .expect("transform should succeed for an in-limits image");
         assert!(!out.is_empty(), "JPEG output should be non-empty");
     }
-
-    // ── pad_to_canvas ──────────────────────────────────────────────────────────
 
     fn make_test_src() -> image::RgbaImage {
         // 8×8 RGBA, all pixels solid red except a distinct blue top-left corner
@@ -87,29 +152,28 @@ mod tests {
 
     #[test]
     fn pad_to_canvas_dims_and_offset() {
-        let src = DynamicImage::ImageRgba8(make_test_src());
+        let src = make_test_src();
         for fill_mode in [1u32, 2, 3] {
-            let out = pad_to_canvas(&src, 12, 12, fill_mode);
+            let out = pad_to_canvas(&src, 12, 12, fill_mode, FilterType::Triangle);
             assert_eq!(out.width(), 12);
             assert_eq!(out.height(), 12);
-            let rgba = out.to_rgba8();
             // offset = floor((12-8)/2) = 2 → source (0,0) lands at canvas (2,2)
-            assert_eq!(*rgba.get_pixel(2, 2), image::Rgba([0, 0, 255, 255]));
+            assert_eq!(*out.get_pixel(2, 2), image::Rgba([0, 0, 255, 255]));
         }
     }
 
     #[test]
     fn pad_to_canvas_black_border() {
-        let src = DynamicImage::ImageRgba8(make_test_src());
-        let out = pad_to_canvas(&src, 12, 12, 1).to_rgba8();
+        let src = make_test_src();
+        let out = pad_to_canvas(&src, 12, 12, 1, FilterType::Triangle);
         // (0,0) is outside the centred 8×8 block (offset 2..10) → border, black.
         assert_eq!(*out.get_pixel(0, 0), image::Rgba([0, 0, 0, 255]));
     }
 
     #[test]
     fn pad_to_canvas_average_border() {
-        let src = DynamicImage::ImageRgba8(make_test_src());
-        let out = pad_to_canvas(&src, 12, 12, 2).to_rgba8();
+        let src = make_test_src();
+        let out = pad_to_canvas(&src, 12, 12, 2, FilterType::Triangle);
         // src is almost entirely red with one blue pixel; average should be
         // close to red (not black, not blue).
         let border = out.get_pixel(0, 0);
@@ -123,8 +187,8 @@ mod tests {
 
     #[test]
     fn pad_to_canvas_edge_clamp_corner_matches_source() {
-        let src = DynamicImage::ImageRgba8(make_test_src());
-        let out = pad_to_canvas(&src, 12, 12, 3).to_rgba8();
+        let src = make_test_src();
+        let out = pad_to_canvas(&src, 12, 12, 3, FilterType::Triangle);
         // Canvas (0,0) clamps to source (0,0) — the blue corner pixel.
         assert_eq!(*out.get_pixel(0, 0), image::Rgba([0, 0, 255, 255]));
         // Canvas (11,11) clamps to source (7,7) — solid red.
@@ -133,9 +197,109 @@ mod tests {
 
     #[test]
     fn pad_to_canvas_larger_than_canvas_falls_back_to_resize() {
-        let src = DynamicImage::new_rgba8(20, 20);
-        let out = pad_to_canvas(&src, 12, 12, 3);
+        let src = RgbaImage::new(20, 20);
+        let out = pad_to_canvas(&src, 12, 12, 3, FilterType::Triangle);
         assert_eq!(out.width(), 12);
         assert_eq!(out.height(), 12);
+    }
+
+    #[test]
+    fn crop_oversize_trims_centre_one_to_one() {
+        // 120×120 into 112×112 (Stream Deck + art on an AKP05E key): trim 4 px per side.
+        let mut src = image::RgbaImage::new(120, 120);
+        src.put_pixel(4, 4, image::Rgba([0, 0, 255, 255]));
+        src.put_pixel(115, 115, image::Rgba([0, 255, 0, 255]));
+        for fill in [1u32, 2, 3] {
+            let out = pad_to_canvas(
+                &src,
+                112,
+                112,
+                fill | FILL_CROP_OVERSIZE,
+                FilterType::Triangle,
+            );
+            assert_eq!(out.dimensions(), (112, 112));
+            assert_eq!(*out.get_pixel(0, 0), image::Rgba([0, 0, 255, 255]));
+            assert_eq!(*out.get_pixel(111, 111), image::Rgba([0, 255, 0, 255]));
+        }
+    }
+
+    #[test]
+    fn crop_oversize_pads_undersize_axis() {
+        // 800×100 into 176×112: crop x, pad y (black) → rows 0..6 are border.
+        let mut src = image::RgbaImage::new(800, 100);
+        for p in src.pixels_mut() {
+            *p = image::Rgba([255, 0, 0, 255]);
+        }
+        let out = pad_to_canvas(&src, 176, 112, 1 | FILL_CROP_OVERSIZE, FilterType::Triangle);
+        assert_eq!(out.dimensions(), (176, 112));
+        assert_eq!(*out.get_pixel(0, 0), image::Rgba([0, 0, 0, 255]));
+        assert_eq!(*out.get_pixel(0, 6), image::Rgba([255, 0, 0, 255]));
+        assert_eq!(*out.get_pixel(0, 106), image::Rgba([0, 0, 0, 255]));
+    }
+
+    #[test]
+    fn region_crop_then_crop_fit_is_one_to_one() {
+        // cropRect (20,10,112,112) of a 160×130 frame into a 112×112 key: the region's
+        // corners land exactly on the output corners, no resampling.
+        let mut src = image::RgbImage::from_pixel(160, 130, image::Rgb([255, 0, 0]));
+        src.put_pixel(20, 10, image::Rgb([0, 0, 255]));
+        src.put_pixel(131, 121, image::Rgb([0, 255, 0]));
+        let bmp = encode_bmp(&DynamicImage::ImageRgb8(src).to_rgba8(), 0).expect("encode_bmp");
+        let out = transform(
+            &bmp,
+            112,
+            112,
+            0,
+            80,
+            false,
+            0,
+            false,
+            false,
+            1,
+            0,
+            0,
+            0,
+            0,
+            3 | FILL_CROP_OVERSIZE,
+            0,
+            20,
+            10,
+            112,
+            112,
+        )
+        .expect("transform with region crop");
+        let out = image::load_from_memory(&out).expect("decode BMP").to_rgb8();
+        assert_eq!(out.dimensions(), (112, 112));
+        assert_eq!(*out.get_pixel(0, 0), image::Rgb([0, 0, 255]));
+        assert_eq!(*out.get_pixel(111, 111), image::Rgb([0, 255, 0]));
+        assert_eq!(*out.get_pixel(1, 1), image::Rgb([255, 0, 0]));
+    }
+
+    #[test]
+    fn region_crop_is_clamped_to_source() {
+        // A rect past the right/bottom edge is clamped, not rejected.
+        let bmp = encode_bmp(&RgbaImage::new(16, 16), 0).expect("encode_bmp");
+        let out = transform(
+            &bmp, 16, 16, 0, 80, false, 0, false, false, 1, 0, 0, 0, 0, 0, 0, 12, 12, 100, 100,
+        )
+        .expect("oversize region must clamp");
+        let out = image::load_from_memory(&out).expect("decode BMP");
+        assert_eq!((out.width(), out.height()), (16, 16));
+    }
+
+    #[test]
+    fn crop_oversize_smaller_source_matches_pad() {
+        let src = make_test_src();
+        for fill in [1u32, 2, 3] {
+            let pad = pad_to_canvas(&src, 12, 12, fill, FilterType::Triangle);
+            let crop = pad_to_canvas(
+                &src,
+                12,
+                12,
+                fill | FILL_CROP_OVERSIZE,
+                FilterType::Triangle,
+            );
+            assert_eq!(pad, crop);
+        }
     }
 }

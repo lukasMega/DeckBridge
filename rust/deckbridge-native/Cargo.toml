@@ -27,7 +27,7 @@ jpeg-fork = ["dep:jpeg-encoder-fork"]
 usb = ["dep:hidapi"]
 
 [dependencies]
-image = { version = "0.25", default-features = false, features = ["jpeg", "bmp", "png"] }
+image = { version = "0.25", default-features = false, features = ["jpeg", "bmp"] }
 # Encoder for the page-protocol devices (Ulanzi D200) — same version deckbridge-tray
 # already resolves, so the workspace stays on one copy.
 png = "0.18"

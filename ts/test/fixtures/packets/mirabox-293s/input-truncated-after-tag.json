@@ -1,0 +1,27 @@
+{
+  "version": 1,
+  "model": "mirabox-293s",
+  "pid": "0x6670",
+  "firmware": null,
+  "interface": {
+    "usagePage": 65440,
+    "usage": 1
+  },
+  "source": "synthetic",
+  "assumeOpen": true,
+  "note": "Cut after the 3-byte ACK tag: no state byte, so nothing may be emitted (no phantom key 0).",
+  "steps": [
+    {
+      "op": "read",
+      "dir": "in",
+      "hex": "41434b00004f4b0000",
+      "expect": []
+    },
+    {
+      "op": "read",
+      "dir": "in",
+      "hex": "41434b00004f4b000003",
+      "expect": []
+    }
+  ]
+}

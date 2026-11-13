@@ -1,20 +1,16 @@
+/* eslint-disable sonarjs/no-hardcoded-ip -- fixture addresses, nothing is contacted */
 import assert from 'tjs:assert';
-import { userArgs, parseCliArgs, applyFlagsToEnv, versionText, USAGE_TEXT } from '../src/cli.js';
-import type { CliFlags } from '../src/cli.js';
-
-let passed = 0;
-let failed = 0;
-
-function test(name: string, fn: () => void): void {
-  try {
-    fn();
-    console.log(`  ✓ ${name}`);
-    passed++;
-  } catch (e) {
-    console.error(`  ✗ ${name}: ${(e as Error).message}`);
-    failed++;
-  }
-}
+import {
+  userArgs,
+  parseCliArgs,
+  applyFlagsToEnv,
+  isLogLevel,
+  mdnsDisabled,
+  versionText,
+  USAGE_TEXT,
+} from '../src/shared/cli.js';
+import type { CliFlags } from '../src/shared/cli.js';
+import { test, summary } from './helpers/harness.js';
 
 const ENV_KEYS = [
   'DECKBRIDGE_MOCK',
@@ -24,6 +20,10 @@ const ENV_KEYS = [
   'DECKBRIDGE_HEADLESS',
   'DECKBRIDGE_CACHE_DIR',
   'DECKBRIDGE_LOG_LEVEL',
+  'DECKBRIDGE_NO_OVERRIDES',
+  'DECKBRIDGE_NO_EXTENSIONS',
+  'DECKBRIDGE_NO_MDNS',
+  'DECKBRIDGE_NO_DAILY_PING',
 ] as const;
 
 function snapshotEnv(): Record<string, string | undefined> {
@@ -39,9 +39,18 @@ function restoreEnv(snap: Record<string, string | undefined>): void {
   }
 }
 
-const NO_FLAGS: CliFlags = { mock: false, noWebui: false, open: false, headless: false };
+const NO_FLAGS: CliFlags = {
+  mock: false,
+  noWebui: false,
+  open: false,
+  headless: false,
+  redactCommands: false,
+  noOverrides: false,
+  noExtensions: false,
+  noDailyPing: false,
+};
 
-// ── userArgs(): both invocation shapes ───────────────────────────────────────
+// userArgs(): both invocation shapes
 
 console.log('\nuserArgs');
 
@@ -63,6 +72,34 @@ test('compiled with no flags → empty', () => {
   assert.deepEqual(userArgs(['deckbridge']), []);
 });
 
+test('compiled ./deckbridge run <flags> keeps the command word AND every flag', () => {
+  // Regression: `args[1] === "run"` alone can't tell this from the `tjs run
+  // <script>` shape, and treating it as that ate both the command word and the
+  // first flag — `./deckbridge run --mock --headless` started without the mock
+  // driver. The script path is the discriminator.
+  assert.deepEqual(userArgs(['deckbridge', 'run', '--mock', '--headless']), [
+    'run',
+    '--mock',
+    '--headless',
+  ]);
+  assert.deepEqual(userArgs(['deckbridge', 'run']), ['run']);
+  assert.deepEqual(userArgs(['deckbridge', 'run', '--no-overrides']), ['run', '--no-overrides']);
+});
+
+test('./deckbridge run <flags> still parses to command "run" with the flags set', () => {
+  const r = parseCliArgs(userArgs(['deckbridge', 'run', '--mock', '--no-overrides']));
+  assert.ok(r.ok);
+  if (r.ok) {
+    assert.equal(r.cli.command, 'run');
+    assert.equal(r.cli.flags.mock, true, 'the flag right after `run` is not swallowed');
+    assert.equal(r.cli.flags.noOverrides, true);
+  }
+});
+
+test('tjs run <script> is still stripped, flags intact', () => {
+  assert.deepEqual(userArgs(['tjs', 'run', '/abs/path/bundle.js', '--mock']), ['--mock']);
+});
+
 test('userArgs() with no override reads the real (frozen) tjs.args', () => {
   // Sanity check against the actual test-runner invocation: $TJS run dist/test/cli.js
   // is the "tjs run <bundle>" shape (tjs.args[1] === 'run'), so this should be [].
@@ -70,7 +107,7 @@ test('userArgs() with no override reads the real (frozen) tjs.args', () => {
   assert.deepEqual(userArgs(), []);
 });
 
-// ── parseCliArgs: commands ───────────────────────────────────────────────────
+// parseCliArgs: commands
 
 console.log('\nparseCliArgs — commands');
 
@@ -84,6 +121,68 @@ test('"devices" → command "devices"', () => {
   const r = parseCliArgs(['devices']);
   assert.ok(r.ok);
   if (r.ok) assert.equal(r.cli.command, 'devices');
+});
+
+test('"diagnose" → command "diagnose"', () => {
+  const r = parseCliArgs(['diagnose']);
+  assert.ok(r.ok);
+  if (r.ok) assert.equal(r.cli.command, 'diagnose');
+});
+
+test('diagnose accepts --out and --redact-commands', () => {
+  const outPath = `${tjs.tmpDir}/deckbridge-report.txt`;
+  const r = parseCliArgs(['diagnose', '--out', outPath, '--redact-commands']);
+  assert.ok(r.ok);
+  if (r.ok) {
+    assert.equal(r.cli.command, 'diagnose');
+    assert.equal(r.cli.flags.out, outPath);
+    assert.equal(r.cli.flags.redactCommands, true);
+  }
+});
+
+test('--out without a value is an error, not a silent default', () => {
+  const r = parseCliArgs(['diagnose', '--out']);
+  assert.ok(!r.ok);
+  if (!r.ok) assert.ok(r.error.includes('--out'));
+});
+
+test('--redact-commands defaults to false (commands included verbatim)', () => {
+  const r = parseCliArgs(['diagnose']);
+  assert.ok(r.ok);
+  if (r.ok) assert.equal(r.cli.flags.redactCommands, false);
+});
+
+test('run --no-extensions sets the safe-mode flag', () => {
+  const r = parseCliArgs(['run', '--no-extensions']);
+  assert.ok(r.ok);
+  if (r.ok) {
+    assert.equal(r.cli.command, 'run');
+    assert.equal(r.cli.flags.noExtensions, true);
+    assert.equal(r.cli.flags.noOverrides, false);
+  }
+});
+
+test('run --no-overrides sets the safe-mode flag', () => {
+  const r = parseCliArgs(['run', '--no-overrides']);
+  assert.ok(r.ok);
+  if (r.ok) {
+    assert.equal(r.cli.command, 'run');
+    assert.equal(r.cli.flags.noOverrides, true);
+  }
+});
+
+test('mdnsDisabled() is true only for DECKBRIDGE_NO_MDNS=1', () => {
+  const snap = snapshotEnv();
+  try {
+    delete tjs.env.DECKBRIDGE_NO_MDNS;
+    assert.equal(mdnsDisabled(), false);
+    tjs.env.DECKBRIDGE_NO_MDNS = '1';
+    assert.equal(mdnsDisabled(), true);
+    tjs.env.DECKBRIDGE_NO_MDNS = '0';
+    assert.equal(mdnsDisabled(), false);
+  } finally {
+    restoreEnv(snap);
+  }
 });
 
 test('"version" → command "version"', () => {
@@ -125,7 +224,16 @@ test('unknown command word → error, not thrown/exited', () => {
   if (!r.ok) assert.ok(r.error.includes('bogus'));
 });
 
-// ── parseCliArgs: flag matrix ────────────────────────────────────────────────
+test('relay passes its args through untouched', () => {
+  const r = parseCliArgs(['relay', '--target', '1.2.3.4']);
+  assert.ok(r.ok);
+  if (r.ok) {
+    assert.equal(r.cli.command, 'relay');
+    assert.deepEqual(r.cli.rest, ['--target', '1.2.3.4']);
+  }
+});
+
+// parseCliArgs: flag matrix
 
 console.log('\nparseCliArgs — flag matrix');
 
@@ -231,6 +339,10 @@ test('combined flags all land correctly', () => {
       headless: true,
       logLevel: 'warn',
       cacheDir: OTHER_CACHE_DIR,
+      redactCommands: false,
+      noOverrides: false,
+      noExtensions: false,
+      noDailyPing: false,
     });
   }
 });
@@ -241,7 +353,7 @@ test('unknown flag → error (not exit)', () => {
   if (!r.ok) assert.ok(r.error.includes('--bogus-flag'));
 });
 
-// ── applyFlagsToEnv: precedence (CLI flag > pre-existing env > default) ──────
+// applyFlagsToEnv: precedence (CLI flag > pre-existing env > default)
 
 console.log('\napplyFlagsToEnv — precedence');
 
@@ -286,7 +398,43 @@ test('--webui-port / --cache-dir / --log-level land in tjs.env', () => {
   restoreEnv(snap);
 });
 
-// ── help / version text ──────────────────────────────────────────────────────
+test('--no-overrides lands in tjs.env (read by DriverManager at module load)', () => {
+  const snap = snapshotEnv();
+  delete tjs.env.DECKBRIDGE_NO_OVERRIDES;
+  applyFlagsToEnv(NO_FLAGS);
+  assert.equal(tjs.env.DECKBRIDGE_NO_OVERRIDES, undefined, 'absent flag sets nothing');
+  applyFlagsToEnv({ ...NO_FLAGS, noOverrides: true });
+  assert.equal(tjs.env.DECKBRIDGE_NO_OVERRIDES, '1');
+  restoreEnv(snap);
+});
+
+test('--no-extensions lands in tjs.env (read by the controller live)', () => {
+  const snap = snapshotEnv();
+  delete tjs.env.DECKBRIDGE_NO_EXTENSIONS;
+  applyFlagsToEnv(NO_FLAGS);
+  assert.equal(tjs.env.DECKBRIDGE_NO_EXTENSIONS, undefined, 'absent flag sets nothing');
+  applyFlagsToEnv({ ...NO_FLAGS, noExtensions: true });
+  assert.equal(tjs.env.DECKBRIDGE_NO_EXTENSIONS, '1');
+  restoreEnv(snap);
+});
+
+// isLogLevel — the single source of truth shared with settings.json + /api/log-level
+
+console.log('\nisLogLevel');
+
+test('accepts every documented level', () => {
+  for (const level of ['debug', 'info', 'warn', 'error', 'silent']) {
+    assert.ok(isLogLevel(level), `${level} is a valid level`);
+  }
+});
+
+test('rejects anything else', () => {
+  for (const bad of ['DEBUG', 'trace', '', 'verbose', undefined, null, 3]) {
+    assert.ok(!isLogLevel(bad), `${String(bad)} is not a valid level`);
+  }
+});
+
+// help / version text
 
 console.log('\nhelp / version text');
 
@@ -311,7 +459,6 @@ test('versionText() includes the build define values', () => {
   assert.ok(versionText().includes('deckbridge'));
 });
 
-// ── Summary ───────────────────────────────────────────────────────────────────
+// Summary
 
-console.log(`\n${passed} passed, ${failed} failed`);
-if (failed > 0) tjs.exit(1);
+summary();

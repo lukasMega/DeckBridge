@@ -15,17 +15,28 @@ import type {SidebarsConfig} from '@docusaurus/plugin-content-docs';
 const sidebars: SidebarsConfig = {
   tutorialSidebar: [
     'introduction',
+    'devices',
     'getting-started',
     'features',
+    'browser-deck',
     'headless-linux',
+    'verify-device',
+    'troubleshooting',
+    'elgato-same-computer',
+    'virustotal',
+    'virustotal-v0.17.0',
     'privacy',
   ],
 
   // Technical Details — reached via its own navbar item (docusaurus.config.ts)
   technicalSidebar: [
+    'device-specs',
     'adding-a-device',
+    'new-protocol',
     'side-keys',
     'plugin-widgets',
+    'extensions',
+    'push-api',
     'hidapi-ffi',
     'image-flow',
     'references',

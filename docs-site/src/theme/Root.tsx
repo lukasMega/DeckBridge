@@ -41,6 +41,28 @@ export default function Root({ children }: { children: ReactNode }): ReactNode {
     return () => document.removeEventListener('click', onClick);
   }, []);
 
+  // Links from the DeckBridge app carry utm_* so the beacon can attribute them;
+  // drop them from the address bar once it has read them (only on first load).
+  useEffect(function stripUtm() {
+    const params = new URLSearchParams(location.search);
+    const keys = [...params.keys()].filter((k) => k.startsWith('utm_'));
+    if (keys.length === 0) return;
+    // The beacon sets globalThis.__da once running; without a collector, give up at 3 s.
+    const started = Date.now();
+    const timer = setInterval(() => {
+      if (!('__da' in globalThis) && Date.now() - started < 3000) return;
+      clearInterval(timer);
+      for (const k of keys) params.delete(k);
+      const q = params.toString();
+      history.replaceState(
+        history.state,
+        '',
+        location.pathname + (q ? `?${q}` : '') + location.hash,
+      );
+    }, 100);
+    return () => clearInterval(timer);
+  }, []);
+
   // Close on Esc / scroll, lock body scroll while open.
   useEffect(() => {
     if (!preview) return;
@@ -60,11 +82,27 @@ export default function Root({ children }: { children: ReactNode }): ReactNode {
 
   // ---- Reader sidebar controls: hide + resize the doc nav and TOC ----
   const { pathname } = useLocation();
-  const [onDoc, setOnDoc] = useState(false);
-  const [hasToc, setHasToc] = useState(false);
+  const [sidebar, setSidebar] = useState<HTMLElement | null>(null);
+  const [tocCol, setTocCol] = useState<HTMLElement | null>(null);
+  const onDoc = !!sidebar;
+  const hasToc = !!tocCol;
   const [hideSidebar, setHideSidebar] = useState(() => readFlag('db-hide-sidebar'));
   const [hideToc, setHideToc] = useState(() => readFlag('db-hide-toc'));
   const [noAnim, setNoAnim] = useState(() => readFlag(ANIM_STORAGE_KEY));
+
+  // In the WebUI's docs dialog the app refuses to be framed (frame-ancestors 'none'), so a
+  // link to the local WebUI would open a blank frame: send it to a new tab instead.
+  useEffect(() => {
+    if (window.self === window.top) return;
+    function onLocalLink(e: MouseEvent) {
+      const a = (e.target as HTMLElement | null)?.closest('a');
+      if (!a || !/^(localhost|127\.0\.0\.1)$/.test(a.hostname)) return;
+      a.target = '_blank';
+      a.rel = 'noopener';
+    }
+    document.addEventListener('click', onLocalLink, true);
+    return () => document.removeEventListener('click', onLocalLink, true);
+  }, []);
 
   // Restore saved widths once on mount.
   useEffect(() => {
@@ -101,22 +139,52 @@ export default function Root({ children }: { children: ReactNode }): ReactNode {
 
   // Is this a doc page, and does it render a desktop TOC? Probe DOM per route
   // (routeBasePath is '/', so the route alone can't tell docs from pages).
+  //
+  // Track the ELEMENTS, not booleans: on client-side navigation React mounts a fresh
+  // sidebar/TOC column, and a heavy page (device-specs) commits them several frames
+  // after the route changes. Probing on `pathname` + one rAF missed that commit, so the
+  // new TOC column never got tagged and "Hide contents" did nothing — while `hasToc`
+  // stayed true from the previous page, so no dependent effect re-ran to repair it.
+  // A MutationObserver catches the late mount, and the element identity in state makes
+  // the tagging + resizer effects re-run for it.
   useEffect(() => {
+    let queued = false;
     const probe = () => {
-      setOnDoc(!!document.querySelector('.theme-doc-sidebar-container'));
-      const toc = document.querySelector('.theme-doc-toc-desktop');
-      setHasToc(!!toc);
-      // Tag the TOC column so custom.css can hide/resize it via a plain
-      // descendant selector. A `:has()` rule keyed on the persistent
-      // <html class="db-hide-toc"> is NOT re-evaluated for the fresh TOC col
-      // React mounts on client-side navigation (the trigger class never
-      // changed), so the carried-over hidden state wouldn't apply.
-      toc?.closest('.col')?.classList.add('db-toc-col');
+      queued = false;
+      setSidebar((prev) => {
+        const next = document.querySelector('.theme-doc-sidebar-container') as HTMLElement | null;
+        return prev === next ? prev : next;
+      });
+      setTocCol((prev) => {
+        const toc = document.querySelector('.theme-doc-toc-desktop');
+        const next = (toc?.closest('.col') as HTMLElement | null) ?? null;
+        return prev === next ? prev : next;
+      });
+    };
+    let frame = 0;
+    const schedule = () => {
+      if (queued) return;
+      queued = true;
+      frame = requestAnimationFrame(probe);
     };
     probe();
-    const id = requestAnimationFrame(probe); // catch late layout
-    return () => cancelAnimationFrame(id);
+    // childList only — tagging the column below sets an attribute, which would
+    // otherwise re-trigger this observer.
+    const obs = new MutationObserver(schedule);
+    obs.observe(document.body, { childList: true, subtree: true });
+    return () => {
+      obs.disconnect();
+      cancelAnimationFrame(frame);
+    };
   }, [pathname]);
+
+  // Tag the TOC column so custom.css can hide/resize it via a plain descendant
+  // selector. A `:has()` rule keyed on the persistent <html class="db-hide-toc"> is NOT
+  // re-evaluated for the fresh TOC col React mounts on client-side navigation (the
+  // trigger class never changed), so the carried-over hidden state wouldn't apply.
+  useEffect(() => {
+    tocCol?.classList.add('db-toc-col');
+  }, [tocCol]);
 
   // Inject a drag handle into each visible panel; drag updates a CSS width var.
   useEffect(() => {
@@ -174,18 +242,14 @@ export default function Root({ children }: { children: ReactNode }): ReactNode {
       });
     };
 
-    if (!hideSidebar) {
-      const left = document.querySelector('.theme-doc-sidebar-container') as HTMLElement | null;
-      if (left) attach(left, 'right', '--doc-sidebar-width', 'db-sidebar-w', 1, 180, 520, 300);
+    if (sidebar && !hideSidebar) {
+      attach(sidebar, 'right', '--doc-sidebar-width', 'db-sidebar-w', 1, 180, 520, 300);
     }
-    if (hasToc && !hideToc) {
-      const tocCol = document
-        .querySelector('.theme-doc-toc-desktop')
-        ?.closest('.col') as HTMLElement | null;
-      if (tocCol) attach(tocCol, 'left', '--db-toc-width', 'db-toc-w', -1, 160, 560, 300);
+    if (tocCol && !hideToc) {
+      attach(tocCol, 'left', '--db-toc-width', 'db-toc-w', -1, 160, 560, 300);
     }
     return () => cleanups.forEach((fn) => fn());
-  }, [onDoc, hasToc, hideSidebar, hideToc, pathname]);
+  }, [onDoc, sidebar, tocCol, hideSidebar, hideToc]);
 
   return (
     <>

@@ -1,0 +1,192 @@
+{
+  "samples": [
+    {
+      "batch": false,
+      "repetition": 0,
+      "ms": 977.437375,
+      "reportCount": 76,
+      "STPms": 9.047999
+    },
+    {
+      "batch": true,
+      "repetition": 0,
+      "ms": 460.901375,
+      "reportCount": 62,
+      "STPms": 0.78975
+    },
+    {
+      "batch": true,
+      "repetition": 1,
+      "ms": 471.0435,
+      "reportCount": 62,
+      "STPms": 0.597042
+    },
+    {
+      "batch": false,
+      "repetition": 1,
+      "ms": 1031.708084,
+      "reportCount": 76,
+      "STPms": 11.139208
+    },
+    {
+      "batch": false,
+      "repetition": 2,
+      "ms": 1021.84825,
+      "reportCount": 76,
+      "STPms": 9.005459
+    },
+    {
+      "batch": true,
+      "repetition": 2,
+      "ms": 463.509,
+      "reportCount": 62,
+      "STPms": 0.582834
+    },
+    {
+      "batch": true,
+      "repetition": 3,
+      "ms": 461.85925,
+      "reportCount": 62,
+      "STPms": 0.760083
+    },
+    {
+      "batch": false,
+      "repetition": 3,
+      "ms": 1021.239792,
+      "reportCount": 76,
+      "STPms": 8.853918
+    },
+    {
+      "batch": false,
+      "repetition": 4,
+      "ms": 1021.351333,
+      "reportCount": 76,
+      "STPms": 9.435457
+    },
+    {
+      "batch": true,
+      "repetition": 4,
+      "ms": 460.349833,
+      "reportCount": 62,
+      "STPms": 0.600917
+    },
+    {
+      "batch": true,
+      "repetition": 5,
+      "ms": 461.742125,
+      "reportCount": 62,
+      "STPms": 0.727083
+    },
+    {
+      "batch": false,
+      "repetition": 5,
+      "ms": 1021.507458,
+      "reportCount": 76,
+      "STPms": 9.791415
+    },
+    {
+      "batch": false,
+      "repetition": 6,
+      "ms": 1022.803959,
+      "reportCount": 76,
+      "STPms": 9.077958
+    },
+    {
+      "batch": true,
+      "repetition": 6,
+      "ms": 461.533667,
+      "reportCount": 62,
+      "STPms": 0.615333
+    },
+    {
+      "batch": true,
+      "repetition": 7,
+      "ms": 461.4885,
+      "reportCount": 62,
+      "STPms": 0.581375
+    },
+    {
+      "batch": false,
+      "repetition": 7,
+      "ms": 1041.00325,
+      "reportCount": 76,
+      "STPms": 8.72154
+    },
+    {
+      "batch": false,
+      "repetition": 8,
+      "ms": 1024.97275,
+      "reportCount": 76,
+      "STPms": 9.543084
+    },
+    {
+      "batch": true,
+      "repetition": 8,
+      "ms": 459.484459,
+      "reportCount": 62,
+      "STPms": 0.6055
+    },
+    {
+      "batch": true,
+      "repetition": 9,
+      "ms": 460.255875,
+      "reportCount": 62,
+      "STPms": 0.488625
+    },
+    {
+      "batch": false,
+      "repetition": 9,
+      "ms": 1025.968667,
+      "reportCount": 76,
+      "STPms": 10.938958
+    },
+    {
+      "batch": false,
+      "repetition": 10,
+      "ms": 1022.155584,
+      "reportCount": 76,
+      "STPms": 9.970752
+    },
+    {
+      "batch": true,
+      "repetition": 10,
+      "ms": 460.591625,
+      "reportCount": 62,
+      "STPms": 0.501791
+    },
+    {
+      "batch": true,
+      "repetition": 11,
+      "ms": 459.897875,
+      "reportCount": 62,
+      "STPms": 0.502666
+    },
+    {
+      "batch": false,
+      "repetition": 11,
+      "ms": 1020.7075,
+      "reportCount": 76,
+      "STPms": 7.964582
+    }
+  ],
+  "summary": {
+    "baseline": {
+      "medianMs": 1022.001917,
+      "minMs": 1020.7075,
+      "maxMs": 1041.00325,
+      "meanMs": 1024.3558543
+    },
+    "batched": {
+      "medianMs": 461.0400625,
+      "minMs": 459.484459,
+      "maxMs": 463.509,
+      "meanMs": 461.0712209
+    }
+  },
+  "date": "2026-09-17",
+  "measurement": "synchronous HIDAPI page writes, after DIS initialization",
+  "images": 15,
+  "jpegBytes": 20465,
+  "warmupRepetitionsExcluded": 2,
+  "retainedSamplesPerMode": 10
+}

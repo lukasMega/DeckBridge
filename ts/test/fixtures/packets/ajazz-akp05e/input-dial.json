@@ -1,0 +1,66 @@
+{
+  "version": 1,
+  "model": "ajazz-akp05e",
+  "pid": "0x3004",
+  "firmware": null,
+  "interface": {
+    "usagePage": 65440,
+    "usage": 1
+  },
+  "source": "synthetic",
+  "assumeOpen": true,
+  "note": "Rotate codes are [ccw, cw] per encoder; encoder presses synthesize the up; a press report with state 0 is ignored (device-notes.json).",
+  "steps": [
+    {
+      "op": "read",
+      "dir": "in",
+      "hex": "41434b00004f4b000051000000000000",
+      "expect": [
+        {
+          "type": "dial",
+          "index": 1,
+          "kind": "rotate",
+          "delta": 1
+        }
+      ]
+    },
+    {
+      "op": "read",
+      "dir": "in",
+      "hex": "41434b00004f4b0000a0000000000000",
+      "expect": [
+        {
+          "type": "dial",
+          "index": 0,
+          "kind": "rotate",
+          "delta": -1
+        }
+      ]
+    },
+    {
+      "op": "read",
+      "dir": "in",
+      "hex": "41434b00004f4b000037010000000000",
+      "expect": [
+        {
+          "type": "dial",
+          "index": 0,
+          "kind": "press",
+          "state": "down"
+        },
+        {
+          "type": "dial",
+          "index": 0,
+          "kind": "press",
+          "state": "up"
+        }
+      ]
+    },
+    {
+      "op": "read",
+      "dir": "in",
+      "hex": "41434b00004f4b000037000000000000",
+      "expect": []
+    }
+  ]
+}

@@ -1,0 +1,22 @@
+{
+  "version": 1,
+  "model": "mirabox-293",
+  "pid": "0x1005",
+  "firmware": null,
+  "interface": {
+    "usagePage": 65440,
+    "usage": 1
+  },
+  "source": "synthetic",
+  "assumeOpen": true,
+  "note": "No catalog model sets sleep: mirabox-han, so setSleep must stay silent (HAN is gated on the model).",
+  "steps": [
+    {
+      "op": "call",
+      "call": "setSleep",
+      "args": {
+        "asleep": true
+      }
+    }
+  ]
+}
