@@ -71,7 +71,8 @@ Two independent channels carry data in opposite directions over a loopback conne
 TCP port is negotiated at startup:
 
 - **Rust → TS** over **stdout** (pipe), newline-delimited JSON — `TrayEvent`: lifecycle
-  (`ready` with port) and menu clicks (`open_webui`, `check_requirements`, `quit`).
+  (`ready` with port) and menu clicks (`open_webui`, `check_requirements`, `quit`). TS opens the browser for the two
+  WebUI items (it knows the bound port).
 - **TS → Rust** over **TCP** `127.0.0.1:N`, newline-delimited JSON — `TrayState`: icon
   (`full` / `usb_only` / `disconnected`) + status string updates.
 

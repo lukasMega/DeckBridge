@@ -14,6 +14,7 @@ your issue.
 ## Common problems
 
 - **Ports 5343/5344 busy** — stop a conflicting DeckBridge, Network Dock, or ESP32 bridge.
+- **Web UI not on 3000** — If port 3000 is busy, DeckBridge picks a free port in 33011–33099. Use tray → **Open Web UI**, or the `WebUI: http://localhost:<port>` log line. `--webui-port <n>` pins a port; startup fails if that port is busy.
 - **Elgato app will not pair another dock** — it takes one dock per IP address; see
   [one dock per IP address](./browser-deck.md#one-dock-per-ip-address).
 - **Browser deck problems** — see [Browser deck → Troubleshooting](./browser-deck.md#troubleshooting).

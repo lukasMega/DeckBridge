@@ -5,7 +5,7 @@ Other tools can write text onto DeckBridge's display-only keys: the side keys an
 ## How it works
 
 1. Pick a **channel** name, such as `obs-rec`.
-2. In the [Web UI](http://localhost:3000), choose **Push API (external)** as a key's widget and enter the channel name.
+2. In the [Web UI](http://localhost:3000) (tray → **Open Web UI**), choose **Push API (external)** as a key's widget and enter the channel name.
 3. In **Settings → Push API**, create a token.
 4. `POST` text to `/api/push/<channel>` with the token.
 
@@ -23,6 +23,8 @@ curl -X DELETE http://127.0.0.1:3000/api/push/obs-rec \
 ```
 
 Or from the command line: `deckbridge push obs-rec 'hi' --ttl 10`.
+
+The examples use the default port. If the bridge moved to a fallback port, use the port from its `WebUI:` log line, or pin one with `--webui-port`. `deckbridge push` then needs `--url`.
 
 ## Requests
 

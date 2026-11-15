@@ -7,7 +7,7 @@
 // bundles `deckbridge-tray` next to it, spawns the sidecar on startup, and is
 // responsible only for clean process-tree teardown on quit (gotcha G1).
 //
-// The sidecar serves the web UI on localhost:3000, runs the CORA TCP servers,
+// The sidecar serves the web UI on localhost:3000 (or a fallback port), runs the CORA TCP servers,
 // advertises mDNS, and — exactly as it does when run standalone — spawns
 // `deckbridge-tray` as its own tray. We deliberately do NOT add a second Tauri
 // TrayIconBuilder tray (locked decision: keep `deckbridge-tray`).
@@ -127,7 +127,7 @@ fn kill_tree(child: &CommandChild) {
 /// Unix (macOS/Linux) process-tree teardown — mirrors the intent of the Windows
 /// `taskkill /F /T`. The relay is cooperative: on SIGTERM it runs its shutdown
 /// handler (ts/src/app.ts → shutdown() → tray.close()), which SIGTERMs
-/// `deckbridge-tray` and frees ports 3000/5343/5344. So we SIGTERM the relay first and
+/// `deckbridge-tray` and frees the WebUI port and 5343/5344. So we SIGTERM the relay first and
 /// let it reap its own children cleanly. As a backstop against a hung/SIGKILLed
 /// relay that never runs its handler, we then walk the descendant tree
 /// (`pgrep -P`, recursively) and SIGTERM any survivors so no orphan

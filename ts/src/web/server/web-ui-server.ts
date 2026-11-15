@@ -11,7 +11,7 @@ import { SettingsFileController } from './settings-file-controller.js';
 import { ModelOverridesController } from './model-overrides-controller.js';
 import { VerifyController } from './verify-controller.js';
 import { DockRegistry } from './dock-registry.js';
-import { isAllowedWebRequest, resolveListenPort } from './web-request-guard.js';
+import { isAllowedWebRequest, listenWithFallback } from './web-request-guard.js';
 import { withSecurityHeaders } from './security-headers.js';
 import { ActivityBuffers } from './activity-buffers.js';
 import type { RawMockInput } from './mock-input.js';
@@ -49,7 +49,7 @@ import { StandbyController } from './standby-controller.js';
 import { ExtensionsController } from './extensions-controller.js';
 import { WslRelayController } from './wsl-relay-controller.js';
 
-export { isAllowedWebRequest, isValidMacAddress, pickFallbackPort } from './web-request-guard.js';
+export { isAllowedWebRequest, isValidMacAddress } from './web-request-guard.js';
 
 const mockConfigHelpers = __MOCK_BUILD__ ? await import('./mock-config.js') : null;
 const mockInputHelpers = __MOCK_BUILD__ ? await import('./mock-input.js') : null;
@@ -244,18 +244,22 @@ export class WebUIServer extends EventEmitter implements WebUIController, WebUIC
   }
 
   // Settings are loaded by app.ts before construction.
-  async start(): Promise<void> {
-    this._port = await resolveListenPort(this._port);
-    this.server = tjs.serve({
-      port: this._port,
-      listenIp: webuiBindAddr(),
-      fetch: (req, extra) => this.handleRequest(req, extra),
-      websocket: this.bus.websocketHandlers((ws) => {
-        this.opened = true;
-        this.bus.sendTo(ws, 'status', this.snapshot());
-        this.imageChannel.sendSnapshot(ws);
+  /** `strictPort`: the user named the port, so a busy one is an error, not a silent move. */
+  async start(opts: { strictPort?: boolean } = {}): Promise<void> {
+    const { port, server } = await listenWithFallback(this._port, !opts.strictPort, (p) =>
+      tjs.serve({
+        port: p,
+        listenIp: webuiBindAddr(),
+        fetch: (req, extra) => this.handleRequest(req, extra),
+        websocket: this.bus.websocketHandlers((ws) => {
+          this.opened = true;
+          this.bus.sendTo(ws, 'status', this.snapshot());
+          this.imageChannel.sendSnapshot(ws);
+        }),
       }),
-    });
+    );
+    this._port = port;
+    this.server = server;
 
     this.bus.start(() => this.bus.broadcast('stats', this.statsMessage()));
   }

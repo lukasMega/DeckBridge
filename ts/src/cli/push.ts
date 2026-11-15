@@ -1,7 +1,7 @@
 // `deckbridge push`: a thin HTTP client for POST/DELETE /api/push/:channel. Never loads
 // native libs or settings, and never opens HID.
 import { isPushChannel, pushBodyError } from '../shared/push-text.js';
-import { WEBUI_PORT } from '../shared/types.js';
+import { WEBUI_FALLBACK_PORT_MAX, WEBUI_FALLBACK_PORT_MIN, WEBUI_PORT } from '../shared/types.js';
 
 export interface PushArgs {
   channel: string;
@@ -89,6 +89,17 @@ function pushBody(a: PushArgs): Record<string, unknown> {
   };
 }
 
+/** The bridge moves off 3000 when it is busy at startup; the default URL can't know that. */
+function fail(msg: string, urlDefaulted: boolean): number {
+  console.error(`deckbridge push: ${msg}`);
+  if (urlDefaulted) {
+    console.error(
+      `deckbridge push: if port ${WEBUI_PORT} was busy when DeckBridge started, it uses a port in ${WEBUI_FALLBACK_PORT_MIN}–${WEBUI_FALLBACK_PORT_MAX}: pass --url with the address from its "WebUI:" log line`,
+    );
+  }
+  return 1;
+}
+
 /** Runs one request; returns the process exit code. `fetchImpl` is a test seam. */
 export async function runPushCommand(
   rest: string[],
@@ -100,6 +111,7 @@ export async function runPushCommand(
     console.error(`deckbridge push: ${args.error}`);
     return 2;
   }
+  const urlDefaulted = !rest.includes('--url') && !env.DECKBRIDGE_WEBUI_PORT;
   const url = `${args.url}/api/push/${encodeURIComponent(args.channel)}`;
   const headers: Record<string, string> = { Authorization: `Bearer ${args.token}` };
   let res: Response;
@@ -112,8 +124,7 @@ export async function runPushCommand(
           body: JSON.stringify(pushBody(args)),
         });
   } catch (e) {
-    console.error(`deckbridge push: cannot reach ${args.url} (${(e as Error).message})`);
-    return 1;
+    return fail(`cannot reach ${args.url} (${(e as Error).message})`, urlDefaulted);
   }
   if (!res.ok) {
     let msg = `HTTP ${res.status}`;
@@ -122,8 +133,7 @@ export async function runPushCommand(
     } catch {
       // keep the status line
     }
-    console.error(`deckbridge push: ${msg}`);
-    return 1;
+    return fail(msg, urlDefaulted);
   }
   if (args.clear) return 0;
   const r = (await res.json()) as { replaced?: number; truncated?: boolean };

@@ -42,7 +42,7 @@ deckbridge bridges a USB stream deck to Elgato software over the network
 (CORA / Elgato legacy). Relevant concerns include, but are not limited to:
 
 - Unauthenticated network access to the emulated dock (TCP 5343/5344, mDNS) and
-  the web UI (port 3000).
+  the web UI (port 3000, or a fallback port in 33011–33099).
 - Buffer handling of fixed-size protocol packets and HID reports.
 - Memory safety in the Rust FFI image pipeline (`deckbridge-native`).
 

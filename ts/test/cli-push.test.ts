@@ -67,6 +67,30 @@ await test('401 → 1; usage error → 2; --clear sends DELETE', async () => {
   assert.equal(method, 'DELETE');
 });
 
+await test('default URL failure prints the fallback-port hint; --url does not', async () => {
+  const lines: string[] = [];
+  const realError = console.error;
+  console.error = (...a: unknown[]) => void lines.push(a.join(' '));
+  try {
+    const down = (() => Promise.reject(new Error('refused'))) as unknown as typeof fetch;
+    const notFound = (() =>
+      Promise.resolve(new Response('{}', { status: 404 }))) as unknown as typeof fetch;
+    assert.equal(await runPushCommand(['obs', 'hi'], down, env), 1);
+    assert.ok(lines.some((l) => l.includes('33011')));
+    lines.length = 0;
+    assert.equal(await runPushCommand(['obs', 'hi'], notFound, env), 1);
+    assert.ok(lines.some((l) => l.includes('33011')));
+    lines.length = 0;
+    assert.equal(
+      await runPushCommand(['obs', 'hi', '--url', 'http://127.0.0.1:4000'], down, env),
+      1,
+    );
+    assert.ok(!lines.some((l) => l.includes('33011')));
+  } finally {
+    console.error = realError;
+  }
+});
+
 console.log('\nparseCliArgs push');
 
 await test('push keeps its rest args and skips flag parsing', () => {

@@ -93,7 +93,7 @@ directory it doesn't have.
 
 | Port | Protocol | Purpose |
 |---|---|---|
-| 3000 | TCP | Web UI — bound to `127.0.0.1` by default. Start with `--bind 0.0.0.0` to expose it on the LAN (see below), or keep the default and use an SSH tunnel: `ssh -L 3000:localhost:3000 pi@<host>`, then open `http://localhost:3000` locally. |
+| 3000 | TCP | Web UI — bound to `127.0.0.1` by default. Start with `--bind 0.0.0.0` to expose it on the LAN (see below), or keep the default and use an SSH tunnel: `ssh -L 3000:localhost:3000 pi@<host>`, then open `http://localhost:3000` locally. If 3000 is busy it falls back to a free port in 33011–33099; on a server, pass `--webui-port 3000` to pin it so firewall/SSH-tunnel rules stay valid (startup then fails if busy). |
 | 5343 | TCP | CORA main server — the Elgato app connects here |
 | 5344 | TCP | CORA child server — image/data channel |
 | 5345/5346 | TCP | Second deck's CORA pair — only when `"multiDeck": true` is set in settings.json (off by default) |

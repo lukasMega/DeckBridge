@@ -82,9 +82,10 @@ class Deckbridge < Formula
       libhidapi is embedded in the binary (auto-extracted at startup) — nothing
       extra to install.
 
-      deckbridge serves a web UI on http://localhost:3000, runs CORA servers on
-      ports 5343/5344, and advertises itself over mDNS (_elg._tcp) so Elgato
-      software auto-discovers it on your LAN.
+      deckbridge serves a web UI on http://localhost:3000 (or a free port in
+      33011–33099 if 3000 is busy), runs CORA servers on ports 5343/5344, and
+      advertises itself over mDNS (_elg._tcp) so Elgato software auto-discovers
+      it on your LAN.
 
       Run it in the background and start it at login (user LaunchAgent, no sudo):
         brew services start deckbridge

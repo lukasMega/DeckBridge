@@ -35,7 +35,7 @@ relay / web UI / USB logic.
 On launch it:
 
 1. Shows **no window** (`app.windows: []`). The dashboard stays the existing
-   browser page at `http://localhost:3000`, served by the sidecar.
+   browser page at `http://localhost:3000` (or its fallback port), served by the sidecar.
 2. Spawns the real `deckbridge` binary as a **sidecar** (`externalBin`).
 3. Points the sidecar's `DECKBRIDGE_TRAY_BIN` env var at the bundled `deckbridge-tray`
    (`deckbridge-tray.exe` on Windows), so the binary spawns **deckbridge-tray** exactly as it
@@ -44,7 +44,7 @@ On launch it:
 4. On quit (deckbridge-tray's Quit shuts the sidecar down → its process exits → the
    supervisor sees `Terminated` and calls `app.exit(0)`), and on
    `RunEvent::ExitRequested`/`Exit`, kills the **whole sidecar process tree** so
-   no orphan `deckbridge` / `deckbridge-tray` lingers and ports 3000/5343 are freed
+   no orphan `deckbridge` / `deckbridge-tray` lingers and the WebUI port and 5343/5344 are freed
    (gotcha G1). Windows uses `taskkill /F /T`; macOS/Linux SIGTERM the relay
    (which cooperatively tears down deckbridge-tray + ports via its own shutdown
    handler) and then SIGTERM any surviving descendants found via `pgrep -P`.

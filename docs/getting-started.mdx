@@ -74,7 +74,7 @@ On macOS, grant **Input Monitoring** access.
 Start DeckBridge. It opens your deck, advertises a network dock, and serves:
 
 - CORA on TCP **5343 / 5344**
-- web UI at **http://localhost:3000**
+- web UI at **http://localhost:3000** (or a free port in 33011–33099 if 3000 is busy)
 
 Packaged releases show current status:
 
@@ -118,7 +118,7 @@ and port (5345, 5347, …). See [Multiple decks](./features.md#multiple-decks).
 
 ## Verify your setup
 
-- Open **http://localhost:3000**. Check live keys and logs.
+- Open **http://localhost:3000**, or tray → **Open Web UI**, which follows a fallback port. Check live keys and logs.
 - Use tray → **Check Requirements** for [diagnostics](./features.md#requirements).
 - `mise run s-advanced` enables advanced controls.
   Mock simulation needs `mise run build-mock`.
@@ -132,6 +132,7 @@ the logs live, how to turn on debug logging, how to produce a diagnostics report
 to a bug report, and how to tune a device whose images land wrong.
 
 - **Ports 5343/5344 busy** — stop conflicting DeckBridge, Network Dock, or ESP32 bridge.
+- **Web UI not on 3000** — If port 3000 is busy, DeckBridge picks a free port in 33011–33099. Use tray → **Open Web UI**, or the `WebUI: http://localhost:<port>` log line. `--webui-port <n>` pins a port; startup fails if that port is busy.
 - **No device** — check USB. On macOS, grant Input Monitoring.
 - **Missing libhidapi** — follow [source-build steps](#option-b--build-from-source).
 - **Linux permission denied** — add a [udev rule](./features.md#permissions).

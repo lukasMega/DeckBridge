@@ -61,7 +61,8 @@ Commands:
 
 Flags (for run):
 ${__MOCK_BUILD__ ? '  --mock                    Start with the mock driver (no hardware)\n' : ''}  --bind <addr>             Listen address for CORA + WebUI  [default 0.0.0.0]
-  --webui-port <n>          WebUI HTTP/WS port               [default 3000]
+  --webui-port <n>          WebUI HTTP/WS port; must be free [default 3000, or a
+                            free port in 33011–33099 when 3000 is busy]
   --no-webui                Do not start the WebUI server
   --open                    Auto-open browser (desktop convenience)
   --headless                Shorthand: no tray, no browser open, skip Elgato-app poll
