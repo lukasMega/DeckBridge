@@ -9,6 +9,7 @@ import urllib.request
 
 import obspython as obs
 
+# If the bridge moved off 3000, use the port from its "WebUI:" log line.
 url = "http://127.0.0.1:3000"
 token = ""
 started = None

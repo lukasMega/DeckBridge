@@ -77,10 +77,9 @@ const noWebui = cli.flags.noWebui;
 await step('deckBr', 'native-libs extract', () => setupNativeLibs());
 
 // tjs.env.DECKBRIDGE_WEBUI_PORT already reflects --webui-port (applyFlagsToEnv, above)
-// or a pre-existing env var — falls back to the WEBUI_PORT default.
-const webuiPort = tjs.env.DECKBRIDGE_WEBUI_PORT
-  ? Number(tjs.env.DECKBRIDGE_WEBUI_PORT)
-  : WEBUI_PORT;
+// or a pre-existing env var — else WEBUI_PORT. Explicit is strict; only the default falls back.
+const webuiPortExplicit = Boolean(tjs.env.DECKBRIDGE_WEBUI_PORT);
+const webuiPort = webuiPortExplicit ? Number(tjs.env.DECKBRIDGE_WEBUI_PORT) : WEBUI_PORT;
 const webui = new WebUIServer(
   webuiPort,
   DEVICE_MODELS.map((m) => ({ id: m.id, name: m.name, keyCount: m.keyCount })),
@@ -465,7 +464,11 @@ if (!__MOCK_BUILD__ || tjs.env.DECKBRIDGE_MOCK !== '1') {
 if (noWebui) {
   log('info', 'web', 'WebUI disabled (--no-webui)');
 } else {
-  await step('deckBr', `webui bind :${webuiPort}`, () => webui.start());
+  await step('deckBr', `webui bind :${webuiPort}`, () =>
+    webui.start({ strictPort: webuiPortExplicit }),
+  );
+  if (webui.port !== webuiPort)
+    log('warn', 'web', `port ${webuiPort} is busy — WebUI moved to :${webui.port}`);
   log('info', 'web', `WebUI: http://localhost:${webui.port}`);
 }
 
@@ -488,6 +491,10 @@ if (headless) {
         },
         onRestartElgatoApp: () => {
           void webui.elgatoApp.restartNow();
+        },
+        onOpenWebUI: (path) => {
+          if (noWebui) log('warn', 'tray', 'WebUI disabled (--no-webui)');
+          else void openBrowser(`http://localhost:${webui.port}${path}`);
         },
       }),
     );

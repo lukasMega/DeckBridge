@@ -237,7 +237,11 @@ if (posix) {
     await tjs.spawn(['chmod', '+x', script]).wait();
     let tray: ReturnType<typeof startTray> = null;
     try {
-      tray = startTray(script, { onQuit: () => {}, onRestartElgatoApp: () => {} });
+      tray = startTray(script, {
+        onQuit: () => {},
+        onRestartElgatoApp: () => {},
+        onOpenWebUI: () => {},
+      });
       assert.ok(tray, 'spawned');
       // A delivered primer proves the writer is ready, even under parallel CI load.
       tray!.push(trayStateWithAttempts(-1));
@@ -273,7 +277,11 @@ if (posix) {
       // Outside the try so a failing startup assertion still closes the sidecar.
       let tray: ReturnType<typeof startTray> = null;
       try {
-        tray = startTray(script, { onQuit: () => {}, onRestartElgatoApp: () => {} });
+        tray = startTray(script, {
+          onQuit: () => {},
+          onRestartElgatoApp: () => {},
+          onOpenWebUI: () => {},
+        });
         assert.ok(tray, 'spawned');
         let pid = 0;
         for (let i = 0; i < 40 && !pid; i++) {
@@ -292,6 +300,34 @@ if (posix) {
         await tray?.close();
         await tjs.remove(script).catch(() => undefined);
         await tjs.remove(pidFile).catch(() => undefined);
+      }
+    },
+  );
+
+  await asyncTest(
+    'open_webui and check_requirements events reach onOpenWebUI with their path',
+    async () => {
+      const script = `${tjs.tmpDir}/fake-tray-open-${tjs.pid}.sh`;
+      await tjs.writeFile(
+        script,
+        `#!/bin/sh\necho '{"event":"open_webui"}'\necho '{"event":"check_requirements"}'\nwhile :; do sleep 0.05; done\n`,
+      );
+      await tjs.spawn(['chmod', '+x', script]).wait();
+      const paths: string[] = [];
+      let tray: ReturnType<typeof startTray> = null;
+      try {
+        tray = startTray(script, {
+          onQuit: () => {},
+          onRestartElgatoApp: () => {},
+          onOpenWebUI: (path) => paths.push(path),
+        });
+        assert.ok(tray, 'spawned');
+        for (let i = 0; i < 40 && paths.length < 2; i++)
+          await new Promise((r) => setTimeout(r, 25));
+        assert.deepEqual(paths, ['/', '/requirements']);
+      } finally {
+        await tray?.close();
+        await tjs.remove(script).catch(() => undefined);
       }
     },
   );

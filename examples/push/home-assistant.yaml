@@ -6,6 +6,7 @@
 # configuration.yaml
 rest_command:
   deckbridge_push:
+    # If the bridge moved off 3000, use the port from its "WebUI:" log line.
     url: "http://deckbridge-host:3000/api/push/{{ channel }}"
     method: post
     content_type: "application/json"

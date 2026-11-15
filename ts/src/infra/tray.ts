@@ -33,10 +33,12 @@ const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms
 
 /** Tray stdout events routed to app.ts. `onRestartElgatoApp` is the manual path
  *  for the "Restart Elgato App" menu item — the tray only emits the event, TS
- *  owns settings/logging/isElgatoAppRunning (see rust/deckbridge-tray/README.md). */
+ *  owns settings/logging/isElgatoAppRunning (see rust/deckbridge-tray/README.md).
+ *  The two WebUI items route to `onOpenWebUI` too: only TS knows the bound port. */
 export interface TrayHandlers {
   onQuit(): void;
   onRestartElgatoApp(): void;
+  onOpenWebUI(path: string): void;
 }
 
 /** What the tray shows, from the live state app.ts gathers. `deviceName` is
@@ -116,7 +118,8 @@ class TrayProcess implements TrayHandle {
     if (ev.event === 'ready' && ev.port) void this._connect(ev.port);
     if (ev.event === 'quit') handlers.onQuit();
     if (ev.event === 'restart_elgato_app') handlers.onRestartElgatoApp();
-    // Unknown events (open_webui, check_requirements — acted on in Rust) are ignored.
+    if (ev.event === 'open_webui') handlers.onOpenWebUI('/');
+    if (ev.event === 'check_requirements') handlers.onOpenWebUI('/requirements');
   }
 
   private async _readLoop(proc: TjsProcess, handlers: TrayHandlers): Promise<void> {

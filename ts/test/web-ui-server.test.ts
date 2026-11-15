@@ -2,13 +2,17 @@ import assert from 'tjs:assert';
 import {
   isAllowedWebRequest,
   isValidMacAddress,
-  pickFallbackPort,
   WebUIServer,
 } from '../src/web/server/web-ui-server.js';
 import { docsUrl, docsTrackingAllowed, DOCS_BASE } from '../src/web/server/docs-links.js';
 import { QR_LIB } from '../src/web/client/simple/qr-lib.js';
 import { Broadcaster } from '../src/web/server/broadcaster.js';
-import { OWN_IP_CACHE_TTL_MS, resetOwnIpCache } from '../src/web/server/web-request-guard.js';
+import {
+  OWN_IP_CACHE_TTL_MS,
+  fallbackPorts,
+  listenWithFallback,
+  resetOwnIpCache,
+} from '../src/web/server/web-request-guard.js';
 import { saveSettings } from '../src/infra/settings-store.js';
 import type { Settings } from '../src/infra/settings-store.js';
 import type { DockStatus } from '../src/shared/types.js';
@@ -187,14 +191,113 @@ test('localhost/127.0.0.1/[::1] still allowed alongside own-IP support', () => {
   assert.ok(isAllowedWebRequest('[::1]:3000', null, 3000));
 });
 
-// pickFallbackPort
+// fallbackPorts / listenWithFallback
 
-console.log('\npickFallbackPort');
+console.log('\nfallbackPorts / listenWithFallback');
 
-test('returns a port in the expected fallback range', () => {
-  for (let i = 0; i < 50; i++) {
-    const port = pickFallbackPort();
-    assert.ok(port >= 64000 && port <= 65000, `port ${port} out of range`);
+async function rejectsWith(fn: () => Promise<unknown>, re: RegExp): Promise<void> {
+  try {
+    await fn();
+  } catch (e) {
+    assert.ok(re.test((e as Error).message), `unexpected error: ${(e as Error).message}`);
+    return;
+  }
+  assert.ok(false, 'expected rejection');
+}
+
+const inFallbackRange = (p: number): boolean => p >= 33011 && p <= 33099;
+function refuseDefaultPort(p: number): number {
+  if (p === 3000) throw new Error('EACCES');
+  return p;
+}
+const never = (): Promise<boolean> => Promise.resolve(false);
+const always = (): Promise<boolean> => Promise.resolve(true);
+
+test('fallbackPorts: every port in 33011–33099 exactly once', () => {
+  const ports = fallbackPorts();
+  assert.eq(ports.length, 89);
+  assert.eq(new Set(ports).size, 89);
+  assert.eq(Math.min(...ports), 33011);
+  assert.eq(Math.max(...ports), 33099);
+});
+
+await runWebTest('listenWithFallback: free preferred port binds once', async () => {
+  let calls = 0;
+  const r = await listenWithFallback(3000, true, (p) => (calls++, p), never);
+  assert.eq(r.port, 3000);
+  assert.eq(calls, 1);
+});
+
+await runWebTest('listenWithFallback: busy preferred port moves into the range', async () => {
+  const r = await listenWithFallback(
+    3000,
+    true,
+    (p) => p,
+    (p) => Promise.resolve(p === 3000),
+  );
+  assert.ok(inFallbackRange(r.port), `port ${r.port} out of range`);
+});
+
+await runWebTest(
+  'listenWithFallback: busy preferred port, strict → rejects naming the flag',
+  async () => {
+    await rejectsWith(
+      () =>
+        listenWithFallback(
+          3000,
+          false,
+          (p) => p,
+          (p) => Promise.resolve(p === 3000),
+        ),
+      /3000.*--webui-port/,
+    );
+  },
+);
+
+await runWebTest(
+  'listenWithFallback: refused bind on 3000 moves on (Windows excluded range)',
+  async () => {
+    const r = await listenWithFallback(3000, true, refuseDefaultPort, never);
+    assert.ok(inFallbackRange(r.port), `port ${r.port} out of range`);
+  },
+);
+
+await runWebTest('listenWithFallback: every port busy → rejects naming the range', async () => {
+  await rejectsWith(() => listenWithFallback(3000, true, (p) => p, always), /33011–33099/);
+});
+
+await runWebTest('listenWithFallback: bind always throws → gives up after 5 binds', async () => {
+  let calls = 0;
+  await rejectsWith(
+    () =>
+      listenWithFallback(
+        3000,
+        true,
+        () => {
+          calls++;
+          throw new Error('boom');
+        },
+        never,
+      ),
+    /boom/,
+  );
+  assert.eq(calls, 5);
+});
+
+await runWebTest('WebUIServer.start: busy port falls back, strictPort rejects', async () => {
+  const ui1 = await webUIAt(TEST_SETTINGS_ROOT, 13011);
+  const ui2 = await webUIAt(TEST_SETTINGS_ROOT, 13011);
+  const ui3 = await webUIAt(TEST_SETTINGS_ROOT, 13011);
+  try {
+    await ui1.start();
+    assert.eq(ui1.port, 13011);
+    await ui2.start();
+    assert.ok(inFallbackRange(ui2.port), `port ${ui2.port} out of range`);
+    await rejectsWith(() => ui3.start({ strictPort: true }), /13011/);
+  } finally {
+    await ui1.stop();
+    await ui2.stop();
+    await ui3.stop();
   }
 });
 

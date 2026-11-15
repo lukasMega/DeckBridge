@@ -1,3 +1,5 @@
+import { WEBUI_FALLBACK_PORT_MIN, WEBUI_FALLBACK_PORT_MAX } from '../../shared/types.js';
+
 export function isValidMacAddress(addr: string): boolean {
   const parts = addr.split(':');
   return parts.length === 6 && parts.every((p) => /^[0-9a-f]{2}$/i.test(p));
@@ -80,22 +82,46 @@ export async function isPortInUse(port: number): Promise<boolean> {
   }
 }
 
-const FALLBACK_PORT_MIN = 64000;
-const FALLBACK_PORT_RANGE = 1001;
-export const FALLBACK_PORT_ATTEMPTS = 5;
+/** A bind that keeps failing on ports that look free is not a port conflict (e.g. a bad --bind). */
+const MAX_BIND_FAILURES = 5;
 
-export function pickFallbackPort(): number {
-  return FALLBACK_PORT_MIN + Math.floor(Math.random() * FALLBACK_PORT_RANGE); // eslint-disable-line sonarjs/pseudo-random
+/** Every fallback port once, shuffled. */
+export function fallbackPorts(random: () => number = Math.random): number[] {
+  const ports: number[] = [];
+  for (let p = WEBUI_FALLBACK_PORT_MIN; p <= WEBUI_FALLBACK_PORT_MAX; p++) ports.push(p);
+  for (let i = ports.length - 1; i > 0; i--) {
+    const j = Math.floor(random() * (i + 1));
+    [ports[i], ports[j]] = [ports[j]!, ports[i]!];
+  }
+  return ports;
 }
 
-/** `preferred` if free, else the first free random high port within
- *  FALLBACK_PORT_ATTEMPTS tries — else `preferred` anyway, letting tjs.serve
- *  report the real bind error. */
-export async function resolveListenPort(preferred: number): Promise<number> {
-  if (!(await isPortInUse(preferred))) return preferred;
-  for (let attempt = 0; attempt < FALLBACK_PORT_ATTEMPTS; attempt++) {
-    const candidate = pickFallbackPort();
-    if (!(await isPortInUse(candidate))) return candidate;
+/** Binds `preferred`, else (when `fallback`) the first fallback port that binds. Both checks are
+ *  needed: macOS lets tjs.serve bind 127.0.0.1 over another app's wildcard listener (only the
+ *  connect probe sees it), and Windows can refuse a bind with nothing listening (excluded ranges). */
+export async function listenWithFallback<T>(
+  preferred: number,
+  fallback: boolean,
+  bind: (port: number) => T,
+  inUse: (port: number) => Promise<boolean> = isPortInUse,
+): Promise<{ port: number; server: T }> {
+  const candidates = fallback
+    ? [preferred, ...fallbackPorts().filter((p) => p !== preferred)]
+    : [preferred];
+  let reason = 'already in use';
+  let bindFailures = 0;
+  for (const port of candidates) {
+    if (await inUse(port)) continue;
+    try {
+      return { port, server: bind(port) };
+    } catch (e) {
+      reason = (e as Error).message;
+      if (++bindFailures >= MAX_BIND_FAILURES) break;
+    }
   }
-  return preferred;
+  throw new Error(
+    fallback
+      ? `WebUI port ${preferred} and fallback ports ${WEBUI_FALLBACK_PORT_MIN}–${WEBUI_FALLBACK_PORT_MAX} are unavailable (${reason})`
+      : `WebUI port ${preferred} is unavailable (${reason}): free it or pass another --webui-port`,
+  );
 }

@@ -6,7 +6,7 @@ Widgets update without an open browser. Choose a clock, date, text, weather, com
 
 ## Assign a widget
 
-1. Open the [Web UI](http://localhost:3000) and select a dock.
+1. Open the [Web UI](http://localhost:3000) (tray → **Open Web UI**) and select a dock.
 2. Find **Side keys** or **Touch strip**. Choose a widget from its dropdown.
 3. Enter any requested value. Changes apply immediately and survive reconnects.
 

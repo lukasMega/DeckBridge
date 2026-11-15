@@ -33,7 +33,7 @@ scoop install deckbridge
 
 This runs the NSIS installer silently, then drops a `deckbridge` shim and a Start
 Menu shortcut. Launch it from either; it runs as a tray supervisor — serving the
-web UI on http://localhost:3000, CORA on ports 5343/5344, and advertising over
+web UI on http://localhost:3000 (or a free port in 33011–33099 if 3000 is busy), CORA on ports 5343/5344, and advertising over
 mDNS so Elgato software auto-discovers it. Quit it from the tray icon.
 
 Update / remove:

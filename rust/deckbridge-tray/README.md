@@ -105,9 +105,9 @@ struct TrayEvent {
 | `event` | When | Action in TS |
 |---|---|---|
 | `"ready"` | tray initialised | TCP-connect to `port` |
-| `"open_webui"` | "Open Web UI" clicked | *(informational — Rust already opened browser)* |
-| `"check_requirements"` | "Check Requirements" clicked | *(informational)* |
-| `"restart_elgato_app"` | "Restart Elgato App" clicked | TS restarts the Elgato app via the same code path as the WebUI button. Unlike the two rows above, Rust does no work of its own here — no browser open, just the emit — because the restart needs settings, logging and `isElgatoAppRunning()`, which live on the TS side. |
+| `"open_webui"` | "Open Web UI" clicked | open `http://localhost:<WebUI port>/` |
+| `"check_requirements"` | "Check Requirements" clicked | open `http://localhost:<WebUI port>/requirements` |
+| `"restart_elgato_app"` | "Restart Elgato App" clicked | TS restarts the Elgato app via the same code path as the WebUI button. Like the rows above, Rust only emits; the restart needs settings, logging and `isElgatoAppRunning()`, which live on the TS side. |
 | `"quit"` | "Quit" clicked | call `shutdown()` → `tjs.exit(0)` |
 
 ---
@@ -149,8 +149,8 @@ flowchart LR
 DeckBridge                         ← disabled header
 Status: Mirabox + Elgato connected  ← disabled, updated by TrayState.status
 ────────────────────────────────
-Open Web UI                     → opens http://localhost:3000
-Check Requirements              → opens http://localhost:3000/requirements
+Open Web UI                     → emit "open_webui" (TS opens the WebUI at its bound port)
+Check Requirements              → emit "check_requirements" (TS opens /requirements)
 Restart Elgato App              → emit "restart_elgato_app" (TS does the restart)
 ────────────────────────────────
 Quit                            → emit "quit", exit process

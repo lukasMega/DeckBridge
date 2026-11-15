@@ -85,6 +85,9 @@ export const HID_POLL_INTERVAL_MS = 3_000;
 
 // WebUI server
 export const WEBUI_PORT = 3000;
+// Used only when the default port is busy; below the Windows/macOS ephemeral range (49152+).
+export const WEBUI_FALLBACK_PORT_MIN = 33011;
+export const WEBUI_FALLBACK_PORT_MAX = 33099;
 export const WEBUI_LISTEN_ADDRESS = '127.0.0.1';
 
 // Loopback port held for the process lifetime: the single-instance lock (infra/single-instance.ts).

@@ -110,6 +110,7 @@ Mirabox 293V3 also matches the HSV293SV3 / "293S V3" refresh — untested.
    Pair it in the app first; next time, it will discover DeckBridge automatically.
 
 A web page at <http://localhost:3000> shows your deck's keys and a live log.
+(If 3000 is busy, it picks a free port in 33011–33099; tray → **Open Web UI** goes there.)
 
 Full install and troubleshooting steps:
 [Getting Started](https://lukasmega.github.io/DeckBridge/getting-started).
@@ -133,7 +134,8 @@ Commands:
 
 Flags (for run):
   --bind <addr>             Listen address for CORA + WebUI  [default 0.0.0.0]
-  --webui-port <n>          WebUI HTTP/WS port               [default 3000]
+  --webui-port <n>          WebUI HTTP/WS port; must be free [default 3000, or a
+                            free port in 33011–33099 when 3000 is busy]
   --no-webui                Do not start the WebUI server
   --open                    Auto-open browser (desktop convenience)
   --headless                Shorthand: no tray, no browser open, skip Elgato-app poll

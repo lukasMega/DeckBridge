@@ -221,6 +221,14 @@ keeping the started WebUI alive instead of crashing. A shutdown signal during th
 exits cleanly. A scanned dock calls it with `maxAttempts: 1`: a bind failure throws back to the
 `DockScanner`'s scan-tick retry instead of looping in place.
 
+The WebUI port does fall back. When the default 3000 is busy, `listenWithFallback()`
+([web-request-guard.ts](../ts/src/web/server/web-request-guard.ts)) tries every port in
+33011–33099 in random order. `app.ts` logs a warning plus the usual `WebUI:` line, and the tray
+follows the bound port. An explicit `--webui-port` / `DECKBRIDGE_WEBUI_PORT` is strict: busy
+means startup fails. Both checks run per candidate: a connect probe (macOS lets `tjs.serve`
+bind `127.0.0.1` over another app's wildcard listener) and the bind itself (Windows can refuse
+a bind with nothing listening). Five bind failures in a row end the search.
+
 <details>
 <summary>Shutdown and unhandled rejections</summary>
 
@@ -596,7 +604,7 @@ re-pairing in Elgato.
 
 </details>
 
-## WebUI (`http://localhost:3000`)
+## WebUI (`http://localhost:3000` by default)
 
 ### Dynamic grid
 
@@ -748,8 +756,8 @@ so it doesn't outlive the main process.
 
 The menu offers **Open Web UI**, **Check Requirements** (the `/requirements` diagnostics page),
 **Restart Elgato App** (see [Troubleshooting](./troubleshooting.md#restarting-the-elgato-app))
-and **Quit**. Rust only emits the click event for the restart item; the restart runs on the TS
-side, which owns settings, logging and the running-process check. The tray is spawned only when
+and **Quit**. Rust only emits the click events. The TS side opens the WebUI items at the bound port and runs
+the restart, and owns settings, logging and the running-process check. The tray is spawned only when
 `DECKBRIDGE_TRAY_BIN` points at the binary (`mise run start` sets it); if it is unset or the
 spawn fails, `startTray()` returns `null` and the app runs normally. Protocol details:
 [rust/deckbridge-tray/README.md](https://github.com/lukasMega/DeckBridge/blob/main/rust/deckbridge-tray/README.md).

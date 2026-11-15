@@ -1,6 +1,7 @@
 #!/bin/sh
 # Push text to a DeckBridge key bound to the channel "demo" (Settings → Push API).
 # Needs: DECKBRIDGE_PUSH_TOKEN=dbp_…   (optional: DECKBRIDGE_URL, default http://127.0.0.1:3000)
+# If the bridge moved off 3000, use the port from its "WebUI:" log line.
 set -eu
 URL="${DECKBRIDGE_URL:-http://127.0.0.1:3000}/api/push/demo"
 AUTH="Authorization: Bearer ${DECKBRIDGE_PUSH_TOKEN:?set DECKBRIDGE_PUSH_TOKEN}"
