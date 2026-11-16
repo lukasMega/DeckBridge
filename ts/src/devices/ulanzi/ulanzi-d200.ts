@@ -62,7 +62,8 @@ export const ULANZI_D200_MODEL: DeviceModel = {
     // square of its average colour rather than being scaled up.
     width: 196,
     height: 196,
-    rotate: 0,
+    // Measured on hardware (verify wizard, 2026-11-16): panel is mounted upside down.
+    rotate: 180,
     flipH: false,
     flipV: false,
     colorMode: 'rgb',
@@ -76,6 +77,8 @@ export const ULANZI_D200_MODEL: DeviceModel = {
     sharpen: 0.6,
     transform: 'sidecar',
   },
+  // Splash is pre-oriented, so it must cancel the image rotate above.
+  splash: { transformOverride: { rotate: 0, flipH: false, flipV: false } },
   keyMap: {
     // CORA (MK.2, row-major) → device slot id. 13 = the wide info window and 14
     // is not a physical cell, so both are dropped by renderImage()'s -1 guard.
