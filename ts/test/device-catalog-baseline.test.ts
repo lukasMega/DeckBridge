@@ -323,7 +323,7 @@ const EXPECTED: Expected[] = [
       format: 'png',
       width: 196,
       height: 196,
-      rotate: 0,
+      rotate: 180,
       flipH: false,
       flipV: false,
       maxBytes: 14336,
@@ -339,6 +339,7 @@ const EXPECTED: Expected[] = [
       smallWindowMode: 203,
       smallWindowSlot: { col: 3, row: 2 },
     },
+    splash: { transformOverride: { rotate: 0, flipH: false, flipV: false } },
     keyMap: {
       coraToWireImage: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, -1, -1],
       wireInputToCora: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, -1],
