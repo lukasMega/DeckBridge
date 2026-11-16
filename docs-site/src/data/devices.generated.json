@@ -945,7 +945,7 @@
           "format": "png",
           "width": "196",
           "height": "196",
-          "rotate": "0°",
+          "rotate": "180°",
           "flipH": "no",
           "flipV": "no",
           "colorMode": "rgb",
