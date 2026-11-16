@@ -28,7 +28,7 @@ import {
   formatClock,
   parseIncoming,
 } from './ulanzi-protocol.js';
-import { UlanziPage, FlushScheduler } from './ulanzi-page.js';
+import { UlanziPage, FlushScheduler, splitBySize } from './ulanzi-page.js';
 import { buildSafePageZip } from './ulanzi-zip.js';
 import type { PageBatch } from './ulanzi-page.js';
 
@@ -180,7 +180,13 @@ export class UlanziDriver extends HidDeviceBase {
     const batch = this.page.takeBatch();
     if (!batch) return;
     try {
-      this.writePage(batch);
+      // SET_BUTTONS replaces the grid, so only the first group may use it; the
+      // rest merge in via PARTIAL_UPDATE. Without partial updates there is no
+      // safe way to split, so the page goes out whole.
+      const groups = splitBySize(batch.slots, this.spec.partialUpdates ? this.spec.maxZipBytes : 0);
+      groups.forEach((slots, i) => {
+        this.writePage({ slots, full: batch.full && i === 0 });
+      });
       this.page.onFlushed(batch);
     } catch (err) {
       this.emit('error', err instanceof Error ? err : new Error(String(err)));
@@ -213,7 +219,7 @@ export class UlanziDriver extends HidDeviceBase {
       warn(
         'hid',
         `page ZIP is ${zip.length} B, over this model's ${this.spec.maxZipBytes} B cap — ` +
-          `the firmware may drop it silently (lower model.image.maxBytes)`,
+          `the firmware may drop it silently`,
       );
     }
     const cmd = batch.full ? CMD.SET_BUTTONS : CMD.PARTIAL_UPDATE;

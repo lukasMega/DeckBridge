@@ -15,6 +15,34 @@ export interface PageBatch {
   full: boolean;
 }
 
+/** Per-slot ZIP overhead beyond the PNG: local + central header, name, manifest entry. */
+const SLOT_OVERHEAD_BYTES = 320;
+/** Headroom for the manifest's fixed part, the 3_2 entry and boundary-byte padding. */
+const ZIP_FIXED_BYTES = 4096;
+
+/** Greedy split of a page into groups whose ZIP stays under `maxZipBytes`, so a
+ *  full-colour PNG page never trips the firmware's silent size cap. A lone slot
+ *  over budget gets its own group. `maxZipBytes <= 0` disables the split. */
+export function splitBySize(slots: PageSlot[], maxZipBytes: number): PageSlot[][] {
+  if (maxZipBytes <= 0) return [slots];
+  const budget = maxZipBytes - ZIP_FIXED_BYTES;
+  const groups: PageSlot[][] = [];
+  let cur: PageSlot[] = [];
+  let used = 0;
+  for (const slot of slots) {
+    const cost = (slot.png?.length ?? 0) + SLOT_OVERHEAD_BYTES;
+    if (cur.length > 0 && used + cost > budget) {
+      groups.push(cur);
+      cur = [];
+      used = 0;
+    }
+    cur.push(slot);
+    used += cost;
+  }
+  if (cur.length > 0 || groups.length === 0) groups.push(cur);
+  return groups;
+}
+
 export class UlanziPage {
   /** Staged since the last successful flush; last write per slot wins. */
   private readonly dirty = new Map<number, Uint8Array>();

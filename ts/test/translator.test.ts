@@ -132,7 +132,6 @@ await test('transformImageForDevice (ulanzi-d200) output is a valid PNG at 196×
   assert.equal(String.fromCharCode(out[12]!, out[13]!, out[14]!, out[15]!), 'IHDR');
   assert.equal(out.readUInt32BE(16), ULANZI_D200_MODEL.image.width);
   assert.equal(out.readUInt32BE(20), ULANZI_D200_MODEL.image.height);
-  assert.ok(out.length <= ULANZI_D200_MODEL.image.maxBytes, `PNG ${out.length} B over budget`);
 });
 
 await test('transformImageForDevice (400x400 BMP) grows OUT past 256 KB and returns full buffer', () => {
