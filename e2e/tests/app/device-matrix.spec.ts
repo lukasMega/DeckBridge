@@ -61,7 +61,8 @@ test.describe('device matrix', () => {
       const last = d.keyCount - 1;
       const press = await nextFrame(
         base,
-        (f) => f.event === 'keyEvent',
+        // Match the index: the previous model's delayed key-up can still be in flight.
+        (f) => f.event === 'keyEvent' && f.data.mk2Index === last,
         () => api(request, base, `/api/key/${last}`, {}),
       );
       expect(press.data.mk2Index).toBe(last);

@@ -152,14 +152,12 @@ export class UlanziDriver extends HidDeviceBase {
    *  CORA index through keyMap.coraToWireImage and dropped the -1 holes). */
   sendImage(slotId: number, png: Uint8Array): void {
     if (!this.device || !this.hidLib || !this.isKeySlot(slotId)) return;
-    this.page.stage(slotId, png);
-    this.scheduler.schedule();
+    if (this.page.stage(slotId, png)) this.scheduler.schedule();
   }
 
   clearKey(slotId: number): void {
     if (!this.device || !this.hidLib || !this.isKeySlot(slotId)) return;
-    this.page.stage(slotId, BLACK_PNG);
-    this.scheduler.schedule();
+    if (this.page.stage(slotId, BLACK_PNG)) this.scheduler.schedule();
   }
 
   /** Real LCD keys only: a staged hole or the info-window slot would land in the manifest. */
@@ -194,6 +192,7 @@ export class UlanziDriver extends HidDeviceBase {
   }
 
   private writePage(batch: PageBatch): void {
+    const t0 = Date.now();
     const { zip, retries, safe } = buildSafePageZip(batch.slots, {
       columns: this.model.columns,
       smallWindowMode: this.spec.smallWindowMode,
@@ -225,6 +224,7 @@ export class UlanziDriver extends HidDeviceBase {
     const cmd = batch.full ? CMD.SET_BUTTONS : CMD.PARTIAL_UPDATE;
     const packets = buildChunks(cmd, zip);
     const delayMs = this.spec.chunkDelayMs ?? 0;
+    const t1 = Date.now();
     let failed = 0;
     // A failed chunk still lets the rest go out: the firmware counts bytes against the
     // header length, and a short upload would swallow the next page as its tail.
@@ -236,7 +236,9 @@ export class UlanziDriver extends HidDeviceBase {
     info(
       'hid',
       `page ${batch.full ? 'full' : 'partial'}: ${batch.slots.length} slots, ` +
-        `${zip.length} B in ${packets.length} packets`,
+        `${zip.length} B in ${packets.length} packets ` +
+        `(png ${batch.slots.reduce((n, s) => n + (s.png?.length ?? 0), 0)} B, ` +
+        `zip ${t1 - t0} ms, write ${Date.now() - t1} ms)`,
     );
   }
 

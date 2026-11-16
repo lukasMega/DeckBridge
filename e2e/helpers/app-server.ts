@@ -1,5 +1,5 @@
 import { spawn, type ChildProcess } from 'node:child_process';
-import { existsSync, mkdtempSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { freePort, freePortBlock, waitFor } from './ports.js';
@@ -60,6 +60,12 @@ export async function startAppServer(): Promise<AppServer> {
   const deckPort = await freePort();
   const cacheDir = mkdtempSync(join(tmpdir(), 'deckbridge-e2e-'));
   const baseURL = `http://127.0.0.1:${port}`;
+  // On macOS/Windows the app probes the real Stream Deck install, and 7.6.1 auto-opens the
+  // "Fix pairing" wizard over every page. Pre-dismiss it so a dev machine matches CI.
+  writeFileSync(
+    join(cacheDir, 'settings.json'),
+    JSON.stringify({ pairingRoute: { route: 'none', wizardDismissed: true } }),
+  );
 
   const env: NodeJS.ProcessEnv = {
     ...process.env,

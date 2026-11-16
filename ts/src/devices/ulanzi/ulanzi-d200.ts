@@ -67,9 +67,9 @@ export const ULANZI_D200_MODEL: DeviceModel = {
     flipH: false,
     flipV: false,
     colorMode: 'rgb',
-    // No per-icon cap: a byte budget forced png.rs onto a 3-level palette (visible
-    // banding). The page cap is met by splitting big pages in the driver instead.
-    maxBytes: 0,
+    // Truecolor up to this size, then png.rs falls back to a dithered adaptive
+    // palette. Every byte costs ~1 ms of USB time; the page cap is met by splitting.
+    maxBytes: 40960,
     quality: 1, // unused for PNG; kept for spec shape
     resizeFilter: 'lanczos3', // 72 → 196 is a 2.7× upscale
     sharpen: 0.6,

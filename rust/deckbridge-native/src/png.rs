@@ -1,16 +1,15 @@
 use image::{RgbImage, RgbaImage};
 
-/// Palette ladder walked when a truecolor PNG overshoots `max_bytes`: levels per
-/// channel (R, G, B). Each step keeps the product <= 256 so the palette fits an
-/// 8-bit indexed PNG, and trades colour fidelity for size the way the JPEG
-/// quality ladder in jpeg.rs trades detail for size.
-const PALETTE_LADDER: [(u32, u32, u32); 4] = [(6, 7, 6), (5, 5, 5), (4, 4, 4), (3, 3, 3)];
+/// Palette sizes tried, in order, when a truecolor PNG overshoots `max_bytes`.
+/// Each is an image-derived (median-cut) palette with error-diffusion dithering.
+const PALETTE_SIZES: [usize; 2] = [256, 64];
 
 /// Encode an image as PNG, optionally under a byte budget.
 ///
 /// The Ulanzi D200 firmware unzips PNGs out of a page manifest and (on at least
-/// one firmware generation) silently drops archives past ~196 KB, so a 13-key
-/// page has a real per-icon budget. `max_bytes == 0` disables the ladder.
+/// one firmware generation) silently drops archives past ~196 KB, and every byte
+/// costs ~1 ms of USB time, so a 13-key page has a real per-icon budget.
+/// `max_bytes == 0` disables the palette fallback.
 ///
 /// Unlike `encode_jpeg`, exceeding the cap is NOT an error: PNG has no quality
 /// knob to blame, and a slightly oversized icon still renders. The smallest
@@ -31,8 +30,8 @@ pub(crate) fn encode_png(img: &RgbaImage, max_bytes: usize) -> Result<Vec<u8>, S
     }
 
     let mut smallest = truecolor;
-    for &levels in PALETTE_LADDER.iter() {
-        let candidate = encode_indexed(&rgb, levels)?;
+    for &size in PALETTE_SIZES.iter() {
+        let candidate = encode_indexed(&rgb, size)?;
         if candidate.len() <= max_bytes {
             return Ok(candidate);
         }
@@ -64,30 +63,17 @@ fn encode_rgb(rgb: &RgbImage) -> Result<Vec<u8>, String> {
     Ok(buf)
 }
 
-/// Uniform quantization: each channel is bucketed into `levels` steps and the
-/// bucket triple indexes a precomputed palette. No dependency on a quantiser
-/// crate — the palette is regular by construction, so the mapping is a divide
-/// rather than a nearest-colour search.
-fn encode_indexed(rgb: &RgbImage, levels: (u32, u32, u32)) -> Result<Vec<u8>, String> {
-    let (lr, lg, lb) = levels;
-    let palette = build_palette(levels);
-    let indices: Vec<u8> = rgb
-        .pixels()
-        .map(|p| {
-            let ri = bucket(p.0[0], lr);
-            let gi = bucket(p.0[1], lg);
-            let bi = bucket(p.0[2], lb);
-            // Palette size is lr*lg*lb <= 256 by construction, so this fits a u8.
-            (ri * lg * lb + gi * lb + bi) as u8
-        })
-        .collect();
+fn encode_indexed(rgb: &RgbImage, size: usize) -> Result<Vec<u8>, String> {
+    let palette = median_cut(rgb, size);
+    let indices = dither(rgb, &palette);
+    let flat: Vec<u8> = palette.iter().flatten().copied().collect();
 
     let mut buf = Vec::new();
     {
         let mut encoder = ::png::Encoder::new(&mut buf, rgb.width(), rgb.height());
         encoder.set_color(::png::ColorType::Indexed);
         encoder.set_depth(::png::BitDepth::Eight);
-        encoder.set_palette(palette);
+        encoder.set_palette(flat);
         encoder.set_compression(::png::Compression::High);
         encoder.set_filter(::png::Filter::Adaptive);
         let mut writer = encoder
@@ -103,34 +89,102 @@ fn encode_indexed(rgb: &RgbImage, levels: (u32, u32, u32)) -> Result<Vec<u8>, St
     Ok(buf)
 }
 
-/// Channel value -> bucket index in 0..levels.
-fn bucket(v: u8, levels: u32) -> u32 {
-    let scaled = u32::from(v) * levels / 256;
-    scaled.min(levels - 1)
-}
-
-/// Bucket index -> the channel value at the centre of that bucket's range,
-/// stretched so bucket 0 is 0 and the top bucket is 255.
-fn level_value(i: u32, levels: u32) -> u8 {
-    if levels <= 1 {
-        return 0;
+/// Median-cut palette: repeatedly split the most populated box at the median of
+/// its widest channel, then average each box. Own code on purpose: the usual
+/// quantiser crates are GPL/commercial or pull in dependencies we avoid.
+fn median_cut(rgb: &RgbImage, size: usize) -> Vec<[u8; 3]> {
+    let mut pixels: Vec<[u8; 3]> = rgb.pixels().map(|p| p.0).collect();
+    let mut boxes: Vec<std::ops::Range<usize>> = Vec::with_capacity(size);
+    boxes.push(0..pixels.len());
+    while boxes.len() < size {
+        // Split the most populated box that still has colour spread.
+        let pick = boxes
+            .iter()
+            .enumerate()
+            .filter(|(_, r)| r.len() > 1 && widest_channel(&pixels[(*r).clone()]).1 > 0)
+            .max_by_key(|(_, r)| r.len())
+            .map(|(i, _)| i);
+        let Some(i) = pick else { break };
+        let r = boxes[i].clone();
+        let (ch, _) = widest_channel(&pixels[r.clone()]);
+        pixels[r.clone()].sort_unstable_by_key(|p| p[ch]);
+        let mid = r.start + r.len() / 2;
+        boxes[i] = r.start..mid;
+        boxes.push(mid..r.end);
     }
-    ((i * 255) / (levels - 1)) as u8
+    boxes
+        .iter()
+        .map(|r| {
+            let n = r.len().max(1) as u64;
+            let mut sum = [0u64; 3];
+            for p in &pixels[r.clone()] {
+                for c in 0..3 {
+                    sum[c] += u64::from(p[c]);
+                }
+            }
+            [(sum[0] / n) as u8, (sum[1] / n) as u8, (sum[2] / n) as u8]
+        })
+        .collect()
 }
 
-fn build_palette(levels: (u32, u32, u32)) -> Vec<u8> {
-    let (lr, lg, lb) = levels;
-    let mut palette = Vec::with_capacity((lr * lg * lb * 3) as usize);
-    for r in 0..lr {
-        for g in 0..lg {
-            for b in 0..lb {
-                palette.push(level_value(r, lr));
-                palette.push(level_value(g, lg));
-                palette.push(level_value(b, lb));
-            }
+/// (channel index, spread) of the channel with the widest min..max range.
+fn widest_channel(px: &[[u8; 3]]) -> (usize, u8) {
+    let mut lo = [255u8; 3];
+    let mut hi = [0u8; 3];
+    for p in px {
+        for c in 0..3 {
+            lo[c] = lo[c].min(p[c]);
+            hi[c] = hi[c].max(p[c]);
         }
     }
-    palette
+    (0..3)
+        .map(|c| (c, hi[c] - lo[c]))
+        .max_by_key(|&(_, spread)| spread)
+        .unwrap_or((0, 0))
+}
+
+fn nearest(palette: &[[u8; 3]], c: [i32; 3]) -> usize {
+    let mut best = 0;
+    let mut best_d = i32::MAX;
+    for (i, p) in palette.iter().enumerate() {
+        let d = (0..3).map(|k| (c[k] - i32::from(p[k])).pow(2)).sum::<i32>();
+        if d < best_d {
+            best_d = d;
+            best = i;
+        }
+    }
+    best
+}
+
+/// Floyd-Steinberg error diffusion (left-to-right) onto `palette`. Smooths the
+/// banding a plain nearest-colour map leaves on gradients.
+fn dither(rgb: &RgbImage, palette: &[[u8; 3]]) -> Vec<u8> {
+    let (w, h) = (rgb.width() as usize, rgb.height() as usize);
+    let mut out = vec![0u8; w * h];
+    // Error rows carry one pixel of padding on each side to skip edge checks.
+    let mut cur = vec![[0i32; 3]; w + 2];
+    let mut next = vec![[0i32; 3]; w + 2];
+    for y in 0..h {
+        for x in 0..w {
+            let px = rgb.get_pixel(x as u32, y as u32).0;
+            let e = cur[x + 1];
+            let want: [i32; 3] =
+                std::array::from_fn(|k| (i32::from(px[k]) + e[k] / 16).clamp(0, 255));
+            let idx = nearest(palette, want);
+            out[y * w + x] = idx as u8;
+            let got = palette[idx];
+            for k in 0..3 {
+                let err = want[k] - i32::from(got[k]);
+                cur[x + 2][k] += err * 7;
+                next[x][k] += err * 3;
+                next[x + 1][k] += err * 5;
+                next[x + 2][k] += err;
+            }
+        }
+        std::mem::swap(&mut cur, &mut next);
+        next.iter_mut().for_each(|e| *e = [0; 3]);
+    }
+    out
 }
 
 #[cfg(test)]
@@ -161,12 +215,14 @@ mod tests {
     #[test]
     fn palette_ladder_shrinks_a_noisy_image() {
         // Per-pixel noise defeats the filters, so truecolor is genuinely large.
+        let mut seed: u32 = 1;
         let mut img = RgbaImage::new(96, 96);
-        for (x, y, p) in img.enumerate_pixels_mut() {
+        for p in img.pixels_mut() {
+            seed = seed.wrapping_mul(1664525).wrapping_add(1013904223);
             *p = image::Rgba([
-                (x * 7 % 256) as u8,
-                (y * 13 % 256) as u8,
-                ((x * y) % 256) as u8,
+                (seed >> 24) as u8,
+                (seed >> 16) as u8,
+                (seed >> 8) as u8,
                 255,
             ]);
         }
@@ -181,10 +237,40 @@ mod tests {
     }
 
     #[test]
-    fn bucket_covers_the_full_range() {
-        assert_eq!(bucket(0, 4), 0);
-        assert_eq!(bucket(255, 4), 3);
-        assert_eq!(level_value(0, 4), 0);
-        assert_eq!(level_value(3, 4), 255);
+    fn adaptive_palette_keeps_a_gradient_close() {
+        let rgb = RgbImage::from_fn(64, 64, |x, y| {
+            image::Rgb([(x * 4) as u8, (y * 4) as u8, 128])
+        });
+        let palette = median_cut(&rgb, 64);
+        assert!(palette.len() <= 64);
+        let idx = dither(&rgb, &palette);
+        // Mean absolute error per channel stays small for a smooth gradient.
+        let mut err = 0u64;
+        for (i, p) in rgb.pixels().enumerate() {
+            let got = palette[idx[i] as usize];
+            err +=
+                p.0.iter()
+                    .zip(got)
+                    .map(|(a, b)| u64::from(a.abs_diff(b)))
+                    .sum::<u64>();
+        }
+        assert!(
+            err / (64 * 64 * 3) < 12,
+            "mean error {}",
+            err / (64 * 64 * 3)
+        );
+    }
+
+    #[test]
+    fn two_color_image_gets_two_palette_entries() {
+        let rgb = RgbImage::from_fn(16, 16, |x, _| {
+            if x < 8 {
+                image::Rgb([255, 0, 0])
+            } else {
+                image::Rgb([0, 0, 255])
+            }
+        });
+        let palette = median_cut(&rgb, 64);
+        assert_eq!(palette.len(), 2);
     }
 }
