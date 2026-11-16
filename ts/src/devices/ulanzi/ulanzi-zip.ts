@@ -93,7 +93,10 @@ export function fnv1a(data: Uint8Array): number {
  *  dependency, and collision-free across flushes. Plan O11 checks whether the
  *  churn is actually required. */
 export function iconName(slotId: number, flushSeq: number, png: Uint8Array): string {
-  return `Images/${slotId}_${flushSeq}_${digest(png).fnv.toString(16).padStart(8, '0')}.png`;
+  // JPEG experiment: the extension follows the bytes (SOI marker FF D8); the
+  // black clear-key PNG stays .png.
+  const ext = png[0] === 0xff && png[1] === 0xd8 ? 'jpg' : 'png';
+  return `Images/${slotId}_${flushSeq}_${digest(png).fnv.toString(16).padStart(8, '0')}.${ext}`;
 }
 
 /** crc32 + fnv1a cost ~O(bytes) in interpreted JS (tens of ms per page), and the

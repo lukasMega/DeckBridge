@@ -57,7 +57,7 @@ export const ULANZI_D200_MODEL: DeviceModel = {
   keyWidth: 196,
   keyHeight: 196,
   image: {
-    format: 'png',
+    format: 'jpeg',
     // Icons MUST be exactly 196×196: an undersized icon is rendered as a solid
     // square of its average colour rather than being scaled up.
     width: 196,
@@ -67,10 +67,10 @@ export const ULANZI_D200_MODEL: DeviceModel = {
     flipH: false,
     flipV: false,
     colorMode: 'rgb',
-    // Truecolor up to this size, then png.rs falls back to a dithered adaptive
-    // palette. Every byte costs ~1 ms of USB time; the page cap is met by splitting.
-    maxBytes: 40960,
-    quality: 1, // unused for PNG; kept for spec shape
+    // EXPERIMENT: JPEG icons in the page ZIP (~5x smaller than PNG). Unknown whether
+    // the firmware decodes them; if keys go blank/solid, revert to 'png' + maxBytes 40960.
+    maxBytes: 0,
+    quality: 0.9,
     resizeFilter: 'lanczos3', // 72 → 196 is a 2.7× upscale
     sharpen: 0.6,
     transform: 'sidecar',

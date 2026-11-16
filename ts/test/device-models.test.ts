@@ -444,8 +444,8 @@ test('ulanzi-d200 is the only page-protocol model and carries a page spec', () =
   assert.equal(ULANZI_D200_MODEL.wire.inSize, 1024);
 });
 
-test('ulanzi-d200 renders PNG at the firmware-mandated 196×196', () => {
-  assert.equal(ULANZI_D200_MODEL.image.format, 'png');
+test('ulanzi-d200 renders JPEG at the firmware-mandated 196×196', () => {
+  assert.equal(ULANZI_D200_MODEL.image.format, 'jpeg');
   assert.equal(ULANZI_D200_MODEL.image.width, 196);
   assert.equal(ULANZI_D200_MODEL.image.height, 196);
 });

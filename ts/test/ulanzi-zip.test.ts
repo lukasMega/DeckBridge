@@ -286,3 +286,8 @@ await test('the archive passes `unzip -t` where unzip exists', async () => {
 
 console.log(`\n${passed} passed, ${failed} failed`);
 tjs.exit(failed > 0 ? 1 : 0);
+
+await test('iconName: JPEG bytes get .jpg, PNG bytes keep .png', () => {
+  assert.ok(iconName(0, 0, new Uint8Array([0xff, 0xd8, 0xff])).endsWith('.jpg'));
+  assert.ok(iconName(0, 0, new Uint8Array([0x89, 0x50])).endsWith('.png'));
+});
