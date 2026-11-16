@@ -1,7 +1,8 @@
 /* eslint-disable sonarjs/no-hardcoded-ip -- fixture addresses, nothing is contacted */
 import assert from 'tjs:assert';
 import { EventEmitter } from 'node:events';
-import { pickWslRunner, wireWslRelay } from '../src/main/wsl-relay-wiring.js';
+import { pickWslRunner } from '../src/main/wsl-relay-wiring.js';
+import { wirePairingRoute } from '../src/main/pairing-route-wiring.js';
 import { PersistedSettings } from '../src/infra/settings.js';
 import { WebUIServer } from '../src/web/server/web-ui-server.js';
 import type { WslRelayStatus } from '../src/web/contract-wsl-relay.js';
@@ -19,9 +20,15 @@ await test('runner choice: mock scenario anywhere, real on Windows, else none', 
   assert.equal(pickWslRunner({ DECKBRIDGE_WSL_RELAY_MOCK: 'bogus' }, 'Linux'), null);
 });
 
+/** Both mocks: the pairing route is only supported on macOS/Windows or with a mock scenario. */
+function setMocks(on: boolean): void {
+  tjs.env.DECKBRIDGE_WSL_RELAY_MOCK = on ? 'happy' : '';
+  tjs.env.DECKBRIDGE_PAIRING_MOCK = on ? 'windows-wsl' : '';
+}
+
 function rig(dir: string, enabled: boolean) {
   const settings = new PersistedSettings(`${ROOT}/${dir}`);
-  settings.setWslRelay({ enabled });
+  settings.setPairingRoute({ route: enabled ? 'wsl' : 'none' });
   const webui = new WebUIServer(undefined, [], 'real', settings);
   const mdns: boolean[] = [];
   const primaryDock = {
@@ -29,9 +36,9 @@ function rig(dir: string, enabled: boolean) {
     childHasClient: false,
   };
   const driverManager = new EventEmitter();
-  const wired = wireWslRelay(
+  const wired = wirePairingRoute(
     { webui, settings, driverManager, primaryDock } as unknown as Parameters<
-      typeof wireWslRelay
+      typeof wirePairingRoute
     >[0],
     () => '192.168.1.10',
   );
@@ -44,9 +51,9 @@ async function until(webui: WebUIServer, state: WslRelayStatus['state']): Promis
 }
 
 await test('unsupported system: start() touches neither mDNS nor the relay', async () => {
-  tjs.env.DECKBRIDGE_WSL_RELAY_MOCK = '';
+  setMocks(false);
   const r = rig('off', true);
-  if (r.webui.wslRelay.status().supported) return; // Windows host: the real runner would run
+  if (r.webui.pairingRoute.status().supported) return; // macOS/Windows host: the route is live
   r.wired.start();
   await sleep(50);
   assert.deepEqual(r.mdns, []);
@@ -54,7 +61,7 @@ await test('unsupported system: start() touches neither mDNS nor the relay', asy
 });
 
 await test('autostart: mDNS off, ready via the mock runner, paired follows the dock, stop() => off', async () => {
-  tjs.env.DECKBRIDGE_WSL_RELAY_MOCK = 'happy';
+  setMocks(true);
   try {
     const r = rig('on', true);
     assert.equal(r.webui.wslRelay.status().supported, true);
@@ -76,13 +83,14 @@ await test('autostart: mDNS off, ready via the mock runner, paired follows the d
     await r.wired.stop();
     assert.equal(r.webui.wslRelay.status().state, 'off');
     assert.equal(r.webui.wslRelay.status().enabled, true, 'shutdown keeps the switch');
+    assert.equal(r.webui.settings.pairingRoute.route, 'wsl');
   } finally {
-    tjs.env.DECKBRIDGE_WSL_RELAY_MOCK = '';
+    setMocks(false);
   }
 });
 
 await test('disabling through the controller turns mDNS back on', async () => {
-  tjs.env.DECKBRIDGE_WSL_RELAY_MOCK = 'happy';
+  setMocks(true);
   try {
     const r = rig('toggle', false);
     await r.webui.wslRelay.setEnabled(true);
@@ -93,9 +101,9 @@ await test('disabling through the controller turns mDNS back on', async () => {
     r.wired.trackMdns({ setMdnsEnabled: (on) => dock.push(on) });
     assert.deepEqual(dock, [], 'a relay that is off leaves a new dock advertising');
     assert.equal(r.webui.wslRelay.status().state, 'off');
-    assert.equal(r.webui.settings.wslRelay.enabled, false);
+    assert.equal(r.webui.settings.pairingRoute.route, 'none');
   } finally {
-    tjs.env.DECKBRIDGE_WSL_RELAY_MOCK = '';
+    setMocks(false);
   }
 });
 

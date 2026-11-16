@@ -12,7 +12,8 @@ import { KeyGridPreview } from '../components/KeyGridPreview.js';
 import { ExtraKeysPanel } from './extra-keys-panel.js';
 import { DockList, keyPressTitle } from './dock-cards.js';
 import { VerifyOffer } from './verify-wizard/verify-entry.js';
-import { WslReadyLine, WslRelayCard } from './wsl-relay-card.js';
+import { WslReadyLine } from './wsl-relay-card.js';
+import { FixPairingButton, useAutoOpen } from './pairing-wizard/entry.js';
 import { pressKey, quitElgatoApp } from './handlers.js';
 import {
   isMultiDockView,
@@ -126,13 +127,14 @@ export function StageDeviceNoElgato({
   const coraProfile = useStore((s) => selectedCoraProfile(s.status));
   const touchStrip = useStore((s) => selectedTouchStripSize(s.status));
   const modelName = useStore((s) => s.status.modelName);
+  useAutoOpen(true);
 
   return (
     <>
       <h1 class="stage-title">Connect your control app</h1>
       <ConnectionPath device="done" app="active" deviceName={modelName} />
       <PairingFlow onHelp={onHelp} />
-      <WslRelayCard />
+      <FixPairingButton />
       <VerifyOffer index={0} />
       <KeyGridPreview
         keyCount={keyCount}

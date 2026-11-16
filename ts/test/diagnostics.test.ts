@@ -148,6 +148,35 @@ test('every section is present with populated sources', () => {
   }
 });
 
+test('the pairing-route script token never reaches the report', () => {
+  const token = 'ab'.repeat(16);
+  const report = buildDiagnostics({
+    header: fullSources().header,
+    settingsJson: JSON.stringify({ pairingRoute: { route: 'device', token } }),
+  });
+  assert.ok(!report.includes(token));
+  assert.ok(report.includes('"route": "device"'));
+});
+
+test('pairing route renders one status line', () => {
+  const report = buildDiagnostics({
+    ...fullSources(),
+    pairingRoute: {
+      supported: true,
+      route: 'wsl',
+      elgatoVersion: '7.6.1',
+      relayIp: '172.20.1.5', // eslint-disable-line sonarjs/no-hardcoded-ip -- fixture
+      relayVersion: null,
+      versionMismatch: false,
+      announcedAt: null,
+      relay: null,
+      paired: true,
+      wizardDismissed: false,
+    },
+  });
+  assert.ok(report.includes('route=wsl relayIp=172.20.1.5 paired=true elgato=7.6.1'));
+});
+
 test('every section is still present with only the header', () => {
   // A partial report must still reach the issue — "(unavailable)" tells a reader
   // "no data" rather than leaving them guessing whether it was ever collected.

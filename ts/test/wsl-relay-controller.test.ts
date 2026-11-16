@@ -6,6 +6,7 @@ import type { WslRelayPort } from '../src/web/server/wsl-relay-controller.js';
 import { buildDiagnostics } from '../src/web/server/diagnostics.js';
 import { PersistedSettings } from '../src/infra/settings.js';
 import type { WslRelayStatus } from '../src/web/contract-wsl-relay.js';
+import type { PairingRoute, PairingRouteStatus } from '../src/web/contract-pairing-route.js';
 import { testAsync as test, summaryExit } from './helpers/harness.js';
 
 console.log('\nwsl-relay controller + routes');
@@ -25,7 +26,7 @@ const OFF: WslRelayStatus = {
 };
 
 /** A relay whose enable moves to `checking` at once and never finishes by itself. */
-function fakePort(): WslRelayPort & { calls: string[] } {
+function fakePort(): WslRelayPort & { calls: string[]; setEnabled(on: boolean): void } {
   let s = OFF;
   const calls: string[] = [];
   return {
@@ -34,7 +35,6 @@ function fakePort(): WslRelayPort & { calls: string[] } {
     setEnabled: (on) => {
       calls.push(`setEnabled(${on})`);
       s = on ? { ...OFF, enabled: true, state: 'checking' } : OFF;
-      return Promise.resolve(s);
     },
     recheck: () => {
       calls.push('recheck');
@@ -42,6 +42,19 @@ function fakePort(): WslRelayPort & { calls: string[] } {
     },
   };
 }
+
+const pairingStatus = (): PairingRouteStatus => ({
+  supported: true,
+  route: 'none',
+  elgatoVersion: null,
+  relayIp: null,
+  relayVersion: null,
+  versionMismatch: false,
+  announcedAt: null,
+  relay: null,
+  paired: false,
+  wizardDismissed: false,
+});
 
 const settings = new PersistedSettings(ROOT);
 const ui = new WebUIServer(PORT, [], 'real', settings);
@@ -71,34 +84,56 @@ try {
     assert.equal(got.supported, false);
     const res = await post('/api/wsl-relay', '{"enabled":true}');
     assert.equal(((await res.json()) as WslRelayStatus).state, 'off');
-    assert.equal(settings.wslRelay.enabled, false, 'an unsupported system persists nothing');
+    assert.equal(settings.pairingRoute.route, 'none', 'an unsupported system persists nothing');
   });
 
   const port = fakePort();
   ui.wslRelay.attach(port);
+  // The real route state drives the relay from setRoute; this fake does the same two things.
+  ui.pairingRoute.attach({
+    status: () => ({ ...pairingStatus(), route: settings.pairingRoute.route }),
+    setRoute: (route: PairingRoute) => {
+      settings.setPairingRoute({ route });
+      port.setEnabled(route === 'wsl');
+      return Promise.resolve({ ...pairingStatus(), route });
+    },
+    dismiss: () => pairingStatus(),
+    probe: () => Promise.reject(new Error('unused')),
+    command: () => Promise.resolve(null),
+  });
 
   await test('a body that is not {enabled: boolean} is a 400', async () => {
     for (const body of ['{}', '{"enabled":"yes"}', '{"enabled":1}', 'null', 'not json']) {
       assert.equal((await post('/api/wsl-relay', body)).status, 400, body);
     }
     assert.deepEqual(port.calls, []);
-    assert.equal(settings.wslRelay.enabled, false);
+    assert.equal(settings.pairingRoute.route, 'none');
   });
 
-  await test('POST enabled:true persists, starts the flow and replies in `checking`', async () => {
+  await test('POST enabled:true selects the wsl route, starts the flow and replies in `checking`', async () => {
     const res = await post('/api/wsl-relay', '{"enabled":true}');
     assert.equal(res.status, 200);
     assert.equal(((await res.json()) as WslRelayStatus).state, 'checking');
-    assert.equal(settings.wslRelay.enabled, true);
+    assert.equal(settings.pairingRoute.route, 'wsl');
     assert.deepEqual(port.calls, ['setEnabled(true)']);
     const got = (await (await fetch(`${base}/api/wsl-relay`)).json()) as WslRelayStatus;
     assert.equal(got.state, 'checking');
   });
 
-  await test('POST enabled:false persists and replies `off`', async () => {
+  await test('POST enabled:false selects the none route and replies `off`', async () => {
     const res = await post('/api/wsl-relay', '{"enabled":false}');
     assert.equal(((await res.json()) as WslRelayStatus).state, 'off');
-    assert.equal(settings.wslRelay.enabled, false);
+    assert.equal(settings.pairingRoute.route, 'none');
+  });
+
+  await test('POST enabled:false leaves another route alone', async () => {
+    port.calls.length = 0;
+    settings.setPairingRoute({ route: 'device' });
+    const res = await post('/api/wsl-relay', '{"enabled":false}');
+    assert.equal(res.status, 200);
+    assert.equal(settings.pairingRoute.route, 'device');
+    assert.deepEqual(port.calls, []);
+    settings.setPairingRoute({ route: 'none' });
   });
 
   await test('POST /recheck runs the relay and replies with its status', async () => {

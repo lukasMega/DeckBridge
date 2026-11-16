@@ -100,12 +100,3 @@ export function wslRelaySteps(s: WslRelayStatus, stuck = false): WslStep[] {
 export function wslRelayFailed(s: WslRelayStatus): boolean {
   return AT[s.state].failed === true;
 }
-
-/** One line for the Settings switch. */
-export function wslRelayStatusLine(s: WslRelayStatus): string {
-  if (!s.enabled || s.state === 'off') return 'Off';
-  if (wslRelayFailed(s)) return 'Needs attention';
-  if (s.state === 'paired') return s.wslIp ? `Paired · ${s.wslIp}` : 'Paired';
-  if (s.state === 'ready') return `Ready · add ${s.wslIp ?? 'the IP'} in the Stream Deck app`;
-  return subFor(s) ?? 'Working…';
-}

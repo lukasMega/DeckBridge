@@ -46,6 +46,14 @@ export type {
 export type { ExtensionInfo, ExtensionsView } from '../contract-extensions.js';
 export type { WslRelayStatus } from '../contract-wsl-relay.js';
 export type {
+  PairingProbe,
+  PairingRoute,
+  PairingRouteStatus,
+  RelayCommandKind,
+  RelayCommandResponse,
+  RelayProgress,
+} from '../contract-pairing-route.js';
+export type {
   DeviceOverridesView,
   TuningCropRect as DeviceCropRect,
   TuningImage as DeviceImageOverride,

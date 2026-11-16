@@ -1,11 +1,9 @@
 // Stream Deck app 7.6.1 refuses a dock at its own computer's IP, so on Windows DeckBridge can
-// run a relay inside WSL2 and the app pairs with that address instead (issue #257). Three
-// views of one status: the pairing card, the "via WSL relay" line on the ready screen, and the
-// Settings switch. The server drives the state; these only post the switch and "Check again".
+// run a relay inside WSL2 and the app pairs with that address instead (issue #257). Two
+// views: the WSL checklist inside the pairing wizard and the "via relay" line on the ready
+// screen. The server drives the state; these only post "Check again" and the route switch.
 import { useEffect, useState } from 'preact/hooks';
-import { Collapsible } from '../components/Collapsible.js';
 import { DocsLink } from '../components/DocsLink.js';
-import { ToggleRow } from '../components/Fields.js';
 import { GhostButton } from '../components/GhostButton.js';
 import { ICON, Icon } from '../components/Icon.js';
 import { patch, useStore } from '../lib/store.js';
@@ -13,15 +11,10 @@ import { useCopyText } from '../lib/use-copy-text.js';
 import { postJson } from '../lib/ui-api.js';
 import { Feedback, useAsyncAction, type AsyncAction } from '../lib/ui-async.js';
 import type { WslRelayState } from '../../contract-wsl-relay.js';
-import type { WslRelayStatus } from '../ui-types.js';
+import type { PairingRouteStatus, WslRelayStatus } from '../ui-types.js';
+import { isRelayRoute } from './pairing-wizard/routes.js';
 import { CopyChip } from './controls.js';
-import {
-  wslRelayFailed,
-  STUCK_MS,
-  wslRelayStatusLine,
-  wslRelaySteps,
-  type WslStep,
-} from './wsl-relay-steps.js';
+import { wslRelayFailed, STUCK_MS, wslRelaySteps, type WslStep } from './wsl-relay-steps.js';
 
 const URL_BASE = '/api/wsl-relay';
 
@@ -76,35 +69,22 @@ function StepRow({ step, n }: Readonly<{ step: WslStep; n: number }>): preact.JS
   );
 }
 
-/** The pairing-stage card; hidden unless the server reports WSL relay as supported. */
-export function WslRelayCard(): preact.JSX.Element | null {
+/** The WSL checklist inside the pairing wizard; `onTurnedOff` runs after the route is cleared. */
+export function WslRelaySteps({
+  onTurnedOff,
+}: Readonly<{ onTurnedOff: () => void }>): preact.JSX.Element | null {
   const s = useStore((st) => st.wslRelay);
   const action = useAsyncAction();
   const stuck = useStuck(s?.state);
   if (!s?.supported) return null;
-
-  if (!s.enabled) {
-    return (
-      <div class="pairing-auto wsl-card" id="wsl-relay-card">
-        <strong>Using Stream Deck app 7.6.1?</strong>
-        <p class="step-sub">
-          It can&apos;t pair with DeckBridge on the same PC. A small relay in WSL fixes that.
-        </p>
-        <button
-          class="ctabtn primary"
-          type="button"
-          disabled={action.busy}
-          onClick={() => void post(action, '', { enabled: true })}
-        >
-          Pair through WSL
-        </button>
-        <Feedback error={action.error} status={null} />
-      </div>
-    );
-  }
+  const turnOff = (): Promise<void> =>
+    action.run(async () => {
+      const next = await postJson<PairingRouteStatus>('/api/pairing-route', { route: 'none' });
+      patch({ pairingRoute: next });
+      onTurnedOff();
+    }, 'Could not reach DeckBridge.');
   return (
-    <div class="pairing-auto wsl-card" id="wsl-relay-card">
-      <strong>Pair through WSL</strong>
+    <div class="wsl-card" id="wsl-relay-card">
       <ol class="help-steps">
         {wslRelaySteps(s, stuck).map((step, i) => (
           <StepRow key={step.title} step={step} n={i + 1} />
@@ -116,7 +96,7 @@ export function WslRelayCard(): preact.JSX.Element | null {
             Check again
           </GhostButton>
         )}
-        <GhostButton disabled={action.busy} onClick={() => post(action, '', { enabled: false })}>
+        <GhostButton disabled={action.busy} onClick={turnOff}>
           Turn off
         </GhostButton>
         <DocsLink topic="wsl-relay" label="Help" />
@@ -126,45 +106,18 @@ export function WslRelayCard(): preact.JSX.Element | null {
   );
 }
 
-/** "via WSL relay · <ip> Copy" in the ready screen's status row. */
+/** "via relay · <ip> Copy" in the ready screen's status row, for any relay route. */
 export function WslReadyLine(): preact.JSX.Element | null {
-  const s = useStore((st) => st.wslRelay);
+  const s = useStore((st) => st.pairingRoute);
   const { status, copy } = useCopyText();
-  if (!s?.supported || !s.enabled || !s.wslIp) return null;
-  const ip = s.wslIp;
+  if (!s?.supported || !isRelayRoute(s.route) || !s.relayIp) return null;
+  const ip = s.relayIp;
   return (
     <span class="ready-status-device wsl-ready">
-      via WSL relay · {ip}{' '}
+      via relay · {ip}{' '}
       <button class="linkbtn accent" type="button" onClick={() => void copy(ip)}>
         {status === 'copied' ? 'Copied' : 'Copy'}
       </button>
     </span>
-  );
-}
-
-/** The Settings switch; hidden unless supported. */
-export function WslRelaySetting(): preact.JSX.Element | null {
-  const s = useStore((st) => st.wslRelay);
-  const action = useAsyncAction();
-  if (!s?.supported) return null;
-  return (
-    <Collapsible
-      title="WSL relay"
-      subtitle="for Stream Deck app 7.6.1"
-      bodyId="wsl-relay-body"
-      status={wslRelayStatusLine(s)}
-    >
-      <ToggleRow
-        id="toggle-wsl-relay"
-        label="Pair through WSL (Stream Deck app 7.6.1)"
-        checked={s.enabled}
-        disabled={action.busy}
-        onChange={(next) => void post(action, '', { enabled: next })}
-      />
-      <p class="multi-deck-note" id="wsl-relay-status">
-        {wslRelayStatusLine(s)} <DocsLink topic="wsl-relay" />
-      </p>
-      <Feedback error={action.error} status={null} />
-    </Collapsible>
   );
 }

@@ -15,6 +15,7 @@ import type {
   PushChannelView,
   TouchStripMode,
   UpdateInfo,
+  PairingRouteStatus,
   WslRelayStatus,
 } from '../ui-types.js';
 import type { VerifyEndedMsg } from '../../contract-verify.js';
@@ -73,6 +74,11 @@ export interface StoreState {
   verifyEnded: VerifyEndedMsg | null;
   /** WSL relay for Stream Deck app 7.6.1 (GET /api/wsl-relay + WS); null hides its UI. */
   wslRelay: WslRelayStatus | null;
+  /** Stream Deck app 7.6.1 pairing route (GET /api/pairing-route + WS); null hides the wizard. */
+  pairingRoute: PairingRouteStatus | null;
+  /** "Fix pairing" wizard is open (UI-only); `restart` starts it from the first screen. */
+  pairingWizardOpen: boolean;
+  pairingWizardRestart: boolean;
 }
 
 /** Before the first observation: nothing known, nothing to snapshot. */
@@ -138,6 +144,9 @@ let state: StoreState = {
   verifyDock: null,
   verifyEnded: null,
   wslRelay: null,
+  pairingRoute: null,
+  pairingWizardOpen: false,
+  pairingWizardRestart: false,
 };
 
 const listeners = new Set<() => void>();

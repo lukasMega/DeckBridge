@@ -1,4 +1,4 @@
-import type { StateResponse, WslRelayStatus } from '../ui-types.js';
+import type { PairingRouteStatus, StateResponse, WslRelayStatus } from '../ui-types.js';
 import { getJson } from './ui-api.js';
 import * as store from './store.js';
 
@@ -33,6 +33,7 @@ export function hydrate(st: StateResponse): void {
   // Absent in simple-only builds (state-response.ts).
   store.replaceLogs(st.logs ?? [], st.commLogs ?? []);
   void loadWslRelay();
+  void loadPairingRoute();
 }
 
 /** Not part of /api/state: a failed read means no WSL relay here, so its UI stays hidden. */
@@ -44,6 +45,19 @@ async function loadWslRelay(): Promise<void> {
   };
   try {
     apply(await getJson<WslRelayStatus>('/api/wsl-relay'));
+  } catch {
+    apply(null);
+  }
+}
+
+/** Same rules as loadWslRelay; the demo has no endpoint, so a failed read hides the wizard. */
+async function loadPairingRoute(): Promise<void> {
+  const before = store.getSnapshot().pairingRoute;
+  const apply = (pairingRoute: PairingRouteStatus | null): void => {
+    if (store.getSnapshot().pairingRoute === before) store.patch({ pairingRoute });
+  };
+  try {
+    apply(await getJson<PairingRouteStatus>('/api/pairing-route'));
   } catch {
     apply(null);
   }
