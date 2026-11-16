@@ -9,6 +9,7 @@ import {
   chunkBoundaryOffsets,
   describeIncoming,
   describeOutgoing,
+  parseDeviceVersion,
   encodeBrightness,
   encodeSmallWindow,
   formatClock,
@@ -221,6 +222,15 @@ test('DEVICE_INFO decodes the identity JSON up to its NUL', () => {
   assert.equal((parsed as { json: string }).json, json);
 });
 
+test('parseDeviceVersion reads Dversion and rejects bad payloads', () => {
+  assert.equal(parseDeviceVersion('{"DeviceType":"D200","Dversion":"5.3.1"}'), '5.3.1');
+  assert.equal(parseDeviceVersion('{"Dversion":5}'), undefined);
+  assert.equal(parseDeviceVersion('{"Dversion":""}'), undefined);
+  assert.equal(parseDeviceVersion('{}'), undefined);
+  assert.equal(parseDeviceVersion('null'), undefined);
+  assert.equal(parseDeviceVersion('not json'), undefined);
+});
+
 test('the ZIP ACK and the heartbeat are distinguished', () => {
   assert.equal(parseIncoming(inbound(CMD.IN_ZIP_ACK))?.kind, 'ack');
   assert.equal(parseIncoming(inbound(CMD.IN_HEARTBEAT))?.kind, 'heartbeat');
@@ -254,6 +264,10 @@ test('describeOutgoing decodes the ASCII opcodes', () => {
   const b = encodeBrightness(70);
   assert.equal(describeOutgoing(buildPacket(CMD.BRIGHTNESS, b.length, b)), 'BRIGHTNESS 70');
   assert.equal(describeOutgoing(buildPacket(CMD.LOCK, 0)), 'LOCK_SCREEN');
+});
+
+test('describeOutgoing names GET_DEVICE_INFO', () => {
+  assert.equal(describeOutgoing(buildPacket(CMD.GET_DEVICE_INFO, 0)), 'GET_DEVICE_INFO');
 });
 
 test('describeIncoming labels a press, an ack and an unknown report', () => {

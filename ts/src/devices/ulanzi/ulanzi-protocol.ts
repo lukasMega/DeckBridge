@@ -33,6 +33,7 @@ export const FIRST_CHUNK_DATA = PACKET_SIZE - HEADER_SIZE; // 1016
  *  are NOT defined here on purpose, so no typo can reach them. */
 export const CMD = {
   SET_BUTTONS: 0x0001, // page ZIP — replaces the whole grid
+  GET_DEVICE_INFO: 0x0003, // read-only; the device never volunteers 0x0303 unasked
   SMALL_WINDOW: 0x0006, // ASCII info-window fields; doubles as our keepalive
   BRIGHTNESS: 0x000a, // ASCII "0".."100" (the firmware strtol()s it)
   LABEL_STYLE: 0x000b, // JSON font/label defaults
@@ -227,6 +228,17 @@ export function parseIncoming(data: Uint8Array): IncomingPacket | null {
   }
 }
 
+/** Firmware version from the 0x0303 identity JSON, or undefined when the payload
+ *  is not JSON or carries no string `Dversion`. */
+export function parseDeviceVersion(json: string): string | undefined {
+  try {
+    const v: unknown = (JSON.parse(json) as { Dversion?: unknown } | null)?.Dversion;
+    return typeof v === 'string' && v !== '' ? v : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 /** Human describers for the WebUI comm log, keyed by opcode — the counterpart of
  *  CRT_DESCRIBERS in mirabox-protocol.ts. `totalLen` is the header's length
  *  field, so a multi-packet page reads as its full size on packet 0. */
@@ -238,6 +250,7 @@ export const CMD_DESCRIBERS: Record<number, (totalLen: number, payload: Uint8Arr
   [CMD.LABEL_STYLE]: (n) => `LABEL_STYLE json=${n}B`,
   [CMD.LOCK]: () => 'LOCK_SCREEN',
   [CMD.UNLOCK]: () => 'UNLOCK_SCREEN',
+  [CMD.GET_DEVICE_INFO]: () => 'GET_DEVICE_INFO',
 };
 
 /** Describe an outbound packet for the comm log. Raw (headerless) page chunks

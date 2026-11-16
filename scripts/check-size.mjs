@@ -17,8 +17,8 @@ const BUDGETS = {
   'css total': 37_394,
   // 12 AKP05-family clone models (2026-10-14), K1 Pro 0x5548 clone (2026-11-06),
   // Ulanzi D200 page-protocol driver (2026-11-13), adaptive palette + ZIP digest cache
-  // (2026-11-16): measured 61,530 + ~70 B.
-  'hid-worker': 61_600,
+  // (2026-11-16), D200 firmware version via GET_DEVICE_INFO (2026-11-16): measured 61,793 + ~60 B.
+  'hid-worker': 61_850,
   // upHere 293V3 (2026-10-22), K1 Pro 0x5548 clone (2026-11-06), Ulanzi D200 (2026-11-13):
   // the registry grows the scan worker; measured + 1%.
   'hid-scan-worker': 12_141,
