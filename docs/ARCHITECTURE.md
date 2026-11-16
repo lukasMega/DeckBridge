@@ -315,7 +315,7 @@ Family differences that stay model-specific:
 - AKP153E rev. 2 has calibrated mappings; AKP153R keeps unverified inherited defaults.
 - Rev. 1 rebadges are registered separately, with image batching disabled by default.
 - Stream Deck + is emulation-only: `CORA_PROFILES` never enters USB discovery.
-- Ulanzi D200 (untested) has no per-key image write: `ulanzi-zk` ships the whole grid as one
+- Ulanzi D200 has no per-key image write: `ulanzi-zk` ships the whole grid as one
   ZIP of PNGs, framed by `model.page` rather than `wire`. Only 13 of its 15 cells are keys,
   so cells 13 and 14 map to `-1`. See [Page-protocol devices](image-flow.md#page-protocol-devices-ulanzi-d200).
 

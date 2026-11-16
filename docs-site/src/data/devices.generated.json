@@ -922,8 +922,8 @@
       "id": "ulanzi-d200",
       "name": "Ulanzi Stream Controller D200",
       "family": "ulanzi",
-      "tested": false,
-      "testedLabel": "— untested",
+      "tested": true,
+      "testedLabel": "✓ tested (macOS, 2026-11-16)",
       "cells": {
         "identity": {
           "name": "Ulanzi Stream Controller D200",
@@ -2215,6 +2215,11 @@
       "tested": true
     },
     {
+      "id": "ulanzi-d200",
+      "name": "Ulanzi Stream Controller D200",
+      "tested": true
+    },
+    {
       "id": "ajazz-akp05",
       "name": "AJAZZ AKP05",
       "tested": false
@@ -2227,11 +2232,6 @@
     {
       "id": "fifine-d6",
       "name": "Fifine AmpliGame D6",
-      "tested": false
-    },
-    {
-      "id": "ulanzi-d200",
-      "name": "Ulanzi Stream Controller D200",
       "tested": false
     },
     {

@@ -6,7 +6,7 @@
  *  of header per entry and keeps this writer to a readable size. busybox unzip
  *  (what the firmware runs) verifies CRC-32, so a real CRC is required.
  *
- *  NOT HARDWARE-TESTED — see ulanzi-protocol.ts. */
+ *  Hardware-tested on macOS — see ulanzi-protocol.ts. */
 
 import { isPayloadSafe } from './ulanzi-protocol.js';
 import type { FontStyle } from './ulanzi-protocol.js';

@@ -278,7 +278,7 @@ Implement the worker-side `UsbDriver` interface from `usb-drivers.ts`.
 | `devices/elgato/driver.ts` | Feature reports and state snapshots |
 | `devices/mirabox/driver.ts` | CRT framing read from `model.wire`, conditional batching |
 | `devices/ajazz/akp05-driver.ts` | Initialization, keepalive, dials, touch |
-| `devices/ulanzi/ulanzi-driver.ts` | Page protocol: whole-grid repaint, handshake ordering (untested) |
+| `devices/ulanzi/ulanzi-driver.ts` | Page protocol: whole-grid repaint, handshake ordering |
 
 `HidDeviceBase` only provides HID transport; a bulk-transfer device needs separate
 architecture work.

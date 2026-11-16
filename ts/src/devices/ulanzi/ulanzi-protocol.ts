@@ -17,7 +17,7 @@
  *  plus the first 1016 bytes; packets 1..n are RAW 1024-byte chunks with NO
  *  header, the last one zero-padded.
  *
- *  NOT HARDWARE-TESTED. Constants come from the MIT-licensed reference
+ *  Hardware-tested on macOS. Constants come from the MIT-licensed reference
  *  implementations catalogued in .claude/plans/2026-09-10_ulanzi-d200-support.md
  *  and docs/references.md. */
 

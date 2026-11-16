@@ -7,7 +7,7 @@
  *  Runs on the USB worker thread only — a full page is ~180 synchronous HID
  *  writes, which must never touch the main thread's CORA ACK loop (P1).
  *
- *  NOT HARDWARE-TESTED. See .claude/plans/2026-09-10_ulanzi-d200-support.md
+ *  Hardware-tested on macOS. See .claude/plans/2026-09-10_ulanzi-d200-support.md
  *  (Phase B is the bring-up runbook) and docs/references.md. */
 
 import { HidDeviceBase } from '../hid-device-base.js';

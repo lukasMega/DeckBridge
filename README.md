@@ -63,6 +63,7 @@ See **[Supported devices](https://lukasmega.github.io/DeckBridge/devices)**. Sel
 | Fifine AmpliGame D6 (rev. 2) | 15 buttons (5×3) | 112×112 | mirabox-cora |
 | Ajazz AKP153E (rev. 2) | 15 buttons (5×3) | 95×95 | mirabox-cora |
 | Ajazz AKP05E | 10 buttons (5×2) | 112×112 | ajazz-akp05 |
+| Ulanzi Stream Controller D200 | 13 buttons (5×3) | 196×196 | ulanzi-zk |
 
 <details>
 <summary>untested devices</summary>
@@ -79,7 +80,6 @@ See **[Supported devices](https://lukasmega.github.io/DeckBridge/devices)**. Sel
 | Mad Dog GK150K | 15 buttons (5×3) | 85×85 | mirabox-cora-v1 |
 | Risemode Vision 01 | 15 buttons (5×3) | 85×85 | mirabox-cora-v1 |
 | TMICE Stream Controller | 15 buttons (5×3) | 85×85 | mirabox-cora-v1 |
-| Ulanzi Stream Controller D200 | 13 buttons (5×3) | 196×196 | ulanzi-zk |
 
 </details>
 
@@ -87,7 +87,7 @@ Mirabox 293V3 also matches the HSV293SV3 / "293S V3" refresh — untested.
 
 > [!NOTE] <details><summary>details about supported devices</summary>
 > Hardware-tested on macOS: Stream Deck MK.2, Stream Deck Mini, 293V3, 293S, K1 Pro,
-> Fifine AmpliGame D6 (rev. 2), and Ajazz AKP05E.
+> Fifine AmpliGame D6 (rev. 2), Ajazz AKP05E, and Ulanzi D200.
 > <br/><br>
 > The Ajazz AKP153 rev. 2 models, the Fifine AmpliGame D6 rev. 1, the 7 v1
 > rebadges of the 293S board (Ajazz AKP153/E/R rev. 1, Mars Gaming MSD-ONE, Mad Dog GK150K,
@@ -101,7 +101,7 @@ Mirabox 293V3 also matches the HSV293SV3 / "293S V3" refresh — untested.
 > <br/><br>
 > The Ulanzi Stream Controller D200 shares no board with the others: it repaints its
 > screen from a ZIP of PNGs the host sends, so it has its own driver. It is implemented
-> from public documentation and is not hardware-tested yet; its 13 LCD keys are driven,
+> from public documentation and is hardware-tested on macOS; its 13 LCD keys are driven,
 > and the wide slot keeps the firmware's own clock.
 
 </details>

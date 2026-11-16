@@ -21,7 +21,7 @@ Those choices are independent.
 | K1 Pro emulating Mini | 80×80 BMP | Crop, transform, encode JPEG |
 | Mirabox 293S emulating MK.2 | 72×72 JPEG | Pad and rotate |
 | AKP05 / AKP05E emulating Plus | 120×120 JPEG; strip updates | Transform keys; composite strip |
-| Ulanzi D200 emulating MK.2 (untested) | 72×72 JPEG | Resize to 196×196 PNG; batch into a page ZIP |
+| Ulanzi D200 emulating MK.2 | 72×72 JPEG | Resize to 196×196 PNG; batch into a page ZIP |
 
 AKP05 and AKP05E advertise as a Stream Deck + by default.
 Each emulation carries its own mapping.

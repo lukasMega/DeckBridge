@@ -3,7 +3,7 @@ import { ELGATO_MK2_PID } from '../../shared/types.js';
 
 /** Ulanzi Stream Controller D200 — the first PAGE-protocol device in DeckBridge.
  *
- *  NOT HARDWARE-TESTED. Every constant here comes from the MIT-licensed
+ *  Hardware-tested on macOS. Every constant here comes from the MIT-licensed
  *  reference implementations listed in docs/references.md ("Ulanzi devices");
  *  the AGPL-3.0 `glmagalhaes/rs-ulanzi-d200` is cited there for FACTS ONLY and
  *  was not used as an implementation reference. `.claude/plans/
