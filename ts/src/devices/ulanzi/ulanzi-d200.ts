@@ -67,11 +67,9 @@ export const ULANZI_D200_MODEL: DeviceModel = {
     flipH: false,
     flipV: false,
     colorMode: 'rgb',
-    // ≈196 KB page cap / 13 icons, with headroom for the manifest and ZIP
-    // headers. The cap is a real firmware limit on the Qt generation (larger
-    // archives are dropped SILENTLY), so this is a budget the PNG encoder walks
-    // a palette ladder to meet — not a hard error like the JPEG cap.
-    maxBytes: 14336,
+    // No per-icon cap: a byte budget forced png.rs onto a 3-level palette (visible
+    // banding). The page cap is met by splitting big pages in the driver instead.
+    maxBytes: 0,
     quality: 1, // unused for PNG; kept for spec shape
     resizeFilter: 'lanczos3', // 72 → 196 is a 2.7× upscale
     sharpen: 0.6,

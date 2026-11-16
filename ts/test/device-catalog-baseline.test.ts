@@ -326,7 +326,7 @@ const EXPECTED: Expected[] = [
       rotate: 180,
       flipH: false,
       flipV: false,
-      maxBytes: 14336,
+      maxBytes: 0,
       transform: 'sidecar',
     },
     wire: { packetSize: 1024, inSize: 1024 },

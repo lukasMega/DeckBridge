@@ -955,7 +955,7 @@
           "resizeFilter": "lanczos3",
           "sharpen": "0.6",
           "blur": "—",
-          "maxBytes": "14336",
+          "maxBytes": "no cap",
           "quality": "1",
           "bmpPpm": "—",
           "transform": "sidecar"

@@ -1,5 +1,5 @@
 import assert from 'tjs:assert';
-import { FlushScheduler, UlanziPage } from '../src/devices/ulanzi/ulanzi-page.js';
+import { FlushScheduler, UlanziPage, splitBySize } from '../src/devices/ulanzi/ulanzi-page.js';
 
 let passed = 0;
 let failed = 0;
@@ -240,6 +240,36 @@ test('cancel disarms a pending flush', () => {
   s.cancel();
   clock.advance(1000);
   assert.equal(flushes, 0);
+});
+
+console.log('\nulanzi-page: size split');
+
+const big = (slotId: number, n: number): { slotId: number; png: Uint8Array } => ({
+  slotId,
+  png: new Uint8Array(n),
+});
+
+test('splitBySize keeps order and stays under budget', () => {
+  const slots = [0, 1, 2, 3, 4, 5].map((i) => big(i, 40_000));
+  const groups = splitBySize(slots, 100_000);
+  assert.deepEqual(
+    groups.map((g) => g.map((s) => s.slotId)),
+    [
+      [0, 1],
+      [2, 3],
+      [4, 5],
+    ],
+  );
+});
+
+test('splitBySize gives an oversize slot its own group', () => {
+  const groups = splitBySize([big(0, 500_000), big(1, 10)], 100_000);
+  assert.equal(groups.length, 2);
+});
+
+test('splitBySize disabled and empty cases', () => {
+  assert.equal(splitBySize([big(0, 999_999)], 0).length, 1);
+  assert.equal(splitBySize([], 100_000).length, 1);
 });
 
 console.log(`\n${passed} passed, ${failed} failed`);
