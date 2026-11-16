@@ -26,6 +26,7 @@ import {
   encodeBrightness,
   encodeSmallWindow,
   formatClock,
+  parseDeviceVersion,
   parseIncoming,
 } from './ulanzi-protocol.js';
 import { UlanziPage, FlushScheduler, splitBySize } from './ulanzi-page.js';
@@ -65,6 +66,8 @@ export class UlanziDriver extends HidDeviceBase {
   private padRetryTotal = 0;
   private brightness = DEFAULT_BRIGHTNESS;
   private _writeScratch: Buffer = Buffer.alloc(0);
+  /** Set from the 0x0303 reply to GET_DEVICE_INFO, inside open()'s handshake drain. */
+  firmware: string | undefined = undefined;
 
   constructor(readonly model: DeviceModel) {
     super();
@@ -95,6 +98,7 @@ export class UlanziDriver extends HidDeviceBase {
    *  brightness → first full page. See HANDSHAKE_DRAIN_MS. */
   private async handshake(): Promise<void> {
     this.sendClock();
+    this.writePacket(buildPacket(CMD.GET_DEVICE_INFO, 0));
     await new Promise((resolve) => setTimeout(resolve, HANDSHAKE_DRAIN_MS));
     this.sendUnlock();
     this.setBrightness(this.brightness);
@@ -281,6 +285,7 @@ export class UlanziDriver extends HidDeviceBase {
       // D200X, which is the first thing any bug report from the other generation
       // needs. See the plan's "Two firmware generations behind one VID:PID".
       info('hid', `device info: ${parsed.json}`);
+      this.firmware = parseDeviceVersion(parsed.json) ?? this.firmware;
       return;
     }
     if (parsed.kind !== 'button') return;
