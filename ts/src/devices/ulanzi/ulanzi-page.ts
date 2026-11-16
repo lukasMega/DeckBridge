@@ -43,6 +43,13 @@ export function splitBySize(slots: PageSlot[], maxZipBytes: number): PageSlot[][
   return groups;
 }
 
+function bytesEqual(a: Uint8Array, b: Uint8Array): boolean {
+  if (a === b) return true;
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false;
+  return true;
+}
+
 export class UlanziPage {
   /** Staged since the last successful flush; last write per slot wins. */
   private readonly dirty = new Map<number, Uint8Array>();
@@ -57,8 +64,17 @@ export class UlanziPage {
    *  the fallback if the PARTIAL_UPDATE opcode turns out to ghost keys. */
   constructor(private readonly partialUpdates: boolean) {}
 
-  stage(slotId: number, png: Uint8Array): void {
+  /** Returns false when the device already shows these exact bytes, so the
+   *  caller can skip arming a flush. The Elgato app resends unchanged icons often. */
+  stage(slotId: number, png: Uint8Array): boolean {
+    const sent = this.lastSent.get(slotId);
+    if (sent && bytesEqual(sent, png)) {
+      // Drops an older staged change too: the slot is back to what is on screen.
+      this.dirty.delete(slotId);
+      return false;
+    }
     this.dirty.set(slotId, png);
+    return true;
   }
 
   hasPending(): boolean {

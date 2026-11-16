@@ -47,6 +47,35 @@ test('the last write for a slot wins', () => {
   assert.equal(batch.slots[0]!.png![0], 9);
 });
 
+test('re-staging identical bytes after a flush is a no-op', () => {
+  const page = new UlanziPage(true);
+  assert.equal(page.stage(3, png(3)), true);
+  page.onFlushed(page.takeBatch()!);
+  assert.equal(page.stage(3, png(3)), false);
+  assert.equal(page.hasPending(), false);
+  assert.equal(page.stage(3, png(4)), true);
+});
+
+test('reverting a staged change to the sent bytes cancels it', () => {
+  const page = new UlanziPage(true);
+  page.stage(3, png(3));
+  page.onFlushed(page.takeBatch()!);
+  page.stage(3, png(9));
+  assert.equal(page.stage(3, png(3)), false);
+  assert.equal(page.hasPending(), false);
+});
+
+test('restoreAll still repaints unchanged slots', () => {
+  const page = new UlanziPage(true);
+  page.stage(3, png(3));
+  page.onFlushed(page.takeBatch()!);
+  page.restoreAll();
+  assert.equal(page.stage(3, png(3)), false);
+  const batch = page.takeBatch()!;
+  assert.equal(batch.full, true);
+  assert.equal(batch.slots.length, 1);
+});
+
 test('batches are ordered by slot id regardless of stage order', () => {
   const page = new UlanziPage(true);
   page.stage(7, png(7));
