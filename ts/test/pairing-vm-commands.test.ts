@@ -17,21 +17,21 @@ const MAC: PairingProbe = {
   mac: { version: '15.6', arch: 'arm64', orbstack: true, container: false },
 };
 
-test('run is one short curl of the served script on the LAN IP', () => {
-  const c = orbstackCommands(MAC);
+const INSTALL = 'curl -fsSL "http://192.168.2.212:44661/relay.sh?t=abc" | sh';
+
+test('run nests the served install command in the machine', () => {
+  const c = orbstackCommands(MAC, INSTALL);
   if (c === null) throw new Error('expected commands');
   assert.equal(c.create, 'orb create ubuntu:noble deckbridge-relay');
   assert.equal(c.ip, 'orb -m deckbridge-relay hostname -I');
-  assert.equal(
-    c.run,
-    "orb -m deckbridge-relay sh -c 'curl -fsSL http://192.168.2.212:44661/relay.sh | sh'",
-  );
+  assert.equal(c.run, `orb -m deckbridge-relay sh -c '${INSTALL}'`);
 });
 
-test('no probe, no Mac info or no LAN IP gives null', () => {
-  assert.equal(orbstackCommands(null), null);
-  assert.equal(orbstackCommands({ ...MAC, mac: null }), null);
-  assert.equal(orbstackCommands({ ...MAC, lanIp: '' }), null);
+test('no probe, no Mac info, no LAN IP or no install command gives null', () => {
+  assert.equal(orbstackCommands(null, INSTALL), null);
+  assert.equal(orbstackCommands({ ...MAC, mac: null }, INSTALL), null);
+  assert.equal(orbstackCommands({ ...MAC, lanIp: '' }, INSTALL), null);
+  assert.equal(orbstackCommands(MAC, null), null);
 });
 
 summary();

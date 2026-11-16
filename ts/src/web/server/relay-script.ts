@@ -57,6 +57,9 @@ main() {
     curl -fL -o "$zip" "$BASE/$zip"
     curl -fsSL "$BASE/SHA256SUMS.txt" | grep "$zip" | sha256sum -c
     unzip -o "$zip"
+    # The release zip holds one folder named like the zip.
+    cp -R "deckbridge-v\${VERSION}-linux-\${arch}"/. .
+    rm -rf "deckbridge-v\${VERSION}-linux-\${arch}"
     rm -f "$zip"
     echo "$VERSION" > .version
   fi

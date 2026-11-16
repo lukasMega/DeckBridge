@@ -51,6 +51,7 @@ const pairingStatus = (): PairingRouteStatus => ({
   relayVersion: null,
   versionMismatch: false,
   announcedAt: null,
+  relay: null,
   paired: false,
   wizardDismissed: false,
 });
@@ -98,6 +99,7 @@ try {
     },
     dismiss: () => pairingStatus(),
     probe: () => Promise.reject(new Error('unused')),
+    command: () => Promise.resolve(null),
   });
 
   await test('a body that is not {enabled: boolean} is a 400', async () => {

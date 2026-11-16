@@ -23,6 +23,7 @@ function route(over: Partial<PairingRouteStatus> = {}): PairingRouteStatus {
     relayVersion: null,
     versionMismatch: false,
     announcedAt: null,
+    relay: null,
     paired: false,
     wizardDismissed: false,
     ...over,
@@ -224,6 +225,65 @@ async function chooseWsl(t: Ctx): Promise<void> {
   );
 }
 
+const RELAY = { ip: '192.168.1.50', platform: 'linux-arm64', version: '0.23.0', at: 1 } as const;
+
+async function deviceFlow(t: Ctx): Promise<void> {
+  await t.mount({ wizardDismissed: true });
+  patch({ pairingWizardOpen: true });
+  await act(() => render(<Stage />, t.root));
+  await t.next();
+  await press(t.choice('On this computer'));
+  await t.next();
+  await t.next();
+  await press(t.choice('Yes'));
+  await t.next();
+  await press(t.choice('Relay on another device'));
+  await t.next();
+  t.check(
+    t.calls.includes('GET /api/pairing-route/command?kind=curl '),
+    `The setup screen fetches the curl command (${t.calls.join(' ; ')})`,
+  );
+  t.check(t.q('.addr-chip')?.textContent.includes('Command') === true, 'The command chip shows');
+  const text = (): string => t.q('#pw-progress')?.textContent ?? '';
+  t.check(
+    ['Downloading', 'Initializing', 'Connecting', 'Connected'].every((w) => text().includes(w)),
+    'The four stages are listed',
+  );
+  t.check(t.q('#pw-next')?.hasAttribute('disabled') === true, 'Next waits for a running relay');
+
+  const stage = async (relay: object | null, over: object = {}): Promise<void> => {
+    patch({ pairingRoute: route({ route: 'device', relay, ...over } as never) });
+    await act(() => sleep(10));
+  };
+  await stage({ ...RELAY, stage: 'installing' });
+  t.check(t.q('#pw-progress .ico-spin') !== null, 'The current stage spins');
+  t.check(t.q('#pw-next')?.hasAttribute('disabled') === true, 'Installing keeps Next disabled');
+  await stage({ ...RELAY, stage: 'failed', message: 'Checksum mismatch.' });
+  t.check(
+    t.q('#pw-failed')?.textContent.includes('Checksum mismatch.') === true,
+    'A failure shows its message',
+  );
+  await stage({ ...RELAY, stage: 'offline' });
+  t.check(t.q('#pw-offline') !== null, 'An offline relay shows the hint');
+  await stage(
+    { ...RELAY, stage: 'running', version: '0.22.0' },
+    { versionMismatch: true, relayIp: RELAY.ip },
+  );
+  t.check(t.q('#pw-mismatch')?.textContent.includes('0.22.0') === true, 'A version mismatch warns');
+  await stage({ ...RELAY, stage: 'running' }, { relayIp: RELAY.ip });
+  t.check(text().includes('Connected on 192.168.1.50'), 'Running shows the relay IP');
+  t.check(t.q('#pw-next')?.hasAttribute('disabled') === false, 'A running relay enables Next');
+  await t.next();
+  t.check(
+    t.q('#pairing-wizard')!.textContent.includes('192.168.1.50'),
+    'The add screen shows the relay IP',
+  );
+  await press(t.q('#pw-cancel'));
+  // `reopen` continues from the WSL route that `chooseWsl` left.
+  patch({ pairingRoute: route({ route: 'wsl', wizardDismissed: true }), pairingWizardOpen: false });
+  await act(() => render(null, t.root));
+}
+
 async function reopen(t: Ctx): Promise<void> {
   patch({ pairingWizardOpen: true });
   await act(() => render(null, t.root));
@@ -262,7 +322,11 @@ export async function runPairingWizard(root: HTMLElement, check: Check): Promise
     calls.push(`${init?.method ?? 'GET'} ${url} ${body}`);
     let reply: unknown = {};
     if (url === '/api/pairing-route/probe') reply = PROBE;
-    else if (url === '/api/pairing-route/dismiss') reply = route({ wizardDismissed: true });
+    else if (url.startsWith('/api/pairing-route/command')) {
+      reply = {
+        command: `${url.endsWith('wget') ? 'wget -qO-' : 'curl -fsSL'} "http://192.168.1.5:44661/relay.sh?t=tok" | sh`,
+      };
+    } else if (url === '/api/pairing-route/dismiss') reply = route({ wizardDismissed: true });
     else if (url === '/api/pairing-route') reply = route(JSON.parse(body) as object);
     return Promise.resolve(new Response(JSON.stringify(reply), { status: 200 }));
   }) as typeof fetch;
@@ -271,6 +335,7 @@ export async function runPairingWizard(root: HTMLElement, check: Check): Promise
     await autoOpen(t);
     await shortFlows(t);
     await chooseWsl(t);
+    await deviceFlow(t);
     await reopen(t);
     await banner(t);
   } finally {

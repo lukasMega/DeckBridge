@@ -9,13 +9,19 @@ import { mdnsDisabled } from '../shared/cli.js';
 import { log } from '../shared/logger.js';
 import { relayTarget } from '../infra/wsl-relay-parse.js';
 import { bindAddr, ELGATO_TCP_PORT, webuiBindAddr } from '../shared/types.js';
-import { relayScript } from '../web/server/relay-script.js';
+import { RELAY_SCRIPT_PATH, relayScript } from '../web/server/relay-script.js';
+import { deviceScript } from '../web/server/relay-script-device.js';
 import { RelayScriptServer } from '../web/server/relay-script-server.js';
 import { pickWslRunner, wireWslRelay } from './wsl-relay-wiring.js';
 import type { WslRelayWiringDeps } from './wsl-relay-wiring.js';
 
 // Dynamic so a shipped bundle carries no scripted probe.
 const mockModule = __MOCK_BUILD__ ? await import('../infra/pairing-probe-mock.js') : null;
+
+function randomToken(): string {
+  const b = crypto.getRandomValues(new Uint8Array(16));
+  return Array.from(b, (x) => x.toString(16).padStart(2, '0')).join('');
+}
 
 type MdnsServer = Pick<ElgatoServer, 'setMdnsEnabled'>;
 
@@ -47,19 +53,33 @@ export function wirePairingRoute(
     for (const srv of mdnsServers) srv.setMdnsEnabled(!on && !mdnsDisabled());
   };
 
-  // Serves the OrbStack route's install script, and only while that route is selected.
+  // Serves the install scripts of the OrbStack and other-device routes, and only while one of
+  // them is selected.
   const scriptServer = new RelayScriptServer({
     listenIp: bindAddr(),
-    script: () => {
+    token: () => state.scriptToken(),
+    script: ({ token, port }) => {
       const target = relayTarget(bindAddr(), lanIp());
       if (!('ip' in target)) return null;
-      return relayScript({ version: __VERSION__, target: target.ip, targetPort: ELGATO_TCP_PORT });
+      const p = { version: __VERSION__, target: target.ip, targetPort: ELGATO_TCP_PORT };
+      return settings.pairingRoute.route === 'orbstack'
+        ? relayScript(p)
+        : deviceScript({ ...p, scriptPort: port, token });
     },
+    onEvent: (ev, ip) => state.onRelayEvent(ev, ip),
     log: (level, msg) => log(level, 'pairing', msg),
   });
   const syncScriptServer = (route: string): void => {
-    if (route === 'orbstack') void scriptServer.start();
+    if (route === 'orbstack' || route === 'device') void scriptServer.start();
     else void scriptServer.stop();
+  };
+  // The one line the wizard shows; the token only ever travels in this reply (PW-D18).
+  const relayCommand = async (kind: 'curl' | 'wget'): Promise<string | null> => {
+    const token = state.scriptToken();
+    const target = relayTarget(bindAddr(), lanIp());
+    if (token === null || !('ip' in target)) return null;
+    const url = `http://${target.ip}:${await scriptServer.reservePort()}${RELAY_SCRIPT_PATH}?t=${token}`;
+    return kind === 'wget' ? `wget -qO- "${url}" | sh` : `curl -fsSL "${url}" | sh`;
   };
 
   const wsl = wireWslRelay(
@@ -78,6 +98,8 @@ export function wirePairingRoute(
     applyMdns,
     readElgatoVersion: elgatoAppVersion,
     paired: () => primaryDock.childHasClient,
+    newToken: randomToken,
+    now: Date.now,
     onStatus: (s) => {
       webui.pairingRoute.publish(s);
       syncScriptServer(s.route);
@@ -111,6 +133,7 @@ export function wirePairingRoute(
     setRoute: (r) => state.setRoute(r),
     dismiss: () => state.dismiss(),
     probe,
+    command: relayCommand,
   });
 
   return {
@@ -118,6 +141,7 @@ export function wirePairingRoute(
       void state.start();
     },
     stop: async () => {
+      state.stop();
       await scriptServer.stop();
       await wsl.stop();
     },

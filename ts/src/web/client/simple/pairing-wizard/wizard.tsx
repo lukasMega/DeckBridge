@@ -11,8 +11,11 @@ import { screens, versionDefault, type Answers } from './flow.js';
 import { ScreenView } from './screens.js';
 
 /** Whether the screen has what Next needs; screens without a question always do. */
-function answered(id: string, a: Answers): boolean {
+function answered(id: string, a: Answers, status: PairingRouteStatus | null): boolean {
   switch (id) {
+    // The other device must report a running relay before there is an IP to add.
+    case 'setup':
+      return a.route !== 'device' || status?.relay?.stage === 'running';
     case 'version':
       return a.version !== undefined;
     case 'where':
@@ -62,7 +65,7 @@ export function PairingWizard({
   const list = screens(answers);
   const at = Math.min(idx, list.length - 1);
   const id = list[at]!;
-  const final = at === list.length - 1 && answered(id, answers);
+  const final = at === list.length - 1 && answered(id, answers, status);
 
   const set = (change: Partial<Answers>): void => {
     action.reset();
@@ -133,7 +136,7 @@ export function PairingWizard({
             class="ctabtn primary"
             id="pw-next"
             type="button"
-            disabled={action.busy || !answered(id, answers)}
+            disabled={action.busy || !answered(id, answers, status)}
             onClick={() => void next()}
           >
             Next

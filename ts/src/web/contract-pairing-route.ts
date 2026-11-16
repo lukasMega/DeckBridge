@@ -11,14 +11,16 @@ export interface PairingRouteStatus {
   route: PairingRoute;
   /** Installed Stream Deck app version as read from disk, e.g. '7.6.1' or '7.6.1.23015'. */
   elgatoVersion: string | null;
-  /** The IP to add in the Stream Deck app: WSL IP (route wsl) or the announced relay IP. */
+  /** The IP to add in the Stream Deck app: WSL IP (route wsl) or the reporting relay's IP. */
   relayIp: string | null;
-  /** Version the relay script announced; null before the first announce. */
+  /** Version the relay script reported; null before the first event. */
   relayVersion: string | null;
   /** True when relayVersion differs from DeckBridge's own version. */
   versionMismatch: boolean;
-  /** Epoch ms of the last announce. */
+  /** Epoch ms of the last relay event. */
   announcedAt: number | null;
+  /** Live install/run state of the script-started relay (routes device, orbstack); not persisted. */
+  relay: RelayProgress | null;
   /** The Stream Deck app holds a session through the primary dock. */
   paired: boolean;
   /** The user closed the auto-opened wizard; it never auto-opens again. */
@@ -55,4 +57,41 @@ export interface PairingRouteRequest {
   route: PairingRoute;
 }
 
-// P2 adds RelayCommandKind, RelayCommandResponse and RelayAnnounceBody (see the plan §Contract).
+/** `offline` is computed by DeckBridge from the heartbeat gap; the script never sends it. */
+export type RelayStage =
+  | 'downloading'
+  | 'installing'
+  | 'starting'
+  | 'running'
+  | 'offline'
+  | 'failed';
+
+export interface RelayProgress {
+  stage: RelayStage;
+  /** Peer address DeckBridge saw on the event POST (never taken from the body). */
+  ip: string;
+  /** e.g. 'linux-arm64', 'macos-x86_64'. */
+  platform: string;
+  /** Version the script installs (bare, no `v`). */
+  version: string;
+  /** Short reason, only with `failed`. */
+  message?: string;
+  /** Epoch ms of the last event. */
+  at: number;
+}
+
+/** Body the relay script POSTs to the script listener's /relay/event. */
+export interface RelayEventBody {
+  t: string;
+  stage: Exclude<RelayStage, 'offline'>;
+  platform: string;
+  version: string;
+  message?: string;
+}
+
+export type RelayCommandKind = 'curl' | 'wget';
+
+export interface RelayCommandResponse {
+  /** One line to paste; carries the script token. */
+  command: string;
+}

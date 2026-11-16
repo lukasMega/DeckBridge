@@ -34,6 +34,7 @@ function route(over: Partial<PairingRouteStatus>): PairingRouteStatus {
     relayVersion: null,
     versionMismatch: false,
     announcedAt: null,
+    relay: null,
     paired: false,
     wizardDismissed: false,
     ...over,

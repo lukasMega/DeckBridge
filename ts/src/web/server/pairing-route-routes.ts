@@ -1,5 +1,5 @@
 import type { PairingRoute, PairingRouteRequest } from '../contract-pairing-route.js';
-import { badRequest, json } from './http.js';
+import { badRequest, json, notFound } from './http.js';
 import { get, post, postJson, type Route } from './router.js';
 
 // A Record so adding a route to the contract union fails to compile until it is listed here.
@@ -23,5 +23,12 @@ export const pairingRouteRoutes: Route[] = [
     return json(await pairingRoute.setRoute(body.route));
   }),
   post('/api/pairing-route/dismiss', ({ pairingRoute }) => json(pairingRoute.dismiss())),
+  get('/api/pairing-route/command', async ({ pairingRoute, url }) => {
+    const kind = url.searchParams.get('kind');
+    if (kind !== 'curl' && kind !== 'wget') return badRequest('kind must be curl or wget');
+    const command = await pairingRoute.command(kind);
+    // No script route selected, or no LAN address: nothing to run.
+    return command === null ? notFound() : json({ command });
+  }),
   get('/api/pairing-route/probe', async ({ pairingRoute }) => json(await pairingRoute.probe())),
 ];

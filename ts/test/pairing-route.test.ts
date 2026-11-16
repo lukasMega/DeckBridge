@@ -32,6 +32,8 @@ function rig(
   let wsl = WSL_OFF;
   let paired = false;
   let version: string | undefined = '7.6.1';
+  const clock = { t: 1_000_000 };
+  let tokens = 0;
   const deps: PairingRouteDeps = {
     supported: true,
     version: '0.23.0',
@@ -59,6 +61,8 @@ function rig(
     },
     paired: () => paired,
     onStatus: (s) => published.push(s),
+    newToken: () => `${'a'.repeat(31)}${(tokens++).toString(16)}`,
+    now: () => clock.t,
     ...over,
   };
   return {
@@ -69,6 +73,7 @@ function rig(
     setWsl: (s: WslRelayStatus) => (wsl = s),
     setPaired: (p: boolean) => (paired = p),
     setVersion: (v: string | undefined) => (version = v),
+    clock,
   };
 }
 
@@ -128,7 +133,7 @@ await test('start applies mDNS before it starts the WSL relay, reads the version
 await test('start on a non-wsl route leaves the relay off; a missing app or a throw is null', async () => {
   const r = rig({}, { route: 'device' });
   await r.state.start();
-  assert.deepEqual(r.log, ['mdns(true)', 'version']);
+  assert.deepEqual(r.log, ['mdns(true)', 'save(device)', 'version']); // save: the token
   const none = rig();
   none.setVersion(undefined);
   await none.state.start();
@@ -224,6 +229,92 @@ await test('dismiss persists, publishes once and is idempotent', () => {
   assert.equal(r.published.length, 1);
 });
 
+const EV = { stage: 'running', platform: 'linux-arm64', version: '0.23.0' } as const;
+
+await test('a script route gets a token once and keeps it across route changes', async () => {
+  const r = rig();
+  await r.state.setRoute('device');
+  const token = r.store.current.token;
+  assert.ok(/^[0-9a-f]{32}$/.test(token ?? ''));
+  assert.equal(r.state.scriptToken(), token);
+  await r.state.setRoute('downgrade');
+  assert.equal(r.state.scriptToken(), null, 'inactive route: no token served');
+  await r.state.setRoute('orbstack');
+  assert.equal(r.store.current.token, token);
+});
+
+await test('start gives a saved script route without a token one', async () => {
+  const r = rig({}, { route: 'orbstack' });
+  await r.state.start();
+  assert.ok(/^[0-9a-f]{32}$/.test(r.store.current.token ?? ''));
+});
+
+await test('a relay event sets relayIp, version and progress and is published', async () => {
+  const r = rig();
+  await r.state.setRoute('device');
+  r.published.length = 0;
+  r.state.onRelayEvent({ ...EV, stage: 'downloading' }, '192.168.1.50');
+  const s = r.published.at(-1)!;
+  assert.equal(s.relayIp, '192.168.1.50');
+  assert.equal(s.relay?.stage, 'downloading');
+  assert.equal(s.relayVersion, '0.23.0');
+  assert.equal(s.versionMismatch, false);
+  assert.equal(s.announcedAt, r.clock.t);
+  assert.equal(r.store.current.relayIp, '192.168.1.50', 'persisted for the Settings row');
+  r.state.onRelayEvent({ ...EV, version: 'v0.22.0' }, '192.168.1.50');
+  assert.equal(r.published.at(-1)!.versionMismatch, true);
+  r.state.stop();
+});
+
+await test('relay events are ignored unless a script route is on', async () => {
+  const r = rig();
+  r.state.onRelayEvent(EV, '192.168.1.50');
+  await r.state.setRoute('downgrade');
+  r.state.onRelayEvent(EV, '192.168.1.50');
+  assert.equal(r.state.status().relay, null);
+});
+
+await test('a silent running relay is offline, a stalled install failed; an event revives it', async () => {
+  const r = rig();
+  await r.state.setRoute('device');
+  r.state.onRelayEvent(EV, '192.168.1.50');
+  r.clock.t += 89_000;
+  assert.equal(r.state.status().relay?.stage, 'running');
+  r.clock.t += 2_000;
+  assert.equal(r.state.status().relay?.stage, 'offline');
+  r.state.onRelayEvent(EV, '192.168.1.50');
+  assert.equal(r.state.status().relay?.stage, 'running');
+  r.state.onRelayEvent({ ...EV, stage: 'installing' }, '192.168.1.50');
+  r.clock.t += 121_000;
+  const s = r.state.status().relay;
+  assert.equal(s?.stage, 'failed');
+  assert.equal(s?.message, 'No progress');
+  r.state.stop();
+});
+
+await test('a route change clears the relay progress and the stored relay IP', async () => {
+  const r = rig();
+  await r.state.setRoute('device');
+  r.state.onRelayEvent(EV, '192.168.1.50');
+  await r.state.setRoute('orbstack');
+  assert.equal(r.state.status().relay, null);
+  assert.equal(r.state.status().relayIp, null);
+  r.state.stop();
+});
+
+await test('the token is in no status, broadcast or settings snapshot', async () => {
+  const r = rig();
+  await r.state.setRoute('device');
+  r.state.onRelayEvent(EV, '192.168.1.50');
+  const token = r.store.current.token!;
+  assert.ok(!JSON.stringify(r.state.status()).includes(token));
+  assert.ok(!JSON.stringify(r.published).includes(token));
+  const snap = new PersistedSettings(`${tjs.tmpDir}/pairing-route-tok-${tjs.pid}`);
+  snap.setPairingRoute({ route: 'device', token });
+  assert.ok(!snap.json().includes(token));
+  r.state.stop();
+});
+
 await test('supported:false never spawns, reads the version or persists', async () => {
   const r = rig({ supported: false }, { route: 'wsl' });
   await r.state.start();
@@ -273,6 +364,7 @@ try {
       return fake.state.setRoute(r);
     },
     dismiss: () => fake.state.dismiss(),
+    command: () => Promise.resolve(null),
     probe: () => {
       probes++;
       return Promise.resolve({

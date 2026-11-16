@@ -10,13 +10,16 @@ export interface OrbstackCommands {
   ip: string;
 }
 
-/** `null` while the probe is missing or DeckBridge has no reachable LAN IP. */
-export function orbstackCommands(probe: PairingProbe | null): OrbstackCommands | null {
-  if (probe?.mac == null || probe.lanIp === '') return null;
-  const url = `http://${probe.lanIp}:${probe.relayScriptPort}/relay.sh`;
+/** `install` is the server's token-carrying `curl "<url>" | sh`; it holds no single quote, so it
+ *  nests in `sh -c '…'`. `null` while the probe or the command is missing, or without a LAN IP. */
+export function orbstackCommands(
+  probe: PairingProbe | null,
+  install: string | null,
+): OrbstackCommands | null {
+  if (probe?.mac == null || probe.lanIp === '' || install === null) return null;
   return {
     create: `orb create ubuntu:noble ${ORBSTACK_MACHINE}`,
-    run: `orb -m ${ORBSTACK_MACHINE} sh -c 'curl -fsSL ${url} | sh'`,
+    run: `orb -m ${ORBSTACK_MACHINE} sh -c '${install}'`,
     ip: `orb -m ${ORBSTACK_MACHINE} hostname -I`,
   };
 }

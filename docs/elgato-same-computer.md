@@ -43,10 +43,10 @@ A relay in Apple's `container` tool (macOS 26) is coming later.
 - **Use Stream Deck app 7.6.0.** No relay. The wizard links the 7.6.0 download (Windows) or
   the Elgato 7.6 release notes (macOS). Install it over your current version, then turn off
   automatic updates in Preferences > General.
-- **Relay on another device.** The wizard shows a `deckbridge relay --target ...` command
-  with this computer's address filled in. Run it on the other device. See
-  [the manual relay](#manual-relay) below, which is the same thing. A Raspberry Pi needs
-  64-bit Raspberry Pi OS Trixie.
+- **Relay on another device.** The wizard shows one command to paste on the other device.
+  See [Another device: one command](#one-command). On a Windows PC, use
+  [the manual relay](#manual-relay) instead. A Raspberry Pi needs 64-bit Raspberry Pi OS
+  Trixie.
 - **Relay in WSL on this PC.** See [Windows: pair on the same PC with WSL](#windows-wsl).
 - **Relay in OrbStack on this Mac.** See [macOS: pair on the same Mac with OrbStack](#macos-orbstack).
 
@@ -56,6 +56,41 @@ finds the dock only at the relay's address. **Turn off relay** in Settings undoe
 
 Answer "7.6.0 or older" or "On another computer" and the wizard says no fix is needed: the
 app can pair with DeckBridge directly.
+
+## Another device: one command {#one-command}
+
+Pick **Relay on another device** in the wizard. It shows one line, with a `curl` / `wget`
+switch, to paste in a terminal on a Linux or macOS device on the same network:
+
+```
+curl -fsSL "http://<this computer's IP>:44661/relay.sh?t=<token>" | sh
+```
+
+DeckBridge serves the script on port 44661 (or a free high port if 44661 is taken) while the
+route is selected. That port must be reachable from the LAN; you do not need `--bind`. The
+script:
+
+- checks the device (Linux needs glibc 2.38 or newer: Raspberry Pi OS Trixie, Debian 13,
+  Ubuntu 24.04);
+- downloads the release zip that matches your DeckBridge version from GitHub, checks it
+  against `SHA256SUMS.txt` and unpacks it into `~/.deckbridge-relay`;
+- runs `deckbridge relay --target <this computer's IP> --no-advertise` in the terminal. Keep
+  the terminal open while you use the deck. The relay does not start again after a reboot:
+  run the command again.
+
+The wizard shows the progress: **Downloading**, **Initializing**, **Connecting**, then
+**Connected on <IP>**. Use that IP in the Stream Deck app as a Network Dock by IP. If the
+relay goes quiet for 90 seconds the wizard shows **Relay offline**; a failed step shows its
+reason. If the relay runs another DeckBridge version than this computer, the wizard warns.
+
+The token in the URL only lets the script fetch itself and report progress. It is kept in
+`settings.json`, shown only in the wizard command, and left out of diagnostics and exports.
+The script reports from the device's own address; DeckBridge ignores any address in the
+report. To remove everything from the device:
+
+```
+curl -fsSL "<the same URL>" | sh -s -- --uninstall
+```
 
 ## The manual relay: a second machine {#manual-relay}
 
@@ -200,7 +235,7 @@ you run three commands yourself; the wizard shows them with your values filled i
 1. Install OrbStack and open it once.
 2. In Terminal, create the machine (once): `orb create ubuntu:noble deckbridge-relay`.
 3. Start the relay in it. The wizard's **Run** command is one short `curl` of an install
-   script that DeckBridge serves on port 44661 (or a free high port if 44661 is taken) while
+   script (with a token in the URL) that DeckBridge serves on port 44661 (or a free high port if 44661 is taken) while
    this route is selected. The script installs `curl` and `unzip`, downloads the Linux
    release zip that matches your DeckBridge version into `~/relay` inside the machine,
    checks it against `SHA256SUMS.txt`, and runs

@@ -1,6 +1,11 @@
 // Admin side of the pairing route (issue #257). The state machine lives in infra/ and is
 // attached by main/pairing-route-wiring.ts; this class only caches the probe and broadcasts.
-import type { PairingProbe, PairingRoute, PairingRouteStatus } from '../contract-pairing-route.js';
+import type {
+  PairingProbe,
+  PairingRoute,
+  PairingRouteStatus,
+  RelayCommandKind,
+} from '../contract-pairing-route.js';
 import type { ControllerHost } from './types.js';
 
 export interface PairingRoutePort {
@@ -8,6 +13,8 @@ export interface PairingRoutePort {
   setRoute(r: PairingRoute): Promise<PairingRouteStatus>;
   dismiss(): PairingRouteStatus;
   probe(): Promise<PairingProbe>;
+  /** The paste-ready install command; null when no script route is on or DeckBridge has no LAN IP. */
+  command(kind: RelayCommandKind): Promise<string | null>;
 }
 
 const UNSUPPORTED: PairingRouteStatus = {
@@ -18,6 +25,7 @@ const UNSUPPORTED: PairingRouteStatus = {
   relayVersion: null,
   versionMismatch: false,
   announcedAt: null,
+  relay: null,
   paired: false,
   wizardDismissed: false,
 };
@@ -61,6 +69,10 @@ export class PairingRouteController {
 
   dismiss(): PairingRouteStatus {
     return this.port?.dismiss() ?? this.status();
+  }
+
+  command(kind: RelayCommandKind): Promise<string | null> {
+    return this.port?.command(kind) ?? Promise.resolve(null);
   }
 
   /** Concurrent callers share one in-flight probe. */

@@ -169,6 +169,7 @@ test('pairing route renders one status line', () => {
       relayVersion: null,
       versionMismatch: false,
       announcedAt: null,
+      relay: null,
       paired: true,
       wizardDismissed: false,
     },

@@ -11,12 +11,12 @@ import { CopyChip, ManualAddPanel } from '../controls.js';
 import { WslRelaySteps } from '../wsl-relay-card.js';
 import type { Answers, ScreenId, VersionAnswer } from './flow.js';
 import { routeOptions } from './routes.js';
+import { DeviceSetupBody, useRelayCommand } from './device-setup.js';
 import { orbstackCommands } from './vm-commands.js';
 
 const MSI_760 = 'https://edge.elgato.com/egc/windows/sd/Stream_Deck_7.6.0.23012.msi';
 const NOTES_76 =
   'https://help.elgato.com/hc/en-us/articles/51156609278737-Elgato-Stream-Deck-7-6-Release-Notes';
-const RELEASES = 'https://github.com/lukasMega/DeckBridge/releases/latest';
 const ORBSTACK_URL = 'https://orbstack.dev';
 
 type SetAnswers = (patch: Partial<Answers>) => void;
@@ -238,32 +238,19 @@ function Unreachable({ title }: Readonly<{ title: string }>): preact.JSX.Element
 
 function DeviceSetup({ probe }: Readonly<{ probe: PairingProbe | null }>): preact.JSX.Element {
   if (probe?.lanIp === '') return <Unreachable title="Relay on another device" />;
-  const command =
-    probe === null
-      ? ''
-      : `deckbridge relay --target ${probe.lanIp} --target-port ${probe.coraPort} --no-advertise`;
   return (
     <>
       <Question>Relay on another device</Question>
-      <p>On the other device, download DeckBridge for it from the releases page and run:</p>
-      <div class="addr-row">
-        <CopyChip label="Command" value={command} cls="addr-chip" pending={probe === null} />
-      </div>
-      <p class="step-sub">
-        <Link href={RELEASES}>DeckBridge releases</Link>
-      </p>
-      <p class="step-sub">
-        A Raspberry Pi needs 64-bit Raspberry Pi OS Trixie. The relay prints its IP addresses when
-        it starts.
-      </p>
+      <DeviceSetupBody probe={probe} />
     </>
   );
 }
 
 function OrbstackSetup({ probe }: Readonly<{ probe: PairingProbe | null }>): preact.JSX.Element {
   const title = 'Relay in OrbStack on this Mac';
+  const install = useRelayCommand('curl');
   if (probe?.lanIp === '') return <Unreachable title={title} />;
-  const cmd = orbstackCommands(probe);
+  const cmd = orbstackCommands(probe, install);
   const chip = (label: string, value: string | undefined): preact.JSX.Element => (
     <div class="addr-row">
       <CopyChip label={label} value={value ?? ''} cls="addr-chip" pending={cmd === null} />
@@ -320,6 +307,7 @@ function SetupScreen({
 
 function AddScreen({ route }: Readonly<{ route: PairingRoute | undefined }>): preact.JSX.Element {
   const paired = useStore((s) => s.pairingRoute?.paired === true);
+  const ip = useStore((s) => s.pairingRoute?.relayIp ?? null);
   return (
     <>
       <Question>Add the relay in the Stream Deck app</Question>
@@ -329,6 +317,11 @@ function AddScreen({ route }: Readonly<{ route: PairingRoute | undefined }>): pr
           ? 'Use the IP of the OrbStack machine, which the relay printed.'
           : 'Use the IP of the device that runs the relay.'}
       </p>
+      {ip !== null && route === 'device' && (
+        <div class="addr-row">
+          <CopyChip label="Relay IP" value={ip} cls="addr-chip" />
+        </div>
+      )}
       {paired ? (
         <StatusChip variant="ok" icon={ICON.check}>
           Paired
