@@ -219,8 +219,8 @@ export default function Home(): ReactNode {
             <p className={styles.sectionLabel}>See it</p>
             <h2 className={styles.sectionTitle}>The built-in web UI</h2>
             <p className={styles.sectionLead}>
-              DeckBridge serves its own control panel at <code>localhost:3000</code> — a guided
-              pairing flow that walks you through connecting the deck to the Elgato app.
+              DeckBridge serves its own control panel at <code>localhost:3000</code> by default — a
+              guided pairing flow that walks you through connecting the deck to the Elgato app.
             </p>
             <div className={styles.showcase}>
               {SHOTS.map((shot, idx) => (

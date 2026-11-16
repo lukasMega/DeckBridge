@@ -393,16 +393,13 @@ fn main() {
 
             Event::UserEvent(UserEvent::Menu(ev)) => {
                 if let Some(handles) = &tray_handles {
+                    // TS owns all menu actions (it knows the WebUI port, settings,
+                    // logging); Rust only emits.
                     if ev.id == handles.open_ui_id {
-                        open_browser("http://localhost:3000");
                         emit("open_webui", None);
                     } else if ev.id == handles.check_req_id {
-                        open_browser("http://localhost:3000/requirements");
                         emit("check_requirements", None);
                     } else if ev.id == handles.restart_elgato_id {
-                        // TS owns the restart flow (settings, isElgatoAppRunning,
-                        // logging) — no browser open or work here, unlike the two
-                        // items above.
                         emit("restart_elgato_app", None);
                     } else if ev.id == handles.quit_id {
                         emit("quit", None);

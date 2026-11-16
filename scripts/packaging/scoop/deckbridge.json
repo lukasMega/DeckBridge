@@ -47,7 +47,7 @@
         }
     },
     "notes": [
-        "deckbridge runs a system-tray supervisor that serves a web UI on http://localhost:3000,",
+        "deckbridge runs a system-tray supervisor that serves a web UI on http://localhost:3000 (or a free port in 33011–33099 if 3000 is busy),",
         "runs CORA servers on ports 5343/5344, and advertises over mDNS so Elgato software finds it.",
         "Launch it from the Start Menu / `deckbridge` shim; quit it from the tray icon."
     ]

@@ -119,7 +119,7 @@ a regular **Network device** at `localhost`; the deck behaves like Elgato hardwa
 - **Standby and burn-in care (opt-in)** — dim or turn off an idle deck, show a dim moving
   clock while the Elgato app is away, run a night-time brightness window, and shift
   DeckBridge's own widgets by 1 px; see [Standby and burn-in care](#standby-and-burn-in-care).
-- **Live web UI** — `http://localhost:3000` shows the key grid and a log feed in real time.
+- **Live web UI** — `http://localhost:3000` (fallback 33011–33099 if busy) shows the key grid and a log feed in real time.
 - **Device tuning** — rotation, flip, image fit, quality and size are adjustable at
   runtime per model, with a key-map learn mode that derives the correct key mapping from
   the hardware itself. For boards supported from documentation rather than from hardware

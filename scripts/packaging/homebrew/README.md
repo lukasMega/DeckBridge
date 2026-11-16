@@ -38,7 +38,7 @@ service (Linux) that runs `deckbridge` at login. Logs go to
 `$(brew --prefix)/var/log/deckbridge.log`. Stop/uninstall the service with
 `brew services stop deckbridge`.
 
-The app then serves the web UI on http://localhost:3000, runs CORA on ports
+The app then serves the web UI on http://localhost:3000 (or a free port in 33011–33099 if 3000 is busy), runs CORA on ports
 5343/5344, and advertises over mDNS so Elgato software auto-discovers it.
 
 ---
