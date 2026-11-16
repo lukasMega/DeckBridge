@@ -93,7 +93,20 @@ export function fnv1a(data: Uint8Array): number {
  *  dependency, and collision-free across flushes. Plan O11 checks whether the
  *  churn is actually required. */
 export function iconName(slotId: number, flushSeq: number, png: Uint8Array): string {
-  return `Images/${slotId}_${flushSeq}_${fnv1a(png).toString(16).padStart(8, '0')}.png`;
+  return `Images/${slotId}_${flushSeq}_${digest(png).fnv.toString(16).padStart(8, '0')}.png`;
+}
+
+/** crc32 + fnv1a cost ~O(bytes) in interpreted JS (tens of ms per page), and the
+ *  same PNG objects are rebuilt into every full page and every boundary-byte retry,
+ *  so hash each buffer once. Keyed by identity: PNGs are never mutated after staging. */
+const digests = new WeakMap<Uint8Array, { crc: number; fnv: number }>();
+function digest(data: Uint8Array): { crc: number; fnv: number } {
+  let d = digests.get(data);
+  if (!d) {
+    d = { crc: crc32(data), fnv: fnv1a(data) };
+    digests.set(data, d);
+  }
+  return d;
 }
 
 /** Grid slot id → the manifest's "{col}_{row}" key (column FIRST). */
@@ -107,8 +120,8 @@ interface ZipEntry {
   crc: number;
 }
 
-function entry(name: string, data: Uint8Array): ZipEntry {
-  return { name: new TextEncoder().encode(name), data, crc: crc32(data) };
+function entry(name: string, data: Uint8Array, crc: number = crc32(data)): ZipEntry {
+  return { name: new TextEncoder().encode(name), data, crc };
 }
 
 function writeLocalHeader(out: Buffer, off: number, e: ZipEntry): number {
@@ -222,29 +235,38 @@ export function buildManifest(slots: PageSlot[], opts: PageZipOptions): string {
   return JSON.stringify(manifest);
 }
 
-/** Build one page archive. Entry order is deliberate: `pad.txt` FIRST when
- *  padding is requested, so its bytes shift every icon that follows (appending
- *  it last is a no-op for the boundary-byte rule — racerxdl PR #11). */
-export function buildPageZip(slots: PageSlot[], opts: PageZipOptions): Uint8Array {
-  const entries: ZipEntry[] = [];
-
-  const padBytes = opts.padBytes ?? 0;
-  if (padBytes > 0) {
-    entries.push(entry('pad.txt', new Uint8Array(padBytes).fill(0x2e))); // '.'
-  }
-
-  entries.push(entry('manifest.json', new TextEncoder().encode(buildManifest(slots, opts))));
+/** Every entry except the optional leading pad.txt. Built once per page so a
+ *  boundary-byte retry only re-lays-out the archive instead of re-hashing it. */
+function pageEntries(slots: PageSlot[], opts: PageZipOptions): ZipEntry[] {
+  const entries: ZipEntry[] = [
+    entry('manifest.json', new TextEncoder().encode(buildManifest(slots, opts))),
+  ];
 
   const wideKey = `${opts.smallWindowSlot.col}_${opts.smallWindowSlot.row}`;
   for (const slot of slots) {
     if (!slot.png) continue;
     if (slotKey(slot.slotId, opts.columns) === wideKey) continue;
-    entries.push(entry(iconName(slot.slotId, opts.flushSeq, slot.png), slot.png));
+    entries.push(
+      entry(iconName(slot.slotId, opts.flushSeq, slot.png), slot.png, digest(slot.png).crc),
+    );
   }
   // The firmware can drop the final entry (marcelobrake protocol.md), so it is a throwaway.
   entries.push(entry('sentinel.txt', new Uint8Array(0)));
+  return entries;
+}
 
-  return writeZip(entries);
+/** `pad.txt` goes FIRST when padding is requested, so its bytes shift every icon
+ *  that follows (appending it last is a no-op for the boundary-byte rule —
+ *  racerxdl PR #11). */
+function assemble(entries: ZipEntry[], padBytes: number): Uint8Array {
+  if (padBytes <= 0) return writeZip(entries);
+  const pad = entry('pad.txt', new Uint8Array(padBytes).fill(0x2e)); // '.'
+  return writeZip([pad, ...entries]);
+}
+
+/** Build one page archive. */
+export function buildPageZip(slots: PageSlot[], opts: PageZipOptions): Uint8Array {
+  return assemble(pageEntries(slots, opts), opts.padBytes ?? 0);
 }
 
 /** Build a page archive whose bytes satisfy the chunk-boundary rule
@@ -266,9 +288,10 @@ export function buildSafePageZip(
   slots: PageSlot[],
   opts: PageZipOptions,
 ): { zip: Uint8Array; retries: number; safe: boolean } {
+  const entries = pageEntries(slots, opts);
   let first: Uint8Array | null = null;
   for (let retry = 0; retry <= MAX_PAD_RETRIES; retry++) {
-    const zip = buildPageZip(slots, { ...opts, padBytes: retry * PAD_STEP_BYTES });
+    const zip = assemble(entries, retry * PAD_STEP_BYTES);
     if (isPayloadSafe(zip)) return { zip, retries: retry, safe: true };
     first ??= zip;
   }
