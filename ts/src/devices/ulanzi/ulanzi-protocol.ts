@@ -204,7 +204,7 @@ function parseButton(data: Uint8Array): IncomingPacket {
   };
 }
 
-/** Parse one inbound report. Returns null for anything unrecognised (including a
+/** Parse one inbound report. Returns null for anything unrecognized (including a
  *  short read or a missing magic) so the caller can log it verbatim. */
 export function parseIncoming(data: Uint8Array): IncomingPacket | null {
   if (data.length < HEADER_SIZE) return null;

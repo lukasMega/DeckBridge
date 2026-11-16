@@ -64,7 +64,7 @@ fn encode_rgb(rgb: &RgbImage) -> Result<Vec<u8>, String> {
     Ok(buf)
 }
 
-/// Uniform quantisation: each channel is bucketed into `levels` steps and the
+/// Uniform quantization: each channel is bucketed into `levels` steps and the
 /// bucket triple indexes a precomputed palette. No dependency on a quantiser
 /// crate — the palette is regular by construction, so the mapping is a divide
 /// rather than a nearest-colour search.
