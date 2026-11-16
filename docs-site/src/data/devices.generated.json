@@ -942,7 +942,7 @@
         },
         "image": {
           "name": "Ulanzi Stream Controller D200",
-          "format": "png",
+          "format": "jpeg",
           "width": "196",
           "height": "196",
           "rotate": "180°",
@@ -955,8 +955,8 @@
           "resizeFilter": "lanczos3",
           "sharpen": "0.6",
           "blur": "—",
-          "maxBytes": "40960",
-          "quality": "1",
+          "maxBytes": "no cap",
+          "quality": "0.9",
           "bmpPpm": "—",
           "transform": "sidecar"
         },
