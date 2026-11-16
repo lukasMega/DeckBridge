@@ -278,9 +278,19 @@ Implement the worker-side `UsbDriver` interface from `usb-drivers.ts`.
 | `devices/elgato/driver.ts` | Feature reports and state snapshots |
 | `devices/mirabox/driver.ts` | CRT framing read from `model.wire`, conditional batching |
 | `devices/ajazz/akp05-driver.ts` | Initialization, keepalive, dials, touch |
+| `devices/ulanzi/ulanzi-driver.ts` | Page protocol: whole-grid repaint, handshake ordering (untested) |
 
 `HidDeviceBase` only provides HID transport; a bulk-transfer device needs separate
 architecture work.
+
+A device with **no per-key image write**, which repaints from one whole-screen document,
+follows the Ulanzi D200 (`devices/ulanzi/`). Framing (`ulanzi-protocol.ts`), the archive
+writer (`ulanzi-zip.ts`) and the coalescing page model (`ulanzi-page.ts`) are FFI-free and
+unit-tested; only `ulanzi-driver.ts` touches hidapi. CORA still sends one image per key,
+so the page model stages them, debounces, and sends one page, all on the USB worker,
+because a full page can take hundreds of blocking HID writes. Page framing lives in
+`model.page` (`DevicePageSpec`), not `wire`, and the protocol exposes no
+`tunableWireKeys`.
 
 **Key design rules for any driver:**
 - Include exactly one report-ID byte. Mirabox prepends its configured report ID; Elgato

@@ -6,6 +6,7 @@ import type { DeviceDriver, DeviceModel, DeviceProtocol } from './driver.js';
 import { ElgatoHidDriver } from './elgato/driver.js';
 import { MiraboxDriver } from './mirabox/driver.js';
 import { Akp05Driver } from './ajazz/akp05-driver.js';
+import { UlanziDriver } from './ulanzi/ulanzi-driver.js';
 
 /** What the USB worker drives: the DeviceDriver contract plus native writes and
  *  the facts it reports back in 'opened'. */
@@ -25,4 +26,5 @@ export const USB_DRIVERS: Record<DeviceProtocol, (model: DeviceModel) => UsbDriv
   'mirabox-cora': (model) => new MiraboxDriver(model),
   'mirabox-cora-v1': (model) => new MiraboxDriver(model),
   'ajazz-akp05': (model) => new Akp05Driver(model),
+  'ulanzi-zk': (model) => new UlanziDriver(model),
 };

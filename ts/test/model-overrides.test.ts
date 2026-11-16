@@ -189,9 +189,11 @@ test('coraToWireImage must have exactly keyCount entries', () => {
   assertRejects({ keyMap: { coraToWireImage: [...good, 16] } }, 'exactly');
 });
 
-test('coraToWireImage entries must be non-negative integers', () => {
-  const bad = Array.from({ length: MODEL.keyCount }, () => -1);
+test('coraToWireImage entries must be integers ≥ -1 (-1 = no display)', () => {
+  const bad = Array.from({ length: MODEL.keyCount }, () => -2);
   assertRejects({ keyMap: { coraToWireImage: bad } }, 'keyMap.coraToWireImage');
+  const holes = Array.from({ length: MODEL.keyCount }, (_, i) => (i < 2 ? -1 : i));
+  assert.deepEqual(errorsFor({ keyMap: { coraToWireImage: holes } }), []);
 });
 
 test('wireInputToCora allows -1 (an ignored key) and has no length constraint', () => {

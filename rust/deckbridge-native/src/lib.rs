@@ -8,6 +8,7 @@ mod blit;
 mod bmp;
 mod jpeg;
 mod pad;
+mod png;
 mod transform;
 mod util;
 

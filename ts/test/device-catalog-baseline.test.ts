@@ -97,6 +97,7 @@ interface Expected {
   geometry: Record<string, number>;
   image: Record<string, unknown>;
   wire: Record<string, unknown>;
+  page?: Record<string, unknown>;
   keyMap: Record<string, unknown>;
   cora: Record<string, unknown>;
   emulations: string[];
@@ -309,6 +310,46 @@ const EXPECTED: Expected[] = [
   v3Board('ajazz-akp153r-rev2', 'ajazz', 0x0300, 0x3011),
   v3Board('fifine-d6', 'fifine', 0x3142, 0x0007, { wire: d6Wire(512), keyMap: D6_KEYMAP }),
   v3Board('fifine-d6-rev2', 'fifine', 0x3142, 0x0060, { wire: d6Wire(1024), keyMap: D6_KEYMAP }),
+  {
+    id: 'ulanzi-d200',
+    vendor: 'ulanzi',
+    protocol: 'ulanzi-zk',
+    usbVendorId: 0x2207,
+    usbProductIds: [0x0019],
+    usagePage: 0x0c,
+    usage: 0x01,
+    geometry: { rows: 3, columns: 5, keyCount: 15, keyWidth: 196, keyHeight: 196 },
+    image: {
+      format: 'png',
+      width: 196,
+      height: 196,
+      rotate: 180,
+      flipH: false,
+      flipV: false,
+      maxBytes: 14336,
+      transform: 'sidecar',
+    },
+    wire: { packetSize: 1024, inSize: 1024 },
+    page: {
+      keepaliveMs: 2000,
+      flushDebounceMs: 75,
+      minFlushIntervalMs: 120,
+      partialUpdates: true,
+      maxZipBytes: 190 * 1024,
+      smallWindowMode: 203,
+      smallWindowSlot: { col: 3, row: 2 },
+    },
+    splash: { transformOverride: { rotate: 0, flipH: false, flipV: false } },
+    keyMap: {
+      coraToWireImage: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, -1, -1],
+      wireInputToCora: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, -1],
+    },
+    cora: V3_CORA,
+    emulations: [],
+    batching: false,
+    widgetDisplayIds: [],
+    touchStripId: null,
+  },
   v1Clone('ajazz-akp153', 'ajazz', 0x5548, 0x6674),
   v1Clone('ajazz-akp153e', 'ajazz', 0x0300, 0x1010),
   v1Clone('ajazz-akp153r', 'ajazz', 0x0300, 0x1020),
@@ -366,6 +407,7 @@ function project(m: DeviceModel): Record<string, unknown> {
       transform: m.image.transform,
     },
     wire: m.wire,
+    page: m.page,
     keyMap: m.keyMap,
     cora: {
       productId: m.cora.productId,
@@ -399,6 +441,7 @@ test('DEVICE_MODELS order and CORA_PROFILES ids are unchanged', () => {
       'ajazz-akp153r-rev2',
       'fifine-d6',
       'fifine-d6-rev2',
+      'ulanzi-d200',
       'ajazz-akp153',
       'ajazz-akp153e',
       'ajazz-akp153r',
@@ -441,12 +484,12 @@ for (const expected of EXPECTED) {
   });
 }
 
-test('findModel resolves all 40 VID/PID pairs to the expected model', () => {
+test('findModel resolves all 41 VID/PID pairs to the expected model', () => {
   const pairs: [number, number, string][] = EXPECTED.flatMap((e) =>
     e.usbProductIds.map((pid): [number, number, string] => [e.usbVendorId, pid, e.id]),
   );
-  assert.equal(pairs.length, 40);
-  assert.equal(new Set(pairs.map(([vid, pid]) => `${vid}:${pid}`)).size, 40);
+  assert.equal(pairs.length, 41);
+  assert.equal(new Set(pairs.map(([vid, pid]) => `${vid}:${pid}`)).size, 41);
   for (const [vid, pid, id] of pairs) {
     assert.equal(findModel(vid, pid)?.id, id, `0x${vid.toString(16)}:0x${pid.toString(16)}`);
   }

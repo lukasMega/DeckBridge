@@ -42,6 +42,21 @@ test('unknown VID/PID → "unknown" model, not supported', () => {
   assert.equal(row.supported, 'no');
 });
 
+// `deckbridge devices` is the first D200 bring-up step; a D200H also enumerates two
+// Genesys hubs, so the deck's own row must come back supported and named.
+test('Ulanzi D200 resolves to a supported row', () => {
+  const row = toDeviceRow({
+    vendorId: 0x2207,
+    productId: 0x0019,
+    serial: '02C37A015U3672742',
+    path: null,
+  });
+  assert.equal(row.vidPid, '2207:0019');
+  assert.equal(row.supported, 'yes');
+  assert.equal(row.model, 'Ulanzi Stream Controller D200');
+  assert.equal(row.serial, '02C37A015U3672742');
+});
+
 // Phase B0 pre-flight for the Fifine D6: `deckbridge devices` is how the unit gets
 // identified before any bring-up step, so the two PIDs must resolve to DISTINCT model
 // names — the revisions differ in packet size, and mixing them up renders black keys.

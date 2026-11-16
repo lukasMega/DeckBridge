@@ -210,6 +210,25 @@
         "own hardware capture (ts/src/dev/d6-capture.ts)"
       ]
     },
+    "ulanzi-d200": {
+      "tested": { "status": false },
+      "summary": "Ulanzi Stream Controller D200: 13 LCD keys on a 5×3 grid plus a wide info window, driven over Ulanzi's page protocol. The whole grid ships as one ZIP of 196×196 PNGs; there is no per-key write. Not hardware-tested here.",
+      "alsoSoldAs": ["D200H (same VID:PID, reports `DeviceType: \"D200\"`)"],
+      "quirks": [
+        "Advertised to the Elgato app as an MK.2 (5×3/15). Cells 13 (the wide info window, which shows the firmware clock) and 14 (no physical key) are not drawn.",
+        "Two firmware generations share VID:PID 0x2207:0x0019: Qt `UlanziDeckKey` on RK3308 and ZKSWE EasyUI on SSD210. The driver logs the device-info JSON on every open, so a bug report names its generation.",
+        "Quit Ulanzi Studio first: it holds the HID interface exclusively.",
+        "Partial page updates (opcode 0x000d) are disputed. If keys show as white or stale blocks, set `page.partialUpdates` to false in the model.",
+        "The D200X adds page buttons and encoders behind an unlock opcode that DeckBridge does not send. Only its 13 keys are expected to work."
+      ],
+      "sources": [
+        "jcalado/companion-surface-d200 (MIT)",
+        "bitfocus companion-surface-ulanzi (MIT)",
+        "aleyvag/ulanzi-d200h-linux firmware-protocol.md (MIT)",
+        "marcelobrake/ulanzi-linux (MIT)",
+        "edufalcao/ulanzi-deck-open, alexbabintsev/udeck, iBobbyTS/UlanziDeckSwift, eitchtee/OpenUlanzi (MIT)"
+      ]
+    },
     "ajazz-akp153": {
       "tested": { "status": false },
       "summary": "A v1 rebadge of the Mirabox 293S board (VID 0x5548, PID 0x6674). Image and mapping defaults inherit 293S. Image batching remains disabled by default.",

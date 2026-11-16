@@ -9,6 +9,7 @@ export const BRANDS: ReactNode[] = [
   <span style={{ fontStretch: 'condensed' }}>Mirabox</span>,
   'Ajazz',
   'Fifine',
+  'Ulanzi',
 ];
 
 /** Tested decks first, then untested — order generated from DEVICE_MODELS by

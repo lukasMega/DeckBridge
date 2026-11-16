@@ -2,6 +2,7 @@ import assert from 'tjs:assert';
 import {
   transformImageForDevice,
   fillModeFor,
+  formatCodeFor,
   blitImage,
   canvasSliceToBmp,
 } from '../src/transform/translator.js';
@@ -9,6 +10,7 @@ import type { DeviceImageSpec } from '../src/devices/driver.js';
 import { MIRABOX_293_MODEL } from '../src/devices/mirabox/mirabox-293.js';
 import { MIRABOX_K1PRO_MODEL } from '../src/devices/mirabox/mirabox-k1pro.js';
 import { AJAZZ_AKP05E_MODEL } from '../src/devices/ajazz/akp05e.js';
+import { ULANZI_D200_MODEL } from '../src/devices/ulanzi/ulanzi-d200.js';
 import { testAsync as test, summaryExit } from './helpers/harness.js';
 import { SOLID_RED_16X16_JPEG } from './helpers/fixtures.js';
 
@@ -114,6 +116,23 @@ await test('transformImageForDevice (mirabox-293) output decodes to spec width×
   assert.notEqual(dims, null);
   assert.equal(dims!.width, MIRABOX_293_MODEL.image.width);
   assert.equal(dims!.height, MIRABOX_293_MODEL.image.height);
+});
+
+await test('formatCodeFor: jpeg → 0, bmp → 1, png → 2', () => {
+  assert.equal(formatCodeFor(baseImageSpec({ format: 'jpeg' })), 0);
+  assert.equal(formatCodeFor(baseImageSpec({ format: 'bmp' })), 1);
+  assert.equal(formatCodeFor(baseImageSpec({ format: 'png' })), 2);
+});
+
+// The transform is the only PNG producer, so this goes through the real cdylib.
+await test('transformImageForDevice (ulanzi-d200) output is a valid PNG at 196×196', () => {
+  const out = transformImageForDevice(SOLID_RED_16X16_JPEG, ULANZI_D200_MODEL.image);
+  assert.equal(JSON.stringify(Array.from(out.subarray(0, 8))), '[137,80,78,71,13,10,26,10]');
+  // IHDR is always the first chunk: 4-byte length, "IHDR", then width/height BE.
+  assert.equal(String.fromCharCode(out[12]!, out[13]!, out[14]!, out[15]!), 'IHDR');
+  assert.equal(out.readUInt32BE(16), ULANZI_D200_MODEL.image.width);
+  assert.equal(out.readUInt32BE(20), ULANZI_D200_MODEL.image.height);
+  assert.ok(out.length <= ULANZI_D200_MODEL.image.maxBytes, `PNG ${out.length} B over budget`);
 });
 
 await test('transformImageForDevice (400x400 BMP) grows OUT past 256 KB and returns full buffer', () => {

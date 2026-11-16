@@ -9,7 +9,7 @@ import { mk2IndexToDeviceImgId } from '../shared/key-map.js';
 import { DumpDir, DumpQueue, newDumpTag } from './image-dump.js';
 import { hashJpeg } from '../shared/image-hash.js';
 import { imageCache, makeCacheKey, specRevision } from './image-cache.js';
-import type { DeviceImageSpec, DeviceModel } from '../devices/driver.js';
+import type { DeviceImageFormat, DeviceImageSpec, DeviceModel } from '../devices/driver.js';
 import type { TouchStripOptions, TouchWindowRegion } from '../shared/types.js';
 import {
   DEFAULT_TOUCH_STRIP_OPTIONS,
@@ -47,8 +47,8 @@ function seqTag(seq: number): string {
   return String(seq).padStart(4, '0');
 }
 
-function dumpExt(format: 'jpeg' | 'bmp'): string {
-  return format === 'jpeg' ? 'jpg' : 'bmp';
+function dumpExt(format: DeviceImageFormat): string {
+  return format === 'jpeg' ? 'jpg' : format;
 }
 
 /** Wait for queued dumps (call on worker close, before the thread exits). */
@@ -83,7 +83,7 @@ function dumpTransformed(
   seq: number | null,
   keyIndex: number,
   nativeBytes: Uint8Array,
-  devFormat: 'jpeg' | 'bmp',
+  devFormat: DeviceImageFormat,
 ): void {
   if (seq === null) return;
   RAW_DUMP_DIR?.write(`${seqTag(seq)}_key${keyIndex}_out.${dumpExt(devFormat)}`, nativeBytes);
@@ -188,7 +188,8 @@ export function renderImage(
   // falls back to identity when the model has no keyMap array/offset).
   const deviceKeyIndex = mk2IndexToDeviceImgId(keyIndex, model);
   if (deviceKeyIndex < 0) {
-    warn('image', `skipping image for out-of-range key ${keyIndex}`);
+    // Debug, not warn: the D200 maps two advertised cells to -1 on purpose, per frame.
+    debug('image', `skipping image for unmapped key ${keyIndex}`);
     return { hash: frameHash, cached };
   }
 

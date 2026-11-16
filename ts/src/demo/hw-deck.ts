@@ -34,6 +34,14 @@ export type HwConnection =
   | { fail: FailReason }
   | null;
 
+// No browser core speaks the page protocol (ulanzi-zk): treat those decks as unknown.
+const WEBHID_MODELS = DEVICE_MODELS.filter((m) => m.protocol !== 'ulanzi-zk');
+
+function webHidModel(vid: number, pid: number): DeviceModel | null {
+  const model = findModel(vid, pid);
+  return model && WEBHID_MODELS.includes(model) ? model : null;
+}
+
 function errorName(error: unknown): string {
   return error instanceof Error ? error.name : '';
 }
@@ -47,7 +55,7 @@ export function connectHwDeck(events: DeckEvents, tracker: typeof track): Promis
   let selection: Promise<HIDDevice[]>;
   try {
     // Keep chooser invocation inside the originating button click.
-    selection = hid.requestDevice({ filters: hidFilters(DEVICE_MODELS) });
+    selection = hid.requestDevice({ filters: hidFilters(WEBHID_MODELS) });
   } catch (error) {
     const reason = errorName(error) === 'SecurityError' ? 'denied' : 'open';
     tracker.hwFail(reason);
@@ -57,13 +65,13 @@ export function connectHwDeck(events: DeckEvents, tracker: typeof track): Promis
     async (devices): Promise<HwConnection> => {
       const device =
         devices.find((candidate) => {
-          const model = findModel(candidate.vendorId, candidate.productId);
+          const model = webHidModel(candidate.vendorId, candidate.productId);
           if (!model) return false;
           const id = model.protocol.startsWith('elgato-') ? 2 : (model.wire.reportId ?? 0);
           return reportLength(candidate, 'output', id) !== null;
         }) ?? devices[0];
       if (!device) return null;
-      const model = findModel(device.vendorId, device.productId);
+      const model = webHidModel(device.vendorId, device.productId);
       if (!model) {
         tracker.hwUnknown(device.vendorId, device.productId);
         return { unknown: { vid: device.vendorId, pid: device.productId } };

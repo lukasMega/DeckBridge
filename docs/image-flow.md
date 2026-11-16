@@ -21,6 +21,7 @@ Those choices are independent.
 | K1 Pro emulating Mini | 80×80 BMP | Crop, transform, encode JPEG |
 | Mirabox 293S emulating MK.2 | 72×72 JPEG | Pad and rotate |
 | AKP05 / AKP05E emulating Plus | 120×120 JPEG; strip updates | Transform keys; composite strip |
+| Ulanzi D200 emulating MK.2 (untested) | 72×72 JPEG | Resize to 196×196 PNG; batch into a page ZIP |
 
 AKP05 and AKP05E advertise as a Stream Deck + by default.
 Each emulation carries its own mapping.
@@ -29,6 +30,20 @@ On image arrival (`wireDockImages` in `dock-frames.ts`, one per dock) the path s
 
 - **WebUI path (main thread)** — fires immediately: the CORA bytes are pushed **inline (base64) over WebSocket**, so the browser renders at arrival with no follow-up request.
 - **Transform + USB path (USB worker thread)** — the main thread forwards raw CORA bytes via `WorkerHidDriver.renderCoraImage()`; the worker (`image-render.ts`) transforms through the Rust deckbridge-native cdylib (LRU-cached), then writes to the device. Running on the worker keeps the transform — and, dominantly, the burst of blocking `hid_write` chunk uploads that follows it — off the CORA ACK loop (P1).
+
+### Page-protocol devices (Ulanzi D200)
+
+Every other model accepts one image per key. The D200 does not: its firmware repaints the whole grid from a ZIP archive (`manifest.json` + `Images/*.png`) sent over a `0x7c7c`-framed HID vendor channel. Everything up to `driver.sendImage()` is unchanged; only the last hop differs:
+
+```
+image-render.ts  →  driver.sendImage(slot, pngBytes)
+                      └─ UlanziPage.stage()          dirty set, last write per slot wins
+                           └─ FlushScheduler         75 ms debounce, 120 ms min gap
+                                └─ buildSafePageZip  stored-method ZIP + manifest
+                                     └─ buildChunks  1016 B + N×1024 B HID writes
+```
+
+The timings come from `model.page` (`DevicePageSpec`). Images coalesce, so a 15-key profile switch is one page, not 15 uploads. The first flush after open sends the full page (~180 writes); later flushes send only changed keys (~15 writes for one key). Icon paths change on every flush because the firmware appears to cache decoded images by path. The wide bottom-right cell keeps the firmware's own clock. Untested on hardware.
 
 ## Image format by device
 
@@ -96,7 +111,7 @@ sequenceDiagram
         Note over REND: nativeBytes = data (forwarded unchanged)
     else transform sidecar [Mirabox 293 / 293S / K1 Pro]
         REND->>RS: transformImageForDevice(data, model.image)
-        RS-->>REND: resized/rotated JPEG (K1 Pro: BMP→JPEG)
+        RS-->>REND: resized/rotated JPEG (K1 Pro: BMP→JPEG, D200: PNG)
     end
 
     Note over REND: store nativeBytes in LRU cache (100 entries / 32 MiB)

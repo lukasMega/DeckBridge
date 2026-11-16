@@ -86,6 +86,9 @@ const DEVICES = [
   { id: 'fifine-d6', name: 'Fifine AmpliGame D6', brand: 'AMPLIGAME', cols: 5, rows: 3, gap: 0.19, bodyR: 14, label: 'top', stand: 'integrated', underglow: true, chassis: 'ink', accent: '#f59f00' }, // prettier-ignore
   { id: 'fifine-d6-rev2', name: 'Fifine AmpliGame D6 (rev. 2)', brand: 'AMPLIGAME', cols: 5, rows: 3, gap: 0.19, bodyR: 14, label: 'top', stand: 'integrated', underglow: true, chassis: 'ink', accent: '#f59f00' }, // prettier-ignore
 
+  // --- Ulanzi -------------------------------------------------------------
+  { id: 'ulanzi-d200', name: 'Ulanzi Stream Controller D200', brand: 'ULANZI', cols: 5, rows: 3, gap: 0.12, bodyR: 16, label: 'top', stand: 'integrated', chassis: 'ink', accent: '#1c7ed6' }, // prettier-ignore
+
   // --- v1 rebadges (all the same Mirabox 293S tooling) --------------------
   { id: 'mars-msd-one', name: 'Mars Gaming MSD-ONE', brand: 'MARS GAMING', cols: 5, rows: 3, strip: true, gap: 0.30, bodyR: 14, label: 'top', stand: 'integrated', chassis: 'black', accent: '#e03131' }, // prettier-ignore
   { id: 'maddog-gk150k', name: 'Mad Dog GK150K', brand: 'MAD DOG', cols: 5, rows: 3, strip: true, gap: 0.30, bodyR: 14, label: 'bottom-right', stand: 'wedge', chassis: 'black', accent: '#94d82d' }, // prettier-ignore

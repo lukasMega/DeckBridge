@@ -889,6 +889,81 @@ capabilities: {
 
 **Derived from:** opendeck-ampgd6 PR #4, #5, #6, #7 · companion-surface-mirabox-stream-dock PR #49 · FifineOpenSource · own hardware capture (ts/src/dev/d6-capture.ts)
 
+### Ulanzi Stream Controller D200 \{#ulanzi-d200}
+
+`ulanzi-d200` · `ulanzi-zk` · — untested · [compare entry](./devices.mdx#ulanzi-d200)
+
+```text
+mk2 index → wire image id  (5×3, row-major)
+
+   0   1   2   3   4       0   1   2   3   4
+   5   6   7   8   9       5   6   7   8   9
+  10  11  12  13  14      10  11  12  -1  -1
+```
+
+```js
+keyMap: {
+  "coraToWireImage": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    11,
+    12,
+    -1,
+    -1
+  ],
+  "wireInputToCora": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    11,
+    12,
+    -1
+  ]
+}
+cora: {
+  "productId": 0x00a5,
+  "advertiseAs": "mk2",
+  "usePhysicalIdentity": false
+}
+splash: {
+  "transformOverride": {
+    "rotate": 0,
+    "flipH": false,
+    "flipV": false
+  }
+}
+capabilities: {
+  "batchImageTransfers": {
+    "configured": null,
+    "effective": false
+  },
+  "widgetDisplays": [],
+  "touchStripDisplay": null,
+  "extraKeyInputs": null,
+  "emulations": [],
+  "defaultAdvertiseAs": "mk2"
+}
+```
+
+**Derived from:** jcalado/companion-surface-d200 (MIT) · bitfocus companion-surface-ulanzi (MIT) · aleyvag/ulanzi-d200h-linux firmware-protocol.md (MIT) · marcelobrake/ulanzi-linux (MIT) · edufalcao/ulanzi-deck-open, alexbabintsev/udeck, iBobbyTS/UlanziDeckSwift, eitchtee/OpenUlanzi (MIT)
+
 ### Ajazz AKP153 \{#ajazz-akp153}
 
 `ajazz-akp153` · `mirabox-cora-v1` · — untested · [compare entry](./devices.mdx#ajazz-akp153)

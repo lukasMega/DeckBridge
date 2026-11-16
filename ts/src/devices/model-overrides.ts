@@ -111,8 +111,8 @@ const IMAGE_FIELDS: Record<(typeof IMAGE_OVERRIDE_KEYS)[number], FieldSpec> = {
 
 const KEYMAP_FIELDS: Record<(typeof KEYMAP_KEYS)[number], FieldSpec> = {
   // One entry per emulated key, in CORA index order — a short array would leave
-  // keys unmapped with no error at render time.
-  coraToWireImage: { kind: 'ints', min: 0, length: (model) => model.keyCount },
+  // keys unmapped with no error at render time. -1 = no display (Ulanzi D200 holes).
+  coraToWireImage: { kind: 'ints', min: -1, length: (model) => model.keyCount },
   wireInputToCora: { kind: 'ints', min: -1 },
   inputOffset: { kind: 'number', integer: true },
   imageOffset: { kind: 'number', integer: true },
@@ -205,7 +205,7 @@ function checkNumber(
   if (spec.max !== undefined && value > spec.max) errors.push(`${path}: must be ≤ ${spec.max}`);
 }
 
-/** `spec.min` is -1 for wireInputToCora (an ignored key, e.g. the 293S 6th column). */
+/** `spec.min` is -1 for an ignored key (293S 6th column) or a key with no display (D200). */
 function checkIntArray(
   value: unknown,
   spec: { min: number; length?: (model: DeviceModel) => number },

@@ -79,6 +79,7 @@ See **[Supported devices](https://lukasmega.github.io/DeckBridge/devices)**. Sel
 | Mad Dog GK150K | 15 buttons (5×3) | 85×85 | mirabox-cora-v1 |
 | Risemode Vision 01 | 15 buttons (5×3) | 85×85 | mirabox-cora-v1 |
 | TMICE Stream Controller | 15 buttons (5×3) | 85×85 | mirabox-cora-v1 |
+| Ulanzi Stream Controller D200 | 13 buttons (5×3) | 196×196 | ulanzi-zk |
 
 </details>
 
@@ -97,6 +98,11 @@ Mirabox 293V3 also matches the HSV293SV3 / "293S V3" refresh — untested.
 > 1024 bytes for PID `0x0060`); the 7 v1 rebadges are the same hardware as the 293S behind
 > a different USB VID/PID, so they reuse the 293S model verbatim — report anything that
 > misbehaves.
+> <br/><br>
+> The Ulanzi Stream Controller D200 shares no board with the others: it repaints its
+> screen from a ZIP of PNGs the host sends, so it has its own driver. It is implemented
+> from public documentation and is not hardware-tested yet; its 13 LCD keys are driven,
+> and the wide slot keeps the firmware's own clock.
 
 </details>
 

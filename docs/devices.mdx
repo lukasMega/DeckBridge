@@ -94,6 +94,18 @@ Dedicated 1024-byte CRT protocol: ten JPEG keys (CRT BAT uploads committed with 
 
 </div>
 
+## Ulanzi page protocol
+
+No per-key write: the host sends the whole grid as one ZIP (manifest.json + 196×196 PNGs) over 0x7c7c-framed 1024-byte reports, coalesced per flush, with a 2 s keepalive.
+
+<div style={{overflowX: 'auto'}}>
+
+| Device | Vendor | USB VID:PID | Keys (grid) | Panel px | Image | Extra keys | Tested |
+|---|---|---|---|---|---|---|---|
+| [Ulanzi Stream Controller D200](#ulanzi-d200) | ulanzi | `0x2207:0x0019` | 15 (5×3) | 196×196 | PNG | — | — untested |
+
+</div>
+
 ## Devices in detail
 
 ### Stream Deck MK.2 \{#mk2}
@@ -325,6 +337,28 @@ Rev. 2 of the Fifine AmpliGame D6 (PID 0x0060) — the 293V3 board behind VID 0x
 - `maxBytes: 10240` is headroom, not a ceiling: a size ladder on real hardware (`mise run d6-capture -- s3`) rendered 7.9 / 10.8 / 14.0 / 22.7 / 22.9 KB keys intact. The cap is left as inherited because desktop keys arrive at 1.9–4.8 KB, so it almost never binds, and every extra KB is another 1024-byte HID write per key.
 
 [Full spec →](./device-specs.mdx#fifine-d6-rev2)
+
+### Ulanzi Stream Controller D200 \{#ulanzi-d200}
+
+Ulanzi Stream Controller D200: 13 LCD keys on a 5×3 grid plus a wide info window, driven over Ulanzi's page protocol. The whole grid ships as one ZIP of 196×196 PNGs; there is no per-key write. Not hardware-tested here.
+
+**Also sold as:** D200H (same VID:PID, reports `DeviceType: "D200"`)
+
+|  |  |
+|---|---|
+| **USB** | `0x2207`:`0x0019` |
+| **Keys** | 15 (5×3) |
+| **Panel** | 196×196 PNG |
+| **Protocol** | `ulanzi-zk` |
+| **Tested** | — untested |
+
+- Advertised to the Elgato app as an MK.2 (5×3/15). Cells 13 (the wide info window, which shows the firmware clock) and 14 (no physical key) are not drawn.
+- Two firmware generations share VID:PID 0x2207:0x0019: Qt `UlanziDeckKey` on RK3308 and ZKSWE EasyUI on SSD210. The driver logs the device-info JSON on every open, so a bug report names its generation.
+- Quit Ulanzi Studio first: it holds the HID interface exclusively.
+- Partial page updates (opcode 0x000d) are disputed. If keys show as white or stale blocks, set `page.partialUpdates` to false in the model.
+- The D200X adds page buttons and encoders behind an unlock opcode that DeckBridge does not send. Only its 13 keys are expected to work.
+
+[Full spec →](./device-specs.mdx#ulanzi-d200)
 
 ### Ajazz AKP153 \{#ajazz-akp153}
 

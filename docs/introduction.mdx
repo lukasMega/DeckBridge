@@ -52,6 +52,12 @@ ships in two revisions that differ only in USB packet size: 512 bytes for PID `0
 1024 bytes for PID `0x0060`); the 7 v1 rebadges are the same hardware as the 293S behind
 a different USB VID/PID, so they reuse the 293S model verbatim.
 
+The **Ulanzi Stream Controller D200** shares no board with the others. Its firmware
+repaints the whole grid from a ZIP archive (`manifest.json` + `Images/*.png`) the host
+sends, so it has its own driver (`ts/src/devices/ulanzi/`). It is implemented from public
+documentation and is not hardware-tested yet. The 13 LCD keys are driven; the wide
+bottom-right slot keeps the firmware's own clock.
+
 :::caution[Platform status]
 DeckBridge is **hardware-tested on macOS only**. The GitHub releases ship macOS
 (`arm64`, `x86_64`), Linux (`x86_64`, `arm64`) and Windows (`x86_64`, NSIS installer)

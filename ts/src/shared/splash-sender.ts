@@ -41,6 +41,7 @@ export function sendSplashImages(driver: DockDriver): void {
     // Match the live image path (image-render.ts): remap mk2 → device wire id
     // when the model defines an image keyMap; Elgato (no keyMap) passes through.
     const deviceKeyIndex = mk2IndexToDeviceImgId(mk2, model);
+    if (deviceKeyIndex < 0) continue; // a grid cell with no display (Ulanzi D200)
     // Every key gets the same device-independent "connected" image. Source
     // bytes are a constant — no copy needed here; WorkerHidDriver.sendSplashImage
     // copies before postMessage.

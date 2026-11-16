@@ -65,8 +65,14 @@ export function fillModeFor(spec: DeviceImageSpec): number {
 // Zero width/height = no region crop (transform.rs).
 const NO_REGION: DeviceCropRect = { x: 0, y: 0, width: 0, height: 0 };
 
-/** Transform a CORA JPEG for an Elgato device according to its DeviceImageSpec.
- *  Returns JPEG bytes for gen2 (MK.2) or BMP bytes for gen1 (Mini). */
+/** The FFI `format: i32` code: 0 = JPEG, 1 = BMP, 2 = PNG. */
+export function formatCodeFor(spec: DeviceImageSpec): 0 | 1 | 2 {
+  if (spec.format === 'bmp') return 1;
+  return spec.format === 'png' ? 2 : 0;
+}
+
+/** Transform a CORA image for a device according to its DeviceImageSpec: JPEG (MK.2,
+ *  Mirabox), BMP (Mini) or PNG (page-protocol devices, Ulanzi D200). */
 export function transformImageForDevice(jpeg: Uint8Array, spec: DeviceImageSpec): Buffer {
   const { symbols } = load();
   const region = spec.cropRect ?? NO_REGION;
@@ -82,7 +88,7 @@ export function transformImageForDevice(jpeg: Uint8Array, spec: DeviceImageSpec)
       spec.rotate,
       spec.flipH ? 1 : 0,
       spec.flipV ? 1 : 0,
-      spec.format === 'bmp' ? 1 : 0,
+      formatCodeFor(spec),
       spec.bmpPpm ?? 2835,
       Math.round((spec.blur ?? 0) * 10),
       resizeFilterFor(spec),

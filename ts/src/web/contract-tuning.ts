@@ -30,7 +30,7 @@ export interface TuningImage {
 /** `effective.image`: every tunable field, plus the protocol facts the device
  *  reports but no override may set. */
 export interface EffectiveTuningImage extends TuningImage {
-  format?: 'jpeg' | 'bmp';
+  format?: 'jpeg' | 'bmp' | 'png';
   colorMode?: 'rgb' | 'bgr';
   bmpPpm?: number;
 }

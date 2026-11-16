@@ -81,6 +81,12 @@ const FAMILIES = [
     blurb:
       'Dedicated 1024-byte CRT protocol: ten JPEG keys (CRT BAT uploads committed with CRT ULEND), four rotary encoders, a four-zone touch strip, and a 10 s keepalive.',
   },
+  {
+    key: 'ulanzi',
+    title: 'Ulanzi page protocol',
+    blurb:
+      'No per-key write: the host sends the whole grid as one ZIP (manifest.json + 196×196 PNGs) over 0x7c7c-framed 1024-byte reports, coalesced per flush, with a 2 s keepalive.',
+  },
 ];
 
 function familyOf(model) {

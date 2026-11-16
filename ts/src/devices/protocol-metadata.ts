@@ -18,7 +18,7 @@ export const WIRE_OVERRIDE_KEYS = [
 export type WireOverrideKey = (typeof WIRE_OVERRIDE_KEYS)[number];
 
 /** Reader-facing grouping for generated docs, not the raw `protocol` tag. */
-export type ProtocolFamily = 'elgato' | 'mirabox-v3' | 'mirabox-v1' | 'ajazz-akp05';
+export type ProtocolFamily = 'elgato' | 'mirabox-v3' | 'mirabox-v1' | 'ajazz-akp05' | 'ulanzi';
 
 export interface ProtocolMeta {
   /** The wire fields this protocol's driver actually reads, so the only ones a user may
@@ -59,4 +59,7 @@ export const PROTOCOLS = {
   },
   // 1024-byte CRT BAT uploads, ULEND commit
   'ajazz-akp05': { tunableWireKeys: ['inSize'], family: 'ajazz-akp05', strategy: false },
+  // Page protocol: the whole grid ships as one ZIP of PNGs (devices/ulanzi/). Its framing
+  // lives in `model.page`, not `wire`, so no wire field is tunable.
+  'ulanzi-zk': { tunableWireKeys: [], family: 'ulanzi', strategy: false },
 } as const satisfies Record<string, ProtocolMeta>;

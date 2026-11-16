@@ -113,8 +113,8 @@ see *Supporting workers*), for **four** thread contexts in total:
   nor a large upload stalls the ACK loop (P1). One generic worker (`hid-worker.ts`, proxied by
   `WorkerHidDriver`) serves every device; `USB_DRIVERS`
   ([usb-drivers.ts](../ts/src/devices/usb-drivers.ts)) picks by `model.protocol`:
-  `ElgatoHidDriver` (MK.2, Mini), `MiraboxDriver` (293/293S/K1 Pro), or `Akp05Driver`
-  (AKP05 family).
+  `ElgatoHidDriver` (MK.2, Mini), `MiraboxDriver` (293/293S/K1 Pro), `Akp05Driver`
+  (AKP05 family), or `UlanziDriver` (Ulanzi D200, page protocol).
 
 A full profile load is fast on **both** sides: the main thread pushes every image to the
 browser immediately while the device updates in parallel on the worker. Mock mode stays on the
@@ -301,9 +301,9 @@ backs off instead of scanning every 3 s.
 
 ### Probe order
 
-`DEVICE_MODELS` defines explicit probe priority; the registry currently holds eighteen USB
-models. Elgato MK.2 and Mini come first, then Mirabox 293, 293S and K1, then AKP05E and AKP05,
-then the remaining rebadges. See [registry source](../ts/src/devices/registry.ts).
+`DEVICE_MODELS` defines explicit probe priority. Elgato MK.2 and Mini come first, then
+Mirabox 293, 293S and K1, then AKP05E and AKP05, the rev. 2 boards, Fifine D6 and the
+Ulanzi D200, then the remaining rebadges. See [registry source](../ts/src/devices/registry.ts).
 [Supported devices](devices.mdx) records support evidence and
 [Device specs](device-specs.mdx) derives registry values; do not duplicate those inventories
 here.
@@ -315,6 +315,9 @@ Family differences that stay model-specific:
 - AKP153E rev. 2 has calibrated mappings; AKP153R keeps unverified inherited defaults.
 - Rev. 1 rebadges are registered separately, with image batching disabled by default.
 - Stream Deck + is emulation-only: `CORA_PROFILES` never enters USB discovery.
+- Ulanzi D200 (untested) has no per-key image write: `ulanzi-zk` ships the whole grid as one
+  ZIP of PNGs, framed by `model.page` rather than `wire`. Only 13 of its 15 cells are keys,
+  so cells 13 and 14 map to `-1`. See [Page-protocol devices](image-flow.md#page-protocol-devices-ulanzi-d200).
 
 ### Open strategy per device
 
@@ -627,6 +630,7 @@ default); the first `status` WebSocket message rebuilds to the actual layout.
 | Ajazz AKP153E/R (rev. 2) | 5×3 (same as 293V3; advertised as MK.2) |
 | Fifine AmpliGame D6 (rev. 1 and rev. 2) | 5×3 (same as 293V3; advertised as MK.2) |
 | AKP153/E/R, MSD-ONE, GK150K, Vision 01, TMICE Stream Controller (v1 rebadges) | 5×3 (left 5 of 6 hardware columns, same as 293S; advertised as MK.2) |
+| Ulanzi Stream Controller D200 | 5×3 advertised as MK.2, but only 13 cells are keys (cell 13 = wide info window, cell 14 = none) |
 
 </details>
 
@@ -868,7 +872,7 @@ Test file names, by area (`ts/test/<name>.test.ts`):
 
 - **CORA framing** — `packets`, `cora-frame` (resync, oversized `payloadLength`), `assembler`, `elgato-child-image-bounds` (out-of-range `keyIndex` drop).
 - **Image pipeline** — `translator`, `image-cache`, `dock-frames` (driver-before-WebUI order, same-model replay), `image-render`.
-- **Drivers & models** — `device-models` (probe order, keyMap permutations), `driver-manager`, `dock`, `hid-worker-host` (failed-`open` reuse), `hid-worker-batching`, `mirabox-parse`, `k1pro-chunk-pad`.
+- **Drivers & models** — `device-models` (probe order, keyMap permutations), `driver-manager`, `dock`, `hid-worker-host` (failed-`open` reuse), `hid-worker-batching`, `mirabox-parse`, `k1pro-chunk-pad`, `ulanzi-protocol` (`0x7c7c` framing, chunking, input), `ulanzi-zip` (CRC-32, stored ZIP, boundary-byte retry), `ulanzi-page` (coalescing, full-then-partial, flush rate limit).
 - **Device catalog** — `device-catalog-baseline` (hand-written expectations per model), `device-catalog-validate` (a failing fixture per validator check), `packet-replay` (versioned fixtures in `ts/test/fixtures/packets/` replayed through the real drivers on a fake hidapi).
 - **Servers** — `server` (primary + child over real TCP), `pairing` (full MK.2 handshake), `feature-response`.
 - **Web & infra** — `web-ui-server`, `ui-helpers-docks`, `key-preview`, `tray`, `mdns-advertiser`, `native-libs`, `buffer-shim`.
@@ -1072,7 +1076,8 @@ deckbridge/
 │   └── dist/             ← bundle.js (~2.2 MB, workers + native dylibs inlined)
 │                            · hid-worker.js · hid-scan-worker.js · plugin-worker.js (debug copies)
 ├── rust/
-│   ├── deckbridge-native/   ← JPEG resize/rotate + HID path-enum cdylib (FFI via DECKBRIDGE_NATIVE_LIB);
+│   ├── deckbridge-native/   ← image resize/rotate + JPEG/BMP/PNG encode + HID path-enum cdylib
+│   │                          (FFI via DECKBRIDGE_NATIVE_LIB);
 │   │                          Cargo features: jpeg-upstream (default) / jpeg-fork, HID behind `usb`
 │   ├── jpeg-encoder/        ← vendored jpeg-encoder 0.6.1 fork (interleaved optimized Huffman; JPEG_FORK=1)
 │   └── deckbridge-tray/     ← system-tray sidecar binary (Rust; tray-icon + tao)

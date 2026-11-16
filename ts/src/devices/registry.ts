@@ -8,6 +8,7 @@ import { AJAZZ_AKP153E_REV2_MODEL, AJAZZ_AKP153R_REV2_MODEL } from './ajazz/akp1
 import { AJAZZ_AKP05E_MODEL } from './ajazz/akp05e.js';
 import { AJAZZ_AKP05_MODEL } from './ajazz/akp05.js';
 import { FIFINE_D6_MODEL, FIFINE_D6_REV2_MODEL } from './fifine/fifine-d6.js';
+import { ULANZI_D200_MODEL } from './ulanzi/ulanzi-d200.js';
 import { UPHERE_293V3_MODEL } from './uphere/uphere-293v3.js';
 import { AKP153_V1_CLONE_MODELS } from './rebadge/akp153-v1-clones.js';
 import { AKP05_CLONE_MODELS } from './rebadge/akp05-clones.js';
@@ -29,6 +30,7 @@ export const DEVICE_MODELS: DeviceModel[] = [
   AJAZZ_AKP153R_REV2_MODEL,
   FIFINE_D6_MODEL,
   FIFINE_D6_REV2_MODEL,
+  ULANZI_D200_MODEL,
   ...AKP153_V1_CLONE_MODELS,
   ...AKP05_CLONE_MODELS,
   ...K1PRO_CLONE_MODELS,

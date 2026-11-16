@@ -226,6 +226,7 @@ dependencies = [
  "image",
  "jpeg-encoder",
  "jpeg-encoder-fork",
+ "png",
  "windows",
 ]
 

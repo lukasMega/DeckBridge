@@ -23,8 +23,12 @@ export interface DeviceCropRect {
   height: number;
 }
 
+/** Image format the device consumes. CORA itself only sends 'jpeg' | 'bmp'; 'png' is
+ *  for page-protocol devices whose firmware unzips PNGs (Ulanzi D200). */
+export type DeviceImageFormat = 'jpeg' | 'bmp' | 'png';
+
 export interface DeviceImageSpec {
-  format: 'jpeg' | 'bmp';
+  format: DeviceImageFormat;
   width: number;
   height: number;
   /** Extra CW rotation applied to the CORA image before sending. The app pre-orients
@@ -97,6 +101,31 @@ export interface DeviceWireSpec {
    *  discards short writes while `hid_write` still succeeds → black panel, no error).
    *  The whitelist lets the probe correct a guess, never invent an untested value. */
   packetSizeCandidates?: readonly number[];
+}
+
+/** Framing for page protocols (ulanzi-zk), which repaint the whole grid from one
+ *  archive instead of taking a per-key write. Kept out of DeviceWireSpec: none of its
+ *  Mirabox quirk flags mean anything here. */
+export interface DevicePageSpec {
+  /** The firmware reverts to its own screen after ~5–10 s without a write. */
+  keepaliveMs: number;
+  /** CORA pushes one image per key; staged images are coalesced this long per ZIP. */
+  flushDebounceMs: number;
+  /** Floor between flushes: a page is ~180 synchronous HID writes. */
+  minFlushIntervalMs: number;
+  /** Partial-update opcode after the first full page. Disputed on hardware (ghost or
+   *  white keys); false resends the whole remembered page each time. */
+  partialUpdates: boolean;
+  /** Firmware cap on one archive (0 = unknown). Oversized ZIPs are dropped silently,
+   *  so this only drives a warning. */
+  maxZipBytes: number;
+  /** Firmware render mode for the wide info-window slot (203 = digital clock). */
+  smallWindowMode: number;
+  /** Grid position of that slot, as the manifest's "{col}_{row}" key. */
+  smallWindowSlot: { col: number; row: number };
+  /** Busy-wait between page chunks (0/undefined = none), for firmware that drops
+   *  back-to-back writes. */
+  chunkDelayMs?: number;
 }
 
 /** CORA key index (MK.2, 0-based row-major) ↔ device wire ids. Each direction
@@ -209,6 +238,8 @@ export interface DeviceModel {
   touchHeight?: number;
   image: DeviceImageSpec;
   wire: DeviceWireSpec;
+  /** Page-protocol framing (ulanzi-zk only); `wire` then carries just the packet sizes. */
+  page?: DevicePageSpec;
   keyMap: DeviceKeyMap;
   cora: DeviceCoraSpec;
   splash?: DeviceSplashSpec;
