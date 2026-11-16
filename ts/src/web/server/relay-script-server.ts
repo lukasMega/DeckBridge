@@ -102,7 +102,7 @@ export class RelayScriptServer {
   }
 
   private serveScript(token: string, given: string | null): Response {
-    // 404, not 403: an unauthorised probe learns nothing about the route.
+    // 404, not 403: an unauthorized probe learns nothing about the route.
     if (!tokenMatches(given, token)) return new Response(null, { status: 404 });
     const body = this.opts.script({ token, port: this.port ?? RELAY_SCRIPT_PORT });
     if (body === null) return new Response('DeckBridge has no LAN address yet\n', { status: 503 });

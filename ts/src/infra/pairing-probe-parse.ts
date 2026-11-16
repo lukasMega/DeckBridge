@@ -12,7 +12,7 @@ export function parseWslList(text: string): WslInfo {
   const distros: WslInfo['distros'] = [];
   for (const line of text.replace(/\r/g, '').split('\n')) {
     // Rows look like `* Ubuntu-24.04  Running  2`. The header is localized, so a row is
-    // recognised by its last token (the version), not by header text.
+    // recognized by its last token (the version), not by header text.
     const trimmed = line.trim();
     const isDefault = trimmed.startsWith('*');
     const t = (isDefault ? trimmed.slice(1).trim() : trimmed).split(/\s+/);
