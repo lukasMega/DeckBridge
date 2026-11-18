@@ -13,7 +13,7 @@ import { ELGATO_MK2_PID } from '../../shared/types.js';
  *  Why this is not just another `mirabox-cora` model: the firmware is a Linux
  *  appliance (Qt `UlanziDeckKey` on RK3308, or ZKSWE EasyUI on SSD210 — two
  *  generations behind ONE VID:PID) with no per-key image write at all. The host
- *  ships the whole grid as a ZIP (`manifest.json` + `Images/*.png`) over a
+ *  ships the whole grid as a ZIP (`manifest.json` + `Images/*.jpg`) over a
  *  `0x7c7c`-framed vendor channel and the firmware repaints from it. See
  *  devices/ulanzi/ulanzi-protocol.ts.
  *
@@ -67,8 +67,8 @@ export const ULANZI_D200_MODEL: DeviceModel = {
     flipH: false,
     flipV: false,
     colorMode: 'rgb',
-    // EXPERIMENT: JPEG icons in the page ZIP (~5x smaller than PNG). Unknown whether
-    // the firmware decodes them; if keys go blank/solid, revert to 'png' + maxBytes 40960.
+    // JPEG icons in the page ZIP: ~5x smaller than PNG, and the firmware decodes them
+    // (hardware-verified). If keys ever go blank/solid, revert to 'png' + maxBytes 40960.
     maxBytes: 0,
     quality: 0.9,
     resizeFilter: 'lanczos3', // 72 → 196 is a 2.7× upscale

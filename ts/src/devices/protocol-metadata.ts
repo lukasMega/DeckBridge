@@ -59,7 +59,7 @@ export const PROTOCOLS = {
   },
   // 1024-byte CRT BAT uploads, ULEND commit
   'ajazz-akp05': { tunableWireKeys: ['inSize'], family: 'ajazz-akp05', strategy: false },
-  // Page protocol: the whole grid ships as one ZIP of PNGs (devices/ulanzi/). Its framing
+  // Page protocol: the whole grid ships as one ZIP of JPEG icons (devices/ulanzi/). Its framing
   // lives in `model.page`, not `wire`, so no wire field is tunable.
   'ulanzi-zk': { tunableWireKeys: [], family: 'ulanzi', strategy: false },
 } as const satisfies Record<string, ProtocolMeta>;

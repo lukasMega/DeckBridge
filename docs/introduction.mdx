@@ -53,7 +53,7 @@ ships in two revisions that differ only in USB packet size: 512 bytes for PID `0
 a different USB VID/PID, so they reuse the 293S model verbatim.
 
 The **Ulanzi Stream Controller D200** shares no board with the others. Its firmware
-repaints the whole grid from a ZIP archive (`manifest.json` + `Images/*.png`) the host
+repaints the whole grid from a ZIP archive (`manifest.json` + `Images/*.jpg`) the host
 sends, so it has its own driver (`ts/src/devices/ulanzi/`). It is implemented from public
 documentation and is hardware-tested on macOS. The 13 LCD keys are driven; the wide
 bottom-right slot keeps the firmware's own clock.
