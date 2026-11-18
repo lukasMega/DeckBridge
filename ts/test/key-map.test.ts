@@ -3,6 +3,7 @@ import {
   mk2IndexToDeviceImgId,
   deviceInputToMk2Index,
   deviceInputToExtraKey,
+  imageKeyRemap,
 } from '../src/shared/key-map.js';
 import { MIRABOX_293_MODEL } from '../src/devices/mirabox/mirabox-293.js';
 import { MIRABOX_K1PRO_MODEL } from '../src/devices/mirabox/mirabox-k1pro.js';
@@ -68,6 +69,41 @@ await test('round-trip: all codes 1–15 map to indices 0–14', () => {
     const idx = deviceInputToMk2Index(code, MIRABOX_293_MODEL);
     assert.ok(idx >= 0 && idx <= 14);
   }
+});
+
+console.log('\nkey-map: imageKeyRemap');
+
+const remapped = (map: number[]) => ({
+  ...MIRABOX_293_MODEL,
+  keyMap: { ...MIRABOX_293_MODEL.keyMap, coraToWireImage: map },
+});
+
+await test('imageKeyRemap: same map → nothing changed', () => {
+  assert.deepEqual(imageKeyRemap(MIRABOX_293_MODEL, remapped([...coraToWireImage])), {
+    changed: false,
+    stale: [],
+  });
+});
+
+await test('imageKeyRemap: a swap reports the wire ids the keys left', () => {
+  const swapped = [...coraToWireImage];
+  [swapped[0], swapped[1]] = [swapped[1]!, swapped[0]!];
+  const { changed, stale } = imageKeyRemap(MIRABOX_293_MODEL, remapped(swapped));
+  assert.equal(changed, true);
+  assert.deepEqual(stale, [coraToWireImage[0], coraToWireImage[1]]);
+});
+
+await test('imageKeyRemap: a key gaining or losing its display', () => {
+  const holed = [...coraToWireImage];
+  holed[2] = -1;
+  assert.deepEqual(imageKeyRemap(MIRABOX_293_MODEL, remapped(holed)), {
+    changed: true,
+    stale: [coraToWireImage[2]],
+  });
+  assert.deepEqual(imageKeyRemap(remapped(holed), MIRABOX_293_MODEL), {
+    changed: true,
+    stale: [],
+  });
 });
 
 // K1 Pro mapping tests

@@ -179,10 +179,11 @@ tuning** fixes them at runtime:
 
 Tuning is stored per model id under `modelOverrides` in `settings.json`, so it applies to
 every deck of that model. Image settings
-(rotation, flip, fit, quality, size, sharpen/blur/crop, crop region) are swapped into the running
-session and the deck repaints straight away; key-map, wire, splash and Elgato identity
-changes reconnect the device, because they must be in force when the CORA session is
-configured. If it leaves the panel dark: **Reset to defaults**, or start with
+(rotation, flip, fit, quality, size, sharpen/blur/crop, crop region) and the key maps (image
+key order, input mapping) are swapped into the running session and the deck repaints straight
+away. A key pressed in the instant of a key-map swap can still hit its old index once. Wire,
+splash, extra-key and Elgato identity changes reconnect the device, because they must be in
+force when the CORA session is configured. If it leaves the panel dark: **Reset to defaults**, or start with
 `./deckbridge run --no-overrides` to ignore all tuning for one session. Active tuning is
 flagged at the top of the diagnostics report.
 

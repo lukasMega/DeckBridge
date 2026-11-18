@@ -95,8 +95,9 @@ for that model, under `modelOverrides` in `settings.json`, so it applies to ever
 the same model. Depending on your answers, it holds the image rotation and flip, the image
 size, the JPEG quality and size limit, the key order, the key map from the Buttons step,
 and the startup splash orientation (only when the image orientation changed). If the
-orientation or the key order changed, the deck reconnects once; a new key map from the
-Buttons step reconnects it again. Saving also turns off the banner for that model.
+orientation changed, the splash changes too and the deck reconnects once; the key order and
+a new key map from the Buttons step apply without a reconnect. Saving also turns off the
+banner for that model.
 
 To undo it:
 

@@ -15,6 +15,7 @@ import type { DockStatus, TouchStripMode } from '../shared/types.js';
 import type { DockHooks, DockOptions, DockSettings } from './dock-types.js';
 import type { ClientApp } from '../shared/types.js';
 import { sendSplashImages } from '../shared/splash-sender.js';
+import { imageKeyRemap } from '../shared/key-map.js';
 import { DEFAULT_MODEL, findModelById } from '../devices/registry.js';
 import { applyModelOverrides } from '../devices/model-overrides.js';
 import type { DockDriver, DeviceModel, DeviceModelOverride } from '../devices/driver.js';
@@ -310,9 +311,10 @@ export class Dock {
     this.repaintWidgets();
   }
 
-  /** Live device tuning (image-only change) for `modelId` ('' = any): swap the spec on
-   *  the running driver and re-render the panel's frames + widget icons instead of a
-   *  close→reopen. */
+  /** Live device tuning (image spec / key map, no wire change) for `modelId` ('' = any):
+   *  swap the spec on the running driver and re-render the panel's frames + widget icons
+   *  instead of a close→reopen. A key press decoded across the swap may hit the old index
+   *  once; nothing drains the read loop for that. */
   applyTuning(
     modelId: string,
     overrideFor: (modelId: string) => DeviceModelOverride | undefined,
@@ -330,8 +332,15 @@ export class Dock {
       `dock ${this.index}: applying device tuning live to ${registryModel.id}`,
     );
     const effectiveModel = applyModelOverrides(registryModel, override);
+    const remap = imageKeyRemap(this.model, effectiveModel);
     driver.applyOverrides(override, effectiveModel);
     this.model = effectiveModel;
+    // A verify hold owns the panel; its end repaints. Else the order is attach's:
+    // blank what moved, splash, then the app's frames on top.
+    if (remap.changed && !this.frames.held) {
+      for (const wire of remap.stale) driver.clearKey(wire);
+      sendSplashImages(driver);
+    }
     this.frames.repaint(driver);
     // Extra-key icons are rendered by the widget scheduler, not by CORA frames.
     this.widgets?.repaint();
@@ -480,7 +489,7 @@ export class Dock {
       wireMockDriverEvents(driver, sinks);
       return;
     }
-    wireCommonDriverEvents(driver, this.model, sinks);
+    wireCommonDriverEvents(driver, () => this.model, sinks);
     driver.on('disconnect', () => {
       log('info', this.model.id, 'disconnected');
       this.hooks.disconnect?.();
