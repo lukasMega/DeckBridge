@@ -96,7 +96,7 @@ Dedicated 1024-byte CRT protocol: ten JPEG keys (CRT BAT uploads committed with 
 
 ## Ulanzi page protocol
 
-No per-key write: the host sends the whole grid as one ZIP (manifest.json + 196×196 PNGs) over 0x7c7c-framed 1024-byte reports, coalesced per flush, with a 2 s keepalive.
+No per-key write: the host sends the whole grid as one ZIP (manifest.json + 196×196 JPEGs) over 0x7c7c-framed 1024-byte reports, coalesced per flush, with a 2 s keepalive.
 
 <div style={{overflowX: 'auto'}}>
 
@@ -340,7 +340,7 @@ Rev. 2 of the Fifine AmpliGame D6 (PID 0x0060) — the 293V3 board behind VID 0x
 
 ### Ulanzi Stream Controller D200 \{#ulanzi-d200}
 
-Ulanzi Stream Controller D200: 13 LCD keys on a 5×3 grid plus a wide info window, driven over Ulanzi's page protocol. The whole grid ships as one ZIP of 196×196 PNGs; there is no per-key write.
+Ulanzi Stream Controller D200: 13 LCD keys on a 5×3 grid plus a wide info window, driven over Ulanzi's page protocol. The whole grid ships as one ZIP of 196×196 JPEGs; there is no per-key write.
 
 **Also sold as:** D200H (same VID:PID, reports `DeviceType: "D200"`)
 

@@ -24,7 +24,7 @@ export interface DeviceCropRect {
 }
 
 /** Image format the device consumes. CORA itself only sends 'jpeg' | 'bmp'; 'png' is
- *  for page-protocol devices whose firmware unzips PNGs (Ulanzi D200). */
+ *  for page-protocol devices whose firmware unzips PNGs (the Ulanzi D200 now uses 'jpeg'). */
 export type DeviceImageFormat = 'jpeg' | 'bmp' | 'png';
 
 export interface DeviceImageSpec {

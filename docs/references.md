@@ -59,9 +59,11 @@ Links below identify historical research sources.
 
 ## Ulanzi devices
 
-The Ulanzi Stream Controller D200 is a *page*-protocol device (a ZIP archive of PNGs plus
+The Ulanzi Stream Controller D200 is a *page*-protocol device (a ZIP archive of icon images plus
 a JSON manifest, not per-key image writes), so its support was written from these sources
-rather than from any existing DeckBridge driver.
+rather than from any existing DeckBridge driver. The reference projects all send PNG icons;
+DeckBridge sends JPEG, because the firmware also decodes it (our own hardware check) and the
+files are about 5x smaller.
 
 **Licence note.** DeckBridge is MIT, so only the MIT-licensed projects below were read as
 implementation references. `glmagalhaes/rs-ulanzi-d200` (and its OpenActionMirrors mirror)

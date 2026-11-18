@@ -100,7 +100,7 @@ Mirabox 293V3 also matches the HSV293SV3 / "293S V3" refresh — untested.
 > misbehaves.
 > <br/><br>
 > The Ulanzi Stream Controller D200 shares no board with the others: it repaints its
-> screen from a ZIP of PNGs the host sends, so it has its own driver. It is implemented
+> screen from a ZIP of JPEG icons the host sends, so it has its own driver. It is implemented
 > from public documentation and is hardware-tested on macOS; its 13 LCD keys are driven,
 > and the wide slot keeps the firmware's own clock.
 
