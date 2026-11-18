@@ -423,7 +423,7 @@ await test('wireCommonDriverEvents reports the raw wire id alongside the mk2 ind
   // index alone cannot, since a wrong map is exactly what it is there to fix.
   const driver = new EventEmitter() as unknown as WorkerHidDriver;
   const seen: Array<{ mk2Index: number; wireId: number | undefined }> = [];
-  wireCommonDriverEvents(driver, MIRABOX_293S_MODEL, {
+  wireCommonDriverEvents(driver, () => MIRABOX_293S_MODEL, {
     onKey: (mk2Index, _state, wireId) => seen.push({ mk2Index, wireId }),
     onReinit: () => undefined,
   });
@@ -447,12 +447,76 @@ await test('an identity-mapped model reports no wire id', () => {
   // there is nothing for learn mode to derive and the field stays absent.
   const driver = new EventEmitter() as unknown as WorkerHidDriver;
   const seen: Array<number | undefined> = [];
-  wireCommonDriverEvents(driver, DEFAULT_MODEL, {
+  wireCommonDriverEvents(driver, () => DEFAULT_MODEL, {
     onKey: (_mk2Index, _state, wireId) => seen.push(wireId),
     onReinit: () => undefined,
   });
   driver.emit('key', { keyIndex: 3, state: 'down' });
   assert.deepEqual(seen, [undefined]);
+});
+
+await test('key decode follows a live key-map swap, no re-wiring needed', () => {
+  const driver = new EventEmitter() as unknown as WorkerHidDriver;
+  let model: DeviceModel = DEFAULT_MODEL;
+  const seen: Array<[number, number | undefined]> = [];
+  wireCommonDriverEvents(driver, () => model, {
+    onKey: (mk2Index, _state, wireId) => seen.push([mk2Index, wireId]),
+    onReinit: () => undefined,
+  });
+  driver.emit('key', { keyIndex: 3, state: 'down' });
+  model = applyModelOverrides(DEFAULT_MODEL, { keyMap: { inputOffset: 1 } });
+  driver.emit('key', { keyIndex: 3, state: 'down' });
+  assert.deepEqual(seen, [
+    [3, undefined],
+    [2, 3],
+  ]);
+});
+
+/** A 293S dock with one app frame on key 0, its recorders cleared. The extra-key widgets
+ *  also clear and paint their own (non-grid) wire ids, so the recorders keep grid ids only. */
+async function dockWithFrame() {
+  const setup = makeTestSetup(MIRABOX_293S_MODEL);
+  await setup.start();
+  setup.childServer.emit('image', { keyIndex: 0, data: SOLID_RED_16X16_JPEG, format: 'jpeg' });
+  const map = MIRABOX_293S_MODEL.keyMap.coraToWireImage!;
+  const swapped = [...map];
+  [swapped[0], swapped[1]] = [map[1]!, map[0]!];
+  const { driver } = setup;
+  driver.renderCalls.length = 0;
+  driver.clearKeyCalls.length = 0;
+  driver.splashCalls.length = 0;
+  const gridOnly = (wires: number[]): number[] => wires.filter((wire) => map.includes(wire));
+  return { ...setup, map, swapped, gridOnly };
+}
+
+await test('applyTuning with a remapped key map blanks the moved keys, then splash and frames', async () => {
+  const { dock, driver, map, swapped, gridOnly } = await dockWithFrame();
+  dock.applyTuning('', () => ({ keyMap: { coraToWireImage: swapped } }));
+  assert.deepEqual(gridOnly(driver.clearKeyCalls), [map[0], map[1]], 'the wire ids keys left');
+  assert.ok(gridOnly(driver.splashCalls).length > 0, 'splash redone at the new positions');
+  assert.deepEqual(
+    driver.renderCalls.map((c) => c.keyIndex),
+    [0],
+    'the app frame is drawn again on top',
+  );
+  assert.deepEqual(dock.model.keyMap.coraToWireImage, swapped, 'the dock decodes with it too');
+});
+
+await test('applyTuning with an image-only change keeps the splash and blanks nothing', async () => {
+  const { dock, driver, gridOnly } = await dockWithFrame();
+  dock.applyTuning('', () => ({ image: { rotate: 90 } }));
+  assert.deepEqual(gridOnly(driver.clearKeyCalls), []);
+  assert.deepEqual(gridOnly(driver.splashCalls), []);
+  assert.equal(driver.renderCalls.length, 1, 'frames still re-render');
+});
+
+await test('applyTuning leaves the panel to a verify hold, even for a key-map change', async () => {
+  const { dock, driver, swapped, gridOnly } = await dockWithFrame();
+  dock.setVerifyHold(true);
+  dock.applyTuning('', () => ({ keyMap: { coraToWireImage: swapped } }));
+  assert.deepEqual(gridOnly(driver.clearKeyCalls), []);
+  assert.deepEqual(gridOnly(driver.splashCalls), []);
+  assert.deepEqual(driver.renderCalls, []);
 });
 
 await test('device action observer reports keys, knobs, touch and unknown inputs without consuming them', () => {
@@ -463,7 +527,7 @@ await test('device action observer reports keys, knobs, touch and unknown inputs
   let touches = 0;
   wireCommonDriverEvents(
     driver,
-    applyModelOverrides(AJAZZ_AKP05E_MODEL, { cora: { advertiseAs: 'stream-deck-plus' } }),
+    () => applyModelOverrides(AJAZZ_AKP05E_MODEL, { cora: { advertiseAs: 'stream-deck-plus' } }),
     {
       onAction: (message) => messages.push(message),
       onKey: () => {
@@ -550,7 +614,7 @@ await test('a pressable extra key reaches onExtraKey by its image wire id, not o
   const driver = new EventEmitter() as unknown as WorkerHidDriver;
   const keys: number[] = [];
   const extras: Array<[number, string]> = [];
-  wireCommonDriverEvents(driver, plus, {
+  wireCommonDriverEvents(driver, () => plus, {
     onKey: (mk2Index) => keys.push(mk2Index),
     onExtraKey: (wireId, state) => extras.push([wireId, state]),
     onReinit: () => undefined,

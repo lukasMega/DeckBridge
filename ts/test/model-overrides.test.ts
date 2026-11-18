@@ -492,17 +492,62 @@ test('an image-only change applies live', () => {
   );
 });
 
-// keyMap/wire/splash are read by the driver at open() (chunking, read buffer,
-// input decode, first splash), so they cannot be swapped under a live session.
-test('keyMap, wire or splash changes force a reopen', () => {
-  assert.equal(classifyOverrideChange(undefined, { wire: { chunkDelayMs: 1 } }), 'reopen');
-  assert.equal(classifyOverrideChange({ wire: { chunkDelayMs: 1 } }, {}), 'reopen');
-  assert.equal(classifyOverrideChange(undefined, { keyMap: { imageOffset: 1 } }), 'reopen');
+// No driver reads the key maps: image-render.ts and the dock's input decode do, both
+// per call, so a key-map change swaps in place like an image change.
+test('a key-map change applies live', () => {
+  assert.equal(classifyOverrideChange(undefined, { keyMap: { imageOffset: 1 } }), 'live');
   assert.equal(
     classifyOverrideChange({ keyMap: { imageOffset: 1 } }, { keyMap: { imageOffset: 2 } }),
+    'live',
+  );
+  assert.equal(
+    classifyOverrideChange({ keyMap: { inputOffset: 1 } }, { keyMap: { wireInputToCora: [0, 1] } }),
+    'live',
+  );
+  assert.equal(
+    classifyOverrideChange(
+      { image: { rotate: 90 }, keyMap: { coraToWireImage: [1, 2] } },
+      { image: { rotate: 90 }, keyMap: { coraToWireImage: [2, 1] } },
+    ),
+    'live',
+  );
+  assert.equal(
+    classifyOverrideChange({ keyMap: { imageOffset: 1 } }, { keyMap: { imageOffset: 1 } }),
+    'none',
+  );
+});
+
+// extraKeys feeds the widget scheduler and the status, both built once per attach.
+test('an extraKeys change still reopens, even beside a live change', () => {
+  assert.equal(classifyOverrideChange(undefined, { keyMap: { extraKeys: [16] } }), 'reopen');
+  assert.equal(
+    classifyOverrideChange(
+      { keyMap: { extraKeys: [16], imageOffset: 1 } },
+      { keyMap: { extraKeys: [16, 17], imageOffset: 2 } },
+    ),
     'reopen',
   );
+  assert.equal(
+    classifyOverrideChange(
+      { keyMap: { extraKeys: [16], imageOffset: 1 } },
+      { keyMap: { extraKeys: [16], imageOffset: 2 } },
+    ),
+    'live',
+    'an untouched extraKeys does not force a reopen',
+  );
+});
+
+// wire/splash/cora are read by the driver at open() (chunking, read buffer, first
+// splash, advertised identity), so they cannot be swapped under a live session.
+test('wire, splash or cora changes force a reopen', () => {
+  assert.equal(classifyOverrideChange(undefined, { wire: { chunkDelayMs: 1 } }), 'reopen');
+  assert.equal(classifyOverrideChange({ wire: { chunkDelayMs: 1 } }, {}), 'reopen');
   assert.equal(classifyOverrideChange(undefined, { splash: { keys: [0] } }), 'reopen');
+  assert.equal(
+    classifyOverrideChange({ keyMap: { imageOffset: 1 } }, { cora: { advertiseAs: 'mk2' } }),
+    'reopen',
+    'a cora change beside a live key-map change reopens',
+  );
   assert.equal(
     classifyOverrideChange(
       { image: { rotate: 90 } },

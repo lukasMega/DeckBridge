@@ -229,13 +229,15 @@ export interface DriverEventSinks {
 }
 
 /** Wire a USB driver's input events: key dispatch (wire→mk2 mapping + logging),
- *  knobs, touch, reinit repaint. 'disconnect' differs per owner and stays with the caller. */
+ *  knobs, touch, reinit repaint. 'disconnect' differs per owner and stays with the caller.
+ *  `currentModel` is read per event: a live key-map tuning swaps the dock's model. */
 export function wireCommonDriverEvents(
   driver: Pick<DeviceDriver, 'on'>,
-  model: DeviceModel,
+  currentModel: () => DeviceModel,
   opts: DriverEventSinks,
 ): void {
   driver.on('key', (e: KeyEvent) => {
+    const model = currentModel();
     const key = hasInputKeyMap(model) ? e.keyIndex : e.keyIndex + 1;
     opts.onAction?.(`Key ${key} ${e.state === 'down' ? 'pressed' : 'released'}`);
     if (!hasInputKeyMap(model)) {
@@ -262,7 +264,7 @@ export function wireCommonDriverEvents(
     opts.onDial?.(e);
   });
   driver.on('touch', (e: TouchInputEvent) => {
-    opts.onAction?.(touchActionText(e, model));
+    opts.onAction?.(touchActionText(e, currentModel()));
     opts.onTouch?.(e);
   });
   driver.on('inputAction', (message: string) => opts.onAction?.(message));

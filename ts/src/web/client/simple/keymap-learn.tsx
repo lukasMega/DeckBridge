@@ -172,7 +172,7 @@ export function KeymapLearn({
         </>
       )}
 
-      <Feedback error={error} status={saved ? 'Key map saved — the device reconnects…' : null} />
+      <Feedback error={error} status={saved ? 'Key map saved.' : null} />
     </>
   );
 }

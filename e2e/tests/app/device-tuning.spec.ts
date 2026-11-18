@@ -25,7 +25,7 @@ async function overridesView(request: Request, baseURL: string): Promise<Overrid
 test.describe('device tuning applies without a reconnect', () => {
   // No browser page: this is the HTTP contract, and every extra Lightpanda page
   // load is a chance for the next spec's navigation to time out.
-  test('an image-only change is applied live; keyMap/wire still reconnect', async ({
+  test('image and key-map changes are applied live; splash/wire still reconnect', async ({
     request,
     app,
   }) => {
@@ -49,14 +49,25 @@ test.describe('device tuning applies without a reconnect', () => {
     });
     expect(repeat.reconnecting).toBe(false);
 
-    // keyMap is read by the driver at open(), so this one must reopen the session.
-    const reopen = await postOverride(request, app.baseURL, {
+    // The key maps are read per call (image render, input decode): live as well.
+    const keyMap = await postOverride(request, app.baseURL, {
       modelId,
       overrides: { image: { rotate: 90 }, keyMap: { imageOffset: 1 } },
     });
+    expect(keyMap.reconnecting).toBe(false);
+
+    // The splash is sent at open(), so this one must reopen the session.
+    const reopen = await postOverride(request, app.baseURL, {
+      modelId,
+      overrides: {
+        image: { rotate: 90 },
+        keyMap: { imageOffset: 1 },
+        splash: { transformOverride: { rotate: 180, flipH: false, flipV: false } },
+      },
+    });
     expect(reopen.reconnecting).toBe(true);
 
-    // Reset drops the keyMap too → reopen again, back to the registry defaults.
+    // Reset drops the splash too → reopen again, back to the registry defaults.
     const reset = await postOverride(
       request,
       app.baseURL,

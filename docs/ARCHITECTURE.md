@@ -498,7 +498,7 @@ settings through `GET`/`POST /api/standby`.
 stopped, brightness, pairing, rename, failed probe); app.ts refreshes the WebUI dock list and
 the tray from that one listener. It keeps every live dock in one `Map<index, Dock>`: WebUI
 per-dock actions go to `driverManager.dock(i)` (or `dockForDevice(deviceKey)` for an identity
-edit), `getDockStatuses()` lists every dock with a driver attached, and an image-only tuning
+edit), `getDockStatuses()` lists every dock with a driver attached, and an image/key-map tuning
 change loops the map (`Dock.applyTuning()` re-derives the effective model from the registry
 entry). Dock 0's servers live for the process: `DriverManager` attaches each newly probed driver
 to it, detaches it on unplug, and `attach()` replays the app's last frames over the splash when

@@ -406,7 +406,7 @@ await test('save: an AKP05 clone takes an 8-entry (advertised grid) key map', ()
   const map = [6, 7, 8, 9, 11, 12, 13, 14];
   assert.deepEqual(h.verify.save({ token, coraToWireImage: map }), {
     ok: true,
-    reconnecting: true,
+    reconnecting: false,
   });
   assert.deepEqual(h.settings.overrideFor(PLUS_CLONE)?.keyMap, { coraToWireImage: map });
 });

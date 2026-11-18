@@ -405,23 +405,30 @@ export function overrideSummary(ov?: DeviceModelOverride): string {
 }
 
 /** What applying a new override over the previous one costs the live device.
- *  'live' = image-transform fields only, swappable in place (no driver reads
- *  model.image — only image-render.ts/translator.ts do); 'reopen' = keyMap,
- *  wire or splash changed, all of which are read at open(). */
+ *  'live' = image-transform and key-mapping fields, swappable in place (no driver
+ *  reads model.image or the key maps — image-render.ts, translator.ts and the dock's
+ *  input decode do); 'reopen' = wire, splash, cora or keyMap.extraKeys changed, all
+ *  of which are read at open()/attach. */
 export type OverrideChangeKind = 'none' | 'live' | 'reopen';
 
-const OPEN_TIME_SECTIONS = ['keyMap', 'wire', 'splash', 'cora'] as const;
+const OPEN_TIME_SECTIONS = ['wire', 'splash', 'cora'] as const;
+
+// The extra-key widgets and their status are built once per attach.
+const isExtraKeys = (key: string): boolean => key === 'extraKeys';
+const isKeyMapLive = (key: string): boolean => !isExtraKeys(key);
 
 /** Canonical form of one override section: key order and absent-vs-undefined
- *  normalized, so `{}`, `undefined` and `{ rotate: undefined }` all compare equal. */
+ *  normalized, so `{}`, `undefined` and `{ rotate: undefined }` all compare equal.
+ *  `include` narrows it to some of the section's fields. */
 function sectionKey(
   ov: DeviceModelOverride | undefined,
   section: (typeof SECTION_KEYS)[number],
+  include: (key: string) => boolean = () => true,
 ): string {
   const value = ov?.[section];
   if (!value || typeof value !== 'object') return '';
   const entries = Object.entries(value as Record<string, unknown>)
-    .filter(([, v]) => v !== undefined)
+    .filter(([key, v]) => v !== undefined && include(key))
     .toSorted(([a], [b]) => (a < b ? -1 : 1));
   return entries.length > 0 ? JSON.stringify(entries) : '';
 }
@@ -433,7 +440,13 @@ export function classifyOverrideChange(
   for (const section of OPEN_TIME_SECTIONS) {
     if (sectionKey(prev, section) !== sectionKey(next, section)) return 'reopen';
   }
-  return sectionKey(prev, 'image') === sectionKey(next, 'image') ? 'none' : 'live';
+  if (sectionKey(prev, 'keyMap', isExtraKeys) !== sectionKey(next, 'keyMap', isExtraKeys)) {
+    return 'reopen';
+  }
+  const same =
+    sectionKey(prev, 'image') === sectionKey(next, 'image') &&
+    sectionKey(prev, 'keyMap', isKeyMapLive) === sectionKey(next, 'keyMap', isKeyMapLive);
+  return same ? 'none' : 'live';
 }
 
 /** Short stable hash of an override, mixed into the image-cache key so a spec
@@ -442,7 +455,8 @@ export function classifyOverrideChange(
 export function overrideRevision(ov?: DeviceModelOverride): string {
   if (!ov || Object.keys(ov).length === 0) return '';
   // Only the image section can change transform output; keyMap/wire/splash
-  // affect routing and framing, not the encoded bytes.
+  // affect routing and framing, not the encoded bytes (the cache sits before
+  // the key → wire-id mapping).
   return fnv1aHex(JSON.stringify(ov.image ?? {}));
 }
 

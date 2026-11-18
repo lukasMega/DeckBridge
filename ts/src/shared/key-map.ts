@@ -13,6 +13,23 @@ export function mk2IndexToDeviceImgId(mk2Index: number, model: DeviceModel): num
   return mk2Index;
 }
 
+/** What a live key-map swap does to the panel: `changed` = some CORA key now draws on a
+ *  different wire id; `stale` = the wire ids those keys left, which still show the old image. */
+export function imageKeyRemap(
+  prev: DeviceModel,
+  next: DeviceModel,
+): { changed: boolean; stale: number[] } {
+  const stale: number[] = [];
+  let changed = false;
+  for (let key = 0; key < prev.keyCount; key++) {
+    const before = mk2IndexToDeviceImgId(key, prev);
+    if (before === mk2IndexToDeviceImgId(key, next)) continue;
+    changed = true;
+    if (before >= 0) stale.push(before);
+  }
+  return { changed, stale };
+}
+
 /** Device input wire code → mk2 index, driven by model.keyMap.
  *  Precedence: explicit array > offset > identity. Returns -1 for entries the
  *  array marks as unused (e.g. 293S 6th-column keys). */
