@@ -145,7 +145,7 @@ const STEPS: Step[] = [
   step(
     'G7',
     'very fast GIF, 10 frames x 20 ms',
-    'Key 0: sweep in ~0.2 s (honoured) or ~1 s (clamped to 100 ms like browsers)?',
+    'Key 0: sweep in ~0.2 s (honored) or ~1 s (clamped to 100 ms like browsers)?',
     withRef([[TEST_SLOT, gif({ frames: 10, delayCs: 2 })]]),
   ),
   step(
