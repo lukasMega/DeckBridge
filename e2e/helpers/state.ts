@@ -48,6 +48,9 @@ export interface DockState {
   encoderCount?: number;
   coraProfile?: string;
   touchStripSize?: { width: number; height: number };
+  /** Ulanzi D200 info window: the firmware small-window modes and its device wire id. */
+  smallWindowModes?: number[];
+  wideKeyWire?: number;
 }
 
 export function dock0(state: AppState): DockState {

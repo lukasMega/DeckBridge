@@ -180,6 +180,7 @@ const driverManager = new DriverManager({
 });
 
 webui.setHidInventory(() => driverManager.hidInventory());
+webui.setWideKeyStats((dock) => driverManager.dock(dock)?.wideKeyStats());
 
 // One fan-out for every dock/probe state change: the WebUI dock list (deduped
 // there) and the tray.
@@ -356,6 +357,10 @@ webui.on('pagesChanged', (dock?: number) =>
 );
 webui.on('standbyChanged', (dock?: number) =>
   dock === undefined ? driverManager.reloadAllStandby() : driverManager.dock(dock)?.reloadStandby(),
+);
+// Info-window settings changed (WebUI or import): push them to the driver live.
+webui.on('wideKeyChanged', (dock?: number) =>
+  dock === undefined ? driverManager.reloadAllWideKey() : driverManager.dock(dock)?.reloadWideKey(),
 );
 
 // A pushed channel changed (coalesced by PushController): paint only what changed.

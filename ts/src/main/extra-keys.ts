@@ -22,6 +22,7 @@ import {
   type TouchStripMode,
   type TouchWindowRegion,
 } from '../shared/types.js';
+import { stripDisplays } from '../devices/driver.js';
 import type { DeviceImageSpec, DockDriver } from '../devices/driver.js';
 import { splashSpec } from '../shared/splash-sender.js';
 import { forcePluginRefresh, pluginValueFor } from '../plugin/plugin-host.js';
@@ -228,7 +229,7 @@ export class ExtraKeyWidgets {
     const cfg = this.configFor(wireId);
     if (!owns(cfg) || !this.widgetIds().includes(wireId)) return false;
     // A zone in its Elgato hold-off shows the app's image: refresh, but draw nothing.
-    const visible = !this.widgetDisplay(wireId) || this.ownsZoneNow(wireId);
+    const visible = !this.stripZone(wireId) || this.ownsZoneNow(wireId);
     const { flash, placeholder } = visible ? this.tapFeedback() : NO_FEEDBACK;
     if (flash) this.flash(wireId);
     const onSettled = placeholder ? (): void => this.endPlaceholder(wireId) : undefined;
@@ -245,7 +246,7 @@ export class ExtraKeyWidgets {
   /** The strip zone shows its widget right now — not 'elgato', assigned, and not in a
    *  'deckbridge-repaint' Elgato hold-off — so a tap there is DeckBridge's. */
   ownsZoneNow(wireId: number): boolean {
-    if (this.mode === 'elgato' || !this.widgetDisplay(wireId)) return false;
+    if (this.mode === 'elgato' || !this.stripZone(wireId)) return false;
     if (!owns(this.configFor(wireId))) return false;
     return this.mode !== 'deckbridge-repaint' || !this.inElgatoHoldOff(wireId, this.seams.now());
   }
@@ -322,7 +323,7 @@ export class ExtraKeyWidgets {
   /** 'deckbridge-repaint' zones the widget must not paint this tick: unassigned ones
    *  (the app shows through) and ones inside an Elgato-frame hold-off. */
   private leftToApp(wireId: number, cfg: ExtraKeyConfig | undefined, nowMs: number): boolean {
-    if (this.mode !== 'deckbridge-repaint' || !this.widgetDisplay(wireId)) return false;
+    if (this.mode !== 'deckbridge-repaint' || !this.stripZone(wireId)) return false;
     if (owns(cfg)) return this.inElgatoHoldOff(wireId, nowMs);
     // Forget the paint so a re-assign repaints.
     this.lastPainted.delete(wireId);
@@ -358,10 +359,10 @@ export class ExtraKeyWidgets {
     const { width, height } = spec;
     const { layout, bmp } = this.composeFor(lines, style, spec);
     this.driver.sendSplashImage(wireId, bmp, spec);
-    const zone = display !== undefined;
+    const zone = this.stripZone(wireId) !== undefined;
     const clipped = layout.clipped;
     this.onWidgetPaint?.(wireId, { bmp, lines, width, height, clipped, style, zone });
-    if (this.mode === 'deckbridge-repaint' && display) this.widgetOnZone.add(wireId);
+    if (this.mode === 'deckbridge-repaint' && zone) this.widgetOnZone.add(wireId);
   }
 
   /** An Elgato strip frame reached the device (nothing is masked under
@@ -425,11 +426,18 @@ export class ExtraKeyWidgets {
     this.driver.setTouchStripMask(mask);
   }
 
+  /** Touch-strip zones only: a standalone window (D200 info window) is painted like a side
+   *  key, so the mask, standby blanking and hold-offs never see it. */
   private widgetDisplayIds(): readonly number[] {
-    return this.driver.model.widgetDisplays?.map((display) => display.wireId) ?? [];
+    return stripDisplays(this.driver.model).map((display) => display.wireId);
   }
 
+  /** Any display of the model — the image spec of whatever is painted on `wireId`. */
   private widgetDisplay(wireId: number) {
     return this.driver.model.widgetDisplays?.find((display) => display.wireId === wireId);
+  }
+
+  private stripZone(wireId: number) {
+    return stripDisplays(this.driver.model).find((display) => display.wireId === wireId);
   }
 }

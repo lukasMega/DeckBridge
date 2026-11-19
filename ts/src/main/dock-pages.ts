@@ -7,6 +7,7 @@ import type { PageObservation } from '../shared/page-match.js';
 import { advertisedGeometry, advertisedModel } from '../devices/registry.js';
 import type { DeviceModel } from '../devices/driver.js';
 import type { DockPrefs } from '../infra/dock-prefs.js';
+import { wideKeyWire } from '../shared/wide-key.js';
 import { PageTracker } from './page-tracker.js';
 import type { PageTrackerClock } from './page-tracker.js';
 
@@ -64,10 +65,12 @@ export class DockPages {
     this.tracker.stop();
   }
 
-  /** The config shown on `wireId` now: the active page's layout, else the default one. */
+  /** The config shown on `wireId` now: the active page's layout, else the default one. The
+   *  info window's widget is device-level only (plan D8): no page layout ever applies to it. */
   layoutConfig(wireId: number): ExtraKeyConfig | undefined {
     const prefs = this.opts.prefs();
     if (!prefs) return undefined;
+    if (wireId === wideKeyWire(this.opts.model())) return prefs.extraKeyConfig(wireId);
     return layoutConfigFor(this.tracker.activePage(), prefs.extraKeyConfigs(), wireId);
   }
 }

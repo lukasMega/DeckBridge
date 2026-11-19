@@ -28,7 +28,7 @@ export async function initProbeLibs(): Promise<void> {
   await setupNativeLibs();
 }
 
-const OPEN_REFUSED_HINTS = IS_MACOS
+export const OPEN_REFUSED_HINTS = IS_MACOS
   ? [
       'Two things refuse an open on macOS:',
       '  1. Input Monitoring. macOS attributes the grant to the app responsible for',
@@ -42,9 +42,9 @@ const OPEN_REFUSED_HINTS = IS_MACOS
       'DeckBridge instance already holds the device.',
     ];
 
-/** Enumerate first, then open, so "nothing connected" and "open refused" are two
- *  different messages. Returns an open driver, or exits. */
-export async function openProbeDevice(model: DeviceModel, prefix: string): Promise<MiraboxDriver> {
+/** HID path of the first unit matching `model`, or exits. Enumeration only, so a probe
+ *  that opens through its own driver class still gets the "nothing connected" message. */
+export function findProbePath(model: DeviceModel, prefix: string): string {
   const usagePage = model.usagePage!;
   const usage = model.usage!;
   const paths = model.usbProductIds.flatMap((pid) =>
@@ -61,10 +61,16 @@ export async function openProbeDevice(model: DeviceModel, prefix: string): Promi
   if (paths.length > 1) {
     console.log(`${prefix} ${paths.length} units match — using ${paths[0]!}`);
   }
+  return paths[0]!;
+}
 
+/** Enumerate first, then open, so "nothing connected" and "open refused" are two
+ *  different messages. Returns an open driver, or exits. */
+export async function openProbeDevice(model: DeviceModel, prefix: string): Promise<MiraboxDriver> {
+  const path = findProbePath(model, prefix);
   const driver = new MiraboxDriver(model);
   try {
-    await driver.open(paths[0]!);
+    await driver.open(path);
   } catch (e) {
     fail(prefix, `open failed: ${(e as Error).message}`, ...OPEN_REFUSED_HINTS);
   }

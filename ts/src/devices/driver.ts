@@ -1,5 +1,5 @@
 import type { EventEmitter } from 'node:events';
-import type { TouchStripOptions, TouchWindowRegion } from '../shared/types.js';
+import type { TouchStripOptions, TouchWindowRegion, WideKeyHourFormat } from '../shared/types.js';
 import { PROTOCOLS, WIRE_OVERRIDE_KEYS, type WireOverrideKey } from './protocol-metadata.js';
 
 // Re-exported so importers keep reading it from driver.ts.
@@ -119,8 +119,11 @@ export interface DevicePageSpec {
   /** Firmware cap on one archive (0 = unknown). Oversized ZIPs are dropped silently,
    *  so this only drives a warning. */
   maxZipBytes: number;
-  /** Firmware render mode for the wide info-window slot (203 = digital clock). */
+  /** Default firmware render mode for the wide info-window slot (203 = digital clock). */
   smallWindowMode: number;
+  /** Every mode the firmware accepts there: 0 stats, 1 dial, 2 background image, 200–203
+   *  digital clock. Bounds what the WebUI offers and what setSmallWindow accepts. */
+  smallWindowModes: readonly number[];
   /** Grid position of that slot, as the manifest's "{col}_{row}" key. */
   smallWindowSlot: { col: number; row: number };
   /** Busy-wait between page chunks (0/undefined = none), for firmware that drops
@@ -191,6 +194,10 @@ export interface DeviceWidgetDisplay {
   /** Left edge of this display's window on the full strip, in strip pixels. Only
    *  meaningful with `DeviceModel.touchStripDisplay`. */
   stripX?: number;
+  /** A window that is no touch-strip zone (the D200 info window): widgets paint it, but the
+   *  strip machinery (ownership mask, standby blanking, zone taps, the WebUI strip section)
+   *  skips it. */
+  standalone?: boolean;
 }
 
 /** One image across the whole touch strip. Its wire id may also be a widget
@@ -248,6 +255,11 @@ export interface DeviceModel {
   /** Hardware screen-off. Set only after the HAN hardware spike passes on that model
    *  (.claude/plans/2026-09-30_standby-burn-in-care.md, Task 0 item 4); not tunable. */
   sleep?: 'mirabox-han';
+}
+
+/** The widget displays that are touch-strip zones: every one but a standalone window. */
+export function stripDisplays(model: DeviceModel): readonly DeviceWidgetDisplay[] {
+  return (model.widgetDisplays ?? []).filter((display) => !display.standalone);
 }
 
 /** Elgato's own HID protocol (MK.2/Mini/…), as opposed to a Mirabox-family board. */
@@ -333,6 +345,12 @@ export interface DeviceDriver extends EventEmitter {
   setBrightness(level: number): void;
   /** Hardware screen-off / wake. Only drivers whose model sets `sleep` implement it. */
   setSleep?(asleep: boolean): void;
+  /** Live info-window mode (page protocols with `page.smallWindowModes`). Takes effect at
+   *  once, without a reopen. */
+  setSmallWindow?(mode: number, hourFormat: WideKeyHourFormat): void;
+  /** Host CPU / memory / GPU percents for the info window's stats mode. Stored only: the next
+   *  keepalive frame carries them, so it costs no extra write. */
+  setHostStats?(cpu: number, mem: number, gpu: number): void;
 }
 
 /** What a Dock drives on the main thread: `WorkerHidDriver` (the USB worker proxy)

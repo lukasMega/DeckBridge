@@ -188,6 +188,23 @@ test('layout: own copies the default map, default drops it, edits go to the page
   assert.equal(stored()[0]?.extraKeys, undefined);
 });
 
+test('layout: own never copies the info-window widget (device-level only)', () => {
+  const { ui, stored } = setup();
+  ui.notifyDocks([{ ...dockStatus(0), smallWindowModes: [0, 2, 203], wideKeyWire: 13 }]);
+  ui.settings
+    .for(KEY)
+    .setExtraKeyConfigs({ '16': { widget: 'text', param: 'DEF' }, '13': { widget: 'clock' } });
+  ui.pages.notifyObservation(0, observation());
+  ui.pages.trySnapshot({ name: 'Main' });
+  ui.pages.trySetLayout({ id: 'p1', mode: 'own' });
+  assert.deepEqual(stored()[0]?.extraKeys, { '16': { widget: 'text', param: 'DEF' } });
+  assert.deepEqual(
+    Object.keys(ui.settings.for(KEY).extraKeyConfigs()).toSorted((a, b) => a.localeCompare(b)),
+    ['13', '16'],
+    'the default map keeps it',
+  );
+});
+
 test('recapture replaces hashes and profile, keeps name, ignore and layout', () => {
   const { ui, stored } = setup();
   ui.pages.notifyObservation(0, observation());

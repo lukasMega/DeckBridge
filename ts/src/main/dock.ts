@@ -15,6 +15,7 @@ import type { DockStatus, TouchStripMode } from '../shared/types.js';
 import type { DockHooks, DockOptions, DockSettings } from './dock-types.js';
 import type { ClientApp } from '../shared/types.js';
 import { sendSplashImages } from '../shared/splash-sender.js';
+import type { HostStats } from '../shared/host-stats.js';
 import { imageKeyRemap } from '../shared/key-map.js';
 import { DEFAULT_MODEL, findModelById } from '../devices/registry.js';
 import { applyModelOverrides } from '../devices/model-overrides.js';
@@ -29,6 +30,8 @@ import { begin, settleAll } from './settle.js';
 import { LastFrames, wireDockImages } from './dock-frames.js';
 import { DockPages } from './dock-pages.js';
 import { createDockStandby, dialInput } from './dock-standby.js';
+import { paintedConfig, pushWideKey, WideKeyInput } from './dock-wide-key.js';
+import { WideKeyStats } from './wide-key-stats.js';
 import type { DockStandby, StandbyInput } from './dock-standby.js';
 import {
   buildDockStatus,
@@ -68,6 +71,10 @@ export class Dock {
   private readonly encoders: EncoderActions;
   private readonly extraKeyActions: ExtraKeyActions;
   private readonly standby: DockStandby;
+  /** The key decoder's model: `model` + the info window's press routing. */
+  private readonly wideInput = new WideKeyInput(() => this.identityPrefs());
+  /** Host stats for the info window while it shows them. */
+  private readonly wideStats: WideKeyStats;
   /** Page-following side-key layouts: which saved Elgato page the deck shows. */
   readonly pages: DockPages;
   private resendTimer: ReturnType<typeof setTimeout> | null = null;
@@ -89,6 +96,12 @@ export class Dock {
     this.deviceInfo = opts.deviceInfo;
     this.identity = opts.identity;
     this.brightness = this.identityPrefs()?.brightness() ?? DEFAULT_BRIGHTNESS;
+    this.wideStats = new WideKeyStats({
+      driver: () => this.driver,
+      prefs: () => this.identityPrefs(),
+      model: () => this.model,
+      sampler: opts.hostStats,
+    });
     // Both resolve the dock's current identity per event.
     this.encoders = new EncoderActions(
       () => {
@@ -138,7 +151,7 @@ export class Dock {
 
   status(): DockStatus {
     const status = buildDockStatus({
-      model: this.model,
+      model: this.wideInput.model(this.model), // press routing decides the pressable keys
       index: this.index,
       primaryPort: this.ports.primary,
       identity: this.identity,
@@ -214,6 +227,7 @@ export class Dock {
     this.widgets = null;
     driver.removeAllListeners();
     this.driver = null;
+    this.wideStats.sync(); // releases the sampler
     this.standby.onDriverDetached();
     // A held dock losing its driver ends the verify session; changed() tells the WebUI now.
     if (this.frames.held) {
@@ -309,6 +323,21 @@ export class Dock {
   reloadStandby(): void {
     this.standby.reload();
     this.repaintWidgets();
+  }
+
+  /** Info-window settings changed (WebUI/import): push them to the driver, no reopen. The
+   *  widget repaints after the mode push, so a new mode 2 is in place when its image lands. */
+  reloadWideKey(): void {
+    const type = this.deviceInfo?.deviceType;
+    if (this.driver) pushWideKey(this.driver, this.model, this.identityPrefs(), false, type);
+    this.wideStats.sync();
+    this.widgets?.repaint();
+    this.changed(); // the press routing decides which keys the status calls pressable
+  }
+
+  /** The figures the info window shows while on Stats (the WebUI preview mirrors them). */
+  wideKeyStats(): HostStats | undefined {
+    return this.wideStats.current();
   }
 
   /** Live device tuning (image spec / key map, no wire change) for `modelId` ('' = any):
@@ -489,7 +518,7 @@ export class Dock {
       wireMockDriverEvents(driver, sinks);
       return;
     }
-    wireCommonDriverEvents(driver, () => this.model, sinks);
+    wireCommonDriverEvents(driver, () => this.wideInput.model(this.model), sinks);
     driver.on('disconnect', () => {
       log('info', this.model.id, 'disconnected');
       this.hooks.disconnect?.();
@@ -526,6 +555,8 @@ export class Dock {
     const entry = prefs.entry();
     const stripOptions = entry && touchStripOptionsOf(entry);
     if (stripOptions) driver.setTouchStripOptions(stripOptions);
+    pushWideKey(driver, this.model, prefs, true, this.deviceInfo?.deviceType);
+    this.wideStats.sync();
   }
 
   /** No-op before identity or for models without extra keys / strip zones. */
@@ -534,7 +565,7 @@ export class Dock {
     if (!prefs) return;
     this.widgets = new ExtraKeyWidgets(
       driver,
-      (wireId) => this.pages.layoutConfig(wireId),
+      (wireId) => paintedConfig(this.model, prefs, wireId, this.pages.layoutConfig(wireId)),
       prefs.stripMode(),
       () => prefs.repaintMs(),
       this.hooks.widgetPaint,

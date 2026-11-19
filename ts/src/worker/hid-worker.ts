@@ -85,6 +85,7 @@ async function handleOpen(
       ok: true,
       deviceSerial: d.serial,
       deviceFirmware: d.firmware,
+      deviceType: d.deviceType,
       hidPath: d.hidPath,
     });
   } catch (err) {
@@ -159,6 +160,15 @@ function handleTouchStripMsg(msg: TouchStripMsg): void {
   else touchCanvas.restore(d, currentModel, msg.wireIds);
 }
 
+/** Panel-mode calls: only a driver that implements them (sleep, the D200 info window) acts. */
+function handlePanelMode(
+  msg: Extract<MainToWorker, { type: 'setSleep' | 'setSmallWindow' | 'setHostStats' }>,
+): void {
+  if (msg.type === 'setSleep') driver?.setSleep?.(msg.asleep);
+  else if (msg.type === 'setSmallWindow') driver?.setSmallWindow?.(msg.mode, msg.hourFormat);
+  else driver?.setHostStats?.(msg.cpu, msg.mem, msg.gpu);
+}
+
 /** Non-device state changes: no HID I/O, they only steer the next render. */
 function handleSetting(msg: Extract<MainToWorker, { type: 'setOverrides' | 'setLogLevel' }>): void {
   if (msg.type === 'setOverrides') applyLiveOverrides(msg.overrides);
@@ -196,7 +206,9 @@ async function handle(msg: MainToWorker, deferNotification: boolean): Promise<vo
       driver?.setBrightness(msg.level);
       break;
     case 'setSleep':
-      driver?.setSleep?.(msg.asleep);
+    case 'setSmallWindow':
+    case 'setHostStats':
+      handlePanelMode(msg);
       break;
     case 'clearKey':
       driver?.clearKey(msg.keyIndex);

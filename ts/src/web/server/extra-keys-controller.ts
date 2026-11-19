@@ -89,8 +89,15 @@ export class ExtraKeysController {
     return (
       status?.extraKeys?.includes(wireId) ||
       status?.widgetDisplays?.some((display) => display.wireId === wireId) ||
+      status?.wideKeyWire === wireId ||
       false
     );
+  }
+
+  /** The info window's widget is device-level only (plan D8): a page layout edit aimed at it
+   *  lands in the default map, the one the Info window card shows. */
+  private isWideKey(wireId: number): boolean {
+    return this.host.selectedDockStatus()?.wideKeyWire === wireId;
   }
 
   private noKeyError(wireId: number): ReqError {
@@ -102,8 +109,9 @@ export class ExtraKeysController {
    *  Persists, pushes the new map to WS clients, and on a widget change emits 'extraKeyChanged'
    *  so app.ts repaints that dock's widgets (a press command resolves per press).
    *  With `pageId` the update edits that page's own layout instead of the default map. */
-  trySet(wireId: number, update: ExtraKeyUpdate, pageId?: string): ReqError | null {
+  trySet(wireId: number, update: ExtraKeyUpdate, requestedPage?: string): ReqError | null {
     if (!this.onSelectedDock(wireId)) return this.noKeyError(wireId);
+    const pageId = this.isWideKey(wireId) ? undefined : requestedPage;
     const isWidget = 'widget' in update;
     if (!isWidget && !this.host.selectedDockStatus()?.pressableExtraKeys?.includes(wireId)) {
       return { error: `extra key ${wireId} has no switch`, status: 400 };
@@ -123,12 +131,10 @@ export class ExtraKeysController {
   /** WebUI "Run now" — immediate re-run of a command-widget extra key, bypassing its interval. */
   tryRunNow(wireId: number): ReqError | null {
     if (!this.onSelectedDock(wireId)) return this.noKeyError(wireId);
-    // What is on the key now: the active page's layout, not the default one.
-    const cfg = layoutConfigFor(
-      this.pages.selectedActivePage(),
-      this.prefs.extraKeyConfigs(),
-      wireId,
-    );
+    // What is on the key now: the active page's layout, not the default one (the info
+    // window has no page layout).
+    const page = this.isWideKey(wireId) ? undefined : this.pages.selectedActivePage();
+    const cfg = layoutConfigFor(page, this.prefs.extraKeyConfigs(), wireId);
     if (cfg?.widget !== 'command') {
       return { error: `extra key ${wireId} is not configured as a command widget`, status: 400 };
     }

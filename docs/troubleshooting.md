@@ -34,6 +34,10 @@ your issue.
 - **My deck went dark** — *Screen off* (after idle or at night) or *When the Elgato app is
   away: Turn the screen off* is on. Press a key or turn a knob to wake it. Your brightness
   level is unchanged.
+- **D200 info window stats read 0 or look off** — on a non-English Windows the built-in
+  sampler cannot read its counters and shows 0; on macOS memory counts inactive cache. See
+  [D200 info window](./plugin-widgets.md#built-in-stats-sources), or supply the numbers with
+  a stats plugin.
 - **AJAZZ AKP05E panel wedged** — unplug it, wait briefly, then reconnect. DeckBridge
   sends the full init sequence on open (`CRT VER`, then `DIS`, `LIG`, `CLE 0xff`, `STP`)
   and nothing on close; do not send other reset commands during recovery.

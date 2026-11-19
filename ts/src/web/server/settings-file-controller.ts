@@ -64,6 +64,7 @@ export class SettingsFileController {
       this.reapplySelectedDeviceLive();
       // No index: every dock's standby settings may have changed, not just the selected one.
       this.host.emit('standbyChanged');
+      this.host.emit('wideKeyChanged');
       this.host.emit('pagesChanged');
     }
     // selectedDock is best-effort — an index absent on this host (file imported from a machine

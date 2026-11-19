@@ -10,6 +10,7 @@ import { PairingFlow } from './pairing-flow.js';
 import { ConnectionPath } from '../components/ConnectionPath.js';
 import { KeyGridPreview } from '../components/KeyGridPreview.js';
 import { ExtraKeysPanel } from './extra-keys-panel.js';
+import { WideKeyPanel } from './wide-key-panel.js';
 import { DockList, keyPressTitle } from './dock-cards.js';
 import { VerifyOffer } from './verify-wizard/verify-entry.js';
 import { WslReadyLine } from './wsl-relay-card.js';
@@ -99,6 +100,7 @@ export function StageReady({
         footer={<Brightness compact />}
       />
       <ExtraKeysPanel />
+      <WideKeyPanel />
     </>
   );
 }

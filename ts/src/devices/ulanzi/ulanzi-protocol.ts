@@ -239,6 +239,17 @@ export function parseDeviceVersion(json: string): string | undefined {
   }
 }
 
+/** Model line from the 0x0303 identity JSON (`DeviceType`: "D200", "D200X", …), or undefined
+ *  when the payload is not JSON or carries no string `DeviceType`. The D200H reports "D200". */
+export function parseDeviceType(json: string): string | undefined {
+  try {
+    const v: unknown = (JSON.parse(json) as { DeviceType?: unknown } | null)?.DeviceType;
+    return typeof v === 'string' && v !== '' ? v : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 /** Human describers for the WebUI comm log, keyed by opcode — the counterpart of
  *  CRT_DESCRIBERS in mirabox-protocol.ts. `totalLen` is the header's length
  *  field, so a multi-packet page reads as its full size on packet 0. */

@@ -18,9 +18,11 @@ import type {
   TouchInputEvent,
   TouchStripOptions,
   TouchWindowRegion,
+  WideKeyHourFormat,
 } from '../shared/types.js';
 import { DEFAULT_TOUCH_STRIP_OPTIONS } from '../shared/types.js';
 import { log } from '../shared/logger.js';
+import { clampPercent } from '../shared/host-stats.js';
 
 const OPEN_TIMEOUT_MS = 10_000;
 const CLOSE_GRACE_MS = 1_000;
@@ -42,6 +44,8 @@ export class WorkerHidDriver extends EventEmitter implements DockDriver {
   private overrides: DeviceModelOverride | undefined;
   deviceSerial: string | undefined = undefined;
   deviceFirmware: string | undefined = undefined;
+  /** The device's own model line (Ulanzi `DeviceType`), when it reports one. */
+  deviceType: string | undefined = undefined;
   /** HID path the worker opened this device with — see device-identity.ts. */
   hidPath: string | undefined = undefined;
   /** Last options posted — the worker resets to the defaults on open, and so does this. */
@@ -184,6 +188,19 @@ export class WorkerHidDriver extends EventEmitter implements DockDriver {
     this.control({ type: 'setSleep', asleep });
   }
 
+  setSmallWindow(mode: number, hourFormat: WideKeyHourFormat): void {
+    this.control({ type: 'setSmallWindow', mode, hourFormat });
+  }
+
+  setHostStats(cpu: number, mem: number, gpu: number): void {
+    this.control({
+      type: 'setHostStats',
+      cpu: clampPercent(cpu),
+      mem: clampPercent(mem),
+      gpu: clampPercent(gpu),
+    });
+  }
+
   clearKey(keyIndex: number): void {
     this.control({ type: 'clearKey', keyIndex });
   }
@@ -259,6 +276,7 @@ export class WorkerHidDriver extends EventEmitter implements DockDriver {
     if (msg.ok) {
       this.deviceSerial = msg.deviceSerial;
       this.deviceFirmware = msg.deviceFirmware;
+      this.deviceType = msg.deviceType;
       this.hidPath = msg.hidPath;
       this.settleOpen(this.openResolve, null);
     } else {

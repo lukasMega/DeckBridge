@@ -630,7 +630,7 @@ default); the first `status` WebSocket message rebuilds to the actual layout.
 | Ajazz AKP153E/R (rev. 2) | 5×3 (same as 293V3; advertised as MK.2) |
 | Fifine AmpliGame D6 (rev. 1 and rev. 2) | 5×3 (same as 293V3; advertised as MK.2) |
 | AKP153/E/R, MSD-ONE, GK150K, Vision 01, TMICE Stream Controller (v1 rebadges) | 5×3 (left 5 of 6 hardware columns, same as 293S; advertised as MK.2) |
-| Ulanzi Stream Controller D200 | 5×3 advertised as MK.2, but only 13 cells are keys (cell 13 = wide info window, cell 14 = none) |
+| Ulanzi Stream Controller D200 | 5×3 advertised as MK.2, but only 13 cells are keys (cell 13 = wide info window, display-only unless its press is routed to cell 13/14; cell 14 = none) |
 
 </details>
 

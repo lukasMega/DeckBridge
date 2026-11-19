@@ -380,6 +380,26 @@ input[type='range'].range:disabled {
 .xkey-tile img {
   object-fit: cover;
 }
+/* Info window (D200): the widget preview keeps its wide shape. */
+.xkey-tile-wide {
+  width: 128px;
+  aspect-ratio: 458 / 196;
+}
+.xkey-tile-wide img {
+  object-fit: contain;
+}
+/* Info window preview (D200): live text on the wide tile, not the firmware's real look. */
+.wide-live {
+  display: grid;
+  color: oklch(1 0 0 / 0.9);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+.wide-live-big {
+  font-size: 20px;
+  font-weight: 600;
+}
 .xkey-tile-empty {
   color: oklch(1 0 0 / 0.35);
 }

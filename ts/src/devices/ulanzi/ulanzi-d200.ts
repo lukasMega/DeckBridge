@@ -1,5 +1,42 @@
-import type { DeviceModel } from '../driver.js';
+import type { DeviceImageSpec, DeviceModel } from '../driver.js';
 import { ELGATO_MK2_PID } from '../../shared/types.js';
+
+/** Info-window (wire 13) widget image, mode 2. Size is the plan's D11 guess: 458×196 (the
+ *  cells "3_2" + "4_2" minus the gap). Rotate 0 is measured (hardware, 2026-11-19): the
+ *  widget is upright like the splash; the keys' 180 only undoes Elgato's MK.2 frames.
+ *  Change them here only. */
+const WIDE_IMAGE_WIDTH = 458;
+const WIDE_IMAGE_HEIGHT = 196;
+const WIDE_IMAGE_ROTATE = 0;
+
+/** What the Elgato desktop's key frames are transformed to (196×196 icons). */
+const KEY_IMAGE: DeviceImageSpec = {
+  format: 'jpeg',
+  // Icons MUST be exactly 196×196: an undersized icon is rendered as a solid
+  // square of its average colour rather than being scaled up.
+  width: 196,
+  height: 196,
+  // Measured on hardware (verify wizard, 2026-11-16): panel is mounted upside down.
+  rotate: 180,
+  flipH: false,
+  flipV: false,
+  colorMode: 'rgb',
+  // JPEG icons in the page ZIP: ~5x smaller than PNG, and the firmware decodes them
+  // (hardware-verified). If keys ever go blank/solid, revert to 'png' + maxBytes 40960.
+  maxBytes: 0,
+  quality: 0.9,
+  resizeFilter: 'lanczos3', // 72 → 196 is a 2.7× upscale
+  sharpen: 0.6,
+  transform: 'sidecar',
+};
+
+/** The widget image of the info window: upright DeckBridge widgets, not Elgato frames. */
+const WIDE_IMAGE: DeviceImageSpec = {
+  ...KEY_IMAGE,
+  width: WIDE_IMAGE_WIDTH,
+  height: WIDE_IMAGE_HEIGHT,
+  rotate: WIDE_IMAGE_ROTATE,
+};
 
 /** Ulanzi Stream Controller D200 — the first PAGE-protocol device in DeckBridge.
  *
@@ -56,25 +93,7 @@ export const ULANZI_D200_MODEL: DeviceModel = {
   rows: 3,
   keyWidth: 196,
   keyHeight: 196,
-  image: {
-    format: 'jpeg',
-    // Icons MUST be exactly 196×196: an undersized icon is rendered as a solid
-    // square of its average colour rather than being scaled up.
-    width: 196,
-    height: 196,
-    // Measured on hardware (verify wizard, 2026-11-16): panel is mounted upside down.
-    rotate: 180,
-    flipH: false,
-    flipV: false,
-    colorMode: 'rgb',
-    // JPEG icons in the page ZIP: ~5x smaller than PNG, and the firmware decodes them
-    // (hardware-verified). If keys ever go blank/solid, revert to 'png' + maxBytes 40960.
-    maxBytes: 0,
-    quality: 0.9,
-    resizeFilter: 'lanczos3', // 72 → 196 is a 2.7× upscale
-    sharpen: 0.6,
-    transform: 'sidecar',
-  },
+  image: KEY_IMAGE,
   // Splash is pre-oriented, so it must cancel the image rotate above.
   splash: { transformOverride: { rotate: 0, flipH: false, flipV: false } },
   keyMap: {
@@ -84,7 +103,13 @@ export const ULANZI_D200_MODEL: DeviceModel = {
     // Device slot ids are identical to CORA indices for the 13 real keys; slot
     // 13 (the wide window, reported with category 0x00) maps to nothing.
     wireInputToCora: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, -1],
+    // The wide window as a DeckBridge-owned key: its widget (mode 2) and press action. It
+    // paints nothing until content 'widget' is chosen. Extra-key inputs are decided at run
+    // time from the window's `press` setting (main/dock-wide-key.ts), not here.
+    extraKeys: [13],
   },
+  // Not a touch-strip zone: `standalone` keeps the strip machinery away from it.
+  widgetDisplays: [{ wireId: 13, label: 'Info window', image: WIDE_IMAGE, standalone: true }],
   cora: {
     productId: ELGATO_MK2_PID,
     advertiseAs: 'mk2', // 5×3/15 — the desktop draws 15, we light 13
@@ -105,7 +130,9 @@ export const ULANZI_D200_MODEL: DeviceModel = {
     partialUpdates: true,
     // A 199,642 B archive failed on hardware, 190,268 B rendered (aleyvag §12.9).
     maxZipBytes: 190 * 1024,
-    smallWindowMode: 203, // firmware digital clock, time only
+    smallWindowMode: 203, // firmware digital clock, time only; the default until the user picks
+    // 0 stats, 1 dial, 2 background image, 200–203 digital clock variants.
+    smallWindowModes: [0, 1, 2, 200, 201, 202, 203],
     smallWindowSlot: { col: 3, row: 2 },
   },
 };

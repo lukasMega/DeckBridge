@@ -102,7 +102,7 @@ No per-key write: the host sends the whole grid as one ZIP (manifest.json + 196�
 
 | Device | Vendor | USB VID:PID | Keys (grid) | Panel px | Image | Extra keys | Tested |
 |---|---|---|---|---|---|---|---|
-| [Ulanzi Stream Controller D200](#ulanzi-d200) | ulanzi | `0x2207:0x0019` | 15 (5×3) | 196×196 | JPEG | — | ✓ tested (macOS, 2026-11-16) |
+| [Ulanzi Stream Controller D200](#ulanzi-d200) | ulanzi | `0x2207:0x0019` | 15 (5×3) | 196×196 | JPEG | 1 | ✓ tested (macOS, 2026-11-16) |
 
 </div>
 
@@ -347,12 +347,12 @@ Ulanzi Stream Controller D200: 13 LCD keys on a 5×3 grid plus a wide info windo
 |  |  |
 |---|---|
 | **USB** | `0x2207`:`0x0019` |
-| **Keys** | 15 (5×3) |
+| **Keys** | 15 (5×3) + 1 extra |
 | **Panel** | 196×196 JPEG |
 | **Protocol** | `ulanzi-zk` |
 | **Tested** | ✓ tested (macOS, 2026-11-16) |
 
-- Advertised to the Elgato app as an MK.2 (5×3/15). Cells 13 (the wide info window, which shows the firmware clock) and 14 (no physical key) are not drawn.
+- Advertised to the Elgato app as an MK.2 (5×3/15). Cells 13 (the wide info window, which shows the firmware clock unless you pick dial, stats or a widget in the Info window section of the main page) and 14 (no physical key) are not drawn from the Elgato app.
 - Two firmware generations share VID:PID 0x2207:0x0019: Qt `UlanziDeckKey` on RK3308 and ZKSWE EasyUI on SSD210. The driver logs the device-info JSON on every open, so a bug report names its generation.
 - Quit Ulanzi Studio first: it holds the HID interface exclusively.
 - Partial page updates (opcode 0x000d) are disputed. If keys show as white or stale blocks, set `page.partialUpdates` to false in the model.

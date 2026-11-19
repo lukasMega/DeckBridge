@@ -30,6 +30,7 @@ import type { UpdateState } from './update-check.js';
 import { encoderSettingsError } from '../shared/encoder-settings.js';
 import { isPageDefinition, MAX_PAGES, sanitizePages } from '../shared/page-config.js';
 import { standbySettingsError } from '../shared/standby-settings.js';
+import { wideKeyError } from '../shared/wide-key.js';
 import {
   DEFAULT_BROWSER_DECK_PROFILE,
   isBrowserDeckProfile,
@@ -67,6 +68,7 @@ const OPTIONAL_DEVICE_FIELDS: ReadonlyArray<{ key: string; isValid: (v: unknown)
   { key: 'tapFeedback', isValid: isTapFeedback },
   { key: 'pairedAt', isValid: (v) => typeof v === 'string' },
   { key: 'standby', isValid: (v) => standbySettingsError(v) === null },
+  { key: 'wideKey', isValid: (v) => wideKeyError(v) === null },
   {
     key: 'pages',
     isValid: (v) => Array.isArray(v) && v.length <= MAX_PAGES && v.every(isPageDefinition),

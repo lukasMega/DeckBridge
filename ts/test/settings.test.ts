@@ -179,6 +179,59 @@ await test('DockPrefs.standby(): runtime fallback, then persisted write', async 
   await settings.flush();
 });
 
+console.log('\nPersistedSettings — wideKey');
+
+const wideDevice = (key: string, wideKey: unknown) => ({
+  ...standbyDevice(key, undefined),
+  wideKey,
+});
+
+await test('load() keeps a valid wideKey and DockPrefs resolves it over the default', async () => {
+  const dir = `${ROOT}/wide-valid`;
+  await saveSettings(
+    { devices: [wideDevice('usb:WK1', { content: 'stats', press: 'elgato-14' })] } as never,
+    dir,
+  );
+  const settings = new PersistedSettings(dir);
+  await settings.load();
+  assert.deepEqual(settings.entryFor('usb:WK1')?.wideKey, { content: 'stats', press: 'elgato-14' });
+  const cfg = settings.for('usb:WK1').wideKey();
+  assert.equal(cfg.content, 'stats');
+  assert.equal(cfg.hourFormat, '24H', 'unset keys take the default');
+});
+
+await test('load() drops an invalid wideKey but keeps the identity', async () => {
+  const dir = `${ROOT}/wide-invalid`;
+  await saveSettings({ devices: [wideDevice('usb:WK2', { content: 'nope' })] } as never, dir);
+  const settings = new PersistedSettings(dir);
+  await settings.load();
+  const e = settings.entryFor('usb:WK2');
+  assert.ok(e, 'identity kept');
+  assert.ok(!('wideKey' in e!), 'wideKey removed');
+});
+
+await test('DockPrefs.wideKey(): default with no entry, persisted write, empty clears', async () => {
+  const settings = new PersistedSettings(`${ROOT}/wide-prefs`);
+  assert.deepEqual(settings.for('usb:NONE').wideKey(), {
+    content: 'clock',
+    clockMode: 203,
+    hourFormat: '24H',
+    press: 'none',
+  });
+  assert.equal(settings.for('usb:NONE').wideKeyStored(), undefined);
+  assert.equal(settings.for('usb:NONE').setWideKey({ content: 'dial' }), false, 'needs an entry');
+
+  settings.getOrCreateIdentity('usb:WK3', 'Dock');
+  const prefs = settings.for('usb:WK3');
+  assert.ok(prefs.setWideKey({ content: 'dial' }));
+  assert.deepEqual(settings.entryFor('usb:WK3')?.wideKey, { content: 'dial' });
+  assert.equal(prefs.wideKey().content, 'dial');
+  assert.ok(prefs.setWideKey({}));
+  assert.ok(!('wideKey' in settings.entryFor('usb:WK3')!), 'empty clears the field');
+  assert.equal(prefs.wideKey().content, 'clock');
+  await settings.flush();
+});
+
 console.log('\nPersistedSettings — elgatoAutoRestart / pairing');
 
 await test('setElgatoAutoRestart persists enabled + clamped delay; getters read defaults', async () => {

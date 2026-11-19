@@ -1,5 +1,6 @@
 // One side key: live preview tile (the widget image the server painted on the
 // device) beside its settings — widget, value, press action + command.
+import type { ComponentChildren } from 'preact';
 import { useStore } from '../lib/store.js';
 import type { ExtraKeyCfg, PluginStatus } from '../ui-types.js';
 import {
@@ -14,10 +15,11 @@ import { ClippedBadge, TextSizeControl } from './text-size-control.js';
 function SideKeyTile({
   wireId,
   label,
-}: Readonly<{ wireId: number; label: string }>): preact.JSX.Element {
+  wide,
+}: Readonly<{ wireId: number; label: string; wide: boolean }>): preact.JSX.Element {
   const image = useStore((s) => s.extraKeyImages[String(wireId)]);
   return (
-    <div class="xkey-tile">
+    <div class={wide ? 'xkey-tile xkey-tile-wide' : 'xkey-tile'}>
       {image !== undefined ? (
         <img src={`data:image/bmp;base64,${image}`} alt={`${label} side key preview`} />
       ) : (
@@ -35,6 +37,8 @@ export function SideKeyCard({
   plugins,
   pluginStatus,
   pressable,
+  wide = false,
+  lead,
 }: Readonly<{
   wireId: number;
   label: string;
@@ -42,11 +46,16 @@ export function SideKeyCard({
   plugins: PluginFiles;
   pluginStatus?: PluginStatus;
   pressable: boolean;
+  /** The preview keeps the info window's wide shape (D200). */
+  wide?: boolean;
+  /** Extra rows above the widget row, on the same grid (the info window's own settings). */
+  lead?: ComponentChildren;
 }>): preact.JSX.Element {
   return (
     <div class="xkey-card" role="group" aria-label={`${label} side key`}>
-      <SideKeyTile wireId={wireId} label={label} />
+      <SideKeyTile wireId={wireId} label={label} wide={wide} />
       <div class="xkey-row xkey-card-fields">
+        {lead}
         <span class="xkey-pos">{label}</span>
         <div class="xkey-card-span">
           <WidgetSelect wireId={wireId} label={label} cfg={cfg} />

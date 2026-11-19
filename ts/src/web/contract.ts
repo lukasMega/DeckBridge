@@ -339,10 +339,12 @@ export interface DockStatus {
   // column). Present only when the model has any — the WebUI renders the
   // extra-keys panel off this.
   extraKeys?: readonly number[];
-  /** The `extraKeys` that have a switch (AKP05E right column as a Stream Deck +) —
-   *  the WebUI offers a press command only on these. */
+  /** The `extraKeys` that have a switch (AKP05E right column as a Stream Deck +, the D200
+   *  info window while its press is DeckBridge's) — the WebUI offers a press command only
+   *  on these. */
   pressableExtraKeys?: readonly number[];
-  /** Device-native widget displays outside CORA's key grid, such as AKP05E's touch strip. */
+  /** Device-native widget displays outside CORA's key grid, such as AKP05E's touch strip
+   *  zones. The D200 info window is no zone: it is `wideKeyWire`. */
   widgetDisplays?: readonly WidgetDisplayInfo[];
   /** Physical rotary encoders (AKP05/AKP05E: 4) — the WebUI's knob-override rows. */
   encoderCount?: number;
@@ -351,6 +353,13 @@ export interface DockStatus {
   coraProfile?: string;
   /** Advertised touch-strip size (Plus profile: 800×100) — the WebUI strip preview canvas. */
   touchStripSize?: TouchStripSize;
+  /** Firmware modes of the wide info window (Ulanzi D200); present only on models that have
+   *  one — the WebUI shows the "Info window" card off this. Absent on a D200X, whose slot 13
+   *  is a real key. */
+  smallWindowModes?: readonly number[];
+  /** Device wire id of that window: the key its widget (content 'widget') and press action
+   *  are configured on. It is never in `extraKeys`, and page layouts never apply to it. */
+  wideKeyWire?: number;
 }
 
 export interface TouchStripSize {

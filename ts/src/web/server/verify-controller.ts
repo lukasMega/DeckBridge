@@ -16,6 +16,7 @@ import {
 import { overridesDisabled } from '../../shared/cli.js';
 import { mk2IndexToDeviceImgId } from '../../shared/key-map.js';
 import { splashSpec } from '../../shared/splash-sender.js';
+import { sideExtraKeys } from '../../shared/wide-key.js';
 import { VIRTUAL_DOCK_INDEX } from '../../shared/types.js';
 import type { DockStatus } from '../../shared/types.js';
 import type {
@@ -319,7 +320,7 @@ export class VerifyController {
       columns: advertised.columns,
       keyCount: advertised.keyCount,
       sourceSize: { width: advertised.keyWidth, height: advertised.keyHeight },
-      extraKeys: effective.keyMap.extraKeys?.length ?? 0,
+      extraKeys: sideExtraKeys(effective).length, // the D200 info window is no side key
       encoders: advertised.encoderCount ?? 0,
       touchStrip: !!(advertised.touchWidth && advertised.touchHeight),
       frameOrientation: frame,
@@ -353,7 +354,7 @@ export class VerifyController {
           keyCount: effective.keyCount,
           keyWidth: effective.keyWidth,
           keyHeight: effective.keyHeight,
-          extraKeyWireIds: [...(effective.keyMap.extraKeys ?? [])],
+          extraKeyWireIds: [...sideExtraKeys(effective)],
           ...(effective.encoderCount === undefined ? {} : { encoderCount: effective.encoderCount }),
           ...(effective.touchWidth === undefined ? {} : { touchWidth: effective.touchWidth }),
           ...(effective.touchHeight === undefined ? {} : { touchHeight: effective.touchHeight }),

@@ -131,6 +131,34 @@ await runTest('setSleep posts {type:setSleep} (sent as a control message)', () =
   ]);
 });
 
+await runTest('setSmallWindow posts {type:setSmallWindow} (sent as a control message)', () => {
+  const driver = new WorkerHidDriver(unknownModel);
+  const posted: unknown[] = [];
+  (driver as unknown as { worker: { postMessage: (m: unknown) => void } }).worker = {
+    postMessage: (m: unknown) => posted.push(withoutId(m)),
+  };
+  driver.setSmallWindow(0, '12H');
+  driver.setSmallWindow(203, '24H');
+  assert.deepEqual(posted, [
+    { type: 'setSmallWindow', mode: 0, hourFormat: '12H' },
+    { type: 'setSmallWindow', mode: 203, hourFormat: '24H' },
+  ]);
+});
+
+await runTest('setHostStats posts clamped whole percents (a control message)', () => {
+  const driver = new WorkerHidDriver(unknownModel);
+  const posted: unknown[] = [];
+  (driver as unknown as { worker: { postMessage: (m: unknown) => void } }).worker = {
+    postMessage: (m: unknown) => posted.push(withoutId(m)),
+  };
+  driver.setHostStats(12, 34, 56);
+  driver.setHostStats(140.2, -3, 49.6);
+  assert.deepEqual(posted, [
+    { type: 'setHostStats', cpu: 12, mem: 34, gpu: 56 },
+    { type: 'setHostStats', cpu: 100, mem: 0, gpu: 50 },
+  ]);
+});
+
 console.log('\nhid-worker-host: bounded admission and close');
 
 interface FakeWorker {
