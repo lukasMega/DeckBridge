@@ -6,14 +6,31 @@ import type {
   WideKeyClockMode,
   WideKeyConfig,
   WideKeyContent,
+  WideKeyElgatoSource,
   WideKeyPress,
 } from '../web/contract-wide-key.js';
+import { isTouchStripRepaintMs, TOUCH_STRIP_REPAINT_DEFAULT_MS } from './types.js';
 
-export const WIDE_KEY_CONTENTS: readonly WideKeyContent[] = ['clock', 'dial', 'stats', 'widget'];
+export const WIDE_KEY_CONTENTS: readonly WideKeyContent[] = [
+  'clock',
+  'dial',
+  'stats',
+  'widget',
+  'elgato',
+];
 export const WIDE_KEY_CLOCK_MODES: readonly WideKeyClockMode[] = [200, 201, 202, 203];
 export const WIDE_KEY_HOUR_FORMATS = ['12H', '24H'] as const;
 export const WIDE_KEY_PRESSES = ['elgato-13', 'elgato-14', 'deckbridge', 'none'] as const;
 export const WIDE_KEY_STATS_PLUGIN_MAX = 256;
+export const WIDE_KEY_ELGATO_SOURCES = ['both', 'elgato-13', 'elgato-14'] as const;
+export const WIDE_KEY_ELGATO_IMAGES = ['ignore', 'override'] as const;
+
+/** MK.2 cells under the window, left to right: what each source composes. */
+const SOURCE_CELLS: Readonly<Record<WideKeyElgatoSource, readonly number[]>> = {
+  both: [13, 14],
+  'elgato-13': [13],
+  'elgato-14': [14],
+};
 
 /** The widget content (mode 2) and the DeckBridge press action are wired: the slot-13 image
  *  path and the wire-13 widget editor exist. Kept as a switch so a firmware that cannot show
@@ -28,6 +45,7 @@ const FIXED_MODE: Readonly<Record<Exclude<WideKeyContent, 'clock'>, number>> = {
   stats: 0,
   dial: 1,
   widget: WIDE_KEY_IMAGE_MODE,
+  elgato: WIDE_KEY_IMAGE_MODE,
 };
 
 /** No entry = what DeckBridge always showed: the digital clock, time only. */
@@ -36,6 +54,9 @@ export const DEFAULT_WIDE_KEY: Readonly<ResolvedWideKey> = {
   clockMode: 203,
   hourFormat: '24H',
   press: 'none',
+  elgatoSource: 'both',
+  elgatoImages: 'ignore',
+  overrideMs: TOUCH_STRIP_REPAINT_DEFAULT_MS,
 };
 
 type Check = (v: unknown) => string | null;
@@ -55,6 +76,9 @@ const CHECKS: ReadonlyArray<readonly [keyof WideKeyConfig, Check]> = [
   ['hourFormat', oneOf(WIDE_KEY_HOUR_FORMATS)],
   ['press', oneOf(WIDE_KEY_PRESSES)],
   ['statsPlugin', pluginName],
+  ['elgatoSource', oneOf(WIDE_KEY_ELGATO_SOURCES)],
+  ['elgatoImages', oneOf(WIDE_KEY_ELGATO_IMAGES)],
+  ['overrideMs', (v) => (isTouchStripRepaintMs(v) ? null : 'must be an integer 1000-3600000')],
 ];
 
 /** Persisted partial → full config over DEFAULT_WIDE_KEY. */
@@ -62,9 +86,9 @@ export function resolveWideKey(partial: Partial<WideKeyConfig> | undefined): Res
   return { ...DEFAULT_WIDE_KEY, ...pickWideKeyKeys({ ...partial }) };
 }
 
-/** The window can show `content` now: the widget needs the wired image path. */
+/** The window can show `content` now: an image content needs the wired image path. */
 function contentReady(content: WideKeyContent): boolean {
-  return content !== 'widget' || WIDE_KEY_WIDGET_READY;
+  return (content !== 'widget' && content !== 'elgato') || WIDE_KEY_WIDGET_READY;
 }
 
 /** The contents and clock variants a model offers, from its small-window mode list. */
@@ -158,4 +182,22 @@ export function wideKeyShowsStats(
   page: { smallWindowMode: number; smallWindowModes: readonly number[] },
 ): boolean {
   return wideKeyFirmwareMode(cfg, page) === FIXED_MODE.stats;
+}
+
+/** What the worker composes into the window and whether Elgato images may reach it. */
+export interface WideWindowElgato {
+  /** MK.2 cells, left to right; [] = the window never shows Elgato images. */
+  cells: readonly number[];
+  /** False while a widget owns the window ('ignore'): frames are kept, not drawn. */
+  show: boolean;
+}
+
+/** The Elgato side of a resolved config: content 'elgato' always shows the cells, a widget
+ *  shows them only under 'override'. */
+export function wideWindowElgato(cfg: ResolvedWideKey): WideWindowElgato {
+  if (cfg.content !== 'elgato' && cfg.content !== 'widget') return { cells: [], show: false };
+  return {
+    cells: SOURCE_CELLS[cfg.elgatoSource],
+    show: cfg.content === 'elgato' || cfg.elgatoImages === 'override',
+  };
 }

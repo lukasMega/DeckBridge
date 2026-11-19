@@ -448,6 +448,35 @@ for (const mode of TOUCH_STRIP_MODES) {
   });
 }
 
+await test('a yielding window is not painted, then repainted once it stops yielding', () => {
+  const d = new FakeDriver(ULANZI_D200_MODEL);
+  let yields = true;
+  const w = new ExtraKeyWidgets(
+    d,
+    (wireId) => (wireId === 13 ? { widget: 'text', param: 'Hi' } : undefined),
+    undefined,
+    undefined,
+    undefined,
+    { yields: (wireId) => wireId === 13 && yields },
+  );
+  w.start();
+  tick(w);
+  assert.deepEqual(d.splashed, [], 'Elgato images show: no widget paint');
+  assert.deepEqual(d.cleared, [], 'and no clear over them');
+  yields = false;
+  tick(w);
+  assert.deepEqual(
+    d.splashed.map((p) => p.keyIndex),
+    [13],
+  );
+  yields = true;
+  tick(w);
+  yields = false;
+  tick(w);
+  w.stop();
+  assert.equal(d.splashed.length, 2, 'same content repaints after a yield');
+});
+
 await test('an unconfigured window clears slot 13 only and is no app-owned strip zone', () => {
   const { d, w } = windowDock(undefined);
   w.start();

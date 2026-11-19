@@ -16,6 +16,7 @@ export function NumberInput({
   disabled,
   ...rest
 }: Readonly<{
+  id?: string;
   min?: number;
   max?: number;
   step?: number;

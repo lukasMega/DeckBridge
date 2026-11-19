@@ -2,13 +2,19 @@
 // slot. Another file of the web-contract leaf, split out of contract.ts for the line
 // gate. Zero imports.
 
-/** What the window shows. 'widget' = DeckBridge-rendered mode-2 background (not wired yet). */
-export type WideKeyContent = 'clock' | 'dial' | 'stats' | 'widget';
+/** What the window shows. 'widget' = a DeckBridge widget, 'elgato' = the Elgato app's images
+ *  of the cells under the window; both are a mode-2 background image. */
+export type WideKeyContent = 'clock' | 'dial' | 'stats' | 'widget' | 'elgato';
 /** Firmware digital-clock variants (small-window modes 200..203). */
 export type WideKeyClockMode = 200 | 201 | 202 | 203;
 export type WideKeyHourFormat = '12H' | '24H';
 /** Press routing: an Elgato cell, the DeckBridge extra-key action of the widget, or nothing. */
 export type WideKeyPress = 'elgato-13' | 'elgato-14' | 'deckbridge' | 'none';
+/** Which Elgato cells (MK.2 index 13 / 14) the window shows: both side by side, or one centred. */
+export type WideKeyElgatoSource = 'both' | 'elgato-13' | 'elgato-14';
+/** Under content 'widget': Elgato images are dropped, or shown until `overrideMs` passes
+ *  with no new one (the AKP05 strip's 'deckbridge-repaint'). */
+export type WideKeyElgatoImages = 'ignore' | 'override';
 
 /** Persisted shape, per device. Settings may hold any subset; absent keys take the default. */
 export interface WideKeyConfig {
@@ -17,6 +23,9 @@ export interface WideKeyConfig {
   hourFormat?: WideKeyHourFormat; // default '24H'
   press: WideKeyPress; // default 'none'
   statsPlugin?: string; // plugin file that overrides the built-in stats; absent = built-in
+  elgatoSource?: WideKeyElgatoSource; // default 'both'
+  elgatoImages?: WideKeyElgatoImages; // default 'ignore'
+  overrideMs?: number; // 'override' hold-off; default 5000
 }
 
 /** A config with the defaults applied. */

@@ -85,6 +85,15 @@ export class LastFrames {
     }
   }
 
+  /** Re-render only these keys (the info window's source cells after a config change). */
+  repaintKeys(driver: DockDriver, keys: readonly number[]): void {
+    if (this.held) return;
+    for (const key of keys) {
+      const frame = this.frames.get(key);
+      if (frame) driver.renderCoraImage(key, frame.data, frame.format);
+    }
+  }
+
   /** On (re)attach: paint the app's last frames over the splash when the same model came back
    *  (and restore the preview via `mirror`), else drop them. */
   replay(

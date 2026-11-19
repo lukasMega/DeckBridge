@@ -1072,7 +1072,7 @@ try {
       // A model that lists the image mode (mode 2) offers the widget content.
       routesUi.notifyDocks([{ ...fakeDockStatus(0), smallWindowModes: [0, 1, 2, 203] }]);
       const wide = (await (await fetch(`${base}/api/wide-key`)).json()) as WideKeyView;
-      assert.deepEqual(wide.contents, ['clock', 'dial', 'stats', 'widget']);
+      assert.deepEqual(wide.contents, ['clock', 'dial', 'stats', 'widget', 'elgato']);
       const widget = await post('/api/wide-key', { config: { content: 'widget' } });
       assert.equal(((await widget.json()) as WideKeyView).config.content, 'widget');
       routesUi.notifyDocks([fakeDockStatus(0)]);
@@ -2093,8 +2093,11 @@ test('wide key view: the default config and what the model can show', () => {
     clockMode: 203,
     hourFormat: '24H',
     press: 'none',
+    elgatoSource: 'both',
+    elgatoImages: 'ignore',
+    overrideMs: 5000,
   });
-  assert.deepEqual((view as WideKeyView).contents, ['clock', 'dial', 'stats', 'widget']);
+  assert.deepEqual((view as WideKeyView).contents, ['clock', 'dial', 'stats', 'widget', 'elgato']);
   assert.deepEqual((view as WideKeyView).clockModes, [200, 201, 202, 203]);
   assert.deepEqual((view as WideKeyView).presses, ['elgato-13', 'elgato-14', 'deckbridge', 'none']);
 });

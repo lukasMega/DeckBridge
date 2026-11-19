@@ -10,6 +10,7 @@ import { useStore } from '../lib/store.js';
 import { postJson, useFetched } from '../lib/ui-api.js';
 import { Feedback, useAsyncAction } from '../lib/ui-async.js';
 import type { PluginsInfo } from '../ui-types.js';
+import { NumberInput } from '../components/Fields.js';
 import { ConfigSection } from './config-section.js';
 import { SideKeyCard } from './side-key-card.js';
 import { WideKeyPreview } from './wide-key-preview.js';
@@ -17,6 +18,8 @@ import type {
   WideKeyClockMode,
   WideKeyConfig,
   WideKeyContent,
+  WideKeyElgatoImages,
+  WideKeyElgatoSource,
   WideKeyHourFormat,
   WideKeyPress,
   WideKeyView,
@@ -28,7 +31,22 @@ const CONTENT_LABELS: Readonly<Record<WideKeyContent, string>> = {
   dial: 'Dial',
   stats: 'Stats',
   widget: 'Widget',
+  elgato: 'Elgato app',
 };
+const SOURCES: readonly WideKeyElgatoSource[] = ['both', 'elgato-13', 'elgato-14'];
+const SOURCE_LABELS: Readonly<Record<WideKeyElgatoSource, string>> = {
+  both: 'Keys 14 + 15',
+  'elgato-13': 'Key 14',
+  'elgato-14': 'Key 15',
+};
+const ELGATO_IMAGES: readonly WideKeyElgatoImages[] = ['ignore', 'override'];
+const ELGATO_IMAGES_LABELS: Readonly<Record<WideKeyElgatoImages, string>> = {
+  ignore: 'Ignore',
+  override: 'Show, then widget',
+};
+// Bounds mirror TOUCH_STRIP_REPAINT_MIN_MS / _MAX_MS (types.ts), in seconds.
+const OVERRIDE_MIN_S = 1;
+const OVERRIDE_MAX_S = 3600;
 const HOUR_FORMATS: readonly WideKeyHourFormat[] = ['24H', '12H'];
 const HOUR_LABELS: Readonly<Record<WideKeyHourFormat, string>> = {
   '24H': '24-hour',
@@ -168,6 +186,60 @@ function clockLabel(mode: WideKeyClockMode): string {
 
 type Save = (change: Partial<WideKeyConfig>) => void;
 
+// Where the Elgato app's images come from and, over a widget, how long they stay.
+function ElgatoRows({
+  config,
+  save,
+}: Readonly<{ config: WideKeyView['config']; save: Save }>): preact.JSX.Element {
+  const isWidget = config.content === 'widget';
+  const shows = !isWidget || config.elgatoImages === 'override';
+  const handleSeconds = (e: Event): void => {
+    const s = Number((e.target as HTMLInputElement).value);
+    if (!Number.isFinite(s) || s < OVERRIDE_MIN_S || s > OVERRIDE_MAX_S) return;
+    save({ overrideMs: Math.round(s * 1000) });
+  };
+  return (
+    <>
+      {isWidget && (
+        <Row
+          id="wide-key-elgato-images"
+          label="Elgato images"
+          value={config.elgatoImages}
+          options={ELGATO_IMAGES}
+          optionLabel={(v) => ELGATO_IMAGES_LABELS[v]}
+          onChange={(elgatoImages) => save({ elgatoImages })}
+        />
+      )}
+      {shows && (
+        <Row
+          id="wide-key-elgato-source"
+          label="Source"
+          value={config.elgatoSource}
+          options={SOURCES}
+          optionLabel={(v) => SOURCE_LABELS[v]}
+          onChange={(elgatoSource) => save({ elgatoSource })}
+        />
+      )}
+      {isWidget && shows && (
+        <>
+          <label class="xkey-press-label" for="wide-key-override-s">
+            Widget after (s)
+          </label>
+          <div class="xkey-card-span">
+            <NumberInput
+              id="wide-key-override-s"
+              min={OVERRIDE_MIN_S}
+              max={OVERRIDE_MAX_S}
+              value={config.overrideMs / 1000}
+              onChange={handleSeconds}
+            />
+          </div>
+        </>
+      )}
+    </>
+  );
+}
+
 // The info window's own settings, as rows of the card grid.
 function WideKeyRows({
   view,
@@ -205,6 +277,9 @@ function WideKeyRows({
             onChange={(hourFormat) => save({ hourFormat })}
           />
         </>
+      )}
+      {(config.content === 'elgato' || config.content === 'widget') && (
+        <ElgatoRows config={config} save={save} />
       )}
       {config.content === 'stats' && (
         <StatsSource

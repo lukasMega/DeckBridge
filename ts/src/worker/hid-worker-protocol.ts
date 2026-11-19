@@ -43,6 +43,9 @@ export type MainToWorker =
   // Host stats for the info window's stats mode (whole percents 0-100); stored by the driver
   // and sent with its next keepalive.
   | { type: 'setHostStats'; cpu: number; mem: number; gpu: number }
+  // Info window's Elgato images: the MK.2 cells composed into display `wireId`, left to
+  // right ([] = none), and whether they are drawn (false = kept for later). Reset on open.
+  | { type: 'setWideWindow'; wireId: number; cells: number[]; show: boolean }
   | { type: 'clearKey'; keyIndex: number }
   // Live device-tuning swap — image-transform fields only, so no reopen is
   // needed. Re-merged on top of the worker's OWN registry entry, exactly like
