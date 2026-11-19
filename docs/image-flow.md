@@ -45,6 +45,17 @@ image-render.ts  →  driver.sendImage(slot, iconBytes)
 
 The timings come from `model.page` (`DevicePageSpec`). Images coalesce, so a 15-key profile switch is one page, not 15 uploads. Icons are 196×196 JPEG at quality 0.9, about 4-5 KB per key; the firmware decodes JPEG, which is far smaller than PNG and makes a full page upload fast. The ZIP entry extension follows the bytes (`.jpg` for `FF D8`). The first flush after open sends the full page; later flushes send only changed keys, and an icon whose bytes equal the last one sent is not restaged. While the info window shows an image (mode 2), every ZIP also carries that image: a manifest entry without it blanks the window. A page over the firmware's ~190 KB cap is split into several ZIPs (the first as a full page, the rest as partial updates). Icon paths change on every flush because the firmware appears to cache decoded images by path. The wide bottom-right cell is the firmware's small window: its clock by default, configurable to dial, stats or a DeckBridge widget (a mode-2 background image). Hardware-tested on macOS.
 
+**Animated GIF.** The firmware also plays animated GIF icons, and the device animates them itself with no further USB traffic. DeckBridge does not use this yet: the Elgato desktop sends an animation as single frames over CORA, so a GIF must come from a source that DeckBridge owns. Hardware-tested on firmware 5.3.1 (`HardwareVersion` SSD210V100) with `mise run d200-gif-probe`:
+
+| Test | Result |
+|---|---|
+| GIF on one key, and on all 13 keys at once (85 KB page) | Animates |
+| `PARTIAL_UPDATE` of another key | The GIF keeps animating without interruption |
+| Info window, mode 2, 458×196 GIF | Animates |
+| A JPEG page sent to the same key | The animation stops cleanly |
+
+Not yet tested: a GIF without the `NETSCAPE2.0` loop block, a GIF in a `.png` entry, frame delays under 100 ms, and the Qt/RK3308 firmware generation.
+
 ## Image format by device
 
 ### gen2 (MK.2, Mirabox)
