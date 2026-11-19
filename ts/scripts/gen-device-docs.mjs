@@ -85,7 +85,7 @@ const FAMILIES = [
     key: 'ulanzi',
     title: 'Ulanzi page protocol',
     blurb:
-      'No per-key write: the host sends the whole grid as one ZIP (manifest.json + 196×196 PNGs) over 0x7c7c-framed 1024-byte reports, coalesced per flush, with a 2 s keepalive.',
+      'No per-key write: the host sends the whole grid as one ZIP (manifest.json + 196×196 JPEGs) over 0x7c7c-framed 1024-byte reports, coalesced per flush, with a 2 s keepalive.',
   },
 ];
 

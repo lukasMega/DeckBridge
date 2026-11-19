@@ -1,8 +1,9 @@
 /** Page-archive writer for the Ulanzi D200: a STORED (method 0) ZIP holding a
- *  `manifest.json` plus one PNG per key the host has an image for.
+ *  `manifest.json` plus one icon (JPEG, or PNG for a png-format model) per key the
+ *  host has an image for.
  *
  *  Stored, not deflated, for two reasons: txiki.js exposes no compression API
- *  (`tjs.*` has no zlib), and PNG is already deflated — storing costs ~90 bytes
+ *  (`tjs.*` has no zlib), and the icons are already compressed — storing costs ~90 bytes
  *  of header per entry and keeps this writer to a readable size. busybox unzip
  *  (what the firmware runs) verifies CRC-32, so a real CRC is required.
  *

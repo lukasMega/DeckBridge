@@ -212,7 +212,7 @@
     },
     "ulanzi-d200": {
       "tested": { "status": true, "platform": "macOS", "date": "2026-11-16" },
-      "summary": "Ulanzi Stream Controller D200: 13 LCD keys on a 5×3 grid plus a wide info window, driven over Ulanzi's page protocol. The whole grid ships as one ZIP of 196×196 PNGs; there is no per-key write.",
+      "summary": "Ulanzi Stream Controller D200: 13 LCD keys on a 5×3 grid plus a wide info window, driven over Ulanzi's page protocol. The whole grid ships as one ZIP of 196×196 JPEGs; there is no per-key write.",
       "alsoSoldAs": ["D200H (same VID:PID, reports `DeviceType: \"D200\"`)"],
       "quirks": [
         "Advertised to the Elgato app as an MK.2 (5×3/15). Cells 13 (the wide info window, which shows the firmware clock unless you pick dial, stats or a widget in the Info window section of the main page) and 14 (no physical key) are not drawn from the Elgato app.",

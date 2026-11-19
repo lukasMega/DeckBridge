@@ -21,7 +21,7 @@ Those choices are independent.
 | K1 Pro emulating Mini | 80×80 BMP | Crop, transform, encode JPEG |
 | Mirabox 293S emulating MK.2 | 72×72 JPEG | Pad and rotate |
 | AKP05 / AKP05E emulating Plus | 120×120 JPEG; strip updates | Transform keys; composite strip |
-| Ulanzi D200 emulating MK.2 | 72×72 JPEG | Resize to 196×196 PNG; batch into a page ZIP |
+| Ulanzi D200 emulating MK.2 | 72×72 JPEG | Resize to 196×196 JPEG; batch into a page ZIP |
 
 AKP05 and AKP05E advertise as a Stream Deck + by default.
 Each emulation carries its own mapping.
@@ -33,17 +33,17 @@ On image arrival (`wireDockImages` in `dock-frames.ts`, one per dock) the path s
 
 ### Page-protocol devices (Ulanzi D200)
 
-Every other model accepts one image per key. The D200 does not: its firmware repaints the whole grid from a ZIP archive (`manifest.json` + `Images/*.png`) sent over a `0x7c7c`-framed HID vendor channel. Everything up to `driver.sendImage()` is unchanged; only the last hop differs:
+Every other model accepts one image per key. The D200 does not: its firmware repaints the whole grid from a ZIP archive (`manifest.json` + `Images/*.jpg`) sent over a `0x7c7c`-framed HID vendor channel. Everything up to `driver.sendImage()` is unchanged; only the last hop differs:
 
 ```
-image-render.ts  →  driver.sendImage(slot, pngBytes)
+image-render.ts  →  driver.sendImage(slot, iconBytes)
                       └─ UlanziPage.stage()          dirty set, last write per slot wins
                            └─ FlushScheduler         75 ms debounce, 120 ms min gap
                                 └─ buildSafePageZip  stored-method ZIP + manifest
                                      └─ buildChunks  1016 B + N×1024 B HID writes
 ```
 
-The timings come from `model.page` (`DevicePageSpec`). Images coalesce, so a 15-key profile switch is one page, not 15 uploads. The first flush after open sends the full page (~180 writes); later flushes send only changed keys (~15 writes for one key). Icon paths change on every flush because the firmware appears to cache decoded images by path. The wide bottom-right cell is the firmware's small window: its clock by default, configurable to dial, stats or a DeckBridge widget (a mode-2 background image). Untested on hardware.
+The timings come from `model.page` (`DevicePageSpec`). Images coalesce, so a 15-key profile switch is one page, not 15 uploads. Icons are 196×196 JPEG at quality 0.9, about 4-5 KB per key; the firmware decodes JPEG, which is far smaller than PNG and makes a full page upload fast. The ZIP entry extension follows the bytes (`.jpg` for `FF D8`). The first flush after open sends the full page; later flushes send only changed keys, and an icon whose bytes equal the last one sent is not restaged. A page over the firmware's ~190 KB cap is split into several ZIPs (the first as a full page, the rest as partial updates). Icon paths change on every flush because the firmware appears to cache decoded images by path. The wide bottom-right cell is the firmware's small window: its clock by default, configurable to dial, stats or a DeckBridge widget (a mode-2 background image). Hardware-tested on macOS.
 
 ## Image format by device
 
@@ -111,7 +111,7 @@ sequenceDiagram
         Note over REND: nativeBytes = data (forwarded unchanged)
     else transform sidecar [Mirabox 293 / 293S / K1 Pro]
         REND->>RS: transformImageForDevice(data, model.image)
-        RS-->>REND: resized/rotated JPEG (K1 Pro: BMP→JPEG, D200: PNG)
+        RS-->>REND: resized/rotated JPEG (K1 Pro: BMP→JPEG)
     end
 
     Note over REND: store nativeBytes in LRU cache (100 entries / 32 MiB)
