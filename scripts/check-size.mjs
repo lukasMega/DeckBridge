@@ -11,17 +11,21 @@ const BUDGETS = {
   // Device verify hardware report + Elgato identity tuning (2026-11-09),
   // WSL relay card for Stream Deck app 7.6.1 (2026-11-12); measured + 1%.
   // "Fix pairing" wizard for 7.6.1 + manual OrbStack route (2026-11-12): measured 202,410 + ~1 KB.
-  'ui.js': 203_700,
+  // D200 info window card (2026-11-18, plan 2026-11-18_ulanzi-d200-wide-key.md Q6): measured
+  // 206,749 + 1%.
+  'ui.js': 208_800,
   'deck.js': 30_106,
-  // Device verify wizard (2026-10-22); measured + 1%.
-  'css total': 37_394,
+  // Device verify wizard (2026-10-22); D200 info window card (2026-11-18): measured 37,448 + 1%.
+  'css total': 37_830,
   // 12 AKP05-family clone models (2026-10-14), K1 Pro 0x5548 clone (2026-11-06),
   // Ulanzi D200 page-protocol driver (2026-11-13), adaptive palette + ZIP digest cache
   // (2026-11-16), D200 firmware version via GET_DEVICE_INFO (2026-11-16): measured 61,793 + ~60 B.
-  'hid-worker': 61_850,
+  // D200 info window, live small-window mode + stats (2026-11-18): measured 63,995 + 1%.
+  'hid-worker': 64_640,
   // upHere 293V3 (2026-10-22), K1 Pro 0x5548 clone (2026-11-06), Ulanzi D200 (2026-11-13):
-  // the registry grows the scan worker; measured + 1%.
-  'hid-scan-worker': 12_141,
+  // the registry grows the scan worker; measured + 1%. D200 info window model data
+  // (2026-11-18): measured 12,272 + 1%.
+  'hid-scan-worker': 12_400,
   'plugin-worker': 2_733,
   // Extension worker: worker-side reply cap (2026-10-11); measured size + 1% headroom.
   'extension-worker': 1_206,

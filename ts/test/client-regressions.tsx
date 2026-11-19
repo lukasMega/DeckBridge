@@ -34,6 +34,9 @@ import { runPagesPanel } from './client-pages.js';
 import { runVerifyWizard } from './client-verify.js';
 import { StandbyPanel } from '../src/web/client/simple/standby-panel.js';
 import type { StandbyView } from '../src/web/contract-standby.js';
+import { WideKeyPanel } from '../src/web/client/simple/wide-key-panel.js';
+import { formatClock } from '../src/web/client/simple/wide-key-preview.js';
+import type { WideKeyView } from '../src/web/contract-wide-key.js';
 import { ElgatoAppPanel } from '../src/web/client/simple/elgato-app-panel.js';
 import { KeymapLearn } from '../src/web/client/simple/keymap-learn.js';
 import { DockList } from '../src/web/client/simple/dock-cards.js';
@@ -1216,6 +1219,8 @@ async function runKeymapAndDiagnosticsPanels(): Promise<void> {
   await runElgatoAutoRestartPanel();
   await runElgatoAutoRestartUnsupported();
   await runStandbyPanel();
+  await runWideKeyPanel();
+  await runWideKeyOnMainPage();
   await runPagesPanel(root, check);
 }
 
@@ -2788,6 +2793,300 @@ async function runStandbyPanel(): Promise<void> {
         field('From')?.value === '22:30',
       'A rejected save keeps the previous values',
     );
+  } finally {
+    stub.restore();
+    await act(() => render(null, root));
+    await act(() => patch({ status: baseStatus }));
+  }
+}
+
+/** Capture setInterval/clearInterval so a test fires ticks by hand and sees what is still armed. */
+function fakeIntervals(): {
+  count: (ms: number) => number;
+  tick: (ms: number) => void;
+  restore: () => void;
+} {
+  const realSet = globalThis.setInterval;
+  const realClear = globalThis.clearInterval;
+  const live = new Map<number, { fn: () => void; ms: number }>();
+  let next = 1_000_000;
+  globalThis.setInterval = ((fn: () => void, ms: number) => {
+    live.set(next, { fn, ms });
+    return next++;
+  }) as unknown as typeof setInterval;
+  globalThis.clearInterval = ((id: number) => {
+    if (!live.delete(id)) realClear(id);
+  }) as typeof clearInterval;
+  return {
+    count: (ms) => [...live.values()].filter((t) => t.ms === ms).length,
+    tick: (ms) => {
+      for (const t of live.values()) if (t.ms === ms) t.fn();
+    },
+    restore: () => {
+      globalThis.setInterval = realSet;
+      globalThis.clearInterval = realClear;
+    },
+  };
+}
+
+const WIDE_KEY_VIEW: WideKeyView = {
+  dock: 0,
+  config: { content: 'clock', clockMode: 203, hourFormat: '24H', press: 'none' },
+  contents: ['clock', 'dial', 'stats', 'widget'],
+  clockModes: [200, 201, 202, 203],
+  presses: ['elgato-13', 'elgato-14', 'deckbridge', 'none'],
+};
+
+const selectIn = (id: string): HTMLSelectElement | null =>
+  root.querySelector<HTMLSelectElement>(`#${id}`);
+
+async function choose(id: string, value: string): Promise<void> {
+  const el = selectIn(id)!;
+  await act(() => {
+    el.value = value;
+    el.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+  await settle();
+}
+
+const WIDE_SECTION = '[aria-label="Info window"]';
+const wideTile = (): string =>
+  Array.from(root.querySelectorAll(`[aria-label="Info window preview"] .wide-live > *`))
+    .map((el) => el.textContent)
+    .join('|');
+const WIDE_CARD = '[aria-label="Widget side key"]';
+const WIDE_TILE = '[aria-label="Info window preview"]';
+const wideField = (what: string): Element | null =>
+  root.querySelector(`[aria-label="Widget side key ${what}"]`);
+
+// Content Widget: the side-key editor for the window's wire, on the device-level layout.
+async function checkWideKeyWidget(calls: StubCall[]): Promise<void> {
+  check(root.querySelector(WIDE_CARD) === null, 'No widget editor outside the Widget content');
+  await choose('wide-key-content', 'widget');
+  check(root.querySelector(WIDE_CARD) !== null, 'Widget content opens the side-key editor');
+  check(root.querySelector('.xkey-tile-wide') !== null, 'Its preview keeps the wide shape');
+  check(
+    root.querySelector(WIDE_TILE) === null && root.querySelectorAll('.xkey-tile').length === 1,
+    'The widget image is the only tile (no second live tile)',
+  );
+  check(
+    root.querySelector(`${WIDE_CARD} #wide-key-content`) !== null,
+    'The window settings sit on the same card as the widget fields',
+  );
+  check(wideField('press action') === null, 'No press controls while the press is not DeckBridge');
+
+  await act(() => patch({ extraKeys: { '13': { widget: 'text', param: 'HELLO' } } }));
+  check(
+    (wideField('text') as HTMLInputElement | null)?.value === 'HELLO',
+    'The editor shows the device-level widget of wire 13',
+  );
+  const widget = wideField('widget') as HTMLSelectElement;
+  await act(() => {
+    widget.value = 'clock';
+    widget.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+  const posted = calls.findLast((c) => c.url === '/api/extra-key')?.body as
+    | { wireId?: number }
+    | undefined;
+  check(posted?.wireId === 13, 'A widget change posts for the window wire');
+
+  await choose('wide-key-press', 'deckbridge');
+  check(wideField('press action') !== null, 'DeckBridge press shows the press controls');
+
+  await choose('wide-key-content', 'stats');
+  check(root.querySelector(WIDE_CARD) === null, 'Leaving the Widget content hides the editor');
+  await act(() => patch({ extraKeys: {} }));
+}
+
+// Info window card: only for a model that lists small-window modes; selects round-trip.
+async function runWideKeyPanel(): Promise<void> {
+  const d200: DockUi = {
+    ...DOCKS[0]!,
+    modelId: 'ulanzi-d200',
+    modelName: 'Ulanzi D200',
+    smallWindowModes: [0, 1, 2, 200, 201, 202, 203],
+    wideKeyWire: 13,
+  };
+  let reject = false;
+  let server = WIDE_KEY_VIEW;
+  let serverStats = { cpu: 12, mem: 34, gpu: 0 };
+  const timers = fakeIntervals();
+  const stub = stubFetch((url, init) => {
+    if (url === '/api/plugins') {
+      return { payload: { dir: '/plugins', files: ['gpu.js', 'sys.js'], status: {} } };
+    }
+    if (url === '/api/extra-key') return { payload: { ok: true } };
+    // Like the server: figures only while the window shows Stats.
+    if (init?.method !== 'POST') {
+      return {
+        payload: server.config.content === 'stats' ? { ...server, stats: serverStats } : server,
+      };
+    }
+    const sent = JSON.parse(init.body as string) as { config: Partial<WideKeyView['config']> };
+    if (reject) return { status: 400, payload: { error: 'content is not available' } };
+    server = { ...server, config: { ...server.config, ...sent.config } };
+    return { payload: server };
+  });
+  const lastPosted = (): unknown => stub.calls.findLast((c) => c.method === 'POST')?.body;
+  try {
+    await act(() => patch({ status: { ...baseStatus, docks: [DOCKS[0]!], selectedDock: 0 } }));
+    await act(() => render(<WideKeyPanel />, root));
+    check(root.querySelector(WIDE_SECTION) === null, 'No info window card without modes');
+
+    await act(() => patch({ status: { ...baseStatus, docks: [d200], selectedDock: 0 } }));
+    await settle();
+    check(root.querySelector(WIDE_SECTION) !== null, 'The D200 shows the info window card');
+    check(
+      elementText('.xkeys-head').includes('Info window'),
+      'The card is a side-keys style section',
+    );
+    check(
+      root.querySelector('.xkey-card > .xkey-tile-wide') !== null,
+      'The card carries a wide preview tile beside its fields',
+    );
+    check(selectIn('wide-key-content')?.value === 'clock', 'Content starts from the GET');
+    check(
+      Array.from(selectIn('wide-key-content')!.options)
+        .map((o) => o.value)
+        .join() === 'clock,dial,stats,widget',
+      'Content lists only what the model can show',
+    );
+    check(selectIn('wide-key-hour-format')?.value === '24H', 'Clock shows the hour format');
+    check(/^\d{2}:\d{2}:\d{2}$/.test(wideTile()), 'The clock tile shows 24-hour time');
+    check(timers.count(1000) === 1, 'The clock tile ticks every second');
+
+    await choose('wide-key-hour-format', '12H');
+    check(
+      /^\d{1,2}:\d{2}:\d{2} (?:AM|PM)$/.test(wideTile()),
+      'The clock tile follows the 12-hour choice',
+    );
+    check(
+      JSON.stringify(lastPosted()) === '{"config":{"hourFormat":"12H"}}',
+      'The hour format posts only the changed key',
+    );
+    await choose('wide-key-clock-mode', '201');
+    check(server.config.clockMode === 201, 'The clock variant reaches the server');
+
+    await choose('wide-key-content', 'stats');
+    check(
+      JSON.stringify(lastPosted()) === '{"config":{"content":"stats"}}',
+      'The content posts only the changed key',
+    );
+    check(
+      selectIn('wide-key-hour-format') === null && selectIn('wide-key-clock-mode') === null,
+      'Clock-only fields hide for other contents',
+    );
+    await settle();
+    check(wideTile() === 'CPU 12%|MEM 34%', 'The stats tile shows the server figures, no zero GPU');
+    check(
+      timers.count(1000) === 0 && timers.count(2000) === 1,
+      'Leaving the clock stops its tick; Stats polls every 2 s',
+    );
+    serverStats = { cpu: 99, mem: 1, gpu: 56 };
+    await act(() => timers.tick(2000));
+    await settle();
+    check(wideTile() === 'CPU 99%|MEM 1%|GPU 56%', 'The stats tile follows the poll and adds GPU');
+    check(selectIn('wide-key-stats-source')?.value === '', 'Stats starts on the built-in source');
+    check(
+      Array.from(selectIn('wide-key-stats-source')!.options)
+        .map((o) => o.value)
+        .join() === ',gpu.js,sys.js',
+      'The source lists built-in plus the plugin files',
+    );
+    await choose('wide-key-stats-source', 'sys.js');
+    check(
+      JSON.stringify(lastPosted()) === '{"config":{"statsPlugin":"sys.js"}}',
+      'A plugin file posts as statsPlugin',
+    );
+    check(selectIn('wide-key-stats-source')?.value === 'sys.js', 'The chosen plugin stays shown');
+    await choose('wide-key-stats-source', '');
+    check(
+      JSON.stringify(lastPosted()) === '{"config":{"statsPlugin":""}}',
+      'Built-in posts an empty statsPlugin, which clears it',
+    );
+    await choose('wide-key-content', 'clock');
+    check(selectIn('wide-key-stats-source') === null, 'The source hides outside Stats');
+    await choose('wide-key-content', 'stats');
+
+    check(selectIn('wide-key-press')?.value === 'none', 'Press starts from the GET');
+    check(
+      Array.from(selectIn('wide-key-press')!.options)
+        .map((o) => o.value)
+        .join() === 'elgato-13,elgato-14,deckbridge,none',
+      'Press lists only what the server offers',
+    );
+    await choose('wide-key-press', 'elgato-14');
+    check(
+      JSON.stringify(lastPosted()) === '{"config":{"press":"elgato-14"}}',
+      'The press posts only the changed key',
+    );
+    check(server.config.press === 'elgato-14', 'The press reaches the server');
+    check(
+      selectIn('wide-key-content')?.value === 'stats',
+      'A press change leaves the content alone',
+    );
+
+    await choose('wide-key-content', 'dial');
+    check(wideTile() === 'Dial', 'The dial tile is a static label');
+    check(timers.count(2000) === 0, 'Leaving Stats stops its poll');
+    await choose('wide-key-content', 'stats');
+
+    await checkWideKeyWidget(stub.calls);
+
+    reject = true;
+    await choose('wide-key-content', 'dial');
+    check(
+      elementText('.settings-error').includes('not available'),
+      'A rejected save shows the server error',
+    );
+    check(selectIn('wide-key-content')?.value === 'stats', 'A rejected save keeps the old value');
+    check(
+      formatClock(new Date(2026, 0, 1, 0, 5, 9), '12H') === '12:05:09 AM' &&
+        formatClock(new Date(2026, 0, 1, 13, 5, 9), '12H') === '1:05:09 PM' &&
+        formatClock(new Date(2026, 0, 1, 13, 5, 9), '24H') === '13:05:09',
+      'formatClock pads 24-hour time and maps 12-hour midnight/afternoon',
+    );
+  } finally {
+    timers.restore();
+    stub.restore();
+    await act(() => render(null, root));
+    await act(() => patch({ status: baseStatus }));
+  }
+}
+
+// The Info window lives on the main page, in the deck card (not in Settings) and only once
+// the deck is paired, like the side keys.
+async function runWideKeyOnMainPage(): Promise<void> {
+  const d200: DockUi = {
+    ...DOCKS[0]!,
+    modelId: 'ulanzi-d200',
+    modelName: 'Ulanzi D200',
+    smallWindowModes: [0, 1, 2, 200, 201, 202, 203],
+    wideKeyWire: 13,
+    elgatoConnected: true,
+  };
+  const stub = stubFetch((url) => ({
+    payload:
+      url === '/api/wide-key'
+        ? WIDE_KEY_VIEW
+        : { dir: '/plugins', files: [], status: {}, ok: true },
+  }));
+  try {
+    const show = async (docks: DockUi[]): Promise<void> => {
+      await act(() => patch({ status: { ...baseStatus, docks, selectedDock: 0 } }));
+      await act(() => render(<DockList docks={docks} onHelp={noop} />, root));
+      await settle();
+    };
+    await show([d200]);
+    check(root.querySelector(WIDE_SECTION) !== null, 'The deck card shows the Info window');
+    check(
+      root.querySelector('.dock-card .xkeys-head') !== null && wideTile() !== '',
+      'It is a side-keys style section with its live tile',
+    );
+    await show([{ ...d200, elgatoConnected: false }]);
+    check(root.querySelector(WIDE_SECTION) === null, 'An unpaired deck has no Info window yet');
+    await show([DOCKS[0]!]);
+    check(root.querySelector(WIDE_SECTION) === null, 'A deck without a window has none');
   } finally {
     stub.restore();
     await act(() => render(null, root));

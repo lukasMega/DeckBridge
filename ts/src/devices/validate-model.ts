@@ -230,6 +230,13 @@ function checkWireAndProtocol(m: DeviceModel, strategies: Strategies, errors: st
   }
 }
 
+function checkPage(m: DeviceModel, errors: string[]): void {
+  const page = m.page;
+  if (page && !page.smallWindowModes.includes(page.smallWindowMode)) {
+    errors.push(`${m.id}: page.smallWindowModes does not include smallWindowMode`);
+  }
+}
+
 function checkModel(
   m: DeviceModel,
   byId: Map<string, DeviceModel>,
@@ -244,6 +251,7 @@ function checkModel(
   }
   checkCora(m, byId, profileIds, errors);
   checkImages(m, errors);
+  checkPage(m, errors);
   const candidates = m.wire.packetSizeCandidates;
   if (candidates && !candidates.includes(m.wire.packetSize)) {
     errors.push(

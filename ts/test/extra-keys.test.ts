@@ -12,6 +12,7 @@ import {
 } from '../src/shared/types.js';
 import { MIRABOX_293S_MODEL } from '../src/devices/mirabox/mirabox-293s.js';
 import { AJAZZ_AKP05E_MODEL } from '../src/devices/ajazz/akp05e.js';
+import { ULANZI_D200_MODEL } from '../src/devices/ulanzi/ulanzi-d200.js';
 import { NATIVE_AKP05E_MODEL } from './helpers/native-akp05e.js';
 import type { DeviceImageSpec, DeviceModel } from '../src/devices/driver.js';
 import type { WidgetPaint } from '../src/shared/widget-layout.js';
@@ -409,6 +410,63 @@ await test('start() re-pushes the mask even when unchanged (worker reset it on o
     [1, 2, 3, 4],
     [1, 2, 3, 4],
   ]);
+});
+
+console.log('\nExtraKeyWidgets standalone window (D200 info window)');
+
+/** A D200 dock whose window (wire 13) shows `cfg`; `paints` collects the WebUI mirror. */
+function windowDock(cfg: ExtraKeyConfig | undefined, mode?: TouchStripMode) {
+  const d = new FakeDriver(ULANZI_D200_MODEL);
+  const paints: Array<[number, WidgetPaint | null]> = [];
+  const w = new ExtraKeyWidgets(
+    d,
+    (wireId) => (wireId === 13 ? cfg : undefined),
+    mode,
+    undefined,
+    (wireId, paint) => paints.push([wireId, paint]),
+  );
+  return { d, w, paints };
+}
+
+for (const mode of TOUCH_STRIP_MODES) {
+  await test(`the window paints at its own size like a side key under '${mode}', no strip traffic`, () => {
+    const { d, w, paints } = windowDock({ widget: 'text', param: 'Hi' }, mode);
+    w.start();
+    tick(w);
+    w.stop();
+    assert.deepEqual(
+      d.splashed.map((p) => p.keyIndex),
+      [13],
+      'painted once, never twice (no duplicate id)',
+    );
+    assert.equal(d.splashed[0]!.spec.width, 458);
+    assert.equal(d.splashed[0]!.spec.height, 196);
+    assert.deepEqual(d.masks, [], 'no ownership mask for a window');
+    assert.deepEqual(d.restored, []);
+    assert.equal(paints.at(-1)![1]!.zone, false, 'the WebUI gets the image, not a zone marker');
+    assert.equal(paints.at(-1)![1]!.width, 458);
+  });
+}
+
+await test('an unconfigured window clears slot 13 only and is no app-owned strip zone', () => {
+  const { d, w } = windowDock(undefined);
+  w.start();
+  w.stop();
+  assert.deepEqual(d.cleared, [13]);
+  assert.deepEqual(d.splashed, []);
+  assert.deepEqual(w.appOwnedZones(), [], 'standby blanks no strip zone on a D200');
+});
+
+await test('a press refreshes the window widget; it is never a strip-zone tap', () => {
+  const { w } = windowDock({ widget: 'text', param: 'Hi' });
+  w.start();
+  assert.equal(w.ownsZoneNow(13), false);
+  assert.equal(w.refresh(13), true);
+  w.stop();
+  const none = windowDock(undefined);
+  none.w.start();
+  assert.equal(none.w.refresh(13), false, 'no widget: the press falls through');
+  none.w.stop();
 });
 
 console.log('\nExtraKeyWidgets repaint hold-off');

@@ -13,7 +13,10 @@
 import { HidDeviceBase } from '../hid-device-base.js';
 import { debug, info, warn } from '../../shared/logger.js';
 import { DEFAULT_BRIGHTNESS } from '../../shared/types.js';
-import type { KeyEvent } from '../../shared/types.js';
+import { NO_STATS, clampPercent } from '../../shared/host-stats.js';
+import type { HostStats } from '../../shared/host-stats.js';
+import type { KeyEvent, WideKeyHourFormat } from '../../shared/types.js';
+import { WIDE_KEY_IMAGE_MODE, wideKeyWire } from '../../shared/wide-key.js';
 import { HID_REPORT_ID_BYTE } from '../mirabox/protocol.js';
 import type { DeviceModel, DevicePageSpec } from '../driver.js';
 import {
@@ -26,6 +29,7 @@ import {
   encodeBrightness,
   encodeSmallWindow,
   formatClock,
+  parseDeviceType,
   parseDeviceVersion,
   parseIncoming,
 } from './ulanzi-protocol.js';
@@ -41,6 +45,11 @@ const HANDSHAKE_DRAIN_MS = 250;
 
 /** Read poll interval, matching MiraboxDriver. */
 const READ_POLL_MS = 5;
+
+/** A mode change writes the whole page (SET_BUTTONS) rather than a partial update: whether the
+ *  firmware applies a changed `SmallViewMode` from PARTIAL_UPDATE is unmeasured (probe P7,
+ *  plan D11). Flip once the probe says partials work. */
+const MODE_CHANGE = { fullPage: true };
 
 /** A 1×1 all-black PNG (grayscale, stored deflate). Used by clearKey: a
  *  ViewParam with no Icon leaves the previous pixmap on screen, and the firmware
@@ -65,13 +74,26 @@ export class UlanziDriver extends HidDeviceBase {
    *  the workaround in ulanzi-zip.ts can be deleted (plan O8). */
   private padRetryTotal = 0;
   private brightness = DEFAULT_BRIGHTNESS;
+  /** Info-window mode and clock format: the model default until setSmallWindow() runs. */
+  private smallMode: number;
+  private hourFormat: WideKeyHourFormat = '24H';
+  /** Host stats for mode 0, stored by setHostStats() and sent by the next keepalive. */
+  private hostStats: HostStats = { ...NO_STATS };
+  /** A mode change owes the panel a full page write even with no staged image (D11). */
+  private modeDirty = false;
   private _writeScratch: Buffer = Buffer.alloc(0);
   /** Set from the 0x0303 reply to GET_DEVICE_INFO, inside open()'s handshake drain. */
   firmware: string | undefined = undefined;
+  /** `DeviceType` from the same reply ("D200", "D200X"); the D200X has a real key in slot 13. */
+  deviceType: string | undefined = undefined;
+  /** Device slot id of the info window (13): its image is accepted only in mode 2. */
+  private readonly wideSlot: number | undefined;
 
   constructor(readonly model: DeviceModel) {
     super();
     this.spec = model.page!;
+    this.smallMode = this.spec.smallWindowMode;
+    this.wideSlot = wideKeyWire(model);
     this.page = new UlanziPage(this.spec.partialUpdates);
     this.scheduler = new FlushScheduler(
       { debounceMs: this.spec.flushDebounceMs, minIntervalMs: this.spec.minFlushIntervalMs },
@@ -141,10 +163,37 @@ export class UlanziDriver extends HidDeviceBase {
 
   private sendClock(): void {
     const payload = encodeSmallWindow({
-      mode: this.spec.smallWindowMode,
+      mode: this.smallMode,
       time: formatClock(new Date()),
+      hourFormat: this.hourFormat,
+      ...this.hostStats,
     });
     this.writePacket(buildPacket(CMD.SMALL_WINDOW, payload.length, payload));
+  }
+
+  /** Live info-window change. The frame goes out at once; a new mode also queues a full page
+   *  because its manifest carries `SmallViewMode`. The keepalive keeps re-sending both, so a
+   *  mode the firmware changes by itself is undone. */
+  setSmallWindow(mode: number, hourFormat: WideKeyHourFormat): void {
+    if (!this.spec.smallWindowModes.includes(mode)) {
+      warn('hid', `ignoring unsupported info-window mode ${mode}`);
+      return;
+    }
+    const modeChanged = mode !== this.smallMode;
+    this.smallMode = mode;
+    this.hourFormat = hourFormat;
+    if (!this.device || !this.hidLib) return; // open()'s handshake sends the stored values
+    this.sendClock();
+    if (!modeChanged) return;
+    this.modeDirty = true;
+    if (MODE_CHANGE.fullPage) this.page.restoreAll();
+    this.scheduler.schedule();
+  }
+
+  /** Stored only, never written: the keepalive frame is the single carrier, so a stats window
+   *  adds no traffic (the page is the sustained-write stall's trigger, parent plan O7). */
+  setHostStats(cpu: number, mem: number, gpu: number): void {
+    this.hostStats = { cpu: clampPercent(cpu), mem: clampPercent(mem), gpu: clampPercent(gpu) };
   }
 
   close(): Promise<void> {
@@ -155,16 +204,23 @@ export class UlanziDriver extends HidDeviceBase {
   /** keyIndex here is the device slot id (image-render.ts has already mapped the
    *  CORA index through keyMap.coraToWireImage and dropped the -1 holes). */
   sendImage(slotId: number, png: Uint8Array): void {
-    if (!this.device || !this.hidLib || !this.isKeySlot(slotId)) return;
+    if (!this.device || !this.hidLib || !this.accepts(slotId)) return;
     if (this.page.stage(slotId, png)) this.scheduler.schedule();
   }
 
   clearKey(slotId: number): void {
-    if (!this.device || !this.hidLib || !this.isKeySlot(slotId)) return;
+    if (!this.device || !this.hidLib || !this.accepts(slotId)) return;
     if (this.page.stage(slotId, BLACK_PNG)) this.scheduler.schedule();
   }
 
-  /** Real LCD keys only: a staged hole or the info-window slot would land in the manifest. */
+  /** Real LCD keys, plus the info window while it shows a host image (mode 2). Any other
+   *  slot — a hole, or the window in a firmware-drawn mode — would land in the manifest
+   *  as an image nothing displays. */
+  private accepts(slotId: number): boolean {
+    if (slotId === this.wideSlot) return this.smallMode === WIDE_KEY_IMAGE_MODE;
+    return this.isKeySlot(slotId);
+  }
+
   private isKeySlot(slotId: number): boolean {
     return this.model.keyMap.coraToWireImage?.includes(slotId) === true && slotId >= 0;
   }
@@ -179,7 +235,8 @@ export class UlanziDriver extends HidDeviceBase {
    *  batch stays dirty and the next staged image retries it. */
   private flush(): void {
     if (!this.device || !this.hidLib) return;
-    const batch = this.page.takeBatch();
+    const batch =
+      this.page.takeBatch() ?? (this.modeDirty ? { slots: [], full: MODE_CHANGE.fullPage } : null);
     if (!batch) return;
     try {
       // SET_BUTTONS replaces the grid, so only the first group may use it; the
@@ -190,6 +247,7 @@ export class UlanziDriver extends HidDeviceBase {
         this.writePage({ slots, full: batch.full && i === 0 });
       });
       this.page.onFlushed(batch);
+      this.modeDirty = false;
     } catch (err) {
       this.emit('error', err instanceof Error ? err : new Error(String(err)));
     }
@@ -199,7 +257,7 @@ export class UlanziDriver extends HidDeviceBase {
     const t0 = Date.now();
     const { zip, retries, safe } = buildSafePageZip(batch.slots, {
       columns: this.model.columns,
-      smallWindowMode: this.spec.smallWindowMode,
+      smallWindowMode: this.smallMode,
       smallWindowSlot: this.spec.smallWindowSlot,
       font: DEFAULT_FONT,
       flushSeq: this.flushSeq++,
@@ -286,6 +344,7 @@ export class UlanziDriver extends HidDeviceBase {
       // needs. See the plan's "Two firmware generations behind one VID:PID".
       info('hid', `device info: ${parsed.json}`);
       this.firmware = parseDeviceVersion(parsed.json) ?? this.firmware;
+      this.deviceType = parseDeviceType(parsed.json) ?? this.deviceType;
       return;
     }
     if (parsed.kind !== 'button') return;

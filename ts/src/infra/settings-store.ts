@@ -18,6 +18,7 @@ import type {
   TouchStripOptions,
   TouchStripUpload,
   TouchStripZoneFit,
+  WideKeyConfig,
 } from '../shared/types.js';
 import { DEFAULT_TOUCH_STRIP_OPTIONS } from '../shared/types.js';
 import type { PageDefinition } from '../shared/page-config.js';
@@ -65,6 +66,9 @@ export interface DeviceIdentitySettings {
   pairedAt?: string;
   /** Idle dim / screen off / night / standby clock / pixel shift — see main/dock-standby.ts. */
   standby?: Partial<StandbySettings>;
+  /** Info window of the Ulanzi D200 (slot 13): content, clock variant, press routing.
+   *  Any subset; absent keys take DEFAULT_WIDE_KEY. See shared/wide-key.ts. */
+  wideKey?: Partial<WideKeyConfig>;
 }
 
 /** Tap-refresh feedback: `flash` = inverted colours for a moment on the tap;

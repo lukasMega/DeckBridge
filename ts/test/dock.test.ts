@@ -16,6 +16,7 @@ import { generateDeviceIdentity } from '../src/infra/device-identity.js';
 import { DEFAULT_MODEL, advertisedModel } from '../src/devices/registry.js';
 import { MIRABOX_293S_MODEL } from '../src/devices/mirabox/mirabox-293s.js';
 import { AJAZZ_AKP05E_MODEL } from '../src/devices/ajazz/akp05e.js';
+import { ULANZI_D200_MODEL } from '../src/devices/ulanzi/ulanzi-d200.js';
 import { NATIVE_AKP05E_MODEL } from './helpers/native-akp05e.js';
 import { applyModelOverrides } from '../src/devices/model-overrides.js';
 import { deviceInputToMk2Index } from '../src/shared/key-map.js';
@@ -34,6 +35,7 @@ import type {
   KeyState,
   TouchInputEvent,
   TouchStripMode,
+  WideKeyPress,
 } from '../src/shared/types.js';
 import type { EncoderOverride } from '../src/main/encoders.js';
 import { DockPrefs, defaultRuntimePrefs } from '../src/infra/dock-prefs.js';
@@ -139,9 +141,28 @@ class FakeDriver extends StubDockDriver {
   }
   override sendSplashImage(keyIndex: number): void {
     this.splashCalls.push(keyIndex);
+    this.windowLog.push(`paint:${keyIndex}`);
   }
   override setBrightness(level: number): void {
     this.brightnessCalls.push(level);
+  }
+  smallWindowCalls: string[] = [];
+  /** Every call that matters to the info window, in order (mode pushes vs paints). */
+  windowLog: string[] = [];
+  setSmallWindow(mode: number, hourFormat: string): void {
+    this.smallWindowCalls.push(`${mode}/${hourFormat}`);
+    this.windowLog.push(`mode:${mode}`);
+  }
+  stripCalls: string[] = [];
+  override setTouchStripMask(wireIds: readonly number[]): void {
+    this.stripCalls.push(`mask:${wireIds.join(',')}`);
+  }
+  override restoreTouchSegments(wireIds: readonly number[]): void {
+    this.stripCalls.push(`restore:${wireIds.join(',')}`);
+  }
+  hostStatsCalls: string[] = [];
+  setHostStats(cpu: number, mem: number, gpu: number): void {
+    this.hostStatsCalls.push(`${cpu}/${mem}/${gpu}`);
   }
   // start() clears unconfigured extra keys (paintExtraKeys — 293S 6th column).
   clearKeyCalls: number[] = [];
@@ -171,16 +192,31 @@ function prefsWith(fields: Partial<DeviceIdentitySettings>) {
   return { entry, prefs: new DockPrefs(store, entry.deviceKey) };
 }
 
+/** Stands in for the process-wide host sampler: no child, no timer, samples on demand. */
+class FakeSampler {
+  readonly listeners = new Set<(s: { cpu: number; mem: number; gpu: number }) => void>();
+  acquire(l: (s: { cpu: number; mem: number; gpu: number }) => void): void {
+    this.listeners.add(l);
+  }
+  release(l: (s: { cpu: number; mem: number; gpu: number }) => void): void {
+    this.listeners.delete(l);
+  }
+  emit(s: { cpu: number; mem: number; gpu: number }): void {
+    for (const l of this.listeners) l(s);
+  }
+}
+
 /** An extra-style dock (index from `identity`) over a fake CORA pair and `prefs`. */
 function makeTestDock(opts: {
   identity: DockSlot;
   cora: CoraDock;
   model: DeviceModel;
   prefs: DockPrefs;
-  deviceInfo?: { serial?: string; firmware?: string };
+  deviceInfo?: { serial?: string; firmware?: string; deviceType?: string };
   hooks?: DockHooks;
   standbyClock?: StandbyClock;
   standbyTiming?: StandbyTiming;
+  sampler?: FakeSampler;
 }): Dock {
   const settings = {
     for: () => opts.prefs,
@@ -200,6 +236,7 @@ function makeTestDock(opts: {
     hooks: opts.hooks,
     standbyClock: opts.standbyClock,
     standbyTiming: opts.standbyTiming,
+    hostStats: opts.sampler,
   });
 }
 
@@ -209,6 +246,8 @@ const encoderFields = (o?: EncoderOverride): Partial<DeviceIdentitySettings> =>
 interface SetupExtras {
   /** Extra per-device settings (standby, pairedAt, …). */
   fields?: Partial<DeviceIdentitySettings>;
+  /** The unit's own model line, as the 0x0303 reply reports it (D200 / D200X). */
+  deviceType?: string;
   /** A fake standby clock + timing (silence off: the fake child has no rx counter). */
   clock?: FakeClock;
   timing?: Partial<StandbyTiming>;
@@ -233,11 +272,16 @@ function makeTestSetup(
   const keyCalls: string[] = [];
   const inputs: string[] = [];
   const attaches: boolean[] = [];
+  const sampler = new FakeSampler();
   const dock = makeTestDock({
     identity: dockSlot(1, testIdentity(model)),
     cora: makeDock(server, childServer),
     model,
-    deviceInfo: { serial: driver.deviceSerial, firmware: driver.deviceFirmware },
+    deviceInfo: {
+      serial: driver.deviceSerial,
+      firmware: driver.deviceFirmware,
+      deviceType: extras.deviceType,
+    },
     hooks: {
       disconnect: () => {
         disconnects++;
@@ -261,8 +305,10 @@ function makeTestSetup(
     prefs,
     standbyClock: extras.clock,
     standbyTiming: extras.clock && { ...DEFAULT_TIMING, silenceMs: 0, ...extras.timing },
+    sampler,
   });
   return {
+    sampler,
     server,
     childServer,
     driver,
@@ -1307,6 +1353,284 @@ await test('a mock-mode driver still feeds the page tracker', async () => {
   await wait(PAGE_SETTLE_WAIT_MS);
   assert.equal(observations.at(-1)?.activePageId, 'p1');
   await dock.stop();
+});
+
+// Info window (Ulanzi D200 wide key)
+
+await test('wide key: attach pushes nothing without a stored entry', async () => {
+  const { driver, dock, start } = makeTestSetup(ULANZI_D200_MODEL);
+  await start();
+  assert.deepEqual(driver.smallWindowCalls, [], 'the firmware default stays untouched');
+  assert.deepEqual(dock.status().smallWindowModes, [0, 1, 2, 200, 201, 202, 203]);
+  await dock.stop();
+});
+
+await test('wide key: attach pushes the stored mode and hour format', async () => {
+  const { driver, dock, start } = makeTestSetup(ULANZI_D200_MODEL, undefined, {
+    fields: { wideKey: { content: 'stats', hourFormat: '12H' } },
+  });
+  await start();
+  assert.deepEqual(driver.smallWindowCalls, ['0/12H']);
+  await dock.stop();
+});
+
+await test('wide key: reloadWideKey applies a change live and a removed entry puts the default back', async () => {
+  const { driver, dock, entry, start } = makeTestSetup(ULANZI_D200_MODEL);
+  await start();
+  entry.wideKey = { content: 'clock', clockMode: 201 };
+  dock.reloadWideKey();
+  entry.wideKey = { content: 'dial' };
+  dock.reloadWideKey();
+  entry.wideKey = undefined;
+  dock.reloadWideKey();
+  assert.deepEqual(driver.smallWindowCalls, ['201/24H', '1/24H', '203/24H']);
+  await dock.stop();
+});
+
+await test('wide key: a model without an info window gets no call, and no status field', async () => {
+  const { driver, dock, entry, start } = makeTestSetup(DEFAULT_MODEL, undefined, {
+    fields: { wideKey: { content: 'stats' } },
+  });
+  await start();
+  entry.wideKey = { content: 'dial' };
+  dock.reloadWideKey();
+  assert.deepEqual(driver.smallWindowCalls, []);
+  assert.equal(dock.status().smallWindowModes, undefined);
+  await dock.stop();
+});
+
+// Info window host stats: the sampler runs only while the window shows Stats.
+
+await test('wide key stats: no sampler without the stats content', async () => {
+  const { driver, dock, sampler, start } = makeTestSetup(ULANZI_D200_MODEL);
+  await start();
+  assert.equal(sampler.listeners.size, 0);
+  assert.deepEqual(driver.hostStatsCalls, []);
+  await dock.stop();
+});
+
+await test('wide key stats: attach subscribes, samples reach the driver, stop releases', async () => {
+  const { driver, dock, sampler, start } = makeTestSetup(ULANZI_D200_MODEL, undefined, {
+    fields: { wideKey: { content: 'stats' } },
+  });
+  await start();
+  assert.equal(sampler.listeners.size, 1);
+  sampler.emit({ cpu: 12, mem: 34, gpu: 0 });
+  sampler.emit({ cpu: 12, mem: 34, gpu: 0 });
+  sampler.emit({ cpu: 13, mem: 34, gpu: 0 });
+  assert.deepEqual(
+    driver.hostStatsCalls,
+    ['12/34/0', '13/34/0'],
+    'an unchanged sample sends nothing',
+  );
+  await dock.stop();
+  assert.equal(sampler.listeners.size, 0, 'the last release stops the sampler');
+});
+
+await test('wide key stats: leaving the stats content releases and zeroes the driver', async () => {
+  const { driver, dock, entry, sampler, start } = makeTestSetup(ULANZI_D200_MODEL, undefined, {
+    fields: { wideKey: { content: 'stats' } },
+  });
+  await start();
+  sampler.emit({ cpu: 50, mem: 60, gpu: 0 });
+  entry.wideKey = { content: 'dial' };
+  dock.reloadWideKey();
+  assert.equal(sampler.listeners.size, 0);
+  assert.deepEqual(driver.hostStatsCalls, ['50/60/0', '0/0/0']);
+  entry.wideKey = { content: 'stats' };
+  dock.reloadWideKey();
+  assert.equal(sampler.listeners.size, 1, 'switching back subscribes again');
+  await dock.stop();
+});
+
+await test('wide key stats: a model without an info window never subscribes', async () => {
+  const { dock, sampler, start } = makeTestSetup(DEFAULT_MODEL, undefined, {
+    fields: { wideKey: { content: 'stats' } },
+  });
+  await start();
+  assert.equal(sampler.listeners.size, 0);
+  await dock.stop();
+});
+
+// Info window press routing: one target per press, live, from the stored `press`.
+
+const WIDE_ROUTES: Array<[WideKeyPress | undefined, number[], string[]]> = [
+  [undefined, [], []],
+  ['none', [], []],
+  ['elgato-13', [13], ['key']],
+  ['elgato-14', [14], ['key']],
+  ['deckbridge', [], ['extraKey']],
+];
+for (const [press, cells, inputKinds] of WIDE_ROUTES) {
+  await test(`wide key press ${press ?? '(no entry)'}: reaches exactly ${inputKinds[0] ?? 'nothing'}`, async () => {
+    const { driver, childServer, inputs, dock, start } = makeTestSetup(
+      ULANZI_D200_MODEL,
+      undefined,
+      press ? { fields: { wideKey: { press } } } : {},
+    );
+    await start();
+    driver.emit('key', { keyIndex: 13, state: 'down' });
+    assert.deepEqual(
+      childServer.sendKeyEventCalls.map((c) => c.keyIndex),
+      cells,
+    );
+    assert.deepEqual(inputs, inputKinds);
+    await dock.stop();
+  });
+}
+
+await test('wide key press: a change applies at the next press, no reopen, no model edit', async () => {
+  const { driver, childServer, entry, dock, start } = makeTestSetup(ULANZI_D200_MODEL);
+  await start();
+  const press = (keyIndex: number): void => {
+    driver.emit('key', { keyIndex, state: 'down' });
+  };
+  entry.wideKey = { press: 'elgato-14' };
+  press(13);
+  entry.wideKey = { press: 'elgato-13' };
+  press(13);
+  entry.wideKey = { press: 'deckbridge' };
+  press(13);
+  entry.wideKey = undefined;
+  press(13);
+  press(12);
+  assert.deepEqual(
+    childServer.sendKeyEventCalls.map((c) => c.keyIndex),
+    [14, 13, 12],
+    'deckbridge and the removed entry send nothing to the app; real keys stay put',
+  );
+  assert.equal(dock.model, ULANZI_D200_MODEL, 'the dock model is still the registry one');
+  assert.equal(dock.status().extraKeys, undefined, 'the status does not list the window');
+  await dock.stop();
+});
+
+// Info window widget (Ulanzi D200 mode 2): wire 13 is a device-level DeckBridge-owned key.
+
+const WIDE_TEXT: ExtraKeyConfig = { widget: 'text', param: 'HELLO' };
+/** The info window's mode pushes and paints, in call order (the splash paints other keys too). */
+const windowCalls = (d: { windowLog: string[] }): string[] =>
+  d.windowLog.filter((c) => c.startsWith('mode:') || c === 'paint:13');
+
+await test('window widget: a configured widget paints nothing while the window shows the clock', async () => {
+  const { driver, dock, start } = makeTestSetup(ULANZI_D200_MODEL, undefined, {
+    fields: { extraKeys: { '13': WIDE_TEXT } },
+  });
+  await start();
+  assert.equal(driver.splashCalls.includes(13), false, 'slot 13 gets no image outside mode 2');
+  assert.deepEqual(driver.smallWindowCalls, [], 'and the default mode is untouched');
+  await dock.stop();
+});
+
+await test('window widget: content widget pushes mode 2 first, then paints slot 13', async () => {
+  const { driver, dock, start } = makeTestSetup(ULANZI_D200_MODEL, undefined, {
+    fields: { wideKey: { content: 'widget' }, extraKeys: { '13': WIDE_TEXT } },
+  });
+  await start();
+  assert.deepEqual(windowCalls(driver), ['mode:2', 'paint:13']);
+  await dock.stop();
+});
+
+await test('window widget: switching content live moves the mode, then the paint; leaving stops painting', async () => {
+  const { driver, dock, entry, start } = makeTestSetup(ULANZI_D200_MODEL, undefined, {
+    fields: { extraKeys: { '13': WIDE_TEXT } },
+  });
+  await start();
+  entry.wideKey = { content: 'widget' };
+  dock.reloadWideKey();
+  assert.deepEqual(windowCalls(driver), ['mode:2', 'paint:13'], 'mode before the image');
+  entry.wideKey = { content: 'dial' };
+  dock.reloadWideKey();
+  assert.deepEqual(windowCalls(driver), ['mode:2', 'paint:13', 'mode:1'], 'no paint after leaving');
+  await dock.stop();
+});
+
+await test('window widget: a saved page layout never applies to wire 13', async () => {
+  const model = ULANZI_D200_MODEL;
+  const page = makePage('p1', 'A', {
+    extraKeys: { '13': { widget: 'text', param: 'PAGE', pressCommand: 'echo page' } },
+  });
+  const server = new FakeServer();
+  const childServer = new FakeChildServer();
+  const driver = new FakeDriver(model);
+  const { prefs } = prefsWith({
+    wideKey: { content: 'widget' },
+    extraKeys: { '13': { widget: 'text', param: 'DEF' } },
+    pages: [page],
+  });
+  const dock = makeTestDock({
+    identity: dockSlot(1, testIdentity(model)),
+    cora: makeDock(server, childServer),
+    model,
+    prefs,
+  });
+  await dock.start(driver);
+  page.hashes.forEach((hash, key) => driver.emit('frameHash', key, hash));
+  await wait(PAGE_SETTLE_WAIT_MS);
+  assert.equal(dock.pages.layoutConfig(13)?.param, 'DEF', 'the device-level widget, page or not');
+  assert.equal(dock.pages.layoutConfig(13)?.pressCommand, undefined);
+  await dock.stop();
+});
+
+await test('window status: not a side key, not a strip zone, reported as wideKeyWire', async () => {
+  const { dock } = makeTestSetup(ULANZI_D200_MODEL);
+  const status = dock.status();
+  assert.equal(status.extraKeys, undefined);
+  assert.equal(status.widgetDisplays, undefined);
+  assert.equal(status.pressableExtraKeys, undefined);
+  assert.equal(status.wideKeyWire, 13);
+  await dock.stop();
+});
+
+const PRESSABLE: Array<[WideKeyPress | undefined, number[] | undefined]> = [
+  [undefined, undefined],
+  ['none', undefined],
+  ['elgato-13', undefined],
+  ['elgato-14', undefined],
+  ['deckbridge', [13]],
+];
+for (const [press, pressable] of PRESSABLE) {
+  await test(`window status: press ${press ?? '(no entry)'} → pressableExtraKeys ${JSON.stringify(pressable)}`, async () => {
+    const { dock } = makeTestSetup(
+      ULANZI_D200_MODEL,
+      undefined,
+      press ? { fields: { wideKey: { press } } } : {},
+    );
+    assert.deepEqual(dock.status().pressableExtraKeys, pressable);
+    await dock.stop();
+  });
+}
+
+await test('window status: a press change re-publishes the status so the editor can offer the press', async () => {
+  const { dock, entry, getStatusChanges } = makeTestSetup(ULANZI_D200_MODEL);
+  const before = getStatusChanges();
+  entry.wideKey = { press: 'deckbridge' };
+  dock.reloadWideKey();
+  assert.ok(getStatusChanges() > before);
+  assert.deepEqual(dock.status().pressableExtraKeys, [13]);
+  await dock.stop();
+});
+
+await test('a D200X has no window: no card flag, no mode push, no side key', async () => {
+  const { driver, dock, start } = makeTestSetup(ULANZI_D200_MODEL, undefined, {
+    deviceType: 'D200X',
+    fields: { wideKey: { content: 'stats' }, extraKeys: { '13': WIDE_TEXT } },
+  });
+  await start();
+  const status = dock.status();
+  assert.equal(status.smallWindowModes, undefined);
+  assert.equal(status.wideKeyWire, undefined);
+  assert.equal(status.extraKeys, undefined);
+  dock.reloadWideKey();
+  assert.deepEqual(driver.smallWindowCalls, [], 'setSmallWindow is skipped');
+  await dock.stop();
+});
+
+await test('a D200 dock sends the strip machinery nothing for its window', async () => {
+  const { driver, dock, start } = makeTestSetup(ULANZI_D200_MODEL);
+  await start();
+  await dock.stop();
+  assert.deepEqual(driver.stripCalls, []);
+  assert.equal(driver.splashCalls.includes(13), false, 'no default paint on slot 13');
 });
 
 // Summary

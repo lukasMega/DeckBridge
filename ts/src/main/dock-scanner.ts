@@ -276,6 +276,7 @@ export class DockScanner {
       deviceInfo: {
         serial: driver.deviceSerial ?? serial ?? undefined,
         firmware: driver.deviceFirmware,
+        deviceType: driver.deviceType,
         ...(usb
           ? {
               usb: {

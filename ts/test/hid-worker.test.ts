@@ -1,5 +1,6 @@
 import assert from 'tjs:assert';
 import { Akp05Driver } from '../src/devices/ajazz/akp05-driver.js';
+import { UlanziDriver } from '../src/devices/ulanzi/ulanzi-driver.js';
 import type { MainToWorker, WorkerToMain } from '../src/worker/hid-worker-protocol.js';
 import { testAsync as test, summaryExit } from './helpers/harness.js';
 import { SOLID_RED_16X16_JPEG } from './helpers/fixtures.js';
@@ -162,6 +163,43 @@ await test('after close, releasing masked zones does no device I/O', async () =>
   send({ type: 'setTouchStripMask', wireIds: [] });
   await wait(5);
   assert.deepEqual(ops(), []);
+});
+
+console.log('\nhid-worker: info window');
+
+const smallWindow: string[] = [];
+const hostStats: string[] = [];
+Object.assign(UlanziDriver.prototype, {
+  open: () => Promise.resolve(),
+  close: () => Promise.resolve(),
+  setSmallWindow: (mode: number, hourFormat: string) => smallWindow.push(`${mode}/${hourFormat}`),
+  setHostStats: (cpu: number, mem: number, gpu: number) => hostStats.push(`${cpu}/${mem}/${gpu}`),
+});
+
+await test('setSmallWindow reaches a driver that has it and is ignored by one that does not', async () => {
+  send({ type: 'open', modelId: 'ulanzi-d200', hidPath: 'fake' });
+  await wait(5);
+  send({ type: 'setSmallWindow', mode: 0, hourFormat: '12H' });
+  await wait(5);
+  assert.deepEqual(smallWindow, ['0/12H']);
+  await openAkp05e();
+  send({ type: 'setSmallWindow', mode: 1, hourFormat: '24H' });
+  await wait(5);
+  assert.deepEqual(smallWindow, ['0/12H'], 'the AKP05 driver has no info window');
+  assert.ok(!messages.some((m) => m.type === 'error'));
+});
+
+await test('setHostStats reaches a driver that has it and is ignored by one that does not', async () => {
+  send({ type: 'open', modelId: 'ulanzi-d200', hidPath: 'fake' });
+  await wait(5);
+  send({ type: 'setHostStats', cpu: 12, mem: 34, gpu: 56 });
+  await wait(5);
+  assert.deepEqual(hostStats, ['12/34/56']);
+  await openAkp05e();
+  send({ type: 'setHostStats', cpu: 1, mem: 2, gpu: 3 });
+  await wait(5);
+  assert.deepEqual(hostStats, ['12/34/56'], 'the AKP05 driver has no info window');
+  assert.ok(!messages.some((m) => m.type === 'error'));
 });
 
 console.log('\nhid-worker: frame hash');

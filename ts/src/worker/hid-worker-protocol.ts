@@ -5,6 +5,7 @@ import type {
   TouchInputEvent,
   TouchStripOptions,
   TouchWindowRegion,
+  WideKeyHourFormat,
 } from '../shared/types.js';
 import type { DeviceModelId, DeviceImageSpec, DeviceModelOverride } from '../devices/driver.js';
 import type { LogLevel } from '../shared/logger.js';
@@ -36,6 +37,12 @@ export type MainToWorker =
   | { type: 'setBrightness'; level: number }
   // Hardware screen-off; only sent for a model with `sleep` set (standby).
   | { type: 'setSleep'; asleep: boolean }
+  // Live info-window mode of a page-protocol device (Ulanzi D200 wide key); the driver
+  // applies it at once and the keepalive keeps re-sending it.
+  | { type: 'setSmallWindow'; mode: number; hourFormat: WideKeyHourFormat }
+  // Host stats for the info window's stats mode (whole percents 0-100); stored by the driver
+  // and sent with its next keepalive.
+  | { type: 'setHostStats'; cpu: number; mem: number; gpu: number }
   | { type: 'clearKey'; keyIndex: number }
   // Live device-tuning swap — image-transform fields only, so no reopen is
   // needed. Re-merged on top of the worker's OWN registry entry, exactly like
@@ -66,7 +73,14 @@ export type MainToWorker =
 export type WorkMessage = MainToWorker & { id?: number };
 
 export type WorkerToMain =
-  | { type: 'opened'; ok: true; deviceSerial?: string; deviceFirmware?: string; hidPath?: string }
+  | {
+      type: 'opened';
+      ok: true;
+      deviceSerial?: string;
+      deviceFirmware?: string;
+      deviceType?: string;
+      hidPath?: string;
+    }
   | { type: 'opened'; ok: false; error: string }
   | { type: 'key'; keyIndex: number; state: KeyState }
   | { type: 'dial'; event: DialEvent }

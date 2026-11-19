@@ -8,6 +8,7 @@
  *
  *  Hardware-tested on macOS — see ulanzi-protocol.ts. */
 
+import { WIDE_KEY_IMAGE_MODE } from '../../shared/wide-key.js';
 import { isPayloadSafe } from './ulanzi-protocol.js';
 import type { FontStyle } from './ulanzi-protocol.js';
 
@@ -117,13 +118,13 @@ export function slotKey(slotId: number, columns: number): string {
   return `${slotId % columns}_${Math.floor(slotId / columns)}`;
 }
 
-interface ZipEntry {
+export interface ZipEntry {
   name: Uint8Array;
   data: Uint8Array;
   crc: number;
 }
 
-function entry(name: string, data: Uint8Array, crc: number = crc32(data)): ZipEntry {
+export function entry(name: string, data: Uint8Array, crc: number = crc32(data)): ZipEntry {
   return { name: new TextEncoder().encode(name), data, crc };
 }
 
@@ -200,6 +201,14 @@ function writeZip(entries: ZipEntry[]): Uint8Array {
   return out;
 }
 
+/** The wide window's image slot, only while it shows a host image (mode 2): in every other
+ *  mode the firmware draws the window itself and a staged image would be dead weight. */
+function wideImage(slots: PageSlot[], opts: PageZipOptions): PageSlot | undefined {
+  if (opts.smallWindowMode !== WIDE_KEY_IMAGE_MODE) return undefined;
+  const wideKey = `${opts.smallWindowSlot.col}_${opts.smallWindowSlot.row}`;
+  return slots.find((s) => s.png && slotKey(s.slotId, opts.columns) === wideKey);
+}
+
 /** Build the manifest JSON for a page.
  *
  *  Dialect: the INTERSECTION of the two firmware generations behind this VID:PID
@@ -208,7 +217,8 @@ function writeZip(entries: ZipEntry[]): Uint8Array {
  *  entirely, because empty entries are documented to break subsequent page
  *  changes on the Qt generation. No `Action` keys: DeckBridge routes every press
  *  itself over CORA, and letting the firmware also act on a press double-fires.
- *  The wide info-window slot always gets an entry carrying `SmallViewMode`. */
+ *  The wide info-window slot always gets an entry carrying `SmallViewMode`; in mode 2
+ *  (host image) it also carries the image as its `Icon`. */
 export function buildManifest(slots: PageSlot[], opts: PageZipOptions): string {
   const manifest: Record<string, unknown> = {};
   const wideKey = `${opts.smallWindowSlot.col}_${opts.smallWindowSlot.row}`;
@@ -229,10 +239,15 @@ export function buildManifest(slots: PageSlot[], opts: PageZipOptions): string {
     };
   }
 
+  const image = wideImage(slots, opts);
   manifest[wideKey] = {
     State: 0,
     SmallViewMode: opts.smallWindowMode,
-    ViewParam: [{ Font: opts.font, Text: '' }],
+    ViewParam: [
+      image?.png
+        ? { Icon: iconName(image.slotId, opts.flushSeq, image.png), Font: opts.font, Text: '' }
+        : { Font: opts.font, Text: '' },
+    ],
   };
 
   return JSON.stringify(manifest);
@@ -246,9 +261,10 @@ function pageEntries(slots: PageSlot[], opts: PageZipOptions): ZipEntry[] {
   ];
 
   const wideKey = `${opts.smallWindowSlot.col}_${opts.smallWindowSlot.row}`;
+  const image = wideImage(slots, opts);
   for (const slot of slots) {
     if (!slot.png) continue;
-    if (slotKey(slot.slotId, opts.columns) === wideKey) continue;
+    if (slotKey(slot.slotId, opts.columns) === wideKey && slot !== image) continue;
     entries.push(
       entry(iconName(slot.slotId, opts.flushSeq, slot.png), slot.png, digest(slot.png).crc),
     );
@@ -291,7 +307,16 @@ export function buildSafePageZip(
   slots: PageSlot[],
   opts: PageZipOptions,
 ): { zip: Uint8Array; retries: number; safe: boolean } {
-  const entries = pageEntries(slots, opts);
+  return buildSafeZip(pageEntries(slots, opts));
+}
+
+/** The pad loop for an arbitrary entry list — the hardware probes build manifests
+ *  the driver never emits. */
+export function buildSafeZip(entries: ZipEntry[]): {
+  zip: Uint8Array;
+  retries: number;
+  safe: boolean;
+} {
   let first: Uint8Array | null = null;
   for (let retry = 0; retry <= MAX_PAD_RETRIES; retry++) {
     const zip = assemble(entries, retry * PAD_STEP_BYTES);

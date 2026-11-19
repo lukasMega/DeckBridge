@@ -11,6 +11,7 @@ import { pairingAddressRoutes } from './pairing-address-routes.js';
 import { wslRelayRoutes } from './wsl-relay-routes.js';
 import { pairingRouteRoutes } from './pairing-route-routes.js';
 import { pageRoutes } from './page-routes.js';
+import { wideKeyRoutes } from './wide-key-routes.js';
 import { extensionRoutes } from './extension-routes.js';
 import { verifyRoutes } from './verify-routes.js';
 import type { ExternalExpire } from '../contract.js';
@@ -95,6 +96,7 @@ export const routes: Route[] = [
   postJson('/api/extra-key/preview', previewExtraKey),
   postJson('/api/extra-key/press', setExtraKeyPress),
   ...pageRoutes,
+  ...wideKeyRoutes,
   ...pushAdminRoutes,
   ...virtualDeckRoutes,
   ...pairingAddressRoutes,

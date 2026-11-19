@@ -67,6 +67,11 @@ description = "Build and run mock AKP05 paired as Stream Deck + at http://127.0.
 depends = ["build-mock"]
 run = "node scripts/mock-akp05.mjs"
 
+[tasks.mock-d200]
+description = "Build and run mock Ulanzi D200, paired (Elgato connected), at http://127.0.0.1:3000"
+depends = ["build-mock"]
+run = "node scripts/mock-d200.mjs"
+
 [tasks.d]
 description = "Rebuild at debug log level (readable WebUI class names) and run"
 depends = ["extensions"]
@@ -409,6 +414,15 @@ dir = "ts"
 run = """
   node build.mjs --probe akp05-strip-guided-probe
   DECKBRIDGE_NATIVE_LIB=$DECKBRIDGE_NATIVE_LIB $TJS run dist/akp05-strip-guided-probe.js ${1:-}
+"""
+
+[tasks.d200-wide-probe]
+description = "Ulanzi D200 wide info-window probe (plan 2026-11-18, P1-P8): firmware modes, mode-2 image size/format, stats, 12H/24H, mode-change opcodes. A real key advances; the wide window only logs. Stop DeckBridge first (requires a D200; Input Monitoring). Usage: mise run d200-wide-probe [-- --list | --dump <dir> | --from <n>]"
+depends = ["tjs-setup", "deckbridge-native"]
+dir = "ts"
+run = """
+  node build.mjs --probe d200-wide-probe
+  DECKBRIDGE_NATIVE_LIB=$DECKBRIDGE_NATIVE_LIB $TJS run dist/d200-wide-probe.js "$@"
 """
 
 [tasks.e2e]

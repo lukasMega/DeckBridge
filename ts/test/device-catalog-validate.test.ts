@@ -208,4 +208,10 @@ test('15 Mirabox protocols need wire.heartbeatMs > 0', () => {
   assert.deepEqual(validateCatalog([MK2], []), []);
 });
 
+test('16 the page default info-window mode is one of the listed modes', () => {
+  const D200 = real('ulanzi-d200');
+  const page = { ...D200.page!, smallWindowModes: [0, 1] };
+  assertNames(errorsWith({ ...D200, page }), 'ulanzi-d200', 'smallWindowModes');
+});
+
 summaryExit();

@@ -15,6 +15,8 @@ export interface UsbDriver extends DeviceDriver {
   readonly hidPath: string | undefined;
   readonly serial?: string;
   readonly firmware?: string;
+  /** Model line the device reports about itself (Ulanzi 0x0303 `DeviceType`), if it does. */
+  readonly deviceType?: string;
   /** Uploads inside `run` share one commit. Only on drivers that can batch; the
    *  worker calls it only when imageBatchingEnabled(model). */
   batch?(run: () => Promise<void>): Promise<void>;

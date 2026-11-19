@@ -182,9 +182,17 @@ export class PagesController implements PageLayoutPort {
     if (body.mode !== 'own' && body.mode !== 'default') {
       return err("mode must be 'own' or 'default'", 400);
     }
-    const own =
-      body.mode === 'own' ? (page.extraKeys ?? { ...this.prefs.extraKeyConfigs() }) : undefined;
+    const own = body.mode === 'own' ? (page.extraKeys ?? this.defaultLayoutCopy()) : undefined;
     return this.commit(withPageLayout(this.prefs.pages(), page.id, own), page.id);
+  }
+
+  /** The default layout as a page's own start. Without the info window's widget: that one is
+   *  device-level only (plan D8), so a page never carries it. */
+  private defaultLayoutCopy(): Record<string, ExtraKeyConfig> {
+    const copy = { ...this.prefs.extraKeyConfigs() };
+    const wide = this.host.selectedDockStatus()?.wideKeyWire;
+    if (wide !== undefined) delete copy[String(wide)];
+    return copy;
   }
 
   tryDelete(body: { id?: unknown }): { ok: true } | ReqError {

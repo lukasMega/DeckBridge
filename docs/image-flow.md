@@ -43,7 +43,7 @@ image-render.ts  →  driver.sendImage(slot, pngBytes)
                                      └─ buildChunks  1016 B + N×1024 B HID writes
 ```
 
-The timings come from `model.page` (`DevicePageSpec`). Images coalesce, so a 15-key profile switch is one page, not 15 uploads. The first flush after open sends the full page (~180 writes); later flushes send only changed keys (~15 writes for one key). Icon paths change on every flush because the firmware appears to cache decoded images by path. The wide bottom-right cell keeps the firmware's own clock. Untested on hardware.
+The timings come from `model.page` (`DevicePageSpec`). Images coalesce, so a 15-key profile switch is one page, not 15 uploads. The first flush after open sends the full page (~180 writes); later flushes send only changed keys (~15 writes for one key). Icon paths change on every flush because the firmware appears to cache decoded images by path. The wide bottom-right cell is the firmware's small window: its clock by default, configurable to dial, stats or a DeckBridge widget (a mode-2 background image). Untested on hardware.
 
 ## Image format by device
 

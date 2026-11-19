@@ -25,8 +25,10 @@ import type {
 import type { DeviceIdentitySettings } from '../infra/settings-store.js';
 import { advertisedGeometry, advertisedModel, advertisedTouchStrip } from '../devices/registry.js';
 import { deviceInputToExtraKey, deviceInputToMk2Index } from '../shared/key-map.js';
+import { hasWideWindow, sideExtraKeys, wideKeyWire } from '../shared/wide-key.js';
 import { emulationProfiles } from '../devices/model-overrides.js';
 import { TESTED_MODEL_IDS } from '../assets/tested-models.js';
+import { stripDisplays } from '../devices/driver.js';
 import type {
   DeviceDriver,
   DockDriver,
@@ -42,6 +44,8 @@ import type { ExtraKeyWidgets } from './extra-keys.js';
 export interface DeviceInfo {
   serial?: string;
   firmware?: string;
+  /** The device's own model line ("D200", "D200X"), when it reports one. */
+  deviceType?: string;
   usb?: {
     vendorId: number;
     productId: number;
@@ -118,14 +122,9 @@ export function buildDockStatus(s: DockStatusInput): DockStatus {
   // Per-model overrides win, then forwarded hardware identity, then generated defaults.
   const usePhysical = model.cora.usePhysicalIdentity;
   const encoderCount = physicalEncoderCount(model);
-  const pressable = pressableExtraKeys(model);
   return {
     index: s.index,
-    ...(model.keyMap.extraKeys ? { extraKeys: model.keyMap.extraKeys } : {}),
-    ...(pressable.length > 0 ? { pressableExtraKeys: pressable } : {}),
-    ...(model.widgetDisplays
-      ? { widgetDisplays: model.widgetDisplays.map(widgetDisplayInfo) }
-      : {}),
+    ...keyFields(model, deviceInfo?.deviceType),
     ...(encoderCount ? { encoderCount } : {}),
     ...(model.cora.advertiseAs ? { coraProfile: model.cora.advertiseAs } : {}),
     ...advertisedTouchStrip(model),
@@ -168,6 +167,25 @@ export function buildDockStatus(s: DockStatusInput): DockStatus {
   };
 }
 
+/** The status fields about keys outside the CORA grid: side keys, strip zones and the D200
+ *  info window. The window is no side key and no strip zone — it is reported as `wideKeyWire`
+ *  with its firmware modes, which a D200X (slot 13 is a real key there) never gets, so the
+ *  WebUI hides the card (plan Q5). */
+function keyFields(model: DeviceModel, deviceType: string | undefined): Partial<DockStatus> {
+  const sideKeys = sideExtraKeys(model);
+  const pressable = pressableExtraKeys(model);
+  const zones = stripDisplays(model);
+  const wire = hasWideWindow(model, deviceType) ? wideKeyWire(model) : undefined;
+  return {
+    ...(sideKeys.length > 0 ? { extraKeys: sideKeys } : {}),
+    ...(pressable.length > 0 ? { pressableExtraKeys: pressable } : {}),
+    ...(zones.length > 0 ? { widgetDisplays: zones.map(widgetDisplayInfo) } : {}),
+    ...(model.page && wire !== undefined
+      ? { smallWindowModes: model.page.smallWindowModes, wideKeyWire: wire }
+      : {}),
+  };
+}
+
 /** Knobs on the physical panel: the model's own count, else the most any of its
  *  CORA emulations declares — AKP05E's knobs are described only by its Plus profile,
  *  and exist (for the encoder override) whichever profile it advertises. */
@@ -176,10 +194,11 @@ export function physicalEncoderCount(model: DeviceModel): number {
   return Math.max(model.encoderCount ?? 0, ...emulated);
 }
 
-/** The extra keys that have a switch — those with an entry in keyMap.extraKeyInputs. */
+/** The extra keys that have a switch — those with an input code in keyMap.extraKeyInputs
+ *  (-1 = display-only, as the D200 info window is until its press is set to DeckBridge). */
 function pressableExtraKeys(model: DeviceModel): readonly number[] {
   const inputs = model.keyMap.extraKeyInputs ?? [];
-  return (model.keyMap.extraKeys ?? []).filter((_, i) => inputs[i] !== undefined);
+  return (model.keyMap.extraKeys ?? []).filter((_, i) => (inputs[i] ?? -1) >= 0);
 }
 
 /** True when the model maps device wire input codes to CORA (MK.2) indices. */
@@ -317,7 +336,7 @@ function zoneIndex(x: number, width: number, count: number): number {
 
 /** The strip's widget displays left→right — the order tap zones and knobs count in. */
 function zonesLeftToRight(model: DeviceModel): number[] {
-  return (model.widgetDisplays ?? [])
+  return stripDisplays(model)
     .map((display, i) => ({ wireId: display.wireId, x: display.stripX ?? i }))
     .toSorted((a, b) => a.x - b.x)
     .map((zone) => zone.wireId);

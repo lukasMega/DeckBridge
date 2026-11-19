@@ -13,6 +13,7 @@ import type { SurveyController } from './survey-controller.js';
 import type { UpdateController } from './update-controller.js';
 import type { ElgatoAppController } from './elgato-app-controller.js';
 import type { StandbyController } from './standby-controller.js';
+import type { WideKeyController } from './wide-key-controller.js';
 import type { DevicePrefsController } from './device-prefs-controller.js';
 import type { EncodersController } from './encoders-controller.js';
 import type { ExtraKeysController } from './extra-keys-controller.js';
@@ -129,6 +130,7 @@ export interface WebUIControllers {
   readonly settingsFile: SettingsFileController;
   readonly elgatoApp: ElgatoAppController;
   readonly standby: StandbyController;
+  readonly wideKey: WideKeyController;
   readonly push: PushController;
   readonly virtualDeck: VirtualDeckController;
   readonly extensions: ExtensionsController;

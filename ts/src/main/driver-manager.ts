@@ -236,6 +236,11 @@ export class DriverManager extends EventEmitter {
     for (const dock of this.docks.values()) dock.reloadStandby();
   }
 
+  /** A settings import may change any dock's info-window settings. */
+  reloadAllWideKey(): void {
+    for (const dock of this.docks.values()) dock.reloadWideKey();
+  }
+
   /** A settings import may change any dock's saved pages. */
   reloadAllPages(): void {
     for (const dock of this.docks.values()) dock.pages.reload();
@@ -275,7 +280,7 @@ export class DriverManager extends EventEmitter {
 
   applyDeviceModel(
     registryOrEffective: DeviceModel,
-    deviceInfo?: { serial?: string; firmware?: string },
+    deviceInfo?: { serial?: string; firmware?: string; deviceType?: string },
   ): void {
     // Proxy model through user tuning so callers don't need to.
     const model = this.effectiveModel(registryOrEffective);
@@ -426,6 +431,7 @@ export class DriverManager extends EventEmitter {
     this.applyDeviceModel(found.model, {
       serial: found.deviceSerial ?? serial ?? undefined,
       firmware: found.deviceFirmware,
+      deviceType: found.deviceType,
       ...(usb ? { usb } : {}),
     });
     return found;

@@ -33,6 +33,15 @@ const PUSH_BROADCAST_COALESCE_MS = 250;
 
 export type PushFailure = { status: number; code: PushErrorCode; error: string };
 
+/** Every wire id a dock can show a widget on: side keys, strip zones and the info window. */
+function displayWireIds(d: DockStatus): Set<number> {
+  return new Set<number>([
+    ...(d.extraKeys ?? []),
+    ...(d.widgetDisplays ?? []).map((w) => w.wireId),
+    ...(d.wideKeyWire === undefined ? [] : [d.wideKeyWire]),
+  ]);
+}
+
 export class PushController {
   readonly limits: PushRateLimits;
   private readonly lastUsed = new Map<string, number>();
@@ -179,10 +188,7 @@ export class PushController {
     let n = 0;
     for (const d of this.docks()) {
       if (!d.deviceKey) continue;
-      const wireIds = new Set<number>([
-        ...(d.extraKeys ?? []),
-        ...(d.widgetDisplays ?? []).map((w) => w.wireId),
-      ]);
+      const wireIds = displayWireIds(d);
       const prefs = this.host.settings.for(d.deviceKey);
       const layouts = [prefs.extraKeyConfigs(), ...prefs.pages().map((p) => p.extraKeys ?? {})];
       const bound = new Set<number>();

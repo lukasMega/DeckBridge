@@ -9,6 +9,7 @@ import {
   chunkBoundaryOffsets,
   describeIncoming,
   describeOutgoing,
+  parseDeviceType,
   parseDeviceVersion,
   encodeBrightness,
   encodeSmallWindow,
@@ -229,6 +230,16 @@ test('parseDeviceVersion reads Dversion and rejects bad payloads', () => {
   assert.equal(parseDeviceVersion('{}'), undefined);
   assert.equal(parseDeviceVersion('null'), undefined);
   assert.equal(parseDeviceVersion('not json'), undefined);
+});
+
+test('parseDeviceType reads DeviceType and rejects bad payloads', () => {
+  assert.equal(parseDeviceType('{"DeviceType":"D200","Dversion":"5.3.1"}'), 'D200');
+  assert.equal(parseDeviceType('{"DeviceType":"D200X"}'), 'D200X');
+  assert.equal(parseDeviceType('{"DeviceType":7}'), undefined);
+  assert.equal(parseDeviceType('{"DeviceType":""}'), undefined);
+  assert.equal(parseDeviceType('{"Dversion":"5.3.1"}'), undefined);
+  assert.equal(parseDeviceType('null'), undefined);
+  assert.equal(parseDeviceType('not json'), undefined);
 });
 
 test('the ZIP ACK and the heartbeat are distinguished', () => {

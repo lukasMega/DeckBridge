@@ -21,6 +21,7 @@ import { test, testAsync as runWebTest, summaryExit } from './helpers/harness.js
 import { PersistedSettings } from '../src/infra/settings.js';
 import { DEFAULT_STANDBY, publicStandby } from '../src/shared/standby-settings.js';
 import type { StandbyView } from '../src/web/contract-standby.js';
+import type { WideKeyView } from '../src/web/contract-wide-key.js';
 
 /** WebUIServer over settings loaded from `root`, as app.ts loads them before construction. */
 async function webUIAt(root: string, port?: number): Promise<WebUIServer> {
@@ -657,6 +658,28 @@ test('applySettingsJson: invalid optional settings are stripped while identity s
   ]);
 });
 
+test('info window widget: its wire is accepted via wideKeyWire and always edits the device-level map', () => {
+  const ui = new WebUIServer(undefined, [], 'real', new PersistedSettings(TEST_SETTINGS_ROOT));
+  ui.settings.getOrCreateIdentity('fake-device-0', 'Dock');
+  const dock = { ...fakeDockStatus(0), smallWindowModes: [0, 2, 203], wideKeyWire: 13 };
+  ui.notifyDocks([dock]);
+  const cfg = () => ui.settings.for('fake-device-0').extraKeyConfig(13);
+  const changed: unknown[][] = [];
+  ui.on('extraKeyChanged', (...args: unknown[]) => changed.push(args));
+
+  assert.equal(ui.extraKeys.trySet(12, { widget: 'clock' })?.status, 400, 'not an extra key');
+  // A page id (even an unknown one) is ignored: the window has no page layout.
+  assert.equal(ui.extraKeys.trySet(13, { widget: 'text', param: 'hi' }, 'no-such-page'), null);
+  assert.deepEqual(cfg(), { widget: 'text', param: 'hi' });
+  assert.deepEqual(changed, [[0]], 'the dock repaints');
+  assert.equal(ui.extraKeys.trySet(13, { pressCommand: 'x' })?.status, 400, 'no switch yet');
+  ui.notifyDocks([{ ...dock, pressableExtraKeys: [13] }]);
+  assert.equal(ui.extraKeys.trySet(13, { pressCommand: 'x' }, 'no-such-page'), null);
+  assert.deepEqual(cfg(), { widget: 'text', param: 'hi', pressCommand: 'x' });
+  ui.notifyDocks([fakeDockStatus(0)]);
+  assert.equal(ui.extraKeys.trySet(13, { widget: 'clock' })?.status, 400, 'a dock without one');
+});
+
 const extraKeyEntry = (extraKeys: unknown): string =>
   JSON.stringify({ devices: [{ ...deviceEntry('fake-device-0', {}), extraKeys }] });
 
@@ -1017,6 +1040,42 @@ try {
       assert.equal((await post('/api/standby', {})).status, 400);
       const after = (await (await fetch(`${base}/api/standby`)).json()) as StandbyView;
       assert.equal(after.settings.idleMinutes, 3, 'a rejected write changes nothing');
+    },
+  );
+
+  await runWebTest(
+    'GET/POST /api/wide-key: 409 without an info window, validated write with one',
+    async () => {
+      routesUi.notifyDocks([fakeDockStatus(0)]);
+      assert.equal((await fetch(`${base}/api/wide-key`)).status, 409);
+      assert.equal((await post('/api/wide-key', { config: { content: 'dial' } })).status, 409);
+
+      routesUi.settings.getOrCreateIdentity('fake-device-0', 'Dock');
+      routesUi.notifyDocks([{ ...fakeDockStatus(0), smallWindowModes: [0, 1, 200, 203] }]);
+      const got = (await (await fetch(`${base}/api/wide-key`)).json()) as WideKeyView;
+      assert.equal(got.config.content, 'clock');
+      assert.deepEqual(got.contents, ['clock', 'dial', 'stats']);
+      assert.deepEqual(got.clockModes, [200, 203]);
+      assert.deepEqual(got.presses, ['elgato-13', 'elgato-14', 'deckbridge', 'none']);
+      assert.equal((await post('/api/wide-key', { config: { content: 'widget' } })).status, 400);
+      assert.equal((await post('/api/wide-key', { config: { press: 'deckbridge' } })).status, 200);
+      const routed = await post('/api/wide-key', { config: { press: 'elgato-14' } });
+      assert.equal(((await routed.json()) as WideKeyView).config.press, 'elgato-14');
+      const ok = await post('/api/wide-key', { config: { content: 'dial' } });
+      assert.equal(ok.status, 200);
+      assert.equal(((await ok.json()) as WideKeyView).config.content, 'dial');
+      assert.equal((await post('/api/wide-key', { config: { content: 'nope' } })).status, 400);
+      assert.equal((await post('/api/wide-key', { config: { clockMode: 201 } })).status, 400);
+      assert.equal((await post('/api/wide-key', {})).status, 400);
+      const after = (await (await fetch(`${base}/api/wide-key`)).json()) as WideKeyView;
+      assert.equal(after.config.content, 'dial', 'a rejected write changes nothing');
+      // A model that lists the image mode (mode 2) offers the widget content.
+      routesUi.notifyDocks([{ ...fakeDockStatus(0), smallWindowModes: [0, 1, 2, 203] }]);
+      const wide = (await (await fetch(`${base}/api/wide-key`)).json()) as WideKeyView;
+      assert.deepEqual(wide.contents, ['clock', 'dial', 'stats', 'widget']);
+      const widget = await post('/api/wide-key', { config: { content: 'widget' } });
+      assert.equal(((await widget.json()) as WideKeyView).config.content, 'widget');
+      routesUi.notifyDocks([fakeDockStatus(0)]);
     },
   );
 
@@ -2004,6 +2063,130 @@ test('a settings import with devices[].standby emits standbyChanged', () => {
   );
   assert.deepEqual(stored(), { night: true, nightLevel: 5 });
   assert.deepEqual(changed, [[]], 'no index: every dock reloads, not just the selected one');
+});
+
+// WideKeyController (selected dock's Ulanzi D200 info window)
+
+console.log('\nwide key controller');
+
+const D200_MODES = [0, 1, 2, 200, 201, 202, 203];
+
+function wideKeyUi(withWindow = true) {
+  const ui = new WebUIServer(undefined, [], 'real', new PersistedSettings(TEST_SETTINGS_ROOT));
+  ui.settings.getOrCreateIdentity('fake-device-0', 'Dock');
+  ui.notifyDocks([
+    { ...fakeDockStatus(0), ...(withWindow ? { smallWindowModes: D200_MODES } : {}) },
+  ]);
+  const changed: unknown[][] = [];
+  ui.on('wideKeyChanged', (...args: unknown[]) => changed.push(args));
+  const stored = () => ui.settings.entryFor('fake-device-0')?.wideKey;
+  return { ui, changed, stored };
+}
+
+test('wide key view: the default config and what the model can show', () => {
+  const { ui } = wideKeyUi();
+  const view = ui.wideKey.view();
+  assert.ok(!('error' in view));
+  assert.equal((view as WideKeyView).dock, 0);
+  assert.deepEqual((view as WideKeyView).config, {
+    content: 'clock',
+    clockMode: 203,
+    hourFormat: '24H',
+    press: 'none',
+  });
+  assert.deepEqual((view as WideKeyView).contents, ['clock', 'dial', 'stats', 'widget']);
+  assert.deepEqual((view as WideKeyView).clockModes, [200, 201, 202, 203]);
+  assert.deepEqual((view as WideKeyView).presses, ['elgato-13', 'elgato-14', 'deckbridge', 'none']);
+});
+
+test('wide key view: stats ride along only on the Stats content and when the dock has some', () => {
+  const { ui } = wideKeyUi();
+  const asked: number[] = [];
+  let figures: { cpu: number; mem: number; gpu: number } | undefined = { cpu: 12, mem: 34, gpu: 0 };
+  ui.setWideKeyStats((dock) => {
+    asked.push(dock);
+    return figures;
+  });
+  const stats = () => (ui.wideKey.view() as WideKeyView).stats;
+  assert.equal(stats(), undefined, 'clock content: no stats');
+  assert.deepEqual(asked, [], 'and the dock is not even asked');
+  ui.wideKey.trySet({ config: { content: 'stats' } });
+  assert.deepEqual(stats(), { cpu: 12, mem: 34, gpu: 0 });
+  assert.equal(asked.at(-1), 0, 'the selected dock is asked');
+  figures = undefined;
+  assert.equal(stats(), undefined, 'no device (or no sampler yet): the key is absent');
+  assert.ok(!('stats' in (ui.wideKey.view() as WideKeyView)));
+});
+
+test('wide key set: persists the merge and emits wideKeyChanged for the selected dock', () => {
+  const { ui, changed, stored } = wideKeyUi();
+  const r = ui.wideKey.trySet({ config: { content: 'stats', hourFormat: '12H' } });
+  assert.ok(!('error' in r) && r.config.content === 'stats');
+  assert.deepEqual(stored(), { content: 'stats', hourFormat: '12H' });
+  assert.deepEqual(changed, [[0]]);
+  ui.wideKey.trySet({ config: { press: 'elgato-14' } });
+  assert.deepEqual(stored(), { content: 'stats', hourFormat: '12H', press: 'elgato-14' }, 'merged');
+});
+
+test('wide key set: bad values and non-objects are 400 and persist nothing', () => {
+  const { ui, changed, stored } = wideKeyUi();
+  for (const config of [{ content: 'nope' }, { clockMode: 204 }, { press: 'elgato-15' }]) {
+    const r = ui.wideKey.trySet({ config });
+    assert.ok('error' in r && r.status === 400, JSON.stringify(config));
+  }
+  for (const body of [{ config: [] }, { config: 'x' }, {}, null]) {
+    const r = ui.wideKey.trySet(body);
+    assert.ok('error' in r && r.status === 400, JSON.stringify(body));
+  }
+  assert.equal(stored(), undefined);
+  assert.equal(changed.length, 0);
+});
+
+test('wide key set: the widget content and the DeckBridge press are accepted', () => {
+  const { ui, changed, stored } = wideKeyUi();
+  const r = ui.wideKey.trySet({ config: { content: 'widget', press: 'deckbridge' } });
+  assert.ok(!('error' in r) && r.config.content === 'widget' && r.config.press === 'deckbridge');
+  assert.deepEqual(stored(), { content: 'widget', press: 'deckbridge' });
+  assert.deepEqual(changed, [[0]]);
+});
+
+test('wide key set: the widget content is refused where the model lacks the image mode', () => {
+  const ui = new WebUIServer(undefined, [], 'real', new PersistedSettings(TEST_SETTINGS_ROOT));
+  ui.settings.getOrCreateIdentity('fake-device-0', 'Dock');
+  ui.notifyDocks([{ ...fakeDockStatus(0), smallWindowModes: [0, 1, 203] }]);
+  const r = ui.wideKey.trySet({ config: { content: 'widget' } });
+  assert.ok('error' in r && r.status === 400);
+});
+
+test('wide key set: unknown keys are dropped and statsPlugin "" clears the plugin', () => {
+  const { ui, stored } = wideKeyUi();
+  ui.wideKey.trySet({ config: { statsPlugin: 'cpu.sh', bogus: 1 } });
+  assert.deepEqual(stored(), { statsPlugin: 'cpu.sh' });
+  ui.wideKey.trySet({ config: { content: 'dial', statsPlugin: '' } });
+  assert.deepEqual(stored(), { content: 'dial' });
+});
+
+test('wide key: a model without an info window answers 409 and persists nothing', () => {
+  const { ui, changed, stored } = wideKeyUi(false);
+  const view = ui.wideKey.view();
+  assert.ok('error' in view && view.status === 409);
+  const r = ui.wideKey.trySet({ config: { content: 'dial' } });
+  assert.ok('error' in r && r.status === 409);
+  assert.equal(stored(), undefined);
+  assert.equal(changed.length, 0);
+});
+
+test('a settings import with devices[].wideKey emits wideKeyChanged with no index', () => {
+  const { ui, changed, stored } = wideKeyUi();
+  ui.settingsFile.applyJson(
+    JSON.stringify({
+      devices: [
+        { ...deviceEntry('fake-device-0', {}), wideKey: { content: 'dial', press: 'none' } },
+      ],
+    }),
+  );
+  assert.deepEqual(stored(), { content: 'dial', press: 'none' });
+  assert.deepEqual(changed, [[]], 'every dock reloads, not just the selected one');
 });
 
 // Summary

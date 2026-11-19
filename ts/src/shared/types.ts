@@ -23,6 +23,13 @@ export type {
   StandbySettings,
   StandbyView,
 } from '../web/contract-standby.js';
+export type {
+  ResolvedWideKey,
+  WideKeyConfig,
+  WideKeyHourFormat,
+  WideKeyPress,
+  WideKeyView,
+} from '../web/contract-wide-key.js';
 
 export const ELGATO_MK2_PID = 0x00a5;
 export const ELGATO_PLUS_PID = 0x0084;

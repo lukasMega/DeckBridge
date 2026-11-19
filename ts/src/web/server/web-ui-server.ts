@@ -46,6 +46,8 @@ import { VirtualDeckController } from './virtual-deck/virtual-deck-controller.js
 import { handlePushApi, isPushApiPath } from './push-routes.js';
 import { ElgatoAppController } from './elgato-app-controller.js';
 import { StandbyController } from './standby-controller.js';
+import { WideKeyController } from './wide-key-controller.js';
+import type { WideKeyStatsFn } from './wide-key-controller.js';
 import { ExtensionsController } from './extensions-controller.js';
 import { WslRelayController } from './wsl-relay-controller.js';
 import { PairingRouteController } from './pairing-route-controller.js';
@@ -79,6 +81,7 @@ export class WebUIServer extends EventEmitter implements WebUIController, WebUIC
   readonly settingsFile: SettingsFileController;
   readonly elgatoApp: ElgatoAppController;
   readonly standby: StandbyController;
+  readonly wideKey: WideKeyController;
   readonly push: PushController;
   readonly virtualDeck: VirtualDeckController;
   readonly extensions: ExtensionsController;
@@ -114,6 +117,13 @@ export class WebUIServer extends EventEmitter implements WebUIController, WebUIC
 
   setHidInventory(fn: HidInventoryFn): void {
     this.hidInventory = fn;
+  }
+
+  /** Injected by app.ts: the docks live in main, the info-window preview reads them here. */
+  private wideKeyStats: WideKeyStatsFn = () => undefined;
+
+  setWideKeyStats(fn: WideKeyStatsFn): void {
+    this.wideKeyStats = fn;
   }
 
   get port(): number {
@@ -190,6 +200,7 @@ export class WebUIServer extends EventEmitter implements WebUIController, WebUIC
     this.settingsFile = new SettingsFileController(host, this.logging);
     this.elgatoApp = new ElgatoAppController(host);
     this.standby = new StandbyController(host);
+    this.wideKey = new WideKeyController(host, (dock) => this.wideKeyStats(dock));
     this.push = new PushController(host, () => this.dockRegistry.list());
     this.virtualDeck = new VirtualDeckController(host, this.push);
     this.extensions = new ExtensionsController(host, { appStartedAt: this.startTime });
@@ -209,6 +220,7 @@ export class WebUIServer extends EventEmitter implements WebUIController, WebUIC
       settingsFile: this.settingsFile,
       elgatoApp: this.elgatoApp,
       standby: this.standby,
+      wideKey: this.wideKey,
       push: this.push,
       virtualDeck: this.virtualDeck,
       extensions: this.extensions,

@@ -9,6 +9,7 @@ import type { CoraDock } from './cora-dock.js';
 import type { ImageFormat } from './dock-frames.js';
 import type { DeviceInfo, DockIdentity } from './dock-status.js';
 import type { StandbyInput } from './dock-standby.js';
+import type { StatsSampler } from './wide-key-stats.js';
 import type { StandbyClock, StandbyTiming } from './standby-policy.js';
 
 /** Where a dock reports out. All optional: a dock without a WebUI mirror just runs. */
@@ -57,4 +58,6 @@ export interface DockOptions {
   /** Test seams for the standby timers; production passes neither. */
   standbyClock?: StandbyClock;
   standbyTiming?: StandbyTiming;
+  /** Test seam for the info window's host sampler; production uses the shared one. */
+  hostStats?: StatsSampler;
 }

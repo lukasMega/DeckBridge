@@ -7,11 +7,14 @@ import { DEFAULT_TOUCH_STRIP_MODE, TOUCH_STRIP_REPAINT_DEFAULT_MS } from '../sha
 import type {
   EncoderSettings,
   ExtraKeyConfig,
+  ResolvedWideKey,
   StandbySettings,
   TouchStripMode,
+  WideKeyConfig,
 } from '../shared/types.js';
 import type { PageDefinition } from '../shared/page-config.js';
 import { resolveStandby } from '../shared/standby-settings.js';
+import { resolveWideKey } from '../shared/wide-key.js';
 
 export const DEFAULT_BRIGHTNESS_OVERRIDE = true;
 
@@ -111,6 +114,17 @@ export class DockPrefs {
     return resolveStandby(this.standbyStored());
   }
 
+  /** What is persisted for the info window, unresolved; undefined = no entry (the WebUI
+   *  POST merges into it, and a dock with no entry sends the firmware default untouched). */
+  wideKeyStored(): Partial<WideKeyConfig> | undefined {
+    return this.entry()?.wideKey;
+  }
+
+  /** The info window's effective config, read live. */
+  wideKey(): ResolvedWideKey {
+    return resolveWideKey(this.wideKeyStored());
+  }
+
   setBrightnessOverride(enabled: boolean): void {
     this.write(
       (e) => (e.brightnessOverride = enabled),
@@ -152,6 +166,17 @@ export class DockPrefs {
       },
       (r) => (r.standby = s),
     );
+  }
+
+  /** Persist-only like setExtraKeyConfigs: the info window needs a device entry. False
+   *  when there is none; an empty object clears the field. */
+  setWideKey(config: Partial<WideKeyConfig>): boolean {
+    const e = this.entry();
+    if (!e) return false;
+    if (Object.keys(config).length > 0) e.wideKey = config;
+    else delete e.wideKey;
+    this.store.persist();
+    return true;
   }
 
   /** Persist-only: extra keys need a device entry. False when there is none. */

@@ -91,10 +91,81 @@ await test('slots without an image are OMITTED, not emitted empty', () => {
   assert.equal(m['1_0'], undefined, 'the image-less slot must be absent');
 });
 
+await test('the manifest carries whichever firmware mode the page is built with', () => {
+  for (const mode of [0, 1, 2, 200, 201, 202, 203]) {
+    const m = JSON.parse(buildManifest([], { ...OPTS, smallWindowMode: mode })) as Record<
+      string,
+      { SmallViewMode?: number }
+    >;
+    assert.equal(m['3_2']!.SmallViewMode, mode);
+  }
+});
+
 await test('the wide info-window entry is always present and carries SmallViewMode', () => {
   const m = JSON.parse(buildManifest([], OPTS)) as Record<string, { SmallViewMode?: number }>;
   assert.notEqual(m['3_2'], undefined);
   assert.equal(m['3_2']!.SmallViewMode, 203);
+});
+
+// Mode 2 shows a host image: the wide entry then carries it as its Icon (plan Phase 4).
+
+interface WideEntry {
+  SmallViewMode: number;
+  ViewParam: Array<{ Icon?: string; Font: unknown; Text: string }>;
+}
+
+await test('mode 2 + a slot-13 image puts the image on the wide entry as its Icon', () => {
+  const png = fakePng(9, 120);
+  const json = buildManifest([{ slotId: 13, png }], { ...OPTS, smallWindowMode: 2 });
+  const wide = (JSON.parse(json) as Record<string, WideEntry>)['3_2']!;
+  assert.equal(wide.SmallViewMode, 2);
+  assert.equal(wide.ViewParam[0]!.Icon, iconName(13, 0, png));
+  const names = readZip(buildPageZip([{ slotId: 13, png }], { ...OPTS, smallWindowMode: 2 })).map(
+    (e) => e.name,
+  );
+  assert.deepEqual(names, ['manifest.json', iconName(13, 0, png), 'sentinel.txt']);
+});
+
+await test('mode 2 with no image keeps the bare wide entry', () => {
+  const wide = (
+    JSON.parse(buildManifest([], { ...OPTS, smallWindowMode: 2 })) as Record<string, WideEntry>
+  )['3_2']!;
+  assert.equal(wide.ViewParam[0]!.Icon, undefined);
+});
+
+await test('in every other mode a slot-13 image is left out, so the page is unchanged', () => {
+  for (const mode of [0, 1, 200, 201, 202, 203]) {
+    const opts = { ...OPTS, smallWindowMode: mode };
+    const plain = buildManifest([{ slotId: 0, png: fakePng(1) }], opts);
+    const withWide = buildManifest(
+      [
+        { slotId: 0, png: fakePng(1) },
+        { slotId: 13, png: fakePng(9) },
+      ],
+      opts,
+    );
+    assert.equal(withWide, plain, `mode ${mode}: manifest`);
+    assert.deepEqual(
+      readZip(
+        buildPageZip(
+          [
+            { slotId: 0, png: fakePng(1) },
+            { slotId: 13, png: fakePng(9) },
+          ],
+          opts,
+        ),
+      ).map((e) => e.name),
+      readZip(buildPageZip([{ slotId: 0, png: fakePng(1) }], opts)).map((e) => e.name),
+      `mode ${mode}: entries`,
+    );
+  }
+});
+
+await test('the default page (mode 203, no wide image) is byte-identical to its manifest of old', () => {
+  assert.equal(
+    buildManifest([{ slotId: 0, png: fakePng(1) }], OPTS),
+    `{"0_0":{"State":0,"ViewParam":[{"Icon":"${iconName(0, 0, fakePng(1))}","Font":${JSON.stringify(DEFAULT_FONT)},"Text":""}]},"3_2":{"State":0,"SmallViewMode":203,"ViewParam":[{"Font":${JSON.stringify(DEFAULT_FONT)},"Text":""}]}}`,
+  );
 });
 
 // DeckBridge routes every press itself over CORA; a firmware Action would

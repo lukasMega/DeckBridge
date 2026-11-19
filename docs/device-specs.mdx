@@ -899,6 +899,8 @@ mk2 index → wire image id  (5×3, row-major)
    0   1   2   3   4       0   1   2   3   4
    5   6   7   8   9       5   6   7   8   9
   10  11  12  13  14      10  11  12  -1  -1
+
+  extra keys (outside the CORA grid): 13
 ```
 
 ```js
@@ -935,6 +937,9 @@ keyMap: {
     11,
     12,
     -1
+  ],
+  "extraKeys": [
+    13
   ]
 }
 cora: {
@@ -954,7 +959,13 @@ capabilities: {
     "configured": null,
     "effective": false
   },
-  "widgetDisplays": [],
+  "widgetDisplays": [
+    {
+      "wireId": 13,
+      "size": "458×196",
+      "label": "Info window"
+    }
+  ],
   "touchStripDisplay": null,
   "extraKeyInputs": null,
   "emulations": [],

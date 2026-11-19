@@ -2,7 +2,8 @@
 
 A **plugin widget** shows the value returned by a small JavaScript file you write, on one
 of a deck's display-only side keys or device-native display zones. The plugin polls, fetches
-or computes a short string, and DeckBridge renders it as centered text.
+or computes a short string, and DeckBridge renders it as centered text. A plugin can also
+feed the [Ulanzi D200 info window](#d200-info-window)'s stats.
 
 Plugins run in a **dedicated worker thread**, isolated from the network ACK loop, so a
 slow, looping, or throwing plugin can never stall image delivery or the web UI.
@@ -94,6 +95,69 @@ Failure handling:
   repeated respawns in a row (a crash-looping plugin), plugins are **disabled** (`ERR`)
   until you change the key's configuration — this stops a broken plugin from burning
   CPU.
+
+## D200 info window
+
+The Ulanzi D200's wide bottom-right slot is set in the **Info window** section of the main
+page, below the key preview. The section appears for the D200 only once it is paired; a D200X
+has a real key there, so it gets none. The setting is stored per device and is the same on
+every Elgato page. A preview tile beside the fields follows it live: the clock ticks in your
+browser, **Stats** shows the figures the device was last sent, and **Widget** shows the
+painted image. It is an approximation of the firmware's own look.
+
+| Setting          | Options                                                                                                                                                            |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **Content**      | **Clock** (firmware clock; style and 12/24-hour), **Dial**, **Stats** (CPU, memory and GPU), or **Widget** (a DeckBridge widget shown as the window's background). |
+| **Sends to**     | **Elgato key 14** or **Elgato key 15** (the press reaches the Elgato app as that key), **DeckBridge action** (refresh or command, as on side keys), or **Nothing**. |
+
+The default is the 24-hour clock with a press that does nothing, which is what DeckBridge
+showed before this card existed. Changes apply at once, with no reconnect.
+
+**Widget** offers the same widgets, text style and press action as the
+[side keys](./side-keys.md), edited in the card itself. It belongs to the device, not to an
+Elgato page: it is not part of a saved page's layout and does not appear in the page editor.
+DeckBridge paints it only while **Content** is **Widget**. **DeckBridge action** works with
+any content.
+
+### Stats plugin
+
+With **Content** set to **Stats**, **Source** picks the built-in figures or a plugin file. A
+stats plugin follows the [contract above](#the-plugin-contract), but its `fetch` returns a
+**JSON string** (it counts against the 256-character cap):
+
+```js
+// <plugins dir>/mystats.js
+export default {
+  interval: 2000,
+  async fetch(ctx) {
+    const res = await ctx.fetch('http://nas.local/stats');
+    const { load, gpuLoad } = await res.json();
+    return JSON.stringify({ cpu: load, gpu: gpuLoad }); // mem omitted: built-in value
+  },
+};
+```
+
+- `cpu`, `mem` and `gpu` are numbers from 0 to 100. DeckBridge rounds them to whole
+  percents and clamps values outside the range.
+- Each field overrides the built-in value on its own. A field you leave out keeps the
+  built-in one, so a plugin can supply only `gpu`.
+- Invalid JSON, a non-numeric field, or none of the three fields: DeckBridge ignores the
+  whole reply, shows the built-in values, and logs one warning per plugin file. A `null`
+  reply, or no reply yet, also shows the built-in values.
+
+### Built-in stats sources
+
+DeckBridge samples every 2 s, only while a connected D200 shows **Stats**. GPU is always 0
+unless a plugin supplies it.
+
+| OS      | Source                                                                  | Caveats                                                                                                                                                                                                          |
+| ------- | ----------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Linux   | `/proc/stat` and `/proc/meminfo`                                        | Memory is RAM minus `MemAvailable`.                                                                                                                                                                              |
+| macOS   | One long-lived `top -l 0 -s 2` process                                  | CPU is user plus system. Memory is `top`'s "used", which counts inactive cached pages, so it reads high. `top` rounds large figures to whole GB, so memory moves in steps of about 3% on a 16 GB Mac.            |
+| Windows | One long-lived `typeperf -si 2` process (processor time, committed memory) | Memory is the **committed** percentage (commit charge against the commit limit), not physical RAM in use. `typeperf` resolves English counter names only, so on a localized Windows the window shows 0 and the log has one warning. Use a stats plugin there. |
+
+If a tool is missing or its output cannot be parsed, the affected figures read 0 and one
+warning is logged.
 
 ## Limitations
 

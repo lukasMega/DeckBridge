@@ -11,6 +11,7 @@ import { PairingAddressLink } from './pairing-address-modal.js';
 import { pressKey } from './handlers.js';
 import { Brightness } from './controls.js';
 import { ExtraKeysPanel } from './extra-keys-panel.js';
+import { WideKeyPanel } from './wide-key-panel.js';
 import { rovingTabKey } from '../lib/roving-tabs.js';
 import { GhostButton } from '../components/GhostButton.js';
 import { VerifyOffer } from './verify-wizard/verify-entry.js';
@@ -108,7 +109,12 @@ function DockCard({
             {showAddressHelp && !autoRestarting && <PairingAddressLink initialDock={dock.index} />}
           </>
         ))}
-      {dock.elgatoConnected && <ExtraKeysPanel />}
+      {dock.elgatoConnected && (
+        <>
+          <ExtraKeysPanel />
+          <WideKeyPanel />
+        </>
+      )}
     </div>
   );
 }
