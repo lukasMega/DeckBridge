@@ -96,6 +96,11 @@ export class UlanziPage {
     return { slots, full };
   }
 
+  /** The image last sent for `slotId`, if any. */
+  sent(slotId: number): Uint8Array | undefined {
+    return this.lastSent.get(slotId);
+  }
+
   /** Commit a batch that was written successfully. */
   onFlushed(batch: PageBatch): void {
     for (const slot of batch.slots) {

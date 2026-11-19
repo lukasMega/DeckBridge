@@ -35,6 +35,7 @@ import {
 } from './ulanzi-protocol.js';
 import { UlanziPage, FlushScheduler, splitBySize } from './ulanzi-page.js';
 import { buildSafePageZip } from './ulanzi-zip.js';
+import type { PageSlot } from './ulanzi-zip.js';
 import type { PageBatch } from './ulanzi-page.js';
 
 /** How long open() lets the read loop run before the first page. Hardware-proved
@@ -242,15 +243,28 @@ export class UlanziDriver extends HidDeviceBase {
       // SET_BUTTONS replaces the grid, so only the first group may use it; the
       // rest merge in via PARTIAL_UPDATE. Without partial updates there is no
       // safe way to split, so the page goes out whole.
-      const groups = splitBySize(batch.slots, this.spec.partialUpdates ? this.spec.maxZipBytes : 0);
+      // Every ZIP's manifest has the window entry, and one without its Icon blanks the window
+      // in mode 2: each group carries the window image, and the split leaves room for it.
+      const wide = this.windowImage(batch.slots);
+      const keys = wide ? batch.slots.filter((s) => s.slotId !== wide.slotId) : batch.slots;
+      const room = this.spec.maxZipBytes - (wide?.png?.length ?? 0);
+      const groups = splitBySize(keys, this.spec.partialUpdates ? Math.max(1, room) : 0);
       groups.forEach((slots, i) => {
-        this.writePage({ slots, full: batch.full && i === 0 });
+        this.writePage({ slots: wide ? [...slots, wide] : slots, full: batch.full && i === 0 });
       });
       this.page.onFlushed(batch);
       this.modeDirty = false;
     } catch (err) {
       this.emit('error', err instanceof Error ? err : new Error(String(err)));
     }
+  }
+
+  /** The window's image for this flush (staged, else last sent), only in mode 2. */
+  private windowImage(slots: readonly PageSlot[]): PageSlot | undefined {
+    if (this.wideSlot === undefined || this.smallMode !== WIDE_KEY_IMAGE_MODE) return undefined;
+    const staged = slots.find((s) => s.slotId === this.wideSlot);
+    const png = staged?.png ?? this.page.sent(this.wideSlot);
+    return png ? { slotId: this.wideSlot, png } : undefined;
   }
 
   private writePage(batch: PageBatch): void {
