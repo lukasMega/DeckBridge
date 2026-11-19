@@ -267,6 +267,40 @@ test('clearing the widget in mode 2 stages the black fill; the real keys are unt
   assert.ok(text.includes('Images/13_') && text.includes('"0_0"'));
 });
 
+const WINDOW_ICON = '"SmallViewMode":2,"ViewParam":[{"Icon"';
+const count = (text: string, part: string): number => text.split(part).length - 1;
+
+test('a partial page in mode 2 re-sends the window image, so the window never blanks', () => {
+  const { driver, writes, i } = rig();
+  driver.setSmallWindow(2, '24H');
+  driver.sendImage(13, WIDE_PNG);
+  flushed(writes, i);
+  driver.sendImage(0, PNG);
+  const text = flushed(writes, i);
+  assert.equal(framed(writes, CMD.PARTIAL_UPDATE).length, 1);
+  assert.ok(text.includes('"0_0"'));
+  assert.equal(count(text, WINDOW_ICON), 1, 'the window entry keeps its Icon');
+});
+
+test('a split partial page carries the window image in every ZIP', () => {
+  const { driver, writes, i } = rig();
+  driver.setSmallWindow(2, '24H');
+  driver.sendImage(13, WIDE_PNG);
+  flushed(writes, i);
+  for (let k = 0; k < 13; k++) driver.sendImage(k, new Uint8Array(20_000).fill(0x41 + k));
+  const text = flushed(writes, i);
+  const zips = framed(writes, CMD.PARTIAL_UPDATE).length;
+  assert.ok(zips >= 2, `split into ${zips}`);
+  assert.equal(count(text, WINDOW_ICON), zips);
+});
+
+test('outside mode 2 a partial page adds no window image', () => {
+  const { driver, writes, i } = rig();
+  flushed(writes, i);
+  driver.sendImage(0, PNG);
+  assert.ok(!flushed(writes, i).includes('Images/13_'));
+});
+
 test('the 0x0303 reply names the unit: DeviceType is kept next to the firmware', () => {
   const { driver, i } = rig();
   assert.equal(driver.deviceType, undefined);

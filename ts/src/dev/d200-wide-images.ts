@@ -30,7 +30,7 @@ const BLUE: Rgb = [40, 80, 255];
 const YELLOW: Rgb = [240, 220, 0];
 
 // 3x5 pixel font: digits and 'x' are all a size label needs.
-const GLYPHS: Record<string, readonly string[]> = {
+export const GLYPHS: Record<string, readonly string[]> = {
   '0': ['###', '# #', '# #', '# #', '###'],
   '1': [' # ', '## ', ' # ', ' # ', '###'],
   '2': ['###', '  #', '###', '#  ', '###'],
