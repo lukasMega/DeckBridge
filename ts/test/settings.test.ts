@@ -217,6 +217,9 @@ await test('DockPrefs.wideKey(): default with no entry, persisted write, empty c
     clockMode: 203,
     hourFormat: '24H',
     press: 'none',
+    elgatoSource: 'both',
+    elgatoImages: 'ignore',
+    overrideMs: 5000,
   });
   assert.equal(settings.for('usb:NONE').wideKeyStored(), undefined);
   assert.equal(settings.for('usb:NONE').setWideKey({ content: 'dial' }), false, 'needs an entry');

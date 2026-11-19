@@ -84,6 +84,9 @@ test.describe('Ulanzi D200 info window (mock)', () => {
       clockMode: 203,
       hourFormat: '24H',
       press: 'none',
+      elgatoSource: 'both',
+      elgatoImages: 'ignore',
+      overrideMs: 5000,
     });
     expect(view.json.contents).toEqual(['clock', 'dial', 'stats', 'widget', 'elgato']);
     expect(view.json.clockModes).toEqual([200, 201, 202, 203]);
