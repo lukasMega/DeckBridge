@@ -12,8 +12,14 @@ import {
   hasWideWindow,
   sideExtraKeys,
   wideKeyWire,
+  wideWindowElgato,
 } from '../src/shared/wide-key.js';
-import { WideKeyInput, paintedConfig, withWideKeyPress } from '../src/main/dock-wide-key.js';
+import {
+  WideKeyElgato,
+  WideKeyInput,
+  paintedConfig,
+  withWideKeyPress,
+} from '../src/main/dock-wide-key.js';
 import { deviceInputToExtraKey, deviceInputToMk2Index } from '../src/shared/key-map.js';
 import { ULANZI_D200_MODEL } from '../src/devices/ulanzi/ulanzi-d200.js';
 import { DEFAULT_MODEL } from '../src/devices/registry.js';
@@ -21,7 +27,7 @@ import { MIRABOX_293S_MODEL } from '../src/devices/mirabox/mirabox-293s.js';
 import { stripDisplays } from '../src/devices/driver.js';
 import type { DeviceModel } from '../src/devices/driver.js';
 import type { DockPrefs } from '../src/infra/dock-prefs.js';
-import type { WideKeyPress } from '../src/shared/types.js';
+import type { WideKeyConfig, WideKeyPress } from '../src/shared/types.js';
 import { test, summary } from './helpers/harness.js';
 
 console.log('\nwide-key');
@@ -35,6 +41,9 @@ test('no entry resolves to the firmware clock DeckBridge always showed', () => {
     clockMode: 203,
     hourFormat: '24H',
     press: 'none',
+    elgatoSource: 'both',
+    elgatoImages: 'ignore',
+    overrideMs: 5000,
   });
   assert.equal(wideKeyFirmwareMode(resolveWideKey(undefined), PAGE), PAGE.smallWindowMode);
   assert.equal(wideKeyError({}), null);
@@ -59,6 +68,10 @@ const bad: Array<[string, unknown]> = [
   ['statsPlugin empty', { statsPlugin: '' }],
   ['statsPlugin number', { statsPlugin: 5 }],
   ['statsPlugin too long', { statsPlugin: 'x'.repeat(257) }],
+  ['elgatoSource elgato-15', { elgatoSource: 'elgato-15' }],
+  ['elgatoImages always', { elgatoImages: 'always' }],
+  ['overrideMs below 1 s', { overrideMs: 999 }],
+  ['overrideMs fraction', { overrideMs: 1500.5 }],
   ['array', []],
   ['null', null],
 ];
@@ -70,7 +83,7 @@ for (const [name, v] of bad) {
 
 test('wideKeyError ignores unknown keys and accepts every documented value', () => {
   assert.equal(wideKeyError({ somethingElse: 1 }), null);
-  for (const content of ['clock', 'dial', 'stats', 'widget']) {
+  for (const content of ['clock', 'dial', 'stats', 'widget', 'elgato']) {
     assert.equal(wideKeyError({ content }), null, content);
   }
   for (const press of ['elgato-13', 'elgato-14', 'deckbridge', 'none']) {
@@ -95,7 +108,7 @@ test('the widget content is accepted where the model lists the image mode', () =
 
 test('wideKeyChoices follows the model list', () => {
   assert.deepEqual(wideKeyChoices(MODES), {
-    contents: ['clock', 'dial', 'stats', 'widget'],
+    contents: ['clock', 'dial', 'stats', 'widget', 'elgato'],
     clockModes: [200, 201, 202, 203],
   });
   assert.deepEqual(wideKeyChoices([0, 1]), { contents: ['dial', 'stats'], clockModes: [] });
@@ -108,6 +121,7 @@ test('wideKeyFirmwareMode maps content to the firmware mode', () => {
   assert.equal(modeFor({ content: 'stats' }), 0);
   assert.equal(modeFor({ content: 'dial' }), 1);
   assert.equal(modeFor({ content: 'widget' }), 2);
+  assert.equal(modeFor({ content: 'elgato' }), 2);
   assert.equal(modeFor({ content: 'clock', clockMode: 201 }), 201);
   assert.equal(modeFor({ content: 'clock' }), 203);
 });
@@ -275,6 +289,56 @@ test('paintedConfig gates only the window: its widget paints only for content wi
     'another key passes through',
   );
   assert.equal(paintedConfig(MIRABOX_293S_MODEL, prefs(), 16, cfg), cfg, 'other models too');
+});
+
+test('content elgato is offered on the D200 and shows a mode-2 image', () => {
+  assert.ok(wideKeyChoices(MODES).contents.includes('elgato'));
+  assert.equal(wideKeyFirmwareMode(resolveWideKey({ content: 'elgato' }), PAGE), 2);
+  assert.equal(wideKeyError({ content: 'elgato', elgatoSource: 'elgato-14' }, MODES), null);
+});
+
+const at = (cfg: Partial<WideKeyConfig>) => wideWindowElgato(resolveWideKey(cfg));
+
+test('wideWindowElgato: cells per source, drawn for elgato and for a widget under override', () => {
+  assert.deepEqual(at({ content: 'elgato' }), { cells: [13, 14], show: true });
+  assert.deepEqual(at({ content: 'elgato', elgatoSource: 'elgato-14' }), {
+    cells: [14],
+    show: true,
+  });
+  assert.deepEqual(at({ content: 'widget' }), { cells: [13, 14], show: false }, 'ignore keeps');
+  assert.deepEqual(at({ content: 'widget', elgatoImages: 'override', elgatoSource: 'elgato-13' }), {
+    cells: [13],
+    show: true,
+  });
+  assert.deepEqual(at({ content: 'clock' }), { cells: [], show: false });
+});
+
+test('WideKeyElgato: content elgato always yields; override only within overrideMs of a source frame', () => {
+  let cfg: Partial<WideKeyConfig> = { content: 'elgato' };
+  const prefs = { wideKey: () => resolveWideKey(cfg) } as unknown as DockPrefs;
+  const w = new WideKeyElgato(
+    () => ULANZI_D200_MODEL,
+    () => prefs,
+  );
+  assert.equal(w.yields(WIRE, 0), true);
+  assert.equal(w.yields(5, 0), false, 'only the window');
+  cfg = { content: 'widget', elgatoImages: 'override', overrideMs: 2000 };
+  assert.equal(w.yields(WIRE, 0), false, 'no frame yet: the widget shows');
+  w.noteFrame(3, 1000);
+  assert.equal(w.yields(WIRE, 1000), false, 'a frame of another key does not count');
+  w.noteFrame(14, 1000);
+  assert.equal(w.yields(WIRE, 2999), true);
+  assert.equal(w.yields(WIRE, 3000), false, 'the widget returns after overrideMs');
+  cfg = { content: 'widget', elgatoImages: 'ignore' };
+  w.noteFrame(14, 5000);
+  assert.equal(w.yields(WIRE, 5001), false, 'ignore never yields');
+  assert.equal(
+    new WideKeyElgato(
+      () => ULANZI_D200_MODEL,
+      () => undefined,
+    ).yields(WIRE, 0),
+    false,
+  );
 });
 
 summary();

@@ -103,11 +103,13 @@ page, below the key preview. The section appears for the D200 only once it is pa
 has a real key there, so it gets none. The setting is stored per device and is the same on
 every Elgato page. A preview tile beside the fields follows it live: the clock ticks in your
 browser, **Stats** shows the figures the device was last sent, and **Widget** shows the
-painted image. It is an approximation of the firmware's own look.
+painted image (**Elgato app** shows a label only). It is an approximation of the firmware's own look.
 
 | Setting          | Options                                                                                                                                                            |
 | ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| **Content**      | **Clock** (firmware clock; style and 12/24-hour), **Dial**, **Stats** (CPU, memory and GPU), or **Widget** (a DeckBridge widget shown as the window's background). |
+| **Content**      | **Clock** (firmware clock; style and 12/24-hour), **Dial**, **Stats** (CPU, memory and GPU), **Widget** (a DeckBridge widget shown as the window's background), or **Elgato app** (the app's images of keys 14 and 15). |
+| **Elgato images** | Widget only. **Ignore** (the widget always shows) or **Show, then widget**: an Elgato image of a source key shows, and the widget comes back **Widget after (s)** seconds (1 to 3600, default 5) after the last one, like the AKP05 strip's repaint mode. |
+| **Source**       | Elgato app, or a widget that shows Elgato images. **Keys 14 + 15** side by side, as the cells sit under the window, or **Key 14** / **Key 15** alone, centred. |
 | **Sends to**     | **Elgato key 14** or **Elgato key 15** (the press reaches the Elgato app as that key), **DeckBridge action** (refresh or command, as on side keys), or **Nothing**. |
 
 The default is the 24-hour clock with a press that does nothing, which is what DeckBridge
@@ -118,6 +120,10 @@ showed before this card existed. Changes apply at once, with no reconnect.
 Elgato page: it is not part of a saved page's layout and does not appear in the page editor.
 DeckBridge paints it only while **Content** is **Widget**. **DeckBridge action** works with
 any content.
+
+The Elgato app draws keys 14 and 15 as usual; DeckBridge scales each to a key and places
+it in the window. Changing **Content** or **Source** redraws the app's last images at once,
+so a static icon does not wait for the app to send it again.
 
 ### Stats plugin
 

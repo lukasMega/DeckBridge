@@ -2831,8 +2831,16 @@ function fakeIntervals(): {
 
 const WIDE_KEY_VIEW: WideKeyView = {
   dock: 0,
-  config: { content: 'clock', clockMode: 203, hourFormat: '24H', press: 'none' },
-  contents: ['clock', 'dial', 'stats', 'widget'],
+  config: {
+    content: 'clock',
+    clockMode: 203,
+    hourFormat: '24H',
+    press: 'none',
+    elgatoSource: 'both',
+    elgatoImages: 'ignore',
+    overrideMs: 5000,
+  },
+  contents: ['clock', 'dial', 'stats', 'widget', 'elgato'],
   clockModes: [200, 201, 202, 203],
   presses: ['elgato-13', 'elgato-14', 'deckbridge', 'none'],
 };
@@ -2948,7 +2956,7 @@ async function runWideKeyPanel(): Promise<void> {
     check(
       Array.from(selectIn('wide-key-content')!.options)
         .map((o) => o.value)
-        .join() === 'clock,dial,stats,widget',
+        .join() === 'clock,dial,stats,widget,elgato',
       'Content lists only what the model can show',
     );
     check(selectIn('wide-key-hour-format')?.value === '24H', 'Clock shows the hour format');

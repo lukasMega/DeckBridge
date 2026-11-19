@@ -47,6 +47,8 @@ export type ExtraKeyWidgetsOptions = Partial<SourceSeams> & {
   /** Burn-in care: orbit DeckBridge's own text by 1 px; read live. */
   pixelShift?: () => boolean;
   pixelShiftPeriodMs?: number;
+  /** A standalone window showing the Elgato app's images now (D200 info window). */
+  yields?: (wireId: number, nowMs: number) => boolean;
 };
 
 /** How long a tap flash shows the inverted widget before the normal repaint. */
@@ -95,6 +97,7 @@ export class ExtraKeyWidgets {
   private readonly push: PushChannelsReader;
   private readonly pixelShift: () => boolean;
   private readonly pixelShiftPeriodMs: number;
+  private readonly yields: (wireId: number, nowMs: number) => boolean;
   /** Orbit offset of the tick in progress (null = off); flash() reuses the last one. */
   private shift: readonly [number, number] | null = null;
   /** Placeholder feedback: wire ids showing '…' until their tap refresh settles. */
@@ -119,6 +122,7 @@ export class ExtraKeyWidgets {
     this.push = options.push ?? pushChannels;
     this.pixelShift = options.pixelShift ?? (() => false);
     this.pixelShiftPeriodMs = options.pixelShiftPeriodMs ?? DEFAULT_TIMING.pixelShiftPeriodMs;
+    this.yields = options.yields ?? (() => false);
   }
 
   start(): void {
@@ -229,7 +233,8 @@ export class ExtraKeyWidgets {
     const cfg = this.configFor(wireId);
     if (!owns(cfg) || !this.widgetIds().includes(wireId)) return false;
     // A zone in its Elgato hold-off shows the app's image: refresh, but draw nothing.
-    const visible = !this.stripZone(wireId) || this.ownsZoneNow(wireId);
+    const shown = !this.stripZone(wireId) || this.ownsZoneNow(wireId);
+    const visible = shown && !this.yields(wireId, this.seams.now());
     const { flash, placeholder } = visible ? this.tapFeedback() : NO_FEEDBACK;
     if (flash) this.flash(wireId);
     const onSettled = placeholder ? (): void => this.endPlaceholder(wireId) : undefined;
@@ -310,14 +315,19 @@ export class ExtraKeyWidgets {
     this.shift = this.pixelShift() ? pixelShiftAt(now.getTime(), this.pixelShiftPeriodMs) : null;
     for (const wireId of widgetIds) {
       const cfg = this.configFor(wireId);
-      if (this.leftToApp(wireId, cfg, now.getTime())) continue;
-      const lines = this.linesFor(wireId, cfg, now);
-      const style = this.externalStyle(cfg, effectiveTextStyle(cfg), now.getTime());
-      const sig = lines === null ? '' : JSON.stringify([style, lines, this.shift]);
-      if (this.lastPainted.get(wireId) === sig) continue;
-      this.lastPainted.set(wireId, sig);
-      this.paint(wireId, lines, style);
+      // Forget the paint so the widget comes back when the Elgato images leave.
+      if (this.yields(wireId, now.getTime())) this.lastPainted.delete(wireId);
+      else if (!this.leftToApp(wireId, cfg, now.getTime())) this.paintIfChanged(wireId, cfg, now);
     }
+  }
+
+  private paintIfChanged(wireId: number, cfg: ExtraKeyConfig | undefined, now: Date): void {
+    const lines = this.linesFor(wireId, cfg, now);
+    const style = this.externalStyle(cfg, effectiveTextStyle(cfg), now.getTime());
+    const sig = lines === null ? '' : JSON.stringify([style, lines, this.shift]);
+    if (this.lastPainted.get(wireId) === sig) return;
+    this.lastPainted.set(wireId, sig);
+    this.paint(wireId, lines, style);
   }
 
   /** 'deckbridge-repaint' zones the widget must not paint this tick: unassigned ones

@@ -1,4 +1,4 @@
-// Live preview tile for the Ulanzi D200 info window (clock / stats / dial). The firmware draws
+// Live preview tile for the Ulanzi D200 info window (clock / stats / dial / Elgato app). The firmware draws
 // these itself, so this is text in the same wide shape, not its real look; the Widget content
 // has the server-painted image tile instead (side-key-card.tsx).
 import { useEffect, useState } from 'preact/hooks';
@@ -79,6 +79,7 @@ export function WideKeyPreview({
         {content === 'stats' && <LiveStats />}
         {content === 'dial' && <span class="wide-live-big">Dial</span>}
         {content === 'widget' && <span class="xkey-tile-empty">Widget</span>}
+        {content === 'elgato' && <span class="xkey-tile-empty">Elgato app</span>}
       </div>
     </div>
   );

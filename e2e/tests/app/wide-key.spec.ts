@@ -85,7 +85,7 @@ test.describe('Ulanzi D200 info window (mock)', () => {
       hourFormat: '24H',
       press: 'none',
     });
-    expect(view.json.contents).toEqual(['clock', 'dial', 'stats', 'widget']);
+    expect(view.json.contents).toEqual(['clock', 'dial', 'stats', 'widget', 'elgato']);
     expect(view.json.clockModes).toEqual([200, 201, 202, 203]);
     expect(view.json.presses).toEqual(['elgato-13', 'elgato-14', 'deckbridge', 'none']);
 
@@ -198,7 +198,13 @@ test.describe('Ulanzi D200 info window (mock)', () => {
       // The selects offer what the model lists, starting from the default.
       const content = page.locator('#wide-key-content');
       await expect(content).toHaveValue('clock');
-      await expect(content.locator('option')).toHaveText(['Clock', 'Dial', 'Stats', 'Widget']);
+      await expect(content.locator('option')).toHaveText([
+        'Clock',
+        'Dial',
+        'Stats',
+        'Widget',
+        'Elgato app',
+      ]);
       await expect(page.locator('#wide-key-hour-format')).toHaveValue('24H');
       await expect(page.locator('#wide-key-press')).toHaveValue('none');
       await expect(page.locator('#wide-key-stats-source')).toHaveCount(0);
@@ -234,6 +240,26 @@ test.describe('Ulanzi D200 info window (mock)', () => {
       await expect(tile).toHaveCount(0);
       await expect(section.locator('.xkey-tile')).toHaveCount(1);
       await expect(section.getByRole('group', { name: 'Widget side key' })).toHaveCount(1);
+
+      // Elgato images over the widget: Source and the hold-off appear only under 'override'.
+      await expect(page.locator('#wide-key-elgato-images')).toHaveValue('ignore');
+      await expect(page.locator('#wide-key-elgato-source')).toHaveCount(0);
+      const overridePosted = page.waitForRequest((r) => r.url().endsWith('/api/wide-key'));
+      await selectValue(page.locator('#wide-key-elgato-images'), 'override');
+      expect((await overridePosted).postDataJSON()).toEqual({
+        config: { elgatoImages: 'override' },
+      });
+      await expect(page.locator('#wide-key-elgato-source')).toHaveValue('both');
+      await expect(page.locator('#wide-key-override-s')).toHaveValue('5');
+
+      // Elgato app: Source only, no widget card.
+      await selectValue(content, 'elgato');
+      await expect(page.locator('#wide-key-elgato-images')).toHaveCount(0);
+      await expect(page.locator('#wide-key-override-s')).toHaveCount(0);
+      await selectValue(page.locator('#wide-key-elgato-source'), 'elgato-14');
+      await expect
+        .poll(async () => (await deviceEntry(request, base, KEY))?.wideKey)
+        .toMatchObject({ content: 'elgato', elgatoSource: 'elgato-14' });
       await selectValue(content, 'stats');
 
       // A fresh load reads the stored choice back from the server.

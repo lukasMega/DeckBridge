@@ -30,7 +30,7 @@ import { begin, settleAll } from './settle.js';
 import { LastFrames, wireDockImages } from './dock-frames.js';
 import { DockPages } from './dock-pages.js';
 import { createDockStandby, dialInput } from './dock-standby.js';
-import { paintedConfig, pushWideKey, WideKeyInput } from './dock-wide-key.js';
+import { paintedConfig, pushWideKey, WideKeyElgato, WideKeyInput } from './dock-wide-key.js';
 import { WideKeyStats } from './wide-key-stats.js';
 import type { DockStandby, StandbyInput } from './dock-standby.js';
 import {
@@ -73,6 +73,11 @@ export class Dock {
   private readonly standby: DockStandby;
   /** The key decoder's model: `model` + the info window's press routing. */
   private readonly wideInput = new WideKeyInput(() => this.identityPrefs());
+  /** When the info window shows Elgato images, so its widget stays off. */
+  private readonly wideElgato = new WideKeyElgato(
+    () => this.model,
+    () => this.identityPrefs(),
+  );
   /** Host stats for the info window while it shows them. */
   private readonly wideStats: WideKeyStats;
   /** Page-following side-key layouts: which saved Elgato page the deck shows. */
@@ -329,7 +334,10 @@ export class Dock {
    *  widget repaints after the mode push, so a new mode 2 is in place when its image lands. */
   reloadWideKey(): void {
     const type = this.deviceInfo?.deviceType;
-    if (this.driver) pushWideKey(this.driver, this.model, this.identityPrefs(), false, type);
+    if (this.driver) {
+      const cells = pushWideKey(this.driver, this.model, this.identityPrefs(), false, type);
+      this.frames.repaintKeys(this.driver, cells);
+    }
     this.wideStats.sync();
     this.widgets?.repaint();
     this.changed(); // the press routing decides which keys the status calls pressable
@@ -424,7 +432,10 @@ export class Dock {
     wireDockImages(child, {
       driver: () => this.driver,
       frames: this.frames,
-      onImage: this.hooks.image,
+      onImage: (key, data, format) => {
+        this.wideElgato.noteFrame(key, Date.now());
+        this.hooks.image?.(key, data, format);
+      },
       onAppFrame: () => this.standby.noteAppTraffic(),
       onTouchFrame: (region) => this.widgets?.noteTouchFrame(region),
       onTouchImage: this.hooks.touchImage,
@@ -569,7 +580,11 @@ export class Dock {
       prefs.stripMode(),
       () => prefs.repaintMs(),
       this.hooks.widgetPaint,
-      { tapFeedback: () => prefs.tapFeedback(), pixelShift: () => prefs.standby().pixelShift },
+      {
+        tapFeedback: () => prefs.tapFeedback(),
+        pixelShift: () => prefs.standby().pixelShift,
+        yields: (wireId, nowMs) => this.wideElgato.yields(wireId, nowMs),
+      },
     );
     this.widgets.start();
   }

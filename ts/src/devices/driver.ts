@@ -376,6 +376,9 @@ export interface DockDriver extends DeviceDriver {
   /** Zone fit + upload policy for a full-strip model (settings.json, per dock). The
    *  worker resets them to the defaults on open. */
   setTouchStripOptions(options: TouchStripOptions): void;
+  /** Info window (D200): compose these MK.2 cells' Elgato images into display `wireId`,
+   *  drawn only while `show`. The worker resets it on open; MockDriver ignores it. */
+  setWideWindow?(wireId: number, cells: readonly number[], show: boolean): void;
   /** The options last set (defaults after open). */
   readonly touchStripOptions: TouchStripOptions;
   /** Live device-tuning swap — image-transform fields only, no reopen. The

@@ -192,6 +192,10 @@ export class WorkerHidDriver extends EventEmitter implements DockDriver {
     this.control({ type: 'setSmallWindow', mode, hourFormat });
   }
 
+  setWideWindow(wireId: number, cells: readonly number[], show: boolean): void {
+    this.control({ type: 'setWideWindow', wireId, cells: [...cells], show });
+  }
+
   setHostStats(cpu: number, mem: number, gpu: number): void {
     this.control({
       type: 'setHostStats',

@@ -12,8 +12,8 @@ const BUDGETS = {
   // WSL relay card for Stream Deck app 7.6.1 (2026-11-12); measured + 1%.
   // "Fix pairing" wizard for 7.6.1 + manual OrbStack route (2026-11-12): measured 202,410 + ~1 KB.
   // D200 info window card (2026-11-18, plan 2026-11-18_ulanzi-d200-wide-key.md Q6): measured
-  // 206,749 + 1%.
-  'ui.js': 208_800,
+  // 206,749 + 1%. Info window Elgato images (2026-11-19): measured 209,280 + 1%.
+  'ui.js': 211_370,
   'deck.js': 30_106,
   // Device verify wizard (2026-10-22); D200 info window card (2026-11-18): measured 37,448 + 1%.
   'css total': 37_830,
@@ -21,7 +21,8 @@ const BUDGETS = {
   // Ulanzi D200 page-protocol driver (2026-11-13), adaptive palette + ZIP digest cache
   // (2026-11-16), D200 firmware version via GET_DEVICE_INFO (2026-11-16): measured 61,793 + ~60 B.
   // D200 info window, live small-window mode + stats (2026-11-18): measured 63,995 + 1%.
-  'hid-worker': 64_640,
+  // Info window Elgato images, worker composite (2026-11-19): measured 65,284 + 1%.
+  'hid-worker': 65_940,
   // upHere 293V3 (2026-10-22), K1 Pro 0x5548 clone (2026-11-06), Ulanzi D200 (2026-11-13):
   // the registry grows the scan worker; measured + 1%. D200 info window model data
   // (2026-11-18): measured 12,272 + 1%.

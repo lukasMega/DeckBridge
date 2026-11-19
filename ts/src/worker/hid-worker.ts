@@ -16,6 +16,8 @@ import {
   TouchStripCanvas,
 } from '../transform/image-render.js';
 import { transformImageForDevice } from '../transform/translator.js';
+import { WideWindowCanvas } from '../transform/wide-window.js';
+import { hashJpeg } from '../shared/image-hash.js';
 import { setWorkerPost, setLogLevel, info } from '../shared/logger.js';
 
 const scope = globalThis as unknown as {
@@ -38,6 +40,8 @@ let openRegistryModel: DeviceModel | null = null;
 // The app's whole strip plus the zones DeckBridge widgets own ('setTouchStripMask'):
 // a partial window update lands in place, and masked zones are drawn but never sent.
 const touchCanvas = new TouchStripCanvas();
+// The info window's Elgato source cells ('setWideWindow'); their frames never reach a key.
+const wideCanvas = new WideWindowCanvas();
 
 async function handleOpen(
   modelId: string,
@@ -58,6 +62,7 @@ async function handleOpen(
   // here additionally frees the stale entries instead of letting them age out.
   imageCache.clear();
   touchCanvas.reset();
+  wideCanvas.reset();
   if (overrides) {
     info('worker', `${model.id} opened with overrides: ${overrideSummary(overrides)}`);
   }
@@ -112,7 +117,9 @@ function handleImage(
   deferNotification: boolean,
 ): RenderResult | undefined {
   if (!driver || !currentModel) return undefined;
-  const rendered = renderImage(driver, currentModel, keyIndex, bytes, format);
+  const rendered = wideCanvas.apply(driver, currentModel, keyIndex, bytes)
+    ? { hash: hashJpeg(bytes), cached: false }
+    : renderImage(driver, currentModel, keyIndex, bytes, format);
   if (!deferNotification) post({ type: 'imageSent', keyIndex, ...rendered });
   return rendered;
 }
@@ -170,8 +177,11 @@ function handlePanelMode(
 }
 
 /** Non-device state changes: no HID I/O, they only steer the next render. */
-function handleSetting(msg: Extract<MainToWorker, { type: 'setOverrides' | 'setLogLevel' }>): void {
+function handleSetting(
+  msg: Extract<MainToWorker, { type: 'setOverrides' | 'setLogLevel' | 'setWideWindow' }>,
+): void {
   if (msg.type === 'setOverrides') applyLiveOverrides(msg.overrides);
+  else if (msg.type === 'setWideWindow') wideCanvas.configure(msg.wireId, msg.cells, msg.show);
   else setLogLevel(msg.level);
 }
 
@@ -219,6 +229,7 @@ async function handle(msg: MainToWorker, deferNotification: boolean): Promise<vo
       currentModel = null;
       openRegistryModel = null;
       touchCanvas.reset();
+      wideCanvas.reset();
       await d?.close().catch(() => undefined);
       // Queued debug dumps are moot once closed; only an in-flight write is awaited.
       discardImageDumps();
@@ -226,7 +237,7 @@ async function handle(msg: MainToWorker, deferNotification: boolean): Promise<vo
       post({ type: 'closed' });
       break;
     }
-    // setOverrides / setLogLevel — no device I/O.
+    // setOverrides / setLogLevel / setWideWindow — no device I/O.
     default:
       handleSetting(msg);
   }

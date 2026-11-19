@@ -7,25 +7,58 @@ import {
   hasWideWindow,
   wideKeyFirmwareMode,
   wideKeyWire,
+  wideWindowElgato,
 } from '../shared/wide-key.js';
 import type { ExtraKeyConfig, WideKeyPress } from '../shared/types.js';
 
 /** `storedOnly`: attach pushes only an explicit entry, so a dock with none keeps sending
  *  exactly what it always did. A live change pushes the resolved config either way, so
  *  removing the entry (a settings import) puts the default back. A unit that reports a
- *  D200X (slot 13 is a real key there) gets nothing: the firmware default stays. */
+ *  D200X (slot 13 is a real key there) gets nothing: the firmware default stays. Returns
+ *  the Elgato cells the window composes, which the caller replays into the worker. */
 export function pushWideKey(
   driver: DockDriver,
   model: DeviceModel,
   prefs: DockPrefs | undefined,
   storedOnly: boolean,
   deviceType?: string,
-): void {
+): readonly number[] {
   const page = model.page;
-  if (!prefs || !page || !driver.setSmallWindow || !hasWideWindow(model, deviceType)) return;
-  if (storedOnly && prefs.wideKeyStored() === undefined) return;
+  const wire = wideKeyWire(model);
+  if (!prefs || !page || wire === undefined || !driver.setSmallWindow) return [];
+  if (!hasWideWindow(model, deviceType)) return [];
+  if (storedOnly && prefs.wideKeyStored() === undefined) return [];
   const cfg = prefs.wideKey();
   driver.setSmallWindow(wideKeyFirmwareMode(cfg, page), cfg.hourFormat);
+  const { cells, show } = wideWindowElgato(cfg);
+  driver.setWideWindow?.(wire, cells, show);
+  return cells;
+}
+
+/** When the info window shows the Elgato app's images instead of its widget: always under
+ *  content 'elgato'; under 'override' until `overrideMs` passes with no new source frame. */
+export class WideKeyElgato {
+  private lastFrameAt: number | undefined;
+
+  constructor(
+    private readonly model: () => DeviceModel,
+    private readonly prefs: () => DockPrefs | undefined,
+  ) {}
+
+  /** A CORA frame reached the device. */
+  noteFrame(keyIndex: number, nowMs: number): void {
+    const cfg = this.prefs()?.wideKey();
+    if (cfg && wideWindowElgato(cfg).cells.includes(keyIndex)) this.lastFrameAt = nowMs;
+  }
+
+  /** True = `wireId` is the window and it shows Elgato images now: no widget paints there. */
+  yields(wireId: number, nowMs: number): boolean {
+    const cfg = this.prefs()?.wideKey();
+    if (!cfg || wireId !== wideKeyWire(this.model())) return false;
+    if (cfg.content === 'elgato') return true;
+    if (!wideWindowElgato(cfg).show || this.lastFrameAt === undefined) return false;
+    return nowMs - this.lastFrameAt < cfg.overrideMs;
+  }
 }
 
 /** Elgato cell (MK.2 index) each press value forwards the window to. */
