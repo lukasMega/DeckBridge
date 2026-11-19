@@ -184,7 +184,7 @@ export class HostStatsSampler {
   }
 
   private set(key: 'cpu' | 'mem', value: number | null, line: string): void {
-    if (value === null) this.fail(`unparseable line: ${line.slice(0, 120)}`);
+    if (value === null) this.fail(`unparsable line: ${line.slice(0, 120)}`);
     this.latest[key] = value ?? 0;
   }
 
@@ -201,7 +201,7 @@ export class HostStatsSampler {
           ]);
           const ticks = parseProcStat(stat);
           const used = parseMeminfo(mem);
-          if (ticks === null || used === null) throw new Error('unrecognised /proc format');
+          if (ticks === null || used === null) throw new Error('unrecognized /proc format');
           this.latest.cpu = prev ? cpuPercent(prev, ticks) : 0;
           this.latest.mem = used;
           prev = ticks;
