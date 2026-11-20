@@ -34,6 +34,11 @@ your issue.
 - **My deck went dark** — *Screen off* (after idle or at night) or *When the Elgato app is
   away: Turn the screen off* is on. Press a key or turn a knob to wake it. Your brightness
   level is unchanged.
+- **The deck disappears from the Stream Deck app after I restart DeckBridge (relay)** — the
+  relay keeps the app's connection only for `--hold-seconds` (default 60). Start DeckBridge
+  again within that time. If the hold ran out, the relay log shows `hold expired`. Raise
+  `--hold-seconds` and restart the relay. Also check that the relay is still running. See
+  [Restarting DeckBridge](./elgato-same-computer.md#restart).
 - **D200 info window stats read 0 or look off** — on a non-English Windows the built-in
   sampler cannot read its counters and shows 0; on macOS memory counts inactive cache. See
   [D200 info window](./plugin-widgets.md#built-in-stats-sources), or supply the numbers with
