@@ -15,7 +15,7 @@ import { log, setWebUILog, setLogLevel, step } from '../shared/logger.js';
 import { startLogFile, stopLogFile, activeLogFilePath } from '../infra/log-file.js';
 import { logElgatoAppVersion } from '../infra/elgato-app.js';
 import { setupNativeLibs } from '../infra/native-libs.js';
-import { acquireInstanceLock } from '../infra/single-instance.js';
+import { acquireInstanceLock, alreadyRunningMessage } from '../infra/single-instance.js';
 import { DriverManager } from './driver-manager.js';
 import { ElgatoAutoRestart, createElgatoAutoRestartDeps } from './elgato-auto-restart.js';
 import { getInitialDriverMode } from './driver-manager-deps.js';
@@ -50,7 +50,7 @@ applyFlagsToEnv(cli.flags);
 // Hard requirement: one instance at a time. After the CLI subcommands (they never serve),
 // before the log sink so a refused copy cannot rotate the running instance's log files.
 if (!(await acquireInstanceLock())) {
-  console.error('DeckBridge is already running. Only one instance is allowed; exiting.');
+  console.error(alreadyRunningMessage(platformName()));
   tjs.exit(1);
 }
 // Disk sink first — before setupNativeLibs, before any HID call. defaultCacheRoot()

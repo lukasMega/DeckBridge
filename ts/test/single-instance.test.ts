@@ -1,6 +1,10 @@
 import assert from 'tjs:assert';
-import { acquireInstanceLock, releaseInstanceLock } from '../src/infra/single-instance.js';
-import { testAsync, summaryExit } from './helpers/harness.js';
+import {
+  acquireInstanceLock,
+  alreadyRunningMessage,
+  releaseInstanceLock,
+} from '../src/infra/single-instance.js';
+import { test, testAsync, summaryExit } from './helpers/harness.js';
 
 const port = 47_900 + (tjs.pid % 100);
 
@@ -23,6 +27,15 @@ await testAsync('lock is free again after release', async () => {
   releaseInstanceLock();
   assert.ok(await acquireInstanceLock(port));
   releaseInstanceLock();
+});
+
+test('refusal message names port and per-OS kill command', () => {
+  const mac = alreadyRunningMessage('macOS', 44_659);
+  assert.ok(mac.includes('lsof -nP -iTCP:44659'));
+  assert.ok(mac.includes('pkill -x deckbridge'));
+  const win = alreadyRunningMessage('Windows', 44_659);
+  assert.ok(win.includes('taskkill /PID'));
+  assert.ok(!win.includes('lsof'));
 });
 
 summaryExit();
