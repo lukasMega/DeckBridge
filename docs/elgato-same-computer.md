@@ -135,6 +135,7 @@ build). B needs no stream deck.
 | `--listen-host <host>` | Address the relay listens on. Default `0.0.0.0`. |
 | `--name <text>` | Name Elgato shows. Default `DeckBridge Relay`. |
 | `--no-advertise` | Don't advertise on the network; add the IP in Elgato by hand. |
+| `--hold-seconds <n>` | Seconds the relay keeps the Stream Deck app's connection while DeckBridge is down. `0` to `3600`. Default `60`. `0` turns it off. |
 | `--log-level <level>` | `debug`, `info`, `warn`, `error` or `silent`. |
 
 The relay writes to the terminal only. Redirect the output to a file when you send a
@@ -248,6 +249,27 @@ Run the relay inside the machine's own home, never from a folder under `/Users`:
 runs macOS binaries it finds there on the Mac itself, and that copy can't listen next to
 DeckBridge (`EADDRINUSE`). The relay does not start again after a reboot yet: run step 3
 again. OrbStack is free for personal use; commercial use needs a paid licence.
+
+## Restarting DeckBridge {#restart}
+
+You can stop or restart DeckBridge while the relay keeps running. The relay keeps the
+Stream Deck app's connection open for up to 60 seconds. It reconnects to DeckBridge by
+itself. When DeckBridge is back, the deck returns in the app. You do not pair again, and
+the dock keeps its IP address.
+
+Use `--hold-seconds <n>` to change this time. The value `0` turns the hold off. The app's
+connection then closes as soon as DeckBridge stops.
+
+A Stream Deck app that connects during the gap also waits. The relay does not refuse it.
+It connects the app to DeckBridge when DeckBridge is back. If DeckBridge does not come back
+within the hold time, the relay closes the connection.
+
+The relay itself must keep running. It does not start by itself at login yet. If you stop
+the relay, or restart the computer it runs on, start it again.
+
+If the deck model or serial number changes, the relay follows the change. This happens
+when you connect a different deck while DeckBridge restarts. The relay logs each change at
+`warn` level.
 
 ## Notes
 

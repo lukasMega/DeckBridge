@@ -8,6 +8,7 @@ import { MdnsAdvertiser } from '../../infra/mdns-advertiser.js';
 import { platformName } from '../../infra/os-utils.js';
 import { probeIdentity } from './identity.js';
 import type { DockIdentity } from './identity.js';
+import { createUpstreamWatcher, sleep } from './recovery.js';
 import { CoraRelay } from './relay.js';
 import type { RelayPortName, RelaySessionClose } from './relay.js';
 
@@ -17,6 +18,7 @@ export interface RelayArgs {
   listenHost: string;
   name: string;
   advertise: boolean;
+  holdSeconds: number;
   logLevel?: CliLogLevel;
 }
 
@@ -26,6 +28,8 @@ const DEFAULT_TARGET_PORT = 5343;
 const DEFAULT_NAME = 'DeckBridge Relay';
 const MAX_NAME_LENGTH = 63;
 const MAX_TARGET_PORT = 65_534; // the child port is often +1
+const DEFAULT_HOLD_SECONDS = 60;
+const MAX_HOLD_SECONDS = 3600;
 const PROBE_RETRY_MS = 3000;
 const WAIT_WARN_EVERY_MS = 30_000;
 const COMPONENT = 'relay';
@@ -40,18 +44,32 @@ const RELAY_USAGE = `Usage: deckbridge relay --target <host> [flags]
   --target-port <n>         Its CORA port                      [default ${DEFAULT_TARGET_PORT}]
   --listen-host <host>      Address to listen on               [default 0.0.0.0]
   --name <s>                Name shown in the Elgato app       [default ${DEFAULT_NAME}]
+  --hold-seconds <n>        Keep Elgato connected this long while DeckBridge is
+                            unreachable, 0 = off              [default ${DEFAULT_HOLD_SECONDS}]
   --no-advertise            Do not advertise via mDNS (add the IP by hand in Elgato)
   --log-level <lvl>         ${LOG_LEVELS.join('|')}
   -h, --help                Show this help`;
 
-type ValueFlag = '--target' | '--target-port' | '--listen-host' | '--name' | '--log-level';
+type ValueFlag =
+  | '--target'
+  | '--target-port'
+  | '--listen-host'
+  | '--name'
+  | '--hold-seconds'
+  | '--log-level';
 const VALUE_FLAGS: readonly string[] = [
   '--target',
   '--target-port',
   '--listen-host',
   '--name',
+  '--hold-seconds',
   '--log-level',
 ];
+
+function parseHoldSeconds(v: string): number | null {
+  const n = /^\d+$/.test(v) ? Number(v) : -1;
+  return n < 0 || n > MAX_HOLD_SECONDS ? null : n;
+}
 
 function applyValue(args: Partial<RelayArgs>, flag: ValueFlag, v: string): string | null {
   switch (flag) {
@@ -75,6 +93,12 @@ function applyValue(args: Partial<RelayArgs>, flag: ValueFlag, v: string): strin
       }
       args.name = v;
       return null;
+    case '--hold-seconds': {
+      const n = parseHoldSeconds(v);
+      if (n === null) return `--hold-seconds must be an integer from 0 to ${MAX_HOLD_SECONDS}`;
+      args.holdSeconds = n;
+      return null;
+    }
     case '--log-level':
       if (!isLogLevel(v)) return `--log-level must be one of ${LOG_LEVELS.join('|')}`;
       args.logLevel = v;
@@ -115,23 +139,13 @@ export function parseRelayArgs(rest: string[]): RelayArgs | { error: string } | 
     listenHost: args.listenHost ?? '0.0.0.0',
     name: args.name ?? DEFAULT_NAME,
     advertise: args.advertise ?? true,
+    holdSeconds: args.holdSeconds ?? DEFAULT_HOLD_SECONDS,
     ...(args.logLevel !== undefined ? { logLevel: args.logLevel } : {}),
   };
 }
 
 function rlog(level: 'debug' | 'info' | 'warn' | 'error', message: string): void {
   log(level, COMPONENT, message);
-}
-
-function sleep(ms: number, stop: Promise<void>): Promise<void> {
-  return new Promise((resolve) => {
-    const t = setTimeout(resolve, ms);
-    void stop.then(() => {
-      clearTimeout(t);
-      resolve();
-      return undefined;
-    });
-  });
 }
 
 /** Retries until DeckBridge answers; null when a stop signal ended the wait. */
@@ -223,6 +237,28 @@ export async function runRelayCommand(rest: string[]): Promise<number> {
     const hex = dock.productId.toString(16).padStart(4, '0');
     rlog('info', `dock: sn=${dock.serial} pid=0x${hex} child port ${dock.childPort}`);
 
+    const onUpstreamLost = createUpstreamWatcher(dock, {
+      probe: () => probeIdentity(args.target, args.targetPort),
+      sleep,
+      stop,
+      isStopped: () => stopped,
+      log: rlog,
+      onRecovered: async (prev, next) => {
+        if (next.childPort !== prev.childPort) {
+          try {
+            await relay?.setRoutePort('child', next.childPort);
+            rlog('info', `child listener moved to :${next.childPort}`);
+          } catch (e) {
+            rlog('error', `can't listen on :${next.childPort} (${(e as Error).message})`);
+          }
+        }
+        if (next.productId !== prev.productId || next.serial !== prev.serial) {
+          // updateIdentity does not re-announce a running advertiser
+          advertiser?.stop();
+          advertiser = startAdvertiser(args, next);
+        }
+      },
+    });
     relay = new CoraRelay({
       listenHost: args.listenHost,
       targetHost: args.target,
@@ -231,8 +267,19 @@ export async function runRelayCommand(rest: string[]): Promise<number> {
         // Elgato dials the child port from the caps reply on the relay's own IP.
         { name: 'child', listenPort: dock.childPort, targetPort: dock.childPort },
       ],
+      holdMs: args.holdSeconds * 1000,
       onOpen: logOpen,
       onClose: logClose,
+      onUpstreamLost,
+      onHold: (id, route, reason) => {
+        rlog(
+          'info',
+          `${route} #${id} DeckBridge gone (${reason}), holding up to ${args.holdSeconds} s`,
+        );
+      },
+      onResume: (id, route, heldMs) => {
+        rlog('info', `${route} #${id} resumed after ${(heldMs / 1000).toFixed(1)} s`);
+      },
       onDroppedAccept: (route, error) => {
         rlog('warn', `a client on ${route} reset before the relay accepted it (${error})`);
         // Seen on macOS only (#257): the firewall drops the socket after the handshake.

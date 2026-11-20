@@ -25,6 +25,7 @@ test('defaults', () => {
     listenHost: '0.0.0.0',
     name: 'DeckBridge Relay',
     advertise: true,
+    holdSeconds: 60,
   });
 });
 
@@ -39,6 +40,8 @@ test('every flag', () => {
     '--name',
     'My Relay',
     '--no-advertise',
+    '--hold-seconds',
+    '90',
     '--log-level',
     'debug',
   ]);
@@ -48,6 +51,7 @@ test('every flag', () => {
     listenHost: '127.0.0.1',
     name: 'My Relay',
     advertise: false,
+    holdSeconds: 90,
     logLevel: 'debug',
   });
 });
@@ -94,6 +98,22 @@ test('--target-port range', () => {
   }
   assert.equal(ok(['--target', 'x', '--target-port', '65534']).targetPort, 65534);
   assert.equal(ok(['--target', 'x', '--target-port', '1']).targetPort, 1);
+});
+
+function hold(v: string): number {
+  return ok(['--target', 'x', '--hold-seconds', v]).holdSeconds;
+}
+
+test('--hold-seconds range', () => {
+  assert.equal(hold('0'), 0);
+  assert.equal(hold('3600'), 3600);
+  for (const bad of ['3601', '-1', 'abc', '1.5', '']) {
+    const e = err(['--target', 'x', '--hold-seconds', bad]);
+    assert.equal(e, '--hold-seconds must be an integer from 0 to 3600', bad);
+  }
+  assert.ok(
+    err(['--target', 'x', '--hold-seconds', '5', '--hold-seconds', '6']).includes('duplicate'),
+  );
 });
 
 summary();
