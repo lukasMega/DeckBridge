@@ -216,10 +216,11 @@ declare module 'tjs:assert' {
 interface NetworkInterface {
   name: string;
   address: string;
-  family: 'IPv4' | 'IPv6';
   internal: boolean;
   netmask?: string;
   mac?: string;
+  /** IPv6 only. */
+  scopeId?: number;
 }
 
 type StdioOption = 'pipe' | 'inherit' | 'ignore';

@@ -6,7 +6,7 @@ import { testAsync, summaryExit } from './helpers/harness.js';
 const HOST = '127.0.0.1';
 // TEST-NET-1 (RFC 5737): never answers, so the upstream connect stays pending.
 const BLACKHOLE = '192.0.2.1';
-let nextPort = 48810 + (tjs.pid % 100);
+let nextPort = 49010 + (tjs.pid % 100);
 const port = (): number => nextPort++;
 
 const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
