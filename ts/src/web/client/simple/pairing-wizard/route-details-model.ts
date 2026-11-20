@@ -7,6 +7,7 @@ import type {
   RelayProgress,
   WslRelayStatus,
 } from '../../ui-types.js';
+import type { WslRelayState } from '../../../contract-wsl-relay.js';
 
 export interface Health {
   label: string;
@@ -20,23 +21,27 @@ const health = (label: string, variant: StatusChipVariant, spin = false): Health
   spin,
 });
 
+// A Record, not a switch: a new WslRelayState must pick its chip here (compile error otherwise).
+const NEEDS_ATTENTION = health('Needs attention', 'accent');
+const RUNNING = health('Running', 'ok');
+const WSL_HEALTH: Record<WslRelayState, Health> = {
+  off: health('Off', 'dim'),
+  checking: health('Checking', 'wait', true),
+  downloading: health('Downloading', 'wait', true),
+  starting: health('Starting', 'wait', true),
+  ready: RUNNING,
+  paired: RUNNING,
+  'no-wsl': NEEDS_ATTENTION,
+  wsl1: NEEDS_ATTENTION,
+  mirrored: NEEDS_ATTENTION,
+  'old-glibc': NEEDS_ATTENTION,
+  'download-failed': NEEDS_ATTENTION,
+  blocked: NEEDS_ATTENTION,
+  error: NEEDS_ATTENTION,
+};
+
 function wslHealth(wsl: WslRelayStatus | null): Health {
-  if (wsl === null) return health('Not reported yet', 'dim');
-  switch (wsl.state) {
-    case 'checking':
-      return health('Checking', 'wait', true);
-    case 'downloading':
-      return health('Downloading', 'wait', true);
-    case 'starting':
-      return health('Starting', 'wait', true);
-    case 'ready':
-    case 'paired':
-      return health('Running', 'ok');
-    case 'off':
-      return health('Off', 'dim');
-    default:
-      return health('Needs attention', 'accent');
-  }
+  return wsl === null ? health('Not reported yet', 'dim') : WSL_HEALTH[wsl.state];
 }
 
 function scriptHealth(relay: RelayProgress | null): Health {

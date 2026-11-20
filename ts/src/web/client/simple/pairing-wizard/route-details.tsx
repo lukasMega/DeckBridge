@@ -15,6 +15,7 @@ import type {
   WslRelayStatus,
 } from '../../ui-types.js';
 import { CopyChip } from '../controls.js';
+import { wslRelayFailed } from '../wsl-relay-steps.js';
 import { KINDS, useRelayCommand } from './device-setup.js';
 import {
   appLine,
@@ -103,13 +104,10 @@ function ScriptCommands({
   );
 }
 
-function WslNotes({
-  wsl,
-  needsAttention,
-}: Readonly<{ wsl: WslRelayStatus | null; needsAttention: boolean }>): preact.JSX.Element {
+function WslNotes({ wsl }: Readonly<{ wsl: WslRelayStatus | null }>): preact.JSX.Element {
   return (
     <>
-      {needsAttention && wsl?.detail != null && (
+      {wsl !== null && wslRelayFailed(wsl) && wsl.detail != null && (
         <p class="warnrow" id="prd-problem">
           {wsl.detail}
         </p>
@@ -185,7 +183,7 @@ export function RouteDetails({
         </p>
       )}
       {isWsl ? (
-        <WslNotes wsl={wsl} needsAttention={health.label === 'Needs attention'} />
+        <WslNotes wsl={wsl} />
       ) : (
         hasScript && <ScriptCommands route={status.route} probe={probe.data} />
       )}

@@ -99,18 +99,14 @@ function statusLine(s: PairingRouteStatus, wsl: WslRelayStatus | null): string {
 
 export function PairingRouteSetting(): preact.JSX.Element | null {
   const s = useStore((st) => st.pairingRoute);
+  // `open` lives in the row, so hiding the row resets it with the Collapsible.
+  return s?.supported ? <PairingRouteRow s={s} /> : null;
+}
+
+function PairingRouteRow({ s }: Readonly<{ s: PairingRouteStatus }>): preact.JSX.Element {
   const wsl = useStore((st) => st.wslRelay);
   const action = useAsyncAction();
   const [open, setOpen] = useState(false);
-  const supported = s?.supported === true;
-  // A hidden row remounts its Collapsible closed.
-  useEffect(
-    function resetOpenWhenHidden() {
-      if (!supported) setOpen(false);
-    },
-    [supported],
-  );
-  if (!s?.supported) return null;
   const line = statusLine(s, wsl);
   const turnOff = (): Promise<void> =>
     action.run(async () => {

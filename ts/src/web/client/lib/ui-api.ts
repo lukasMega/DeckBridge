@@ -65,7 +65,8 @@ export interface Fetched<T> {
 /** GET a URL once per mount, aborting on unmount. A failed read keeps the
  *  last-known data — these are best-effort previews, not the source of truth. */
 export function useFetched<T>(url: string): Fetched<T> {
-  const [data, setData] = useState<T | null>(null);
+  // Tagged with its URL so a URL change never shows the old URL's data (e.g. curl → wget).
+  const [data, setData] = useState<{ url: string; value: T } | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(
@@ -73,7 +74,7 @@ export function useFetched<T>(url: string): Fetched<T> {
       try {
         const value = await getJson<T>(url, signal);
         if (signal?.aborted === true) return;
-        setData(value);
+        setData({ url, value });
         setError(null);
       } catch (e) {
         if (signal?.aborted === true) return;
@@ -89,5 +90,5 @@ export function useFetched<T>(url: string): Fetched<T> {
     return () => ctrl.abort();
   }, [load]);
 
-  return { data, error, reload: () => load() };
+  return { data: data?.url === url ? data.value : null, error, reload: () => load() };
 }
