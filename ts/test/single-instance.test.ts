@@ -6,7 +6,11 @@ import {
 } from '../src/infra/single-instance.js';
 import { test, testAsync, summaryExit } from './helpers/harness.js';
 
-const port = 47_900 + (tjs.pid % 100);
+// A fixed port flaked on CI (EADDRINUSE: it sits in Linux's ephemeral range), so let the OS pick.
+const probe = await tjs.listen('tcp', '127.0.0.1', 0);
+const { localPort: port } = await probe.opened;
+probe.close();
+await probe.closed;
 
 await testAsync('acquires a free lock and is idempotent for the owner', async () => {
   assert.ok(await acquireInstanceLock(port));
