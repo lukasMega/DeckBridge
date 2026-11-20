@@ -324,7 +324,7 @@ function AddScreen({
           ? 'Use the IP of the OrbStack machine, which the relay printed.'
           : 'Use the IP of the device that runs the relay.'}
       </p>
-      {ip !== null && route === 'device' && (
+      {ip !== null && (route === 'device' || route === 'orbstack') && (
         <div class="addr-row">
           <CopyChip label="Relay IP" value={ip} cls="addr-chip" />
         </div>

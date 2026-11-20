@@ -266,6 +266,19 @@ await test('a relay event sets relayIp, version and progress and is published', 
   r.state.stop();
 });
 
+await test('an OrbStack relay shows its own IP (NAT hides it), other routes the peer', async () => {
+  const r = rig();
+  await r.state.setRoute('orbstack');
+  r.state.onRelayEvent({ ...EV, selfIp: '192.168.139.155' }, '192.168.2.212');
+  assert.equal(r.state.status().relayIp, '192.168.139.155');
+  assert.equal(r.state.status().relay?.ip, '192.168.2.212', 'progress keeps the socket peer');
+  assert.equal(r.store.current.relayIp, '192.168.139.155');
+  await r.state.setRoute('device');
+  r.state.onRelayEvent({ ...EV, selfIp: '172.17.0.1' }, '192.168.1.50');
+  assert.equal(r.state.status().relayIp, '192.168.1.50');
+  r.state.stop();
+});
+
 await test('relay events are ignored unless a script route is on', async () => {
   const r = rig();
   r.state.onRelayEvent(EV, '192.168.1.50');

@@ -1,6 +1,6 @@
-// The relay installer for another Linux/macOS device (issue #257). One `curl | sh` from the
-// wizard downloads the release, verifies it, runs the relay and reports stages to DeckBridge's
-// script listener. Kept apart from relay-script.ts (the OrbStack script) so that one stays as is.
+// The relay installer for another Linux/macOS device and the OrbStack VM (issue #257). One
+// `curl | sh` from the wizard downloads the release, verifies it, runs the relay and reports
+// stages to DeckBridge's script listener.
 import { RELAY_SCRIPT_PATH } from './relay-script.js';
 
 export const RELAY_EVENT_PATH = '/relay/event';
@@ -51,14 +51,22 @@ BASE='${RELEASE_BASE}/deckbridge-v${version}'
 DIR="$HOME/.deckbridge-relay"
 STEP=starting
 PLATFORM=unknown
+SELF_IP=
 REPORTED=
 RELAY_PID=
 HB_PID=
 
 # A DeckBridge that went away must never abort the install, hence the \`|| true\`.
 event() {
+  # Behind NAT (OrbStack) DeckBridge sees the host, not this VM. Retried per event: a VM that
+  # just booted may have no address yet.
+  if [ -z "$SELF_IP" ] && [ "$(uname -s)" = Linux ]; then
+    SELF_IP=$(hostname -I 2>/dev/null | awk '{print $1}' || true)
+    case "$SELF_IP" in *[!0-9.]*) SELF_IP= ;; esac
+  fi
   body="{\\"t\\":\\"$TOKEN\\",\\"stage\\":\\"$1\\",\\"platform\\":\\"$PLATFORM\\",\\"version\\":\\"$VERSION\\""
   if [ -n "\${2:-}" ]; then body="$body,\\"message\\":\\"$2\\""; fi
+  if [ -n "$SELF_IP" ]; then body="$body,\\"selfIp\\":\\"$SELF_IP\\""; fi
   body="$body}"
   if command -v curl >/dev/null 2>&1; then
     curl -fsS -m 3 -X POST -H 'Content-Type: application/json' -d "$body" "$EVENT_URL" >/dev/null 2>&1 || true

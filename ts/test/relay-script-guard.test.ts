@@ -73,6 +73,16 @@ test('parseRelayEvent refuses bad json, stages, fields and messages', () => {
   for (const b of bad) assert.equal(parseRelayEvent(b), null, b);
 });
 
+test('parseRelayEvent keeps a LAN selfIp and drops any other, never the event', () => {
+  assert.equal(
+    parseRelayEvent(JSON.stringify({ ...GOOD, selfIp: '192.168.139.155' }))?.selfIp,
+    '192.168.139.155',
+  );
+  for (const selfIp of ['8.8.8.8', 'x', 5, '192.168.1.1"']) {
+    assert.deepEqual(parseRelayEvent(JSON.stringify({ ...GOOD, selfIp })), GOOD, String(selfIp));
+  }
+});
+
 test('RateLimit allows max per window and recovers', () => {
   const r = new RateLimit(2, 1000);
   assert.ok(r.allow(0));

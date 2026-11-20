@@ -268,13 +268,15 @@ you run three commands yourself; the wizard shows them with your values filled i
 2. In Terminal, create the machine (once): `orb create ubuntu:noble deckbridge-relay`.
 3. Start the relay in it. The wizard's **Run** command is one short `curl` of an install
    script (with a token in the URL) that DeckBridge serves on port 44661 (or a free high port if 44661 is taken) while
-   this route is selected. The script installs `curl` and `unzip`, downloads the Linux
-   release zip that matches your DeckBridge version into `~/relay` inside the machine,
-   checks it against `SHA256SUMS.txt`, and runs
-   `deckbridge relay --target <this Mac's IP> --no-advertise`. Running it again skips the
-   download. Keep the Terminal window open while you use the deck.
-4. The relay prints its IP addresses. `orb -m deckbridge-relay hostname -I` shows the IP
-   later. Add it in the Stream Deck app as a Network Dock by IP.
+   this route is selected. It is the same script as for
+   [another device](#one-command): it downloads the Linux release zip that matches your
+   DeckBridge version into `~/.deckbridge-relay` inside the machine, checks it against
+   `SHA256SUMS.txt`, runs `deckbridge relay --target <this Mac's IP> --no-advertise`, and
+   reports its progress, so the Settings pairing row shows whether it runs. Running it again
+   skips the download. Keep the Terminal window open while you use the deck.
+4. The relay prints its IP addresses, and the wizard and the Settings pairing row show the
+   machine's IP once the relay runs. `orb -m deckbridge-relay hostname -I` also shows it.
+   Add it in the Stream Deck app as a Network Dock by IP.
 
 Run the relay inside the machine's own home, never from a folder under `/Users`: OrbStack
 runs macOS binaries it finds there on the Mac itself, and that copy can't listen next to

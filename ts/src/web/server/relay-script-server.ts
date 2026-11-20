@@ -124,9 +124,16 @@ export class RelayScriptServer {
     // After the token check, so a flood of bad tokens can't use up a real relay's budget.
     if (!this.limit.allow((this.opts.now ?? Date.now)()))
       return new Response(null, { status: 429 });
-    const { stage, platform, version, message } = ev;
+    // Field by field, so the token never leaves this check.
+    const { stage, platform, version, message, selfIp } = ev;
     this.opts.onEvent(
-      { stage, platform, version, ...(message === undefined ? {} : { message }) },
+      {
+        stage,
+        platform,
+        version,
+        ...(message === undefined ? {} : { message }),
+        ...(selfIp === undefined ? {} : { selfIp }),
+      },
       ip,
     );
     return new Response(null, { status: 204 });

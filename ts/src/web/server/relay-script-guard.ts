@@ -69,12 +69,15 @@ export function parseRelayEvent(text: string): RelayEventBody | null {
     return null;
   }
   const o = v as RelayEventBody;
+  // Optional and advisory: a bad value drops the field, never the heartbeat.
+  const selfIp = typeof o.selfIp === 'string' ? lanPeer(o.selfIp) : null;
   return {
     t: o.t,
     stage: o.stage,
     platform: o.platform,
     version: o.version,
     ...(o.message === undefined ? {} : { message: o.message }),
+    ...(selfIp === null ? {} : { selfIp }),
   };
 }
 
