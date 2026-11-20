@@ -14,7 +14,7 @@ import type {
 } from '../../ui-types.js';
 import { CopyChip } from '../controls.js';
 
-const KINDS = [
+export const KINDS = [
   { value: 'curl', label: 'curl' },
   { value: 'wget', label: 'wget' },
 ] as const;

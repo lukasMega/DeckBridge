@@ -432,6 +432,8 @@ ports and the Web UI. The Web UI binds `127.0.0.1` unless you pass `--bind`.
 | `DECKBRIDGE_CACHE_DIR` | Cache root (settings, logs, extracted native libs) |
 | `DECKBRIDGE_NO_OVERRIDES` | Safe mode: ignore device tuning for this session |
 | `DECKBRIDGE_NO_MDNS` | Don't advertise the dock over mDNS; the Elgato app must add it by IP address |
+| `DECKBRIDGE_WSL_RELAY_ZIP` | Relay zip (local path or URL) the WSL route uses instead of the GitHub release; a local path skips the SHA256 check |
+| `DECKBRIDGE_WSL_RELAY_MOCK` | `happy`/`no-wsl`/`mirrored`/`old-glibc`/`blocked`: scripted WSL runner for reviewing the WSL route without WSL; `DECKBRIDGE_BUILD_MOCK=1` builds only |
 | `DECKBRIDGE_CORA_LOG` | Set `1` with debug logging to log every primary-port CORA frame as hex (pairing diagnosis) |
 | `DECKBRIDGE_PUSH_TOKEN` | Token used by `deckbridge push` (see [Push API](./push-api.md)) |
 

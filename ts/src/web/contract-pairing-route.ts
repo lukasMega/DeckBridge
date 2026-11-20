@@ -87,6 +87,8 @@ export interface RelayEventBody {
   platform: string;
   version: string;
   message?: string;
+  /** The relay's own IPv4 as it sees it; only trusted to label an OrbStack relay (NAT). */
+  selfIp?: string;
 }
 
 export type RelayCommandKind = 'curl' | 'wget';

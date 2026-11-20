@@ -68,7 +68,7 @@ export class PairingRouteState {
       supported,
       route,
       elgatoVersion: this.elgatoVersion,
-      relayIp: route === 'wsl' ? wsl.status().wslIp : (relay?.ip ?? relayIp ?? null),
+      relayIp: route === 'wsl' ? wsl.status().wslIp : (relayIp ?? relay?.ip ?? null),
       relayVersion: relay?.version ?? null,
       versionMismatch: relay !== null && relay.version !== this.deps.version.replace(/^v/, ''),
       announcedAt: relay?.at ?? null,
@@ -123,8 +123,10 @@ export class PairingRouteState {
       ...(ev.message === undefined ? {} : { message: ev.message }),
       at: this.deps.now(),
     };
-    if (settings.pairingRoute.relayIp !== ip) {
-      settings.setPairingRoute({ ...settings.pairingRoute, relayIp: ip });
+    // OrbStack NATs its VM, so the peer is this Mac; the IP to add in the app is the VM's own.
+    const addr = settings.pairingRoute.route === 'orbstack' ? (ev.selfIp ?? ip) : ip;
+    if (settings.pairingRoute.relayIp !== addr) {
+      settings.setPairingRoute({ ...settings.pairingRoute, relayIp: addr });
     }
     this.armStaleTimer();
     this.publish();

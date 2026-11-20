@@ -15,13 +15,13 @@ const blocker = (await isPortInUse(RELAY_SCRIPT_PORT))
   ? null
   : tjs.serve({ port: RELAY_SCRIPT_PORT, listenIp: '127.0.0.1', fetch: () => new Response('') });
 const logs: string[] = [];
-const events: Array<{ stage: string; ip: string }> = [];
+const events: Array<{ stage: string; ip: string; selfIp?: string; t?: unknown }> = [];
 let active: string | null = TOKEN;
 const server = new RelayScriptServer({
   listenIp: '127.0.0.1',
   token: () => active,
   script: ({ token, port }) => `#!/bin/sh\n# ${token} ${port}\n`,
-  onEvent: (ev, ip) => events.push({ stage: ev.stage, ip }),
+  onEvent: (ev, ip) => events.push({ ...ev, ip }),
   log: (_level, msg) => logs.push(msg),
 });
 
@@ -83,7 +83,16 @@ try {
   await test('the reported ip is the socket peer, never a body field', async () => {
     events.length = 0;
     assert.equal((await send({ body: body({ ip: '10.9.9.9' }) })).status, 204);
-    assert.deepEqual(events, [{ stage: 'running', ip: '127.0.0.1' }]);
+    assert.equal(events.length, 1);
+    assert.equal(events[0]!.ip, '127.0.0.1');
+    assert.equal(events[0]!.t, undefined, 'the token stays in the server');
+  });
+
+  await test('a LAN selfIp reaches the route state next to the peer ip', async () => {
+    events.length = 0;
+    assert.equal((await send({ body: body({ selfIp: '192.168.139.155' }) })).status, 204);
+    assert.equal(events[0]!.selfIp, '192.168.139.155');
+    assert.equal(events[0]!.ip, '127.0.0.1');
   });
 
   await test('30 events a minute; bad tokens do not use the budget', async () => {

@@ -9,7 +9,7 @@ import { mdnsDisabled } from '../shared/cli.js';
 import { log } from '../shared/logger.js';
 import { relayTarget } from '../infra/wsl-relay-parse.js';
 import { bindAddr, ELGATO_TCP_PORT, webuiBindAddr } from '../shared/types.js';
-import { RELAY_SCRIPT_PATH, relayScript } from '../web/server/relay-script.js';
+import { RELAY_SCRIPT_PATH } from '../web/server/relay-script.js';
 import { deviceScript } from '../web/server/relay-script-device.js';
 import { RelayScriptServer } from '../web/server/relay-script-server.js';
 import { pickWslRunner, wireWslRelay } from './wsl-relay-wiring.js';
@@ -61,10 +61,14 @@ export function wirePairingRoute(
     script: ({ token, port }) => {
       const target = relayTarget(bindAddr(), lanIp());
       if (!('ip' in target)) return null;
-      const p = { version: __VERSION__, target: target.ip, targetPort: ELGATO_TCP_PORT };
-      return settings.pairingRoute.route === 'orbstack'
-        ? relayScript(p)
-        : deviceScript({ ...p, scriptPort: port, token });
+      // One script for both routes, so OrbStack reports progress like any other device.
+      return deviceScript({
+        version: __VERSION__,
+        target: target.ip,
+        targetPort: ELGATO_TCP_PORT,
+        scriptPort: port,
+        token,
+      });
     },
     onEvent: (ev, ip) => state.onRelayEvent(ev, ip),
     log: (level, msg) => log(level, 'pairing', msg),

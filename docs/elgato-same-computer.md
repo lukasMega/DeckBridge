@@ -92,6 +92,23 @@ report. To remove everything from the device:
 curl -fsSL "<the same URL>" | sh -s -- --uninstall
 ```
 
+### Check the relay in Settings {#relay-settings}
+
+Open Settings and expand **Stream Deck app 7.6.1 pairing**. It lists:
+
+- **Status**: Running, Installing, Offline, Failed or Not reported yet.
+- **Seen**: how long ago the relay last reported.
+- **Relay**: the relay's IP, to add in the Stream Deck app.
+- **Build**: the relay's platform and version.
+- **Target**: the address the relay connects to on this computer.
+- **App**: whether the Stream Deck app is paired through the relay.
+
+**Offline** means no heartbeat for 90 seconds: the device is off, the terminal was closed or
+the network is down. After the device restarts, copy **Run** there and paste it on the
+device again (the relay has no autostart yet). **Uninstall** copies the removal command. A
+version warning means the relay runs another DeckBridge version: run the command again to
+update it.
+
 ## The manual relay: a second machine {#manual-relay}
 
 `deckbridge relay` runs on a second computer (B). Elgato on computer A connects to the
@@ -112,6 +129,18 @@ build). B needs no stream deck.
 
    ```bash
    DECKBRIDGE_NO_MDNS=1 deckbridge
+   ```
+
+   On Windows, in PowerShell:
+
+   ```powershell
+   $env:DECKBRIDGE_NO_MDNS = "1"; deckbridge
+   ```
+
+   In Command Prompt:
+
+   ```bat
+   set "DECKBRIDGE_NO_MDNS=1" && deckbridge
    ```
 
 2. On B, start the relay and point it at A:
@@ -191,6 +220,8 @@ DeckBridge runs no admin command for you. It shows one sentence and a command to
 | Download failed | The relay could not be downloaded or its checksum did not match. | Check your internet connection and click **Check again**. |
 | Blocked | The relay cannot reach DeckBridge on Windows. Most likely the firewall. | See below. |
 
+The pairing row in Settings shows the same: the distro, the WSL IP and the current problem.
+
 ### Firewall
 
 Windows may block traffic from the WSL network to DeckBridge. The relay then waits and
@@ -237,18 +268,23 @@ you run three commands yourself; the wizard shows them with your values filled i
 2. In Terminal, create the machine (once): `orb create ubuntu:noble deckbridge-relay`.
 3. Start the relay in it. The wizard's **Run** command is one short `curl` of an install
    script (with a token in the URL) that DeckBridge serves on port 44661 (or a free high port if 44661 is taken) while
-   this route is selected. The script installs `curl` and `unzip`, downloads the Linux
-   release zip that matches your DeckBridge version into `~/relay` inside the machine,
-   checks it against `SHA256SUMS.txt`, and runs
-   `deckbridge relay --target <this Mac's IP> --no-advertise`. Running it again skips the
-   download. Keep the Terminal window open while you use the deck.
-4. The relay prints its IP addresses. `orb -m deckbridge-relay hostname -I` shows the IP
-   later. Add it in the Stream Deck app as a Network Dock by IP.
+   this route is selected. It is the same script as for
+   [another device](#one-command): it downloads the Linux release zip that matches your
+   DeckBridge version into `~/.deckbridge-relay` inside the machine, checks it against
+   `SHA256SUMS.txt`, runs `deckbridge relay --target <this Mac's IP> --no-advertise`, and
+   reports its progress, so the Settings pairing row shows whether it runs. Running it again
+   skips the download. Keep the Terminal window open while you use the deck.
+4. The relay prints its IP addresses, and the wizard and the Settings pairing row show the
+   machine's IP once the relay runs. `orb -m deckbridge-relay hostname -I` also shows it.
+   Add it in the Stream Deck app as a Network Dock by IP.
 
 Run the relay inside the machine's own home, never from a folder under `/Users`: OrbStack
 runs macOS binaries it finds there on the Mac itself, and that copy can't listen next to
 DeckBridge (`EADDRINUSE`). The relay does not start again after a reboot yet: run step 3
 again. OrbStack is free for personal use; commercial use needs a paid licence.
+
+The pairing row in Settings has the OrbStack run command and a remove command
+(`orb delete deckbridge-relay`).
 
 ## Restarting DeckBridge {#restart}
 
