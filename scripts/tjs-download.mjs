@@ -70,13 +70,10 @@ try {
 
   mkdirSync(outDir, { recursive: true });
   if (isWin) {
-    // Expand-Archive is Windows' built-in unzip — there's no `unzip` binary on a
-    // stock Windows box (Git Bash on GitHub's windows-latest runners is not
-    // assumed here; this script runs under plain node/cmd).
-    execSync(
-      `powershell -NoProfile -Command "Expand-Archive -Path '${zipPath}' -DestinationPath '${outDir}' -Force"`,
-      { stdio: 'inherit' },
-    );
+    // System32 bsdtar unzips and ships with Windows 10+; Expand-Archive broke on a runner
+    // image update ("ExtractToDirectory" overload). Full path: Git Bash's GNU tar can't unzip.
+    const tar = join(process.env.SystemRoot ?? 'C:\\Windows', 'System32', 'tar.exe');
+    execSync(`"${tar}" -xf "${zipPath}" -C "${outDir}"`, { stdio: 'inherit' });
   } else {
     execSync(`unzip -q "${zipPath}" -d "${outDir}"`, { stdio: 'inherit' });
   }
