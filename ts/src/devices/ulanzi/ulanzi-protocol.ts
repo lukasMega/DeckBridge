@@ -145,14 +145,22 @@ export function chunkBoundaryOffsets(payloadLen: number): number[] {
  *  it like every other DeckBridge HID write — so the retry counter this guards
  *  is logged: if it stays at 0 on hardware, the workaround can go (plan O8). */
 export function isPayloadSafe(payload: Uint8Array): boolean {
-  // Ulanzi Studio never ends a payload exactly on a chunk edge; udeck rejects it too.
-  const tail = payload.length - FIRST_CHUNK_DATA;
-  if (tail > 0 && tail % PACKET_SIZE === 0) return false;
+  if (!isLengthSafe(payload.length)) return false;
   for (const off of chunkBoundaryOffsets(payload.length)) {
-    const b = payload[off];
-    if (b === 0x00 || b === 0x7c) return false;
+    if (!isBoundaryByteSafe(payload[off]!)) return false;
   }
   return true;
+}
+
+/** Ulanzi Studio never ends a payload exactly on a chunk edge; udeck rejects it too. */
+export function isLengthSafe(payloadLen: number): boolean {
+  const tail = payloadLen - FIRST_CHUNK_DATA;
+  return !(tail > 0 && tail % PACKET_SIZE === 0);
+}
+
+/** The byte rule of isPayloadSafe, shared with the analytic pad search in ulanzi-zip. */
+export function isBoundaryByteSafe(b: number): boolean {
+  return b !== 0x00 && b !== 0x7c;
 }
 
 const ASCII = new TextEncoder();

@@ -1012,7 +1012,7 @@
         <code>0xa4</code> firmware).
       </li>
       <li>
-        Steady state: image chunks flow desktop→child (ACK-paced); key events flow child→desktop;
+        Steady state: key images flow desktop→child (ACK-paced, one ACK per image); key events flow child→desktop;
         keepalives flow in both directions on both ports every 2 s. The real desktop software also
         drops and reopens TCP connections one or two times while probing, which the bridge must
         tolerate gracefully.
@@ -1111,9 +1111,9 @@
       key-state bytes in a CORA key-event frame and sends it over the child TCP connection to the
       desktop software. In the <em>output direction</em>: the desktop software decides to update
       the button image, encodes it as JPEG, splits it into 1016-byte chunks, and sends each chunk
-      as a CORA frame with REQACK set; the bridge receives each chunk, enqueues the HID output
-      report for the USB worker, sends an ACKNAK immediately (so the desktop can release the
-      next chunk), and the USB worker thread calls <code>hid_write</code> to push the pixel data
+      as a CORA frame (only the last chunk of a key image sets REQACK); the bridge receives each
+      chunk, hands the finished image to the USB worker, sends one ACKNAK per key image
+      immediately (so the desktop can release the next image), and the USB worker thread calls <code>hid_write</code> to push the pixel data
       to the physical device. The two directions are fully independent and can proceed
       simultaneously.
     </p>

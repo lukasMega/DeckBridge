@@ -33,4 +33,24 @@ test('stalled client is closed and dropped; healthy client keeps receiving', () 
   assert.equal(b.size, 1);
 });
 
+test('broadcastJson / sendToJson frame a pre-built payload like the typed API', () => {
+  const b = new Broadcaster();
+  const ws = fakeWs(0);
+  b.websocketHandlers(() => {}).open(ws);
+  const data = { wireId: 4, data: 'QUJD', clipped: true };
+  b.broadcast('extraKeyImage', data);
+  b.broadcastJson('extraKeyImage', JSON.stringify(data));
+  b.sendTo(ws, 'extraKeyImage', data);
+  b.sendToJson(ws, 'extraKeyImage', JSON.stringify(data));
+  assert.equal(ws.sent[1], ws.sent[0]);
+  assert.equal(ws.sent[3], ws.sent[2]);
+  assert.equal(ws.sent[0], ws.sent[2]);
+});
+
+test('broadcastJson with no client does nothing', () => {
+  const b = new Broadcaster();
+  b.broadcastJson('extraKeyImage', '{"wireId":1}');
+  assert.equal(b.size, 0);
+});
+
 summary();

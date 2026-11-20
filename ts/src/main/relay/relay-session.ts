@@ -1,5 +1,7 @@
-// One relayed client connection. Design notes (raw tjs streams, awaited ACK-paced writes,
+// One relayed client connection. Design notes (raw tjs streams, awaited writes,
 // closing both native handles) are in relay.ts.
+
+import { KEEPALIVE_DELAY_S } from '../../platform/accept-guard.js';
 
 export type RelayPortName = 'main' | 'child';
 
@@ -189,7 +191,13 @@ export class Session {
       abort.abort(new Error('timeout'));
     }, timeoutMs);
     try {
-      const sock = await tjs.connect('tcp', d.targetHost, d.targetPort, { signal: abort.signal });
+      // noDelay: Nagle would add its delayed-ACK wait to every small ACK and key event.
+      // keepAliveDelay: seconds (libuv), so a vanished upstream is noticed while idle.
+      const sock = await tjs.connect('tcp', d.targetHost, d.targetPort, {
+        signal: abort.signal,
+        noDelay: true,
+        keepAliveDelay: KEEPALIVE_DELAY_S,
+      });
       this.upstream = sock;
       return await sock.opened;
     } catch (e) {

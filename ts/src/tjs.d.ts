@@ -23,6 +23,21 @@ declare module 'virtual:native-libs' {
   export const NATIVE_LIBS_HASH: string;
 }
 
+// esbuild virtual module: the WebUI + browser-deck static files, gzip-compressed at build time.
+declare module 'virtual:web-assets' {
+  export interface EmbeddedAsset {
+    /** The gzip bytes, one latin1 char (U+0000..U+00FF) per byte. */
+    data: string;
+    /** Hash of `data`: changes exactly when the asset does. */
+    etag: string;
+  }
+  export const WEB_ASSETS: Record<
+    'html' | 'css' | 'js' | 'requirementsHtml' | 'qrSandboxHtml',
+    EmbeddedAsset
+  >;
+  export const DECK_ASSETS: Record<'html' | 'css' | 'js', EmbeddedAsset>;
+}
+
 // esbuild virtual module: the bundled generic HID USB worker (Mirabox + Elgato)
 declare module 'virtual:hid-worker' {
   const s: string;
@@ -366,7 +381,7 @@ declare const tjs: {
     transport: 'tcp',
     host: string,
     port: number,
-    options?: { signal?: AbortSignal },
+    options?: { signal?: AbortSignal; noDelay?: boolean; keepAliveDelay?: number },
   ): Promise<TjsTCPSocket>;
   listen(transport: 'tcp', host: string, port: number): Promise<TjsTCPServerSocket>;
   serve(options: TjsServeOptions): TjsServeServer;

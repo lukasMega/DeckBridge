@@ -29,6 +29,7 @@ import type {
   WebUIController,
   WebUIControllers,
 } from './types.js';
+import type { CommCountKind } from '../../shared/comm-format.js';
 import type { KeyState, CommEntry, DockStatus, ClientApp } from '../../shared/types.js';
 import { MAX_MULTI_DECK_DOCKS, WEBUI_PORT, webuiBindAddr } from '../../shared/types.js';
 import type { DetectedDeck, DetectedDecksView } from '../contract-decks.js';
@@ -311,6 +312,10 @@ export class WebUIServer extends EventEmitter implements WebUIController, WebUIC
 
   notifyComm(entry: Omit<CommEntry, 'ts'>): void {
     this.activity.comm(entry);
+  }
+
+  notifyCommCount(kind: CommCountKind): void {
+    this.activity.commCount(kind);
   }
 
   log(level: LogLevel, component: string, message: string): void {

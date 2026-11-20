@@ -3,6 +3,9 @@
 // stops the whole runtime. The wrapper drops that one connection instead: the accept stream
 // then yields null, which callers skip with isDroppedAccept(). Remove once txiki catches it.
 
+/** libuv takes seconds. Probes start after 30 s idle so a vanished peer is noticed. */
+export const KEEPALIVE_DELAY_S = 30;
+
 type AcceptFactory = (this: unknown, ...args: unknown[]) => unknown;
 
 function closeHandle(handle: unknown): void {
@@ -13,6 +16,20 @@ function closeHandle(handle: unknown): void {
   }
 }
 
+/** Nagle would hold a small CORA ACK or key event until the peer's delayed ACK (tens of ms). */
+function tuneAccepted(handle: unknown): void {
+  const h = handle as {
+    setNoDelay?: (on: boolean) => void;
+    setKeepAlive?: (on: boolean, s: number) => void;
+  } | null;
+  try {
+    h?.setNoDelay?.(true);
+    h?.setKeepAlive?.(true, KEEPALIVE_DELAY_S);
+  } catch {
+    // best effort: a reset peer must not fail the accept
+  }
+}
+
 /** Call right after `tjs.listen` resolves, before the first await. */
 export function guardAccept(server: TjsTCPServerSocket, onDrop?: (error: unknown) => void): void {
   const target = server as unknown as { _createAcceptedSocket?: AcceptFactory };
@@ -20,7 +37,9 @@ export function guardAccept(server: TjsTCPServerSocket, onDrop?: (error: unknown
   if (typeof original !== 'function') return;
   target._createAcceptedSocket = function guardedAccept(...args: unknown[]): unknown {
     try {
-      return original.apply(this, args);
+      const socket = original.apply(this, args);
+      tuneAccepted(args[1]);
+      return socket;
     } catch (e) {
       closeHandle(args[1]);
       try {

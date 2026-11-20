@@ -17,7 +17,19 @@ import {
   coraFlagString,
   encodeCoraFrame,
 } from './frame.js';
-import { formatCommHex } from '../shared/comm-format.js';
+import { formatCommHex, type CommCountKind } from '../shared/comm-format.js';
+
+// Reused per ACK: a 4-byte payload frame differing only in hidOp and messageId.
+const ACK_FRAME_TEMPLATE = encodeCoraFrame(
+  Buffer.alloc(4),
+  CORA_FLAG_VERBATIM | CORA_FLAG_ACKNAK,
+  0,
+  0,
+);
+
+export function ackDescription(messageId: number, hidOp: number): string {
+  return `CORA AckNak for msgId=${messageId} hidOp=${hidOp}`;
+}
 
 export abstract class CoraServerBase extends EventEmitter {
   protected server: net.Server;
@@ -35,7 +47,7 @@ export abstract class CoraServerBase extends EventEmitter {
   protected lastClientRxTs = 0;
   protected abstract componentName: string;
   /** Full wire traces are useful for the low-volume primary handshake, but not
-   *  for the ACK-paced child image stream. */
+   *  for the child image stream. */
   protected traceWireFrames = false;
 
   protected constructor(port: number) {
@@ -138,15 +150,29 @@ export abstract class CoraServerBase extends EventEmitter {
     this.keepaliveSeq = (this.keepaliveSeq + 1) & 0xff;
   }
 
+  /** Writes the ACK and returns its frame so the caller can trace it afterwards:
+   *  Elgato waits for this frame before sending the next key image. */
+  protected writeAckNak(messageId: number, hidOp = 0): Buffer {
+    // A fresh copy: the socket may still hold the buffer after write().
+    const frame = Buffer.from(ACK_FRAME_TEMPLATE);
+    frame[6] = hidOp;
+    frame.writeUInt32LE(messageId, 8);
+    this.client?.write(frame);
+    return frame;
+  }
+
+  protected traceAckNak(frame: Buffer, messageId: number, hidOp: number): void {
+    if (this.traceWireFrames) this.logWireFrame('tx', frame);
+    if (this.commTracing) this.emitComm('tx', ackDescription(messageId, hidOp), frame);
+  }
+
   protected sendAckNak(messageId: number, hidOp = 0): void {
-    this.sendFrame(
-      Buffer.alloc(4),
-      CORA_FLAG_VERBATIM | CORA_FLAG_ACKNAK,
-      hidOp,
-      messageId,
-      `CORA AckNak for msgId=${messageId} hidOp=${hidOp}`,
-      true,
-    );
+    this.traceAckNak(this.writeAckNak(messageId, hidOp), messageId, hidOp);
+  }
+
+  /** Simple-only builds tally bulk comm traffic instead of storing an entry. */
+  protected countComm(kind: CommCountKind): void {
+    this.emit('commCount', kind);
   }
 
   /** Without a 'comm' listener the per-frame hex dump is dead work. */

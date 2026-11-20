@@ -91,10 +91,6 @@ export type WorkerToMain =
   | { type: 'inputAction'; message: string }
   | { type: 'log'; level: LogLevel; component: string; message: string }
   | { type: 'error'; message: string }
-  // One image finished writing to the device — drives the Statistics page. `hash` is
-  // the raw CORA frame hash (page fingerprint, main/page-tracker.ts); riding here keeps it
-  // to one message per frame on the ACK-paced path. `cached`: the LRU served the frame.
-  | { type: 'imageSent'; keyIndex: number; hash?: string; cached?: boolean }
   // A touch-strip upload reached the device — the WebUI strip preview mirrors it.
   | { type: 'stripWrite'; wireId: number; bytes: Uint8Array; full: boolean }
   // The driver re-initialized the device (sleep/wake CLE ALL) — the main
@@ -103,5 +99,14 @@ export type WorkerToMain =
   | { type: 'disconnect' }
   | { type: 'closed' }
   // Posting credits back: these work ids are finished. A batch reports after its final
-  // native write, together with its imageSent notifications.
-  | { type: 'workDone'; ids: number[] };
+  // native write. `sent` rides along (one message per frame on the ACK-paced path):
+  // images that finished writing, driving the Statistics page; absent when the work failed.
+  | { type: 'workDone'; ids: number[]; sent?: SentImage[] };
+
+/** One image that reached the device. `hash` is the raw CORA frame hash (page
+ *  fingerprint, main/page-tracker.ts); `cached`: the LRU served the frame. */
+export interface SentImage {
+  keyIndex: number;
+  hash?: string;
+  cached?: boolean;
+}

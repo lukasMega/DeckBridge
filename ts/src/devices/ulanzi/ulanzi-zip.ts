@@ -10,7 +10,13 @@
  *  Hardware-tested on macOS — see ulanzi-protocol.ts. */
 
 import { WIDE_KEY_IMAGE_MODE } from '../../shared/wide-key.js';
-import { isPayloadSafe } from './ulanzi-protocol.js';
+import {
+  FIRST_CHUNK_DATA,
+  PACKET_SIZE,
+  isBoundaryByteSafe,
+  isLengthSafe,
+  isPayloadSafe,
+} from './ulanzi-protocol.js';
 import type { FontStyle } from './ulanzi-protocol.js';
 
 const LOCAL_SIG = 0x04034b50;
@@ -28,12 +34,14 @@ const VERSION_STORE = 10;
 const DOS_TIME = 0;
 const DOS_DATE = 0x0021;
 
-/** Max boundary-byte rebuild attempts before shipping the page anyway (plan O8).
- *  Each retry adds one more filler byte, so this samples 64 distinct alignments. */
-export const MAX_PAD_RETRIES = 64;
-/** Bytes of filler added to pad.txt per retry. One, so consecutive retries test
- *  adjacent alignments rather than skipping 7 of every 8. */
-const PAD_STEP_BYTES = 1;
+/** Max pad candidates tried before shipping the page anyway (plan O8). Each retry
+ *  adds one more filler byte, so consecutive candidates test adjacent alignments.
+ *  Cheap because the search only inspects boundary bytes (see buildSafeZip). */
+export const MAX_PAD_RETRIES = 1024;
+const PAD_NAME = new TextEncoder().encode('pad.txt');
+/** '.' filler; sliced for the analytic search so no candidate allocates its own. */
+const PAD_FILL = 0x2e;
+const PAD_BYTES = new Uint8Array(MAX_PAD_RETRIES).fill(PAD_FILL);
 
 export interface PageSlot {
   slotId: number;
@@ -56,33 +64,53 @@ export interface PageZipOptions {
 }
 
 // ── CRC-32 (IEEE, the one ZIP uses) ────────────────────────────────────────
+/** Slicing-by-8: row 0 is the classic byte table, row k advances a byte through k
+ *  more zero bytes, so eight bytes fold in with eight lookups. */
 const CRC_TABLE = ((): Uint32Array => {
-  const table = new Uint32Array(256);
+  const t = new Uint32Array(256 * 8);
   for (let n = 0; n < 256; n++) {
     let c = n;
     for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
-    table[n] = c >>> 0;
+    t[n] = c >>> 0;
   }
-  return table;
+  for (let n = 0; n < 256; n++) {
+    let c = t[n]!;
+    for (let k = 1; k < 8; k++) {
+      c = t[c & 0xff]! ^ (c >>> 8);
+      t[k * 256 + n] = c >>> 0;
+    }
+  }
+  return t;
 })();
 
 export function crc32(data: Uint8Array): number {
+  const t = CRC_TABLE;
+  const n = data.length;
   let c = 0xffffffff;
-  for (let i = 0; i < data.length; i++) {
-    c = CRC_TABLE[(c ^ (data[i] ?? 0)) & 0xff]! ^ (c >>> 8);
+  let i = 0;
+  // Word reads need 4-byte alignment; the word loop assumes a little-endian host.
+  const head = Math.min(n, (4 - (data.byteOffset & 3)) & 3);
+  for (; i < head; i++) c = t[(c ^ data[i]!) & 0xff]! ^ (c >>> 8);
+  const words = (n - i) >>> 3;
+  if (words > 0) {
+    const u = new Uint32Array(data.buffer, data.byteOffset + i, words * 2);
+    for (let w = 0; w < u.length; w += 2) {
+      const a = u[w]! ^ c;
+      const b = u[w + 1]!;
+      c =
+        t[1792 + (a & 0xff)]! ^
+        t[1536 + ((a >>> 8) & 0xff)]! ^
+        t[1280 + ((a >>> 16) & 0xff)]! ^
+        t[1024 + (a >>> 24)]! ^
+        t[768 + (b & 0xff)]! ^
+        t[512 + ((b >>> 8) & 0xff)]! ^
+        t[256 + ((b >>> 16) & 0xff)]! ^
+        t[b >>> 24]!;
+    }
+    i += words * 8;
   }
+  for (; i < n; i++) c = t[(c ^ data[i]!) & 0xff]! ^ (c >>> 8);
   return (c ^ 0xffffffff) >>> 0;
-}
-
-/** FNV-1a 32-bit — content tag for icon paths. Not security-relevant; it only
- *  has to differ when the bytes differ. */
-export function fnv1a(data: Uint8Array): number {
-  let h = 0x811c9dc5;
-  for (let i = 0; i < data.length; i++) {
-    h ^= data[i] ?? 0;
-    h = Math.imul(h, 0x01000193) >>> 0;
-  }
-  return h >>> 0;
 }
 
 /** Icon paths must be FRESH on every flush. Two independent implementations
@@ -91,27 +119,34 @@ export function fnv1a(data: Uint8Array): number {
  *  push without documenting why; the shared behaviour is strong evidence the
  *  firmware caches decoded pixmaps by path after unzipping into /tmp/icon/, so a
  *  stable `k0.png` would repaint the OLD image. txiki.js has no UUID API, so mix
- *  the slot, the flush counter and a content hash — deterministic, no crypto
+ *  the slot, the flush counter and the content CRC-32 (already needed for the
+ *  ZIP entry, so naming costs no second pass) — deterministic, no crypto
  *  dependency, and collision-free across flushes. Plan O11 checks whether the
  *  churn is actually required. */
 export function iconName(slotId: number, flushSeq: number, png: Uint8Array): string {
   // JPEG experiment: the extension follows the bytes (SOI marker FF D8); the
   // black clear-key PNG stays .png.
   const ext = png[0] === 0xff && png[1] === 0xd8 ? 'jpg' : 'png';
-  return `Images/${slotId}_${flushSeq}_${digest(png).fnv.toString(16).padStart(8, '0')}.${ext}`;
+  return `Images/${slotId}_${flushSeq}_${digest(png).toString(16).padStart(8, '0')}.${ext}`;
 }
 
-/** crc32 + fnv1a cost ~O(bytes) in interpreted JS (tens of ms per page), and the
- *  same PNG objects are rebuilt into every full page and every boundary-byte retry,
- *  so hash each buffer once. Keyed by identity: PNGs are never mutated after staging. */
-const digests = new WeakMap<Uint8Array, { crc: number; fnv: number }>();
-function digest(data: Uint8Array): { crc: number; fnv: number } {
+/** crc32 costs O(bytes) in interpreted JS, and the same PNG objects are rebuilt into
+ *  every full page, so hash each buffer once. Keyed by identity: PNGs are never
+ *  mutated after staging. */
+const digests = new WeakMap<Uint8Array, number>();
+function digest(data: Uint8Array): number {
   let d = digests.get(data);
-  if (!d) {
-    d = { crc: crc32(data), fnv: fnv1a(data) };
+  if (d === undefined) {
+    d = crc32(data);
     digests.set(data, d);
   }
   return d;
+}
+
+/** Hash at stage time so the cost hides in the gaps between CORA images instead of
+ *  the flush that follows. */
+export function warmDigest(data: Uint8Array): void {
+  digest(data);
 }
 
 /** Grid slot id → the manifest's "{col}_{row}" key (column FIRST). */
@@ -167,29 +202,21 @@ function writeCentralHeader(out: Buffer, off: number, e: ZipEntry, localOff: num
   return off + CENTRAL_HEADER_SIZE + e.name.length;
 }
 
-/** Assemble a stored-method ZIP from entries, in the given order. */
-function writeZip(entries: ZipEntry[]): Uint8Array {
-  let size = EOCD_SIZE;
-  for (const e of entries) {
-    size += LOCAL_HEADER_SIZE + e.name.length + e.data.length;
-    size += CENTRAL_HEADER_SIZE + e.name.length;
-  }
-  const out = Buffer.alloc(size, 0);
-
-  const localOffsets: number[] = [];
-  let off = 0;
-  for (const e of entries) {
-    localOffsets.push(off);
-    off = writeLocalHeader(out, off, e);
-    out.set(e.data, off);
-    off += e.data.length;
-  }
-
-  const cdStart = off;
+/** Central directory + EOCD, starting at `off` in `out`. `cdStart` is the directory's
+ *  absolute offset in the archive, which differs from `off` when `out` is only a
+ *  scratch copy of the tail. Returns the end offset. */
+function writeTail(
+  out: Buffer,
+  off: number,
+  cdStart: number,
+  entries: ZipEntry[],
+  localOffsets: number[],
+): number {
+  const first = off;
   for (let i = 0; i < entries.length; i++) {
     off = writeCentralHeader(out, off, entries[i]!, localOffsets[i]!);
   }
-  const cdSize = off - cdStart;
+  const cdSize = off - first;
 
   out.writeUInt32LE(EOCD_SIG, off);
   out.writeUInt16LE(0, off + 4); // this disk
@@ -199,6 +226,33 @@ function writeZip(entries: ZipEntry[]): Uint8Array {
   out.writeUInt32LE(cdSize, off + 12);
   out.writeUInt32LE(cdStart, off + 16);
   out.writeUInt16LE(0, off + 20); // comment len
+  return off + EOCD_SIZE;
+}
+
+/** Local-section layout: each entry's offset and where the central directory starts. */
+function layout(entries: ZipEntry[]): { localOffsets: number[]; localEnd: number; size: number } {
+  const localOffsets: number[] = [];
+  let off = 0;
+  let size = EOCD_SIZE;
+  for (const e of entries) {
+    localOffsets.push(off);
+    off += LOCAL_HEADER_SIZE + e.name.length + e.data.length;
+    size += CENTRAL_HEADER_SIZE + e.name.length;
+  }
+  return { localOffsets, localEnd: off, size: size + off };
+}
+
+/** Assemble a stored-method ZIP from entries, in the given order. */
+function writeZip(entries: ZipEntry[]): Buffer {
+  const { localOffsets, localEnd, size } = layout(entries);
+  const out = Buffer.alloc(size, 0);
+  let off = 0;
+  for (const e of entries) {
+    off = writeLocalHeader(out, off, e);
+    out.set(e.data, off);
+    off += e.data.length;
+  }
+  writeTail(out, localEnd, localEnd, entries, localOffsets);
   return out;
 }
 
@@ -266,9 +320,7 @@ function pageEntries(slots: PageSlot[], opts: PageZipOptions): ZipEntry[] {
   for (const slot of slots) {
     if (!slot.png) continue;
     if (slotKey(slot.slotId, opts.columns) === wideKey && slot !== image) continue;
-    entries.push(
-      entry(iconName(slot.slotId, opts.flushSeq, slot.png), slot.png, digest(slot.png).crc),
-    );
+    entries.push(entry(iconName(slot.slotId, opts.flushSeq, slot.png), slot.png, digest(slot.png)));
   }
   // The firmware can drop the final entry (marcelobrake protocol.md), so it is a throwaway.
   entries.push(entry('sentinel.txt', new Uint8Array(0)));
@@ -311,18 +363,87 @@ export function buildSafePageZip(
   return buildSafeZip(pageEntries(slots, opts));
 }
 
+/** CRC-32 register after `p` filler bytes, advanced one byte per call. */
+function padCrcStep(c: number): number {
+  return CRC_TABLE[(c ^ PAD_FILL) & 0xff]! ^ (c >>> 8);
+}
+
+/** Judges pad candidates for one entry list without assembling them.
+ *
+ *  The local section carries no absolute offsets, so a pad only shifts it: boundary
+ *  bytes come from the unpadded archive at shifted offsets, plus a small rebuilt tail
+ *  (central directory + EOCD, the only part that changes). */
+class PadSearch {
+  private readonly localOffsets: number[];
+  private readonly localEnd: number;
+  private readonly tailLen: number;
+  private readonly scratch: Buffer;
+  private readonly padded: ZipEntry[];
+  private readonly padOffsets: number[];
+  private crc = 0xffffffff;
+
+  constructor(
+    entries: ZipEntry[],
+    private readonly base: Uint8Array,
+  ) {
+    const l = layout(entries);
+    this.localOffsets = l.localOffsets;
+    this.localEnd = l.localEnd;
+    this.tailLen = l.size - l.localEnd + CENTRAL_HEADER_SIZE + PAD_NAME.length;
+    this.scratch = Buffer.alloc(this.tailLen);
+    this.padded = [{ name: PAD_NAME, data: PAD_BYTES, crc: 0 }, ...entries];
+    this.padOffsets = [0, ...l.localOffsets];
+  }
+
+  /** Candidates must be tried with pad = 1, 2, 3, … (the CRC register advances per call). */
+  isSafe(pad: number): boolean {
+    this.crc = padCrcStep(this.crc);
+    const shift = LOCAL_HEADER_SIZE + PAD_NAME.length + pad;
+    const tailStart = shift + this.localEnd;
+    const total = tailStart + this.tailLen;
+    if (!isLengthSafe(total)) return false;
+    let tailBuilt = false;
+    for (let off = FIRST_CHUNK_DATA; off < total; off += PACKET_SIZE) {
+      // off >= 1016 clears pad.txt's 37-byte header, so a pad boundary is always filler.
+      let b = PAD_FILL;
+      if (off >= tailStart) {
+        if (!tailBuilt) {
+          this.buildTail(pad, shift, tailStart);
+          tailBuilt = true;
+        }
+        b = this.scratch[off - tailStart]!;
+      } else if (off >= shift) {
+        b = this.base[off - shift]!;
+      }
+      if (!isBoundaryByteSafe(b)) return false;
+    }
+    return true;
+  }
+
+  private buildTail(pad: number, shift: number, tailStart: number): void {
+    const crc = (this.crc ^ 0xffffffff) >>> 0;
+    this.padded[0] = { name: PAD_NAME, data: PAD_BYTES.subarray(0, pad), crc };
+    for (let i = 0; i < this.localOffsets.length; i++) {
+      this.padOffsets[i + 1] = this.localOffsets[i]! + shift;
+    }
+    writeTail(this.scratch, 0, tailStart, this.padded, this.padOffsets);
+  }
+}
+
 /** The pad loop for an arbitrary entry list — the hardware probes build manifests
- *  the driver never emits. */
+ *  the driver never emits. Same order and rule as rebuilding the whole archive per
+ *  candidate (so the chosen pad is identical), but only the winner is assembled. */
 export function buildSafeZip(entries: ZipEntry[]): {
   zip: Uint8Array;
   retries: number;
   safe: boolean;
 } {
-  let first: Uint8Array | null = null;
-  for (let retry = 0; retry <= MAX_PAD_RETRIES; retry++) {
-    const zip = assemble(entries, retry * PAD_STEP_BYTES);
-    if (isPayloadSafe(zip)) return { zip, retries: retry, safe: true };
-    first ??= zip;
+  const base = writeZip(entries);
+  if (isPayloadSafe(base)) return { zip: base, retries: 0, safe: true };
+
+  const search = new PadSearch(entries, base);
+  for (let pad = 1; pad <= MAX_PAD_RETRIES; pad++) {
+    if (search.isSafe(pad)) return { zip: assemble(entries, pad), retries: pad, safe: true };
   }
-  return { zip: first!, retries: MAX_PAD_RETRIES, safe: false };
+  return { zip: base, retries: MAX_PAD_RETRIES, safe: false };
 }

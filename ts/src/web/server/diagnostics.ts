@@ -9,6 +9,7 @@ import type { HidDeviceInfo } from '../../ffi/hidapi.js';
 import type { DeviceRow } from '../../cli/devices.js';
 import type { RequirementResult } from './requirements.js';
 import type { CommEntry } from '../../shared/types.js';
+import type { CommCountKind } from '../../shared/comm-format.js';
 import type { WslRelayStatus } from '../contract-wsl-relay.js';
 import type { PairingRouteStatus } from '../contract-pairing-route.js';
 import type { KeyEventEntry, LogEntry, StateResponse } from './types.js';
@@ -66,6 +67,8 @@ export interface DiagnosticsSources {
     error?: string;
   };
   comms?: CommEntry[];
+  /** Image-chunk/ACK totals that simple-only builds count instead of storing in `comms`. */
+  commCounts?: Partial<Record<CommCountKind, number>>;
   keyEvents?: KeyEventEntry[];
   /** Tail of the log FILE. Empty falls back to `ringLogs`. */
   logTail?: string;
@@ -193,15 +196,22 @@ function logsBlock(sources: DiagnosticsSources, maxLines: number): string {
     .join('\n');
 }
 
-function commsBlock(comms: CommEntry[] | undefined): string {
+function commsBlock(
+  comms: CommEntry[] | undefined,
+  counts: Partial<Record<CommCountKind, number>> | undefined,
+): string {
   if (!comms) return '';
-  return comms
-    .map(
-      (c) =>
-        `${new Date(c.ts).toISOString()} ${c.direction} ${c.protocol} [${c.component}] ` +
-        `${c.totalBytes}B ${c.human}`,
-    )
-    .join('\n');
+  const lines = comms.map(
+    (c) =>
+      `${new Date(c.ts).toISOString()} ${c.direction} ${c.protocol} [${c.component}] ` +
+      `${c.totalBytes}B ${c.human}`,
+  );
+  const tally = Object.entries(counts ?? {});
+  if (tally.length > 0) {
+    const totals = tally.map(([k, n]) => k + '=' + String(n)).join(' ');
+    lines.push('counted, not listed: ' + totals);
+  }
+  return lines.join('\n');
 }
 
 function keyEventsBlock(events: KeyEventEntry[] | undefined): string {
@@ -348,7 +358,7 @@ export function buildDiagnostics(src: DiagnosticsSources, opt: DiagnosticsOption
     section('requirements', requirementsBlock(src.requirements)),
     section('docks / live state', jsonBlock(src.state)),
     section(`log tail (last ${maxLines} lines)`, logsBlock(src, maxLines)),
-    section('cora comm buffer', commsBlock(src.comms)),
+    section('cora comm buffer', commsBlock(src.comms, src.commCounts)),
     section('key events', keyEventsBlock(src.keyEvents)),
     section('settings.json', settingsBlock),
   ];

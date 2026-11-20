@@ -315,10 +315,6 @@ export class WorkerHidDriver extends EventEmitter implements DockDriver {
       case 'inputAction':
         this.emit('inputAction', msg.message);
         break;
-      case 'imageSent':
-        if (msg.hash !== undefined) this.emit('frameHash', msg.keyIndex, msg.hash);
-        this.emit('imageSent', msg.keyIndex, msg.cached === true);
-        break;
       case 'reinit':
         this.emit('reinit');
         break;
@@ -345,7 +341,15 @@ export class WorkerHidDriver extends EventEmitter implements DockDriver {
   private onLifecycleMessage(msg: WorkerToMain): boolean {
     switch (msg.type) {
       case 'workDone':
-        if (this.queue.complete(msg.ids) > 0) this.resumeLocalIfDrained();
+        // Credits return even if a listener throws, as when this was its own message.
+        try {
+          for (const s of msg.sent ?? []) {
+            if (s.hash !== undefined) this.emit('frameHash', s.keyIndex, s.hash);
+            this.emit('imageSent', s.keyIndex, s.cached === true);
+          }
+        } finally {
+          if (this.queue.complete(msg.ids) > 0) this.resumeLocalIfDrained();
+        }
         return true;
       case 'disconnect':
         this.emit('disconnect');

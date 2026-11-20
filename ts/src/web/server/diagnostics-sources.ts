@@ -7,6 +7,7 @@ import type { DiagnosticsOptions, DiagnosticsSources } from './diagnostics.js';
 import { checkRequirements } from './requirements.js';
 import type { KeyEventEntry, LogEntry, StateResponse } from './types.js';
 import type { CommEntry } from '../../shared/types.js';
+import type { CommCountKind } from '../../shared/comm-format.js';
 import type { WslRelayStatus } from '../contract-wsl-relay.js';
 import type { PairingRouteStatus } from '../contract-pairing-route.js';
 import type { DeviceModelOverride } from '../../devices/driver.js';
@@ -42,6 +43,7 @@ export interface LiveDiagnosticsInputs extends DiagnosticsInputsBase {
   modelOverrides: Record<string, DeviceModelOverride>;
   effectiveModels: Record<string, unknown>;
   comms: CommEntry[];
+  commCounts?: Partial<Record<CommCountKind, number>>;
   keyEvents: KeyEventEntry[];
   ringLogs: LogEntry[];
   inventory: HidInventoryFn;
@@ -53,7 +55,12 @@ export interface LiveDiagnosticsInputs extends DiagnosticsInputsBase {
 export function liveDiagnosticsInputs(
   args: DiagnosticsInputsBase & {
     overrides: ModelOverridesController;
-    activity: { comms: CommEntry[]; keyEvents: KeyEventEntry[]; logs: LogEntry[] };
+    activity: {
+      comms: CommEntry[];
+      commCounts: Partial<Record<CommCountKind, number>>;
+      keyEvents: KeyEventEntry[];
+      logs: LogEntry[];
+    };
     inventory: HidInventoryFn;
   },
 ): LiveDiagnosticsInputs {
@@ -71,6 +78,7 @@ export function liveDiagnosticsInputs(
     modelOverrides,
     effectiveModels,
     comms: activity.comms,
+    commCounts: activity.commCounts,
     keyEvents: activity.keyEvents,
     ringLogs: activity.logs,
     inventory,
@@ -149,6 +157,7 @@ function sourcesFor(
       error: live.state.updateInfo.error,
     },
     comms: live.comms,
+    commCounts: live.commCounts,
     keyEvents: live.keyEvents,
     logTail,
     ringLogs: live.ringLogs,

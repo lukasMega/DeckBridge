@@ -7,6 +7,7 @@
  *  Deliberately free of FFI and hidapi: this is the part most likely to need
  *  retuning on real hardware, so it is unit-testable on its own. */
 
+import { warmDigest } from './ulanzi-zip.js';
 import type { PageSlot } from './ulanzi-zip.js';
 
 export interface PageBatch {
@@ -74,6 +75,7 @@ export class UlanziPage {
       return false;
     }
     this.dirty.set(slotId, png);
+    warmDigest(png); // hashed in the CORA gap, not in the flush
     return true;
   }
 

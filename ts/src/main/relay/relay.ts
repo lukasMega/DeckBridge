@@ -1,7 +1,7 @@
 // Transparent TCP relay between an Elgato client and a DeckBridge on another computer.
 //
 // Uses raw tjs streams, not platform/tcp.ts: that shim has no half-close and no write
-// backpressure, and CORA image chunks are ACK-paced, so each pump awaits its write.
+// backpressure, and CORA key images are ACK-paced, so each pump awaits its write.
 // txiki closes a socket handle only once BOTH stream halves finish, so the session closes
 // both native handles itself when the pumps settle.
 //

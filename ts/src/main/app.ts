@@ -6,6 +6,7 @@ import { CoraDock } from './cora-dock.js';
 import { WebUIServer } from '../web/server/index.js';
 import type { MockDeviceConfig } from '../web/server/index.js';
 import type { ClientApp, CommEntry, LogObject } from '../shared/types.js';
+import type { CommCountKind } from '../shared/comm-format.js';
 import type { MockInput, TouchStripMode } from '../shared/types.js';
 import { ELGATO_CHILD_PORT, ELGATO_TCP_PORT, WEBUI_PORT } from '../shared/types.js';
 import { advertisedGeometry, DEFAULT_MODEL, DEVICE_MODELS } from '../devices/registry.js';
@@ -265,6 +266,7 @@ for (const [sig, handler] of signalHandlers) tjs.addSignalListener(sig, handler)
 for (const s of [server, childServer]) {
   s.on('serverLog', ({ level, component: c, message: m }: LogObject) => log(level, c, m));
   s.on('comm', (entry: Omit<CommEntry, 'ts'>) => webui.notifyComm(entry));
+  s.on('commCount', (kind: CommCountKind) => webui.notifyCommCount(kind));
   s.on('clientAppDetected', (app: ClientApp) => webui.notifyClientApp(app));
 }
 

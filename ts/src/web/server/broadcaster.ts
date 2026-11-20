@@ -9,6 +9,10 @@ function wsMsg(event: string, data: unknown): string {
   return JSON.stringify({ event, data });
 }
 
+function wsMsgJson(event: string, dataJson: string): string {
+  return `{"event":${JSON.stringify(event)},"data":${dataJson}}`;
+}
+
 /**
  * Owns the set of connected WebSocket clients and the broadcast timers.
  * The server is broadcast-only; clients never send meaningful messages.
@@ -73,6 +77,17 @@ export class Broadcaster {
 
   sendTo<K extends keyof WsEvents>(ws: ServerWebSocket, event: K, data: WsEvents[K]): void {
     ws.sendText(wsMsg(event, data));
+  }
+
+  /** `broadcast` for a payload the caller already serialized: `dataJson` must be exactly what
+   *  JSON.stringify(data) would give (hand-built for big base64 images, which it would only copy). */
+  broadcastJson(event: keyof WsEvents, dataJson: string): void {
+    if (this.clients.size === 0) return;
+    this.send(wsMsgJson(event, dataJson));
+  }
+
+  sendToJson(ws: ServerWebSocket, event: keyof WsEvents, dataJson: string): void {
+    ws.sendText(wsMsgJson(event, dataJson));
   }
 
   private send(msg: string): void {

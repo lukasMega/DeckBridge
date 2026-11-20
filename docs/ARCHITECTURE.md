@@ -104,8 +104,9 @@ see *Supporting workers*), for **four** thread contexts in total:
 
 - **Main thread** — the CORA TCP servers (Elgato primary/child), the WebUI HTTP/WebSocket
   server, and the orchestration forwarding each received CORA image to the worker. It must stay
-  responsive: CORA image chunks are **ACK-paced** (Elgato waits for our ACK before the next),
-  so any stall here throttles image delivery *and* the WebUI previews riding on it.
+  responsive: key images are **ACK-paced** (only a key image's last chunk, flags `0xc000`, sets
+  REQACK; Elgato waits for that ACK before sending the next image), so any stall here throttles
+  image delivery *and* the WebUI previews riding on it.
 - **USB worker thread** — owns the libhidapi handle and all **synchronous, blocking** work: the
   JPEG/BMP **transform** (`image-render.ts` → `image_proc_transform` FFI, ~1 ms) + LRU **image
   cache**, then HID I/O (`hid_write` uploads, `hid_read_timeout` key polling). The main thread
@@ -162,7 +163,7 @@ Three lighter worker types sit outside the CORA/image hot path:
 <details>
 <summary>WebUI log batching</summary>
 
-To keep image bursts from flooding the WebUI, per-chunk CORA tx/ACK and keepalive logs are
+To keep image bursts from flooding the WebUI, CORA tx/ACK (one per key image) and keepalive logs are
 `debug` level, and `WebUIServer.notifyComm()` batches comm entries into one `commBatch` message
 every ~100 ms (`COMM_BROADCAST_FLUSH_MS`). In `__SIMPLE_ONLY__` builds (the default — no
 log/comm panel) the `commBatch`/`logBatch` broadcasts and the `/api/state` `logs`/`commLogs`

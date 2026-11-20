@@ -71,6 +71,36 @@ test('blank text renders pure background', () => {
   assert.equal(pixelsOf(composeWidgetBmp([{ text: ' ', big: true }], SIZE), FG).length, 0);
 });
 
+test('background fill covers every pixel for any canvas size and colour (doubling fill)', () => {
+  const blank: WidgetLine[] = [{ text: ' ', big: false }];
+  const sizes: Array<[number, number]> = [
+    [1, 1],
+    [3, 1],
+    [1, 7],
+    [7, 5],
+    [37, 29],
+    [85, 85],
+    [458, 196],
+  ];
+  for (const [w, h] of sizes) {
+    for (const background of ['#000000', '#0a84ff', '#fffffe']) {
+      const bmp = composeWidgetBmp(blank, w, h, { background });
+      const n = Number.parseInt(background.slice(1), 16);
+      const want = [n & 0xff, (n >> 8) & 0xff, n >> 16];
+      for (let y = 0; y < h; y++)
+        for (let x = 0; x < w; x++)
+          assert.deepEqual(pixel(bmp, x, y), want, `${w}x${h} ${background} (${x},${y})`);
+    }
+  }
+});
+
+test('inverted swaps the fill colour to the text colour', () => {
+  const layout = layoutWidget([{ text: ' ', big: false }], 40, 20, {});
+  const bmp = composeLayout(layout, 40, 20, true);
+  assert.deepEqual(pixel(bmp, 39, 19), FG);
+  assert.deepEqual(pixel(bmp, 0, 0), FG);
+});
+
 // Golden hashes captured from the pre-ladder renderer: default style must stay
 // pixel-identical — except the default ellipsis on cut text, so `ellipsis: false` here.
 

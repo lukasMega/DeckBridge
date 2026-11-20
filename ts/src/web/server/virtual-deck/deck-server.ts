@@ -3,6 +3,8 @@
 import type { DeckPairRequest } from '../../contract-deck.js';
 import { isAllowedWebRequest, isPortInUse } from '../web-request-guard.js';
 import type { DeckAuth } from './deck-auth.js';
+import { DECK_ASSETS } from 'virtual:web-assets';
+import { staticAsset } from '../static-asset.js';
 import { deckAssets, deckManifest } from './deck-assets.js';
 import { DECK_MAX_TEXT_BYTES, DECK_TICK_MS } from './deck-constants.js';
 import type { DeckHub } from './deck-hub.js';
@@ -33,26 +35,25 @@ function reply(
 const jsonReply = (data: unknown, status = 200, headers: Record<string, string> = {}): Response =>
   reply(JSON.stringify(data), status, { 'Content-Type': 'application/json', ...headers });
 
-const STATIC: Record<string, () => Response> = {
-  '/deck': () => page(),
-  '/deck/': () => page(),
-  '/deck/deck.js': () =>
-    reply(deckAssets.js, 200, {
-      'Content-Type': 'application/javascript',
-      'Cache-Control': 'no-cache',
-    }),
-  '/deck/deck.css': () =>
-    reply(deckAssets.css, 200, { 'Content-Type': 'text/css', 'Cache-Control': 'no-cache' }),
+type Handler = (req: Request) => Response | Promise<Response>;
+
+const STATIC: Record<string, Handler> = {
+  '/deck': (req) => page(req),
+  '/deck/': (req) => page(req),
+  '/deck/deck.js': (req) =>
+    staticAsset(req, DECK_ASSETS.js, 'application/javascript', { headers: SECURITY_HEADERS }),
+  '/deck/deck.css': (req) =>
+    staticAsset(req, DECK_ASSETS.css, 'text/css', { headers: SECURITY_HEADERS }),
   '/deck/manifest.webmanifest': () =>
     reply(deckManifest(), 200, { 'Content-Type': 'application/manifest+json' }),
   '/deck/icon-180.png': () => icon(180),
   '/deck/icon-512.png': () => icon(512),
 };
 
-function page(): Response {
-  return reply(deckAssets.html, 200, {
-    'Content-Type': 'text/html; charset=utf-8',
-    'Cache-Control': 'no-store',
+function page(req: Request): Response | Promise<Response> {
+  return staticAsset(req, DECK_ASSETS.html, 'text/html; charset=utf-8', {
+    cacheControl: 'no-store',
+    headers: SECURITY_HEADERS,
   });
 }
 
@@ -142,7 +143,7 @@ export class DeckServer {
     if (req.method === 'GET' || req.method === 'HEAD') {
       if (url.pathname === '/') return reply(null, 302, { Location: '/deck/' });
       const serve = STATIC[url.pathname];
-      if (serve) return serve();
+      if (serve) return serve(req);
     }
     return reply(null, 404);
   }

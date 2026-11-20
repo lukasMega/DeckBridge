@@ -107,16 +107,6 @@ const textAssets = (cssAsEmpty) => ({
     }));
   },
 });
-// ui.js / deck.js are stubs build.mjs replaces with the real client bundle; measured separately.
-const clientStubs = {
-  name: 'client-stubs',
-  setup(b) {
-    b.onLoad({ filter: /client[/\\](deck[/\\])?(ui|deck)\.js$/ }, () => ({
-      contents: '',
-      loader: 'text',
-    }));
-  },
-};
 // build.mjs does the same: release bundles never carry the mock driver.
 const noMockDriver = {
   name: 'no-mock-driver',
@@ -237,7 +227,7 @@ async function measureCss(uiText, mangle) {
       uniqueDeclarations: new Set(decls).size,
     });
   }
-  // assets.ts serves base + simple as one /ui.css, so they gzip together.
+  // The server serves base + simple as one /ui.css, so they gzip together.
   const ui = uiNames.map((name) => minified[name]);
   const uiDecls = ui.flatMap(cssDeclarations);
   const plainUi = uiNames.map((name) => plain[name]).join('');
@@ -340,14 +330,14 @@ export async function measure({ mangle = true } = {}) {
       charset: 'utf8',
       entryPoints: [join(TS, 'src/main/app.ts')],
       external: [...shared.external, 'virtual:*'],
-      plugins: [clientStubs, noMockDriver, textAssets(true)],
+      plugins: [noMockDriver, textAssets(true)],
     }),
     measureCss(ui.text, mangle),
     ...Object.values(WORKERS).map((entry) =>
       bundle({
         ...shared,
         entryPoints: [join(TS, entry)],
-        plugins: [clientStubs, textAssets(false)],
+        plugins: [textAssets(false)],
       }),
     ),
   ]);

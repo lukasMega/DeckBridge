@@ -1,8 +1,9 @@
-import { assets } from './assets.js';
+import { WEB_ASSETS } from 'virtual:web-assets';
+import { staticAsset } from './static-asset.js';
 import { checkRequirements } from './requirements.js';
 import { get, post, postJson } from './router.js';
 import type { Route, RouteContext } from './router.js';
-import { badRequest, css, html, js, json, noContent, notFound, readJson, text } from './http.js';
+import { badRequest, json, noContent, notFound, readJson, text } from './http.js';
 import { docsTrackingAllowed, docsUrl, isDocsTopic, isOwnNavigation } from './docs-links.js';
 import type { RawMockInput } from './mock-input.js';
 import { pushAdminRoutes } from './push-routes.js';
@@ -37,15 +38,17 @@ import type {
 } from '../../shared/types.js';
 import { encoderSettingsError } from '../../shared/encoder-settings.js';
 
+const HTML = 'text/html; charset=utf-8';
+
 // The complete HTTP surface, declarative. WebSocket upgrade (/api/ws) is handled
 // before dispatch in WebUIServer; everything else lives here.
 export const routes: Route[] = [
-  get('/', () => html(assets.html)),
-  get('/ui.css', () => css(assets.css)),
-  get('/ui.js', () => js(assets.js)),
-  get('/requirements', () => html(assets.requirementsHtml)),
+  get('/', ({ req }) => staticAsset(req, WEB_ASSETS.html, HTML)),
+  get('/ui.css', ({ req }) => staticAsset(req, WEB_ASSETS.css, 'text/css')),
+  get('/ui.js', ({ req }) => staticAsset(req, WEB_ASSETS.js, 'application/javascript')),
+  get('/requirements', ({ req }) => staticAsset(req, WEB_ASSETS.requirementsHtml, HTML)),
   // Framed by the pairing QR (simple/pairing-qr.tsx); its CSP is set in security-headers.ts.
-  get('/qr-sandbox', () => html(assets.qrSandboxHtml)),
+  get('/qr-sandbox', ({ req }) => staticAsset(req, WEB_ASSETS.qrSandboxHtml, HTML)),
   // Counts the docs open, then hands off to the docs site (see docs-links.ts).
   get('/go/docs/:topic', ({ params, req, settings }) => {
     const topic = params.topic ?? '';

@@ -1,5 +1,5 @@
 import assert from 'tjs:assert';
-import { ImageChannel } from '../src/web/server/image-channel.js';
+import { ImageChannel, extraKeyImageJson } from '../src/web/server/image-channel.js';
 import type { Broadcaster } from '../src/web/server/broadcaster.js';
 import type { WidgetPaint } from '../src/shared/widget-layout.js';
 import { widgetPreviews } from '../src/web/server/widget-preview.js';
@@ -24,6 +24,10 @@ function channel(selected = 0) {
     size: 1,
     broadcast: (event: string, data: Sent['data']) => sent.push({ event, data }),
     sendTo: (_ws: unknown, event: string, data: Sent['data']) => sent.push({ event, data }),
+    broadcastJson: (event: string, json: string) =>
+      sent.push({ event, data: JSON.parse(json) as Sent['data'] }),
+    sendToJson: (_ws: unknown, event: string, json: string) =>
+      sent.push({ event, data: JSON.parse(json) as Sent['data'] }),
   } as unknown as Broadcaster;
   let dock = selected;
   const ch = new ImageChannel(bus, () => dock);
@@ -117,12 +121,116 @@ test('selectedWidgetPaint reads the selected dock only', () => {
   assert.equal(ch.selectedWidgetPaint(15), PAINT);
 });
 
+console.log('\nImageChannel side-key repaint dedup');
+
+const b64 = (bytes: Uint8Array) => Buffer.from(bytes).toString('base64');
+const paintOf = (bytes: number[], over: Partial<WidgetPaint> = {}): WidgetPaint => ({
+  ...PAINT,
+  bmp: new Uint8Array(bytes),
+  ...over,
+});
+
+test('an unchanged repaint is not broadcast again; a changed one is', () => {
+  const { ch, sent } = channel();
+  ch.notifyDockWidgetPaint(0, 15, paintOf([1, 2, 3]));
+  ch.notifyDockWidgetPaint(0, 15, paintOf([1, 2, 3]));
+  assert.equal(extraKeyEvents(sent).length, 1);
+  ch.notifyDockWidgetPaint(0, 15, paintOf([1, 2, 4]));
+  ch.notifyDockWidgetPaint(0, 15, paintOf([1, 2, 4], { clipped: true }));
+  ch.notifyDockWidgetPaint(0, 15, paintOf([1, 2, 4], { clipped: true }));
+  assert.deepEqual(
+    extraKeyEvents(sent).map((d) => [d.data, d.clipped]),
+    [
+      [b64(new Uint8Array([1, 2, 3])), undefined],
+      [b64(new Uint8Array([1, 2, 4])), undefined],
+      [b64(new Uint8Array([1, 2, 4])), true],
+    ],
+  );
+});
+
+test('dedup is per wire id, and a repeated clear is sent once', () => {
+  const { ch, sent } = channel();
+  ch.notifyDockWidgetPaint(0, 15, paintOf([1]));
+  ch.notifyDockWidgetPaint(0, 10, paintOf([1]));
+  ch.notifyDockWidgetPaint(0, 10, null);
+  ch.notifyDockWidgetPaint(0, 10, null);
+  assert.deepEqual(extraKeyEvents(sent), [
+    { wireId: 15, data: 'AQ==' },
+    { wireId: 10, data: 'AQ==' },
+    { wireId: 10 },
+  ]);
+});
+
+test('a buffer repainted in place still counts as changed', () => {
+  const { ch, sent } = channel();
+  const bmp = new Uint8Array([1, 2, 3]);
+  ch.notifyDockWidgetPaint(0, 15, paintOf([], { bmp }));
+  bmp[0] = 9;
+  ch.notifyDockWidgetPaint(0, 15, paintOf([], { bmp }));
+  assert.equal(extraKeyEvents(sent).length, 2);
+});
+
+test('a zone repaint with the same status is not resent', () => {
+  const { ch, sent } = channel();
+  const zone = paintOf([], { zone: true, clipped: true });
+  ch.notifyDockWidgetPaint(0, 1, zone);
+  ch.notifyDockWidgetPaint(0, 1, zone);
+  assert.equal(extraKeyEvents(sent).length, 1);
+});
+
+test('a client that joins gets the unchanged image from the snapshot', () => {
+  const { ch, sent } = channel();
+  ch.notifyDockWidgetPaint(0, 15, paintOf([1, 2, 3]));
+  ch.notifyDockWidgetPaint(0, 15, paintOf([1, 2, 3]));
+  sent.length = 0;
+  ch.sendSnapshot({} as ServerWebSocket);
+  assert.deepEqual(extraKeyEvents(sent), [{ wireId: 15, data: b64(new Uint8Array([1, 2, 3])) }]);
+});
+
+test('no clients: nothing is remembered as sent, so the next paint with one is broadcast', () => {
+  const { ch, sent, setClients } = channel();
+  ch.notifyDockWidgetPaint(0, 15, paintOf([1]));
+  setClients(0);
+  ch.notifyDockWidgetPaint(0, 15, paintOf([2]));
+  setClients(1);
+  ch.notifyDockWidgetPaint(0, 15, paintOf([1])); // equals what an old client saw, not this one
+  assert.deepEqual(
+    extraKeyEvents(sent).map((d) => d.data),
+    ['AQ==', 'AQ=='],
+  );
+});
+
+test('a dock switch resends identical images (the browser drops them on switch)', () => {
+  const { ch, sent, select } = channel();
+  ch.notifyDockWidgetPaint(0, 15, paintOf([1]));
+  select(1);
+  ch.notifyDockWidgetPaint(1, 15, paintOf([1]));
+  assert.equal(extraKeyEvents(sent).length, 2);
+  select(0);
+  ch.replay(0);
+  assert.equal(extraKeyEvents(sent).length, 3);
+});
+
+test('hand-built extraKeyImage JSON equals JSON.stringify of the message', () => {
+  const cases: [number, WidgetPaint | undefined, Sent['data'] | undefined][] = [
+    [15, PAINT, { wireId: 15, data: 'Qk0=' }],
+    [10, undefined, { wireId: 10 }],
+    [3, { ...PAINT, clipped: true }, { wireId: 3, data: 'Qk0=', clipped: true }],
+    [1, { ...PAINT, zone: true, clipped: true }, { wireId: 1, zone: true, clipped: true }],
+    [2, { ...PAINT, zone: true }, { wireId: 2, zone: true }],
+    [0, paintOf(Array.from({ length: 4096 }, (_, i) => i & 0xff)), undefined],
+  ];
+  for (const [wireId, paint, expected] of cases) {
+    const msg = expected ?? { wireId, data: Buffer.from(paint!.bmp).toString('base64') };
+    assert.equal(extraKeyImageJson(wireId, paint), JSON.stringify(msg));
+  }
+});
+
 console.log('\nImageChannel strip-write mirror');
 
 const SLOT_A = new Uint8Array([1, 2, 3]);
 const SLOT_B = new Uint8Array([4, 5, 6]);
 const FULL = new Uint8Array([7, 8, 9]);
-const b64 = (bytes: Uint8Array) => Buffer.from(bytes).toString('base64');
 const stripEvents = (sent: Sent[]) =>
   sent.filter((s) => s.event === 'stripWrite').map((s) => s.data);
 function snapshot(ch: ImageChannel, sent: Sent[]): Sent['data'][] {

@@ -30,7 +30,7 @@ import {
   CORA_VERBATIM_RESULT,
   encodeCoraFrame,
 } from './frame.js';
-import { CoraServerBase } from './server-base.js';
+import { CoraServerBase, ackDescription } from './server-base.js';
 import { describeChildPayload } from './describe.js';
 import type { DeviceConfig, LogFn } from './types.js';
 import type { ChildGeometry } from '../devices/driver.js';
@@ -54,6 +54,19 @@ import {
   buildTouchReport,
 } from './plus-reports.js';
 
+/** Output-report payloads carrying image data (key, gen1, touch-strip chunks). */
+function isBulkChunk(payload: Buffer): boolean {
+  if (payload[0] !== PAYLOAD_TYPE_OUTPUT_REPORT) return false;
+  const cmd = payload[1];
+  return (
+    cmd === IMG_CMD_WRITE ||
+    cmd === GEN1_IMG_CMD ||
+    cmd === IMG_CMD_LCD ||
+    cmd === IMG_CMD_WINDOW ||
+    cmd === IMG_CMD_WINDOW_PARTIAL
+  );
+}
+
 export class ElgatoChildServer extends CoraServerBase {
   private imagePages: Map<number, ImageAssembly> = new Map();
   private gen1ImagePages: Map<number, ImageAssembly> = new Map();
@@ -70,7 +83,13 @@ export class ElgatoChildServer extends CoraServerBase {
   private sessionStartTs = 0;
   private sessionId = 0;
 
-  // Bound once so the ACK-paced hot path doesn't allocate a closure per chunk.
+  /** Simple-only builds tally image-chunk rx / ACK tx comm traffic instead of storing
+   *  entries, so the 500-entry ring keeps the pairing handshake. */
+  countBulkComm = __SIMPLE_ONLY__;
+  /** True while an image chunk's rx comm entry waits for its ACK to be written first. */
+  private rxDeferred = false;
+
+  // Bound once so the per-chunk hot path doesn't allocate a closure.
   private readonly emitLogFn: LogFn = this.emitLog.bind(this);
 
   protected componentName = 'elgato-child';
@@ -193,26 +212,44 @@ export class ElgatoChildServer extends CoraServerBase {
     if (payload.length < 1) return;
 
     try {
-      // Runs per image chunk on the ACK-paced hot path.
-      if (this.commTracing) {
-        this.emitComm(
-          'rx',
-          describeChildPayload(
-            payload,
-            flags,
-            hidOp,
-            messageId,
-            this.deviceConfig.productId,
-            this.port,
-          ),
-          payload,
-        );
-      }
+      // Image chunks record their rx entry after the ACK is written (see ackImage).
+      this.rxDeferred = isBulkChunk(payload);
+      if (!this.rxDeferred) this.traceRx(flags, hidOp, messageId, payload);
       this.routeChildPacket(flags, hidOp, messageId, payload);
+      if (this.rxDeferred) this.traceRx(flags, hidOp, messageId, payload);
     } catch (err) {
       this.emitLog('error', `child handleCoraPacket error: ${(err as Error).message}`);
       this.emitLog('debug', `child handleCoraPacket stack: ${(err as Error).stack}`);
     }
+  }
+
+  private traceRx(flags: number, hidOp: number, messageId: number, payload: Buffer): void {
+    this.rxDeferred = false;
+    if (!this.commTracing) return;
+    if (this.countBulkComm && isBulkChunk(payload)) {
+      this.countComm('image-chunk-rx');
+      return;
+    }
+    this.emitComm(
+      'rx',
+      describeChildPayload(
+        payload,
+        flags,
+        hidOp,
+        messageId,
+        this.deviceConfig.productId,
+        this.port,
+      ),
+      payload,
+    );
+  }
+
+  /** Elgato waits for the ACK of a key image's last chunk (only that chunk sets
+   *  REQACK), so it goes out before any tracing or assembly. */
+  private ackImage(flags: number, hidOp: number, messageId: number, payload: Buffer): void {
+    const ack = (flags & CORA_FLAG_REQACK) !== 0 ? this.writeAckNak(messageId, hidOp) : null;
+    this.traceRx(flags, hidOp, messageId, payload);
+    if (ack) this.traceAckNak(ack, messageId, hidOp, true);
   }
 
   private routeChildPacket(flags: number, hidOp: number, messageId: number, payload: Buffer): void {
@@ -284,7 +321,8 @@ export class ElgatoChildServer extends CoraServerBase {
   }
 
   /** Image and Stream Deck + surface chunks. ACK before assembly: Elgato waits for
-   *  the ACK before sending the next chunk, so assembly must not delay it. */
+   *  the ACK of a key image's last chunk before sending the next image, so assembly
+   *  must not delay it. */
   private handleOutputReport(
     cmd: number,
     flags: number,
@@ -292,26 +330,25 @@ export class ElgatoChildServer extends CoraServerBase {
     messageId: number,
     payload: Buffer,
   ): void {
-    const ack = (flags & CORA_FLAG_REQACK) !== 0;
     switch (cmd) {
       case IMG_CMD_WRITE:
         if (isLevelEnabled('debug')) {
           traceImageChunk(this.emitLogFn, payload, messageId, this.msSinceConnect());
         }
-        if (ack) this.sendAckNak(messageId, hidOp);
+        this.ackImage(flags, hidOp, messageId, payload);
         this.handleImageChunk(payload);
         return;
       case GEN1_IMG_CMD:
         if (isLevelEnabled('debug')) {
           traceGen1ImageChunk(this.emitLogFn, payload, messageId, this.msSinceConnect());
         }
-        if (ack) this.sendAckNak(messageId, hidOp);
+        this.ackImage(flags, hidOp, messageId, payload);
         this.handleGen1ImageChunk(payload);
         return;
       case IMG_CMD_LCD:
       case IMG_CMD_WINDOW:
       case IMG_CMD_WINDOW_PARTIAL: {
-        if (ack) this.sendAckNak(messageId, hidOp);
+        this.ackImage(flags, hidOp, messageId, payload);
         const touch = this.touchStrip.accept(cmd, payload, this.emitLogFn);
         if (touch) this.emit('touchImage', touch);
       }
@@ -358,20 +395,39 @@ export class ElgatoChildServer extends CoraServerBase {
     this.warnedOobKeys.clear();
   }
 
+  protected override traceAckNak(
+    frame: Buffer,
+    messageId: number,
+    hidOp: number,
+    bulk = false,
+  ): void {
+    const wantsLog = isLevelEnabled('debug');
+    const wantsComm = this.commTracing;
+    const counted = wantsComm && bulk && this.countBulkComm;
+    if (counted) this.countComm('ack-tx');
+    const storeComm = wantsComm && !counted;
+    if (!wantsLog && !storeComm) return;
+    const desc = ackDescription(messageId, hidOp);
+    if (wantsLog) {
+      const since = this.sessionStartTs ? `+${Date.now() - this.sessionStartTs}ms` : '';
+      this.emitLog('debug', `child tx: ${desc} (${frame.length}B)${since}`);
+    }
+    if (storeComm) this.emitComm('tx', desc, frame);
+  }
+
   protected override sendFrame(
     payload: Buffer,
     flags: number,
     hidOp: number,
     messageId: number,
     description?: string,
-    // Per-chunk image ACKs and keepalives fire constantly during image bursts;
-    // callers mark them noisy so they log at debug instead of becoming an
-    // info-level WS broadcast per chunk.
+    // Keepalives fire constantly; callers mark them noisy so they log at debug
+    // instead of becoming an info-level WS broadcast each.
     noisy = false,
   ): void {
     const frame = encodeCoraFrame(payload, flags, hidOp, messageId);
-    // Write FIRST, then trace — matching the base class. Elgato ACK-paces image
-    // chunks, so anything ahead of the write throttles image delivery.
+    // Write FIRST, then trace — matching the base class. Elgato ACK-paces key
+    // images, so anything ahead of the write throttles image delivery.
     this.client?.write(frame);
 
     const wantsLog = isLevelEnabled(noisy ? 'debug' : 'info');

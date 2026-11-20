@@ -1,8 +1,5 @@
-// Static files of the browser deck page, embedded at build time (see assets.ts for the
-// pattern). deck.js is the stub the clientBundleAsText plugin replaces with the bundle.
-import deckHtml from '../../client/deck/deck.html';
-import deckCss from '../../client/deck/deck.css';
-import deckJs from '../../client/deck/deck.js';
+// The deck page's html/css/js are embedded gzipped (virtual:web-assets, served by
+// static-asset.ts); only the icons and the manifest are built here.
 import { DECK_ICON_180_PNG_BASE64, DECK_ICON_512_PNG_BASE64 } from '../../../assets/deck-icons.js';
 
 const toBytes = (base64: string): Uint8Array<ArrayBuffer> =>
@@ -11,9 +8,6 @@ const toBytes = (base64: string): Uint8Array<ArrayBuffer> =>
 let icons: { 180: Uint8Array<ArrayBuffer>; 512: Uint8Array<ArrayBuffer> } | undefined;
 
 export const deckAssets = {
-  html: deckHtml,
-  css: deckCss,
-  js: deckJs,
   /** Decoded on first use: most processes never serve the deck. */
   icon(size: 180 | 512): Uint8Array<ArrayBuffer> {
     icons ??= { 180: toBytes(DECK_ICON_180_PNG_BASE64), 512: toBytes(DECK_ICON_512_PNG_BASE64) };
