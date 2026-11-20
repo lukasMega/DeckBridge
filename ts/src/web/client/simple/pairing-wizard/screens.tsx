@@ -8,6 +8,7 @@ import { useStore } from '../../lib/store.js';
 import type { Fetched } from '../../lib/ui-api.js';
 import type { PairingProbe, PairingRoute } from '../../ui-types.js';
 import { CopyChip, ManualAddPanel } from '../controls.js';
+import { ElgatoAppAction } from '../pairing-flow.js';
 import { WslRelaySteps } from '../wsl-relay-card.js';
 import type { Answers, ScreenId, VersionAnswer } from './flow.js';
 import { routeOptions } from './routes.js';
@@ -305,7 +306,13 @@ function SetupScreen({
   return route === 'device' ? <DeviceSetup probe={probe} /> : null;
 }
 
-function AddScreen({ route }: Readonly<{ route: PairingRoute | undefined }>): preact.JSX.Element {
+function AddScreen({
+  route,
+  onHelp,
+}: Readonly<{
+  route: PairingRoute | undefined;
+  onHelp: (helpId: string) => void;
+}>): preact.JSX.Element {
   const paired = useStore((s) => s.pairingRoute?.paired === true);
   const ip = useStore((s) => s.pairingRoute?.relayIp ?? null);
   return (
@@ -327,9 +334,13 @@ function AddScreen({ route }: Readonly<{ route: PairingRoute | undefined }>): pr
           Paired
         </StatusChip>
       ) : (
-        <StatusChip variant="wait" spin>
-          Waiting for the Stream Deck app…
-        </StatusChip>
+        <>
+          <StatusChip variant="wait" spin>
+            Waiting for the Stream Deck app…
+          </StatusChip>
+          {/* The app runs on this computer: a restart often makes it find the new dock. */}
+          <ElgatoAppAction onHelp={onHelp} />
+        </>
       )}
     </>
   );
@@ -366,7 +377,7 @@ export function ScreenView({
     case 'setup':
       return <SetupScreen route={answers.route} probe={probe.data} onTurnedOff={onTurnedOff} />;
     case 'add':
-      return <AddScreen route={answers.route} />;
+      return <AddScreen route={answers.route} onHelp={onHelp} />;
     case 'done-old':
       return <p>No fix needed. Stream Deck app 7.6.0 and older pair with DeckBridge directly.</p>;
     case 'done-elsewhere':

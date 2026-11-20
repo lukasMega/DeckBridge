@@ -278,6 +278,17 @@ async function deviceFlow(t: Ctx): Promise<void> {
     t.q('#pairing-wizard')!.textContent.includes('192.168.1.50'),
     'The add screen shows the relay IP',
   );
+  await act(() => sleep(30));
+  t.check(
+    t.calls.includes('GET /api/elgato-app/status '),
+    'The add screen checks whether the Elgato app runs',
+  );
+  t.check(
+    t.q('.pairing-action-row button')?.textContent === 'Restart Elgato app',
+    'A running Elgato app offers a restart',
+  );
+  await stage({ ...RELAY, stage: 'running' }, { relayIp: RELAY.ip, paired: true });
+  t.check(t.q('.pairing-action-row') === null, 'Once paired, the app action hides');
   await press(t.q('#pw-cancel'));
   // `reopen` continues from the WSL route that `chooseWsl` left.
   patch({ pairingRoute: route({ route: 'wsl', wizardDismissed: true }), pairingWizardOpen: false });
@@ -328,6 +339,7 @@ export async function runPairingWizard(root: HTMLElement, check: Check): Promise
       };
     } else if (url === '/api/pairing-route/dismiss') reply = route({ wizardDismissed: true });
     else if (url === '/api/pairing-route') reply = route(JSON.parse(body) as object);
+    else if (url === '/api/elgato-app/status') reply = { running: true, supported: true };
     return Promise.resolve(new Response(JSON.stringify(reply), { status: 200 }));
   }) as typeof fetch;
   const t = makeCtx(root, check, calls);

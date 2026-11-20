@@ -38,7 +38,8 @@ function AutoRestartNotice({
   );
 }
 
-function PairedAppAction({
+/** Open or restart the Elgato app on this computer; polls whether it runs. */
+export function ElgatoAppAction({
   onHelp,
 }: Readonly<{ onHelp: (id: string) => void }>): preact.JSX.Element {
   const [app, setApp] = useState<ElgatoAppStatus | null>(null);
@@ -219,7 +220,7 @@ export function PairingFlow({
             <span>Show pairing steps and address.</span>
           </GhostButton>
         </div>
-        {paired === true && <PairedAppAction onHelp={onHelp} />}
+        {paired === true && <ElgatoAppAction onHelp={onHelp} />}
       </div>
       {paired === false && <ManualAddPanel onHelp={onHelp} port={port} expanded />}
     </div>
