@@ -61,7 +61,7 @@ test('device script refuses a value that could inject shell', () => {
 
 async function run(argv: string[], stdin: string): Promise<{ code: number; out: string }> {
   const proc = tjs.spawn(argv, { stdin: 'pipe', stdout: 'pipe', stderr: 'pipe' });
-  const w = proc.stdin!.getWriter();
+  const w = proc.stdin.getWriter();
   await w.write(new TextEncoder().encode(stdin));
   await w.close();
   const out = await new Response(proc.stdout as ReadableStream).text();

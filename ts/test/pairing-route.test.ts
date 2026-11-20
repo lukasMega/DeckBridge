@@ -171,7 +171,7 @@ await test('a WSL status change with the same IP does not republish', () => {
 });
 
 await test('a newer setRoute during the WSL halt wins the mDNS state', async () => {
-  let release = (): void => {};
+  let release!: () => void;
   const r = rig({}, { route: 'wsl' });
   const halt = new Promise<void>((res) => (release = res));
   const slow = rig(
