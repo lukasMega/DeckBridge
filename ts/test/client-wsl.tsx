@@ -155,26 +155,39 @@ export async function runWslRelay(root: HTMLElement, check: Check): Promise<void
 /** A WS `wslRelay` event that lands while hydrate()'s GET is in flight must survive its reply. */
 export async function runWslHydrateRace(hydrateNow: () => void, check: Check): Promise<void> {
   const before = getSnapshot().wslRelay;
+  const beforeRoute = getSnapshot().pairingRoute;
   const original = globalThis.fetch;
-  globalThis.fetch = () =>
-    new Promise<Response>((resolve) => {
-      setTimeout(() => resolve(new Response(JSON.stringify(status({ state: 'off' })))), 20);
-    });
+  // Fixed sleeps flaked on CI: wait for the reply to be read, then one macrotask so the
+  // awaiting hydrate code has applied it.
+  let replied = Promise.resolve();
+  globalThis.fetch = () => {
+    let done!: () => void;
+    replied = new Promise<void>((resolve) => (done = resolve));
+    const json = (): Promise<unknown> => {
+      done();
+      return Promise.resolve(status({ state: 'off' }));
+    };
+    return Promise.resolve({ ok: true, json } as unknown as Response);
+  };
+  const settled = async (): Promise<void> => {
+    await replied;
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  };
   try {
     patch({ wslRelay: null });
     hydrateNow();
     patch({ wslRelay: status({ enabled: true, state: 'ready', wslIp: '172.20.1.2' }) });
-    await new Promise((resolve) => setTimeout(resolve, 60));
+    await settled();
     check(
       getSnapshot().wslRelay?.state === 'ready',
       'A WS wslRelay event is not overwritten by the older GET reply',
     );
     patch({ wslRelay: null });
     hydrateNow();
-    await new Promise((resolve) => setTimeout(resolve, 60));
+    await settled();
     check(getSnapshot().wslRelay?.state === 'off', 'Without a newer event the GET reply applies');
   } finally {
     globalThis.fetch = original;
-    patch({ wslRelay: before });
+    patch({ wslRelay: before, pairingRoute: beforeRoute });
   }
 }

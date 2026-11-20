@@ -137,7 +137,7 @@ try {
       stdout: 'ignore',
       stderr: 'ignore',
     });
-    const w = proc.stdin!.getWriter();
+    const w = proc.stdin.getWriter();
     await w.write(new TextEncoder().encode(script));
     await w.close();
     const { exit_status } = await proc.wait();
