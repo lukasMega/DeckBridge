@@ -1,5 +1,5 @@
 import assert from 'tjs:assert';
-import { guardAccept, isDroppedAccept } from '../src/platform/accept-guard.js';
+import { guardAccept, isDroppedAccept, KEEPALIVE_DELAY_S } from '../src/platform/accept-guard.js';
 import { testAsync, summaryExit } from './helpers/harness.js';
 
 const HOST = '127.0.0.1';
@@ -25,6 +25,43 @@ await testAsync('guarded accept drops a handle whose getpeername throws', async 
     const result = factory.call(server, Object, handle, () => ({})) as TjsAcceptedTCPSocket | null;
     assert.ok(isDroppedAccept(result), 'yields null instead of throwing');
     assert.equal(closed, 1, 'closes the dropped handle');
+  } finally {
+    server.close();
+  }
+});
+
+/** Swap txiki's accept factory for a stub so the guard's wrapper can be driven with a fake handle. */
+function stubFactory(server: TjsTCPServerSocket): Factory {
+  (server as unknown as { _createAcceptedSocket: Factory })._createAcceptedSocket = () => ({});
+  guardAccept(server);
+  return (server as unknown as { _createAcceptedSocket: Factory })._createAcceptedSocket;
+}
+
+await testAsync('accepted socket handle gets noDelay and keepalive', async () => {
+  const server = await tjs.listen('tcp', HOST, port + 2);
+  try {
+    const calls: string[] = [];
+    const handle = {
+      setNoDelay: (on: boolean) => calls.push(`nodelay ${on}`),
+      setKeepAlive: (on: boolean, s: number) => calls.push(`keepalive ${on} ${s}`),
+    };
+    const result = stubFactory(server).call(server, Object, handle, () => ({}));
+    assert.ok(result !== null, 'accept itself succeeds');
+    assert.deepEqual(calls, ['nodelay true', `keepalive true ${KEEPALIVE_DELAY_S}`]);
+  } finally {
+    server.close();
+  }
+});
+
+await testAsync('a throwing setNoDelay does not fail the accept', async () => {
+  const server = await tjs.listen('tcp', HOST, port + 3);
+  try {
+    const handle = {
+      setNoDelay: () => {
+        throw new Error('ENOTCONN');
+      },
+    };
+    assert.ok(stubFactory(server).call(server, Object, handle, () => ({})) !== null);
   } finally {
     server.close();
   }

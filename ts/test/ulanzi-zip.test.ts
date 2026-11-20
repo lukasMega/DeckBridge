@@ -4,13 +4,19 @@ import {
   buildManifest,
   buildPageZip,
   buildSafePageZip,
+  buildSafeZip,
+  entry,
   crc32,
-  fnv1a,
   iconName,
   slotKey,
 } from '../src/devices/ulanzi/ulanzi-zip.js';
 import type { PageSlot, PageZipOptions } from '../src/devices/ulanzi/ulanzi-zip.js';
-import { DEFAULT_FONT, isPayloadSafe } from '../src/devices/ulanzi/ulanzi-protocol.js';
+import {
+  DEFAULT_FONT,
+  FIRST_CHUNK_DATA,
+  PACKET_SIZE,
+  isPayloadSafe,
+} from '../src/devices/ulanzi/ulanzi-protocol.js';
 
 let passed = 0;
 let failed = 0;
@@ -58,9 +64,33 @@ await test('crc32 matches the published vector for "The quick brown fox..."', ()
   assert.equal(crc32(new TextEncoder().encode(s)), 0x414fa339);
 });
 
-await test('fnv1a differs for different bytes and is stable for the same bytes', () => {
-  assert.equal(fnv1a(fakePng(1)), fnv1a(fakePng(1)));
-  assert.notEqual(fnv1a(fakePng(1)), fnv1a(fakePng(2)));
+/** Bit-at-a-time reference, independent of the table the implementation uses. */
+function refCrc32(data: Uint8Array): number {
+  let c = 0xffffffff;
+  for (const byte of data) {
+    c ^= byte;
+    for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+  }
+  return (c ^ 0xffffffff) >>> 0;
+}
+
+await test('crc32 matches the bitwise reference at every length 0..40 and offset 0..7', () => {
+  const backing = new Uint8Array(64);
+  for (let i = 0; i < backing.length; i++) backing[i] = (i * 73 + 11) & 0xff;
+  for (let off = 0; off < 8; off++) {
+    for (let len = 0; len <= 40; len++) {
+      const view = backing.subarray(off, off + len);
+      assert.equal(crc32(view), refCrc32(view), `off ${off} len ${len}`);
+    }
+  }
+});
+
+await test('crc32 matches the reference on large, unaligned and all-0xff inputs', () => {
+  const big = fakePng(7, 20001);
+  assert.equal(crc32(big), refCrc32(big));
+  assert.equal(crc32(big.subarray(3, 12345)), refCrc32(big.subarray(3, 12345)));
+  const ones = new Uint8Array(4097).fill(0xff);
+  assert.equal(crc32(ones), refCrc32(ones));
 });
 
 // ── manifest ─────────────────────────────────────────────────────────────────
@@ -180,6 +210,14 @@ await test('icon paths change on every flush even for identical bytes', () => {
   assert.notEqual(iconName(0, 0, png), iconName(0, 1, png));
 });
 
+await test('icon names are the CRC-32 of the content: deterministic, content-sensitive', () => {
+  const png = fakePng(3, 300);
+  const crcHex = crc32(png).toString(16).padStart(8, '0');
+  assert.equal(iconName(4, 9, png), `Images/4_9_${crcHex}.png`);
+  assert.equal(iconName(4, 9, png), iconName(4, 9, fakePng(3, 300)));
+  assert.notEqual(iconName(4, 9, png), iconName(4, 9, fakePng(4, 300)));
+});
+
 // ── ZIP structure ────────────────────────────────────────────────────────────
 
 console.log('\nulanzi-zip: archive structure');
@@ -286,16 +324,112 @@ await test('buildSafePageZip returns a payload that passes isPayloadSafe', () =>
   assert.equal(isPayloadSafe(zip), true);
 });
 
+/** Zero-only icons that cannot converge: an entry with no zero-free alignment. */
+function pinnedEntries(): ReturnType<typeof entry>[] {
+  // A 100 KB zero entry puts ~100 boundaries inside it at any alignment.
+  return [entry('z.bin', new Uint8Array(100_000))];
+}
+
 // Adversarial case: long constant runs of 0x00 can pin a boundary at every
 // alignment we can reach. The page must still be SENT (a blank panel is worse
 // than a possibly-torn one) and must say so — see buildSafePageZip.
-await test('an unconvergeable page is returned flagged rather than thrown', () => {
-  const slots: PageSlot[] = [];
-  for (let i = 0; i < 13; i++) slots.push({ slotId: i, png: flatPng(0x00, 400) });
-  const { zip, safe, retries } = buildSafePageZip(slots, OPTS);
+await test('an unconvergeable archive is returned flagged rather than thrown', () => {
+  const { zip, safe, retries } = buildSafeZip(pinnedEntries());
   assert.equal(safe, false);
   assert.equal(retries, MAX_PAD_RETRIES);
-  assert.ok(zip.length > 1016, 'a usable archive is still returned');
+  assert.ok(zip.length > 100_000, 'a usable archive is still returned');
+  assert.equal(readZip(zip)[0]!.name, 'z.bin', 'the unpadded archive is the fallback');
+});
+
+/** The pre-analytic algorithm: rebuild the whole archive per pad until it is safe. */
+function oldSearch(
+  slots: PageSlot[],
+  opts: PageZipOptions,
+  max: number,
+): { zip: Uint8Array; retries: number } | null {
+  for (let pad = 0; pad <= max; pad++) {
+    const zip = buildPageZip(slots, { ...opts, padBytes: pad });
+    if (isPayloadSafe(zip)) return { zip, retries: pad };
+  }
+  return null;
+}
+
+function pageOf(n: number, size: number, salt: number): PageSlot[] {
+  const slots: PageSlot[] = [];
+  for (let i = 0; i < n; i++) slots.push({ slotId: i, png: fakePng(i * 7 + salt, size + i * 13) });
+  return slots;
+}
+
+await test('analytic pad search is byte-identical to the per-candidate rebuild', () => {
+  let padded = 0;
+  for (let salt = 0; salt < 60; salt++) {
+    const opts = { ...OPTS, flushSeq: salt, smallWindowMode: salt % 3 === 0 ? 2 : 203 };
+    const slots = pageOf(1 + (salt % 13), 600 + salt * 37, salt);
+    const old = oldSearch(slots, opts, 64);
+    const now = buildSafePageZip(slots, opts);
+    if (old) {
+      assert.equal(now.safe, true, `salt ${salt}`);
+      assert.equal(now.retries, old.retries, `salt ${salt}: retries`);
+      assert.deepEqual([...now.zip], [...old.zip], `salt ${salt}: bytes`);
+      if (old.retries > 0) padded++;
+    }
+    assert.equal(isPayloadSafe(now.zip) === now.safe, true, `salt ${salt}: flag`);
+  }
+  assert.ok(padded > 5, `fixtures must exercise padding (only ${padded} did)`);
+});
+
+await test('the analytic verdict equals isPayloadSafe for every pad 0..200', () => {
+  // Exercises the tail-boundary path (central directory + EOCD) as well as the locals.
+  for (const [n, size] of [
+    [1, 900],
+    [2, 1100],
+    [13, 90],
+  ] as const) {
+    const slots = pageOf(n, size, n);
+    let first = -1;
+    for (let pad = 0; pad <= 200; pad++) {
+      if (isPayloadSafe(buildPageZip(slots, { ...OPTS, padBytes: pad }))) {
+        first = pad;
+        break;
+      }
+    }
+    assert.equal(buildSafePageZip(slots, OPTS).retries, first, `n ${n}`);
+  }
+});
+
+await test('finds a safe pad beyond the old 64-retry cap', () => {
+  // A 200-byte zero window in a 0x41 icon pins one boundary for ~160 consecutive pads.
+  let checked = 0;
+  for (let w = 1200; w < 2400 && checked === 0; w += 20) {
+    const png = new Uint8Array(6000).fill(0x41);
+    png.fill(0, w, w + 200);
+    const slots: PageSlot[] = [{ slotId: 0, png }];
+    if (oldSearch(slots, OPTS, 64)) continue;
+    const ref = oldSearch(slots, OPTS, MAX_PAD_RETRIES);
+    if (!ref) continue;
+    const now = buildSafePageZip(slots, OPTS);
+    assert.equal(now.safe, true);
+    assert.ok(now.retries > 64, `retries ${now.retries}`);
+    assert.equal(now.retries, ref.retries);
+    assert.deepEqual([...now.zip], [...ref.zip]);
+    checked++;
+  }
+  assert.equal(checked, 1, 'no fixture needed more than 64 pad bytes');
+});
+
+await test('the chosen pad also satisfies the chunk-edge length rule', () => {
+  for (let salt = 0; salt < 30; salt++) {
+    const { zip, safe } = buildSafePageZip(pageOf(3, 500 + salt * 11, salt), OPTS);
+    assert.equal(safe, true);
+    const tail = zip.length - FIRST_CHUNK_DATA;
+    assert.ok(!(tail > 0 && tail % PACKET_SIZE === 0));
+  }
+});
+
+await test('a page is deterministic: same slots and seq give the same bytes and names', () => {
+  const a = buildSafePageZip(pageOf(5, 700, 3), { ...OPTS, flushSeq: 4 });
+  const b = buildSafePageZip(pageOf(5, 700, 3), { ...OPTS, flushSeq: 4 });
+  assert.deepEqual([...a.zip], [...b.zip]);
 });
 
 await test('padding is inserted as a FIRST entry so it shifts the icons that follow', () => {
@@ -355,10 +489,10 @@ await test('the archive passes `unzip -t` where unzip exists', async () => {
   }
 });
 
-console.log(`\n${passed} passed, ${failed} failed`);
-tjs.exit(failed > 0 ? 1 : 0);
-
 await test('iconName: JPEG bytes get .jpg, PNG bytes keep .png', () => {
   assert.ok(iconName(0, 0, new Uint8Array([0xff, 0xd8, 0xff])).endsWith('.jpg'));
   assert.ok(iconName(0, 0, new Uint8Array([0x89, 0x50])).endsWith('.png'));
 });
+
+console.log(`\n${passed} passed, ${failed} failed`);
+tjs.exit(failed > 0 ? 1 : 0);

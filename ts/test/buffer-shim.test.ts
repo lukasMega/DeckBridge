@@ -352,6 +352,49 @@ tst('base64 round-trip over a larger buffer (chunked fromCharCode path)', () => 
   assert.deepEqual(Array.from(round), Array.from(big));
 });
 
+/** The pre-native encoder: chunked fromCharCode + btoa. */
+function loopBase64(view: Uint8Array): string {
+  let bin = '';
+  for (let i = 0; i < view.length; i += 0x8000)
+    bin += String.fromCharCode(...view.subarray(i, i + 0x8000));
+  return btoa(bin);
+}
+
+function patternBytes(n: number): Buffer {
+  const b = Buffer.alloc(n);
+  for (let i = 0; i < n; i++) b[i] = (i * 131 + (i >> 3)) & 0xff;
+  return b;
+}
+
+const B64_LENGTHS = [0, 1, 2, 3, 4, 5, 6, 7, 255, 256, 257, 0x7fff, 0x8000, 0x8001, 70001];
+
+tst('base64 encode is byte-identical to the char loop (all residues, chunk edges)', () => {
+  for (const n of B64_LENGTHS) {
+    const b = patternBytes(n);
+    assert.equal(b.toString('base64'), loopBase64(b), `length ${n}`);
+  }
+});
+
+tst('base64 encode honours start/end and subarray views', () => {
+  const b = patternBytes(100);
+  assert.equal(b.toString('base64', 3, 50), loopBase64(b.subarray(3, 50)));
+  assert.equal((b.subarray(7, 22) as Buffer).toString('base64'), loopBase64(b.subarray(7, 22)));
+});
+
+tst('base64 encode fallback (no native toBase64) matches the loop', () => {
+  const proto = Uint8Array.prototype as { toBase64?: unknown };
+  const saved = Object.getOwnPropertyDescriptor(proto, 'toBase64');
+  delete proto.toBase64;
+  try {
+    for (const n of B64_LENGTHS) {
+      const b = patternBytes(n);
+      assert.equal(b.toString('base64'), loopBase64(b), `length ${n}`);
+    }
+  } finally {
+    if (saved) Object.defineProperty(proto, 'toBase64', saved);
+  }
+});
+
 tst('utf8 round-trip', () => {
   const s = 'mira2el — café ☕';
   assert.equal(Buffer.from(s).toString(), s);

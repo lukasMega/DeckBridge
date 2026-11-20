@@ -30,7 +30,9 @@ const scope = globalThis as unknown as {
 };
 scope.postMessage = (msg) => {
   messages.push(msg);
-  if (msg.type === 'imageSent') notificationTags.push(tag(writes.at(-1)!));
+  if (msg.type === 'workDone') {
+    notificationTags.push(...(msg.sent ?? []).map(() => tag(writes.at(-1)!)));
+  }
 };
 scope.addEventListener = (_type, callback) => {
   receive = callback;
@@ -158,20 +160,20 @@ await test('CORA image completion notifications follow final STP', async () => {
   assert.equal(stpCount(), 1);
   assert.equal(notificationTags.length, 15);
   assert.ok(notificationTags.every((value) => value === 'STP'));
-  // The hash rides on imageSent: no second message per frame.
+  // The hash rides on workDone.sent: no second message per frame.
   assert.ok(messages.every((m) => (m.type as string) !== 'frameHash'));
-  const hashed = messages.flatMap((m) =>
-    m.type === 'imageSent' && m.hash !== undefined ? [m.keyIndex] : [],
-  );
+  assert.ok(messages.every((m) => (m.type as string) !== 'imageSent'));
+  const sent = messages.flatMap((m) => (m.type === 'workDone' ? (m.sent ?? []) : []));
+  const hashed = sent.flatMap((s) => (s.hash !== undefined ? [s.keyIndex] : []));
   assert.deepEqual(
     hashed.toSorted((a, b) => a - b),
     Array.from({ length: 15 }, (_, i) => i),
   );
   // The LRU flag rides the deferred notification too.
-  assert.ok(messages.every((m) => m.type !== 'imageSent' || typeof m.cached === 'boolean'));
+  assert.ok(sent.every((s) => typeof s.cached === 'boolean'));
 });
 
-await test('workDone returns every batched id once, after imageSent and the final STP', async () => {
+await test('workDone returns every batched id once, with its sent images, after the final STP', async () => {
   await open('mirabox-293s');
   for (let keyIndex = 0; keyIndex < 3; keyIndex++) {
     send({
@@ -189,8 +191,12 @@ await test('workDone returns every batched id once, after imageSent and the fina
     done.map((d) => d.ids),
     [[100, 101, 102], [200]],
   );
-  const lastSent = messages.findLastIndex((m) => m.type === 'imageSent');
-  assert.ok(done[0]!.i > lastSent, 'credits follow the imageSent notifications');
+  const first = messages[done[0]!.i] as Extract<WorkerToMain, { type: 'workDone' }>;
+  assert.deepEqual(
+    first.sent?.map((s) => s.keyIndex),
+    [0, 1, 2],
+    'the batch credit carries its sent notifications',
+  );
 });
 
 await test('a failed message still returns its credit', async () => {

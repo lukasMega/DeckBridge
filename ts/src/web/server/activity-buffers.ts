@@ -2,6 +2,7 @@ import type { Broadcaster } from './broadcaster.js';
 import type { KeyEventEntry, LogEntry, LogLevel } from './types.js';
 import type { CommEntry, KeyState } from '../../shared/types.js';
 import { clearRepeating } from '../../shared/types.js';
+import type { CommCountKind } from '../../shared/comm-format.js';
 import {
   KEY_EVENT_BUFFER_MAX,
   COMM_BUFFER_MAX,
@@ -18,6 +19,8 @@ export class ActivityBuffers {
   readonly logs: LogEntry[] = [];
   readonly comms: CommEntry[] = [];
   readonly keyEvents: KeyEventEntry[] = [];
+  /** Simple-only builds tally image-chunk/ACK traffic here instead of in `comms`. */
+  readonly commCounts: Partial<Record<CommCountKind, number>> = {};
   private readonly flushQueue: CommEntry[] = [];
   private readonly logFlushQueue: LogEntry[] = [];
   private flushTimer: number | null = null;
@@ -44,6 +47,10 @@ export class ActivityBuffers {
       this.push(this.flushQueue, full, COMM_BUFFER_MAX);
       this.startFlush();
     }
+  }
+
+  commCount(kind: CommCountKind): void {
+    this.commCounts[kind] = (this.commCounts[kind] ?? 0) + 1;
   }
 
   log(level: LogLevel, component: string, message: string): void {

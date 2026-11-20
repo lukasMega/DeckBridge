@@ -3,7 +3,7 @@
 // never re-pushes unprompted); only the SELECTED dock's frames reach the browser.
 import type { Broadcaster } from './broadcaster.js';
 import type { TouchWindowRegion } from '../../shared/types.js';
-import type { ExtraKeyImageMsg, KeyImageMsg, StripWriteMsg } from '../contract.js';
+import type { KeyImageMsg, StripWriteMsg } from '../contract.js';
 import type { WidgetPaint } from '../../shared/widget-layout.js';
 
 export type ImageFormat = 'jpeg' | 'bmp';
@@ -29,6 +29,9 @@ export class ImageChannel {
   private readonly dockExtraKeys = new Map<number, Map<number, WidgetPaint>>();
   /** Per dock: mirror of the touch-strip uploads that reached the device. */
   private readonly dockStrip = new Map<number, StripMirror>();
+  /** Last `extraKeyImage` each connected browser was sent, by wire id, for the dock below. */
+  private readonly sentExtraKeys = new Map<number, SentPaint>();
+  private sentExtraDock = -1;
 
   constructor(
     private readonly bus: Broadcaster,
@@ -117,7 +120,7 @@ export class ImageChannel {
       this.bus.sendTo(ws, 'touchImage', touchPayload(frame));
     }
     for (const [wireId, paint] of this.dockExtraKeys.get(this.selectedDock()) ?? []) {
-      this.bus.sendTo(ws, 'extraKeyImage', extraKeyPayload(wireId, paint));
+      this.bus.sendToJson(ws, 'extraKeyImage', extraKeyImageJson(wireId, paint));
     }
     for (const msg of stripMessages(this.dockStrip.get(this.selectedDock()))) {
       this.bus.sendTo(ws, 'stripWrite', msg);
@@ -135,9 +138,20 @@ export class ImageChannel {
     this.bus.broadcast('stripWrite', msg);
   }
 
+  /** Repaints often reproduce the same pixels; the browsers already hold them, so skip the 360 KB. */
   private broadcastExtraKey(wireId: number, paint?: WidgetPaint): void {
-    if (this.bus.size === 0) return;
-    this.bus.broadcast('extraKeyImage', extraKeyPayload(wireId, paint));
+    // Nobody to tell: forget what was sent, a client that joins later gets the snapshot.
+    if (this.bus.size === 0) {
+      this.sentExtraKeys.clear();
+      return;
+    }
+    const dock = this.selectedDock();
+    // The browser drops these images when the selected dock changes (ui-ws.ts `status`).
+    if (dock !== this.sentExtraDock) this.sentExtraKeys.clear();
+    this.sentExtraDock = dock;
+    if (samePaint(this.sentExtraKeys.get(wireId), paint)) return;
+    this.sentExtraKeys.set(wireId, sentPaint(paint));
+    this.bus.broadcastJson('extraKeyImage', extraKeyImageJson(wireId, paint));
   }
 
   private broadcastTouch(frame: TouchFrame): void {
@@ -147,6 +161,7 @@ export class ImageChannel {
 
   /** Replay a dock's cached frames onto the live channel (dock-select / settings import). */
   replay(dock: number): void {
+    this.sentExtraKeys.clear(); // a replay is an explicit resend
     for (const [key, frame] of this.dockImages.get(dock) ?? []) this.broadcastImage(key, frame);
     for (const frame of this.dockTouch.get(dock)?.values() ?? []) this.broadcastTouch(frame);
     for (const [wireId, paint] of this.dockExtraKeys.get(dock) ?? []) {
@@ -208,14 +223,39 @@ export function touchPayload({ data, region }: TouchFrame): {
   return { data: data.toString('base64'), ...(region ? { region } : {}) };
 }
 
-/** A strip zone's image is not mirrored (the strip preview shows the app's frames). */
-function extraKeyPayload(wireId: number, paint?: WidgetPaint): ExtraKeyImageMsg {
-  if (!paint) return { wireId };
+/** JSON.stringify of an `ExtraKeyImageMsg`, built by hand: the 360 KB base64 needs no escaping,
+ *  and stringify would scan and copy it again. A strip zone's image is not mirrored (the strip
+ *  preview shows the app's frames). Key order is the message's, so the output is identical. */
+export function extraKeyImageJson(wireId: number, paint?: WidgetPaint): string {
+  let json = `{"wireId":${JSON.stringify(wireId)}`;
+  if (paint) {
+    json += paint.zone ? ',"zone":true' : `,"data":"${Buffer.from(paint.bmp).toString('base64')}"`;
+    if (paint.clipped) json += ',"clipped":true';
+  }
+  return `${json}}`;
+}
+
+/** What the browsers last got for a wire id; `bmp` is a copy so an in-place repaint still differs. */
+type SentPaint = { bmp?: Uint8Array; clipped: boolean; zone: boolean } | null;
+
+function sentPaint(paint?: WidgetPaint): SentPaint {
+  if (!paint) return null;
   return {
-    wireId,
-    ...(paint.zone ? { zone: true } : { data: Buffer.from(paint.bmp).toString('base64') }),
-    ...(paint.clipped ? { clipped: true } : {}),
+    ...(paint.zone ? {} : { bmp: paint.bmp.slice() }),
+    clipped: paint.clipped,
+    zone: paint.zone,
   };
+}
+
+function samePaint(sent: SentPaint | undefined, paint?: WidgetPaint): boolean {
+  if (sent === undefined) return false;
+  if (!sent || !paint) return sent === null && !paint;
+  if (sent.clipped !== paint.clipped || sent.zone !== paint.zone) return false;
+  if (paint.zone) return true;
+  const { bmp } = sent;
+  if (!bmp || bmp.length !== paint.bmp.length) return false;
+  for (let i = 0; i < bmp.length; i++) if (bmp[i] !== paint.bmp[i]) return false;
+  return true;
 }
 
 function stripPayload(wireId: number, data: Buffer, full: boolean): StripWriteMsg {

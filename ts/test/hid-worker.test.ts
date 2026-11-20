@@ -1,7 +1,7 @@
 import assert from 'tjs:assert';
 import { Akp05Driver } from '../src/devices/ajazz/akp05-driver.js';
 import { UlanziDriver } from '../src/devices/ulanzi/ulanzi-driver.js';
-import type { MainToWorker, WorkerToMain } from '../src/worker/hid-worker-protocol.js';
+import type { MainToWorker, WorkMessage, WorkerToMain } from '../src/worker/hid-worker-protocol.js';
 import { testAsync as test, summaryExit } from './helpers/harness.js';
 import { SOLID_RED_16X16_JPEG } from './helpers/fixtures.js';
 import { hashJpeg } from '../src/shared/image-hash.js';
@@ -204,14 +204,47 @@ await test('setHostStats reaches a driver that has it and is ignored by one that
 
 console.log('\nhid-worker: frame hash');
 
-await test("an 'image' message carries the frame hash on imageSent", async () => {
+await test("an 'image' message carries the frame hash in workDone.sent", async () => {
   await openAkp05e();
-  send({ type: 'image', keyIndex: 2, bytes: SOLID_RED_16X16_JPEG, format: 'jpeg' });
+  send({
+    type: 'image',
+    keyIndex: 2,
+    bytes: SOLID_RED_16X16_JPEG,
+    format: 'jpeg',
+    id: 7,
+  } as WorkMessage);
   await wait(20);
-  const sent = messages.filter((m) => m.type === 'imageSent');
-  assert.deepEqual(sent, [
-    { type: 'imageSent', keyIndex: 2, hash: hashJpeg(SOLID_RED_16X16_JPEG), cached: false },
-  ]);
+  assert.deepEqual(
+    messages.filter((m) => m.type === 'workDone'),
+    [
+      {
+        type: 'workDone',
+        ids: [7],
+        sent: [{ keyIndex: 2, hash: hashJpeg(SOLID_RED_16X16_JPEG), cached: false }],
+      },
+    ],
+    'credit and sent notification travel in one message',
+  );
+  assert.ok(!messages.some((m) => (m as { type: string }).type === 'imageSent'));
+});
+
+await test('a failed or skipped image credits its id with no sent notification', async () => {
+  // No open: the worker has no driver, so the frame is skipped.
+  send({ type: 'close' });
+  await wait(10);
+  messages.length = 0;
+  send({
+    type: 'image',
+    keyIndex: 1,
+    bytes: SOLID_RED_16X16_JPEG,
+    format: 'jpeg',
+    id: 9,
+  } as WorkMessage);
+  await wait(20);
+  assert.deepEqual(
+    messages.filter((m) => m.type === 'workDone'),
+    [{ type: 'workDone', ids: [9], sent: [] }],
+  );
 });
 
 summaryExit();

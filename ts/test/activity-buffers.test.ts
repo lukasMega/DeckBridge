@@ -46,4 +46,14 @@ test('log() fills the ring buffer but skips the logBatch broadcast', () => {
   buffers.stop();
 });
 
+test('commCount() tallies per kind without touching the ring', () => {
+  const buffers = new ActivityBuffers(new RecordingBroadcaster());
+  buffers.commCount('image-chunk-rx');
+  buffers.commCount('image-chunk-rx');
+  buffers.commCount('ack-tx');
+  assert.deepEqual(buffers.commCounts, { 'image-chunk-rx': 2, 'ack-tx': 1 });
+  assert.equal(buffers.comms.length, 0);
+  buffers.stop();
+});
+
 summary();

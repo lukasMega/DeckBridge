@@ -11,12 +11,6 @@ export const noContent = (): Response => new Response(null, { status: 204 });
 export const notFound = (): Response => new Response(null, { status: 404 });
 export const forbidden = (): Response => new Response('Forbidden', { status: 403 });
 
-export const html = (body: string): Response =>
-  new Response(body, { headers: { 'Content-Type': 'text/html; charset=utf-8' } });
-export const css = (body: string): Response =>
-  new Response(body, { headers: { 'Content-Type': 'text/css' } });
-export const js = (body: string): Response =>
-  new Response(body, { headers: { 'Content-Type': 'application/javascript' } });
 /** Plain text, no-store — the diagnostics report (a fresh snapshot every time). */
 export const text = (body: string): Response =>
   new Response(body, {

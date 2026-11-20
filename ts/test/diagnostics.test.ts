@@ -401,4 +401,13 @@ test('hashes are stripped, names and prefixes stay; with and without redactComma
   }
 });
 
+test('counted comm traffic is summarized under the comm buffer', () => {
+  const report = buildDiagnostics({
+    ...fullSources(),
+    commCounts: { 'image-chunk-rx': 47, 'ack-tx': 3 },
+  });
+  assert.ok(report.includes('counted, not listed: image-chunk-rx=47 ack-tx=3'));
+  assert.ok(!buildDiagnostics(fullSources()).includes('counted, not listed'));
+});
+
 summary();

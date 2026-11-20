@@ -1,7 +1,7 @@
 /** Generic USB HID worker thread entry point.
  *  Instantiates the right driver for the model's protocol (USB_DRIVERS),
  *  then bridges its EventEmitter events ↔ postMessage. */
-import type { MainToWorker, WorkMessage, WorkerToMain } from './hid-worker-protocol.js';
+import type { MainToWorker, SentImage, WorkMessage, WorkerToMain } from './hid-worker-protocol.js';
 import type { KeyEvent, DialEvent, TouchInputEvent } from '../shared/types.js';
 import { DEVICE_MODELS } from '../devices/registry.js';
 import type { DeviceModel, DeviceModelOverride } from '../devices/driver.js';
@@ -108,20 +108,17 @@ function applyLiveOverrides(overrides?: DeviceModelOverride): void {
   info('worker', `${currentModel.id} tuning applied live: ${overrideSummary(overrides)}`);
 }
 
-/** Render one CORA image frame: transform (via image-render.ts) + notify main
- *  thread. Guards on driver+currentModel; no-ops if the driver is gone. */
+/** Render one CORA image frame: transform (via image-render.ts) and write it.
+ *  Guards on driver+currentModel; no-ops if the driver is gone. */
 function handleImage(
   keyIndex: number,
   bytes: Uint8Array,
   format: 'jpeg' | 'bmp',
-  deferNotification: boolean,
 ): RenderResult | undefined {
   if (!driver || !currentModel) return undefined;
-  const rendered = wideCanvas.apply(driver, currentModel, keyIndex, bytes)
+  return wideCanvas.apply(driver, currentModel, keyIndex, bytes)
     ? { hash: hashJpeg(bytes), cached: false }
     : renderImage(driver, currentModel, keyIndex, bytes, format);
-  if (!deferNotification) post({ type: 'imageSent', keyIndex, ...rendered });
-  return rendered;
 }
 
 /** Transform the splash source image with the caller-supplied spec (which may
@@ -185,18 +182,15 @@ function handleSetting(
   else setLogLevel(msg.level);
 }
 
-/** Render results of a batch's images, held until the batch's imageSent notifications. */
-const deferredRenders = new WeakMap<object, RenderResult>();
+/** Render results, held until the message's workDone carries them to the host. */
+const renders = new WeakMap<object, RenderResult>();
 
-function handleImageMsg(
-  msg: Extract<MainToWorker, { type: 'image' }>,
-  deferNotification: boolean,
-): void {
-  const rendered = handleImage(msg.keyIndex, msg.bytes, msg.format, deferNotification);
-  if (deferNotification && rendered !== undefined) deferredRenders.set(msg, rendered);
+function handleImageMsg(msg: Extract<MainToWorker, { type: 'image' }>): void {
+  const rendered = handleImage(msg.keyIndex, msg.bytes, msg.format);
+  if (rendered !== undefined) renders.set(msg, rendered);
 }
 
-async function handle(msg: MainToWorker, deferNotification: boolean): Promise<void> {
+async function handle(msg: MainToWorker): Promise<void> {
   // Device path, not handleSetting: releasing/restoring a zone writes to the device.
   if (isTouchStripMsg(msg)) {
     handleTouchStripMsg(msg);
@@ -207,7 +201,7 @@ async function handle(msg: MainToWorker, deferNotification: boolean): Promise<vo
       await handleOpen(msg.modelId, msg.hidPath, msg.overrides);
       break;
     case 'image':
-      handleImageMsg(msg, deferNotification);
+      handleImageMsg(msg);
       break;
     case 'imageWithSpec':
       handleSplashImage(msg.keyIndex, msg.bytes, msg.spec);
@@ -247,26 +241,27 @@ let queue: Promise<void> = Promise.resolve();
 let pendingImages: WorkMessage[] = [];
 let batchTimer: ReturnType<typeof setTimeout> | null = null;
 
-/** Return the host's posting credits — after success, skip and failure alike. */
-function workDone(msgs: readonly WorkMessage[]): void {
+/** Return the host's posting credits — after success, skip and failure alike — and
+ *  the images' sent notifications in the same message (one post per frame on the
+ *  ACK-paced path). `sent` is empty when the work failed. */
+function workDone(msgs: readonly WorkMessage[], sent: SentImage[] = []): void {
   const ids = msgs.flatMap((m) => (m.id === undefined ? [] : [m.id]));
-  if (ids.length > 0) post({ type: 'workDone', ids });
+  if (ids.length > 0 || sent.length > 0) post({ type: 'workDone', ids, sent });
 }
 
 async function handleImageBatch(images: WorkMessage[]): Promise<void> {
+  const sent: SentImage[] = [];
   try {
     const d = driver;
     if (!d?.batch) return;
     await d.batch(async () => {
-      for (const msg of images) await handle(msg, true);
+      for (const msg of images) await handle(msg);
     });
     for (const msg of images) {
-      if (msg.type === 'image') {
-        post({ type: 'imageSent', keyIndex: msg.keyIndex, ...deferredRenders.get(msg) });
-      }
+      if (msg.type === 'image') sent.push({ keyIndex: msg.keyIndex, ...renders.get(msg) });
     }
   } finally {
-    workDone(images);
+    workDone(images, sent);
   }
 }
 
@@ -297,7 +292,10 @@ scope.addEventListener('message', (ev: MessageEvent) => {
   // Flush earlier images before clear, settings, close, or another open.
   enqueueImageBatch();
   queue = queue
-    .then(() => handle(msg, false))
+    .then(() => handle(msg))
     .catch((e: unknown) => post({ type: 'error', message: (e as Error).message }))
-    .finally(() => workDone([msg]));
+    .finally(() => {
+      const r = renders.get(msg);
+      workDone([msg], msg.type === 'image' && r ? [{ keyIndex: msg.keyIndex, ...r }] : []);
+    });
 });

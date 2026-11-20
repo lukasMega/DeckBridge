@@ -71,6 +71,8 @@ bytes 4-5: bodyLength (LE uint16)   [IMAGE_CHUNK_LEN_OFFSET]
 bytes 8+:  JPEG payload             [ELGATO_IMAGE_HEADER_SIZE = 8]
 ```
 
+ACK is once per key image, not per chunk: only the last chunk is flagged `0xc000` (REQACK); the others are `0x8000`. `ElgatoChildServer` writes the ACK before tracing or assembly because Elgato waits for it before sending the next image. In simple-only builds the image-chunk rx and ACK tx comm entries are counted (diagnostics prints the totals) instead of stored, so the 500-entry comm ring keeps the pairing handshake.
+
 `assembleImageChunk()` reassembles pages into `{ keyIndex, data: Buffer, format: 'jpeg' }`.
 
 ### gen1 (Mini)

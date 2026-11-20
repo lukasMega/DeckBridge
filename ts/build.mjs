@@ -10,6 +10,7 @@ import {
   realpathSync,
 } from 'fs';
 import { createHash } from 'crypto';
+import { gzipSync } from 'zlib';
 import { readFile } from 'fs/promises';
 import * as path from 'path';
 import { fileURLToPath } from 'url';
@@ -109,7 +110,8 @@ const LEGACY_API_DENYLIST = [
 
 function assertLegacySafe(js, label) {
   for (const [name, re] of LEGACY_API_DENYLIST) {
-    if (re.test(js)) throw new Error(`${label} uses ${name}, which the legacy browser targets lack`);
+    if (re.test(js))
+      throw new Error(`${label} uses ${name}, which the legacy browser targets lack`);
   }
 }
 
@@ -118,8 +120,8 @@ const once = (fn) => {
   return () => (result ??= fn());
 };
 
-// Bundles a browser-side entry subtree into a single IIFE string. Memoized: every esbuild call
-// below (workers, main) loads the same client stubs, and the ui.js text also feeds the class mangler.
+// Bundles a browser-side entry subtree into a single IIFE string. Memoized: the ui.js text also
+// feeds the class mangler.
 const clientSource = (entry, target) =>
   once(async () => {
     const result = await build({
@@ -143,21 +145,16 @@ const clientSource = (entry, target) =>
     return result.outputFiles[0].text;
   });
 
-// A stub .js file (ui.js, deck.js) is what server code imports; this plugin intercepts that load
-// and embeds the real bundle (`source`, optionally post-processed by `rewrite`) as text instead.
-function clientBundleAsText({ name, stubRe, source, rewrite, outFile, legacyCheck, onSize }) {
-  return {
-    name: `${name}-ts-as-text`,
-    setup(b) {
-      b.onLoad({ filter: stubRe }, async () => {
-        const contents = rewrite ? await rewrite() : await source();
-        if (legacyCheck) assertLegacySafe(contents, `dist/${path.basename(outFile)}`);
-        onSize(Buffer.byteLength(contents, 'utf8'));
-        writeFileSync(path.resolve(dir, outFile), contents);
-        return { contents, loader: 'text' };
-      });
-    },
-  };
+// Builds one browser-side bundle (optionally post-processed by `rewrite`) for embedding. Memoized:
+// the module that embeds it and its size/legacy checks must run once per build.
+function clientBundle({ source, rewrite, outFile, legacyCheck, onSize }) {
+  return once(async () => {
+    const contents = rewrite ? await rewrite() : await source();
+    if (legacyCheck) assertLegacySafe(contents, `dist/${path.basename(outFile)}`);
+    onSize(Buffer.byteLength(contents, 'utf8'));
+    writeFileSync(path.resolve(dir, outFile), contents);
+    return contents;
+  });
 }
 
 // ui.js and the two CSS files it is served with are mangled together (they share one class map).
@@ -187,23 +184,18 @@ const mangleUi = once(async () => {
   return mangled;
 });
 
-const uiJsAsText = clientBundleAsText({
-  name: 'ui',
-  stubRe: /web[/\\]client[/\\]ui\.js$/,
+const uiJs = clientBundle({
   source: uiSource,
   rewrite: mangleClassNames ? async () => (await mangleUi()).js : undefined,
   outFile: 'dist/ui.js',
   onSize: (n) => (uiJsSize = n),
 });
-const deckJsAsText = clientBundleAsText({
-  name: 'deck',
-  stubRe: /web[/\\]client[/\\]deck[/\\]deck\.js$/,
+const deckJs = clientBundle({
   source: clientSource('deck/deck-entry.ts', DECK_JS_TARGETS),
   outFile: 'dist/deck.js',
   legacyCheck: true,
   onSize: (n) => (deckJsSize = n),
 });
-const clientBundles = [uiJsAsText, deckJsAsText];
 
 // Conservative HTML minifier: strips comments and collapses inter-tag/text
 // whitespace, but never touches the contents of <script>, <style>, or <pre>
@@ -248,20 +240,24 @@ async function minifyCss(file) {
   });
   return code;
 }
+async function loadCss(file) {
+  const i = mangleClassNames ? UI_CSS.indexOf(path.resolve(file)) : -1;
+  return i >= 0 ? (await mangleUi()).css[i] : await minifyCss(file);
+}
+async function loadHtml(file) {
+  return minifyHtml(await readFile(file, 'utf8'));
+}
 const minifyTextAssets = {
   name: 'minify-text-assets',
   setup(b) {
-    b.onLoad({ filter: /\.css$/ }, async (args) => {
-      const i = mangleClassNames ? UI_CSS.indexOf(path.resolve(args.path)) : -1;
-      return {
-        contents: i >= 0 ? (await mangleUi()).css[i] : await minifyCss(args.path),
-        loader: 'text',
-      };
-    });
-    b.onLoad({ filter: /\.html$/ }, async (args) => {
-      const source = await readFile(args.path, 'utf8');
-      return { contents: minifyHtml(source), loader: 'text' };
-    });
+    b.onLoad({ filter: /\.css$/ }, async (args) => ({
+      contents: await loadCss(args.path),
+      loader: 'text',
+    }));
+    b.onLoad({ filter: /\.html$/ }, async (args) => ({
+      contents: await loadHtml(args.path),
+      loader: 'text',
+    }));
   },
 };
 
@@ -395,7 +391,7 @@ for (const [name, entry] of Object.entries(WORKER_ENTRIES)) {
     ...shared,
     entryPoints: [`${dir}/src/${entry}`],
     write: false,
-    plugins: [...clientBundles, minifyTextAssets],
+    plugins: [minifyTextAssets],
   });
   workerSources[name] = result.outputFiles[0].text;
   writeFileSync(path.resolve(dir, `dist/${name}.js`), workerSources[name]);
@@ -505,9 +501,54 @@ const virtualModule = (spec, namespace, getContents, loader = 'text') => ({
   name: spec.replace(/[^a-z0-9]+/gi, '-'),
   setup(b) {
     b.onResolve({ filter: new RegExp(`^${spec}$`) }, () => ({ path: spec, namespace }));
-    b.onLoad({ filter: /.*/, namespace }, () => ({ contents: getContents(), loader }));
+    b.onLoad({ filter: /.*/, namespace }, async () => ({ contents: await getContents(), loader }));
   },
 });
+
+// ── virtual:web-assets ───────────────────────────────────────────────────────
+// The WebUI and browser-deck static files, embedded as gzip bytes only (latin1, like the native
+// libs; ts/src/web/server/static-asset.ts serves them as-is, decompressing for the rare client
+// without gzip). The ETag is a hash of the bytes, so it changes exactly when the asset does.
+const client = (f) => path.resolve(dir, 'src/web/client', f);
+function embedGzip(text) {
+  const raw = Buffer.from(text, 'utf8');
+  const gz = gzipSync(raw, { level: 9 });
+  const etag = createHash('sha256').update(gz).digest('hex').slice(0, 16);
+  console.log(`embed asset: ${raw.length} → ${gz.length} B gzip`);
+  return `{ data: ${JSON.stringify(gz.toString('latin1'))}, etag: ${JSON.stringify(etag)} }`;
+}
+async function embedGroup(name, assets) {
+  const entries = await Promise.all(
+    Object.entries(assets).map(async ([key, load]) => `  ${key}: ${embedGzip(await load())},`),
+  );
+  return `export const ${name} = {\n${entries.join('\n')}\n};\n`;
+}
+async function buildWebAssetsModuleSource() {
+  return (
+    (await embedGroup('WEB_ASSETS', {
+      html: () => loadHtml(client('ui.html')),
+      // Simple-only builds leave the advanced view's CSS out.
+      css: async () =>
+        (await loadCss(client('ui-base.css'))) +
+        (isSimpleOnly ? '' : await loadCss(client('ui-advanced.css'))) +
+        (await loadCss(client('ui-simple.css'))),
+      js: uiJs,
+      requirementsHtml: () => loadHtml(client('requirements.html')),
+      qrSandboxHtml: () => loadHtml(client('qr-sandbox.html')),
+    })) +
+    (await embedGroup('DECK_ASSETS', {
+      html: () => loadHtml(client('deck/deck.html')),
+      css: () => loadCss(client('deck/deck.css')),
+      js: deckJs,
+    }))
+  );
+}
+const virtualWebAssets = virtualModule(
+  'virtual:web-assets',
+  'webassets',
+  once(buildWebAssetsModuleSource),
+  'js',
+);
 
 const virtualNativeLibs = virtualModule(
   'virtual:native-libs',
@@ -566,7 +607,7 @@ const mainResult = await build({
   outfile,
   plugins: [
     ...(isCoverageTest ? [istanbulPlugin] : []),
-    ...clientBundles,
+    virtualWebAssets,
     virtualWorker,
     virtualScanWorker,
     virtualPluginWorker,

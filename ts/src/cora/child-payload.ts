@@ -1,6 +1,6 @@
 // Pure helpers for the child-server (MK.2/Mini) payload hot path: chunk tracing,
 // brightness parsing and the out-of-range key guard. Dispatch stays in
-// ElgatoChildServer so each ACK-paced chunk goes straight to the assembler.
+// ElgatoChildServer so each image chunk goes straight to the assembler.
 import { PAYLOAD_TYPE_FEATURE, GEN1_IMAGE_KEY_OFFSET, GEN1_IMAGE_LAST_OFFSET } from './protocol.js';
 import type { LogFn } from './types.js';
 

@@ -18,6 +18,7 @@ import type { Settings } from '../src/infra/settings-store.js';
 import type { DockStatus } from '../src/shared/types.js';
 import type { StatusSnapshot } from '../src/web/contract.js';
 import { test, testAsync as runWebTest, summaryExit } from './helpers/harness.js';
+import { rawHead } from './helpers/raw-http.js';
 import { PersistedSettings } from '../src/infra/settings.js';
 import { DEFAULT_STANDBY, publicStandby } from '../src/shared/standby-settings.js';
 import type { StandbyView } from '../src/web/contract-standby.js';
@@ -1163,6 +1164,35 @@ try {
       assert.ok(body.includes(`'${QR_LIB.integrity}'`), 'integrity literal');
     },
   );
+
+  await runWebTest('static assets: gzip bytes, ETag, no-cache, 304 on If-None-Match', async () => {
+    const types: Record<string, string> = {
+      '/': 'text/html; charset=utf-8',
+      '/ui.css': 'text/css',
+      '/ui.js': 'application/javascript',
+      '/requirements': 'text/html; charset=utf-8',
+      '/qr-sandbox': 'text/html; charset=utf-8',
+    };
+    for (const [path, type] of Object.entries(types)) {
+      const res = await fetch(`${base}${path}`);
+      assert.equal(res.status, 200, path);
+      assert.equal(res.headers.get('Content-Type'), type, path);
+      assert.equal(res.headers.get('Content-Encoding'), 'gzip', path);
+      assert.equal(res.headers.get('Cache-Control'), 'no-cache', path);
+      // Security headers still ride on the encoded response.
+      assert.equal(res.headers.get('X-Content-Type-Options'), 'nosniff', path);
+      const etag = res.headers.get('ETag') ?? '';
+      assert.ok(/^"[0-9a-f]{16}"$/.test(etag), `${path} etag ${etag}`);
+      assert.ok((await res.text()).length > 100, `${path} decoded body`);
+      const again = await rawHead(routesUi.port, path, {
+        'Accept-Encoding': 'gzip',
+        'If-None-Match': etag,
+      });
+      assert.equal(again.status, 304, path);
+      assert.equal(again.headers.get('etag'), etag, path);
+      assert.equal(again.headers.get('x-content-type-options'), 'nosniff', path);
+    }
+  });
 
   const goDocs = (topic: string, headers: Record<string, string> = {}): Promise<Response> =>
     fetch(`${base}/go/docs/${topic}`, { redirect: 'manual', headers });

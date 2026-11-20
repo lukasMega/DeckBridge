@@ -203,15 +203,43 @@ await runTest('a stalled worker never has more than the posted budget outstandin
   assert.equal(driver.workQueue.pendingCount, 0);
 });
 
-await runTest("an 'imageSent' hash becomes a 'frameHash' event before 'imageSent'", () => {
+await runTest("a workDone 'sent' hash becomes a 'frameHash' event before 'imageSent'", () => {
   const { driver, send } = attached();
   const seen: string[] = [];
   driver.on('frameHash', (key: number, hash: string) => seen.push(`hash ${key} ${hash}`));
   driver.on('imageSent', (key: number, cached: boolean) => seen.push(`sent ${key} ${cached}`));
-  send({ type: 'imageSent', keyIndex: 3, hash: 'deadbeef', cached: true });
-  send({ type: 'imageSent', keyIndex: 4 });
+  send({
+    type: 'workDone',
+    ids: [],
+    sent: [{ keyIndex: 3, hash: 'deadbeef', cached: true }, { keyIndex: 4 }],
+  });
   assert.deepEqual(seen, ['hash 3 deadbeef', 'sent 3 true', 'sent 4 false']);
 });
+
+await runTest(
+  'workDone emits its sent images, then credits; a throwing listener still credits',
+  () => {
+    const { driver, w, send } = attached();
+    const order: string[] = [];
+    driver.on('imageSent', (key: number) => order.push(`sent ${key}`));
+    for (let i = 0; i < 20; i++) driver.renderCoraImage(i % 8, jpeg(i), 'jpeg');
+    const before = w.posted.length;
+    send({ type: 'workDone', ids: w.posted.map((m) => m.id!), sent: [{ keyIndex: 1 }] });
+    assert.deepEqual(order, ['sent 1']);
+    assert.ok(w.posted.length > before, 'the credit drained waiting frames');
+
+    const t = attached();
+    t.driver.on('imageSent', () => {
+      throw new Error('listener');
+    });
+    for (let i = 0; i < 20; i++) t.driver.renderCoraImage(i % 8, jpeg(i), 'jpeg');
+    const posted = t.w.posted.length;
+    assert.throws(() =>
+      t.send({ type: 'workDone', ids: t.w.posted.map((m) => m.id!), sent: [{ keyIndex: 1 }] }),
+    );
+    assert.ok(t.w.posted.length > posted, 'credits returned despite the throwing listener');
+  },
+);
 
 await runTest(
   'overload: one event, images refused until a fresh session, patches need a base',

@@ -5,6 +5,7 @@ import { DeckHub, type DeckSource } from '../src/web/server/virtual-deck/deck-hu
 import { DeckServer } from '../src/web/server/virtual-deck/deck-server.js';
 import { DECK_PROTOCOL_VERSION } from '../src/web/server/virtual-deck/deck-constants.js';
 import { testAsync as test, summaryExit } from './helpers/harness.js';
+import { rawHead } from './helpers/raw-http.js';
 
 const ROOT = `${tjs.tmpDir}/deck-server-test-${tjs.pid}`;
 const WEBUI_PORT = 13061;
@@ -110,6 +111,32 @@ try {
       const r = await fetch(`${base}${path}`);
       assert.equal(r.status, 404, path);
       await r.text();
+    }
+  });
+
+  await test('page assets are gzip with an ETag; a matching If-None-Match is 304', async () => {
+    const files: [string, string, string][] = [
+      ['/deck/', 'text/html; charset=utf-8', 'no-store'],
+      ['/deck/deck.js', 'application/javascript', 'no-cache'],
+      ['/deck/deck.css', 'text/css', 'no-cache'],
+    ];
+    for (const [path, type, cache] of files) {
+      const res = await fetch(`${base}${path}`);
+      assert.equal(res.status, 200, path);
+      assert.equal(res.headers.get('Content-Type'), type, path);
+      assert.equal(res.headers.get('Content-Encoding'), 'gzip', path);
+      assert.equal(res.headers.get('Cache-Control'), cache, path);
+      assert.equal(res.headers.get('X-Frame-Options'), 'DENY', path);
+      const etag = res.headers.get('ETag') ?? '';
+      assert.ok(etag.length > 2, path);
+      assert.ok((await res.text()).length > 100, path);
+      const again = await rawHead(DECK_PORT, path, {
+        'Accept-Encoding': 'gzip',
+        'If-None-Match': etag,
+      });
+      assert.equal(again.status, 304, path);
+      assert.equal(again.headers.get('etag'), etag, path);
+      assert.equal(again.headers.get('x-frame-options'), 'DENY', path);
     }
   });
 

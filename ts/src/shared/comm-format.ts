@@ -15,3 +15,7 @@ export function formatCommHex(data: Buffer): string {
   for (let i = 0; i < n; i++) s += HEX[data[i]!]!;
   return s.slice(1);
 }
+
+/** Bulk image traffic that simple-only builds count instead of storing, so the
+ *  500-entry comm ring keeps the pairing handshake. */
+export type CommCountKind = 'image-chunk-rx' | 'ack-tx';
