@@ -11,9 +11,10 @@ minimumReleaseAgeExclude:
 # Drop these once all direct parents resolve fixed releases themselves.
 overrides:
   browserslist: "^4.28.7"
-  baseline-browser-mapping: "^2.11.0"
   # 4.7.10 fixes AST injection, constructor access, and inline script escaping.
   handlebars: "^4.7.10"
+  # 11.0.1 fixes globParts amplification DoS (GHSA, Dependabot #117); eslint plugins still pin ^10.
+  minimatch: "^11.0.5"
 
 # Share the docs build's nesting guard with ESLint's transitive braces copy.
 patchedDependencies:
