@@ -8,6 +8,7 @@ import { docsTrackingAllowed, docsUrl, isDocsTopic, isOwnNavigation } from './do
 import type { RawMockInput } from './mock-input.js';
 import { pushAdminRoutes } from './push-routes.js';
 import { virtualDeckRoutes } from './virtual-deck/virtual-deck-routes.js';
+import { deckAssets } from './virtual-deck/deck-assets.js';
 import { pairingAddressRoutes } from './pairing-address-routes.js';
 import { wslRelayRoutes } from './wsl-relay-routes.js';
 import { pairingRouteRoutes } from './pairing-route-routes.js';
@@ -45,6 +46,13 @@ const HTML = 'text/html; charset=utf-8';
 export const routes: Route[] = [
   get('/', ({ req }) => staticAsset(req, WEB_ASSETS.html, HTML)),
   get('/ui.css', ({ req }) => staticAsset(req, WEB_ASSETS.css, 'text/css')),
+  get(
+    '/favicon.png',
+    () =>
+      new Response(deckAssets.icon(180), {
+        headers: { 'Content-Type': 'image/png', 'Cache-Control': 'max-age=86400' },
+      }),
+  ),
   get('/ui.js', ({ req }) => staticAsset(req, WEB_ASSETS.js, 'application/javascript')),
   get('/requirements', ({ req }) => staticAsset(req, WEB_ASSETS.requirementsHtml, HTML)),
   // Framed by the pairing QR (simple/pairing-qr.tsx); its CSP is set in security-headers.ts.
