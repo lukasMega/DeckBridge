@@ -78,7 +78,7 @@ function patternBmp(w: number, h: number, seed: number): Uint8Array {
   return bmp;
 }
 
-/** The pre-optimisation compose: blit each cell onto a black canvas, repack to BMP. */
+/** The pre-optimization compose: blit each cell onto a black canvas, repack to BMP. */
 function referenceWindow(model: DeviceModel, cells: Array<[number, Uint8Array]>, center: boolean) {
   const spec = model.widgetDisplays![0]!.image;
   const { width, height } = spec;
