@@ -139,9 +139,13 @@ export function RouteDetails({
   const isWsl = status.route === 'wsl';
   const health = relayHealth(status, wsl);
   const addr = relayAddress(status, wsl);
-  const seen = seenAgo(status.relay?.at ?? null, now);
+  const at = status.relay?.at ?? null;
+  // A heartbeat can be newer than the last tick; that is not clock skew.
+  const seen = seenAgo(at, Math.max(now, at ?? now));
   const build = buildLine(status.relay);
   const problem = relayProblem(status, __VERSION__);
+  // The server issues no script token for container (isScriptRoute).
+  const hasScript = status.route !== 'container';
 
   const recheck = (): Promise<void> =>
     action.run(async () => {
@@ -183,7 +187,7 @@ export function RouteDetails({
       {isWsl ? (
         <WslNotes wsl={wsl} needsAttention={health.label === 'Needs attention'} />
       ) : (
-        <ScriptCommands route={status.route} probe={probe.data} />
+        hasScript && <ScriptCommands route={status.route} probe={probe.data} />
       )}
       <div class="addr-row">
         <GhostButton id="prd-recheck" disabled={action.busy} onClick={recheck}>

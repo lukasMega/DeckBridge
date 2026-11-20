@@ -557,4 +557,6 @@ export type DocsTopic =
   | 'image-fit'
   | 'wsl-relay'
   | 'wsl-relay-stuck'
+  | 'relay-device'
+  | 'relay-orbstack'
   | 'troubleshooting';

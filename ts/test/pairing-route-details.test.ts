@@ -87,9 +87,9 @@ const wslStateHealth = (state: WslRelayStatus['state']) =>
 
 test('relayHealth: wsl states', () => {
   assert.deepEqual(relayHealth(status({ route: 'wsl' }), null), {
-    label: 'Checking',
-    variant: 'wait',
-    spin: true,
+    label: 'Not reported yet',
+    variant: 'dim',
+    spin: false,
   });
   assert.deepEqual(wslStateHealth('checking'), { label: 'Checking', variant: 'wait', spin: true });
   assert.deepEqual(wslStateHealth('downloading'), {
@@ -146,7 +146,8 @@ test('buildLine', () => {
 test('relayAddress', () => {
   const w = status({ route: 'wsl', relayIp: '1.1.1.1' });
   assert.equal(relayAddress(w, wslStatus()), '172.20.0.2');
-  assert.equal(relayAddress(w, null), null);
+  assert.equal(relayAddress(w, null), '1.1.1.1');
+  assert.equal(relayAddress(status({ route: 'wsl' }), null), null);
   assert.equal(relayAddress(status({ relayIp: '10.0.0.5', relay: relay() }), null), '10.0.0.5');
   assert.equal(relayAddress(status({ relay: relay() }), null), '192.168.88.10');
   assert.equal(relayAddress(status(), null), null);
@@ -190,7 +191,11 @@ test('relayProblem', () => {
     'Relay offline. Check the device, or run the command again.',
   );
   assert.equal(
-    p({ relay: relay(), versionMismatch: true }),
+    p({ relay: relay(), relayVersion: '0.22.0', versionMismatch: true }),
+    'The relay runs version 0.22.0, DeckBridge runs 0.24.1. Run the command again on the device.',
+  );
+  assert.equal(
+    p({ relay: null, relayVersion: '0.22.0', versionMismatch: true }),
     'The relay runs version 0.22.0, DeckBridge runs 0.24.1. Run the command again on the device.',
   );
   assert.equal(p({ relay: null, versionMismatch: true }), null);

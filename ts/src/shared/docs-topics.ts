@@ -20,5 +20,7 @@ export const DOCS_TOPICS = {
   'image-fit': '/troubleshooting/#image-fit',
   'wsl-relay': '/elgato-same-computer/#windows-wsl',
   'wsl-relay-stuck': '/elgato-same-computer/#wsl-not-pairing',
+  'relay-device': '/elgato-same-computer/#relay-settings',
+  'relay-orbstack': '/elgato-same-computer/#macos-orbstack',
   troubleshooting: '/troubleshooting/#diagnostics-report',
 } as const satisfies Record<DocsTopic, string>;

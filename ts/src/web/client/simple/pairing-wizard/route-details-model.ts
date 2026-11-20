@@ -21,7 +21,7 @@ const health = (label: string, variant: StatusChipVariant, spin = false): Health
 });
 
 function wslHealth(wsl: WslRelayStatus | null): Health {
-  if (wsl === null) return health('Checking', 'wait', true);
+  if (wsl === null) return health('Not reported yet', 'dim');
   switch (wsl.state) {
     case 'checking':
       return health('Checking', 'wait', true);
@@ -61,7 +61,7 @@ export function relayHealth(s: PairingRouteStatus, wsl: WslRelayStatus | null): 
   return s.route === 'wsl' ? wslHealth(wsl) : scriptHealth(s.relay);
 }
 
-/** Null when unknown or the clock is more than 5 s behind the relay's. */
+/** Null when unknown or the browser clock is more than 5 s behind DeckBridge's. */
 export function seenAgo(at: number | null, now: number): string | null {
   if (at === null) return null;
   const diff = now - at;
@@ -79,7 +79,7 @@ export function buildLine(relay: RelayProgress | null): string | null {
 }
 
 export function relayAddress(s: PairingRouteStatus, wsl: WslRelayStatus | null): string | null {
-  if (s.route === 'wsl') return wsl?.wslIp ?? null;
+  if (s.route === 'wsl') return wsl?.wslIp ?? s.relayIp ?? null;
   return s.relayIp ?? s.relay?.ip ?? null;
 }
 
@@ -111,8 +111,8 @@ export function relayProblem(s: PairingRouteStatus, ownVersion: string): string 
   if (relay?.stage === 'offline') {
     return 'Relay offline. Check the device, or run the command again.';
   }
-  if (s.versionMismatch && relay !== null) {
-    return `The relay runs version ${relay.version}, DeckBridge runs ${ownVersion}. Run the command again on the device.`;
+  if (s.versionMismatch && s.relayVersion !== null) {
+    return `The relay runs version ${s.relayVersion}, DeckBridge runs ${ownVersion}. Run the command again on the device.`;
   }
   return null;
 }

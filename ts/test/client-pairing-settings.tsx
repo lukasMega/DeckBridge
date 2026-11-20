@@ -152,7 +152,11 @@ async function problems(t: Ctx): Promise<void> {
   const relay = route().relay;
   await t.mount({ relay: relay && { ...relay, stage: 'offline' } });
   t.check(t.text('#prd-problem').includes('Relay offline'), 'offline problem');
-  await t.mount({ versionMismatch: true, relay: relay && { ...relay, version: '0.1.0' } });
+  await t.mount({
+    versionMismatch: true,
+    relayVersion: '0.1.0',
+    relay: relay && { ...relay, version: '0.1.0' },
+  });
   t.check(t.text('#prd-problem').includes('relay runs version 0.1.0'), 'version mismatch problem');
 }
 

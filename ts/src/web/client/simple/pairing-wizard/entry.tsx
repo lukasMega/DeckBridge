@@ -1,15 +1,16 @@
 // Ways into the pairing wizard: the pairing-stage button, the auto-open, the version banner
 // link and the Settings row. All stay hidden unless the server reports the route as supported.
-import { useEffect } from 'preact/hooks';
+import { useEffect, useState } from 'preact/hooks';
 import { Collapsible } from '../../components/Collapsible.js';
 import { GhostButton } from '../../components/GhostButton.js';
 import { patch, useStore } from '../../lib/store.js';
 import { postJson } from '../../lib/ui-api.js';
 import { Feedback, useAsyncAction } from '../../lib/ui-async.js';
-import type { PairingRoute, PairingRouteStatus } from '../../ui-types.js';
+import type { PairingRoute, PairingRouteStatus, WslRelayStatus } from '../../ui-types.js';
 import { ICON, Icon } from '../../components/Icon.js';
 import { isAffected, shouldAutoOpen } from './flow.js';
-import { wslRelayFailed } from '../wsl-relay-steps.js';
+import { RouteDetails } from './route-details.js';
+import { relayAddress, relayHealth } from './route-details-model.js';
 import { isRelayRoute } from './routes.js';
 import { PairingWizard } from './wizard.js';
 
@@ -87,20 +88,30 @@ const ROUTE_LABEL: Record<Exclude<PairingRoute, 'none'>, string> = {
   orbstack: 'Relay in OrbStack',
 };
 
-function statusLine(s: PairingRouteStatus, wslFailed: boolean): string {
+function statusLine(s: PairingRouteStatus, wsl: WslRelayStatus | null): string {
   if (s.route === 'none') return 'Not set up';
   const label = ROUTE_LABEL[s.route];
-  // The pairing stage no longer shows the WSL checklist, so a failure must surface here.
-  if (s.route === 'wsl' && wslFailed) return `${label} · needs attention (Run setup again)`;
-  return s.relayIp === null ? label : `${label} · ${s.relayIp}`;
+  if (s.route === 'downgrade') return label;
+  const addr = relayAddress(s, wsl);
+  const head = `${label} · ${relayHealth(s, wsl).label}`;
+  return addr === null ? head : `${head} · ${addr}`;
 }
 
 export function PairingRouteSetting(): preact.JSX.Element | null {
   const s = useStore((st) => st.pairingRoute);
   const wsl = useStore((st) => st.wslRelay);
   const action = useAsyncAction();
+  const [open, setOpen] = useState(false);
+  const supported = s?.supported === true;
+  // A hidden row remounts its Collapsible closed.
+  useEffect(
+    function resetOpenWhenHidden() {
+      if (!supported) setOpen(false);
+    },
+    [supported],
+  );
   if (!s?.supported) return null;
-  const line = statusLine(s, wsl !== null && wslRelayFailed(wsl));
+  const line = statusLine(s, wsl);
   const turnOff = (): Promise<void> =>
     action.run(async () => {
       patch({
@@ -108,10 +119,16 @@ export function PairingRouteSetting(): preact.JSX.Element | null {
       });
     }, 'Could not reach DeckBridge.');
   return (
-    <Collapsible title="Stream Deck app 7.6.1 pairing" bodyId="pairing-route-body" status={line}>
+    <Collapsible
+      title="Stream Deck app 7.6.1 pairing"
+      bodyId="pairing-route-body"
+      status={line}
+      onToggle={setOpen}
+    >
       <p class="multi-deck-note" id="pairing-route-status">
         {line}
       </p>
+      {open && isRelayRoute(s.route) && <RouteDetails status={s} />}
       <div class="addr-row">
         <GhostButton id="pairing-route-again" onClick={() => openPairingWizard(true)}>
           Run setup again

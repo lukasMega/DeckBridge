@@ -26,6 +26,7 @@ import { runDeckPage } from './client-deck.js';
 import { runPairingFlow } from './client-pairing.js';
 import { runDocsLinks } from './client-docs.js';
 import { runPairingWizard } from './client-pairing-wizard.js';
+import { runPairingSettings } from './client-pairing-settings.js';
 import { runWslHydrateRace, runWslRelay } from './client-wsl.js';
 import { runSurvey } from './client-survey.js';
 import { runStatistics } from './client-statistics.js';
@@ -271,6 +272,7 @@ async function run(): Promise<void> {
   await runDocsLinks(root, check);
   await runWslRelay(root, check);
   await runPairingWizard(root, check);
+  await runPairingSettings(root, check);
   await runModalShells(root, check);
   await runSurvey(root, check);
   await runVerifyWizard(root, check);

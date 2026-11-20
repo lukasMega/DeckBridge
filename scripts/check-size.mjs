@@ -13,7 +13,8 @@ const BUDGETS = {
   // "Fix pairing" wizard for 7.6.1 + manual OrbStack route (2026-11-12): measured 202,410 + ~1 KB.
   // D200 info window card (2026-11-18, plan 2026-11-18_ulanzi-d200-wide-key.md Q6): measured
   // 206,749 + 1%. Info window Elgato images (2026-11-19): measured 209,280 + 1%.
-  'ui.js': 211_370,
+  // Relay details in Settings pairing row (2026-11-20): measured 213,796 + 1%.
+  'ui.js': 215_940,
   'deck.js': 30_106,
   // Device verify wizard (2026-10-22); D200 info window card (2026-11-18): measured 37,448 + 1%.
   'css total': 37_830,
