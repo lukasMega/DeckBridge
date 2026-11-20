@@ -2,7 +2,7 @@
 // version and installed VM runtimes on macOS. Spawns only, never boots a VM, never throws.
 import type { PairingProbe } from '../web/contract-pairing-route.js';
 import { spawnOwned } from './owned-spawn.js';
-import { parseMacVersion, parseWslList } from './pairing-probe-parse.js';
+import { parseMacVersion, parseNecpBlocked, parseWslList } from './pairing-probe-parse.js';
 import { decodeWslText } from './wsl-relay-parse.js';
 
 const SPAWN_TIMEOUT_MS = 5000;
@@ -36,6 +36,24 @@ async function runText(runner: ProbeRunner, argv: string[]): Promise<string> {
   return r !== null && r.code === 0 ? new TextDecoder().decode(r.stdout).trim() : '';
 }
 
+// Readable without sudo; the 5 minute window is ~1-2 s, a longer one takes minutes.
+const NECP_LOG = [
+  '/usr/bin/log',
+  'show',
+  '--last',
+  '5m',
+  '--style',
+  'compact',
+  '--predicate',
+  'process == "kernel" AND eventMessage CONTAINS "reason: NECP" AND eventMessage CONTAINS "process: Stream Deck"',
+];
+
+/** macOS only. Async spawn with a timeout, so it never stalls the main thread. */
+export async function streamDeckNecpBlocked(runner: ProbeRunner): Promise<boolean> {
+  const r = await runner.run(NECP_LOG, 8000);
+  return r !== null && r.code === 0 && parseNecpBlocked(new TextDecoder().decode(r.stdout));
+}
+
 async function probeMac(
   runner: ProbeRunner,
   home: string,
@@ -47,11 +65,13 @@ async function probeMac(
     home === '' ? false : runner.exists(`${home}/.orbstack/bin/orb`),
     runner.exists('/usr/local/bin/container'),
   ]);
+  const orbstack = appOrb || cliOrb;
   return {
     version: parseMacVersion(version),
     arch: uname === 'x86_64' ? 'x86_64' : 'arm64',
-    orbstack: appOrb || cliOrb,
+    orbstack,
     container,
+    localNetworkBlocked: orbstack && (await streamDeckNecpBlocked(runner)),
   };
 }
 
@@ -65,7 +85,13 @@ export async function probePairing(deps: ProbeDeps): Promise<PairingProbe> {
   } catch {
     if (platform === 'Windows') wsl = { installed: false, distros: [] };
     else if (platform === 'macOS')
-      mac = { version: '', arch: 'arm64', orbstack: false, container: false };
+      mac = {
+        version: '',
+        arch: 'arm64',
+        orbstack: false,
+        container: false,
+        localNetworkBlocked: false,
+      };
   }
   return {
     platform: platform === 'Windows' || platform === 'macOS' ? platform : 'other',

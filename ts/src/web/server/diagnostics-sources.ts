@@ -14,6 +14,7 @@ import type { DeviceModelOverride } from '../../devices/driver.js';
 import type { ModelOverridesController } from './model-overrides-controller.js';
 import { deviceRowsFromInventory } from '../../cli/devices.js';
 import type { HidDeviceInfo } from '../../ffi/hidapi.js';
+import { createProbeRunner, streamDeckNecpBlocked } from '../../infra/pairing-probe.js';
 import { tailLogFile } from '../../infra/log-file.js';
 import { defaultCacheRoot } from '../../infra/native-libs.js';
 import { settingsPath } from '../../infra/settings-store.js';
@@ -185,6 +186,9 @@ export async function buildLiveDiagnostics(
     await fetchInventory(live.inventory),
   );
   sources.requirements = await checkRequirements();
+  if (platformName() === 'macOS') {
+    sources.localNetworkBlocked = await streamDeckNecpBlocked(createProbeRunner());
+  }
   return buildDiagnostics(sources, opt);
 }
 

@@ -50,6 +50,8 @@ export interface PairingProbe {
     arch: 'arm64' | 'x86_64';
     orbstack: boolean;
     container: boolean;
+    /** Recent kernel NECP drops of the Stream Deck app: its Local Network grant is not active. */
+    localNetworkBlocked: boolean;
   } | null;
 }
 

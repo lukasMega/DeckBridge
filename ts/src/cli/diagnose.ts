@@ -16,6 +16,7 @@ import { loadSettings, settingsPath } from '../infra/settings-store.js';
 import { logFilePath, tailLogFile } from '../infra/log-file.js';
 import { currentLogLevel } from '../shared/logger.js';
 import { isElgatoAppRunning, platformName } from '../infra/os-utils.js';
+import { createProbeRunner, streamDeckNecpBlocked } from '../infra/pairing-probe.js';
 import { versionText } from '../shared/cli.js';
 import type { CliFlags } from '../shared/cli.js';
 
@@ -46,6 +47,8 @@ export async function buildDiagnosticsReport(flags: CliFlags): Promise<string> {
       hidEnumerateMs: hidEnum.tookMs,
       deviceRows: enumerateDevices().map(toDeviceRow),
       requirements: await checkRequirements(),
+      localNetworkBlocked:
+        platformName() === 'macOS' ? await streamDeckNecpBlocked(createProbeRunner()) : undefined,
       logTail: await tailLogFile(Number.MAX_SAFE_INTEGER, cacheRoot),
       settingsJson: JSON.stringify(settings, null, 2),
     },

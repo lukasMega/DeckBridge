@@ -1,7 +1,12 @@
 /* eslint-disable sonarjs/no-hardcoded-ip -- fixture addresses, nothing is contacted */
 import assert from 'tjs:assert';
 import { isMockPairingScenario, mockProbe } from '../src/infra/pairing-probe-mock.js';
-import { macOsAtLeast, parseMacVersion, parseWslList } from '../src/infra/pairing-probe-parse.js';
+import {
+  macOsAtLeast,
+  parseMacVersion,
+  parseNecpBlocked,
+  parseWslList,
+} from '../src/infra/pairing-probe-parse.js';
 import { probePairing } from '../src/infra/pairing-probe.js';
 import type { ProbeRunner } from '../src/infra/pairing-probe.js';
 import { testAsync, test, summary } from './helpers/harness.js';
@@ -95,6 +100,7 @@ await testAsync('probePairing: macOS version, arch and installed runtimes', asyn
     arch: 'arm64',
     orbstack: true,
     container: true,
+    localNetworkBlocked: false,
   });
 });
 
@@ -112,7 +118,35 @@ await testAsync('probePairing: macOS app bundle counts as OrbStack; Intel arch',
     arch: 'x86_64',
     orbstack: true,
     container: false,
+    localNetworkBlocked: false,
   });
+});
+
+const readFixture = async (f: string): Promise<string> =>
+  new TextDecoder().decode(await tjs.readFile(`test/fixtures/${f}`));
+
+await testAsync(
+  'parseNecpBlocked: real Stream Deck NECP drops match, other processes do not',
+  async () => {
+    assert.equal(parseNecpBlocked(await readFixture('necp-drop-streamdeck.log')), true);
+    assert.equal(parseNecpBlocked(await readFixture('necp-drop-negative.log')), false);
+    assert.equal(parseNecpBlocked(''), false);
+  },
+);
+
+await testAsync('probePairing: OrbStack Mac reports a Stream Deck NECP block', async () => {
+  const base = fakeRunner({}, ['/Applications/OrbStack.app']);
+  const logOut = utf8(await readFixture('necp-drop-streamdeck.log'));
+  const withLog: ProbeRunner = {
+    ...base,
+    run: (argv, t) =>
+      argv[0] === '/usr/bin/log' ? Promise.resolve({ code: 0, stdout: logOut }) : base.run(argv, t),
+  };
+  assert.equal((await probePairing(deps(withLog, 'macOS'))).mac?.localNetworkBlocked, true);
+  // No OrbStack: the log is never read.
+  const none = fakeRunner({});
+  assert.equal((await probePairing(deps(none, 'macOS'))).mac?.localNetworkBlocked, false);
+  assert.ok(!none.calls.some((c) => c.startsWith('/usr/bin/log')));
 });
 
 await testAsync('probePairing: other platform runs nothing', async () => {

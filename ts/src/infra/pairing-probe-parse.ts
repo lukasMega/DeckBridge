@@ -25,6 +25,11 @@ export function parseWslList(text: string): WslInfo {
   return distros.length === 0 ? { ...NO_WSL } : { installed: true, distros };
 }
 
+/** Kernel `tcp drop ... process: Stream Deck:<pid> ... reason: NECP` lines from `log show`. */
+export function parseNecpBlocked(logText: string): boolean {
+  return /process: Stream Deck:\d.*reason: NECP/.test(logText);
+}
+
 /** `sw_vers -productVersion` output to `'26.1'`; empty when unreadable. */
 export function parseMacVersion(swVers: string): string {
   const m = /^\d+(?:\.\d+){0,2}/.exec(swVers.trim());

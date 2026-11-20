@@ -304,6 +304,29 @@ DeckBridge (`EADDRINUSE`).
 The pairing row in Settings has the run command and a remove command
 (`orb delete deckbridge-relay`).
 
+### Stream Deck app blocked from the local network {#macos-local-network}
+
+macOS treats the OrbStack machine as part of the local network, because its subnet is
+directly attached to the Mac (`bridge100`). The Stream Deck app therefore needs the Local
+Network permission. When that permission is off, or turned on but not yet applied, macOS drops every
+connection the app makes to the relay. The relay logs nothing, and the app never pairs. A
+relay on another device on your network has the same problem.
+
+The wizard and the diagnostics report show "The Stream Deck app is blocked from the local
+network" when this happens. To check it yourself, run this in Terminal right after the app
+tried to connect:
+
+```bash
+/usr/bin/log show --last 5m --style compact --predicate 'process == "kernel" AND eventMessage CONTAINS "reason: NECP" AND eventMessage CONTAINS "process: Stream Deck"'
+```
+
+Any output means macOS blocked the app. To fix it:
+
+1. Quit the Stream Deck app, including its menu bar icon.
+2. Open System Settings > Privacy & Security > Local Network. Turn Stream Deck off and on.
+3. Start the app again.
+4. If it still does not connect, restart the Mac.
+
 ## Restarting DeckBridge {#restart}
 
 You can stop or restart DeckBridge while the relay keeps running. The relay holds the Stream

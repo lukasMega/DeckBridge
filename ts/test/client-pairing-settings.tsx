@@ -46,7 +46,13 @@ const PROBE: PairingProbe = {
 const MAC_PROBE: PairingProbe = {
   ...PROBE,
   platform: 'macOS',
-  mac: { version: '15.1', arch: 'arm64', orbstack: true, container: false },
+  mac: {
+    version: '15.1',
+    arch: 'arm64',
+    orbstack: true,
+    container: false,
+    localNetworkBlocked: false,
+  },
   wsl: null,
 };
 

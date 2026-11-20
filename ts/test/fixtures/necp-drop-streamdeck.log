@@ -1,0 +1,6 @@
+2026-11-20 22:08:13.035 Df kernel[0:f279ab] tcp drop outgoing [<IPv4-redacted>:49520<-><IPv4-redacted>:5343] interface: en0 (skipped: 0)
+so_gencnt: 13414559 t_state: SYN_SENT process: Stream Deck:4779 t_state: SYN_SENT so_error: 0 reason: NECP
+2026-11-20 22:08:13.049 Df kernel[0:f279ab] tcp drop outgoing [<IPv4-redacted>:49521<-><IPv4-redacted>:5343] interface: en0 (skipped: 0)
+so_gencnt: 13414560 t_state: SYN_SENT process: Stream Deck:4779 t_state: SYN_SENT so_error: 0 reason: NECP
+2026-11-20 22:08:13.444 Df kernel[0:f279cc] tcp drop outgoing [<IPv4-redacted>:49527<-><IPv4-redacted>:5343] interface: bridge100 (skipped: 0)
+so_gencnt: 13414613 t_state: SYN_SENT process: Stream Deck:4779 t_state: SYN_SENT so_error: 0 reason: NECP

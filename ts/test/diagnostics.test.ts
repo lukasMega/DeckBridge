@@ -177,6 +177,11 @@ test('pairing route renders one status line', () => {
   assert.ok(report.includes('route=wsl relayIp=172.20.1.5 paired=true elgato=7.6.1'));
 });
 
+test('local network block shows without a route status (CLI report)', () => {
+  const report = buildDiagnostics({ ...fullSources(), localNetworkBlocked: true });
+  assert.ok(report.includes('STREAM DECK APP BLOCKED FROM LOCAL NETWORK'));
+});
+
 test('every section is still present with only the header', () => {
   // A partial report must still reach the issue — "(unavailable)" tells a reader
   // "no data" rather than leaving them guessing whether it was ever collected.
