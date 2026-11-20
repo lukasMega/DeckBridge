@@ -308,9 +308,11 @@ function SetupScreen({
 
 function AddScreen({
   route,
+  blocked,
   onHelp,
 }: Readonly<{
   route: PairingRoute | undefined;
+  blocked: boolean;
   onHelp: (helpId: string) => void;
 }>): preact.JSX.Element {
   const paired = useStore((s) => s.pairingRoute?.paired === true);
@@ -328,6 +330,13 @@ function AddScreen({
         <div class="addr-row">
           <CopyChip label="Relay IP" value={ip} cls="addr-chip" />
         </div>
+      )}
+      {!paired && route === 'orbstack' && blocked && (
+        <p class="warnrow">
+          The Stream Deck app is blocked from the local network. Quit it, turn it off and on in
+          System Settings, Privacy &amp; Security, Local Network, then start it again. If that does
+          not help, restart the Mac.
+        </p>
       )}
       {paired ? (
         <StatusChip variant="ok" icon={ICON.check}>
@@ -377,7 +386,13 @@ export function ScreenView({
     case 'setup':
       return <SetupScreen route={answers.route} probe={probe.data} onTurnedOff={onTurnedOff} />;
     case 'add':
-      return <AddScreen route={answers.route} onHelp={onHelp} />;
+      return (
+        <AddScreen
+          route={answers.route}
+          blocked={probe.data?.mac?.localNetworkBlocked === true}
+          onHelp={onHelp}
+        />
+      );
     case 'done-old':
       return <p>No fix needed. Stream Deck app 7.6.0 and older pair with DeckBridge directly.</p>;
     case 'done-elsewhere':

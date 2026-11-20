@@ -80,6 +80,8 @@ export interface DiagnosticsSources {
   wslRelay?: WslRelayStatus;
   /** Pairing route status (server path only); carries no token. */
   pairingRoute?: PairingRouteStatus;
+  /** macOS only: kernel NECP drops of the Stream Deck app in the last 5 minutes. */
+  localNetworkBlocked?: boolean;
 }
 
 export const DEFAULT_LOG_TAIL_LINES = 400;
@@ -300,10 +302,13 @@ function wslRelayLine(s: WslRelayStatus | undefined): string {
   return `enabled=${s.enabled} state=${s.state} wslIp=${s.wslIp ?? '-'} distro=${s.distro ?? '-'}`;
 }
 
-function pairingRouteLine(s: PairingRouteStatus | undefined): string {
-  if (!s) return '';
+function pairingRouteLine(s: PairingRouteStatus | undefined, blocked?: boolean): string {
+  // The CLI report has no route status, but the block is still worth showing.
+  const flag = blocked ? 'STREAM DECK APP BLOCKED FROM LOCAL NETWORK (NECP drops)' : '';
+  if (!s) return flag;
   if (!s.supported) return 'not supported on this system';
-  return `route=${s.route} relayIp=${s.relayIp ?? '-'} paired=${s.paired} elgato=${s.elgatoVersion ?? '-'}`;
+  const line = `route=${s.route} relayIp=${s.relayIp ?? '-'} paired=${s.paired} elgato=${s.elgatoVersion ?? '-'}`;
+  return flag ? `${line} ${flag}` : line;
 }
 
 function headerBlock(h: DiagnosticsSources['header']): string {
@@ -346,7 +351,7 @@ export function buildDiagnostics(src: DiagnosticsSources, opt: DiagnosticsOption
     section('environment (DECKBRIDGE_*)', kvBlock(src.env)),
     section('paths', kvBlock(src.paths)),
     section('update check', updatesBlock(src.updates)),
-    section('pairing route', pairingRouteLine(src.pairingRoute)),
+    section('pairing route', pairingRouteLine(src.pairingRoute, src.localNetworkBlocked)),
     section('wsl relay', wslRelayLine(src.wslRelay)),
     section('model overrides', overridesBlock(src.modelOverrides)),
     section('effective model specs', jsonBlock(src.effectiveModels)),

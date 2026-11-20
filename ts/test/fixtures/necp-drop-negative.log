@@ -1,0 +1,4 @@
+2026-11-20 03:21:21.665 E  intelligenceflowd[38012:d34c1e] [com.apple.network:] nw_path_evaluator_create_flow_inner failed NECP_CLIENT_ACTION_ADD_FLOW (null) evaluator parameters: <private>
+2026-11-20 03:21:21.666 E  intelligenceflowd[38012:d34c1e] [com.apple.network:] nw_path_evaluator_create_flow_inner NECP_CLIENT_ACTION_ADD_FLOW 85666C9B-5EDF-4510-9EC8-3F8735A6AEC7 [1: Operation not permitted]
+2026-11-20 03:21:21.666 E  intelligenceflowd[38012:d34c1e] [com.apple.network:] nw_path_evaluator_create_flow_inner failed NECP_CLIENT_ACTION_ADD_FLOW (null) evaluator parameters: <private>
+2026-11-20 03:21:21.666 E  intelligenceflowd[38012:d34c1e] [com.apple.network:] nw_path_evaluator_create_flow_inner NECP_CLIENT_ACTION_ADD_FLOW 85666C9B-5EDF-4510-9EC8-3F8735A6AEC7 [1: Operation not permitted]

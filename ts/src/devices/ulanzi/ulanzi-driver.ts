@@ -122,7 +122,12 @@ export class UlanziDriver extends HidDeviceBase {
   private async handshake(): Promise<void> {
     this.sendClock();
     this.writePacket(buildPacket(CMD.GET_DEVICE_INFO, 0));
-    await new Promise((resolve) => setTimeout(resolve, HANDSHAKE_DRAIN_MS));
+    // Wall clock, not one setTimeout: libuv's cached loop time goes stale across a blocking
+    // open (dlopen), so a lone 250 ms timer fired after 20 ms and missed the 0x0303 reply.
+    const drainEnd = Date.now() + HANDSHAKE_DRAIN_MS;
+    for (let left = HANDSHAKE_DRAIN_MS; left > 0; left = drainEnd - Date.now()) {
+      await new Promise((resolve) => setTimeout(resolve, left));
+    }
     this.sendUnlock();
     this.setBrightness(this.brightness);
     // Establish the grid immediately, even with no images yet: this replaces the

@@ -39,6 +39,9 @@ your issue.
   again within that time. If the hold ran out, the relay log shows `hold expired`. Raise
   `--hold-seconds` and restart the relay. Also check that the relay is still running. See
   [Restarting DeckBridge](./elgato-same-computer.md#restart).
+- **The Stream Deck app never connects to a relay on a Mac, and the relay logs nothing** —
+  macOS blocks the app from the local network. An OrbStack machine counts as local network
+  too. See [Stream Deck app blocked from the local network](./elgato-same-computer.md#macos-local-network).
 - **D200 info window stats read 0 or look off** — on a non-English Windows the built-in
   sampler cannot read its counters and shows 0; on macOS memory counts inactive cache. See
   [D200 info window](./plugin-widgets.md#built-in-stats-sources), or supply the numbers with

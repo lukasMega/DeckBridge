@@ -8,7 +8,8 @@ export type MockPairingScenario =
   | 'windows-wsl1'
   | 'mac-26'
   | 'mac-15'
-  | 'mac-intel';
+  | 'mac-intel'
+  | 'mac-blocked';
 
 const SCENARIOS: readonly MockPairingScenario[] = [
   'windows-wsl',
@@ -17,6 +18,7 @@ const SCENARIOS: readonly MockPairingScenario[] = [
   'mac-26',
   'mac-15',
   'mac-intel',
+  'mac-blocked',
 ];
 
 export function isMockPairingScenario(s: string): s is MockPairingScenario {
@@ -36,8 +38,14 @@ const DEFAULT_BASE: MockBase = {
   lanReachable: true,
 };
 
-function mac(version: string, arch: 'arm64' | 'x86_64', orbstack: boolean, container: boolean) {
-  return { version, arch, orbstack, container };
+function mac(
+  version: string,
+  arch: 'arm64' | 'x86_64',
+  orbstack: boolean,
+  container: boolean,
+  blocked = false,
+) {
+  return { version, arch, orbstack, container, localNetworkBlocked: blocked };
 }
 
 /** `base` lets the caller keep the real addresses and ports around the scripted facts. */
@@ -67,6 +75,8 @@ export function mockProbe(
       return { ...osx, mac: mac('26.1', 'arm64', false, true) };
     case 'mac-15':
       return { ...osx, mac: mac('15.6', 'arm64', true, false) };
+    case 'mac-blocked':
+      return { ...osx, mac: mac('27.2', 'arm64', true, false, true) };
     case 'mac-intel':
       return { ...osx, mac: mac('15.6', 'x86_64', false, false) };
   }

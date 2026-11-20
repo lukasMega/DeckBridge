@@ -14,7 +14,13 @@ const MAC: PairingProbe = {
   relayScriptPort: 44661,
   lanReachable: false,
   wsl: null,
-  mac: { version: '15.6', arch: 'arm64', orbstack: true, container: false },
+  mac: {
+    version: '15.6',
+    arch: 'arm64',
+    orbstack: true,
+    container: false,
+    localNetworkBlocked: false,
+  },
 };
 
 const INSTALL = 'curl -fsSL "http://192.168.2.212:44661/relay.sh?t=abc" | sh';

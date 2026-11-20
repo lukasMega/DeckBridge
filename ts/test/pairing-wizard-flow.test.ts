@@ -143,19 +143,37 @@ const PROBES: Record<string, PairingProbe> = {
     ...base,
     platform: 'macOS',
     wsl: null,
-    mac: { version: '26.1', arch: 'arm64', orbstack: false, container: true },
+    mac: {
+      version: '26.1',
+      arch: 'arm64',
+      orbstack: false,
+      container: true,
+      localNetworkBlocked: false,
+    },
   },
   'mac-15': {
     ...base,
     platform: 'macOS',
     wsl: null,
-    mac: { version: '15.6', arch: 'arm64', orbstack: true, container: false },
+    mac: {
+      version: '15.6',
+      arch: 'arm64',
+      orbstack: true,
+      container: false,
+      localNetworkBlocked: false,
+    },
   },
   'mac-intel': {
     ...base,
     platform: 'macOS',
     wsl: null,
-    mac: { version: '15.6', arch: 'x86_64', orbstack: false, container: false },
+    mac: {
+      version: '15.6',
+      arch: 'x86_64',
+      orbstack: false,
+      container: false,
+      localNetworkBlocked: false,
+    },
   },
   other: { ...base, platform: 'other', wsl: null, mac: null },
 };
@@ -238,7 +256,13 @@ test('routeOptions: mac-intel falls back to orbstack, container disabled', () =>
 test('routeOptions: a macOS 26 arm64 Mac with nothing installed recommends container', () => {
   const p: PairingProbe = {
     ...PROBES['mac-26']!,
-    mac: { version: '26.0', arch: 'arm64', orbstack: false, container: false },
+    mac: {
+      version: '26.0',
+      arch: 'arm64',
+      orbstack: false,
+      container: false,
+      localNetworkBlocked: false,
+    },
   };
   assert.equal(rec(p, false, ALL), 'container');
   assert.equal(
