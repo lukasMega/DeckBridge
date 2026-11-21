@@ -164,6 +164,7 @@ async function startRelay(targetPort: number, extra: Partial<RelayOptions> = {})
     connectTimeoutMs: 1000,
     holdMs: 3000,
     redialBackoffMs: [50, 100],
+    holdKeepaliveMs: 0, // echo tests compare exact bytes
     onClose: closes.push,
     onHold: (_id, _route, reason) => holds.push(reason),
     onResume: (_id, _route, heldMs) => resumes.push(heldMs),
@@ -212,6 +213,49 @@ await testAsync(
     await upstream.close();
   },
 );
+
+/** True when `f` is a 48-byte CORA keepalive frame with this seq. */
+function isKeepalive(f: Uint8Array, seq: number): boolean {
+  const magic = [0x43, 0x93, 0x8a, 0x41];
+  return (
+    magic.every((b, i) => f[i] === b) &&
+    f[8] === seq && // messageId = seq
+    f[12] === 32 && // payload length
+    f[16] === 0x01 &&
+    f[17] === 0x0a &&
+    f[21] === seq
+  );
+}
+
+await testAsync('held client gets CORA keepalives; they stop on resume', async () => {
+  const up = port();
+  let upstream = await fakeUpstream(up);
+  const h = await startRelay(up, { holdKeepaliveMs: 100 });
+  const c = await connectClient(h.listenPort);
+  await c.writer.write(pattern(10, 13));
+  await c.readExact(10);
+
+  await upstream.close();
+  await h.holds.next();
+  assert.ok(isKeepalive(await c.readExact(48), 0), 'first keepalive, sent at hold start');
+  assert.ok(isKeepalive(await c.readExact(48), 1), 'second keepalive');
+
+  upstream = await fakeUpstream(up);
+  await h.resumes.next();
+  const echoed = pattern(48, 14); // starts with 0x0e, never the CORA magic
+  await c.writer.write(echoed);
+  // Keepalives written before the resume are still in flight; skip them.
+  let f = await c.readExact(48);
+  while (f[0] === 0x43) f = await c.readExact(48);
+  assertBytes(f, echoed);
+  await sleep(350); // three periods: a still-running timer would send here
+  const after = pattern(48, 15);
+  await c.writer.write(after);
+  assertBytes(await c.readExact(48), after);
+  c.close();
+  await h.relay.stop();
+  await upstream.close();
+});
 
 await testAsync('dial fails at session start, upstream appears inside the window', async () => {
   const up = port();

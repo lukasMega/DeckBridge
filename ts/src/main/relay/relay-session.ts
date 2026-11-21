@@ -2,6 +2,7 @@
 // closing both native handles) are in relay.ts.
 
 import { KEEPALIVE_DELAY_S } from '../../platform/accept-guard.js';
+import { encodeCoraFrame, keepalivePayload } from '../../cora/frame.js';
 
 export type RelayPortName = 'main' | 'child';
 
@@ -35,6 +36,8 @@ export interface SessionDeps {
   /** 0 = close both sides as soon as either ends. */
   holdMs: number;
   redialBackoffMs: readonly number[];
+  /** CORA keepalive period sent to the client while held; 0 = none. */
+  holdKeepaliveMs: number;
   onOpen?: (id: number, route: RelayPortName, client: string) => void;
   onClose?: (s: RelaySessionClose) => void;
   onUpstreamLost?: (route: RelayPortName, reason: string) => void;
@@ -98,6 +101,8 @@ export class Session {
   private heldSince: number | null = null;
   private everLive = false;
   private attempt = 0;
+  private kaTimer: ReturnType<typeof setInterval> | null = null;
+  private kaSeq = 0;
 
   constructor(d: SessionDeps) {
     this.d = d;
@@ -115,6 +120,7 @@ export class Session {
   private teardown(): void {
     if (this.torn) return;
     this.torn = true;
+    this.stopKeepalive();
     this.connectAbort?.abort();
     this.connectAbort = null;
     for (const r of this.readers) void r.cancel().catch(noop);
@@ -259,6 +265,7 @@ export class Session {
       if (this.heldSince === null) {
         const since = this.everLive ? Date.now() : this.startedAt;
         this.heldSince = since;
+        this.startKeepalive(cw);
         safely(() => this.d.onHold?.(this.d.id, this.d.route, reason));
       }
       if (!(await this.backoff(this.heldSince + this.d.holdMs))) return;
@@ -286,7 +293,29 @@ export class Session {
     return this.isFinished() ? null : reason;
   }
 
+  // The app drops a session that is silent for ~4 s (S1 in the 761 plan), so the relay
+  // stands in for DeckBridge's keepalive. shortcut: assumes the upstream ended on a frame
+  // boundary (DeckBridge writes whole frames); parse the down stream if that ever breaks.
+  private startKeepalive(cw: Writer): void {
+    const ms = this.d.holdKeepaliveMs;
+    if (ms <= 0 || this.kaTimer) return;
+    const send = (): void => {
+      const seq = this.kaSeq;
+      this.kaSeq = (seq + 1) & 0xff;
+      // A failed write means the client is gone; pumpClient ends the session.
+      void cw.write(encodeCoraFrame(keepalivePayload(seq), 0, 0, seq)).catch(noop);
+    };
+    send();
+    this.kaTimer = setInterval(send, ms);
+  }
+
+  private stopKeepalive(): void {
+    if (this.kaTimer) clearInterval(this.kaTimer);
+    this.kaTimer = null;
+  }
+
   private markResumed(): void {
+    this.stopKeepalive();
     const since = this.heldSince;
     this.attempt = 0;
     if (since === null) return;
