@@ -323,16 +323,6 @@ export class UlanziDriver extends HidDeviceBase {
     );
   }
 
-  // Blocking spin-wait between chunks — the device sees the same inter-transfer
-  // gap as a real sleep, without threading an async path through the sync write
-  // loop. Mirrors MiraboxDriver._busyWait.
-  private _busyWait(ms: number): void {
-    const end = Date.now() + ms;
-    while (Date.now() < end) {
-      /* spin */
-    }
-  }
-
   /** False when hid_write failed (already logged by _writeRaw). */
   private writePacket(pkt: Buffer): boolean {
     if (pkt.length !== this.model.wire.packetSize) {

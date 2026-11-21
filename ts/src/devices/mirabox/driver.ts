@@ -191,16 +191,6 @@ export class MiraboxDriver extends HidDeviceBase {
     this.write(this._buildCrt(CMD_STP));
   }
 
-  // Blocking spin-wait — diagnostic pacing between HID writes. The device sees
-  // the same inter-transfer gap as a real sleep; busy-wait avoids threading an
-  // async path through the sync write loop.
-  private _busyWait(ms: number): void {
-    const end = Date.now() + ms;
-    while (Date.now() < end) {
-      /* spin */
-    }
-  }
-
   clearKey(imageKeyId: number): void {
     this.write(this._buildCle(imageKeyId));
     if (this.model.wire.sendStpAfterImage) {

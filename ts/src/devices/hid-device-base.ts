@@ -167,6 +167,15 @@ export abstract class HidDeviceBase extends EventEmitter {
     }
   }
 
+  // Blocking spin-wait between HID writes: the device sees the same gap as a real
+  // sleep, without threading an async path through the sync write loop.
+  protected _busyWait(ms: number): void {
+    const end = Date.now() + ms;
+    while (Date.now() < end) {
+      /* spin */
+    }
+  }
+
   /** Per-driver shutdown write, performed while the device is still open.
    *  Mirabox sends CLE-DC + HAN; Elgato sends a reset-to-logo feature report. */
   protected abstract onBeforeClose(): void;
