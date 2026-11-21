@@ -154,10 +154,21 @@ jobs:
         if: matrix.platform == 'linux-x86_64'
         run: mise run package-extensions
 
+      # The Node.js relay (relay.sh --node) is platform-independent too.
+      - name: Build Node.js relay
+        if: matrix.platform == 'linux-x86_64'
+        run: |
+          mise run build-relay-node
+          out="dist/deckbridge-relay-v$(node -p "require('./ts/package.json').version").mjs"
+          cp ts/dist/deckbridge-relay.mjs "$out"
+          node "$out" --help > /dev/null
+
       - uses: actions/upload-artifact@v7
         with:
           name: ${{ matrix.platform }}
-          path: dist/*.zip
+          path: |
+            dist/*.zip
+            dist/*.mjs
           if-no-files-found: error
 
       - name: Install pinned Tauri CLI
@@ -430,12 +441,12 @@ jobs:
             exit 0
           fi
           chmod +x .github/scripts/vt-upload.sh
-          .github/scripts/vt-upload.sh artifacts/*.zip artifacts/*-setup.exe artifacts/*.dmg
+          .github/scripts/vt-upload.sh artifacts/*.zip artifacts/*-setup.exe artifacts/*.dmg artifacts/*.mjs
 
       - name: Generate SHA256SUMS
         run: |
           cd artifacts
-          sha256sum ./*.zip ./*-setup.exe ./*.dmg > SHA256SUMS.txt
+          sha256sum ./*.zip ./*-setup.exe ./*.dmg ./*.mjs > SHA256SUMS.txt
           cat SHA256SUMS.txt
 
       # Include every artifact, even when its VirusTotal scan failed.
@@ -457,5 +468,6 @@ jobs:
             artifacts/*.zip
             artifacts/*-setup.exe
             artifacts/*.dmg
+            artifacts/*.mjs
             artifacts/SHA256SUMS.txt
           fail_on_unmatched_files: true

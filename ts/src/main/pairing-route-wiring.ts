@@ -78,12 +78,13 @@ export function wirePairingRoute(
     else void scriptServer.stop();
   };
   // The one line the wizard shows; the token only ever travels in this reply (PW-D18).
-  const relayCommand = async (kind: 'curl' | 'wget'): Promise<string | null> => {
+  const relayCommand = async (kind: 'curl' | 'wget' | 'node'): Promise<string | null> => {
     const token = state.scriptToken();
     const target = relayTarget(bindAddr(), lanIp());
     if (token === null || !('ip' in target)) return null;
     const url = `http://${target.ip}:${await scriptServer.reservePort()}${RELAY_SCRIPT_PATH}?t=${token}`;
-    return kind === 'wget' ? `wget -qO- "${url}" | sh` : `curl -fsSL "${url}" | sh`;
+    if (kind === 'wget') return `wget -qO- "${url}" | sh`;
+    return `curl -fsSL "${url}" | sh${kind === 'node' ? ' -s -- --node' : ''}`;
   };
 
   const wsl = wireWslRelay(

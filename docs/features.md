@@ -86,6 +86,9 @@ a regular **Network device** at `localhost`; the deck behaves like Elgato hardwa
 
 - **Network Dock emulation** — Elgato CORA protocol over TCP, advertised via mDNS
   `_elg._tcp` ("Network Stream Deck"); the app discovers it like real hardware.
+- **Elgato app 7.6.1 on the same computer** — pair through a relay on another device (one
+  pasted command; a [Node.js relay](./elgato-same-computer.md#relay-node) where macOS blocks
+  the binary), WSL or OrbStack; see [Same computer](./elgato-same-computer.md).
 - **Works with non-Elgato decks** — [supported](./introduction.mdx#supported-devices)
   Mirabox / Ajazz decks present themselves to the app as an Elgato model it already
   knows, so nothing changes app-side.

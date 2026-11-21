@@ -150,6 +150,15 @@ async function closedAndDevice(t: Ctx): Promise<void> {
   await press(t.q('input[name="prd-kind"][value="wget"]'));
   await settle();
   t.check(t.chip('Run')?.includes('Copy Run wget') === true, 'details: wget switches Run chip');
+  t.check(t.q('#relay-node-hint') === null, 'details: no Node.js hint for wget');
+  await press(t.q('input[name="prd-kind"][value="node"]'));
+  await settle();
+  t.check(t.chip('Run')?.endsWith('| sh -s -- --node') === true, 'details: Node.js Run chip');
+  t.check(
+    t.chip('Uninstall')?.endsWith('| sh -s -- --uninstall') === true,
+    'details: Node.js uninstall',
+  );
+  t.check(t.text('#relay-node-hint').includes('Node.js 20'), 'details: Node.js hint');
   await t.toggle();
   t.check(t.text('.collapse-status').includes('Running'), 'closed header shows health');
 }
@@ -212,7 +221,7 @@ export async function runPairingSettings(root: HTMLElement, check: Check): Promi
     if (url === '/api/pairing-route/probe') reply = probe;
     else if (url.startsWith('/api/pairing-route/command')) {
       reply = {
-        command: `${url.endsWith('wget') ? 'wget -qO-' : 'curl -fsSL'} "http://192.168.1.5:44661/relay.sh?t=tok" | sh`,
+        command: `${url.endsWith('wget') ? 'wget -qO-' : 'curl -fsSL'} "http://192.168.1.5:44661/relay.sh?t=tok" | sh${url.endsWith('node') ? ' -s -- --node' : ''}`,
       };
     } else if (url === '/api/pairing-route') reply = getSnapshot().pairingRoute;
     else if (url === '/api/wsl-relay/recheck') reply = { ...WSL, state: 'ready' };

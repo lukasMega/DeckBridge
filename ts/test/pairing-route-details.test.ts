@@ -171,6 +171,10 @@ test('uninstallCommand', () => {
     uninstallCommand('wget -qO- "http://x/relay.sh?t=T" | sh'),
     'wget -qO- "http://x/relay.sh?t=T" | sh -s -- --uninstall',
   );
+  assert.equal(
+    uninstallCommand('curl -fsSL "http://x/relay.sh?t=T" | sh -s -- --node'),
+    'curl -fsSL "http://x/relay.sh?t=T" | sh -s -- --uninstall',
+  );
   assert.equal(uninstallCommand(null), null);
   assert.equal(uninstallCommand('echo hi'), null);
 });

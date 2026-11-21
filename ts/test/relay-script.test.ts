@@ -51,6 +51,21 @@ test('device script covers platforms, glibc, checksum, unzip fallbacks and unins
   }
 });
 
+test('device script has the Node.js relay branch', () => {
+  const s = deviceScript(D);
+  for (const part of [
+    '--node) NODE=1',
+    'file="deckbridge-relay-v$VERSION.mjs"',
+    'download "$file"',
+    'PLATFORM="node-$PLATFORM"',
+    'the relay needs Node.js 20 or newer',
+    'exec node ./deckbridge-relay.mjs relay "$@"',
+    'exec ./deckbridge relay "$@"',
+  ]) {
+    assert.ok(s.includes(part), part);
+  }
+});
+
 test('device script refuses a value that could inject shell', () => {
   assert.throws(() => deviceScript({ ...D, version: "1.0.0'; id; '" }));
   assert.throws(() => deviceScript({ ...D, target: '1.2.3.4; id' }));
@@ -81,9 +96,27 @@ await testAsync('the checksum lookup finds a ./name entry in the release list', 
   const sums = 'aaa  ./other.zip\nabc123  ./' + zip + '\n';
   const file = `sums-${tjs.pid}.txt`;
   const lookup = line.replace('SHA256SUMS.txt', file);
-  const sh = `zip=${zip}\nprintf '${sums.replaceAll('\n', '\\n')}' > /tmp/${file}\ncd /tmp && ${lookup}\necho "$want"`;
+  const sh = `set -- ${zip}\nprintf '${sums.replaceAll('\n', '\\n')}' > /tmp/${file}\ncd /tmp && ${lookup}\necho "$want"`;
   const r = await run(['sh'], sh);
   assert.equal(r.out.trim(), 'abc123');
+});
+
+await testAsync('device script accepts only --node and --uninstall', async () => {
+  if (!hasSh) return;
+  const r = await run(['sh', '-s', '--', '--bogus'], deviceScript(D));
+  assert.equal(r.code, 2);
+  // A fake HOME: --uninstall deletes $HOME/.deckbridge-relay.
+  const home = `/tmp/relay-sh-${tjs.pid}`;
+  const u = await run(
+    [
+      'sh',
+      '-c',
+      `mkdir -p ${home}/.deckbridge-relay && HOME=${home} sh -s -- --uninstall && ls -A ${home}; rm -rf ${home}`,
+    ],
+    deviceScript(D),
+  );
+  assert.equal(u.code, 0, u.out);
+  assert.equal(u.out.trim(), 'DeckBridge relay removed.');
 });
 
 await testAsync('device script passes sh -n', async () => {

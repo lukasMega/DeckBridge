@@ -17,7 +17,18 @@ import { CopyChip } from '../controls.js';
 export const KINDS = [
   { value: 'curl', label: 'curl' },
   { value: 'wget', label: 'wget' },
+  { value: 'node', label: 'Node.js' },
 ] as const;
+
+export function NodeHint({
+  kind,
+}: Readonly<{ kind: RelayCommandKind }>): preact.JSX.Element | null {
+  return kind === 'node' ? (
+    <p class="step-sub" id="relay-node-hint">
+      For Macs that block the relay's network. Needs curl and Node.js 20 or newer.
+    </p>
+  ) : null;
+}
 
 /** The install command with its token; null until the server answers (or no script route is on). */
 export function useRelayCommand(kind: RelayCommandKind): string | null {
@@ -115,6 +126,7 @@ export function DeviceSetupBody({
         options={KINDS}
         onChange={setKind}
       />
+      <NodeHint kind={kind} />
       <div class="addr-row">
         <CopyChip
           label="Command"

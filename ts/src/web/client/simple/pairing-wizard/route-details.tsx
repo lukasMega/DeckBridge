@@ -16,7 +16,7 @@ import type {
 } from '../../ui-types.js';
 import { CopyChip } from '../controls.js';
 import { wslRelayFailed } from '../wsl-relay-steps.js';
-import { KINDS, useRelayCommand } from './device-setup.js';
+import { KINDS, NodeHint, useRelayCommand } from './device-setup.js';
 import {
   appLine,
   buildLine,
@@ -90,6 +90,7 @@ function ScriptCommands({
         options={KINDS}
         onChange={setKind}
       />
+      <NodeHint kind={kind} />
       <div class="addr-row">
         <CopyChip label="Run" value={run ?? ''} cls="addr-chip" pending={run === null} />
         <CopyChip

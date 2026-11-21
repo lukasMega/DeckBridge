@@ -57,8 +57,8 @@ dock only at the relay's IP. **Turn off relay** in Settings undoes this.
 
 ## Another device: one command {#one-command}
 
-The wizard shows one line (with a `curl` / `wget` switch) to paste in a terminal on a Linux
-or macOS device on the same network:
+The wizard shows one line (with a `curl` / `wget` / **Node.js** switch) to paste in a
+terminal on a Linux or macOS device on the same network:
 
 ```
 curl -fsSL "http://<this computer's IP>:44661/relay.sh?t=<token>" | sh
@@ -102,6 +102,15 @@ curl -fsSL "<the same URL>" | sh -s -- --uninstall
 ```
 
 </details>
+
+### macOS blocks the relay {#relay-node}
+
+On some Macs the relay starts but gets no network: the Stream Deck app never connects, and
+the relay log shows `connect failed` or nothing at all. Pick **Node.js** in the switch. The
+command then ends in `| sh -s -- --node`: the script downloads `deckbridge-relay-v<version>.mjs`
+from the same release, checks it against `SHA256SUMS.txt` and runs it with `node`. It needs
+Node.js 20 or newer from [nodejs.org](https://nodejs.org). The Node.js relay does not
+advertise over mDNS: add its IP in the Stream Deck app by hand. **Uninstall** stays the same.
 
 ### Check the relay in Settings {#relay-settings}
 
@@ -168,6 +177,11 @@ ports 5343 and 5344.
    The relay asks DeckBridge for the dock's serial number and model, then advertises itself.
    It retries until DeckBridge is up. It reads the dock identity only at startup: restart it
    after you change the dock identity on A.
+
+   With Node.js 20+ instead of the binary (for example a Mac that
+   [blocks the relay](#relay-node)): download `deckbridge-relay-v<version>.mjs` from the release
+   and run `node deckbridge-relay-v<version>.mjs relay --target <A-IP>`. It takes the same flags
+   and never advertises, so add its IP by hand.
 
 3. In Elgato on A, "DeckBridge Relay" appears as a network dock. If it doesn't, add the
    relay's IP by hand; the relay prints its IP addresses at startup.
