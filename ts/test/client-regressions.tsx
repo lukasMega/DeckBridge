@@ -2974,8 +2974,7 @@ async function runWideKeyPanel(): Promise<void> {
       JSON.stringify(lastPosted()) === '{"config":{"hourFormat":"12H"}}',
       'The hour format posts only the changed key',
     );
-    await choose('wide-key-clock-mode', '201');
-    check(server.config.clockMode === 201, 'The clock variant reaches the server');
+    check(!selectIn('wide-key-clock-mode'), 'The clock variants look alike on the D200, no picker');
 
     await choose('wide-key-content', 'stats');
     check(
