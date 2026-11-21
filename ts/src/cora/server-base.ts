@@ -1,21 +1,14 @@
 import { EventEmitter } from 'node:events';
 import * as net from '../platform/tcp.js';
 import { bindAddr, clearRepeating } from '../shared/types.js';
-import {
-  ELGATO_KEEPALIVE_MS,
-  KEEPALIVE_PAYLOAD_SIZE,
-  KEEPALIVE_PKT_SEQ_OFFSET,
-  KEEPALIVE_SUBTYPE,
-  PKT_EVENT,
-  EVENT_SUBTYPE_KEEPALIVE,
-  CLIENT_EVICTION_GRACE_MS,
-} from './protocol.js';
+import { ELGATO_KEEPALIVE_MS, CLIENT_EVICTION_GRACE_MS } from './protocol.js';
 import {
   CORA_FLAG_ACKNAK,
   CORA_FLAG_VERBATIM,
   CoraFrameReader,
   coraFlagString,
   encodeCoraFrame,
+  keepalivePayload,
 } from './frame.js';
 import { formatCommHex, type CommCountKind } from '../shared/comm-format.js';
 
@@ -133,14 +126,8 @@ export abstract class CoraServerBase extends EventEmitter {
   }
 
   protected sendKeepalive(): void {
-    const payload = Buffer.alloc(KEEPALIVE_PAYLOAD_SIZE);
-    payload[0] = PKT_EVENT;
-    payload[1] = EVENT_SUBTYPE_KEEPALIVE;
-    payload[2] = KEEPALIVE_SUBTYPE;
-    payload[4] = 0x01;
-    payload[KEEPALIVE_PKT_SEQ_OFFSET] = this.keepaliveSeq;
     this.sendFrame(
-      payload,
+      keepalivePayload(this.keepaliveSeq),
       0,
       0,
       this.keepaliveSeq,

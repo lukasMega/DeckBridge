@@ -8,6 +8,7 @@
 // With `holdMs > 0` a session outlives its upstream: the client socket stays open while
 // the relay redials DeckBridge (session logic in relay-session.ts).
 import { guardAccept, isDroppedAccept } from '../../platform/accept-guard.js';
+import { ELGATO_KEEPALIVE_MS } from '../../cora/protocol.js';
 import { Session, closeQuietly, msgOf, noop } from './relay-session.js';
 import type { RelayPortName, RelaySessionClose } from './relay-session.js';
 
@@ -30,8 +31,10 @@ export interface RelayOptions {
    * close both sides as soon as either ends.
    */
   holdMs?: number;
-  /** Redial delays while holding; the last value repeats. Default 1 s, 2 s, 5 s. */
+  /** Redial delays while holding; the last value repeats. Default 250 ms. */
   redialBackoffMs?: readonly number[];
+  /** CORA keepalive period sent to a held client. Default 2 s (DeckBridge's own); 0 = off. */
+  holdKeepaliveMs?: number;
   onOpen?: (id: number, route: RelayPortName, client: string) => void;
   onClose?: (s: RelaySessionClose) => void;
   /** Upstream ended first, or a dial failed (every failed attempt). The caller dedupes. */
@@ -43,7 +46,8 @@ export interface RelayOptions {
 }
 
 const DEFAULT_CONNECT_TIMEOUT_MS = 5000;
-const DEFAULT_REDIAL_BACKOFF_MS: readonly number[] = [1000, 2000, 5000];
+// Short: the app drops a held session after ~4 s, so a late redial loses it (S1, 761 plan).
+const DEFAULT_REDIAL_BACKOFF_MS: readonly number[] = [250];
 
 interface Listener {
   route: RelayRoute;
@@ -160,6 +164,7 @@ export class CoraRelay {
       redialBackoffMs: opts.redialBackoffMs?.length
         ? opts.redialBackoffMs
         : DEFAULT_REDIAL_BACKOFF_MS,
+      holdKeepaliveMs: opts.holdKeepaliveMs ?? ELGATO_KEEPALIVE_MS,
       onOpen: opts.onOpen,
       onClose: opts.onClose,
       onUpstreamLost: opts.onUpstreamLost,

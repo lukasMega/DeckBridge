@@ -1,4 +1,11 @@
-import { MAX_RECEIVE_BUFFER } from './protocol.js';
+import {
+  EVENT_SUBTYPE_KEEPALIVE,
+  KEEPALIVE_PAYLOAD_SIZE,
+  KEEPALIVE_PKT_SEQ_OFFSET,
+  KEEPALIVE_SUBTYPE,
+  MAX_RECEIVE_BUFFER,
+  PKT_EVENT,
+} from './protocol.js';
 import { warn } from '../shared/logger.js';
 
 export const CORA_MAGIC = Buffer.from([0x43, 0x93, 0x8a, 0x41]);
@@ -42,6 +49,17 @@ export function encodeCoraFrame(
   header.writeUInt32LE(messageId, 8);
   header.writeUInt32LE(payload.length, 12);
   return Buffer.concat([header, payload]);
+}
+
+/** The dock's keepalive event; sent with flags 0, hidOp 0 and messageId = seq. */
+export function keepalivePayload(seq: number): Buffer {
+  const payload = Buffer.alloc(KEEPALIVE_PAYLOAD_SIZE);
+  payload[0] = PKT_EVENT;
+  payload[1] = EVENT_SUBTYPE_KEEPALIVE;
+  payload[2] = KEEPALIVE_SUBTYPE;
+  payload[4] = 0x01;
+  payload[KEEPALIVE_PKT_SEQ_OFFSET] = seq;
+  return payload;
 }
 
 export function tryDecodeCoraFrame(buf: Buffer): CoraFrame | null {
