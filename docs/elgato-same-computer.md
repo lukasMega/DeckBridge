@@ -325,7 +325,8 @@ Any output means macOS blocked the app. To fix it:
 1. Quit the Stream Deck app, including its menu bar icon.
 2. Open System Settings > Privacy & Security > Local Network. Turn Stream Deck off and on.
 3. Start the app again.
-4. If it still does not connect, restart the Mac.
+4. If it still does not connect, restart the Mac. In our tests, restarting only the app was
+   not enough; the permission took effect after a Mac restart.
 
 ## Restarting DeckBridge {#restart}
 
