@@ -15,7 +15,6 @@ import { ConfigSection } from './config-section.js';
 import { SideKeyCard } from './side-key-card.js';
 import { WideKeyPreview } from './wide-key-preview.js';
 import type {
-  WideKeyClockMode,
   WideKeyConfig,
   WideKeyContent,
   WideKeyElgatoImages,
@@ -179,11 +178,6 @@ const PRESS_LABELS: Readonly<Record<WideKeyPress, string>> = {
   none: 'Nothing',
 };
 
-/** 203 is the time-only clock DeckBridge always used; the others are named once measured. */
-function clockLabel(mode: WideKeyClockMode): string {
-  return mode === 203 ? 'Time only' : `Variant ${mode}`;
-}
-
 type Save = (change: Partial<WideKeyConfig>) => void;
 
 // Where the Elgato app's images come from and, over a widget, how long they stay.
@@ -258,16 +252,6 @@ function WideKeyRows({
       />
       {config.content === 'clock' && (
         <>
-          {view.clockModes.length > 1 && (
-            <Row
-              id="wide-key-clock-mode"
-              label="Style"
-              value={config.clockMode}
-              options={view.clockModes}
-              optionLabel={clockLabel}
-              onChange={(clockMode) => save({ clockMode })}
-            />
-          )}
           <Row
             id="wide-key-hour-format"
             label="Hours"
