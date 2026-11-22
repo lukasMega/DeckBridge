@@ -133,8 +133,11 @@ export class UlanziPage {
 }
 
 export interface FlushSchedulerOptions {
-  /** Coalescing window: how long to wait after a stage before flushing. */
-  debounceMs: number;
+  /** Flush once no stage arrived for this long: CORA sends a page's keys back to back. */
+  quietMs: number;
+  /** Flush at most this long after the first stage of a burst, so a steady stager
+   *  (animation) is not held back forever by quietMs. */
+  maxDelayMs: number;
   /** Floor on the gap between two flushes. A full page is ~180 synchronous HID
    *  writes; unthrottled writers are reported to stall the firmware after ~17
    *  minutes of animation, so this is the cheap prophylactic. */
@@ -145,10 +148,11 @@ export interface FlushSchedulerOptions {
   clearTimer?: (handle: unknown) => void;
 }
 
-/** Debounce + rate limit in front of a flush. One pending flush at a time: while
- *  a timer is armed, further schedule() calls fold into it. */
+/** Quiet-window debounce + rate limit in front of a flush. Every schedule() re-arms
+ *  the one pending timer; all stages of a burst land in one flush. */
 export class FlushScheduler {
   private timer: unknown = null;
+  private firstStageAt: number | null = null;
   /** null until the first flush — a fresh scheduler must not behave as if it had
    *  just flushed at time 0 and delay the first page by the min interval. */
   private lastFlushAt: number | null = null;
@@ -166,22 +170,25 @@ export class FlushScheduler {
       opts.clearTimer ?? ((h): void => clearTimeout(h as ReturnType<typeof setTimeout>));
   }
 
-  /** Arm a flush. The delay is the debounce window, stretched when the previous
-   *  flush was too recent to satisfy minIntervalMs. */
   schedule(): void {
-    if (this.timer !== null) return;
-    const delay =
-      this.lastFlushAt === null
-        ? this.opts.debounceMs
-        : Math.max(this.opts.debounceMs, this.opts.minIntervalMs - (this.now() - this.lastFlushAt));
-    this.timer = this.setTimer(() => {
-      this.timer = null;
-      this.lastFlushAt = this.now();
-      this.onFlush();
-    }, delay);
+    const now = this.now();
+    this.firstStageAt ??= now;
+    let due = Math.min(now + this.opts.quietMs, this.firstStageAt + this.opts.maxDelayMs);
+    if (this.lastFlushAt !== null) due = Math.max(due, this.lastFlushAt + this.opts.minIntervalMs);
+    if (this.timer !== null) this.clearTimer(this.timer);
+    this.timer = this.setTimer(
+      () => {
+        this.timer = null;
+        this.firstStageAt = null;
+        this.lastFlushAt = this.now();
+        this.onFlush();
+      },
+      Math.max(0, due - now),
+    );
   }
 
   cancel(): void {
+    this.firstStageAt = null;
     if (this.timer !== null) {
       this.clearTimer(this.timer);
       this.timer = null;

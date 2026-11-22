@@ -109,8 +109,10 @@ export interface DeviceWireSpec {
 export interface DevicePageSpec {
   /** The firmware reverts to its own screen after ~5–10 s without a write. */
   keepaliveMs: number;
-  /** CORA pushes one image per key; staged images are coalesced this long per ZIP. */
-  flushDebounceMs: number;
+  /** CORA pushes one image per key: a ZIP flushes once no image came for this long… */
+  flushQuietMs: number;
+  /** …or this long after the burst's first image, whichever is first. */
+  flushMaxDelayMs: number;
   /** Floor between flushes: a page is ~180 synchronous HID writes. */
   minFlushIntervalMs: number;
   /** Partial-update opcode after the first full page. Disputed on hardware (ghost or

@@ -434,6 +434,15 @@ run = """
   DECKBRIDGE_NATIVE_LIB=$DECKBRIDGE_NATIVE_LIB $TJS run dist/d200-gif-probe.js "$@"
 """
 
+[tasks.d200-flush-soak]
+description = "Ulanzi D200 V6 soak at the flush-rate floor: 1 Hz clock key, 50 ms busy key, page switch every 5 s; logs flush rate and failed hid_writes. Stop DeckBridge first (requires a D200). Usage: mise run d200-flush-soak [-- --minutes <n>]"
+depends = ["tjs-setup", "deckbridge-native"]
+dir = "ts"
+run = """
+  node build.mjs --probe d200-flush-soak
+  DECKBRIDGE_NATIVE_LIB=$DECKBRIDGE_NATIVE_LIB $TJS run dist/d200-flush-soak.js "$@"
+"""
+
 [tasks.e2e]
 description = "Black-box smoke test of a packaged release zip (usage: mise run e2e -- dist/foo.zip)"
 quiet = true
