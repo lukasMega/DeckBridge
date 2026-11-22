@@ -51,6 +51,8 @@ export interface GifSpec {
   loop: boolean;
   /** Start colour/number offset, so many keys running the same GIF are told apart. */
   phase?: number;
+  /** Pre-turn the picture 180° (AKP05 firmware shows uploads upside down). */
+  rotate180?: boolean;
 }
 
 /** Frame i: solid colour, big frame number, a white bar sweeping left to right
@@ -63,6 +65,8 @@ function frame(spec: GifSpec, i: number): GifFrame {
   drawDigits(cv, String(n + 1), Math.floor(Math.min(cv.h, cv.w) / 10), WHITE);
   const barW = Math.max(8, Math.floor(cv.w / spec.frames));
   fillRect(cv, n * barW, cv.h - 20, barW, 14, WHITE);
+  // Reversing row-major pixels is a 180° turn, for panels mounted upside down.
+  if (spec.rotate180) cv.px.reverse();
   return { indices: cv.px, delayCs: spec.delayCs };
 }
 
