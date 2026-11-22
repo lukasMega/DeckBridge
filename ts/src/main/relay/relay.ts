@@ -35,6 +35,8 @@ export interface RelayOptions {
   redialBackoffMs?: readonly number[];
   /** CORA keepalive period sent to a held client. Default 2 s (DeckBridge's own); 0 = off. */
   holdKeepaliveMs?: number;
+  /** Experimental: answer key-image ACKs locally (needs holdMs > 0). Default off. */
+  ackTerm?: boolean;
   onOpen?: (id: number, route: RelayPortName, client: string) => void;
   onClose?: (s: RelaySessionClose) => void;
   /** Upstream ended first, or a dial failed (every failed attempt). The caller dedupes. */
@@ -165,6 +167,8 @@ export class CoraRelay {
         ? opts.redialBackoffMs
         : DEFAULT_REDIAL_BACKOFF_MS,
       holdKeepaliveMs: opts.holdKeepaliveMs ?? ELGATO_KEEPALIVE_MS,
+      // Key images, and so their ACKs, only travel on the child route.
+      ackTerm: (opts.ackTerm ?? false) && route.name === 'child',
       onOpen: opts.onOpen,
       onClose: opts.onClose,
       onUpstreamLost: opts.onUpstreamLost,

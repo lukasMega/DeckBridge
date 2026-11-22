@@ -2,7 +2,8 @@
 // closing both native handles) are in relay.ts.
 
 import { KEEPALIVE_DELAY_S } from '../../platform/accept-guard.js';
-import { encodeCoraFrame, keepalivePayload } from '../../cora/frame.js';
+import { CoraFrameReader, encodeCoraFrame, keepalivePayload } from '../../cora/frame.js';
+import { splitClientFrames, wholeFrames } from './ack-term.js';
 
 export type RelayPortName = 'main' | 'child';
 
@@ -38,6 +39,8 @@ export interface SessionDeps {
   redialBackoffMs: readonly number[];
   /** CORA keepalive period sent to the client while held; 0 = none. */
   holdKeepaliveMs: number;
+  /** Answer key-image ACKs locally (experimental, hold mode only; see ack-term.ts). */
+  ackTerm?: boolean;
   onOpen?: (id: number, route: RelayPortName, client: string) => void;
   onClose?: (s: RelaySessionClose) => void;
   onUpstreamLost?: (route: RelayPortName, reason: string) => void;
@@ -103,6 +106,7 @@ export class Session {
   private attempt = 0;
   private kaTimer: ReturnType<typeof setInterval> | null = null;
   private kaSeq = 0;
+  private readonly fromE = new CoraFrameReader();
 
   constructor(d: SessionDeps) {
     this.d = d;
@@ -249,7 +253,7 @@ export class Session {
     const cw = clientInfo.writable.getWriter();
     this.readers = [cr];
     this.writers = [cw];
-    const clientPump = this.pumpClient(cr);
+    const clientPump = this.pumpClient(cr, cw);
     await this.holdLoop(cw);
     this.teardown();
     await clientPump.catch(noop);
@@ -407,6 +411,8 @@ export class Session {
 
   /** Resolves with why the upstream ended; a client write failure ends the session instead. */
   private async pumpUp(ur: Reader, cw: Writer): Promise<string> {
+    // Fresh per upstream: a frame cut short by the loss must not prefix the next one.
+    const down = this.d.ackTerm ? new CoraFrameReader() : null;
     for (;;) {
       let r: ReadableStreamReadResult<Uint8Array>;
       try {
@@ -415,23 +421,25 @@ export class Session {
         return `error ${msgOf(e)}`;
       }
       if (r.done) return this.upReason ?? 'FIN';
+      const out = down ? wholeFrames(down, r.value) : r.value;
+      if (out.byteLength === 0) continue;
       try {
-        await cw.write(r.value);
+        await cw.write(out);
       } catch (e) {
         this.finish('E', `error ${msgOf(e)}`);
         this.teardown();
         return 'client write failed';
       }
-      this.bytesDown += r.value.byteLength;
+      this.bytesDown += out.byteLength;
     }
   }
 
-  private async pumpClient(cr: Reader): Promise<void> {
+  private async pumpClient(cr: Reader, cw: Writer): Promise<void> {
     try {
       for (;;) {
         const { done, value } = await cr.read();
         if (done) break;
-        await this.sendUp(value);
+        await this.onClientBytes(value, cw);
         if (this.isFinished()) return;
       }
     } catch (e) {
@@ -450,6 +458,20 @@ export class Session {
     } catch {
       this.teardown();
     }
+  }
+
+  /** Whole client frames for upstream; image ACKs are answered here while it is live. */
+  private terminateAcks(chunk: Uint8Array, cw: Writer): Uint8Array {
+    // Parked frames keep REQACK, so DeckBridge ACKs them after the replay.
+    const { up, acks } = splitClientFrames(this.fromE, chunk, this.live);
+    // A failed write means the client is gone; pumpClient ends the session.
+    if (acks.byteLength > 0) void cw.write(acks).catch(noop);
+    return up;
+  }
+
+  private async onClientBytes(value: Uint8Array, cw: Writer): Promise<void> {
+    const chunk = this.d.ackTerm ? this.terminateAcks(value, cw) : value;
+    if (chunk.byteLength > 0) await this.sendUp(chunk);
   }
 
   private async sendUp(chunk: Uint8Array): Promise<void> {
