@@ -332,8 +332,9 @@ const EXPECTED: Expected[] = [
     wire: { packetSize: 1024, inSize: 1024 },
     page: {
       keepaliveMs: 2000,
-      flushDebounceMs: 75,
-      minFlushIntervalMs: 120,
+      flushQuietMs: 20,
+      flushMaxDelayMs: 60,
+      minFlushIntervalMs: 60,
       partialUpdates: true,
       maxZipBytes: 190 * 1024,
       smallWindowMode: 203,

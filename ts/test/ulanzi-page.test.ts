@@ -199,12 +199,14 @@ class FakeClock {
 function makeScheduler(
   clock: FakeClock,
   onFlush: () => void,
-  debounceMs = 75,
-  minIntervalMs = 120,
+  quietMs = 20,
+  maxDelayMs = 60,
+  minIntervalMs = 60,
 ): FlushScheduler {
   return new FlushScheduler(
     {
-      debounceMs,
+      quietMs,
+      maxDelayMs,
       minIntervalMs,
       now: () => clock.now,
       setTimer: clock.setTimer,
@@ -214,7 +216,7 @@ function makeScheduler(
   );
 }
 
-test('a burst of schedules inside the debounce produces ONE flush', () => {
+test('a burst of schedules produces ONE flush', () => {
   const clock = new FakeClock();
   let flushes = 0;
   const s = makeScheduler(clock, () => flushes++);
@@ -226,42 +228,54 @@ test('a burst of schedules inside the debounce produces ONE flush', () => {
   assert.equal(flushes, 1);
 });
 
-test('the flush waits out the debounce window', () => {
+test('the flush waits for the quiet window after the last stage', () => {
   const clock = new FakeClock();
   let flushes = 0;
   const s = makeScheduler(clock, () => flushes++);
   s.schedule();
-  clock.advance(74);
-  assert.equal(flushes, 0, 'must not fire before the debounce elapses');
+  clock.advance(10);
+  s.schedule();
+  clock.advance(19);
+  assert.equal(flushes, 0, 'a new stage restarts the quiet window');
   clock.advance(1);
   assert.equal(flushes, 1);
 });
 
-test('minFlushIntervalMs caps a 100 Hz stager at ~8 flushes/s', () => {
+test('a steady stager is flushed maxDelayMs after its first stage', () => {
+  const clock = new FakeClock();
+  const at: number[] = [];
+  const s = makeScheduler(clock, () => at.push(clock.now));
+  for (let i = 0; i < 10; i++) {
+    s.schedule();
+    clock.advance(10);
+  }
+  assert.equal(at[0], 60);
+});
+
+test('minFlushIntervalMs caps a 100 Hz stager at ~16 flushes/s', () => {
   const clock = new FakeClock();
   let flushes = 0;
   const s = makeScheduler(clock, () => flushes++);
-  // 100 stages per second for one second.
   for (let i = 0; i < 100; i++) {
     s.schedule();
     clock.advance(10);
   }
   clock.advance(200);
-  assert.ok(flushes <= 9, `expected <= 9 flushes in ~1 s, got ${flushes}`);
-  assert.ok(flushes >= 5, `expected the scheduler to keep flushing, got ${flushes}`);
+  assert.ok(flushes <= 17, `expected <= 17 flushes in ~1 s, got ${flushes}`);
+  assert.ok(flushes >= 12, `expected the scheduler to keep flushing, got ${flushes}`);
 });
 
-test('a lone schedule after a long idle still respects only the debounce', () => {
+test('a lone schedule after a long idle waits only the quiet window', () => {
   const clock = new FakeClock();
   let flushes = 0;
   const s = makeScheduler(clock, () => flushes++);
   clock.advance(10_000);
   s.schedule();
-  clock.advance(75);
+  clock.advance(20);
   assert.equal(flushes, 1);
 });
 
-test('cancel disarms a pending flush', () => {
+test('cancel disarms a pending flush and forgets the burst', () => {
   const clock = new FakeClock();
   let flushes = 0;
   const s = makeScheduler(clock, () => flushes++);
@@ -269,6 +283,11 @@ test('cancel disarms a pending flush', () => {
   s.cancel();
   clock.advance(1000);
   assert.equal(flushes, 0);
+  s.schedule();
+  clock.advance(19);
+  assert.equal(flushes, 0, 'the cancelled burst must not shorten the next one');
+  clock.advance(1);
+  assert.equal(flushes, 1);
 });
 
 console.log('\nulanzi-page: size split');

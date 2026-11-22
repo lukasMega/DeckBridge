@@ -121,8 +121,10 @@ export const ULANZI_D200_MODEL: DeviceModel = {
     // Any outbound write resets the firmware watchdog; sources put the blanking
     // timeout at ~5–10 s, so 2 s satisfies the strictest of them.
     keepaliveMs: 2000,
-    flushDebounceMs: 75,
-    minFlushIntervalMs: 120,
+    // Quiet window (2026-11 trace replay): press feedback 90 → 25 ms, page switch 338 → 271 ms.
+    flushQuietMs: 20,
+    flushMaxDelayMs: 60,
+    minFlushIntervalMs: 60,
     // Disputed: bitfocus and jcalado both ship the partial-update opcode and it
     // is what makes per-key CORA updates cheap (~15 writes instead of ~180),
     // but realhidden reports ghost/white keys from it and uses full pages only.

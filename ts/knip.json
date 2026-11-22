@@ -24,6 +24,7 @@
     "src/dev/akp05-strip-guided-probe.ts",
     "src/dev/d200-wide-probe.ts",
     "src/dev/d200-gif-probe.ts",
+    "src/dev/d200-flush-soak.ts",
     "test/**/*.test.ts",
     "scripts/*.mjs"
   ],

@@ -57,6 +57,8 @@ export interface PageZipOptions {
   /** Grid position of that wide slot. */
   smallWindowSlot: { col: number; row: number };
   font: FontStyle;
+  /** Mode 2 only: Icon path of an earlier ZIP's window image, referenced without shipping it. */
+  windowIconRef?: string;
   /** Monotonic build counter, mixed into every icon path — see iconName(). */
   flushSeq: number;
   /** Boundary-byte escape hatch: bytes of ASCII filler in a leading pad.txt. */
@@ -295,14 +297,11 @@ export function buildManifest(slots: PageSlot[], opts: PageZipOptions): string {
   }
 
   const image = wideImage(slots, opts);
+  const icon = image?.png ? iconName(image.slotId, opts.flushSeq, image.png) : opts.windowIconRef;
   manifest[wideKey] = {
     State: 0,
     SmallViewMode: opts.smallWindowMode,
-    ViewParam: [
-      image?.png
-        ? { Icon: iconName(image.slotId, opts.flushSeq, image.png), Font: opts.font, Text: '' }
-        : { Font: opts.font, Text: '' },
-    ],
+    ViewParam: [icon ? { Icon: icon, Font: opts.font, Text: '' } : { Font: opts.font, Text: '' }],
   };
 
   return JSON.stringify(manifest);

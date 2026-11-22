@@ -34,7 +34,7 @@ import {
   parseIncoming,
 } from './ulanzi-protocol.js';
 import { UlanziPage, FlushScheduler, splitBySize } from './ulanzi-page.js';
-import { buildSafePageZip } from './ulanzi-zip.js';
+import { buildSafePageZip, iconName } from './ulanzi-zip.js';
 import type { PageSlot } from './ulanzi-zip.js';
 import type { PageBatch } from './ulanzi-page.js';
 
@@ -51,6 +51,12 @@ const READ_POLL_MS = 5;
  *  firmware applies a changed `SmallViewMode` from PARTIAL_UPDATE is unmeasured (probe P7,
  *  plan D11). Flip once the probe says partials work. */
 const MODE_CHANGE = { fullPage: true };
+
+/** A mode-2 partial page whose window image did not change references the Icon path of the
+ *  last ZIP that shipped it instead of re-uploading it (~-33 % packets). Unmeasured on
+ *  hardware (plan relay-remaining §B step 2): if the window blanks after a key update,
+ *  set `enabled: false` and every ZIP carries the image again, as in #274. */
+const WINDOW_ICON_REF = { enabled: true };
 
 /** A 1×1 all-black PNG (grayscale, stored deflate). Used by clearKey: a
  *  ViewParam with no Icon leaves the previous pixmap on screen, and the firmware
@@ -82,6 +88,8 @@ export class UlanziDriver extends HidDeviceBase {
   private hostStats: HostStats = { ...NO_STATS };
   /** A mode change owes the panel a full page write even with no staged image (D11). */
   private modeDirty = false;
+  /** Icon path of the window image the panel got in the last successful flush (mode 2). */
+  private windowIcon: string | null = null;
   private _writeScratch: Buffer = Buffer.alloc(0);
   /** Set from the 0x0303 reply to GET_DEVICE_INFO, inside open()'s handshake drain. */
   firmware: string | undefined = undefined;
@@ -97,7 +105,11 @@ export class UlanziDriver extends HidDeviceBase {
     this.wideSlot = wideKeyWire(model);
     this.page = new UlanziPage(this.spec.partialUpdates);
     this.scheduler = new FlushScheduler(
-      { debounceMs: this.spec.flushDebounceMs, minIntervalMs: this.spec.minFlushIntervalMs },
+      {
+        quietMs: this.spec.flushQuietMs,
+        maxDelayMs: this.spec.flushMaxDelayMs,
+        minIntervalMs: this.spec.minFlushIntervalMs,
+      },
       () => this.flush(),
     );
   }
@@ -245,18 +257,12 @@ export class UlanziDriver extends HidDeviceBase {
       this.page.takeBatch() ?? (this.modeDirty ? { slots: [], full: MODE_CHANGE.fullPage } : null);
     if (!batch) return;
     try {
-      // SET_BUTTONS replaces the grid, so only the first group may use it; the
-      // rest merge in via PARTIAL_UPDATE. Without partial updates there is no
-      // safe way to split, so the page goes out whole.
-      // Every ZIP's manifest has the window entry, and one without its Icon blanks the window
-      // in mode 2: each group carries the window image, and the split leaves room for it.
-      const wide = this.windowImage(batch.slots);
-      const keys = wide ? batch.slots.filter((s) => s.slotId !== wide.slotId) : batch.slots;
-      const room = this.spec.maxZipBytes - (wide?.png?.length ?? 0);
-      const groups = splitBySize(keys, this.spec.partialUpdates ? Math.max(1, room) : 0);
-      groups.forEach((slots, i) => {
-        this.writePage({ slots: wide ? [...slots, wide] : slots, full: batch.full && i === 0 });
-      });
+      const { image: wide, ref: windowRef } = this.windowPlan(batch);
+      this.windowIcon = null; // set again only once the writes below all succeeded
+      this.writeGroups(batch, wide, windowRef);
+      this.windowIcon = wide?.png
+        ? iconName(wide.slotId, this.flushSeq - 1, wide.png)
+        : (windowRef ?? null);
       this.page.onFlushed(batch);
       this.modeDirty = false;
     } catch (err) {
@@ -264,20 +270,40 @@ export class UlanziDriver extends HidDeviceBase {
     }
   }
 
-  /** The window's image for this flush (staged, else last sent), only in mode 2. */
-  private windowImage(slots: readonly PageSlot[]): PageSlot | undefined {
-    if (this.wideSlot === undefined || this.smallMode !== WIDE_KEY_IMAGE_MODE) return undefined;
-    const staged = slots.find((s) => s.slotId === this.wideSlot);
-    const png = staged?.png ?? this.page.sent(this.wideSlot);
-    return png ? { slotId: this.wideSlot, png } : undefined;
+  /** SET_BUTTONS replaces the grid, so only the first group may use it; the rest merge in
+   *  via PARTIAL_UPDATE. Without partial updates there is no safe way to split, so the page
+   *  goes out whole. Every ZIP's manifest has the window entry, and one without its Icon
+   *  blanks the window in mode 2: each group carries the window image, and the split leaves
+   *  room for it. */
+  private writeGroups(batch: PageBatch, wide?: PageSlot, windowRef?: string): void {
+    const keys = wide ? batch.slots.filter((s) => s.slotId !== wide.slotId) : batch.slots;
+    const room = this.spec.maxZipBytes - (wide?.png?.length ?? 0);
+    const groups = splitBySize(keys, this.spec.partialUpdates ? Math.max(1, room) : 0);
+    groups.forEach((slots, i) => {
+      const group = { slots: wide ? [...slots, wide] : slots, full: batch.full && i === 0 };
+      this.writePage(group, windowRef);
+    });
   }
 
-  private writePage(batch: PageBatch): void {
+  /** Mode 2 only. `image`: upload the window image when it changed, on a full page or mode
+   *  change (the grid is rebuilt), or when no earlier ZIP left an Icon to reference.
+   *  Otherwise `ref` is that earlier Icon path. */
+  private windowPlan(batch: PageBatch): { image?: PageSlot; ref?: string } {
+    if (this.wideSlot === undefined || this.smallMode !== WIDE_KEY_IMAGE_MODE) return {};
+    const staged = batch.slots.find((s) => s.slotId === this.wideSlot);
+    const reuse = WINDOW_ICON_REF.enabled && !batch.full && !this.modeDirty && this.windowIcon;
+    if (!staged && reuse) return { ref: reuse };
+    const png = staged?.png ?? this.page.sent(this.wideSlot);
+    return png ? { image: { slotId: this.wideSlot, png } } : {};
+  }
+
+  private writePage(batch: PageBatch, windowIconRef?: string): void {
     const t0 = Date.now();
     const { zip, retries, safe } = buildSafePageZip(batch.slots, {
       columns: this.model.columns,
       smallWindowMode: this.smallMode,
       smallWindowSlot: this.spec.smallWindowSlot,
+      windowIconRef,
       font: DEFAULT_FONT,
       flushSeq: this.flushSeq++,
     });
@@ -385,6 +411,7 @@ export class UlanziDriver extends HidDeviceBase {
   protected _cleanup(): void {
     debug('hid', '_cleanup: starting');
     this.scheduler.cancel();
+    this.windowIcon = null;
     if (this.keepaliveTimer) {
       clearInterval(this.keepaliveTimer);
       this.keepaliveTimer = null;

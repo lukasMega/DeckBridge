@@ -269,29 +269,80 @@ test('clearing the widget in mode 2 stages the black fill; the real keys are unt
 
 const WINDOW_ICON = '"SmallViewMode":2,"ViewParam":[{"Icon"';
 const count = (text: string, part: string): number => text.split(part).length - 1;
+const iconPath = (text: string): string => /Images\/13_\d+_[0-9a-f]{8}\.png/.exec(text)![0];
 
-test('a partial page in mode 2 re-sends the window image, so the window never blanks', () => {
+test('a partial page in mode 2 references the window Icon without re-uploading it', () => {
   const { driver, writes, i } = rig();
   driver.setSmallWindow(2, '24H');
   driver.sendImage(13, WIDE_PNG);
-  flushed(writes, i);
+  const full = flushed(writes, i);
+  const path = iconPath(full);
+  assert.equal(count(full, path), 3, 'the full page ships the file (manifest + local + central)');
+  const fullPackets = writes.length;
   driver.sendImage(0, PNG);
   const text = flushed(writes, i);
   assert.equal(framed(writes, CMD.PARTIAL_UPDATE).length, 1);
   assert.ok(text.includes('"0_0"'));
   assert.equal(count(text, WINDOW_ICON), 1, 'the window entry keeps its Icon');
+  assert.equal(count(text, path), 1, 'previous path in the manifest only, no file entry');
+  assert.ok(writes.length <= fullPackets, 'no more packets than the full page');
 });
 
-test('a split partial page carries the window image in every ZIP', () => {
+test('a staged window image is uploaded in a partial page', () => {
+  const { driver, writes, i } = rig();
+  driver.setSmallWindow(2, '24H');
+  driver.sendImage(13, WIDE_PNG);
+  const old = iconPath(flushed(writes, i));
+  driver.sendImage(13, new Uint8Array(96).fill(0x58));
+  const text = flushed(writes, i);
+  assert.equal(framed(writes, CMD.PARTIAL_UPDATE).length, 1);
+  assert.ok(!text.includes(old));
+  assert.equal(count(text, iconPath(text)), 3, 'new image: manifest + local + central');
+});
+
+test('a full page (restoreAll) and a mode change upload the window image again', () => {
   const { driver, writes, i } = rig();
   driver.setSmallWindow(2, '24H');
   driver.sendImage(13, WIDE_PNG);
   flushed(writes, i);
+  (driver as unknown as { page: { restoreAll(): void } }).page.restoreAll();
+  const full = flushed(writes, i);
+  assert.equal(framed(writes, CMD.SET_BUTTONS).length, 1);
+  assert.equal(count(full, iconPath(full)), 3);
+  driver.setSmallWindow(1, '24H');
+  flushed(writes, i);
+  driver.setSmallWindow(2, '24H');
+  const back = flushed(writes, i);
+  assert.equal(count(back, iconPath(back)), 3, 're-entering mode 2 re-uploads');
+});
+
+test('a failed flush does not leave a reference to an Icon the panel never got', () => {
+  const { driver, writes, i } = rig();
+  driver.setSmallWindow(2, '24H');
+  driver.sendImage(13, WIDE_PNG);
+  flushed(writes, i);
+  const hid = (i.hidLib as { symbols: { hid_write: unknown } }).symbols;
+  const ok = hid.hid_write;
+  hid.hid_write = (): number => -1;
+  driver.on('error', () => {});
+  driver.sendImage(0, PNG);
+  flushed(writes, i);
+  hid.hid_write = ok;
+  const retry = flushed(writes, i);
+  assert.equal(count(retry, iconPath(retry)), 3, 'the retry ships the image');
+});
+
+test('a split partial page references the window Icon in every ZIP', () => {
+  const { driver, writes, i } = rig();
+  driver.setSmallWindow(2, '24H');
+  driver.sendImage(13, WIDE_PNG);
+  const path = iconPath(flushed(writes, i));
   for (let k = 0; k < 13; k++) driver.sendImage(k, new Uint8Array(20_000).fill(0x41 + k));
   const text = flushed(writes, i);
   const zips = framed(writes, CMD.PARTIAL_UPDATE).length;
   assert.ok(zips >= 2, `split into ${zips}`);
   assert.equal(count(text, WINDOW_ICON), zips);
+  assert.equal(count(text, path), zips);
 });
 
 test('outside mode 2 a partial page adds no window image', () => {
