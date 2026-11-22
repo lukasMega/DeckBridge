@@ -103,6 +103,9 @@ function ScriptCommands({
           cls="addr-chip"
           pending={uninstall === null}
         />
+        {isContainer && (
+          <CopyChip label="Logs" value="container logs -f deckbridge-relay" cls="addr-chip" />
+        )}
       </div>
       <p class="step-sub">Without automatic start, run this again after a restart.</p>
     </>
