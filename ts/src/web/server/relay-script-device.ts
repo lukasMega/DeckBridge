@@ -244,7 +244,7 @@ run_relay() {
 
 # Apple container prints the address with its prefix length, e.g. "192.168.64.3/24".
 container_ip() {
-  container inspect "$CTR_NAME" 2>/dev/null | grep -oE '"[A-Za-z0-9]*[Aa]ddress" *: *"[0-9.]+/[0-9]+"' | head -n 1 | grep -oE '[0-9]+(\\.[0-9]+){3}' || true
+  container inspect "$CTR_NAME" 2>/dev/null | grep -oiE '"[a-z0-9]*address" *: *"[0-9.]+/[0-9]+"' | head -n 1 | grep -oE '[0-9]+(\\.[0-9]+){3}' || true
 }
 
 # The relay dials DeckBridge from a NATed VM; this script, on the host, reports for it.
