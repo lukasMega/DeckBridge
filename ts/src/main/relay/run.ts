@@ -259,6 +259,8 @@ export async function runRelayCommand(rest: string[]): Promise<number> {
         }
       },
     });
+    const ackTerm = tjs.env.DECKBRIDGE_RELAY_ACK_TERM === '1' && args.holdSeconds > 0;
+    if (ackTerm) rlog('warn', 'experimental: answering key-image ACKs locally');
     relay = new CoraRelay({
       listenHost: args.listenHost,
       targetHost: args.target,
@@ -268,6 +270,7 @@ export async function runRelayCommand(rest: string[]): Promise<number> {
         { name: 'child', listenPort: dock.childPort, targetPort: dock.childPort },
       ],
       holdMs: args.holdSeconds * 1000,
+      ackTerm,
       onOpen: logOpen,
       onClose: logClose,
       onUpstreamLost,
