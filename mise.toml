@@ -416,6 +416,15 @@ run = """
   DECKBRIDGE_NATIVE_LIB=$DECKBRIDGE_NATIVE_LIB $TJS run dist/akp05-strip-guided-probe.js ${1:-}
 """
 
+[tasks.akp05-gif-probe]
+description = "Ajazz AKP05/AKP05E animated-GIF probe: raw GIF via CRT BAT on keys/strip slot, keepalive survival, then the host-side JPEG-loop fallback with measured frames/s. A real LCD key advances. Stop DeckBridge first (requires the device; Input Monitoring). Usage: mise run akp05-gif-probe [-- --list | --from <n> | --dir <gifs>]"
+depends = ["tjs-setup", "deckbridge-native"]
+dir = "ts"
+run = """
+  node build.mjs --probe akp05-gif-probe
+  DECKBRIDGE_NATIVE_LIB=$DECKBRIDGE_NATIVE_LIB $TJS run dist/akp05-gif-probe.js "$@"
+"""
+
 [tasks.d200-wide-probe]
 description = "Ulanzi D200 wide info-window probe (plan 2026-11-18, P1-P8): firmware modes, mode-2 image size/format, stats, 12H/24H, mode-change opcodes. A real key advances; the wide window only logs. Stop DeckBridge first (requires a D200; Input Monitoring). Usage: mise run d200-wide-probe [-- --list | --dump <dir> | --from <n>]"
 depends = ["tjs-setup", "deckbridge-native"]
