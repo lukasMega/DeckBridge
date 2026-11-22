@@ -13,6 +13,7 @@ import { PushApiPanel } from './push-api-panel.js';
 import { MultiDeckPanel } from './multi-deck-panel.js';
 import { VirtualDeckPanel } from './virtual-deck-panel.js';
 import { KeyPressPanel } from './key-press-panel.js';
+import { KeepIconsPanel } from './keep-icons-panel.js';
 import { UpdatePanel } from './update-panel.js';
 import { ElgatoAppPanel } from './elgato-app-panel.js';
 import { PairingRouteSetting } from './pairing-wizard/entry.js';
@@ -148,6 +149,7 @@ type SettingsState = Pick<
   | 'logFilePath'
   | 'multiDeck'
   | 'keyPressEnabled'
+  | 'keepLastIcons'
   | 'updateInfo'
   | 'elgatoAutoRestart'
 >;
@@ -325,6 +327,7 @@ export function SettingsPage({
         <SettingsGroup title="Devices">
           <MultiDeckPanel enabled={state.data ? state.data.multiDeck : null} />
           <KeyPressPanel enabled={state.data ? state.data.keyPressEnabled : null} />
+          <KeepIconsPanel enabled={state.data ? state.data.keepLastIcons : null} />
           <VirtualDeckPanel />
         </SettingsGroup>
 

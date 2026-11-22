@@ -48,6 +48,7 @@ export interface StateResponseInputs {
   logFilePath: string;
   multiDeck: boolean;
   keyPressEnabled: boolean;
+  keepLastIcons: boolean;
   updateInfo: UpdateInfo;
   elgatoAutoRestart: ElgatoAutoRestartState;
   extensions: ExtensionsView;

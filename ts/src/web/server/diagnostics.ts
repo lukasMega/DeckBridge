@@ -9,6 +9,7 @@ import type { HidDeviceInfo } from '../../ffi/hidapi.js';
 import type { DeviceRow } from '../../cli/devices.js';
 import type { RequirementResult } from './requirements.js';
 import type { CommEntry } from '../../shared/types.js';
+import type { SavedFramesInfo } from '../../infra/frame-store.js';
 import type { CommCountKind } from '../../shared/comm-format.js';
 import type { WslRelayStatus } from '../contract-wsl-relay.js';
 import type { PairingRouteStatus } from '../contract-pairing-route.js';
@@ -80,6 +81,8 @@ export interface DiagnosticsSources {
   wslRelay?: WslRelayStatus;
   /** Pairing route status (server path only); carries no token. */
   pairingRoute?: PairingRouteStatus;
+  /** Saved last icons: one entry per file, sizes and ages only, never pixels. */
+  savedIcons?: SavedFramesInfo[];
   /** macOS only: kernel NECP drops of the Stream Deck app in the last 5 minutes. */
   localNetworkBlocked?: boolean;
 }
@@ -296,6 +299,15 @@ function updatesBlock(updates: DiagnosticsSources['updates']): string {
 }
 
 /** One line; the relay's own log lines are in the log tail (component wsl-relay). */
+function savedIconsBlock(files: SavedFramesInfo[] | undefined): string {
+  if (!files) return '';
+  if (files.length === 0) return '(none)';
+  return table(
+    ['model', 'icons', 'bytes', 'age'],
+    files.map((f) => [f.modelId, String(f.frames), String(f.bytes), formatDuration(f.ageMs)]),
+  );
+}
+
 function wslRelayLine(s: WslRelayStatus | undefined): string {
   if (!s) return '';
   if (!s.supported) return 'not supported on this system';
@@ -363,6 +375,7 @@ export function buildDiagnostics(src: DiagnosticsSources, opt: DiagnosticsOption
     section('requirements', requirementsBlock(src.requirements)),
     section('docks / live state', jsonBlock(src.state)),
     section(`log tail (last ${maxLines} lines)`, logsBlock(src, maxLines)),
+    section('saved icons', savedIconsBlock(src.savedIcons)),
     section('cora comm buffer', commsBlock(src.comms, src.commCounts)),
     section('key events', keyEventsBlock(src.keyEvents)),
     section('settings.json', settingsBlock),

@@ -353,13 +353,23 @@ export interface DeviceDriver extends EventEmitter {
   setHostStats?(cpu: number, mem: number, gpu: number): void;
 }
 
+export interface RenderOptions {
+  stale?: boolean;
+}
+
 /** What a Dock drives on the main thread: `WorkerHidDriver` (the USB worker proxy)
  *  or `MockDriver`, whose versions of the worker-only calls are no-ops. */
 export interface DockDriver extends DeviceDriver {
   /** Transform (resize/rotate/encode), cache and write a raw CORA image, off the
    *  main thread; the in-worker drivers take native bytes via their own `sendImage`.
-   *  Emits `'frameHash'(coraKey, hash)` once the frame is rendered. */
-  renderCoraImage(keyIndex: number, coraBytes: Uint8Array, format: 'jpeg' | 'bmp'): void;
+   *  Emits `'frameHash'(coraKey, hash)` once the frame is rendered. `opts.stale` marks a
+   *  saved frame the app has not refreshed yet: a driver that can, draws a red "!" on it. */
+  renderCoraImage(
+    keyIndex: number,
+    coraBytes: Uint8Array,
+    format: 'jpeg' | 'bmp',
+    opts?: RenderOptions,
+  ): void;
   /** Send a splash source image, transformed with `spec` (which may differ from
    *  model.image — splash sources are upright), keeping the FFI transform and
    *  hid_write burst off the main thread. */

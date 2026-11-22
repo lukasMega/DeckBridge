@@ -13,6 +13,7 @@ export const DOCS_TOPICS = {
   'qr-code': '/browser-deck/#qr-code',
   'multi-deck': '/features/#multiple-decks',
   'click-to-press': '/features/#click-to-press',
+  'last-icons': '/features/#last-icons',
   'push-api': '/push-api/',
   extensions: '/extensions/',
   'side-keys': '/side-keys/',

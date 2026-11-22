@@ -130,6 +130,32 @@ await test('passthrough model forwards original bytes unchanged', () => {
   );
 });
 
+await test('stale frame is badged: own cache entry, fresh render stays clean', () => {
+  imageCache.clear();
+  const fake = makeFakeDriver();
+  const send = (stale: boolean) => {
+    renderImage(fake, MIRABOX_293_MODEL, 0, SOLID_RED_16X16_JPEG, 'jpeg', stale);
+    return Array.from(fake.calls.at(-1)!.bytes);
+  };
+  const fresh = send(false);
+  const stale = send(true);
+  assert.notEqual(stale.join(','), fresh.join(','), 'the badge changes the bytes');
+  assert.deepEqual(send(false), fresh, 'a fresh render after a stale one is clean');
+  assert.deepEqual(send(true), stale, 'the stale entry is served from the cache');
+  assert.equal(imageCache.size, 2);
+});
+
+await test('passthrough model ignores the stale flag (no badge, shared cache entry)', () => {
+  imageCache.clear();
+  const fake = makeFakeDriver();
+  const bytes = Buffer.from([0xff, 0xd8, 0x11, 0x22, 0xff, 0xd9]);
+  renderImage(fake, makePassthroughModel(), 1, bytes, 'jpeg', true);
+  assert.deepEqual(Array.from(fake.calls[0]!.bytes), Array.from(bytes));
+  assert.equal(imageCache.size, 1);
+  renderImage(fake, makePassthroughModel(), 1, bytes, 'jpeg');
+  assert.equal(imageCache.size, 1, 'same key with and without the flag');
+});
+
 console.log('\nimage-render: TouchStripCanvas');
 
 const STRIP = AJAZZ_AKP05E_MODEL.touchStripDisplay!;

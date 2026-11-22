@@ -126,6 +126,7 @@ export const routes: Route[] = [
   postJson('/api/device-identity/mdns-name', setDeviceMdnsName),
   postJson('/api/log-level', setLogLevelRoute),
   postJson('/api/multi-deck', setMultiDeckRoute),
+  postJson('/api/keep-last-icons', setKeepLastIconsRoute),
   get('/api/detected-decks', ({ ui }) => json(ui.detectedDecks())),
   postJson('/api/active-decks', setActiveDecksRoute),
   postJson('/api/browser-locale', setBrowserLocaleRoute),
@@ -255,6 +256,16 @@ function setMultiDeckRoute(
 ): Response {
   if (typeof enabled !== 'boolean') return badRequest('enabled must be a boolean');
   settingsFile.setMultiDeck(enabled);
+  return json({ ok: true, enabled });
+}
+
+/** WebUI "Keep last icons" toggle; off also deletes the saved files (app.ts). */
+function setKeepLastIconsRoute(
+  { enabled }: { enabled: unknown },
+  { settingsFile }: RouteContext,
+): Response {
+  if (typeof enabled !== 'boolean') return badRequest('enabled must be a boolean');
+  settingsFile.setKeepLastIcons(enabled);
   return json({ ok: true, enabled });
 }
 

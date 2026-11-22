@@ -27,6 +27,12 @@ export class SettingsFileController {
     this.host.emit('setMultiDeck', enabled);
   }
 
+  /** Persist the keep-last-icons switch and let app.ts delete or start saving frames. */
+  setKeepLastIcons(enabled: boolean): void {
+    this.host.settings.setKeepLastIcons(enabled);
+    this.host.emit('setKeepLastIcons', enabled);
+  }
+
   /** Persist the chosen decks and let app.ts reconcile the running docks with them. */
   setActiveDecks(keys: string[]): void {
     this.host.settings.setActiveDecks(keys);

@@ -1,6 +1,6 @@
 import assert from 'tjs:assert';
 import { createUpstreamWatcher } from '../src/main/relay/recovery.js';
-import type { UpstreamWatcherDeps } from '../src/main/relay/recovery.js';
+import type { UpstreamWatcher, UpstreamWatcherDeps } from '../src/main/relay/recovery.js';
 import type { DockIdentity } from '../src/main/relay/identity.js';
 import { testAsync, summaryExit } from './helpers/harness.js';
 
@@ -12,6 +12,7 @@ interface Rig {
   probes: number;
   recovered: [DockIdentity, DockIdentity][];
   lost: () => void;
+  resumed: () => void;
   stop: () => void;
   settle: () => Promise<void>;
 }
@@ -24,6 +25,7 @@ function rig(results: (DockIdentity | Error)[], over: Partial<UpstreamWatcherDep
     probes: 0,
     recovered: [],
     lost: () => {},
+    resumed: () => {},
     stop: () => {},
     settle: () => Promise.resolve(),
   };
@@ -33,7 +35,7 @@ function rig(results: (DockIdentity | Error)[], over: Partial<UpstreamWatcherDep
     stopped = true;
     resolve();
   };
-  r.lost = createUpstreamWatcher(ID, {
+  const watcher: UpstreamWatcher = createUpstreamWatcher(ID, {
     probe: () => {
       const res = results[Math.min(r.probes++, results.length - 1)]!;
       return res instanceof Error ? Promise.reject(res) : Promise.resolve(res);
@@ -49,7 +51,9 @@ function rig(results: (DockIdentity | Error)[], over: Partial<UpstreamWatcherDep
       r.recovered.push([prev, next]);
     },
     ...over,
-  }) as () => void;
+  });
+  r.lost = () => watcher('main', 'FIN');
+  r.resumed = () => watcher.onResumed();
   // Let the microtask chain of a recovery drain.
   r.settle = async (): Promise<void> => {
     for (let i = 0; i < 50; i++) await Promise.resolve();
@@ -152,6 +156,31 @@ await testAsync('stop during retries ends without more probes', async () => {
   r.lost();
   await r.settle();
   assert.equal(r.probes, 1);
+});
+
+await testAsync('a resumed session ends the recovery: no more probes, back logged', async () => {
+  const e = new Error('rejected takeover');
+  const r = rig([e, e, ID], {
+    sleep: (ms) => {
+      r.sleeps.push(ms);
+      r.resumed();
+      return Promise.resolve();
+    },
+  });
+  r.lost();
+  await r.settle();
+  assert.equal(r.probes, 1);
+  assert.equal(r.recovered.length, 0);
+  assert.ok(r.logs.at(-1)!.startsWith('info: DeckBridge back after '));
+});
+
+await testAsync('a resume with no recovery running is ignored', async () => {
+  const r = rig([ID]);
+  r.resumed();
+  r.lost();
+  await r.settle();
+  assert.equal(r.probes, 1);
+  assert.deepEqual(r.logs, []);
 });
 
 summaryExit();

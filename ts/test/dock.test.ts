@@ -10,6 +10,7 @@ import type { DockSlot } from '../src/main/dock-status.js';
 import { CoraDock } from '../src/main/cora-dock.js';
 import { Dock } from '../src/main/dock.js';
 import type { DockHooks, DockSettings } from '../src/main/dock-types.js';
+import type { FrameSaver } from '../src/infra/frame-store.js';
 import type { ElgatoServer } from '../src/cora/primary-server.js';
 import type { ElgatoChildServer } from '../src/cora/child-server.js';
 import { generateDeviceIdentity } from '../src/infra/device-identity.js';
@@ -128,6 +129,8 @@ class FakeDriver extends StubDockDriver {
   deviceFirmware: string | undefined = '1.0';
   closeCalls = 0;
   renderCalls: { keyIndex: number; format: string }[] = [];
+  /** Keys rendered with the stale badge, in order. */
+  staleRenders: number[] = [];
   splashCalls: number[] = [];
   brightnessCalls: number[] = [];
   /** Like the browser deck's driver: splash images are ignored there. */
@@ -136,8 +139,14 @@ class FakeDriver extends StubDockDriver {
     this.closeCalls++;
     return Promise.resolve();
   }
-  override renderCoraImage(keyIndex: number, _bytes: Uint8Array, format: 'jpeg' | 'bmp'): void {
+  override renderCoraImage(
+    keyIndex: number,
+    _bytes: Uint8Array,
+    format: 'jpeg' | 'bmp',
+    opts?: { stale?: boolean },
+  ): void {
     this.renderCalls.push({ keyIndex, format });
+    if (opts?.stale) this.staleRenders.push(keyIndex);
   }
   override sendSplashImage(keyIndex: number): void {
     this.splashCalls.push(keyIndex);
@@ -251,6 +260,8 @@ interface SetupExtras {
   /** A fake standby clock + timing (silence off: the fake child has no rx counter). */
   clock?: FakeClock;
   timing?: Partial<StandbyTiming>;
+  /** Saved frames from the last run (the persistent frame store). */
+  frameSaver?: FrameSaver;
 }
 
 function makeTestSetup(
@@ -301,6 +312,7 @@ function makeTestSetup(
       attached: (mock) => {
         attaches.push(mock);
       },
+      frameSaver: extras.frameSaver,
     },
     prefs,
     standbyClock: extras.clock,
@@ -792,6 +804,41 @@ await test('image event reaches driver.renderCoraImage', async () => {
   assert.equal(driver.renderCalls.length, 1, 'renderCoraImage called once');
   assert.equal(driver.renderCalls[0]?.keyIndex, 4, 'keyIndex forwarded');
   assert.equal(driver.renderCalls[0]?.format, 'jpeg', 'format forwarded');
+});
+
+const savedFrame = (key: number) => ({
+  key,
+  format: 'jpeg' as const,
+  data: new Uint8Array([key]),
+});
+
+await test('saved frames replay stale on attach; a fresh frame clears its key only', async () => {
+  const saves: string[] = [];
+  const frameSaver: FrameSaver = {
+    take: (deviceKey) => {
+      saves.push(`take:${deviceKey}`);
+      return {
+        modelId: DEFAULT_MODEL.id,
+        savedAt: Date.now(),
+        frames: [savedFrame(1), savedFrame(2)],
+      };
+    },
+    save: (deviceKey) => void saves.push(`save:${deviceKey}`),
+  };
+  const { childServer, driver, dock, start } = makeTestSetup(DEFAULT_MODEL, undefined, {
+    frameSaver,
+  });
+  await start();
+  assert.deepEqual(driver.staleRenders, [1, 2], 'both saved frames drawn with the badge');
+  assert.ok(saves[0]!.startsWith('take:'), 'asked for the saved frames by device key');
+
+  childServer.emit('image', { keyIndex: 1, data: new Uint8Array([9]), format: 'jpeg' });
+  assert.deepEqual(driver.staleRenders, [1, 2], 'the fresh frame is drawn without the badge');
+  assert.ok(
+    saves.some((s) => s.startsWith('save:')),
+    'a fresh frame marks the store dirty',
+  );
+  await dock.stop(); // detach pauses the expiry countdown
 });
 
 await test('image event mirrors to the image hook after the driver render', async () => {

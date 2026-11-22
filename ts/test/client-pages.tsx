@@ -106,6 +106,7 @@ async function runScopeHydrate(main: PageSummary, check: Check): Promise<void> {
       logLevel: 'info',
       logFilePath: '',
       multiDeck: false,
+      keepLastIcons: true,
       elgatoAutoRestart: { enabled: true, delayS: 10, supported: true },
       updateInfo: current.updateInfo ?? { enabled: true, current: 'test', updateAvailable: false },
     };

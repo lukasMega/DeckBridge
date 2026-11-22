@@ -14,6 +14,7 @@ import { buildDiagnostics, diagnosticsFileName, REVIEW_NOTICE } from '../web/ser
 import { deckbridgeEnv } from '../web/server/diagnostics-sources.js';
 import { loadSettings, settingsPath } from '../infra/settings-store.js';
 import { logFilePath, tailLogFile } from '../infra/log-file.js';
+import { FrameStore, framesDir } from '../infra/frame-store.js';
 import { currentLogLevel } from '../shared/logger.js';
 import { isElgatoAppRunning, platformName } from '../infra/os-utils.js';
 import { createProbeRunner, streamDeckNecpBlocked } from '../infra/pairing-probe.js';
@@ -50,6 +51,7 @@ export async function buildDiagnosticsReport(flags: CliFlags): Promise<string> {
       localNetworkBlocked:
         platformName() === 'macOS' ? await streamDeckNecpBlocked(createProbeRunner()) : undefined,
       logTail: await tailLogFile(Number.MAX_SAFE_INTEGER, cacheRoot),
+      savedIcons: await new FrameStore(framesDir(cacheRoot)).info(),
       settingsJson: JSON.stringify(settings, null, 2),
     },
     { redactCommands: flags.redactCommands },

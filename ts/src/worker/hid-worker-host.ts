@@ -11,6 +11,7 @@ import type {
   DeviceImageSpec,
   DeviceModel,
   DeviceModelOverride,
+  RenderOptions,
 } from '../devices/driver.js';
 import type {
   KeyEvent,
@@ -128,12 +129,18 @@ export class WorkerHidDriver extends EventEmitter implements DockDriver {
    *  `channel_msg_build` → `JS_WriteObject2` runs in the sender ctx, not deferred),
    *  so the clone can never observe a later mutation of `bytes` — a manual copy
    *  made just before this call would only be copied again by the clone itself. */
-  renderCoraImage(keyIndex: number, bytes: Uint8Array, format: 'jpeg' | 'bmp'): void {
-    this.submit({ type: 'image', keyIndex, bytes, format }, 'image', {
+  renderCoraImage(
+    keyIndex: number,
+    bytes: Uint8Array,
+    format: 'jpeg' | 'bmp',
+    opts?: RenderOptions,
+  ): void {
+    const stale = opts?.stale || undefined;
+    this.submit({ type: 'image', keyIndex, bytes, format, stale }, 'image', {
       bytes: bytes.byteLength,
       coalesceKey: `cora:${keyIndex}`,
       // Waiting means no clone yet, so it must not alias the caller's buffer.
-      snapshot: () => ({ type: 'image', keyIndex, bytes: bytes.slice(), format }),
+      snapshot: () => ({ type: 'image', keyIndex, bytes: bytes.slice(), format, stale }),
     });
   }
 

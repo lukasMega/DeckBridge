@@ -72,8 +72,13 @@ export function formatCodeFor(spec: DeviceImageSpec): 0 | 1 | 2 {
 }
 
 /** Transform a CORA image for a device according to its DeviceImageSpec: JPEG (MK.2,
- *  Mirabox), BMP (Mini) or PNG (page-protocol devices, Ulanzi D200). */
-export function transformImageForDevice(jpeg: Uint8Array, spec: DeviceImageSpec): Buffer {
+ *  Mirabox), BMP (Mini) or PNG (page-protocol devices, Ulanzi D200). `badge` is a
+ *  `badgeCorner()` value (0 = none): the red "!" of a saved, not yet refreshed frame. */
+export function transformImageForDevice(
+  jpeg: Uint8Array,
+  spec: DeviceImageSpec,
+  badge = 0,
+): Buffer {
   const { symbols } = load();
   const region = spec.cropRect ?? NO_REGION;
   for (;;) {
@@ -99,6 +104,7 @@ export function transformImageForDevice(jpeg: Uint8Array, spec: DeviceImageSpec)
       region.y,
       region.width,
       region.height,
+      badge,
       OUT,
       OUT.length,
       ERR,

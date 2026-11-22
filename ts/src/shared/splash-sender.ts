@@ -1,6 +1,7 @@
 import { SPLASH_STATES } from '../assets/splash-states.js';
 import { mk2IndexToDeviceImgId } from './key-map.js';
-import type { DeviceModel, DockDriver, DeviceImageSpec } from '../devices/driver.js';
+import { splashSpec } from './splash-spec.js';
+import type { DockDriver } from '../devices/driver.js';
 
 // Single device-independent splash image, decoded once at module load.
 const SPLASH_CONNECTED = Buffer.from(SPLASH_STATES.connected, 'base64');
@@ -10,20 +11,7 @@ const SPLASH_KEYS_15 = [0, 1, 2, 5, 6, 7] as const;
 // Keys to fill on smaller devices (fill all, up to 6).
 const SPLASH_KEY_COUNT_SMALL = 6;
 
-// model.image is calibrated for CORA images (pre-rotated by desktop software).
-// Splash source images are upright (natural canvas orientation).
-// model.splash.transformOverride corrects for the orientation difference measured on hardware.
-// Exported for extra-keys.ts — extra-key icons are upright sources too.
-export function splashSpec(model: DeviceModel): DeviceImageSpec {
-  const t = model.splash?.transformOverride;
-  if (!t) return model.image;
-  return {
-    ...model.image,
-    ...(t.rotate !== undefined && { rotate: t.rotate }),
-    ...(t.flipH !== undefined && { flipH: t.flipH }),
-    ...(t.flipV !== undefined && { flipV: t.flipV }),
-  };
-}
+export { splashSpec };
 
 /** The worker transforms each splash image (sendSplashImage), keeping the synchronous
  *  FFI transform off the main thread (P1 / Finding 1). */

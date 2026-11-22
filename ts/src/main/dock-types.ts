@@ -5,6 +5,7 @@ import type { WidgetPaint } from '../shared/widget-layout.js';
 import type { PageObservation } from '../shared/page-match.js';
 import type { DeviceModel } from '../devices/driver.js';
 import type { PersistedSettings } from '../infra/settings.js';
+import type { FrameSaver } from '../infra/frame-store.js';
 import type { CoraDock } from './cora-dock.js';
 import type { ImageFormat } from './dock-frames.js';
 import type { DeviceInfo, DockIdentity } from './dock-status.js';
@@ -37,6 +38,8 @@ export interface DockHooks {
   elgatoAttached?: () => void;
   /** The Elgato page recognition changed (the WebUI mirrors it). */
   pageObservation?: (obs: PageObservation) => void;
+  /** Keeps the last key frames across a restart; absent = frames live in memory only. */
+  frameSaver?: FrameSaver;
 }
 
 export type DockSettings = Pick<PersistedSettings, 'for' | 'getOrCreateIdentity' | 'markPaired'>;

@@ -155,6 +155,7 @@ export class PersistedSettings implements DockPrefsStore {
   /** User-chosen device keys among the detected decks (deck-selection.ts). */
   activeDecks: string[] = [];
   webuiKeyPress = false;
+  keepLastIcons = true;
   virtualDeck = { enabled: false, profile: DEFAULT_BROWSER_DECK_PROFILE as string };
   /** GitHub-release update check opt-out (see update-check.ts). undefined = enabled. */
   updateCheck: boolean | undefined = undefined;
@@ -214,6 +215,7 @@ export class PersistedSettings implements DockPrefsStore {
     if (typeof saved.multiDeck === 'boolean') this.multiDeck = saved.multiDeck;
     this.activeDecks = sanitizeActiveDecks(saved.activeDecks, MAX_MULTI_DECK_DOCKS);
     if (typeof saved.webuiKeyPress === 'boolean') this.webuiKeyPress = saved.webuiKeyPress;
+    this.keepLastIcons = saved.keepLastIcons !== false;
     this.virtualDeck = sanitizeVirtualDeck(saved.virtualDeck) ?? this.virtualDeck;
     if (typeof saved.updateCheck === 'boolean') this.updateCheck = saved.updateCheck;
     if (saved.updateState) this.updateState = saved.updateState;
@@ -381,6 +383,12 @@ export class PersistedSettings implements DockPrefsStore {
     this.persist();
   }
 
+  /** Persist the keep-last-icons switch (WebUI Settings). */
+  setKeepLastIcons(enabled: boolean): void {
+    this.keepLastIcons = enabled;
+    this.persist();
+  }
+
   /** Switch an extension on with the digest and events the user approved. */
   grantExtension(id: string, grant: ExtensionGrant): void {
     this.extensionGrants = { ...this.extensionGrants, [id]: grant };
@@ -538,6 +546,7 @@ export class PersistedSettings implements DockPrefsStore {
       ...(this.multiDeck ? { multiDeck: true } : {}),
       ...(this.activeDecks.length > 0 ? { activeDecks: this.activeDecks } : {}),
       ...(this.webuiKeyPress ? { webuiKeyPress: true } : {}),
+      ...(this.keepLastIcons ? {} : { keepLastIcons: false }),
       ...(this.virtualDeck.enabled || this.virtualDeck.profile !== DEFAULT_BROWSER_DECK_PROFILE
         ? { virtualDeck: this.virtualDeck }
         : {}),

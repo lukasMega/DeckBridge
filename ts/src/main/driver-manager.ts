@@ -165,7 +165,13 @@ export class DriverManager extends EventEmitter {
 
   /** The same hooks `dockHooks` gives scanned docks, for a dock built outside the manager. */
   hooksForDock(index: number): DockHooks {
-    return this.dockHooks(index);
+    // The browser deck draws no badge, so its frames stay in memory.
+    return { ...this.dockHooks(index), frameSaver: undefined };
+  }
+
+  /** The "keep last icons" setting went off: blank what still shows a saved frame. */
+  dropStaleFrames(): void {
+    for (const dock of this.docks.values()) dock.frames.expireStale();
   }
 
   /** Register a dock that is not backed by a scanned USB unit (the browser deck). The index
@@ -199,6 +205,7 @@ export class DriverManager extends EventEmitter {
       stripWrite: (...args) => webui.imageChannel.notifyDockStripWrite(index, ...args),
       elgatoAttached: () => this.deps.onElgatoAttached?.(index),
       pageObservation: (obs) => webui.pages.notifyObservation(index, obs),
+      frameSaver: this.deps.frameStore,
       ...extension,
       imageSent: (keyIndex, cached) => {
         webui.noteImageSent();

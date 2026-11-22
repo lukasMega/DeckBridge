@@ -16,6 +16,7 @@ import { deviceRowsFromInventory } from '../../cli/devices.js';
 import type { HidDeviceInfo } from '../../ffi/hidapi.js';
 import { createProbeRunner, streamDeckNecpBlocked } from '../../infra/pairing-probe.js';
 import { tailLogFile } from '../../infra/log-file.js';
+import { FrameStore, framesDir } from '../../infra/frame-store.js';
 import { defaultCacheRoot } from '../../infra/native-libs.js';
 import { settingsPath } from '../../infra/settings-store.js';
 import { MIN_DWELL_MS, suppressReason } from '../../infra/daily-ping-env.js';
@@ -186,6 +187,7 @@ export async function buildLiveDiagnostics(
     await fetchInventory(live.inventory),
   );
   sources.requirements = await checkRequirements();
+  sources.savedIcons = await new FrameStore(framesDir(live.cacheRoot)).info();
   if (platformName() === 'macOS') {
     sources.localNetworkBlocked = await streamDeckNecpBlocked(createProbeRunner());
   }

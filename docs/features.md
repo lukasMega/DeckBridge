@@ -292,6 +292,22 @@ on `127.0.0.1` (the default) unless you trust the network. It is stored as
 `"webuiKeyPress": true` in settings.json and is never taken from an imported settings file.
 A virtual press is not a hardware press: key-map learn mode ignores it.
 
+## Last icons
+
+After a restart the Elgato app takes a few seconds to send its icons again. Until then
+DeckBridge shows the icons from the last run, each with a small red "!" in its top-right
+corner. The "!" of a key goes away when the app sends a fresh icon for that key. About 30
+seconds after the first fresh icon, keys the app did not repaint (for example after a
+profile change) go blank and their saved icon is deleted. If the app never reconnects, the
+saved icons and their "!" stay for up to 24 hours, then they are dropped.
+
+The icons are saved in `<cache-root>/last-frames/` and can show private text such as titles
+or calendar entries. *Settings → Last icons* turns this off and deletes the files. It is
+stored as `"keepLastIcons": false` in settings.json. Not saved: widget, side-key and touch-strip
+images. Models that take the app's image unchanged (Elgato Stream Deck MK.2 and Mini over
+USB) replay without the "!". The Web UI preview shows no "!".
+`./deckbridge diagnose` lists the number, size and age of the saved files, never their content.
+
 ## Permissions
 
 Each permission is requested on first use; no admin / root rights are required.
@@ -350,7 +366,7 @@ only case that needs a system libhidapi installed.
 
 ## Files, ports & data
 
-**DeckBridge stores no personal data and sends no telemetry.**
+**DeckBridge sends no telemetry.** The only personal data it can store is the last key icons (see [Last icons](#last-icons)), and you can turn that off.
 
 ### Reads
 
@@ -374,6 +390,8 @@ only case that needs a system libhidapi installed.
   reads it and never writes there. See [Extensions](./extensions.md).
 - **Log file** — `<cache-root>/logs/deckbridge.log`, rotated at 2 MB with three files
   kept. See [Troubleshooting](./troubleshooting.md#where-the-logs-live).
+- **Saved icons** — `<cache-root>/last-frames/`, one file per deck, for up to 24 hours.
+  See [Last icons](#last-icons).
 - **Diagnostics reports** — `<cache-root>/diagnostics/`, only when you ask for one.
 - **Debug image dumps** — only when `DECKBRIDGE_DUMP_DIR` / `DECKBRIDGE_RAW_DUMP_DIR` are
   set. Off by default.

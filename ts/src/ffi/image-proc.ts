@@ -27,6 +27,7 @@ interface ImageProcSymbols {
     cropY: number, // region-crop top offset
     cropW: number, // region-crop width (0 = no region crop)
     cropH: number, // region-crop height (0 = no region crop)
+    badge: number, // 0 = none; 1..4 = red "!" corner: top-left, top-right, bottom-right, bottom-left
     outBuf: Uint8Array,
     outCap: number,
     errBuf: Uint8Array,
@@ -60,6 +61,7 @@ export function load(): { symbols: ImageProcSymbols; close(): void } {
         UINT32, UINT32,
         SIZE_T, UINT32, INT,
         UINT32, INT, INT, INT, INT,
+        UINT32,
         UINT32,
         UINT32,
         UINT32,

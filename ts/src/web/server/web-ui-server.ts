@@ -485,6 +485,7 @@ export class WebUIServer extends EventEmitter implements WebUIController, WebUIC
       logFilePath: this.logging.path(),
       multiDeck: this.settings.multiDeck,
       keyPressEnabled: this.settings.webuiKeyPress,
+      keepLastIcons: this.settings.keepLastIcons,
       updateInfo: this.updates.info(),
       elgatoAutoRestart: this.elgatoApp.state(),
       extensions: this.extensions.view(),

@@ -353,6 +353,11 @@ An app that connects during the gap also waits instead of being refused, and is 
 when DeckBridge is back. If DeckBridge isn't back within the hold time, the relay closes the
 connection.
 
+While it holds, the relay sends the app a keepalive every 2 seconds, because the app drops a
+connection that stays silent for about 4.5 seconds. Measured with Stream Deck 7.6.1: a
+DeckBridge restart of 9.5 seconds brought the deck back with no new pairing. Longer gaps are
+untested; the 60 second default is a guess.
+
 The relay itself must keep running. It doesn't start at login yet: if you stop it or restart
 its computer, start it again.
 

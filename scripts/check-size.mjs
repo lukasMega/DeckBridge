@@ -23,7 +23,8 @@ const BUDGETS = {
   // (2026-11-16), D200 firmware version via GET_DEVICE_INFO (2026-11-16): measured 61,793 + ~60 B.
   // D200 info window, live small-window mode + stats (2026-11-18): measured 63,995 + 1%.
   // Info window Elgato images, worker composite (2026-11-19): measured 65,284 + 1%.
-  'hid-worker': 68_400,
+  // Stale-icon badge corner + stale flag through the worker (2026-11-22): measured 68,639 + 1%.
+  'hid-worker': 69_330,
   // upHere 293V3 (2026-10-22), K1 Pro 0x5548 clone (2026-11-06), Ulanzi D200 (2026-11-13):
   // the registry grows the scan worker; measured + 1%. D200 info window model data
   // (2026-11-18): measured 12,272 + 1%.

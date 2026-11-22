@@ -257,6 +257,50 @@ await testAsync('held client gets CORA keepalives; they stop on resume', async (
   await upstream.close();
 });
 
+/** Accepts and closes at once: DeckBridge refusing a second primary client. */
+async function rejectingUpstream(p: number): Promise<FakeUpstream> {
+  const server = await tjs.listen('tcp', HOST, p);
+  const info = await server.opened;
+  const accept = info.readable.getReader();
+  const loop = (async (): Promise<void> => {
+    try {
+      for (;;) {
+        const { done, value: conn } = await accept.read();
+        if (done) break;
+        conn.close();
+      }
+    } catch {
+      // closed
+    }
+  })();
+  return {
+    async close(): Promise<void> {
+      await accept.cancel().catch(() => {});
+      server.close();
+      await loop;
+    },
+  };
+}
+
+await testAsync(
+  'upstream closes before sending a byte: no hold, no loss, session ends',
+  async () => {
+    const up = port();
+    const upstream = await rejectingUpstream(up);
+    const h = await startRelay(up);
+    const c = await connectClient(h.listenPort);
+    const s = await h.closes.next();
+    assert.equal(s.closedBy, 'D');
+    assert.ok(s.how.startsWith('upstream closed before sending'), s.how);
+    assert.equal(await c.drain(), 0);
+    assert.equal(h.holds.all.length, 0);
+    assert.equal(h.lost.all.length, 0);
+    c.close();
+    await h.relay.stop();
+    await upstream.close();
+  },
+);
+
 await testAsync('dial fails at session start, upstream appears inside the window', async () => {
   const up = port();
   const h = await startRelay(up);

@@ -114,11 +114,12 @@ function handleImage(
   keyIndex: number,
   bytes: Uint8Array,
   format: 'jpeg' | 'bmp',
+  stale?: boolean,
 ): RenderResult | undefined {
   if (!driver || !currentModel) return undefined;
   return wideCanvas.apply(driver, currentModel, keyIndex, bytes)
     ? { hash: hashJpeg(bytes), cached: false }
-    : renderImage(driver, currentModel, keyIndex, bytes, format);
+    : renderImage(driver, currentModel, keyIndex, bytes, format, stale);
 }
 
 /** Transform the splash source image with the caller-supplied spec (which may
@@ -186,7 +187,7 @@ function handleSetting(
 const renders = new WeakMap<object, RenderResult>();
 
 function handleImageMsg(msg: Extract<MainToWorker, { type: 'image' }>): void {
-  const rendered = handleImage(msg.keyIndex, msg.bytes, msg.format);
+  const rendered = handleImage(msg.keyIndex, msg.bytes, msg.format, msg.stale);
   if (rendered !== undefined) renders.set(msg, rendered);
 }
 
