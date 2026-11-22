@@ -40,7 +40,8 @@ export function deviceScript(p: DeviceScriptParams): string {
   return `#!/bin/sh
 # DeckBridge relay installer, served by DeckBridge. Safe to run again.
 # Options: --node runs the Node.js relay (Macs that block the binary's network);
-# --uninstall removes it: curl -fsSL "${selfUrl}?t=<token>" | sh -s -- --uninstall
+# --container runs the relay in an Apple container (macOS 26, Apple silicon);
+# --uninstall removes it, with any automatic start: curl -fsSL "${selfUrl}?t=<token>" | sh -s -- --uninstall
 set -eu
 
 VERSION='${version}'
@@ -48,8 +49,12 @@ TARGET='${p.target}'
 TARGET_PORT='${p.targetPort}'
 EVENT_URL='${eventUrl}'
 TOKEN='${p.token}'
+SELF_URL='${selfUrl}?t=${p.token}'
 BASE='${RELEASE_BASE}/deckbridge-v${version}'
 DIR="$HOME/.deckbridge-relay"
+PLIST="$HOME/Library/LaunchAgents/dev.deckbridge.relay.plist"
+UNIT="$HOME/.config/systemd/user/deckbridge-relay.service"
+CTR_NAME=deckbridge-relay
 STEP=starting
 PLATFORM=unknown
 SELF_IP=
@@ -57,6 +62,9 @@ REPORTED=
 RELAY_PID=
 HB_PID=
 NODE=
+CONTAINER=
+SERVICE=
+CTR_UP=
 
 # A DeckBridge that went away must never abort the install, hence the \`|| true\`.
 event() {
@@ -88,8 +96,9 @@ cleanup() {
   rc=$?
   if [ "$rc" -ne 0 ] && [ -z "$REPORTED" ]; then event failed "Failed while $STEP"; fi
   if [ -n "$HB_PID" ]; then kill "$HB_PID" 2>/dev/null || true; fi
-  if [ -n "$RELAY_PID" ]; then kill "$RELAY_PID" 2>/dev/null || true; fi
-  rm -f "$DIR/relay.pid"
+  if [ -n "$CTR_UP" ]; then container rm -f "$CTR_NAME" >/dev/null 2>&1 || true; fi
+  # Only the process that started a relay owns the pid file (the installer exits while a service runs).
+  if [ -n "$RELAY_PID" ]; then kill "$RELAY_PID" 2>/dev/null || true; rm -f "$DIR/relay.pid"; fi
 }
 
 fetch() {
@@ -144,6 +153,12 @@ detect() {
     v=\${v#v}
     case "\${v%%.*}" in '' | *[!0-9]*) fail "Could not read the Node.js version." ;; esac
     [ "\${v%%.*}" -ge 20 ] || fail "This is Node.js $v; the relay needs Node.js 20 or newer (nodejs.org)."
+  elif [ -n "$CONTAINER" ]; then
+    [ "$os-$arch" = macos-arm64 ] || fail "Apple container needs a Mac with Apple silicon."
+    command -v container >/dev/null 2>&1 || fail "Install Apple container from github.com/apple/container/releases, run: container system start, then run this again."
+    container system status >/dev/null 2>&1 || fail "Run: container system start, then run this again."
+    # The VM runs Linux: the Linux zip is downloaded and unpacked here, on the host.
+    PLATFORM=container-linux-arm64
   elif [ "$os" = linux ]; then
     glibc=$(getconf GNU_LIBC_VERSION 2>/dev/null | sed 's/^glibc //' || true)
     major=\${glibc%%.*}
@@ -184,7 +199,10 @@ install_node() {
 
 install() {
   dir="$DIR/$VERSION"
-  zip="deckbridge-v$VERSION-$PLATFORM.zip"
+  # A native macOS copy may sit in $dir; the container needs the Linux one.
+  [ -z "$CONTAINER" ] || dir="$dir-linux"
+  plat=\${PLATFORM#container-}
+  zip="deckbridge-v$VERSION-$plat.zip"
   mkdir -p "$dir"
   cd "$dir"
   if [ -n "$NODE" ]; then install_node; return 0; fi
@@ -192,7 +210,7 @@ install() {
   download "$zip"
   unpack "$zip"
   # The release zip holds one folder named like the zip; its files belong next to us.
-  inner="deckbridge-v$VERSION-$PLATFORM"
+  inner="deckbridge-v$VERSION-$plat"
   if [ -d "$inner" ]; then cp -R "$inner"/. . && rm -rf "$inner"; fi
   rm -f "$zip" SHA256SUMS.txt
   [ -f ./deckbridge ] || fail "The download holds no deckbridge binary."
@@ -219,29 +237,142 @@ run_relay() {
   STEP=running
   ( while kill -0 "$RELAY_PID" 2>/dev/null; do event running; sleep 30; done ) &
   HB_PID=$!
-  echo "Relay running. Keep this window open; press Ctrl-C to stop it."
+  echo "Relay running."
+  [ -n "$SERVICE" ] || echo "Keep this window open; press Ctrl-C to stop it."
   wait "$RELAY_PID" || fail "The relay stopped."
 }
 
+# Apple container prints the address with its prefix length, e.g. "192.168.64.3/24".
+container_ip() {
+  container inspect "$CTR_NAME" 2>/dev/null | grep -oiE '"[a-z0-9]*address" *: *"[0-9.]+/[0-9]+"' | head -n 1 | grep -oE '[0-9]+(\\.[0-9]+){3}' || true
+}
+
+# The relay dials DeckBridge from a NATed VM; this script, on the host, reports for it.
+run_container() {
+  STEP=starting
+  event starting
+  # The first run pulls the image, which can take minutes: keep the wizard's progress alive.
+  ( while :; do event starting; sleep 20; done ) &
+  HB_PID=$!
+  container rm -f "$CTR_NAME" >/dev/null 2>&1 || true
+  : > "$DIR/.container"
+  CTR_UP=1
+  container run -d --name "$CTR_NAME" --memory 256M -v "$DIR:/relay" ubuntu:24.04 "/relay/$VERSION-linux/deckbridge" relay --target "$TARGET" --target-port "$TARGET_PORT" --no-advertise --name "DeckBridge Relay" >/dev/null || fail "Could not start the container. Run: container system start"
+  kill "$HB_PID" 2>/dev/null || true
+  HB_PID=
+  sleep 2
+  SELF_IP=$(container_ip)
+  [ -n "$SELF_IP" ] || fail "The container has no IP address."
+  STEP=running
+  echo "Relay running in a container at $SELF_IP."
+  [ -n "$SERVICE" ] || echo "Keep this window open; press Ctrl-C to stop it."
+  while container ls 2>/dev/null | grep -q "^$CTR_NAME "; do event running; sleep 30; done
+  fail "The relay container stopped."
+}
+
+can_autostart() {
+  if [ "$(uname -s)" = Darwin ]; then command -v launchctl >/dev/null 2>&1; else command -v systemctl >/dev/null 2>&1; fi
+}
+
+ask_autostart() {
+  [ -z "$SERVICE" ] || return 1
+  can_autostart || return 1
+  # No terminal (cron, ssh -T): run in the foreground.
+  ( : </dev/tty ) 2>/dev/null || return 1
+  printf 'Start the relay automatically after a restart? [Y/n] ' >/dev/tty
+  read -r ans </dev/tty || return 1
+  case "$ans" in [nN]*) return 1 ;; esac
+  return 0
+}
+
+stop_service() {
+  if [ -f "$PLIST" ]; then launchctl bootout "gui/$(id -u)" "$PLIST" >/dev/null 2>&1 || true; rm -f "$PLIST"; fi
+  if [ -f "$UNIT" ]; then systemctl --user disable --now deckbridge-relay.service >/dev/null 2>&1 || true; rm -f "$UNIT"; fi
+}
+
+# The service runs a saved copy of this script (--service): at boot DeckBridge may not be up to serve it.
+install_service() {
+  STEP=autostart
+  flag=
+  [ -z "$NODE" ] || flag=--node
+  [ -z "$CONTAINER" ] || flag=--container
+  stop_old
+  fetch "$SELF_URL" "$DIR/relay.sh" || return 1
+  chmod 600 "$DIR/relay.sh"
+  if [ "$(uname -s)" = Darwin ]; then
+    mkdir -p "$HOME/Library/LaunchAgents"
+    # launchd's PATH lacks /usr/local/bin (container, node).
+    cat > "$PLIST" <<EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+<key>Label</key><string>dev.deckbridge.relay</string>
+<key>ProgramArguments</key><array><string>/bin/sh</string><string>$DIR/relay.sh</string><string>--service</string>\${flag:+<string>$flag</string>}</array>
+<key>EnvironmentVariables</key><dict><key>PATH</key><string>/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin</string></dict>
+<key>RunAtLoad</key><true/>
+<key>KeepAlive</key><true/>
+<key>StandardOutPath</key><string>$DIR/relay.log</string>
+<key>StandardErrorPath</key><string>$DIR/relay.log</string>
+</dict></plist>
+EOF
+    launchctl bootstrap "gui/$(id -u)" "$PLIST" || { rm -f "$PLIST"; return 1; }
+  else
+    mkdir -p "$HOME/.config/systemd/user"
+    cat > "$UNIT" <<EOF
+[Unit]
+Description=DeckBridge relay
+After=network-online.target
+
+[Service]
+ExecStart=/bin/sh $DIR/relay.sh --service $flag
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=default.target
+EOF
+    if systemctl --user daemon-reload && systemctl --user enable --now deckbridge-relay.service >/dev/null 2>&1; then
+      # Lets the user service start at boot, before anyone logs in.
+      loginctl enable-linger "$(id -un)" >/dev/null 2>&1 || true
+    else
+      rm -f "$UNIT"
+      return 1
+    fi
+  fi
+}
+
 uninstall() {
+  stop_service
+  if [ -f "$DIR/.container" ] && command -v container >/dev/null 2>&1; then
+    container rm -f "$CTR_NAME" >/dev/null 2>&1 || true
+  fi
   stop_old
   rm -rf "$DIR"
   echo "DeckBridge relay removed."
 }
 
 main() {
-  case "\${1:-}" in
-    --uninstall) uninstall; return 0 ;;
-    --node) NODE=1 ;;
-    '') ;;
-    *) echo "Unknown option $1. Use --node or --uninstall." >&2; exit 2 ;;
-  esac
+  for arg in "$@"; do
+    case "$arg" in
+      --uninstall) uninstall; return 0 ;;
+      --node) NODE=1 ;;
+      --container) CONTAINER=1 ;;
+      --service) SERVICE=1 ;;
+      *) echo "Unknown option $arg. Use --node, --container or --uninstall." >&2; exit 2 ;;
+    esac
+  done
   trap cleanup EXIT
   trap 'exit 130' INT
   trap 'exit 143' TERM
   detect
   install
-  run_relay
+  # Running again replaces the service; answering no leaves it off.
+  if [ -z "$SERVICE" ]; then stop_service; fi
+  if ask_autostart && install_service; then
+    echo "The relay now starts automatically. Remove it with: curl -fsSL \\"$SELF_URL\\" | sh -s -- --uninstall"
+    return 0
+  fi
+  if [ -n "$CONTAINER" ]; then run_container; else run_relay; fi
 }
 
 main "$@"

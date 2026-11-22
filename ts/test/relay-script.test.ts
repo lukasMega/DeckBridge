@@ -66,6 +66,41 @@ test('device script has the Node.js relay branch', () => {
   }
 });
 
+test('device script has the Apple container branch', () => {
+  const s = deviceScript(D);
+  for (const part of [
+    '--container) CONTAINER=1',
+    'container system status',
+    'PLATFORM=container-linux-arm64',
+    'plat=${PLATFORM#container-}',
+    'dir="$dir-linux"',
+    'container run -d --name "$CTR_NAME" --memory 256M -v "$DIR:/relay" ubuntu:24.04',
+    '"/relay/$VERSION-linux/deckbridge" relay --target "$TARGET"',
+    '--no-advertise',
+    'container rm -f "$CTR_NAME"',
+  ]) {
+    assert.ok(s.includes(part), part);
+  }
+});
+
+test('device script offers automatic start with a LaunchAgent and a systemd user unit', () => {
+  const s = deviceScript(D);
+  for (const part of [
+    '--service) SERVICE=1',
+    "SELF_URL='http://192.168.2.212:44661/relay.sh?t=" + D.token + "'",
+    'Start the relay automatically after a restart? [Y/n]',
+    'dev.deckbridge.relay.plist',
+    '<key>RunAtLoad</key><true/>',
+    'launchctl bootstrap',
+    'launchctl bootout',
+    'deckbridge-relay.service',
+    'systemctl --user enable --now',
+    'loginctl enable-linger',
+  ]) {
+    assert.ok(s.includes(part), part);
+  }
+});
+
 test('device script refuses a value that could inject shell', () => {
   assert.throws(() => deviceScript({ ...D, version: "1.0.0'; id; '" }));
   assert.throws(() => deviceScript({ ...D, target: '1.2.3.4; id' }));
@@ -117,6 +152,25 @@ await testAsync('device script accepts only --node and --uninstall', async () =>
   );
   assert.equal(u.code, 0, u.out);
   assert.equal(u.out.trim(), 'DeckBridge relay removed.');
+});
+
+await testAsync('container_ip takes the first CIDR address of the inspect output', async () => {
+  if (!hasSh) return;
+  const script = deviceScript(D);
+  const start = script.indexOf('container_ip() {');
+  const fn = script.slice(start, script.indexOf('\n}\n', start) + 3);
+  const ip = async (json: string): Promise<string> => {
+    // A fake `container` that prints the fixture; the real function pipes its output.
+    const sh = `CTR_NAME=x\ncontainer() { printf '%s' '${json}'; }\n${fn}\ncontainer_ip`;
+    return (await run(['sh'], sh)).out.trim();
+  };
+  const net = '"networks":[{"address":"192.168.64.3/24","gateway":"192.168.64.1"}]';
+  assert.equal(await ip(`[{"status":"running",${net}}]`), '192.168.64.3');
+  assert.equal(
+    await ip('[{"networks":[{"ipv4Address":"192.168.64.9/24","ipv4Gateway":"192.168.64.1"}]}]'),
+    '192.168.64.9',
+  );
+  assert.equal(await ip('[{"networks":[]}]'), '');
 });
 
 await testAsync('device script passes sh -n', async () => {

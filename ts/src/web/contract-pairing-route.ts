@@ -19,7 +19,7 @@ export interface PairingRouteStatus {
   versionMismatch: boolean;
   /** Epoch ms of the last relay event. */
   announcedAt: number | null;
-  /** Live install/run state of the script-started relay (routes device, orbstack); not persisted. */
+  /** Live install/run state of the script-started relay (device, orbstack, container); not persisted. */
   relay: RelayProgress | null;
   /** The Stream Deck app holds a session through the primary dock. */
   paired: boolean;
@@ -89,11 +89,11 @@ export interface RelayEventBody {
   platform: string;
   version: string;
   message?: string;
-  /** The relay's own IPv4 as it sees it; only trusted to label an OrbStack relay (NAT). */
+  /** The relay's own IPv4 as it sees it; only trusted to label an OrbStack or container relay (NAT). */
   selfIp?: string;
 }
 
-export type RelayCommandKind = 'curl' | 'wget' | 'node';
+export type RelayCommandKind = 'curl' | 'wget' | 'node' | 'container';
 
 export interface RelayCommandResponse {
   /** One line to paste; carries the script token. */

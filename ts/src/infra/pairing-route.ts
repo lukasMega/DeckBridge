@@ -17,7 +17,7 @@ export function isRelayRoute(r: PairingRoute): boolean {
 
 /** Routes whose relay the install script starts and reports on. */
 export function isScriptRoute(r: PairingRoute): boolean {
-  return r === 'device' || r === 'orbstack';
+  return r === 'device' || r === 'orbstack' || r === 'container';
 }
 
 /** A silent relay is shown as offline (the script heartbeats every 30 s) and a stalled install as
@@ -123,8 +123,10 @@ export class PairingRouteState {
       ...(ev.message === undefined ? {} : { message: ev.message }),
       at: this.deps.now(),
     };
-    // OrbStack NATs its VM, so the peer is this Mac; the IP to add in the app is the VM's own.
-    const addr = settings.pairingRoute.route === 'orbstack' ? (ev.selfIp ?? ip) : ip;
+    // OrbStack and container NAT their VM, so the peer is this Mac; the IP to add in the app is the VM's own.
+    const nat =
+      settings.pairingRoute.route === 'orbstack' || settings.pairingRoute.route === 'container';
+    const addr = nat ? (ev.selfIp ?? ip) : ip;
     if (settings.pairingRoute.relayIp !== addr) {
       settings.setPairingRoute({ ...settings.pairingRoute, relayIp: addr });
     }

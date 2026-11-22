@@ -70,7 +70,9 @@ function ScriptCommands({
   probe: PairingProbe | null;
 }>): preact.JSX.Element {
   const [kind, setKind] = useState<RelayCommandKind>('curl');
-  const run = useRelayCommand(route === 'orbstack' ? 'curl' : kind);
+  const isContainer = route === 'container';
+  const fixed = isContainer ? 'container' : kind;
+  const run = useRelayCommand(route === 'orbstack' ? 'curl' : fixed);
   if (route === 'orbstack') {
     const orbRun = orbstackCommands(probe, run)?.run ?? null;
     return (
@@ -83,13 +85,15 @@ function ScriptCommands({
   const uninstall = uninstallCommand(run);
   return (
     <>
-      <ChipRadioGroup
-        name="prd-kind"
-        label="Download tool"
-        value={kind}
-        options={KINDS}
-        onChange={setKind}
-      />
+      {!isContainer && (
+        <ChipRadioGroup
+          name="prd-kind"
+          label="Download tool"
+          value={kind}
+          options={KINDS}
+          onChange={setKind}
+        />
+      )}
       <NodeHint kind={kind} />
       <div class="addr-row">
         <CopyChip label="Run" value={run ?? ''} cls="addr-chip" pending={run === null} />
@@ -99,8 +103,11 @@ function ScriptCommands({
           cls="addr-chip"
           pending={uninstall === null}
         />
+        {isContainer && (
+          <CopyChip label="Logs" value="container logs -f deckbridge-relay" cls="addr-chip" />
+        )}
       </div>
-      <p class="step-sub">After the device restarts, run this on it again.</p>
+      <p class="step-sub">Without automatic start, run this again after a restart.</p>
     </>
   );
 }
@@ -143,8 +150,6 @@ export function RouteDetails({
   const seen = seenAgo(at, Math.max(now, at ?? now));
   const build = buildLine(status.relay);
   const problem = relayProblem(status, __VERSION__);
-  // The server issues no script token for container (isScriptRoute).
-  const hasScript = status.route !== 'container';
 
   const recheck = (): Promise<void> =>
     action.run(async () => {
@@ -183,11 +188,7 @@ export function RouteDetails({
           {problem}
         </p>
       )}
-      {isWsl ? (
-        <WslNotes wsl={wsl} />
-      ) : (
-        hasScript && <ScriptCommands route={status.route} probe={probe.data} />
-      )}
+      {isWsl ? <WslNotes wsl={wsl} /> : <ScriptCommands route={status.route} probe={probe.data} />}
       <div class="addr-row">
         <GhostButton id="prd-recheck" disabled={action.busy} onClick={recheck}>
           Check again

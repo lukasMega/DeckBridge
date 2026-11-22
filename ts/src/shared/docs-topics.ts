@@ -23,5 +23,6 @@ export const DOCS_TOPICS = {
   'wsl-relay-stuck': '/elgato-same-computer/#wsl-not-pairing',
   'relay-device': '/elgato-same-computer/#relay-settings',
   'relay-orbstack': '/elgato-same-computer/#macos-orbstack',
+  'relay-container': '/elgato-same-computer/#macos-container',
   troubleshooting: '/troubleshooting/#diagnostics-report',
 } as const satisfies Record<DocsTopic, string>;

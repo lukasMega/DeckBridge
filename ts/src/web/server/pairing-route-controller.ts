@@ -75,12 +75,14 @@ export class PairingRouteController {
     return this.port?.command(kind) ?? Promise.resolve(null);
   }
 
-  /** Concurrent callers share one in-flight probe. */
-  probe(): Promise<PairingProbe> {
+  /** Concurrent callers share one in-flight probe; `fresh` skips the cache ("Check again"). */
+  probe(fresh = false): Promise<PairingProbe> {
     const port = this.port;
     if (port === null) return Promise.resolve({ ...NO_PROBE });
     const now = Date.now();
-    if (this.cached !== null && now - this.cached.at < PROBE_TTL_MS) return this.cached.value;
+    if (!fresh && this.cached !== null && now - this.cached.at < PROBE_TTL_MS) {
+      return this.cached.value;
+    }
     const value = port.probe();
     this.cached = { at: now, value };
     return value;

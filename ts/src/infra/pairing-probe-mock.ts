@@ -7,6 +7,7 @@ export type MockPairingScenario =
   | 'windows-none'
   | 'windows-wsl1'
   | 'mac-26'
+  | 'mac-26-fresh'
   | 'mac-15'
   | 'mac-intel'
   | 'mac-blocked';
@@ -16,6 +17,7 @@ const SCENARIOS: readonly MockPairingScenario[] = [
   'windows-none',
   'windows-wsl1',
   'mac-26',
+  'mac-26-fresh',
   'mac-15',
   'mac-intel',
   'mac-blocked',
@@ -73,6 +75,9 @@ export function mockProbe(
       return { ...win, wsl: { installed: false, distros: [] } };
     case 'mac-26':
       return { ...osx, mac: mac('26.1', 'arm64', false, true) };
+    // macOS 26 without the container tool: the "install, then Check again" screen.
+    case 'mac-26-fresh':
+      return { ...osx, mac: mac('26.1', 'arm64', false, false) };
     case 'mac-15':
       return { ...osx, mac: mac('15.6', 'arm64', true, false) };
     case 'mac-blocked':

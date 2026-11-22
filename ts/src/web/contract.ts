@@ -562,4 +562,5 @@ export type DocsTopic =
   | 'wsl-relay-stuck'
   | 'relay-device'
   | 'relay-orbstack'
+  | 'relay-container'
   | 'troubleshooting';
