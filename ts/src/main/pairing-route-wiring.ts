@@ -3,7 +3,7 @@
 // DECKBRIDGE_PAIRING_MOCK=<scenario> fakes the probe on any OS (mock builds only).
 import type { ElgatoServer } from '../cora/primary-server.js';
 import { elgatoAppVersion, platformName } from '../infra/os-utils.ts';
-import { PairingRouteState } from '../infra/pairing-route.js';
+import { isScriptRoute, PairingRouteState } from '../infra/pairing-route.js';
 import { createProbeRunner, probePairing } from '../infra/pairing-probe.js';
 import { mdnsDisabled } from '../shared/cli.js';
 import { log } from '../shared/logger.js';
@@ -53,8 +53,8 @@ export function wirePairingRoute(
     for (const srv of mdnsServers) srv.setMdnsEnabled(!on && !mdnsDisabled());
   };
 
-  // Serves the install scripts of the OrbStack and other-device routes, and only while one of
-  // them is selected.
+  // Serves the install scripts of the OrbStack, container and other-device routes, and only while
+  // one of them is selected.
   const scriptServer = new RelayScriptServer({
     listenIp: bindAddr(),
     token: () => state.scriptToken(),
@@ -73,18 +73,17 @@ export function wirePairingRoute(
     onEvent: (ev, ip) => state.onRelayEvent(ev, ip),
     log: (level, msg) => log(level, 'pairing', msg),
   });
-  const syncScriptServer = (route: string): void => {
-    if (route === 'orbstack' || route === 'device') void scriptServer.start();
-    else void scriptServer.stop();
-  };
   // The one line the wizard shows; the token only ever travels in this reply (PW-D18).
-  const relayCommand = async (kind: 'curl' | 'wget' | 'node'): Promise<string | null> => {
+  const relayCommand = async (
+    kind: 'curl' | 'wget' | 'node' | 'container',
+  ): Promise<string | null> => {
     const token = state.scriptToken();
     const target = relayTarget(bindAddr(), lanIp());
     if (token === null || !('ip' in target)) return null;
     const url = `http://${target.ip}:${await scriptServer.reservePort()}${RELAY_SCRIPT_PATH}?t=${token}`;
     if (kind === 'wget') return `wget -qO- "${url}" | sh`;
-    return `curl -fsSL "${url}" | sh${kind === 'node' ? ' -s -- --node' : ''}`;
+    const flag = kind === 'curl' ? '' : ` -s -- --${kind}`;
+    return `curl -fsSL "${url}" | sh${flag}`;
   };
 
   const wsl = wireWslRelay(
@@ -107,7 +106,8 @@ export function wirePairingRoute(
     now: Date.now,
     onStatus: (s) => {
       webui.pairingRoute.publish(s);
-      syncScriptServer(s.route);
+      if (isScriptRoute(s.route)) void scriptServer.start();
+      else void scriptServer.stop();
     },
   });
   driverManager.on('changed', () => state.syncPaired());

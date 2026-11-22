@@ -5,20 +5,21 @@ import { GhostButton } from '../../components/GhostButton.js';
 import { ICON } from '../../components/Icon.js';
 import { StatusChip } from '../../components/StatusChip.js';
 import { useStore } from '../../lib/store.js';
-import type { Fetched } from '../../lib/ui-api.js';
+import { useFetched, type Fetched } from '../../lib/ui-api.js';
 import type { PairingProbe, PairingRoute } from '../../ui-types.js';
 import { CopyChip, ManualAddPanel } from '../controls.js';
 import { ElgatoAppAction } from '../pairing-flow.js';
 import { WslRelaySteps } from '../wsl-relay-card.js';
 import type { Answers, ScreenId, VersionAnswer } from './flow.js';
 import { routeOptions } from './routes.js';
-import { DeviceSetupBody, useRelayCommand } from './device-setup.js';
+import { DeviceSetupBody, RelayProgressView, useRelayCommand } from './device-setup.js';
 import { orbstackCommands } from './vm-commands.js';
 
 const MSI_760 = 'https://edge.elgato.com/egc/windows/sd/Stream_Deck_7.6.0.23012.msi';
 const NOTES_76 =
   'https://help.elgato.com/hc/en-us/articles/51156609278737-Elgato-Stream-Deck-7-6-Release-Notes';
 const ORBSTACK_URL = 'https://orbstack.dev';
+const CONTAINER_URL = 'https://github.com/apple/container/releases';
 
 type SetAnswers = (patch: Partial<Answers>) => void;
 
@@ -284,6 +285,44 @@ function OrbstackSetup({ probe }: Readonly<{ probe: PairingProbe | null }>): pre
   );
 }
 
+function ContainerSetup(): preact.JSX.Element {
+  const title = 'Relay in Apple container on this Mac';
+  const command = useRelayCommand('container');
+  // Fresh on mount and on Check again: the 30 s probe cache would hide a tool installed a moment ago.
+  const probe = useFetched<PairingProbe>('/api/pairing-route/probe?fresh=1');
+  if (probe.data?.lanIp === '') return <Unreachable title={title} />;
+  const missing = probe.data !== null && probe.data.mac?.container !== true;
+  return (
+    <>
+      <Question>{title}</Question>
+      {missing ? (
+        <>
+          <p>
+            Install Apple container (the .pkg on <Link href={CONTAINER_URL}>GitHub</Link>), then run{' '}
+            <code>container system start</code> in Terminal.
+          </p>
+          <GhostButton id="pw-recheck" onClick={probe.reload}>
+            Check again
+          </GhostButton>
+        </>
+      ) : (
+        <>
+          <p>Run this in Terminal on this Mac.</p>
+          <div class="addr-row">
+            <CopyChip
+              label="Command"
+              value={command ?? ''}
+              cls="addr-chip"
+              pending={command === null}
+            />
+          </div>
+          <RelayProgressView />
+        </>
+      )}
+    </>
+  );
+}
+
 function SetupScreen({
   route,
   probe,
@@ -293,6 +332,7 @@ function SetupScreen({
   probe: PairingProbe | null;
   onTurnedOff: () => void;
 }>): preact.JSX.Element | null {
+  if (route === 'container') return <ContainerSetup />;
   if (route === 'downgrade') return <DowngradeSetup probe={probe} />;
   if (route === 'wsl') {
     return (
@@ -317,21 +357,21 @@ function AddScreen({
 }>): preact.JSX.Element {
   const paired = useStore((s) => s.pairingRoute?.paired === true);
   const ip = useStore((s) => s.pairingRoute?.relayIp ?? null);
+  // These VMs NAT the relay, so the IP to add is the VM's, not the Mac's.
+  const vm = route === 'orbstack' || route === 'container';
   return (
     <>
       <Question>Add the relay in the Stream Deck app</Question>
       <p>
-        In the Stream Deck app, add a Network Dock by IP address.{' '}
-        {route === 'orbstack'
-          ? 'Use the IP of the OrbStack machine, which the relay printed.'
-          : 'Use the IP of the device that runs the relay.'}
+        In the Stream Deck app, add a Network Dock by IP address. Use the IP of{' '}
+        {vm ? 'the relay machine, shown below.' : 'the device that runs the relay.'}
       </p>
-      {ip !== null && (route === 'device' || route === 'orbstack') && (
+      {ip !== null && (
         <div class="addr-row">
           <CopyChip label="Relay IP" value={ip} cls="addr-chip" />
         </div>
       )}
-      {!paired && route === 'orbstack' && blocked && (
+      {!paired && vm && blocked && (
         <p class="warnrow">
           The Stream Deck app is blocked from the local network. Quit it, turn it off and on in
           System Settings, Privacy &amp; Security, Local Network, then start it again. If that does

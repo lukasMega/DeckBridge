@@ -195,10 +195,10 @@ const rec = (p: PairingProbe, other: boolean, en?: ReadonlySet<PairingRoute>): s
     .map((o) => o.route)
     .join(',');
 
-test('phase gate: P1 offers downgrade, device, wsl, orbstack', () => {
+test('phase gate: every route but none is offered', () => {
   assert.deepEqual(
     [...ENABLED_ROUTES].toSorted((a, b) => a.localeCompare(b)),
-    ['device', 'downgrade', 'orbstack', 'wsl'],
+    ['container', 'device', 'downgrade', 'orbstack', 'wsl'],
   );
 });
 
@@ -271,10 +271,11 @@ test('routeOptions: a macOS 26 arm64 Mac with nothing installed recommends conta
   );
 });
 
-test('routeOptions: P1 gate on macOS offers a same-Mac relay (OrbStack), recommended', () => {
+test('routeOptions: the default gate on macOS offers a same-Mac relay, recommended', () => {
   // Regression: P1 once left a Mac with no other device at downgrade only.
-  assert.equal(order(PROBES['mac-26']!, false), 'downgrade,orbstack');
-  assert.equal(rec(PROBES['mac-26']!, false), 'orbstack');
+  assert.equal(order(PROBES['mac-26']!, false), 'downgrade,container,orbstack');
+  assert.equal(rec(PROBES['mac-26']!, false), 'container');
+  assert.equal(rec(PROBES['mac-15']!, false), 'orbstack');
   assert.equal(rec(PROBES['mac-intel']!, false), 'orbstack');
 });
 

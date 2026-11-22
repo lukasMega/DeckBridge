@@ -59,11 +59,12 @@ export interface RouteOption {
   recommended: boolean;
 }
 
-/** Phase gate: P1 offers downgrade, device, wsl and a manual orbstack; P3 adds container. */
+/** Drop `container` here until the Apple container pairing test (V0b) passes. */
 export const ENABLED_ROUTES: ReadonlySet<PairingRoute> = new Set([
   'downgrade',
   'device',
   'wsl',
+  'container',
   'orbstack',
 ]);
 

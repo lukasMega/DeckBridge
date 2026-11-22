@@ -105,13 +105,23 @@ function Problem({
   return null;
 }
 
+/** Live stages of the script-started relay, then what to do about a failure. */
+export function RelayProgressView(): preact.JSX.Element {
+  const relay = useStore((s) => s.pairingRoute?.relay ?? null);
+  const mismatch = useStore((s) => s.pairingRoute?.versionMismatch === true);
+  return (
+    <>
+      <Steps relay={relay} />
+      <Problem relay={relay} mismatch={mismatch} />
+    </>
+  );
+}
+
 export function DeviceSetupBody({
   probe,
 }: Readonly<{ probe: PairingProbe | null }>): preact.JSX.Element {
   const [kind, setKind] = useState<RelayCommandKind>('curl');
   const command = useRelayCommand(kind);
-  const relay = useStore((s) => s.pairingRoute?.relay ?? null);
-  const mismatch = useStore((s) => s.pairingRoute?.versionMismatch === true);
   const manual =
     probe === null
       ? ''
@@ -136,11 +146,10 @@ export function DeviceSetupBody({
         />
       </div>
       <p class="step-sub">
-        It downloads and checks DeckBridge, then starts the relay. Keep the terminal open. A
-        Raspberry Pi needs 64-bit Raspberry Pi OS Trixie.
+        It downloads and checks DeckBridge, then starts the relay. Keep the terminal open, or say
+        yes to start it automatically. A Raspberry Pi needs 64-bit Raspberry Pi OS Trixie.
       </p>
-      <Steps relay={relay} />
-      <Problem relay={relay} mismatch={mismatch} />
+      <RelayProgressView />
       <details>
         <summary>Windows PC? Use the manual command</summary>
         <p class="step-sub">Download DeckBridge for Windows from GitHub releases and run:</p>

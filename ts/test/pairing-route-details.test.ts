@@ -175,6 +175,10 @@ test('uninstallCommand', () => {
     uninstallCommand('curl -fsSL "http://x/relay.sh?t=T" | sh -s -- --node'),
     'curl -fsSL "http://x/relay.sh?t=T" | sh -s -- --uninstall',
   );
+  assert.equal(
+    uninstallCommand('curl -fsSL "http://x/relay.sh?t=T" | sh -s -- --container'),
+    'curl -fsSL "http://x/relay.sh?t=T" | sh -s -- --uninstall',
+  );
   assert.equal(uninstallCommand(null), null);
   assert.equal(uninstallCommand('echo hi'), null);
 });
@@ -214,7 +218,7 @@ test('detailsTopic', () => {
   assert.equal(t('wsl'), 'wsl-relay');
   assert.equal(t('orbstack'), 'relay-orbstack');
   assert.equal(t('device'), 'relay-device');
-  assert.equal(t('container'), 'relay-device');
+  assert.equal(t('container'), 'relay-container');
   assert.equal(t('none'), 'relay-device');
   assert.equal(t('downgrade'), 'relay-device');
 });

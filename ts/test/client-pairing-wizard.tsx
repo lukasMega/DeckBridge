@@ -309,6 +309,76 @@ async function reopen(t: Ctx): Promise<void> {
   await act(() => render(null, t.root));
 }
 
+const MAC: PairingProbe = {
+  ...PROBE,
+  platform: 'macOS',
+  wsl: null,
+  mac: {
+    version: '26.1',
+    arch: 'arm64',
+    orbstack: false,
+    container: false,
+    localNetworkBlocked: false,
+  },
+};
+const CONTAINER_RELAY = { ...RELAY, ip: '192.168.1.5', platform: 'container-linux-arm64' } as const;
+
+async function containerFlow(t: Ctx, setProbe: (p: PairingProbe) => void): Promise<void> {
+  setProbe(MAC);
+  await t.mount({ wizardDismissed: true });
+  patch({ pairingWizardOpen: true });
+  await act(() => render(<Stage />, t.root));
+  await t.next();
+  await press(t.choice('On this computer'));
+  await t.next();
+  await t.next();
+  await press(t.choice('No, only this computer'));
+  await t.next();
+  t.check(
+    t.choice('Relay in Apple container')?.textContent.includes('Recommended') === true,
+    'Apple container is recommended on macOS 26 with Apple silicon',
+  );
+  await press(t.choice('Relay in Apple container'));
+  await t.next();
+  t.check(
+    t.calls.includes('POST /api/pairing-route {"route":"container"}'),
+    'Choosing container posts the route',
+  );
+  await act(() => sleep(30));
+  t.check(t.q('#pw-recheck') !== null, 'Without the tool, setup offers Check again');
+  t.check(t.q('.addr-chip') === null, 'Without the tool, there is no command yet');
+  setProbe({ ...MAC, mac: { ...MAC.mac!, container: true } });
+  t.check(
+    t.calls.includes('GET /api/pairing-route/command?kind=container '),
+    'Setup fetches the container command',
+  );
+  t.calls.length = 0;
+  await press(t.q('#pw-recheck'));
+  t.check(
+    t.calls.includes('GET /api/pairing-route/probe?fresh=1 '),
+    'Check again bypasses the probe cache',
+  );
+  t.check(t.q('.addr-chip')?.textContent.includes('Command') === true, 'The command chip shows');
+  t.check(t.q('#pw-progress') !== null, 'The stages are listed');
+  t.check(t.q('#pw-next')?.hasAttribute('disabled') === true, 'Next waits for a running relay');
+  const over = { route: 'container', relayIp: '192.168.64.3' } as const;
+  patch({
+    pairingRoute: route({ ...over, relay: { ...CONTAINER_RELAY, stage: 'running' } } as never),
+  });
+  await act(() => sleep(10));
+  t.check(t.q('#pw-next')?.hasAttribute('disabled') === false, 'A running relay enables Next');
+  await t.next();
+  t.check(
+    t.q('#pairing-wizard')!.textContent.includes('IP of the relay machine') &&
+      t.q('.addr-chip')?.textContent.includes('192.168.64.3') === true,
+    'The add screen shows the container IP',
+  );
+  await press(t.q('#pw-cancel'));
+  patch({ pairingWizardOpen: false });
+  await act(() => render(null, t.root));
+  setProbe(PROBE);
+}
+
 async function banner(t: Ctx): Promise<void> {
   const shown = async (over: Partial<PairingRouteStatus> | null): Promise<boolean> => {
     patch({ pairingRoute: over === null ? null : route(over) });
@@ -328,11 +398,12 @@ export async function runPairingWizard(root: HTMLElement, check: Check): Promise
   const before = getSnapshot();
   const original = globalThis.fetch;
   const calls: string[] = [];
+  let probe = PROBE;
   globalThis.fetch = ((url: string, init?: RequestInit) => {
     const body = (init?.body as string | undefined) ?? '';
     calls.push(`${init?.method ?? 'GET'} ${url} ${body}`);
     let reply: unknown = {};
-    if (url === '/api/pairing-route/probe') reply = PROBE;
+    if (url.startsWith('/api/pairing-route/probe')) reply = probe;
     else if (url.startsWith('/api/pairing-route/command')) {
       reply = {
         command: `${url.endsWith('wget') ? 'wget -qO-' : 'curl -fsSL'} "http://192.168.1.5:44661/relay.sh?t=tok" | sh`,
@@ -349,6 +420,9 @@ export async function runPairingWizard(root: HTMLElement, check: Check): Promise
     await chooseWsl(t);
     await deviceFlow(t);
     await reopen(t);
+    await containerFlow(t, (p) => {
+      probe = p;
+    });
     await banner(t);
   } finally {
     globalThis.fetch = original;

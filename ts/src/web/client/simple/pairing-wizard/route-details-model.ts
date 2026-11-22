@@ -100,7 +100,7 @@ export function appLine(
   return s.paired ? 'Paired' : 'Waiting for the Stream Deck app';
 }
 
-const SH_TAIL = /\| sh(?: -s -- --node)?$/;
+const SH_TAIL = /\| sh(?: -s -- --(?:node|container))?$/;
 
 export function uninstallCommand(run: string | null): string | null {
   if (run === null || !SH_TAIL.test(run)) return null;
@@ -124,5 +124,6 @@ export function relayProblem(s: PairingRouteStatus, ownVersion: string): string 
 
 export function detailsTopic(route: PairingRoute): DocsTopic {
   if (route === 'wsl') return 'wsl-relay';
+  if (route === 'container') return 'relay-container';
   return route === 'orbstack' ? 'relay-orbstack' : 'relay-device';
 }

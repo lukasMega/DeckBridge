@@ -3,7 +3,7 @@ sidebar_position: 7
 sidebar_label: Elgato on the same computer
 title: Elgato app 7.6.1 on the same computer as DeckBridge
 slug: /elgato-same-computer
-description: Elgato Stream Deck 7.6.1 refuses a network dock on its own computer. Fix it with the Fix pairing wizard in DeckBridge - use app 7.6.0, a relay on another device, a relay in WSL on Windows, or a relay in OrbStack on a Mac.
+description: Elgato Stream Deck 7.6.1 refuses a network dock on its own computer. Fix it with the Fix pairing wizard in DeckBridge - use app 7.6.0, a relay on another device, a relay in WSL on Windows, or a relay in Apple container or OrbStack on a Mac.
 ---
 
 # Elgato app 7.6.1 on the same computer as DeckBridge
@@ -31,6 +31,7 @@ marked **Recommended**. If your app is 7.6.0 or older, or on another computer, y
 - **Relay on another device.** See [one command](#one-command), or the
   [manual relay](#manual-relay) on a Windows device.
 - **Relay in WSL** (Windows only). See [Windows with WSL](#windows-wsl).
+- **Relay in Apple container** (Mac only). See [macOS with Apple container](#macos-container).
 - **Relay in OrbStack** (Mac only). See [macOS with OrbStack](#macos-orbstack).
 
 A **relay** is a small program between the app and DeckBridge. The app sees it at a different
@@ -46,9 +47,8 @@ up. **Turn off relay** in Settings undoes this.
 | Use Stream Deck app 7.6.0 | none | none | ~5 min | free | Turn off app updates. You miss newer app fixes. |
 | Relay on another device | ~15 MB on that device | ~30 MB | ~5 min | free if you own one (Raspberry Pi Zero 2 W ~$15) | 64-bit Linux, macOS or Windows; stays on |
 | Relay in WSL on this PC | ~300-600 MB while on | ~1.5-2 GB | ~2 min, or 15 min + restart | free | Windows 10 2004+ or 11 |
+| Relay in Apple container on this Mac | up to 256 MB | ~100 MB | ~5 min | free | macOS 26, Apple silicon, admin password once |
 | Relay in OrbStack on this Mac | ~150 MB-1 GB | ~0.8 GB | ~5 min | free for personal use; $8/month commercial | macOS |
-
-A relay in Apple's `container` tool (macOS 26) is coming later.
 
 </details>
 
@@ -61,7 +61,10 @@ wizard has a `curl` / `wget` / **Node.js** switch):
 curl -fsSL "http://<this computer's IP>:44661/relay.sh?t=<token>" | sh
 ```
 
-Keep the terminal open while you use the deck. After a reboot, run the command again.
+The script asks "Start the relay automatically after a restart? [Y/n]". Answer yes (the
+default) and you can close the terminal: on Linux a systemd user service starts the relay at
+boot, on a Mac a LaunchAgent starts it at login. Answer no and keep the terminal open; after a
+reboot, run the command again. Running the command again replaces the automatic start.
 Linux needs glibc 2.38 or newer (Raspberry Pi OS Trixie, Debian 13, Ubuntu 24.04). A Raspberry
 Pi needs 64-bit Raspberry Pi OS Trixie.
 
@@ -78,13 +81,19 @@ The port must be reachable from your local network. You do not need `--bind`. Th
 - checks the device;
 - downloads the release zip for your DeckBridge version from GitHub, checks it against
   `SHA256SUMS.txt` and unpacks it into `~/.deckbridge-relay` (a second run skips the download);
-- runs `deckbridge relay --target <this computer's IP> --no-advertise` and reports progress.
+- runs `deckbridge relay --target <this computer's IP> --no-advertise` and reports progress;
+- on a yes, saves itself to `~/.deckbridge-relay/relay.sh` and installs the service
+  (`~/Library/LaunchAgents/dev.deckbridge.relay.plist` on a Mac,
+  `~/.config/systemd/user/deckbridge-relay.service` on Linux, plus `loginctl enable-linger`).
+  The service logs to `~/.deckbridge-relay/relay.log` on a Mac and to `journalctl --user -u
+  deckbridge-relay` on Linux. After a DeckBridge update, run the command again to update the
+  relay.
 
 The token only lets the script fetch itself and report progress. It is saved in
 `settings.json`, shown only in the wizard command, and left out of diagnostics and exports.
 DeckBridge ignores any address written inside a report.
 
-To remove everything from the device:
+To remove everything from the device (relay, automatic start and, on a Mac, the container):
 
 ```
 curl -fsSL "<the same URL>" | sh -s -- --uninstall
@@ -249,6 +258,31 @@ into the DeckBridge log file under `wsl-relay`.
 
 </details>
 
+## macOS: pair on the same Mac with Apple container {#macos-container}
+
+:::caution
+New and not yet confirmed to pair with the Stream Deck app. If it fails, please
+[open an issue](https://github.com/lukasMega/DeckBridge/issues/257) with the diagnostics report.
+:::
+
+[Apple container](https://github.com/apple/container) is Apple's free tool for small Linux
+VMs. Each one has its own IP (`192.168.64.x`), so the app sees the relay at a different address.
+It needs macOS 26 and Apple silicon.
+
+1. Install the signed `.pkg` from the
+   [releases page](https://github.com/apple/container/releases) (asks for your password once),
+   then run `container system start` in Terminal. In the wizard, **Check again** finds it.
+2. Paste the wizard's command in Terminal. It downloads the Linux relay to
+   `~/.deckbridge-relay`, starts the container `deckbridge-relay` (Ubuntu 24.04, 256 MB) and
+   reports its IP. The first start pulls the Ubuntu image, which takes a few minutes. Answer
+   yes to the automatic start, and the relay comes back at every login.
+3. In the Stream Deck app, add the container's IP as a Network Dock by IP. The wizard and the
+   Settings pairing row show it. So does `container ls`.
+
+To remove it, run the **Uninstall** command from Settings > "Stream Deck app 7.6.1 pairing".
+It stops and deletes the container and removes the LaunchAgent. If the app stays blocked, see
+[Local Network](#macos-local-network).
+
 ## macOS: pair on the same Mac with OrbStack {#macos-orbstack}
 
 [OrbStack](https://orbstack.dev) runs a small Linux machine on your Mac with its own IP, so
@@ -269,7 +303,7 @@ macOS programs found there on the Mac itself, and that copy cannot listen next t
 
 ### Stream Deck app blocked from the local network {#macos-local-network}
 
-macOS counts the OrbStack machine (and any relay on your network) as local network, so the
+macOS counts the OrbStack machine or Apple container (and any relay on your network) as local network, so the
 Stream Deck app needs the Local Network permission. If it is off, or not yet applied, macOS
 drops every connection to the relay. The relay logs nothing and the app never pairs. The
 wizard and diagnostics show "The Stream Deck app is blocked from the local network". To fix:
@@ -297,8 +331,8 @@ for up to 60 seconds and reconnects by itself. The deck comes back with no new p
 same dock IP. An app that connects during the gap waits. If DeckBridge is not back in time,
 the relay closes the connection. `--hold-seconds <n>` changes the time; `0` turns it off.
 
-The relay itself must keep running. It does not start at login yet: after you stop it or
-restart its computer, start it again.
+The relay itself must keep running. If you chose the automatic start, it starts again after
+a restart. If not, start it again by hand.
 
 <details>
 <summary>More details and limits</summary>

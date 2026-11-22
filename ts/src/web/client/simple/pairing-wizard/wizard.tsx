@@ -13,9 +13,11 @@ import { ScreenView } from './screens.js';
 /** Whether the screen has what Next needs; screens without a question always do. */
 function answered(id: string, a: Answers, status: PairingRouteStatus | null): boolean {
   switch (id) {
-    // The other device must report a running relay before there is an IP to add.
+    // A script-started relay must report running before there is an IP to add.
     case 'setup':
-      return a.route !== 'device' || status?.relay?.stage === 'running';
+      return (
+        (a.route !== 'device' && a.route !== 'container') || status?.relay?.stage === 'running'
+      );
     case 'version':
       return a.version !== undefined;
     case 'where':
