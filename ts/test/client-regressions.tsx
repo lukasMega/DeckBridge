@@ -20,6 +20,7 @@ import { DeviceTuningPanel } from '../src/web/client/simple/device-tuning.js';
 import { DiagnosticsPanel } from '../src/web/client/simple/diagnostics-panel.js';
 import { PushApiPanel } from '../src/web/client/simple/push-api-panel.js';
 import { MultiDeckPanel } from '../src/web/client/simple/multi-deck-panel.js';
+import { KeepIconsPanel } from '../src/web/client/simple/keep-icons-panel.js';
 import { UpdatePanel } from '../src/web/client/simple/update-panel.js';
 import { Collapsible } from '../src/web/client/components/Collapsible.js';
 import { runDeckPage } from './client-deck.js';
@@ -320,6 +321,7 @@ async function runHydrateRegression(): Promise<void> {
     logFilePath: '',
     multiDeck: false,
     keyPressEnabled: false,
+    keepLastIcons: true,
     updateInfo: { enabled: true, current: '0.14.1', updateAvailable: true, latest: '0.15.0' },
     elgatoAutoRestart: { enabled: true, delayS: 10, supported: true },
     extensions: { dir: '/ext', extensions: [] },
@@ -1215,6 +1217,7 @@ async function runKeymapAndDiagnosticsPanels(): Promise<void> {
   await runKeymapLearnNoWireId();
   await runDiagnosticsPanel();
   await runMultiDeckPanel();
+  await runKeepIconsPanel();
   await runPushApiPanel();
   await runDeckPage(root, check);
   await runPairingFlow(root, check);
@@ -1477,6 +1480,28 @@ async function runMultiDeckPanel(): Promise<void> {
       stub.restore();
       await act(() => render(null, root));
     }
+  }
+}
+
+// Last icons: on by default, turning it off posts enabled:false.
+async function runKeepIconsPanel(): Promise<void> {
+  const stub = stubFetch(() => ({ payload: { ok: true } }));
+  try {
+    await act(() => render(<KeepIconsPanel enabled={true} />, root));
+    await settle();
+    const box = (): HTMLInputElement | null => root.querySelector('#toggle-keep-icons');
+    check(box()?.checked === true, 'Last icons toggle starts on (the default)');
+    await click('#toggle-keep-icons');
+    await settle();
+    const post = stub.calls.find((c) => c.url === '/api/keep-last-icons');
+    check(
+      (post?.body as { enabled?: boolean } | undefined)?.enabled === false,
+      'Turning it off posts enabled:false',
+    );
+    check(box()?.checked === false, 'The toggle updates after a successful post');
+  } finally {
+    stub.restore();
+    await act(() => render(null, root));
   }
 }
 

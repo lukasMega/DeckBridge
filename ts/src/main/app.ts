@@ -15,6 +15,7 @@ import { log, setWebUILog, setLogLevel, step } from '../shared/logger.js';
 import { startLogFile, stopLogFile, activeLogFilePath } from '../infra/log-file.js';
 import { logElgatoAppVersion } from '../infra/elgato-app.js';
 import { setupNativeLibs } from '../infra/native-libs.js';
+import { FrameStore } from '../infra/frame-store.js';
 import { acquireInstanceLock, alreadyRunningMessage } from '../infra/single-instance.js';
 import { DriverManager } from './driver-manager.js';
 import { ElgatoAutoRestart, createElgatoAutoRestartDeps } from './elgato-auto-restart.js';
@@ -168,9 +169,15 @@ const coraDockFactory: CoraDockFactory = (identity) => {
   return new CoraDock(s, cs, `dock ${identity.index}`);
 };
 
+// The previous run's key frames, read before the first probe can attach a dock.
+const frameStore = new FrameStore();
+await frameStore.setEnabled(settings.keepLastIcons);
+await step('deckBr', 'saved icons load', () => frameStore.load());
+
 const driverManager = new DriverManager({
   webui,
   settings,
+  frameStore,
   cora: primaryDock,
   getShuttingDown: () => shuttingDown,
   coraDockFactory,
@@ -240,6 +247,7 @@ const shutdown = createShutdown({
     ['extensions', () => Promise.resolve(webui.extensions.dispose())],
     ['browser deck', () => virtualDeck.stop()],
     ['docks', () => driverManager.shutdown()],
+    ['saved icons', () => frameStore.flush()],
     ['webui', () => webui.stop()],
     ['tray', async () => tray?.close()],
     ['settings writers', () => Promise.allSettled(settingsWriters)],
@@ -302,6 +310,12 @@ webui.on('setMultiDeck', (enabled: boolean) => {
   driverManager.setMultiDeck(enabled).catch((err: unknown) => {
     log('error', 'deckBr', `setMultiDeck(${enabled}) failed: ${(err as Error).message}`);
   });
+});
+
+// Keep-last-icons switch: off deletes the saved files and blanks keys still showing one.
+webui.on('setKeepLastIcons', (enabled: boolean) => {
+  if (!enabled) driverManager.dropStaleFrames();
+  void frameStore.setEnabled(enabled);
 });
 
 // Deck picker changed (WebUI or settings import): stop decks that are no longer chosen.

@@ -178,6 +178,8 @@ export default defineConfig([
         { type: 'app', mode: 'full', pattern: 'src/main/**' },
         { type: 'dev-entry', mode: 'full', pattern: 'src/dev/**' },
         { type: 'cli', mode: 'full', pattern: 'src/cli/**' },
+        // The Node.js relay (separate bundle, build.mjs --relay-node): a tjs shim over node:*.
+        { type: 'node-relay', mode: 'full', pattern: 'src/node/**' },
         // shared/ holds zero-FFI leaves any tier may import: worker-lifecycle.ts (spawn +
         // deferred terminate for every worker host), key-map.ts + splash-sender.ts (pure, so
         // main never pulls translator.ts's ffi/image-proc onto the main thread).
@@ -217,6 +219,13 @@ export default defineConfig([
             { from: { element: { type: 'ffi' } }, allow: { to: { element: { type: 'ffi' } } } },
             { from: { element: { type: 'cli' } }, allow: { to: { element: { type: 'cli' } } } },
             { from: { element: { type: 'dev-entry' } }, allow: { to: { element: { type: 'dev-entry' } } } },
+            { from: { element: { type: 'node-relay' } }, allow: { to: { element: { type: 'node-relay' } } } },
+            {
+              from: { element: { type: 'node-relay' } },
+              allow: { to: { element: { type: ['app', 'platform'] } } },
+              message:
+                'node-relay is meant to import only main/relay/** (the relay core) and platform/accept-guard.ts (this policy allows all of app/platform); build.mjs fails the Node bundle on any non-node: import.',
+            },
             // mdns-advertiser.ts (infra) needs the native Windows mDNS advertise
             // (ffi/mdns.ts) — a fire-and-forget dlopen call (register) / a blocking
             // dlopen call only on stop(), never device I/O. Other infra files gain

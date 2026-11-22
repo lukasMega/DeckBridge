@@ -5,14 +5,18 @@
 // output and exit status. Continues past failures; exits non-zero if any test failed.
 //
 // Env (provided by mise): TJS, DECKBRIDGE_NATIVE_LIB. Invoked by [tasks.test] in mise.toml.
+// `--node`: only the relay core tests, on Node.js via ts/src/node/tjs-shim.ts ([tasks.test-relay-node]):
+// the Node.js relay (deckbridge-relay-v<ver>.mjs) ships that same code.
 import { spawnSync } from 'node:child_process';
 import { readdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const tsDir = join(dirname(fileURLToPath(import.meta.url)), '..', 'ts');
+const nodeMode = process.argv.includes('--node');
+const NODE_TESTS = /^relay-(?:args|connect|core|hold|identity|recovery)\.test\.ts$/;
 const tjs = process.env.TJS;
-if (!tjs) {
+if (!tjs && !nodeMode) {
   console.error('TJS env var not set — run via `mise run test`');
   process.exit(1);
 }
@@ -28,6 +32,7 @@ const opts = { cwd: tsDir, encoding: 'utf8' };
 const files = readdirSync(join(tsDir, 'test'))
   .filter((f) => f.endsWith('.test.ts'))
   .filter((f) => process.env.CI || !CI_ONLY_TESTS.has(f))
+  .filter((f) => !nodeMode || NODE_TESTS.test(f))
   .sort();
 
 const verbose = Boolean(process.env.VERBOSE);
@@ -42,7 +47,7 @@ for (const file of files) {
     return seconds > 0.5 ? ` ⏲ (${seconds.toFixed(2)}s)` : '';
   };
 
-  const build = spawnSync('node', ['build.mjs', '--test', name], opts);
+  const build = spawnSync('node', ['build.mjs', '--test', name, ...(nodeMode ? ['--node'] : [])], opts);
   if (build.status !== 0) {
     console.log(`✘ ${label}${duration()}`);
     process.stdout.write((build.stdout ?? '') + (build.stderr ?? ''));
@@ -52,7 +57,9 @@ for (const file of files) {
     continue;
   }
 
-  const run = spawnSync(tjs, ['run', `dist/test/${name}.js`], opts);
+  const run = nodeMode
+    ? spawnSync('node', [`dist/test-node/${name}.mjs`], opts)
+    : spawnSync(tjs, ['run', `dist/test/${name}.js`], opts);
   if (run.status !== 0) {
     console.log(`✘ ${label}${duration()}`);
     process.stdout.write((run.stdout ?? '') + (run.stderr ?? ''));
@@ -66,8 +73,11 @@ for (const file of files) {
   if (verbose) console.log(`✔ ${label}${duration()}`);
 }
 
+const runtime = nodeMode ? ' on Node.js' : '';
 console.log(
-  failed ? `✘ tests: ${failed} of ${files.length} files failed` : `✔ tests (${files.length} files)`,
+  failed
+    ? `✘ tests${runtime}: ${failed} of ${files.length} files failed`
+    : `✔ tests${runtime} (${files.length} files)`,
 );
 
 process.exit(rc);

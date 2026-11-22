@@ -8,6 +8,8 @@ import { blitImage, canvasSliceToBmp, transformImageForDevice } from './translat
 import { mk2IndexToDeviceImgId } from '../shared/key-map.js';
 import { DumpDir, DumpQueue, newDumpTag } from './image-dump.js';
 import { hashJpeg } from '../shared/image-hash.js';
+import { badgeCorner } from './badge-corner.js';
+import { splashSpec } from '../shared/splash-spec.js';
 import { imageCache, makeCacheKey, specRevision } from './image-cache.js';
 import type { DeviceImageFormat, DeviceImageSpec, DeviceModel } from '../devices/driver.js';
 import type { TouchStripOptions, TouchWindowRegion } from '../shared/types.js';
@@ -140,6 +142,7 @@ export function renderImage(
   keyIndex: number,
   coraBytes: Uint8Array,
   format: 'jpeg' | 'bmp',
+  stale = false,
 ): { hash: string; cached: boolean } {
   // Capture the raw input first so it's saved even if the transform throws.
   const rawDump = dumpRawReceived(keyIndex, coraBytes, format);
@@ -148,7 +151,17 @@ export function renderImage(
   // at open()/'setOverrides' time — see devices/model-overrides.ts).
   const eff = model.image;
   const frameHash = hashJpeg(coraBytes);
-  const hash = makeCacheKey(model.id, frameHash, 'def', revisionFor(model));
+  // A passthrough is forwarded as-is, so it has nothing to badge (and a stale frame may
+  // share its entry with a fresh one).
+  const passthrough = (format === 'bmp' && eff.format === 'bmp') || eff.transform === 'passthrough';
+  const badge = stale && !passthrough ? badgeCorner(splashSpec(model)) : 0;
+  // The corner is in the key: a badged and a clean render of the same frame differ.
+  const hash = makeCacheKey(
+    model.id,
+    frameHash,
+    badge ? `stale${badge}` : 'def',
+    revisionFor(model),
+  );
   let entry = imageCache.get(hash);
   const cached = entry !== undefined;
 
@@ -159,14 +172,14 @@ export function renderImage(
     // Forward the input bytes unchanged when no re-encode is needed: either a
     // true gen1 device (the desktop already sent native BMP) or a model whose
     // CORA JPEG is already in the correct device format ('passthrough').
-    if ((format === 'bmp' && eff.format === 'bmp') || eff.transform === 'passthrough') {
+    if (passthrough) {
       nativeBytes = Buffer.from(coraBytes);
       perfOnRender(0);
     } else {
       // Includes K1 Pro: advertised as a Mini, so the app sends gen1 BMP, but the
       // device needs JPEG — decode the BMP and re-encode to native.
       // (image::load_from_memory auto-detects BMP vs JPEG input.)
-      nativeBytes = transformImageForDevice(coraBytes, eff);
+      nativeBytes = transformImageForDevice(coraBytes, eff, badge);
       perfOnRender(Date.now() - tStart);
     }
 

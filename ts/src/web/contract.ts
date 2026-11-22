@@ -430,6 +430,8 @@ export interface StateResponse extends StatusSnapshot {
   multiDeck: boolean;
   /** Click-to-press opt-in (settings.json `webuiKeyPress`): the preview may fire key presses. */
   keyPressEnabled: boolean;
+  /** Keep the last key icons across a restart (settings.json `keepLastIcons`, default on). */
+  keepLastIcons: boolean;
   /** GitHub-release update check (update-check.ts) — cached, no network. */
   updateInfo: UpdateInfo;
   /** Elgato-app auto-restart opt-out + grace delay (settings.json
@@ -550,6 +552,7 @@ export type DocsTopic =
   | 'qr-code'
   | 'multi-deck'
   | 'click-to-press'
+  | 'last-icons'
   | 'push-api'
   | 'extensions'
   | 'side-keys'

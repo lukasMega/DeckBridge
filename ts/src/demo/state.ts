@@ -96,6 +96,7 @@ export function buildStateResponse(s: DemoState): StateResponse {
     logFilePath: '',
     multiDeck: false,
     keyPressEnabled: true,
+    keepLastIcons: true,
     updateInfo: { enabled: false, current: __VERSION__, updateAvailable: false },
     elgatoAutoRestart: { enabled: false, delayS: 0, supported: true },
     extensions: { dir: '', extensions: [] },

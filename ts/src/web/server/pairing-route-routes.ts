@@ -25,7 +25,9 @@ export const pairingRouteRoutes: Route[] = [
   post('/api/pairing-route/dismiss', ({ pairingRoute }) => json(pairingRoute.dismiss())),
   get('/api/pairing-route/command', async ({ pairingRoute, url }) => {
     const kind = url.searchParams.get('kind');
-    if (kind !== 'curl' && kind !== 'wget') return badRequest('kind must be curl or wget');
+    if (kind !== 'curl' && kind !== 'wget' && kind !== 'node') {
+      return badRequest('kind must be curl, wget or node');
+    }
     const command = await pairingRoute.command(kind);
     // No script route selected, or no LAN address: nothing to run.
     return command === null ? notFound() : json({ command });

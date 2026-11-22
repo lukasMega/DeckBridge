@@ -39,7 +39,8 @@ export function deviceScript(p: DeviceScriptParams): string {
   // as events hold no quotes or backslashes, so the JSON body needs no escaping.
   return `#!/bin/sh
 # DeckBridge relay installer, served by DeckBridge. Safe to run again.
-# Remove it again with: curl -fsSL "${selfUrl}?t=<token>" | sh -s -- --uninstall
+# Options: --node runs the Node.js relay (Macs that block the binary's network);
+# --uninstall removes it: curl -fsSL "${selfUrl}?t=<token>" | sh -s -- --uninstall
 set -eu
 
 VERSION='${version}'
@@ -55,6 +56,7 @@ SELF_IP=
 REPORTED=
 RELAY_PID=
 HB_PID=
+NODE=
 
 # A DeckBridge that went away must never abort the install, hence the \`|| true\`.
 event() {
@@ -117,8 +119,9 @@ stop_old() {
   [ -f "$DIR/relay.pid" ] || return 0
   old=$(cat "$DIR/relay.pid" 2>/dev/null || true)
   case "$old" in '' | *[!0-9]*) return 0 ;; esac
-  case "$(ps -p "$old" -o comm= 2>/dev/null || true)" in
-    *deckbridge*) kill "$old" 2>/dev/null || true; sleep 1 ;;
+  case "$(ps -p "$old" -o args= 2>/dev/null || true)" in
+    # Only a relay: after a reboot the stale pid may belong to anything.
+    *'deckbridge relay'* | *deckbridge-relay.mjs*) kill "$old" 2>/dev/null || true; sleep 1 ;;
   esac
 }
 
@@ -131,10 +134,17 @@ detect() {
   case "$(uname -m)" in
     aarch64 | arm64) arch=arm64 ;;
     x86_64 | amd64) arch=x86_64 ;;
-    *) fail "Unsupported CPU: $(uname -m)" ;;
+    *) if [ -n "$NODE" ]; then arch=$(uname -m); else fail "Unsupported CPU: $(uname -m)"; fi ;;
   esac
   PLATFORM="$os-$arch"
-  if [ "$os" = linux ]; then
+  if [ -n "$NODE" ]; then
+    PLATFORM="node-$PLATFORM"
+    command -v node >/dev/null 2>&1 || fail "Install Node.js 20 or newer from nodejs.org and run this again."
+    v=$(node -v 2>/dev/null || true)
+    v=\${v#v}
+    case "\${v%%.*}" in '' | *[!0-9]*) fail "Could not read the Node.js version." ;; esac
+    [ "\${v%%.*}" -ge 20 ] || fail "This is Node.js $v; the relay needs Node.js 20 or newer (nodejs.org)."
+  elif [ "$os" = linux ]; then
     glibc=$(getconf GNU_LIBC_VERSION 2>/dev/null | sed 's/^glibc //' || true)
     major=\${glibc%%.*}
     minor=\${glibc#*.}
@@ -146,26 +156,40 @@ detect() {
   fi
 }
 
+download() {
+  STEP=downloading
+  event downloading
+  echo "Downloading $1 ..."
+  fetch "$BASE/$1" "$1" || fail "Download failed. Check the network, and that release v$VERSION exists."
+  fetch "$BASE/SHA256SUMS.txt" SHA256SUMS.txt || fail "Download of the checksum list failed."
+  STEP=installing
+  event installing
+  # The release list names files like "./deckbridge-v1-linux-arm64.zip".
+  want=$(awk -v z="$1" '{ n = $2; sub("^[*]", "", n); sub("^[.]/", "", n); if (n == z) print $1 }' SHA256SUMS.txt)
+  got=$(sha_of "$1")
+  if [ -z "$want" ] || [ "$want" != "$got" ]; then
+    rm -f "$1" SHA256SUMS.txt
+    fail "Checksum mismatch. The download was removed."
+  fi
+}
+
+install_node() {
+  if [ -f ./deckbridge-relay.mjs ] && [ -f .verified-node ]; then return 0; fi
+  file="deckbridge-relay-v$VERSION.mjs"
+  download "$file"
+  mv "$file" deckbridge-relay.mjs
+  rm -f SHA256SUMS.txt
+  : > .verified-node
+}
+
 install() {
   dir="$DIR/$VERSION"
   zip="deckbridge-v$VERSION-$PLATFORM.zip"
   mkdir -p "$dir"
   cd "$dir"
+  if [ -n "$NODE" ]; then install_node; return 0; fi
   if [ -x ./deckbridge ] && [ -f .verified ]; then return 0; fi
-  STEP=downloading
-  event downloading
-  echo "Downloading $zip ..."
-  fetch "$BASE/$zip" "$zip" || fail "Download failed. Check the network, and that release v$VERSION exists."
-  fetch "$BASE/SHA256SUMS.txt" SHA256SUMS.txt || fail "Download of the checksum list failed."
-  STEP=installing
-  event installing
-  # The release list names files like "./deckbridge-v1-linux-arm64.zip".
-  want=$(awk -v z="$zip" '{ n = $2; sub("^[*]", "", n); sub("^[.]/", "", n); if (n == z) print $1 }' SHA256SUMS.txt)
-  got=$(sha_of "$zip")
-  if [ -z "$want" ] || [ "$want" != "$got" ]; then
-    rm -f "$zip" SHA256SUMS.txt
-    fail "Checksum mismatch. The download was removed."
-  fi
+  download "$zip"
   unpack "$zip"
   # The release zip holds one folder named like the zip; its files belong next to us.
   inner="deckbridge-v$VERSION-$PLATFORM"
@@ -176,12 +200,18 @@ install() {
   : > .verified
 }
 
+# exec: run in the background, so $! is the relay itself, not a subshell.
+start_relay() {
+  if [ -n "$NODE" ]; then exec node ./deckbridge-relay.mjs relay "$@"; fi
+  exec ./deckbridge relay "$@"
+}
+
 run_relay() {
   STEP=starting
   event starting
   [ "$(uname -s)" = Darwin ] && echo "Allow incoming connections when macOS asks."
   stop_old
-  ./deckbridge relay --target "$TARGET" --target-port "$TARGET_PORT" --no-advertise --name "DeckBridge Relay" </dev/null &
+  start_relay --target "$TARGET" --target-port "$TARGET_PORT" --no-advertise --name "DeckBridge Relay" </dev/null &
   RELAY_PID=$!
   echo "$RELAY_PID" > "$DIR/relay.pid"
   sleep 2
@@ -200,7 +230,12 @@ uninstall() {
 }
 
 main() {
-  if [ "\${1:-}" = "--uninstall" ]; then uninstall; return 0; fi
+  case "\${1:-}" in
+    --uninstall) uninstall; return 0 ;;
+    --node) NODE=1 ;;
+    '') ;;
+    *) echo "Unknown option $1. Use --node or --uninstall." >&2; exit 2 ;;
+  esac
   trap cleanup EXIT
   trap 'exit 130' INT
   trap 'exit 143' TERM

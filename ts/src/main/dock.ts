@@ -65,7 +65,11 @@ export class Dock {
   driver: DockDriver | null = null;
 
   /** The Elgato app's last CORA frames: replayed on replug, re-rendered on live tuning. */
-  private readonly frames = new LastFrames();
+  readonly frames = new LastFrames({
+    driver: () => this.driver,
+    deviceKey: () => this.identity?.deviceKey,
+    saver: () => this.hooks.frameSaver,
+  });
   /** Display widgets on the extra keys / strip zones; created per attach. */
   private widgets: ExtraKeyWidgets | null = null;
   private readonly encoders: EncoderActions;
@@ -214,6 +218,7 @@ export class Dock {
     this.seed(driver);
     if (real) {
       sendSplashImages(driver);
+      this.frames.seedSaved();
       this.frames.replay(driver, this.hooks.image);
     } else {
       this.frames.clear();
@@ -230,6 +235,7 @@ export class Dock {
     if (!driver) return null;
     this.widgets?.stop();
     this.widgets = null;
+    this.frames.pause();
     driver.removeAllListeners();
     this.driver = null;
     this.wideStats.sync(); // releases the sampler

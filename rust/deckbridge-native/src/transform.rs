@@ -1,3 +1,4 @@
+use crate::badge::draw_badge;
 use crate::bmp::encode_bmp;
 use crate::jpeg::encode_jpeg;
 use crate::pad::pad_to_canvas;
@@ -87,6 +88,7 @@ pub(crate) fn transform(
     crop_y: u32,
     crop_w: u32,
     crop_h: u32,
+    badge: u32,
 ) -> Result<Vec<u8>, String> {
     let mut img = decode_limited(input)?;
 
@@ -151,6 +153,10 @@ pub(crate) fn transform(
         img = imageops::unsharpen(&img, sigma, 0);
     }
 
+    // Last pixel step: the badge sits in a corner of the final output, so it is never
+    // resized, rotated or sharpened away.
+    draw_badge(&mut img, badge);
+
     // Only true passthrough (skip_resize with no padding) is exempt from max_bytes
     // enforcement; pad mode must still honour the cap (pad output is small, so this
     // rarely triggers).
@@ -181,6 +187,9 @@ pub(crate) fn transform(
 /// source frame. Inputs larger than the canvas in either axis fall back to a resize
 /// (with `resize_filter`), unless bit 4 is set (5/6/7 = crop + black/average/edge):
 /// then the oversize axes are centre-cropped 1:1 instead.
+/// badge: 0 = none, else a red "!" badge in one corner of the final output (draws after
+/// resize/rotate/flip, so every format gets it): 1 = top-left, 2 = top-right,
+/// 3 = bottom-right, 4 = bottom-left. See badge.rs.
 /// crop_px: pixels trimmed from every side of the source before rotate/flip/resize
 /// (0 = none); ignored when it would leave a non-positive dimension.
 ///
@@ -217,6 +226,7 @@ pub unsafe extern "C" fn image_proc_transform(
     crop_y: u32,    // region-crop top offset
     crop_w: u32,    // region-crop width (0 = no region crop)
     crop_h: u32,    // region-crop height (0 = no region crop)
+    badge: u32,     // 0 = none; 1..=4 = red "!" badge top-left/top-right/bottom-right/bottom-left
     out_buf: *mut u8,
     out_cap: usize,
     err_buf: *mut u8,
@@ -252,6 +262,7 @@ pub unsafe extern "C" fn image_proc_transform(
             crop_y,
             crop_w,
             crop_h,
+            badge,
         ) {
             Ok(bytes) => {
                 if bytes.len() > out_cap {

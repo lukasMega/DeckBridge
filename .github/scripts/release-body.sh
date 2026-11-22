@@ -7,7 +7,7 @@
   echo
   echo "| Artifact | Report |"
   echo "| --- | --- |"
-  for file in artifacts/*.zip artifacts/*-setup.exe artifacts/*.dmg; do
+  for file in artifacts/*.zip artifacts/*-setup.exe artifacts/*.dmg artifacts/*.mjs; do
     [ -f "$file" ] || continue
     url=$(grep -F "${file}=" "$VT_OUT" 2>/dev/null | head -n1 | cut -d= -f2-)
     if [ -n "$url" ]; then

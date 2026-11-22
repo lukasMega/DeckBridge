@@ -20,7 +20,7 @@ export interface RelaySessionClose {
   closedBy: 'E' | 'D' | 'relay';
   /**
    * 'FIN' | 'error <msg>' | 'connect failed <msg>' | 'connect timeout' | 'shutdown' |
-   * 'hold expired' | 'hold buffer full'
+   * 'hold expired' | 'hold buffer full' | 'upstream closed before sending (<reason>)'
    */
   how: string;
 }
@@ -261,6 +261,13 @@ export class Session {
     for (;;) {
       const reason = await this.connectAndPump(cw);
       if (reason === null) return;
+      // An upstream that answered the dial but sent nothing before it ended is a rejection
+      // (DeckBridge refuses a second primary client), not an outage: end the session so the
+      // app redials, and do not report the upstream lost.
+      if (this.everLive && this.bytesDown === 0) {
+        this.finish('D', `upstream closed before sending (${reason})`);
+        return;
+      }
       this.lost(reason);
       if (this.heldSince === null) {
         const since = this.everLive ? Date.now() : this.startedAt;

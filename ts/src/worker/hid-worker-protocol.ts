@@ -26,7 +26,8 @@ export type MainToWorker =
   // Raw CORA image: the worker transforms (resize/rotate/encode) + caches it,
   // then writes it to the device. Off the main thread so the FFI
   // transform never stalls the CORA ACK loop (see P1).
-  | { type: 'image'; keyIndex: number; bytes: Uint8Array; format: 'jpeg' | 'bmp' }
+  // `stale`: a saved frame the app has not refreshed yet — drawn with a red "!" badge.
+  | { type: 'image'; keyIndex: number; bytes: Uint8Array; format: 'jpeg' | 'bmp'; stale?: boolean }
   // Source image with an explicit transform spec (which may differ from
   // model.image — splash orientation overrides, or a widget's own geometry;
   // see splash-sender.ts and extra-keys.ts). The worker transforms with the

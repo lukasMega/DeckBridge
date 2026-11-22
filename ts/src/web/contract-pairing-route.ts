@@ -93,7 +93,7 @@ export interface RelayEventBody {
   selfIp?: string;
 }
 
-export type RelayCommandKind = 'curl' | 'wget';
+export type RelayCommandKind = 'curl' | 'wget' | 'node';
 
 export interface RelayCommandResponse {
   /** One line to paste; carries the script token. */

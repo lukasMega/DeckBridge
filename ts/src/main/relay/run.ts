@@ -279,6 +279,7 @@ export async function runRelayCommand(rest: string[]): Promise<number> {
       },
       onResume: (id, route, heldMs) => {
         rlog('info', `${route} #${id} resumed after ${(heldMs / 1000).toFixed(1)} s`);
+        onUpstreamLost.onResumed();
       },
       onDroppedAccept: (route, error) => {
         rlog('warn', `a client on ${route} reset before the relay accepted it (${error})`);

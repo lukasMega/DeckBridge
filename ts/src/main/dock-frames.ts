@@ -3,7 +3,8 @@
 // so these frames are what a replug replays and a live tuning change re-renders.
 // The WebUI keeps its own preview cache (web/server/image-channel.ts): that one
 // blanks on disconnect, this one must survive it.
-import type { DockDriver } from '../devices/driver.js';
+import type { DockDriver, RenderOptions } from '../devices/driver.js';
+import type { FrameSaver, SavedFrames } from '../infra/frame-store.js';
 import type { ImageEvent, TouchWindowRegion } from '../shared/types.js';
 import type { ElgatoChildServer } from '../cora/child-server.js';
 import { perfOnArrival, perfOnWebUI } from './image-perf.js';
@@ -13,8 +14,32 @@ import { sendSplashImages } from '../shared/splash-sender.js';
 export type ImageFormat = 'jpeg' | 'bmp';
 export type DockFrame = { data: Buffer; format: ImageFormat };
 
+/** After the first fresh frame, a saved frame the app never repaints (another profile)
+ *  is blanked and forgotten this long after. */
+export const STALE_EXPIRY_MS = 30_000;
+const STALE: RenderOptions = { stale: true };
+
+/** What the frames need from their dock. */
+export interface FramesLink {
+  driver(): DockDriver | null;
+  deviceKey(): string | undefined;
+  /** Absent for a dock whose frames are not kept across a restart. */
+  saver(): FrameSaver | undefined;
+  /** Test seam; production uses STALE_EXPIRY_MS. */
+  expiryMs?: number;
+}
+
 export class LastFrames {
   private readonly frames = new Map<number, DockFrame>();
+  /** Keys whose frame is a saved one from the last run, drawn with a "!" until the app
+   *  sends a fresh one. Always a subset of `frames`. */
+  private readonly stale = new Set<number>();
+  private expiry: ReturnType<typeof setTimeout> | null = null;
+  /** Time of the newest fresh frame, else of the saved file: saving never refreshes a stale frame's age. */
+  private savedAt: number | null = null;
+
+  constructor(private readonly link?: FramesLink) {}
+
   /** Model of the driver the frames were painted on: a different device must not inherit them. */
   private modelId: string | null = null;
   /** Keys the verify wizard painted during its hold; null = not held (Dock.setVerifyHold). */
@@ -23,10 +48,76 @@ export class LastFrames {
   /** No copy: `data` is a fresh Buffer.concat result from image-assembler.ts that nothing mutates. */
   record(key: number, data: Buffer, format: ImageFormat): void {
     this.frames.set(key, { data, format });
+    this.stale.delete(key);
+    this.savedAt = Date.now();
+    this.persist();
+    if (this.stale.size > 0)
+      this.expiry ??= setTimeout(() => this.expireStale(), this.link?.expiryMs ?? STALE_EXPIRY_MS);
   }
 
   clear(): void {
+    const had = this.frames.size > 0;
     this.frames.clear();
+    this.stale.clear();
+    this.pause();
+    if (had) this.persist();
+  }
+
+  /** Stop the stale-expiry countdown (detach/stop); the next fresh frame restarts it. */
+  pause(): void {
+    if (this.expiry !== null) clearTimeout(this.expiry);
+    this.expiry = null;
+  }
+
+  /** Start from the last run's frames, every one stale. Ignored once frames exist. */
+  seedSaved(): void {
+    const key = this.link?.deviceKey();
+    const saved = key ? this.link?.saver()?.take(key) : undefined;
+    if (!saved || this.frames.size > 0) return;
+    this.modelId = saved.modelId;
+    this.savedAt = saved.savedAt;
+    for (const f of saved.frames) {
+      this.frames.set(f.key, {
+        data: Buffer.from(f.data),
+        format: f.format,
+      });
+      this.stale.add(f.key);
+    }
+  }
+
+  /** Blank every key still showing a saved frame and forget it (the countdown, or the setting off). */
+  expireStale(): void {
+    this.pause();
+    if (this.stale.size === 0) return;
+    const driver = this.link?.driver();
+    for (const key of this.stale) {
+      this.frames.delete(key);
+      const wire = driver ? mk2IndexToDeviceImgId(key, driver.model) : -1;
+      if (driver && wire >= 0) driver.clearKey(wire);
+    }
+    this.stale.clear();
+    this.persist();
+  }
+
+  /** O(1): the store only marks itself dirty; the snapshot is taken when it writes. */
+  private persist(): void {
+    const key = this.link?.deviceKey();
+    if (key) this.link?.saver()?.save(key, this.snapshotFn);
+  }
+
+  private snapshot(): SavedFrames | null {
+    if (!this.modelId || this.frames.size === 0) return null;
+    return {
+      modelId: this.modelId,
+      savedAt: this.savedAt ?? Date.now(),
+      frames: [...this.frames].map(([key, { data, format }]) => ({ key, format, data })),
+    };
+  }
+
+  private readonly snapshotFn = (): SavedFrames | null => this.snapshot();
+
+  private opts(key: number): RenderOptions | undefined {
+    return this.stale.has(key) ? STALE : undefined;
   }
 
   has(key: number): boolean {
@@ -80,7 +171,7 @@ export class LastFrames {
   ): void {
     if (this.held) return;
     for (const [key, { data, format }] of this.frames) {
-      driver.renderCoraImage(key, data, format);
+      driver.renderCoraImage(key, data, format, this.opts(key));
       mirror?.(key, data, format);
     }
   }
@@ -90,7 +181,7 @@ export class LastFrames {
     if (this.held) return;
     for (const key of keys) {
       const frame = this.frames.get(key);
-      if (frame) driver.renderCoraImage(key, frame.data, frame.format);
+      if (frame) driver.renderCoraImage(key, frame.data, frame.format, this.opts(key));
     }
   }
 
@@ -102,11 +193,11 @@ export class LastFrames {
   ): void {
     if (this.modelId === driver.model.id) {
       for (const [key, { data, format }] of this.held ? [] : this.frames) {
-        driver.renderCoraImage(key, data, format);
+        driver.renderCoraImage(key, data, format, this.opts(key));
         mirror?.(key, data, format);
       }
     } else {
-      this.frames.clear();
+      this.clear();
     }
     this.modelId = driver.model.id;
   }

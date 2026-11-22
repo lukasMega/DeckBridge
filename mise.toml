@@ -338,7 +338,7 @@ run = "node scripts/device-new.mjs"
 [tasks.ci-checks]
 description = "Lint, typecheck, core/browser tests, knip, check-loc, check-size, and generated device docs in parallel"
 quiet = true
-depends = ["lint", "types", "test", "test-client", "test-security", "knip", "check-loc", "check-size", "devices-check"]
+depends = ["lint", "types", "test", "test-relay-node", "test-client", "test-security", "knip", "check-loc", "check-size", "devices-check"]
 run = "echo '✔ ci-checks'"
 timeout = "120s"
 
@@ -495,6 +495,22 @@ wait_for = ["lint", "compile", "docs-check", "e2e-browser", "test-client"]
 env = { DECKBRIDGE_BUILD_MOCK = "1" }
 run = "node scripts/run-tests.mjs"
 timeout = "240s"
+
+[tasks.test-relay-node]
+description = "Run the relay core tests on Node.js (the Node.js relay release asset shares that code)"
+quiet = true
+depends = ["ts-install"]
+# Same port bases as the tjs run: never in parallel with it.
+wait_for = ["test"]
+run = "node scripts/run-tests.mjs --node"
+timeout = "120s"
+
+[tasks.build-relay-node]
+description = "Build the Node.js relay -> ts/dist/deckbridge-relay.mjs"
+quiet = true
+dir = "ts"
+depends = ["ts-install"]
+run = "node ../scripts/quiet.mjs --fail-only -- node build.mjs --relay-node"
 
 [tasks.test-client]
 description = "Run Preact browser regression tests"

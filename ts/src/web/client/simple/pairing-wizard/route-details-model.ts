@@ -100,7 +100,7 @@ export function appLine(
   return s.paired ? 'Paired' : 'Waiting for the Stream Deck app';
 }
 
-const SH_TAIL = /\| sh$/;
+const SH_TAIL = /\| sh(?: -s -- --node)?$/;
 
 export function uninstallCommand(run: string | null): string | null {
   if (run === null || !SH_TAIL.test(run)) return null;

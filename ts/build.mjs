@@ -368,6 +368,48 @@ const shared = {
 };
 
 mkdirSync(path.resolve(dir, 'dist'), { recursive: true });
+
+// `--relay-node`: the relay core as one Node.js 20+ script (release asset
+// deckbridge-relay-v<ver>.mjs) for Macs that block the relay binary's network.
+// `--test <name> --node`: a relay test on that same shim (scripts/run-tests.mjs --node).
+const isNodeTest = isTest && process.argv.includes('--node');
+if (process.argv.includes('--relay-node') || isNodeTest) {
+  const relayOut = isNodeTest
+    ? path.resolve(dir, `dist/test-node/${testName}.mjs`)
+    : path.resolve(dir, 'dist/deckbridge-relay.mjs');
+  const stubMdns = {
+    name: 'stub-mdns-advertiser',
+    setup(b) {
+      b.onResolve({ filter: /[/\\]infra[/\\]mdns-advertiser\.js$/ }, () => ({
+        path: path.resolve(dir, 'src/node/mdns-stub.ts'),
+      }));
+    },
+  };
+  const result = await build({
+    ...shared,
+    platform: 'node',
+    target: 'node20',
+    external: [],
+    metafile: true,
+    entryPoints: [isNodeTest ? entryPoint : `${dir}/src/node/relay-entry.ts`],
+    outfile: relayOut,
+    plugins: [stubMdns],
+    ...(isNodeTest
+      ? {
+          inject: [...shared.inject, './src/node/install-shim.ts'],
+          alias: { ...shared.alias, 'tjs:assert': 'node:assert' },
+        }
+      : { banner: { js: '#!/usr/bin/env node' } }),
+  });
+  const imports = Object.values(result.metafile.outputs).flatMap((o) => o.imports);
+  const foreign = imports.filter((i) => !i.path.startsWith('node:'));
+  if (foreign.length) {
+    throw new Error(`relay.mjs imports non-node modules: ${foreign.map((i) => i.path)}`);
+  }
+  console.log(`bundle → ${path.relative(dir, relayOut)} (${(statSync(relayOut).size / 1024).toFixed(1)} kB)`);
+  process.exit(0);
+}
+
 mkdirSync(path.dirname(outfile), { recursive: true });
 
 // 1) Bundle the worker entries. Each is bundled standalone, written to dist for

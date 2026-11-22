@@ -7,6 +7,7 @@ import type { PersistedSettings } from '../infra/settings.js';
 import type { HidDiscovery } from './driver-manager-discovery.js';
 import type { WorkerPool } from './worker-pool.js';
 import type { DeviceModelOverride } from '../devices/driver.js';
+import type { FrameSaver } from '../infra/frame-store.js';
 
 export type DriverMode = 'real' | 'mock';
 
@@ -24,6 +25,8 @@ export interface DriverManagerDeps {
   onElgatoAttached?: (dockIndex: number) => void;
   /** Verify-wizard draft (persisted ⊕ draft image) for a model id; wins over settings. */
   draftOverrideFor?: (modelId: string) => DeviceModelOverride | undefined;
+  /** Keeps each dock's last key frames across a restart; absent = in memory only. */
+  frameStore?: FrameSaver;
   /** Injected by tests (no hardware/FFI); default nativeHidDiscovery() / new WorkerPool(). */
   discovery?: HidDiscovery;
   pool?: WorkerPool;
