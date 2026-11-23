@@ -373,6 +373,11 @@ const EXPECTED: Expected[] = [
   akp05Clone('ajazz-akp05e-pro', 'ajazz', 0x0300, 0x3013),
   akp05Clone('ajazz-akp05cn-pro', 'ajazz', 0x0300, 0x3014),
   v3Board('uphere-293v3', 'uphere', 0x1200, 0x2012),
+  v3Board('mirabox-293-gen1', 'mirabox', 0x5500, 0x1001, {
+    geometry: { ...V3_GEOMETRY, keyWidth: 100, keyHeight: 100 },
+    image: { ...V3_IMAGE, width: 100, height: 100 },
+    wire: { ...d6Wire(512), sharedSerial: true },
+  }),
 ];
 
 // JSON round trip drops undefined fields, so "unset" and "absent" compare equal.
@@ -466,6 +471,7 @@ test('DEVICE_MODELS order and CORA_PROFILES ids are unchanged', () => {
       'ajazz-akp05cn-pro',
       'mirabox-k1pro-5548',
       'uphere-293v3',
+      'mirabox-293-gen1',
     ],
   );
   assert.deepEqual(
@@ -487,12 +493,12 @@ for (const expected of EXPECTED) {
   });
 }
 
-test('findModel resolves all 41 VID/PID pairs to the expected model', () => {
+test('findModel resolves all 42 VID/PID pairs to the expected model', () => {
   const pairs: [number, number, string][] = EXPECTED.flatMap((e) =>
     e.usbProductIds.map((pid): [number, number, string] => [e.usbVendorId, pid, e.id]),
   );
-  assert.equal(pairs.length, 41);
-  assert.equal(new Set(pairs.map(([vid, pid]) => `${vid}:${pid}`)).size, 41);
+  assert.equal(pairs.length, 42);
+  assert.equal(new Set(pairs.map(([vid, pid]) => `${vid}:${pid}`)).size, 42);
   for (const [vid, pid, id] of pairs) {
     assert.equal(findModel(vid, pid)?.id, id, `0x${vid.toString(16)}:0x${pid.toString(16)}`);
   }

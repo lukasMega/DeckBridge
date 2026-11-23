@@ -25,11 +25,13 @@ const BUDGETS = {
   // D200 info window, live small-window mode + stats (2026-11-18): measured 63,995 + 1%.
   // Info window Elgato images, worker composite (2026-11-19): measured 65,284 + 1%.
   // Stale-icon badge corner + stale flag through the worker (2026-11-22): measured 68,639 + 1%.
-  'hid-worker': 69_330,
+  // Mirabox 293 gen 1 model (2026-11-23): measured 69,508 + 1%.
+  'hid-worker': 70_203,
   // upHere 293V3 (2026-10-22), K1 Pro 0x5548 clone (2026-11-06), Ulanzi D200 (2026-11-13):
   // the registry grows the scan worker; measured + 1%. D200 info window model data
   // (2026-11-18): measured 12,272 + 1%.
-  'hid-scan-worker': 12_400,
+  // Mirabox 293 gen 1 model (2026-11-23): measured 12,609 + 1%.
+  'hid-scan-worker': 12_735,
   'plugin-worker': 2_733,
   // Extension worker: worker-side reply cap (2026-10-11); measured size + 1% headroom.
   'extension-worker': 1_206,

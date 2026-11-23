@@ -99,6 +99,12 @@ test('findModel returns MIRABOX_293_MODEL for the HSV293SV3 PID 0x1014', () => {
   assert.equal(findModel(0x6603, 0x1014)?.id, 'mirabox-293');
 });
 
+test('findModel returns MIRABOX_293_GEN1_MODEL for the first-gen 293 (0x5500:0x1001)', () => {
+  const m = findModel(0x5500, 0x1001);
+  assert.equal(m?.id, 'mirabox-293-gen1');
+  assert.equal(m?.protocol, 'mirabox-cora');
+});
+
 test('findModel returns the Ajazz AKP153 rev.2 models for VID 0x0300', () => {
   assert.equal(findModel(0x0300, 0x3010)?.id, 'ajazz-akp153e-rev2');
   assert.equal(findModel(0x0300, 0x3011)?.id, 'ajazz-akp153r-rev2');
@@ -482,8 +488,8 @@ test('ulanzi-d200 page spec: the wide slot "3_2" is grid cell 13', () => {
 
 console.log('\ndevice-models: DEVICE_MODELS ordering');
 
-test('DEVICE_MODELS contains exactly 33 models', () => {
-  assert.equal(DEVICE_MODELS.length, 33);
+test('DEVICE_MODELS contains exactly 34 models', () => {
+  assert.equal(DEVICE_MODELS.length, 34);
 });
 
 test('DEFAULT_MODEL is MK2_MODEL', () => {

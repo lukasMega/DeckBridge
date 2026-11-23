@@ -151,6 +151,58 @@ keyMap and splash are therefore copied from `MIRABOX_293_MODEL`. The usage page
 
 ---
 
+## Mirabox 293, first generation (`mirabox/mirabox-293-gen1.ts`)
+
+**Not hardware-tested.** The original 5×3 Stream Dock 293 is VID `0x5500`, PID `0x1001`
+(`StreamDock293` / `StreamDock293V2` in the Mirabox SDK). It was listed here as "v1,
+unsupported", but that was a guess: the evidence below says v3-style CRT commands with
+press and release events. The issue #292 reporter has not yet confirmed their VID:PID.
+
+Sources, by what each one gave:
+
+- **MiraboxSpace/StreamDock-Device-SDK** (vendor): `ProductIDs.py` has `USB_VID_293 = 0x5500`
+  and `USB_PID_STREAMDOCK_293 = 0x1001`; `StreamDock293.py` has 100×100 JPEG keys, 180°
+  rotation and the key table; the C++ `StreamDock293V2` calls `setReportSize(513, 513)`
+  (report id + 512 bytes). The transport library is closed source.
+- **rigor789/mirabox-streamdock-node** (MIT): the only project built for this board. Sends
+  `STP` after every image; init is the firmware GET_REPORT, `DIS`, `CLE 0xFF`, `LIG`, with
+  no heartbeat. Its example restores the key icon on state `0`, so key release is reported.
+- **applearon/libtransport-decomp**: reimplements the closed transport and was tested on a
+  real `5500:1001`. Its `LIG`/`BAT`/`CLE`/`STP` layouts equal `buildLig`/`buildBat`/
+  `buildCle`; the input key is at byte 9 and the state at byte 10. Licence not checked.
+- **kebot/mirabox-ts** (no licence stated): TypeScript port of the SDK; same IDs and the
+  same key table as rigor789.
+- **fstechlabs/taurilanzi** (AGPL-3.0, facts only): "293 `5500:1001`, 15 keys, 100×100,
+  180°, 512"; never send `LOG` (boot image, writes ROM). DeckBridge never does.
+- **4ndv/opendeck-akp153** (GPL-3.0, facts only): its gen1 requests (#34, #26) were closed
+  unimplemented. The #34 `lsusb` shows `iSerial 0` and bcdDevice 3.00, so the deck has no
+  USB serial.
+
+Field basis:
+
+- **`protocol: 'mirabox-cora'`**, not `mirabox-cora-v1`: press and release are reported, an
+  `STP` follows each image and there is no sixth column, so the v1 (293S board) description
+  would be wrong. Precedent is `FIFINE_D6_MODEL`.
+- **`wire.packetSize` 512**, with `packetSizeCandidates: [512, 1024]` so the report
+  descriptor arbitrates at open (as on the D6). 512 comes from the SDK's report size and
+  kebot; rigor789's 5 + 512 framing is its own libusb quirk. `inSize` 512 is from the SDK.
+- **Geometry and `image`**: 15 keys, 5×3, 100×100 JPEG (SDK, rigor789, taurilanzi). The
+  rotation stays V3's `rotate: 0`: the SDK says 180° for gen1 and V3 alike, and the
+  hardware-verified V3 model uses `0` with that same convention.
+- **`keyMap`** is V3's (`coraToWireImage [11..15, 6..10, 1..5]`, `inputOffset: 1`):
+  identical tables in the SDK for `StreamDock293` and `StreamDock293V3`, rigor789 and kebot.
+  `cora` and `splash` are also V3's.
+- **`sendStpAfterImage` true** (rigor789), **`synthesizeKeyUp` false** (SDK dispatch and
+  rigor789 state `0x00` = release), **`sharedSerial` true** (no USB serial; without it two
+  decks would share one device key).
+
+Unverified, and tunable in Device tuning: `image.maxBytes` 10240, `wire.heartbeatMs` 8000
+(family default; a gen1 board may not expect the keepalive), usage page `0xffa0`/usage 1
+(inherited from V3), and `synthesizeKeyUp` on real hardware. Do not merge with
+`0x6602:0x1001` (N4) or `0x0b00:0x1001` (MSD-TWO): same PID, other VIDs and protocols.
+
+---
+
 ## Ajazz AKP153E / AKP153R rev. 2 (`ajazz/akp153-rev2.ts`)
 
 The same board as the Mirabox 293V3 behind a different VID/PID
@@ -246,10 +298,10 @@ opendeck-akp05, the Mirabox SDK and VT-Ragnaros. opendeck-akp05 queries usage pa
 
 ### Adjacent PIDs, different protocols — do not merge
 
-| PID             | Device                   | Protocol | Model file                    |
-| --------------- | ------------------------ | -------- | ----------------------------- |
-| `0x0b00:0x1000` | Mars MSD-ONE             | v1       | `rebadge/akp153-v1-clones.ts` |
-| `0x0b00:0x1001` | Mars MSD-TWO (keydeck)   | v2       | unsupported                   |
-| `0x0b00:0x1003` | Mars MSD-PRO             | AKP05    | `rebadge/akp05-clones.ts`     |
-| `0x5500:0x1001` | Mirabox 293 (original)   | v1       | unsupported                   |
-| `0x6602:0x1001` | Mirabox N4 (not the 293) | AKP05    | `rebadge/akp05-clones.ts`     |
+| PID             | Device                   | Protocol      | Model file                    |
+| --------------- | ------------------------ | ------------- | ----------------------------- |
+| `0x0b00:0x1000` | Mars MSD-ONE             | v1            | `rebadge/akp153-v1-clones.ts` |
+| `0x0b00:0x1001` | Mars MSD-TWO (keydeck)   | v2            | unsupported                   |
+| `0x0b00:0x1003` | Mars MSD-PRO             | AKP05         | `rebadge/akp05-clones.ts`     |
+| `0x5500:0x1001` | Mirabox 293 (original)   | v3 CRT, 512 B | `mirabox/mirabox-293-gen1.ts` |
+| `0x6602:0x1001` | Mirabox N4 (not the 293) | AKP05         | `rebadge/akp05-clones.ts`     |

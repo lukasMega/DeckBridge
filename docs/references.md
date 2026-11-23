@@ -27,10 +27,11 @@ Links below identify historical research sources.
 | [zeccola/ajazz-akp05](https://github.com/zeccola/ajazz-akp05) | AKP05E Python SDK — hardware-confirmed notes that the `DIS`/`LIG`/`CLE`/`STP` init unlocks key reporting, and that the keepalive tick needs the `DIS` + `LIG` wake pair. |
 | [Uriziel01/Ajazz-AKP153-reverse-engineering](https://github.com/Uriziel01/Ajazz-AKP153-reverse-engineering) | AKP153 USB protocol teardown. |
 | [crusardri/MiraboxStreamController](https://github.com/crusardri/MiraboxStreamController) | Mirabox controller — image and input handling. |
-| [MiraboxSpace/StreamDock-Device-SDK](https://github.com/MiraboxSpace/StreamDock-Device-SDK) | Vendor SDK — image format and report IDs; N4/N4E key and second-screen constants (`StreamDockN4`). |
+| [MiraboxSpace/StreamDock-Device-SDK](https://github.com/MiraboxSpace/StreamDock-Device-SDK) | Vendor SDK — image format and report IDs; N4/N4E key and second-screen constants (`StreamDockN4`); first-gen 293 (`StreamDock293` / `StreamDock293V2`): VID/PID `5500:1001`, 100×100 keys, key table and 512-byte report size. |
 | [teras/keydeck](https://github.com/teras/keydeck) | Cross-platform deck driver. |
-| [rigor789/mirabox-streamdock-node](https://github.com/rigor789/mirabox-streamdock-node) | Node Mirabox driver. |
-| [kebot/mirabox-ts](https://github.com/kebot/mirabox-ts) | TypeScript Mirabox driver. |
+| [rigor789/mirabox-streamdock-node](https://github.com/rigor789/mirabox-streamdock-node) | Node Mirabox driver. The only project built for the first-gen 293 (`5500:1001`): IDs, `STP` after every image, init sequence, press and release events. |
+| [kebot/mirabox-ts](https://github.com/kebot/mirabox-ts) | TypeScript Mirabox driver. First-gen 293 IDs and key table (`StreamDock293`) as a cross-check of the vendor SDK. |
+| [applearon/libtransport-decomp](https://github.com/applearon/libtransport-decomp) | Reimplementation of Mirabox's closed transport, tested on a first-gen 293 (`5500:1001`): CRT packet layouts and the ACK input report. |
 | [ValentinTorassa/VT-Ragnaros](https://github.com/ValentinTorassa/VT-Ragnaros) | Ragnaros (Redragon SS552, `0200:3001`) Linux driver — reverse-engineered Mirabox/Ajazz v3 1024-byte protocol, 10 keys, 4 knobs, touch strip. |
 
 <!-- Promote into the table above once upHere support lands (.claude/plans/2026-10-22_uphere-293v3-support.md):

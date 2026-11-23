@@ -2,6 +2,7 @@ import type { ChildGeometry, DeviceModel } from './driver.js';
 import { MK2_MODEL } from './elgato/mk2.js';
 import { MINI_MODEL } from './elgato/mini.js';
 import { MIRABOX_293_MODEL } from './mirabox/mirabox-293.js';
+import { MIRABOX_293_GEN1_MODEL } from './mirabox/mirabox-293-gen1.js';
 import { MIRABOX_293S_MODEL } from './mirabox/mirabox-293s.js';
 import { MIRABOX_K1PRO_MODEL } from './mirabox/mirabox-k1pro.js';
 import { AJAZZ_AKP153E_REV2_MODEL, AJAZZ_AKP153R_REV2_MODEL } from './ajazz/akp153-rev2.js';
@@ -35,6 +36,7 @@ export const DEVICE_MODELS: DeviceModel[] = [
   ...AKP05_CLONE_MODELS,
   ...K1PRO_CLONE_MODELS,
   UPHERE_293V3_MODEL,
+  MIRABOX_293_GEN1_MODEL,
 ];
 
 /** Fallback model used when nothing is connected / before a real device is probed. */
