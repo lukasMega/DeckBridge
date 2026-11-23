@@ -66,7 +66,7 @@ const FAMILIES = [
     key: 'mirabox-v3',
     title: 'Mirabox v3 board',
     blurb:
-      'The 293V3 board and its rebadges: 1024-byte CRT packets (512 on the D6 rev. 1), JPEG keys, press *and* release events.',
+      'The 293V3 board and its rebadges: 1024-byte CRT packets (512 on the D6 rev. 1 and the first-gen 293), JPEG keys, press *and* release events.',
   },
   {
     key: 'mirabox-v1',
