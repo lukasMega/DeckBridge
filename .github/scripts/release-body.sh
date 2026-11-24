@@ -5,6 +5,8 @@
   echo
   echo "## VirusTotal scans"
   echo
+  echo "<details><summary>Scan reports per artifact</summary>"
+  echo
   echo "| Artifact | Report |"
   echo "| --- | --- |"
   for file in artifacts/*.zip artifacts/*-setup.exe artifacts/*.dmg artifacts/*.mjs; do
@@ -16,6 +18,8 @@
       echo "| \`$(basename "$file")\` | _scan unavailable_ |"
     fi
   done
+  echo
+  echo "</details>"
   echo
   echo "Verify downloads against \`SHA256SUMS.txt\`."
 } > release-body.md
