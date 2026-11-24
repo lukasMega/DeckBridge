@@ -8,49 +8,34 @@ description: Use your phone or tablet to control Stream Deck actions. Connect it
 
 # Browser deck
 
-Use your phone or tablet as a **15-key Stream Deck**. Tap the keys to run actions
-from the Elgato app. **No USB deck needed.**
-
-This feature stays off until you enable it.
+Use your phone or tablet as a **15-key Stream Deck** (5 × 3, no dials or touch strip).
+Tap keys to run actions from the Elgato app. **No USB deck needed.** It is off until you turn it on.
 
 ## What you need
 
-- DeckBridge running on your computer.
-- The Elgato Stream Deck app.
-- Your phone, DeckBridge and Elgato app on the **same network**.
-
-<details>
-<summary>Supported browsers</summary>
-
-| Device | Browser |
-|---|---|
-| iPhone / iPad | Safari, iOS / iPadOS **12.2+** |
-| Android | Chrome **80+**, Android **7+** |
-| Computer | Any current desktop browser |
-
-</details>
+- DeckBridge on your computer, and the Elgato Stream Deck app.
+- Phone, DeckBridge and Elgato app on the **same network**.
+- Safari on iOS / iPadOS **12.2+**, Chrome **80+** on Android **7+**, or any current desktop browser.
 
 ## Set it up
 
-1. **Enable it.** In DeckBridge, open **Settings → Browser deck**.
-   Turn on **Use a phone or tablet as a deck**.
-2. **Connect your phone.** Press **Pair a device**.
-   On your phone, open the shown address and enter the **6-digit code**.
-   Or scan the QR code, if enabled. Codes expire after five minutes.
-3. **Connect the Elgato app.** Choose **Add Network Device…**.
-   Enter the IP address and port shown in DeckBridge.
-   If that address is already used, follow **Need another address?** below.
-4. **Add your actions.** Select your newly added deck in the Elgato app.
-   Set up its keys, then tap them on your phone.
+1. **Turn it on.** **Settings → Browser deck → Use a phone or tablet as a deck**.
+2. **Connect your phone.** Press **Pair a device**. On the phone, open the address shown
+   and enter the **6-digit code** (or scan the QR code). A code expires after five minutes.
+3. **Connect the Elgato app.** Choose **Add Network Device…** and enter the IP address and
+   port shown in DeckBridge. If the address is already in use, see **Need another address?** below.
+4. **Add your actions.** Select the new deck in the Elgato app, set up its keys, then tap them on your phone.
 
-DeckBridge shows two separate checks: **Browser: Connected** and **Elgato app: Paired**.
-Both are needed.
-
-QR codes need an optional download. The address and code work without it.
+DeckBridge shows **Browser: Connected** and **Elgato app: Paired**. You need both.
 
 ## QR code
 
-DeckBridge ships no QR library. When you ask for a QR code, it downloads
+The QR code is optional. The address and 6-digit code work without it.
+
+<details>
+<summary>What the QR code downloads</summary>
+
+DeckBridge has no QR library built in. When you ask for a QR code, it downloads
 **qrcode-generator 1.4.4** (MIT licence, about 55 kB) from the jsDelivr CDN:
 `https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.js`.
 
@@ -59,39 +44,37 @@ DeckBridge ships no QR library. When you ask for a QR code, it downloads
   (`sha384-8FWZA6BGMXhsfO+BLtrJK0We6gg5o1JyO8xQm6peWDEUs17ACA5ziE/NIAkl9z2k`) taken from the
   npm tarball, not only the CDN copy. A file that does not match is not run.
 - It runs in an isolated frame that cannot reach DeckBridge.
-- Skipping it is fine: the 6-digit code pairs the phone the same way.
+
+</details>
 
 ### One dock per IP address
 
-Each deck needs a different IP address in the Elgato app.
-Open **Need another address?** in DeckBridge. Follow the steps for your system,
+The Elgato app accepts one dock per IP address, so each deck needs its own address.
+Open **Need another address?** in DeckBridge, follow the steps for your system,
 press **Test**, then use the address shown. DeckBridge never runs commands for you.
 
 ## Using the deck
 
 - **Tap** to press. **Hold** for long-press actions.
 - **Green dot:** connected. **Amber dot:** reconnecting.
-- Keep the screen awake using your phone's **Auto-Lock / Screen timeout** settings.
-- Use **Add to Home Screen** for quick access. On iOS, this also opens full screen.
-- Layout: **15 keys (5 × 3)**, without dials or a touch strip.
+- Keep the screen awake with your phone's **Auto-Lock / Screen timeout** setting.
+- **Add to Home Screen** gives quick access (full screen on iOS).
 
 ## Security
 
-Use a **trusted private network**. The connection uses unencrypted HTTP.
-Someone monitoring that network could copy access and press your keys.
-
-Remove lost or unwanted devices in **Settings → Browser deck → Revoke**.
-Use **Revoke all** to disconnect everyone.
+Use a **trusted private network**. The connection is plain HTTP (not encrypted),
+so someone on that network could copy access and press your keys.
+Remove devices in **Settings → Browser deck → Revoke**, or use **Revoke all**.
 
 ## Troubleshooting
 
 | Problem | Try this |
 |---|---|
-| Phone cannot connect | Check both devices use the same network. Use the address shown in DeckBridge. Allow TCP **44660** through your computer's firewall. |
+| Phone cannot connect | Same network? Use the address shown in DeckBridge. Allow TCP **44660** in your computer's firewall. |
 | Code expired | Press **Pair a device** again. Each code works once. |
 | Elgato app refuses pairing | Follow [One dock per IP address](#one-dock-per-ip-address). |
-| Address stopped working | Reopen Settings for the current address. |
-| Keys respond slowly | Improve Wi-Fi signal or try 5 GHz. |
+| Address stopped working | Reopen Settings to see the current address. |
+| Keys respond slowly | Improve the Wi-Fi signal or try 5 GHz. |
 
 <details>
 <summary>Advanced settings and limits</summary>
@@ -104,11 +87,10 @@ Use **Revoke all** to disconnect everyone.
 | Pairing code | Single-use; expires after **5 minutes** or **5 wrong attempts** |
 
 - All open pages share the same keys and profile.
-- Locking your phone releases held keys within about four seconds.
-  Delayed presses are dropped.
+- If you lock your phone, held keys are released within about four seconds. Delayed presses are dropped.
 - `--bind 127.0.0.1` blocks access from phones and tablets.
-- Device access cannot control DeckBridge settings or the [Push API](./push-api.md).
-- Enable this feature in the web UI. Importing settings cannot enable it.
-- For connection timing, append `?debug=1` to the browser deck address.
+- Device access cannot change DeckBridge settings or use the [Push API](./push-api.md).
+- You must turn this on in the web UI. Importing settings cannot turn it on.
+- For connection timing, add `?debug=1` to the browser deck address.
 
 </details>
