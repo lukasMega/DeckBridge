@@ -17,6 +17,8 @@ export interface AppServer {
   /** CORA child port of the browser deck's dock. */
   virtualChildPort: number;
   stop(): Promise<void>;
+  /** Kill the app and boot it again on the same ports + cache dir, with `extraEnv` added. */
+  restart(extraEnv?: NodeJS.ProcessEnv): Promise<void>;
 }
 
 function tjsPath(): string {
@@ -67,7 +69,7 @@ export async function startAppServer(): Promise<AppServer> {
     JSON.stringify({ pairingRoute: { route: 'none', wizardDismissed: true } }),
   );
 
-  const env: NodeJS.ProcessEnv = {
+  const baseEnv: NodeJS.ProcessEnv = {
     ...process.env,
     DECKBRIDGE_MOCK: '1',
     DECKBRIDGE_CORA_PORT: String(coraPort),
@@ -78,38 +80,29 @@ export async function startAppServer(): Promise<AppServer> {
   };
   // The tray sidecar is resolved from $DECKBRIDGE_TRAY_BIN *or* a sibling file; --headless
   // skips it entirely, but drop the env var too so a stale path can't be picked up.
-  delete env.DECKBRIDGE_TRAY_BIN;
-  delete env.DECKBRIDGE_OPEN;
+  delete baseEnv.DECKBRIDGE_TRAY_BIN;
+  delete baseEnv.DECKBRIDGE_OPEN;
 
-  const child: ChildProcess = spawn(
-    tjsPath(),
-    ['run', bundle, '--headless', '--webui-port', String(port), '--cache-dir', cacheDir],
-    { cwd: REPO, env, stdio: ['ignore', 'pipe', 'pipe'] },
-  );
-
+  let child: ChildProcess;
   let log = '';
-  const capture = (chunk: Buffer) => {
-    log += chunk.toString();
-  };
-  child.stdout?.on('data', capture);
-  child.stderr?.on('data', capture);
+  let exited = true;
 
-  let exited = false;
-  child.on('exit', () => {
-    exited = true;
-  });
-
-  const stop = async (): Promise<void> => {
-    if (!exited && child.pid !== undefined) {
-      child.kill('SIGTERM');
-      await waitFor(async () => exited, { timeoutMs: 5000, what: 'app shutdown' }).catch(() => {
-        child.kill('SIGKILL');
-      });
-    }
-    rmSync(cacheDir, { recursive: true, force: true });
-  };
-
-  try {
+  const launch = async (extraEnv: NodeJS.ProcessEnv = {}): Promise<void> => {
+    exited = false;
+    const proc = spawn(
+      tjsPath(),
+      ['run', bundle, '--headless', '--webui-port', String(port), '--cache-dir', cacheDir],
+      { cwd: REPO, env: { ...baseEnv, ...extraEnv }, stdio: ['ignore', 'pipe', 'pipe'] },
+    );
+    child = proc;
+    const capture = (chunk: Buffer) => {
+      log += chunk.toString();
+    };
+    proc.stdout?.on('data', capture);
+    proc.stderr?.on('data', capture);
+    proc.on('exit', () => {
+      if (child === proc) exited = true;
+    });
     // Same readiness gate the client itself blocks on before mounting (ui-entry.ts).
     await waitFor(
       async () => {
@@ -125,6 +118,24 @@ export async function startAppServer(): Promise<AppServer> {
       },
       { timeoutMs: 30_000, what: 'GET /api/state to report a connected mock driver' },
     );
+  };
+
+  const kill = async (): Promise<void> => {
+    if (!exited && child.pid !== undefined) {
+      child.kill('SIGTERM');
+      await waitFor(async () => exited, { timeoutMs: 5000, what: 'app shutdown' }).catch(() => {
+        child.kill('SIGKILL');
+      });
+    }
+  };
+
+  const stop = async (): Promise<void> => {
+    await kill();
+    rmSync(cacheDir, { recursive: true, force: true });
+  };
+
+  try {
+    await launch();
   } catch (err) {
     await stop();
     throw new Error(`${(err as Error).message}\n--- app output ---\n${log}`);
@@ -143,5 +154,9 @@ export async function startAppServer(): Promise<AppServer> {
     deckURL: `http://127.0.0.1:${deckPort}`,
     virtualChildPort: coraPort + VIRTUAL_DOCK_OFFSET + 1,
     stop,
+    restart: async (extraEnv) => {
+      await kill();
+      await launch(extraEnv);
+    },
   };
 }

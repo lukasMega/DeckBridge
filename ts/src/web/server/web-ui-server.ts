@@ -196,7 +196,9 @@ export class WebUIServer extends EventEmitter implements WebUIController, WebUIC
         inventory: () => this.hidInventory(),
       }),
     );
-    this.updates = new UpdateController(host, __VERSION__);
+    // Mock builds only: lets e2e fake a restart on a new version (client reload test).
+    const version = (__MOCK_BUILD__ && tjs.env['DECKBRIDGE_VERSION']) || __VERSION__;
+    this.updates = new UpdateController(host, version);
     this.survey = new SurveyController(settings);
     this.settingsFile = new SettingsFileController(host, this.logging);
     this.elgatoApp = new ElgatoAppController(host);
