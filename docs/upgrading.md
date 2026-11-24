@@ -30,14 +30,3 @@ the old `deckbridge`, and start it. `settings.json` is kept.
 
 Use **Settings → Updates → Check for updates**, or set `"updateCheck": false` in
 `settings.json`. Then DeckBridge never contacts GitHub, and no banner shows.
-
-<details>
-<summary>For maintainers: the signing key</summary>
-
-Installer builds verify updates with a minisign key. The public half is
-`plugins.updater.pubkey` in `src-tauri/tauri.conf.json`. The private half is only in the
-GitHub secret `TAURI_SIGNING_PRIVATE_KEY` (no password). `release.yml` fails without it,
-so a release never ships without `latest.json`. If the key is lost, installed apps can no
-longer self-update and users must reinstall by hand.
-
-</details>
