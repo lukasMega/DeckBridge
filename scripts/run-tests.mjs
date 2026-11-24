@@ -35,6 +35,9 @@ const files = readdirSync(join(tsDir, 'test'))
   .filter((f) => !nodeMode || NODE_TESTS.test(f))
   .sort();
 
+const PORT_RETRIES = 2;
+const isPortClash = (run) => `${run.stdout ?? ''}${run.stderr ?? ''}`.includes('EADDRINUSE');
+
 const verbose = Boolean(process.env.VERBOSE);
 let rc = 0;
 let failed = 0;
@@ -57,9 +60,16 @@ for (const file of files) {
     continue;
   }
 
-  const run = nodeMode
-    ? spawnSync('node', [`dist/test-node/${name}.mjs`], opts)
-    : spawnSync(tjs, ['run', `dist/test/${name}.js`], opts);
+  const runOnce = () =>
+    nodeMode
+      ? spawnSync('node', [`dist/test-node/${name}.mjs`], opts)
+      : spawnSync(tjs, ['run', `dist/test/${name}.js`], opts);
+  let run = runOnce();
+  // A fixed test port can be taken by another process's outgoing socket; that is not a test failure.
+  for (let retry = 1; retry <= PORT_RETRIES && run.status !== 0 && isPortClash(run); retry++) {
+    console.log(`↻ ${label}: EADDRINUSE, retry ${retry}/${PORT_RETRIES}`);
+    run = runOnce();
+  }
   if (run.status !== 0) {
     console.log(`✘ ${label}${duration()}`);
     process.stdout.write((run.stdout ?? '') + (run.stderr ?? ''));

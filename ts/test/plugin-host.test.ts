@@ -529,7 +529,8 @@ await runTest('dispose aborts every request, settles, and never respawns', async
 });
 
 await runTest('native loopback: a stalled body is aborted and the connection closed', async () => {
-  const port = 47900 + (tjs.pid % 50);
+  // Below 32768: Linux gives 32768-60999 to outgoing sockets, which caused EADDRINUSE.
+  const port = 19900 + (tjs.pid % 50);
   const server = await tjs.listen('tcp', '127.0.0.1', port);
   const { readable } = await server.opened;
   const accepts = readable.getReader();
