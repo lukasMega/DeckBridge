@@ -11,7 +11,8 @@ import type { CoraFrame } from '../src/cora/frame.js';
 import { testAsync, summaryExit } from './helpers/harness.js';
 
 const HOST = '127.0.0.1';
-let nextPort = 49310 + (tjs.pid % 100);
+// Below 32768: Linux gives 32768-60999 to outgoing sockets, which caused EADDRINUSE.
+let nextPort = 21310 + (tjs.pid % 100);
 const port = (): number => nextPort++;
 const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
 

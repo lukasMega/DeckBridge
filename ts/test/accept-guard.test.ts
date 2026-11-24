@@ -3,7 +3,8 @@ import { guardAccept, isDroppedAccept, KEEPALIVE_DELAY_S } from '../src/platform
 import { testAsync, summaryExit } from './helpers/harness.js';
 
 const HOST = '127.0.0.1';
-const port = 48720 + (tjs.pid % 100);
+// Below 32768: Linux gives 32768-60999 to outgoing sockets, which caused EADDRINUSE.
+const port = 20720 + (tjs.pid % 100);
 
 type Factory = (...args: unknown[]) => unknown;
 
