@@ -60,6 +60,7 @@ const STATE = {
   touchStripRepaintMs: 0,
   encoders: {},
   keyPressEnabled: false,
+  updateInfo: { enabled: false, current: __VERSION__, updateAvailable: false, canInstall: false },
   keyEvents: [],
   logs: [],
   commLogs: [],
