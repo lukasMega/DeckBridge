@@ -54,9 +54,8 @@ export const MIRABOX_293S_MODEL: DeviceModel = {
     coraToWireImage: [13, 10, 7, 4, 1, 14, 11, 8, 5, 2, 15, 12, 9, 6, 3],
     // device input wire code (1-based) → mk2 index; -1 = unused 6th column. Index 0 unused.
     wireInputToCora: [-1, 4, 9, 14, 3, 8, 13, 2, 7, 12, 1, 6, 11, 0, 5, 10, -1, -1, -1],
-    // 6th column, top→bottom. Derived from the opendeck-akp153 wire-id namespace
-    // (left 15 hardware-verified; 16–18 derived — verify: press the right column
-    // in a debug build and look for ACK key=0x10/0x11/0x12 in the comm log).
+    // 6th column, top→bottom. Display only: no switches, sends no input reports.
+    // VERIFIED ON HARDWARE (2026-11-23, image upload to wire 16/17/18).
     extraKeys: [16, 17, 18],
   },
   cora: {
