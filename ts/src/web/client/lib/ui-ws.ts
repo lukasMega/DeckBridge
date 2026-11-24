@@ -103,6 +103,11 @@ export function connectWS(): void {
         return r.json() as Promise<StateResponse>;
       })
       .then((st) => {
+        // The restart was an update: this tab still runs the old bundle.
+        if (st.updateInfo.current !== __VERSION__) {
+          location.reload();
+          return undefined;
+        }
         hydrate(st);
         store.patch({ connection: 'live' });
         return undefined;
