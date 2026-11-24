@@ -26,12 +26,12 @@ async function spawnOk(argv: string[]): Promise<boolean | null> {
 }
 
 async function fileExists(path: string): Promise<boolean> {
-  // Windows has no `test` built-in; use cmd /c if exist instead.
-  const argv =
-    FFI.suffix === 'dll'
-      ? ['cmd', '/c', `if exist "${path}" (exit 0) else (exit 1)`]
-      : ['test', '-f', path];
-  return (await spawnOk(argv)) === true;
+  // Not `cmd /c if exist "..."`: libuv escapes the inner quotes as \", which cmd rejects (#252).
+  try {
+    return (await tjs.stat(path)).isFile;
+  } catch {
+    return false;
+  }
 }
 
 function binaryResult(
