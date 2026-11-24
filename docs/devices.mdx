@@ -47,7 +47,7 @@ The 293V3 board and its rebadges: 1024-byte CRT packets (512 on the D6 rev. 1 an
 | [Fifine AmpliGame D6 (rev. 2)](#fifine-d6-rev2) | fifine | `0x3142:0x0060` | 15 (5×3) | 112×112 | JPEG | — | ✓ tested (macOS, 2026-09-11) |
 | [Mirabox K1 Pro (0x5548)](#mirabox-k1pro-5548) | mirabox | `0x5548:0x1025` | 6 (3×2) | 64×64 | JPEG | — | — untested |
 | [upHere 293V3](#uphere-293v3) | uphere | `0x1200:0x2012` | 15 (5×3) | 112×112 | JPEG | — | — untested |
-| [Mirabox 293 (gen 1)](#mirabox-293-gen1) | mirabox | `0x5500:0x1001` | 15 (5×3) | 100×100 | JPEG | — | — untested |
+| [Mirabox 293 (gen 1)](#mirabox-293-gen1) | mirabox | `0x5500:0x1001` | 15 (5×3) | 100×100 | JPEG | — | ✓ tested (Windows) |
 
 </div>
 
@@ -730,9 +730,9 @@ The original 5×3 Stream Dock 293 (VID 0x5500, PID 0x1001). Speaks the v3 CRT co
 | **Keys** | 15 (5×3) |
 | **Panel** | 100×100 JPEG |
 | **Protocol** | `mirabox-cora` |
-| **Tested** | — untested |
+| **Tested** | ✓ tested (Windows) |
 
-- Not hardware-tested; values come from the Mirabox SDK and rigor789/mirabox-streamdock-node.
+- Hardware-tested on Windows (issue #292): detect, key press/release, brightness, image, colour and size checks pass. Values come from the Mirabox SDK and rigor789/mirabox-streamdock-node.
 - Packet size (512 or 1024) is probed from the report descriptor at open.
 - The deck reports no USB serial, so it uses sharedSerial.
 - Never send LOG: it writes the boot image to ROM. DeckBridge never does.

@@ -446,11 +446,11 @@
       ]
     },
     "mirabox-293-gen1": {
-      "tested": { "status": false },
+      "tested": { "status": true, "platform": "Windows" },
       "summary": "The original 5×3 Stream Dock 293 (VID 0x5500, PID 0x1001). Speaks the v3 CRT commands at 512-byte packets with 100×100 JPEG keys and press and release events.",
       "alsoSoldAs": ["StreamDock293 / 293V2 in the Mirabox SDK"],
       "quirks": [
-        "Not hardware-tested; values come from the Mirabox SDK and rigor789/mirabox-streamdock-node.",
+        "Hardware-tested on Windows (issue #292): detect, key press/release, brightness, image, colour and size checks pass. Values come from the Mirabox SDK and rigor789/mirabox-streamdock-node.",
         "Packet size (512 or 1024) is probed from the report descriptor at open.",
         "The deck reports no USB serial, so it uses sharedSerial.",
         "Never send LOG: it writes the boot image to ROM. DeckBridge never does.",

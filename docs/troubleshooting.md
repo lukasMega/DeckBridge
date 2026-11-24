@@ -17,6 +17,7 @@ Turn on debug logging, reproduce the problem, create a diagnostics report, attac
 - **Elgato app will not pair another dock** — one dock per IP address. See [one dock per IP address](./browser-deck.md#one-dock-per-ip-address).
 - **Browser deck problems** — see [Browser deck → Troubleshooting](./browser-deck.md#troubleshooting).
 - **No device found** — check the USB cable. macOS: grant Input Monitoring. Linux: install the [udev rule](./features.md#permissions).
+- **Deck disconnects and reconnects** — use a good USB cable, 1.5 m at most, and plug it straight into a USB port on the computer, not into an external USB hub.
 - **Missing libhidapi** — see the [requirements check](./features.md#requirements).
 - **Restrict LAN access** — set `DECKBRIDGE_BIND=127.0.0.1`.
 - **Images rotated, mirrored, on the wrong key, cut off or black** — run the [device check](./verify-device.md), or see [Device tuning](#device-tuning).

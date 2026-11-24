@@ -10,4 +10,5 @@ export const TESTED_MODEL_IDS: readonly string[] = [
   'ajazz-akp153e-rev2',
   'fifine-d6-rev2',
   'ulanzi-d200',
+  'mirabox-293-gen1',
 ];
