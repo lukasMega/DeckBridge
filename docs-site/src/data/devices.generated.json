@@ -2176,8 +2176,8 @@
       "id": "mirabox-293-gen1",
       "name": "Mirabox 293 (gen 1)",
       "family": "mirabox-v3",
-      "tested": false,
-      "testedLabel": "— untested",
+      "tested": true,
+      "testedLabel": "✓ tested (Windows)",
       "cells": {
         "identity": {
           "name": "Mirabox 293 (gen 1)",
@@ -2274,6 +2274,11 @@
     {
       "id": "ulanzi-d200",
       "name": "Ulanzi Stream Controller D200",
+      "tested": true
+    },
+    {
+      "id": "mirabox-293-gen1",
+      "name": "Mirabox 293 (gen 1)",
       "tested": true
     },
     {
@@ -2394,11 +2399,6 @@
     {
       "id": "uphere-293v3",
       "name": "upHere 293V3",
-      "tested": false
-    },
-    {
-      "id": "mirabox-293-gen1",
-      "name": "Mirabox 293 (gen 1)",
       "tested": false
     }
   ]

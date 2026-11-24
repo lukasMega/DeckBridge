@@ -1,7 +1,7 @@
 import type { DeviceModel } from '../driver.js';
 import { MIRABOX_293_MODEL } from './mirabox-293.js';
 
-/** Mirabox Stream Dock 293, first generation (5×3). NOT HARDWARE-TESTED — sources and
+/** Mirabox Stream Dock 293, first generation (5×3). hardware-tested on Windows (#292) — sources and
  *  per-field basis in ../PROVENANCE.md. Do not merge with 0x6602:0x1001 (N4) or
  *  0x0b00:0x1001 (MSD-TWO): same PID, other VIDs and protocols. */
 export const MIRABOX_293_GEN1_MODEL: DeviceModel = {
