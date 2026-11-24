@@ -54,8 +54,26 @@ async function request(url, options = {}) {
     ...options,
     headers: { 'x-apikey': apiKey, ...options.headers },
   });
-  if (!response.ok) throw new Error(`${response.status} ${url}: ${await response.text()}`);
+  if (!response.ok) {
+    throw Object.assign(new Error(`${response.status} ${url}: ${await response.text()}`), {
+      status: response.status,
+    });
+  }
   return response.json();
+}
+
+// A re-run job re-uploads the same bytes; VirusTotal answers 409 while the first upload is
+// still being analysed, so read the file report by hash instead.
+async function fileReport(sha) {
+  try {
+    const attrs = (await request(`https://www.virustotal.com/api/v3/files/${sha}`)).data.attributes;
+    return attrs.last_analysis_date
+      ? { stats: attrs.last_analysis_stats, results: attrs.last_analysis_results }
+      : undefined;
+  } catch (error) {
+    if (error.status === 404) return undefined;
+    throw error;
+  }
 }
 
 // Submit everything first so VirusTotal analyses run while we wait on the limiter.
@@ -64,22 +82,29 @@ for (const job of jobs) {
   job.sha256 = createHash('sha256').update(bytes).digest('hex');
   const form = new FormData();
   form.set('file', new Blob([bytes]), basename(job.name));
-  const upload = await request('https://www.virustotal.com/api/v3/files', {
-    method: 'POST', body: form,
-  });
-  job.analysisId = upload.data.id;
   job.submittedAt = Date.now();
-  console.log(`submitted ${job.platform}/${job.name} ${job.sha256}`);
+  try {
+    const upload = await request('https://www.virustotal.com/api/v3/files', {
+      method: 'POST', body: form,
+    });
+    job.analysisId = upload.data.id;
+    console.log(`submitted ${job.platform}/${job.name} ${job.sha256}`);
+  } catch (error) {
+    if (error.status !== 409) throw error;
+    console.log(`already submitted ${job.platform}/${job.name} ${job.sha256}`);
+  }
 }
 
 const pending = [...jobs];
 while (pending.length) {
   const job = pending.shift();
-  const analysis = await request(`https://www.virustotal.com/api/v3/analyses/${job.analysisId}`);
-  if (analysis.data.attributes.status === 'completed') {
-    job.attrs = analysis.data.attributes;
-    continue;
+  if (job.analysisId) {
+    const analysis = await request(`https://www.virustotal.com/api/v3/analyses/${job.analysisId}`);
+    if (analysis.data.attributes.status === 'completed') job.attrs = analysis.data.attributes;
+  } else {
+    job.attrs = await fileReport(job.sha256);
   }
+  if (job.attrs) continue;
   if (Date.now() - job.submittedAt > SCAN_DEADLINE_MS) {
     throw new Error(`Scan timeout: ${job.platform}/${job.name}`);
   }
