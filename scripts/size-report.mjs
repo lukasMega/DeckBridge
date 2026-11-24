@@ -69,6 +69,7 @@ const shared = {
     __UI_SCRIPT_HASHES__: JSON.stringify(uiScriptHashes),
     __LOG_LEVEL__: '1',
     __VERSION__: JSON.stringify(version),
+    __ZIP_PLATFORM__: '"linux-x86_64"',
     __DEMO__: 'false',
     __SIMPLE_ONLY__: 'true',
     __MOCK_BUILD__: 'false',

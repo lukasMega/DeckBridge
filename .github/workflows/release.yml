@@ -194,12 +194,25 @@ jobs:
           df -h .
 
       # Retry intermittent hdiutil "Resource busy" failures.
-      - name: Build Tauri dmg
+      # Updater artifacts (.app.tar.gz + .sig) are signed with the minisign key whose
+      # public half is in tauri.conf.json; see docs/upgrading.md.
+      - name: Build Tauri dmg + updater bundle
         if: matrix.tauri == '1'
         working-directory: src-tauri
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: |
+          if [ -z "$TAURI_SIGNING_PRIVATE_KEY" ]; then
+            echo "::error::TAURI_SIGNING_PRIVATE_KEY secret is not set (needed for auto-update)"
+            exit 1
+          fi
           for attempt in 1 2 3; do
-            if pnpm tauri build --bundles dmg --verbose; then
+            if pnpm tauri build --bundles app,dmg --config tauri.updater.conf.json --verbose; then
+              # Both macOS arches emit DeckBridge.app.tar.gz; name them per arch for the release.
+              cd target/release/bundle/macos
+              mv DeckBridge.app.tar.gz "DeckBridge-${{ matrix.platform }}.app.tar.gz"
+              mv DeckBridge.app.tar.gz.sig "DeckBridge-${{ matrix.platform }}.app.tar.gz.sig"
               exit 0
             fi
             if [[ "$attempt" == 3 ]]; then
@@ -213,7 +226,10 @@ jobs:
         if: matrix.tauri == '1'
         with:
           name: ${{ matrix.platform }}-dmg
-          path: src-tauri/target/release/bundle/dmg/*.dmg
+          path: |
+            src-tauri/target/release/bundle/dmg/*.dmg
+            src-tauri/target/release/bundle/macos/*.app.tar.gz
+            src-tauri/target/release/bundle/macos/*.app.tar.gz.sig
           if-no-files-found: error
 
   # Windows ships both portable ZIP and Tauri NSIS installer.
@@ -313,14 +329,23 @@ jobs:
           Copy-Item "rust/target/release/deckbridge-tray.exe" "src-tauri/binaries/deckbridge-tray-x86_64-pc-windows-msvc.exe" -Force
           Get-ChildItem "src-tauri/binaries/"
 
-      - name: Build Tauri NSIS installer
+      - name: Build Tauri NSIS installer + updater signature
         working-directory: src-tauri
-        run: pnpm tauri build
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: |
+          if (-not $env:TAURI_SIGNING_PRIVATE_KEY) {
+            Write-Error "TAURI_SIGNING_PRIVATE_KEY secret is not set (needed for auto-update)"; exit 1
+          }
+          pnpm tauri build --config tauri.updater.conf.json
 
       - uses: actions/upload-artifact@v7
         with:
           name: windows-x86_64
-          path: src-tauri/target/release/bundle/nsis/*-setup.exe
+          path: |
+            src-tauri/target/release/bundle/nsis/*-setup.exe
+            src-tauri/target/release/bundle/nsis/*-setup.exe.sig
           if-no-files-found: error
 
   publish-virustotal-docs:
@@ -446,8 +471,12 @@ jobs:
       - name: Generate SHA256SUMS
         run: |
           cd artifacts
-          sha256sum ./*.zip ./*-setup.exe ./*.dmg ./*.mjs > SHA256SUMS.txt
+          sha256sum ./*.zip ./*-setup.exe ./*.dmg ./*.app.tar.gz ./*.mjs > SHA256SUMS.txt
           cat SHA256SUMS.txt
+
+      # Tauri updater manifest: installed apps poll releases/latest/download/latest.json.
+      - name: Generate updater latest.json
+        run: node .github/scripts/updater-manifest.mjs artifacts "${{ needs.prepare.outputs.tag }}"
 
       # Include every artifact, even when its VirusTotal scan failed.
       - name: Build release body
@@ -468,6 +497,8 @@ jobs:
             artifacts/*.zip
             artifacts/*-setup.exe
             artifacts/*.dmg
+            artifacts/*.app.tar.gz
+            artifacts/latest.json
             artifacts/*.mjs
             artifacts/SHA256SUMS.txt
           fail_on_unmatched_files: true

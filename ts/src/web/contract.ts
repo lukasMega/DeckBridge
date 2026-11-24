@@ -198,6 +198,8 @@ export interface UpdateInfo {
   releaseUrl?: string;
   lastCheckedAt?: number;
   dismissedVersion?: string;
+  canInstall: boolean;
+  downloadUrl?: string;
   error?: 'no-curl' | 'network' | 'parse';
 }
 
@@ -430,7 +432,7 @@ export interface StateResponse extends StatusSnapshot {
   multiDeck: boolean;
   /** Click-to-press opt-in (settings.json `webuiKeyPress`): the preview may fire key presses. */
   keyPressEnabled: boolean;
-  /** Keep the last key icons across a restart (settings.json `keepLastIcons`, default on). */
+  /** Keep the last key icons across a restart (settings.json `keepLastIcons`, default off). */
   keepLastIcons: boolean;
   /** GitHub-release update check (update-check.ts) — cached, no network. */
   updateInfo: UpdateInfo;

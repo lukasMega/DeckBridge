@@ -108,7 +108,12 @@ async function runScopeHydrate(main: PageSummary, check: Check): Promise<void> {
       multiDeck: false,
       keepLastIcons: true,
       elgatoAutoRestart: { enabled: true, delayS: 10, supported: true },
-      updateInfo: current.updateInfo ?? { enabled: true, current: 'test', updateAvailable: false },
+      updateInfo: current.updateInfo ?? {
+        enabled: true,
+        current: 'test',
+        updateAvailable: false,
+        canInstall: false,
+      },
     };
   };
   for (const pages of [[], [page('p1', 'Main')]]) {

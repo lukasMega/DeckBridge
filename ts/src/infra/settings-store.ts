@@ -164,7 +164,7 @@ export interface Settings {
   /** Click-to-press in the WebUI preview (double-click a key = a virtual press on the Elgato
    *  app). Opt-in, off by default; never imported from a settings file. */
   webuiKeyPress?: boolean;
-  /** Show the last key icons (red "!" marked) after a restart; absent = on. Off deletes the saved files. */
+  /** Show the last key icons (red "!" marked) after a restart; absent = off. Off deletes the saved files. */
   keepLastIcons?: boolean;
   /** Browser deck (phone/tablet as a CORA dock); absent = off. `profile` is a
    *  BrowserDeckProfile id, validated on load. */

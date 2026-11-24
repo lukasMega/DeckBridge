@@ -1,5 +1,5 @@
-// Checks GitHub for a newer DeckBridge release — notify only, no download or
-// self-update, opt-out via settings.json `updateCheck`. Split pure/IO like
+// Checks GitHub for a newer DeckBridge release, opt-out via settings.json
+// `updateCheck`. Installing is the Tauri shell's job (UPDATE_EXIT_CODE). Split pure/IO like
 // diagnostics.ts so the comparison logic is unit-testable without network.
 //
 // Why curl: this build's `fetch()` rejects `https://` (no TLS — see
@@ -43,6 +43,8 @@ export interface UpdateState {
   /** The version the user closed the badge for — suppresses the badge, not
    *  `updateAvailable` itself (see createUpdateChecker.toInfo). */
   dismissedVersion?: string;
+  /** The version the tray notification already announced (once per version). */
+  notifiedVersion?: string;
 }
 
 /** Wire DTO — see web/contract.ts's re-export. Kept in sync by hand (this file
@@ -55,7 +57,21 @@ export interface UpdateInfo {
   releaseUrl?: string;
   lastCheckedAt?: number;
   dismissedVersion?: string;
+  /** Running under the Tauri shell, which installs the update on exit code 75. */
+  canInstall: boolean;
+  /** Portable/Linux: the release zip for this OS/arch. */
+  downloadUrl?: string;
   error?: UpdateCheckErrorCode;
+}
+
+/** Relay exit code that asks the Tauri shell (src-tauri/src/lib.rs) to run its updater. */
+export const UPDATE_EXIT_CODE = 75;
+
+const RELEASE_DOWNLOAD_URL = 'https://github.com/lukasMega/DeckBridge/releases/download';
+
+/** Same name scripts/package.mjs gives the zip. */
+export function zipDownloadUrl(version: string, platform: string): string {
+  return `${RELEASE_DOWNLOAD_URL}/deckbridge-v${version}/deckbridge-${version}-${platform}.zip`;
 }
 
 // pure
@@ -162,6 +178,10 @@ export interface UpdateCheckerDeps {
   setState: (s: UpdateState) => void;
   /** Injected so tests never spawn curl — production passes fetchLatestRelease. */
   fetchRelease: (version: string) => Promise<string>;
+  /** `DECKBRIDGE_UPDATER=1`, set only by the Tauri shell. */
+  canInstall: boolean;
+  /** `<os>-<arch>` as in the release zip name (build-time `__ZIP_PLATFORM__`). */
+  zipPlatform: string;
   now?: () => number;
 }
 
@@ -173,6 +193,7 @@ export interface UpdateChecker {
    *  the previous cache preserved. */
   check(force?: boolean): Promise<UpdateInfo>;
   dismiss(version: string): void;
+  takeNotification(): string | null;
 }
 
 /** `isEnabled: () => false` (opt-out) or the settings toggle off ⇒ `check()`
@@ -195,6 +216,10 @@ export function createUpdateChecker(deps: UpdateCheckerDeps): UpdateChecker {
       releaseUrl: state?.releaseUrl,
       lastCheckedAt: state?.lastCheckedAt,
       dismissedVersion: state?.dismissedVersion,
+      canInstall: deps.canInstall,
+      ...(updateAvailable && !deps.canInstall && state.latestVersion
+        ? { downloadUrl: zipDownloadUrl(state.latestVersion, deps.zipPlatform) }
+        : {}),
       ...(error ? { error } : {}),
     };
   }
@@ -211,10 +236,10 @@ export function createUpdateChecker(deps: UpdateCheckerDeps): UpdateChecker {
         return toInfo('parse');
       }
       deps.setState({
+        ...state,
         lastCheckedAt: now(),
         latestVersion: release.version,
         releaseUrl: release.url,
-        dismissedVersion: state?.dismissedVersion,
       });
       return toInfo();
     } catch (e) {
@@ -226,12 +251,22 @@ export function createUpdateChecker(deps: UpdateCheckerDeps): UpdateChecker {
   function dismiss(version: string): void {
     const state = deps.getState();
     deps.setState({
+      ...state,
       lastCheckedAt: state?.lastCheckedAt ?? now(),
-      latestVersion: state?.latestVersion,
-      releaseUrl: state?.releaseUrl,
       dismissedVersion: version,
     });
   }
 
-  return { toInfo, check, dismiss };
+  /** The version to announce in the tray now, or null; marks it announced. */
+  function takeNotification(): string | null {
+    const info = toInfo();
+    const state = deps.getState();
+    if (!info.updateAvailable || !state || !info.latest) return null;
+    if (info.latest === state.notifiedVersion || info.latest === state.dismissedVersion)
+      return null;
+    deps.setState({ ...state, notifiedVersion: info.latest });
+    return info.latest;
+  }
+
+  return { toInfo, check, dismiss, takeNotification };
 }

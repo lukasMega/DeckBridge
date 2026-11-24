@@ -17,6 +17,7 @@ const sidebars: SidebarsConfig = {
     'introduction',
     'devices',
     'getting-started',
+    'upgrading',
     'features',
     'browser-deck',
     'headless-linux',

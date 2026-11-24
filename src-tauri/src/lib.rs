@@ -17,11 +17,16 @@ use std::sync::{Arc, Mutex};
 use tauri::{Manager, RunEvent};
 use tauri_plugin_shell::process::{CommandChild, CommandEvent};
 use tauri_plugin_shell::ShellExt;
+use tauri_plugin_updater::UpdaterExt;
 
 // Sidecar base name as referenced by `app.shell().sidecar(..)`. Tauri matches
 // `binaries/<this>-<target-triple>(.exe)` from the externalBin config and runs
 // the triple-matched copy that the bundler installed next to the app exe.
 const SIDECAR_NAME: &str = "deckbridge";
+
+// The relay exits with this code when the WebUI "Install update" button is used
+// (UPDATE_EXIT_CODE in ts/src/infra/update-check.ts).
+const UPDATE_EXIT_CODE: i32 = 75;
 
 // The deckbridge-tray sidecar is bundled alongside the main binary. After install it
 // sits next to the Tauri app exe with the target triple stripped, i.e.
@@ -45,6 +50,7 @@ pub fn run() {
 
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(SidecarChild(child_slot.clone()))
         .setup(move |app| {
             let handle = app.handle().clone();
@@ -59,7 +65,9 @@ pub fn run() {
             let mut command = handle
                 .shell()
                 .sidecar(SIDECAR_NAME)?
-                .env("DECKBRIDGE_APP_ID", handle.config().identifier.clone());
+                .env("DECKBRIDGE_APP_ID", handle.config().identifier.clone())
+                // Tells the relay it may offer "Install update".
+                .env("DECKBRIDGE_UPDATER", "1");
             if let Some(tray) = tray_bin {
                 command = command.env("DECKBRIDGE_TRAY_BIN", tray.to_string_lossy().to_string());
             }
@@ -82,10 +90,17 @@ pub fn run() {
                         CommandEvent::Stderr(bytes) => {
                             eprint!("{}", String::from_utf8_lossy(&bytes));
                         }
-                        CommandEvent::Terminated(_) => {
+                        CommandEvent::Terminated(payload) => {
                             // Sidecar gone — drop our handle (nothing left to
                             // kill) and quit the supervisor.
                             *slot.lock().unwrap() = None;
+                            if payload.code == Some(UPDATE_EXIT_CODE) {
+                                if let Err(e) = install_update(&handle).await {
+                                    eprintln!("[deckbridge] update failed: {e}");
+                                }
+                                // New version, or the old one again after a failure.
+                                handle.restart();
+                            }
                             handle.exit(0);
                             break;
                         }
@@ -111,6 +126,15 @@ pub fn run() {
                 }
             }
         });
+}
+
+/// Download, verify (minisign pubkey in tauri.conf.json) and install the update
+/// from latest.json. On Windows the NSIS installer takes over and exits this process.
+async fn install_update(app: &tauri::AppHandle) -> tauri_plugin_updater::Result<()> {
+    if let Some(update) = app.updater()?.check().await? {
+        update.download_and_install(|_, _| {}, || {}).await?;
+    }
+    Ok(())
 }
 
 /// Kill the sidecar and all of its descendants.

@@ -357,6 +357,10 @@ const shared = {
     __UI_SCRIPT_HASHES__: JSON.stringify(uiScriptHashes),
     __LOG_LEVEL__: String(logLevel),
     __VERSION__: JSON.stringify(version),
+    // Same naming as scripts/package.mjs; the binary is built on its target host.
+    __ZIP_PLATFORM__: JSON.stringify(
+      `${{ darwin: 'macos', win32: 'windows' }[process.platform] ?? process.platform}-${process.arch === 'x64' ? 'x86_64' : process.arch}`,
+    ),
     __DEMO__: 'false',
     __SIMPLE_ONLY__: JSON.stringify(isSimpleOnly),
     __MOCK_BUILD__: JSON.stringify(isMockBuild),

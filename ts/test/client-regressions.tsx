@@ -322,7 +322,13 @@ async function runHydrateRegression(): Promise<void> {
     multiDeck: false,
     keyPressEnabled: false,
     keepLastIcons: true,
-    updateInfo: { enabled: true, current: '0.14.1', updateAvailable: true, latest: '0.15.0' },
+    updateInfo: {
+      enabled: true,
+      current: '0.14.1',
+      updateAvailable: true,
+      latest: '0.15.0',
+      canInstall: false,
+    },
     elgatoAutoRestart: { enabled: true, delayS: 10, supported: true },
     extensions: { dir: '/ext', extensions: [] },
   };
@@ -1691,7 +1697,7 @@ function cellCounts(card: HTMLElement): { live: number; inert: number } {
 }
 
 function baseUpdateInfo(): UpdateInfo {
-  return { enabled: true, current: '0.14.1', updateAvailable: false };
+  return { enabled: true, current: '0.14.1', updateAvailable: false, canInstall: false };
 }
 
 function runUpdateBadge(): void {

@@ -36,6 +36,9 @@ declare global {
   // Docs-site demo build (ts/scripts/build-demo.mjs), never true in the app.
   const __DEMO__: boolean;
 
+  // `<os>-<arch>` of the build host, as in the release zip name (ts/build.mjs).
+  const __ZIP_PLATFORM__: string;
+
   // Explicit local/test build only. Release bundles fold mock paths away.
   const __MOCK_BUILD__: boolean;
 }

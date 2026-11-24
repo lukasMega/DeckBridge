@@ -107,8 +107,9 @@ Push-API tokens appear in the report without their hashes.
 
 ## Update check
 
-DeckBridge checks GitHub for a newer release on startup and every 24h — notify only,
-never a download or self-update. It sends one plain `GET` to the GitHub releases API
+DeckBridge checks GitHub for a newer release on startup and every 24h. The check itself
+never downloads anything; installing is a separate click (see [Upgrading](./upgrading.md)).
+It sends one plain `GET` to the GitHub releases API
 carrying just a `User-Agent: DeckBridge/<version>` header; see
 [Privacy](./privacy.md#the-deckbridge-app) for exactly what that call sends. Turn it off
 with **Settings → Check for updates**, or `"updateCheck": false` in `settings.json`. No

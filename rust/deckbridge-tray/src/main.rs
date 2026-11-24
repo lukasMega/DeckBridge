@@ -223,6 +223,7 @@ struct TrayHandles {
     header_item: MenuItem,
     status_item: MenuItem,
     update_item: MenuItem,
+    update_id: tray_icon::menu::MenuId,
     open_ui_id: tray_icon::menu::MenuId,
     check_req_id: tray_icon::menu::MenuId,
     restart_elgato_id: tray_icon::menu::MenuId,
@@ -240,6 +241,7 @@ fn build_tray(icons: &Icons) -> TrayHandles {
     let restart_elgato_item = MenuItem::new("Restart Elgato App", true, None);
     let quit_item = MenuItem::new("Quit", true, None);
 
+    let update_id = update_item.id().clone();
     let open_ui_id = open_ui_item.id().clone();
     let check_req_id = check_req_item.id().clone();
     let restart_elgato_id = restart_elgato_item.id().clone();
@@ -271,6 +273,7 @@ fn build_tray(icons: &Icons) -> TrayHandles {
         header_item,
         status_item,
         update_item,
+        update_id,
         open_ui_id,
         check_req_id,
         restart_elgato_id,
@@ -383,6 +386,8 @@ fn main() {
                     };
                     handles.status_item.set_text(&label);
                     handles.update_item.set_text(&state.update_text);
+                    // Clickable only while there is something to install or download.
+                    handles.update_item.set_enabled(state.update_available);
                     if !state.version.is_empty() {
                         handles
                             .header_item
@@ -397,6 +402,8 @@ fn main() {
                     // logging); Rust only emits.
                     if ev.id == handles.open_ui_id {
                         emit("open_webui", None);
+                    } else if ev.id == handles.update_id {
+                        emit("open_update", None);
                     } else if ev.id == handles.check_req_id {
                         emit("check_requirements", None);
                     } else if ev.id == handles.restart_elgato_id {
