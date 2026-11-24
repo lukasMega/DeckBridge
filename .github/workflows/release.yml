@@ -437,7 +437,8 @@ jobs:
           mkdir artifacts
           for dir in downloaded/*/; do
             case "$(basename "$dir")" in virustotal-poc-*) continue ;; esac
-            mv "$dir"* artifacts/
+            # Flatten: the macOS -dmg artifacts keep dmg/ and macos/ subdirs and both arches share them.
+            find "$dir" -type f -exec mv -t artifacts/ {} +
           done
           ls -la artifacts
 
