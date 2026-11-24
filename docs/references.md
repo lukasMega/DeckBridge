@@ -42,16 +42,6 @@ Links below identify historical research sources.
 
 | Project | What it gave us |
 |---|---|
-| [shugotekitten/opendeck-ampgd6](https://github.com/shugotekitten/opendeck-ampgd6) | D6 driver — key remap, JPEG geometry, protocol versions, and 1024-byte packets for PID `0x0060`. |
-| [Phoenix557/FifineOpenSource](https://github.com/Phoenix557/FifineOpenSource) | Independent confirmation of the same D6 constants. |
-| [Lyagva/companion-surface-mirabox-stream-dock](https://github.com/Lyagva/companion-surface-mirabox-stream-dock) | Companion fork that added the D6; PR #49 is the hardware-verified `0x0007` model we cloned. |
-| [jasonkoon/sd-connect](https://github.com/jasonkoon/sd-connect) | Live-probed `0x0060` notes — key remap on write, raw 1-based indexes on input. |
-| [TripleU613/Ampligame_D6_Pro_Linux](https://github.com/TripleU613/Ampligame_D6_Pro_Linux) | libusb notes on CRT opcodes, `STP` commit, and 180° rotation (treat as a different firmware reading). |
-
-## Fifine devices
-
-| Project | What it gave us |
-|---|---|
 | [shugotekitten/opendeck-ampgd6](https://github.com/shugotekitten/opendeck-ampgd6) | AmpliGame D6 driver — the `IMAGE_MAP` key remap (identical to the 293V3), JPEG geometry, and the split between the write and reader protocol versions. Its PRs #4, #5, #6 and #7 are four independent reports that PID `0x0060` needs 1024-byte packets; #6 and #7 also put that revision's panel at 112×112 and its protocol at v3 (press+release). PR #7 explains *why* a wrong packet size is invisible — the board reports `MaxOutputReportSize = 1024` and silently discards short writes while `write()` still returns success, which is what `wire.packetSizeCandidates` now probes for. |
 | [Phoenix557/FifineOpenSource](https://github.com/Phoenix557/FifineOpenSource) | Independent confirmation of the same D6 constants (VID/PID, HID usage, image map, protocol versions) from a separate Tauri/Rust implementation. |
 | [Lyagva/companion-surface-mirabox-stream-dock](https://github.com/Lyagva/companion-surface-mirabox-stream-dock) | Fork of Companion's Mirabox surface that added the D6. Its PR #49 (upstream) is the hardware-verified `0x0007` entry we cloned the model from. PR #1 is a *different* fix for the `0x0060` black screen: it keeps 512-byte control packets and instead enlarges the image chunks, serializes the writes and paces them 2 ms apart — the pacing `wire.chunkDelayMs` exposes. |
