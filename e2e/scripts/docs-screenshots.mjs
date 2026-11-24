@@ -110,6 +110,8 @@ async function capture(name, snapshot, heading, wide = false) {
       await page.route('**/api/state', (route) =>
         route.fulfill({ json: { ...snapshot, localIp: '192.168.1.42' } }),
       );
+      // The capture machine's Stream Deck app version must not show up in published images.
+      await page.route('**/api/pairing-route', (route) => route.fulfill({ json: null }));
       // Keep staged no-device/conflict snapshots from being replaced by live mock status.
       await page.routeWebSocket('**/api/ws', () => {});
       await page.goto(base, { waitUntil: 'networkidle' });

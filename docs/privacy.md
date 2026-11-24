@@ -9,148 +9,127 @@ description: What this docs site measures — cookieless, first-party, no person
 # Privacy & Analytics
 
 This site uses **first-party, self-hosted analytics**: no cookies, no stored IPs, no
-fingerprinting, no third-party trackers, nothing sold or shared. Site measurements are aggregate daily
-counts only — we cannot identify you or follow you across sites. Explicit in-app survey
-responses are stored individually, as described below.
+fingerprinting, no third-party trackers, nothing sold or shared. Site data is daily totals
+only, so we cannot identify you. In-app survey answers are stored one by one (see below).
 
 ## What is measured
 
 Per page view, stored only as running daily counts:
 
-- **Page path** and **referrer host** (e.g. `google.com`) — not the full URL.
-- **Browser, OS, device type** — from the server-side User-Agent, no version fingerprint.
-- **Language** and **timezone** — coarse locale hint instead of IP geolocation.
-- **Viewport bucket** (`<640`, `640–1024`, `>1024`) — layout only.
-- **Campaign tags** (`utm_source` / `utm_medium` / `utm_campaign`) when present. Links from
-  the DeckBridge app carry them; the page removes them from the address bar once counted.
-- **Outbound-link / download clicks** — destination host or file name.
-- **Whether the page saw any interaction**, and how soon after load, as one of three
-  coarse buckets. No mouse coordinates, no movement, no event trace — only that a real
-  (browser-trusted) interaction happened. It is used to tell humans from automation.
+- **Page path** and **referrer host** (e.g. `google.com`), not the full URL.
+- **Browser, OS, device type** from the User-Agent. No version fingerprint.
+- **Language** and **timezone**, as a rough hint instead of IP geolocation.
+- **Viewport bucket** (`<640`, `640–1024`, `>1024`).
+- **Campaign tags** (`utm_source` / `utm_medium` / `utm_campaign`) when present. App links
+  carry them. The page removes them from the address bar once counted.
+- **Outbound-link / download clicks**: destination host or file name.
+- **Any interaction**, and how soon after load, in one of three rough buckets. No mouse
+  data. It only tells humans from bots.
 
-Individual visits are never stored as rows, so a single page view cannot be reconstructed,
-and no measurement can be joined to another (e.g. page path × country).
-
-The collector is open source and self-hosted:
-[deno-kv-analytics](https://github.com/lukasMega/deno-kv-analytics).
+Single visits are never stored, and no measurement can be joined to another. The
+collector is open source: [deno-kv-analytics](https://github.com/lukasMega/deno-kv-analytics).
 
 ## Live demo
 
-The docs-site demo reports which device model you tried: its model id, or USB
-vendor/product ids when a real device is unknown. It also reports unsupported
-real-device mode and connection failures, using one-word reasons. These aggregate
-events use the same first-party beacon as page views. No serial numbers, images or
-key presses are sent. Nothing is sent from localhost.
+The docs-site demo reports the device model you tried (model id, or USB vendor/product
+ids for an unknown real device), unsupported real-device mode, and connection failures
+(one-word reasons). It uses the same beacon. No serial numbers, images or key presses are
+sent. Nothing is sent from localhost.
 
 ## Visitor & session counting
 
-To count visitors and sessions **without cookies**, your browser keeps a random,
-non-personal id in `localStorage`. It never leaves the browser — only a "first visit
-today" / "new session" flag is sent, never the id. Clearing browser storage resets it.
+Your browser keeps a random, non-personal id in `localStorage`. It never leaves the
+browser. Only a "first visit today" / "new session" flag is sent. Clearing storage resets it.
 
 ## Opting out
 
-The beacon is a plain image request. Block it with any content blocker, disable
-JavaScript for this site, or clear `localStorage` — the docs work fully either way. No
-consent banner is needed, since nothing personal is stored locally or server-side.
+The beacon is a plain image request. Block it with a content blocker, turn off JavaScript
+for this site, or clear `localStorage`. The docs work either way. No consent banner is
+needed, because nothing personal is stored.
 
 ## The DeckBridge app
 
-The binary makes two automatic outbound network calls, both on by default and each
-with its own independent opt-out. Neither sends a machine id, a device serial, a file
-path, or anything about what you press.
+The binary makes two automatic calls. Both are on by default, each with its own opt-out.
+Neither sends a machine id, device serial, file path, or what you press.
 
-A **release-update check**. Every 24h (and once ~30s after startup) it runs one
-unauthenticated `GET` to `api.github.com/repos/lukasMega/DeckBridge/releases/latest`,
-carrying only a `User-Agent: DeckBridge/<version>` header. The result (a version
-string + release URL) is cached in `settings.json` so a restart doesn't repeat the
-request. Turn it off with the **Check for updates** toggle in Settings, or by setting
-`"updateCheck": false` in `settings.json`. Only when you click **Install** (installer
-builds) does the app fetch `latest.json` and the signed update from GitHub Releases.
+- **Release-update check.** Every 24h (and once ~30s after startup): one unauthenticated
+  `GET` to `api.github.com/repos/lukasMega/DeckBridge/releases/latest`, with only a
+  `User-Agent: DeckBridge/<version>` header. The result is cached in `settings.json`.
+  Turn it off with **Check for updates** in Settings, or `"updateCheck": false`. Only when
+  you click **Install** does the app fetch `latest.json` and the signed update.
+- **Daily usage ping.** On its own timer, first one 5 minutes after startup, then one
+  request per UTC day. Turn it off with `"a7s": false` in `settings.json` (separate from
+  the update check). It sends eight items:
+  - **OS family**: `macos` / `windows` / `linux`.
+  - **OS major version**: `windows-11`, `macos-26`, `ubuntu-24.04`. Never the patch level.
+  - **DeckBridge version**.
+  - **Connected deck model ids**, or `none`.
+  - **Country locale hint**: `pl-PL` or `en-GB`, from OS settings (else the browser
+    language, else `unknown`). Not IP geolocation.
+  - **Timezone**: IANA zone such as `Europe/Bratislava`, or a UTC offset such as
+    `UTC+02:00`. Never saved in settings.
+  - **Elgato Stream Deck app version**, e.g. `7.6.0`, from the default install path
+    (macOS/Windows). Left out if not installed.
+  - **Docs topics opened from the WebUI** since the last ping: names only (e.g.
+    `push-api`), no count or time. Not recorded while the ping is off.
 
-A **daily usage ping**, on its own timer (first one 5 minutes after startup — see
-below for why). One request per UTC day, carrying eight things:
+The collector keeps aggregate counters only: no row per install, no visitor id, nothing to
+join two days. Local state is only `a7sDay` (UTC day of the last ping, never sent) and the
+topics waiting for the next ping.
 
-- **OS family** — `macos` / `windows` / `linux`.
-- **OS major version** — `windows-11`, `macos-26`, `ubuntu-24.04`. Never the patch level.
-- **DeckBridge version**.
-- **Connected deck model ids**, or `none`.
-- **Country locale hint** — `pl-PL` or `en-GB`, from OS language and region settings,
-  falling back to the WebUI browser's own language if the OS setting can't be read.
-  This is not physical location or IP geolocation; unavailable locales are `unknown`.
-- **Timezone** — browser-resolved IANA zone, such as `Europe/Bratislava`, when
-  WebUI reports one. Otherwise, UTC offset, such as `UTC+02:00`. Named zones
-  reveal more about approximate location than offsets. This remains an
-  aggregate-only counter; browser timezone is never saved in settings.
-- **Elgato Stream Deck app version** — `7.6.0`, read from the default install path
-  (macOS/Windows). Omitted when the app is not installed there.
-- **Docs topics opened from the WebUI** since the last ping — topic names only (e.g.
-  `push-api`): no count, no time, nothing about the page you were on. Not recorded at all
-  while the ping is off.
+The **Statistics** [extension](./extensions.md), if you install it, counts presses,
+images, and reconnects for the session. The numbers stay in memory, reset on restart, and
+are never sent.
 
-The collector stores aggregate counters only: no row per install, no visitor id,
-nothing to join two days' pings together. The only local state is `a7sDay`, the UTC day
-of the last ping (which never leaves the machine), and the docs topics waiting for the next ping. Turn it off with `"a7s": false` in
-`settings.json` — a separate switch from the update check.
+<details>
+<summary>When DeckBridge does not ping at all</summary>
 
-The **Statistics** [extension](./extensions.md), when you install and switch it on, counts
-presses, images, and reconnects for the current session. The numbers stay in memory, reset
-when DeckBridge restarts, and are never sent anywhere.
+The ping is skipped when any of these is true (`ts/src/infra/daily-ping-env.ts` has the
+whole rule):
 
-### When DeckBridge does not ping at all
+- **You turned it off**: `--no-daily-ping`, `DECKBRIDGE_NO_DAILY_PING=1`, or `DO_NOT_TRACK=1`.
+- **Development mock mode**: `DECKBRIDGE_MOCK` in a mock build. Release builds have no mock.
+- **An automated environment**: `CI`, `GITHUB_ACTIONS`, `GITLAB_CI`, `JENKINS_URL` and a
+  dozen similar markers. (`CI=false` and `CI=` do not count.)
+- **Running for less than 5 minutes.** This keeps malware sandboxes (VirusTotal and
+  similar run a binary for a couple of minutes) from making any request.
 
-Independently of the setting above, the ping is skipped outright when any of these
-holds (`ts/src/infra/daily-ping-env.ts` is the whole rule, in one file):
+A skipped ping leaves `a7sDay` untouched, so a CI job or sandbox cannot use up a real
+machine's daily ping. `deckbridge diagnose` shows the verdict on the `(daily-ping)` line.
 
-- **You turned it off at the command line or in the environment** —
-  `--no-daily-ping`, `DECKBRIDGE_NO_DAILY_PING=1`, or the cross-tool convention
-  `DO_NOT_TRACK=1`.
-- **Development mock mode** — `DECKBRIDGE_MOCK` set in a mock-enabled build. Release builds omit mock support.
-- **An automated environment** — `CI`, `GITHUB_ACTIONS`, `GITLAB_CI`, `JENKINS_URL`
-  and a dozen similar markers. (`CI=false` and `CI=` do not count as set.)
-- **The app has been running for less than 5 minutes.** This one exists so that
-  malware-analysis sandboxes — VirusTotal and friends, which run a binary for a
-  couple of minutes — never produce a network request at all. It also means a very
-  short session is never counted.
-
-So the first ping of a session comes no earlier than 5 minutes after start, on its
-own timer rather than the update check's. A skipped ping leaves `a7sDay` untouched, so
-a CI job or a sandbox run cannot consume the day's ping for a real machine.
-`deckbridge diagnose` reports the current verdict on the `(daily-ping)` line of the
-environment section.
+</details>
 
 ### Optional feedback survey
 
-A third outbound call happens only when you press **Send** in the feedback survey.
-Open it from Settings → Maintenance → **Give feedback**, About, or the footer's
-**Feedback** link. Every question can be skipped. Before sending, **What gets sent**
-shows the exact JSON body: survey version, the ids of the questions shown, your selected answers, an optional comment
-(trimmed and capped at 280 characters), a description required when you select **Other** in
-**What do you use it for?** (trimmed and capped at 300 characters) or in
-**How did you find DeckBridge?**, **What bothers you most?**, **What should come next?** or
-**Would you support DeckBridge?** (each trimmed and capped at 100 characters), DeckBridge version,
-OS family and major version, and connected model ids. Nothing leaves your machine before Send.
+A third call happens only when you press **Send** in the feedback survey (Settings →
+Maintenance → **Give feedback**, About, or the footer **Feedback** link). Every question is
+optional. **What gets sent** shows the exact JSON first. Nothing leaves before Send.
 
-Unlike the daily ping, each survey response is **stored as one row** by the same
-self-hosted collector. Rows have no stored IP, install id, device serial, device key,
-paths, commands, locale or timezone. The collector groups responses by UTC day.
-Please do not include personal information in any text field.
+Unlike the ping, each response is **stored as one row** by the same collector. Rows have no
+IP, install id, device serial, device key, paths, commands, locale or timezone. Please put
+no personal information in text fields.
 
-Daily-ping opt-outs do not hide or block the survey: pressing Send is explicit consent.
-Mock mode never sends. An unfinished survey is kept as a draft in your browser's local
-storage (answers, typed text and current step) so you can continue later; it never leaves
-your machine, is deleted after a successful send or 30 days, and clearing browser data
-removes it. The app itself saves only the survey version and submission date, a 30-day
-snooze, or **Don't ask again** preference.
-The Ready screen may show a small feedback prompt seven days after first pairing, once
-per survey version; passive feedback links remain available after opting out of prompts.
+<details>
+<summary>Survey details</summary>
 
-Everything else it records stays on your machine, under the cache directory described
-in [Troubleshooting](./troubleshooting.md).
+The body has the survey version, ids of the questions shown, your answers, an optional
+comment (max 280 characters), DeckBridge version, OS family and major version, and
+connected model ids. If you pick **Other**, a description is required: max 300 characters
+in **What do you use it for?**, max 100 in **How did you find DeckBridge?**, **What bothers
+you most?**, **What should come next?** and **Would you support DeckBridge?**.
 
-One thing to know before sharing: the **diagnostics report** you can generate for a bug
-report includes your `settings.json` verbatim — which means your extra-key shell
-commands, plugin arguments and local file paths. But bug reports are public, so skim
-the report before posting it, or omit the commands with
-`./deckbridge diagnose --redact-commands` / the **Hide my commands** checkbox in the web
-UI. The report's first line repeats this reminder.
+Ping opt-outs do not block the survey: pressing Send is consent. Mock mode never sends. A
+draft (answers, text, step) stays in your browser's local storage, is deleted after a send
+or 30 days, and is never sent. The app saves only the survey version and submission date,
+a 30-day snooze, or **Don't ask again**. The Ready screen may show a feedback prompt seven
+days after first pairing, once per survey version.
+
+</details>
+
+Everything else stays on your machine, in the cache directory described in
+[Troubleshooting](./troubleshooting.md).
+
+**Before you share a diagnostics report:** it includes your `settings.json` verbatim,
+with extra-key shell commands, plugin arguments and local paths. Bug reports are public,
+so skim it first. Or omit the commands with `./deckbridge diagnose --redact-commands` or
+the **Hide my commands** checkbox in the web UI. The report's first line repeats this.

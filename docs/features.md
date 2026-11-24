@@ -7,20 +7,15 @@ description: What DeckBridge does, who it's for, the permissions it needs, and t
 
 # Features & Use Cases
 
-DeckBridge turns a USB Stream Deck into a network device the Elgato app can use over
-WiFi.
+DeckBridge turns a USB Stream Deck into a network device the Elgato app can use over WiFi.
 
 ## Live demo
 
-[Try the live demo](/demo) with a mock deck in your browser, without installing anything.
-Real device mode in desktop Chrome, Edge or Opera drives your deck's keys and brightness
-over WebHID, plus the strip and knobs on AKP05 and AKP05E.
+[Try the live demo](/demo) with a mock deck in your browser. You install nothing. In desktop Chrome, Edge or Opera, real device mode drives your deck's keys and brightness over WebHID (plus the strip and knobs on AKP05 and AKP05E).
 
 ## Use a budget deck with the Elgato app
 
-DeckBridge lets the **official Elgato Stream Deck app** drive cheap, non-Elgato decks —
-Mirabox, Ajazz, and similar boards, from 6-key minis to 15-key (3×5) decks. The app sees
-a regular **Network device** at `localhost`; the deck behaves like Elgato hardware.
+DeckBridge lets the **official Elgato Stream Deck app** drive cheap, non-Elgato decks: Mirabox, Ajazz and similar boards, from 6-key minis to 15-key (3×5) decks. The app sees a regular **Network device** at `localhost`. The deck behaves like Elgato hardware.
 
 <div class="db-stepper" role="group" aria-label="Pairing a budget Stream Deck with DeckBridge in four steps">
 <input type="radio" name="db-step" id="db-s1" />
@@ -84,74 +79,36 @@ a regular **Network device** at `localhost`; the deck behaves like Elgato hardwa
 
 ## Feature overview
 
-- **Network Dock emulation** — Elgato CORA protocol over TCP, advertised via mDNS
-  `_elg._tcp` ("Network Stream Deck"); the app discovers it like real hardware.
-- **Elgato app 7.6.1 on the same computer** — pair through a relay on another device (one
-  pasted command; a [Node.js relay](./elgato-same-computer.md#relay-node) where macOS blocks
-  the binary), WSL or OrbStack; see [Same computer](./elgato-same-computer.md).
-- **Works with non-Elgato decks** — [supported](./introduction.mdx#supported-devices)
-  Mirabox / Ajazz decks present themselves to the app as an Elgato model it already
-  knows, so nothing changes app-side.
-- **Browser deck (opt-in)** — a phone or tablet becomes one more network dock, with press
-  and hold; see [Browser deck](./browser-deck.md).
-- **Multiple decks (opt-in, max 2)** — off by default: DeckBridge uses one deck and stops
-  looking for further USB devices once it is connected. Switch it on in Settings and a
-  second deck appears as its own network dock, with per-deck pairing cards, a selectable
-  live preview, and per-deck brightness in the web UI; see
-  [Multiple decks](#multiple-decks) for the walkthrough and
-  [Limitations](#limitations) for the rules and caveats.
-- **Per-device image pipeline** — resizes, rotates, and (for the K1 Pro) re-encodes every
-  button image to the device's native format via a Rust native library, with a cache
-  to skip repeat work.
-- **Extensions** — optional features you download separately and switch on in Settings,
-  so the app stays small for everyone else; see [Extensions](./extensions.md). The
-  Statistics extension shows uptime, key and dial presses, processed key images, cache hit
-  rate, reconnects, and a 15-minute activity chart, per deck or for all decks; it is
-  session-only and never leaves your machine.
-- **Non-blocking by design** — USB HID and the image transforms run on a
-  separate worker thread, so the network ACK loop and web UI never stall.
-- **Side-key widgets** — decks with display-only keys outside the grid (e.g. the 293S
-  sixth column) show server-rendered clock / date / text / weather / command / plugin
-  widgets; see [Side-key widgets](./side-keys.md).
-- **Page-following layouts** — save an Elgato page once, give it its own side-key and touch
-  strip layout, and the deck switches layouts when the app changes page; see
-  [Layouts that follow the Elgato page](./side-keys.md#layouts-that-follow-the-elgato-page).
-- **Push API** — other tools (OBS, Home Assistant, scripts, `deckbridge push`) write text
-  onto side keys and AKP05/AKP05E strip zones over token-authenticated HTTP, with a TTL;
-  see [Push API](./push-api.md).
-- **Standby and burn-in care (opt-in)** — dim or turn off an idle deck, show a dim moving
-  clock while the Elgato app is away, run a night-time brightness window, and shift
-  DeckBridge's own widgets by 1 px; see [Standby and burn-in care](#standby-and-burn-in-care).
-- **Live web UI** — `http://localhost:3000` (fallback 33011–33099 if busy) shows the key grid and a log feed in real time.
-- **Device tuning** — rotation, flip, image fit, quality and size are adjustable at
-  runtime per model, with a key-map learn mode that derives the correct key mapping from
-  the hardware itself. For boards supported from documentation rather than from hardware
-  we own; see [Device tuning](./troubleshooting.md#device-tuning).
-- **Log file + diagnostics report** — logs are written to disk (rotated, ~6 MB cap), and
-  a single pasteable report can be produced from the web UI or with
-  `./deckbridge diagnose` — which works even when the web UI never starts. See
-  [Troubleshooting](./troubleshooting.md).
-- **System tray + diagnostics** — packaged releases (installers and release zips) include
-  a status tray icon ([states](./getting-started.mdx#3-run-it)) and a `/requirements`
-  self-check page.
-- **Standalone binary** — one **&lt;5 MB** file built on txiki.js; no Node.js.
+- **Network Dock emulation** — CORA over TCP, advertised by mDNS `_elg._tcp` ("Network Stream Deck"). The app finds it like real hardware.
+- **Elgato app on the same computer (7.6.1)** — pair through a relay, WSL or OrbStack. See [Same computer](./elgato-same-computer.md) and the [Node.js relay](./elgato-same-computer.md#relay-node) for macOS.
+- **Non-Elgato decks** — [supported](./introduction.mdx#supported-devices) Mirabox / Ajazz decks look like an Elgato model the app knows.
+- **Browser deck (opt-in)** — a phone or tablet is one more dock. See [Browser deck](./browser-deck.md).
+- **Multiple decks (opt-in, max 2)** — see [Multiple decks](#multiple-decks) and [Limitations](#limitations).
+- **Image pipeline** — a Rust library resizes, rotates and (K1 Pro) re-encodes key images, with a cache, off the main thread.
+- **Extensions** — optional downloads you switch on in Settings. See [Extensions](./extensions.md). Statistics shows uptime, presses, cache hit rate, reconnects and a 15-minute chart; its data is session-only and stays local.
+- **Side-key widgets** — clock, date, text, weather, command and plugin widgets on display-only keys (for example the 293S sixth column). See [Side-key widgets](./side-keys.md).
+- **Page-following layouts** — give an Elgato page its own side-key and touch-strip layout. See [Layouts that follow the Elgato page](./side-keys.md#layouts-that-follow-the-elgato-page).
+- **Push API** — OBS, Home Assistant, scripts and `deckbridge push` write text to side keys and AKP05/AKP05E strip zones over token-authenticated HTTP, with a TTL. See [Push API](./push-api.md).
+- **Standby and burn-in care (opt-in)** — see [Standby and burn-in care](#standby-and-burn-in-care).
+- **Live web UI** — `http://localhost:3000` (fallback 33011–33099 if busy): key grid and live log.
+- **Device tuning** — rotation, flip, image fit, quality and size per model, plus a key-map learn mode. See [Device tuning](./troubleshooting.md#device-tuning).
+- **Logs + diagnostics** — a rotated log file (~6 MB cap) and one pasteable report from the web UI or `./deckbridge diagnose` (works even if the web UI never starts). See [Troubleshooting](./troubleshooting.md).
+- **Tray + self-check** — packaged releases have a tray icon ([states](./getting-started.mdx#3-run-it)) and a `/requirements` page.
+- **Standalone binary** — one **&lt;5 MB** file on txiki.js. No Node.js.
 
 ## Web UI states
 
-Web UI always shows current setup state. No guessing required.
-
 | Waiting for USB | Elgato conflict |
 |---|---|
-| ![DeckBridge waiting for a Stream Deck to be connected over USB, light theme](./img/webui-state-no-device.png) ![DeckBridge waiting for a Stream Deck to be connected over USB, dark theme](./img/webui-state-no-device-dark.png) | ![DeckBridge warning that the Elgato app is blocking USB access, light theme](./img/webui-state-conflict.png) ![DeckBridge warning that the Elgato app is blocking USB access, dark theme](./img/webui-state-conflict-dark.png) |
+| ![Waiting for a Stream Deck over USB, light theme](./img/webui-state-no-device.png) ![Waiting for a Stream Deck over USB, dark theme](./img/webui-state-no-device-dark.png) | ![Warning that the Elgato app blocks USB access, light theme](./img/webui-state-conflict.png) ![Warning that the Elgato app blocks USB access, dark theme](./img/webui-state-conflict-dark.png) |
 | **Ready to pair** | **Connected and working** |
-| ![DeckBridge showing the address needed to pair a connected Stream Deck, light theme](./img/webui-state-pairing.png) ![DeckBridge showing the address needed to pair a connected Stream Deck, dark theme](./img/webui-state-pairing-dark.png) | ![DeckBridge showing a connected and working Stream Deck with its live preview, light theme](./img/webui-state-ready.png) ![DeckBridge showing a connected and working Stream Deck with its live preview, dark theme](./img/webui-state-ready-dark.png) |
+| ![Address needed to pair a connected deck, light theme](./img/webui-state-pairing.png) ![Address needed to pair a connected deck, dark theme](./img/webui-state-pairing-dark.png) | ![Connected deck with live preview, light theme](./img/webui-state-ready.png) ![Connected deck with live preview, dark theme](./img/webui-state-ready-dark.png) |
 
 ### AKP05 as Elgato Stream Deck +
 
-This mock pairing shows the AKP05's eight app keys, touch strip, side keys, and knob
-controls with **Stream Deck +** emulation.
+The AKP05 in **Stream Deck +** emulation (mock pairing).
 
-![Paired AJAZZ AKP05 in Stream Deck Plus emulation showing touch strip and knobs, light theme](./img/webui-akp05-plus.png) ![Paired AJAZZ AKP05 in Stream Deck Plus emulation showing touch strip and knobs, dark theme](./img/webui-akp05-plus-dark.png)
+![Paired AJAZZ AKP05 in Stream Deck Plus emulation, light theme](./img/webui-akp05-plus.png) ![Paired AJAZZ AKP05 in Stream Deck Plus emulation, dark theme](./img/webui-akp05-plus-dark.png)
 
 ## Use cases
 
@@ -166,11 +123,8 @@ flowchart LR
     dbx <-->|"WiFi / LAN"| elg
 ```
 
-- **Put the deck on another computer** — plug the deck into a laptop or mini-PC, run
-  DeckBridge there, and control the Elgato app on your streaming PC across the LAN.
-- **Skip the Network Dock** — use a computer you already own and avoid buying the
-  [Elgato Network Dock](https://www.elgato.com/us/en/p/network-dock-stream-deck), listed at
-  **$79.99 USD** in September 2026.
+- **Deck on another computer** — plug the deck into a laptop or mini-PC, run DeckBridge there, and control the Elgato app on your streaming PC over the LAN.
+- **Skip the Network Dock** — use a computer you own instead of the [Elgato Network Dock](https://www.elgato.com/us/en/p/network-dock-stream-deck) (**$79.99 USD**, September 2026).
 
   <details class="db-dock-compare">
   <summary>Compare DeckBridge with Network Dock</summary>
@@ -183,10 +137,7 @@ flowchart LR
   | **Use** | Hobby project with setup flexibility; host computer must stay on. | Dedicated, officially supported hardware for fixed installations; requires purchase and wired network. |
 
   </details>
-- **Use a real Stream Deck wirelessly** — a Stream Deck Mini or MK.2 works the same way,
-  over WiFi instead of a cable.
-- **Bitfocus Companion** — Companion also speaks the dock protocol and discovers
-  DeckBridge the same way.
+- **Real Stream Deck over WiFi** — a Mini or MK.2 works the same way. So does Bitfocus Companion.
 
 <div style="border-left:4px solid #e6a700;background:rgba(230,167,0,0.12);padding:12px 16px;border-radius:6px;margin:20px 0">
 <strong>⚠ Hobby use</strong><br/>
@@ -195,74 +146,42 @@ DeckBridge is for personal and hobby use, and does not replace the Elgato Networ
 
 ## Multiple decks
 
-**Off by default.** DeckBridge drives a single deck and, once that deck is connected,
-stops scanning USB for other supported devices entirely. To use two decks at once, open
-**Settings → Multiple decks** in the web UI and turn on *Use two decks at once* (stored as
-`"multiDeck": true` in settings.json). Two decks is the maximum.
+**Off by default.** DeckBridge drives one deck and stops scanning USB once it is connected. For two decks (the maximum), open **Settings → Multiple decks** and turn on *Use two decks at once* (`"multiDeck": true` in settings.json). The second deck is its own network dock, with its own mDNS name and CORA port pair (see [Network ports](#network-ports)). The web UI shows one card per deck:
 
-With it on, a second deck becomes its own network dock: own mDNS name, own CORA port pair
-(see [Network ports](#network-ports)). The web UI lists every connected deck as a card:
+1. **Pair one deck at a time.** An unpaired card shows "Waiting for Elgato app" and `IP : port` copy-chips for **Add Network Device…**. The port differs per deck (5343, 5345, …), so copy it from that card.
+2. **The card turns green** ("Paired") when the app connects. The app remembers paired docks.
+3. **Click a card to select it.** The selected deck gets the live preview and brightness slider. Each deck keeps its own brightness (also set from the Elgato app, unless "Ignore brightness from Elgato app" is on).
 
-1. **Pair one at a time.** Each deck shows in the Elgato app as a separate Network Dock.
-   An unpaired card shows an amber "Waiting for Elgato app" chip and the exact
-   `IP : port` copy-chips for the app's **Add Network Device…** dialog — the port differs
-   per deck (5343, 5345, …), so copy it from that deck's card.
-2. **Card flips green** ("Paired") when the app connects — no reload. The app remembers
-   paired docks across restarts.
-3. **Click a card to select it** — the selected deck gets the live preview and the
-   brightness slider. Each deck keeps its own brightness (also applied per deck from the
-   Elgato app, unless "Ignore brightness from Elgato app" is on).
+Every dock needs its **own IP address** in the Elgato app: see [one dock per IP address](./browser-deck.md#one-dock-per-ip-address). A phone or tablet can be an extra dock: see the [Browser deck](./browser-deck.md).
 
-**Choosing which decks run.** With multiple decks on, DeckBridge detects up to four plugged-in
-decks and lists them under **Settings → Multiple decks**. Tick the (at most two) decks to run;
-the rest stay idle. Your choice is stored as `"activeDecks"` in settings.json. With no choice
-saved, the first two decks found run.
+<details>
+<summary>Advanced: choosing decks, unplugging, single instance</summary>
 
-Unplugging an extra deck removes its card; replugging brings it back automatically.
-Turning the setting back off disconnects the second deck (its settings are kept, so
-switching it on again restores the dock).
+- **Choosing decks** — DeckBridge detects up to four decks and lists them under **Settings → Multiple decks**. Tick at most two to run. The choice is stored as `"activeDecks"`. With no choice, the first two found run.
+- **Unplugging** — an unplugged extra deck loses its card and gets it back when replugged. Turning the setting off disconnects the second deck but keeps its settings.
+- **One instance** — a second DeckBridge exits with "DeckBridge is already running". The first one holds loopback TCP port 44659 as a lock.
 
-Only one DeckBridge can run per machine. A second copy exits at startup with "DeckBridge is
-already running" (it holds loopback TCP port 44659 as a lock).
-
-Every dock needs its **own IP address** in the Elgato app — see
-[one dock per IP address](./browser-deck.md#one-dock-per-ip-address). A phone or tablet can
-be an extra dock too: see the [Browser deck](./browser-deck.md).
+</details>
 
 ## Standby and burn-in care
 
-Cheap LCD panels keep a ghost of a static image, and a deck left at full brightness with a
-stale page glares at night. **Settings → Standby & burn-in care** (for the selected deck) protects the
-panel. **Everything is off by default**; a deck behaves as before until you switch a piece on.
+Cheap LCD panels keep a ghost of a static image. **Settings → Standby & burn-in care** (per selected deck) protects the panel. **Everything is off by default.**
 
-- **Dim when idle** — after N minutes without a key, knob or touch input, the backlight drops
-  to the level you pick. Any input brings it back.
-- **Screen off** — a second idle stage turns the screen off after N more minutes. *How to turn
-  it off* is `auto` (the device's sleep mode where it has a verified one, else brightness 0)
-  or `brightness0`. No model uses hardware sleep yet, because it has not been verified on
-  real hardware: today both choices write brightness 0.
-- **Wake press** — by default the first press on a dimmed or dark deck only wakes it and is
-  not sent to the Elgato app. Switch it to *Wakes and runs the key* to forward it. A click
-  in the web UI (Click to press) is never swallowed.
-- **When the Elgato app is away** — keep the last images (default), show a dim clock, or turn
-  the screen off. DeckBridge waits 15 s before it acts, so the app's own reconnects and
-  restarts never flash the clock. It acts only for a paired deck (or one that was paired
-  since DeckBridge started) and not in the first minute after DeckBridge starts. The clock
-  moves to a new key every minute; when the app returns, its last images come back at once.
-  The Companion app is not treated as the Elgato app.
-- **Night mode** — between *From* and *To* the brightness is capped at the night level, and the
-  screen can go fully dark when idle. The window follows the **DeckBridge computer's clock**
-  (the web UI shows its current time), including its time zone and daylight saving.
-- **Pixel shift** — moves the side-key and touch-strip widgets DeckBridge draws by 1 px every
-  five minutes. The Elgato app's own key images are never shifted.
+- **Dim when idle** — after N minutes without input, the backlight drops to the level you pick. Any input brings it back.
+- **Screen off** — after N more minutes, the screen turns off. *How to turn it off*: `auto` or `brightness0`. No model has a verified hardware sleep yet, so both write brightness 0 today.
+- **Wake press** — the first press on a dimmed deck only wakes it. Choose *Wakes and runs the key* to forward it. A web UI click (Click to press) is never swallowed.
+- **When the Elgato app is away** — keep the last images (default), show a dim clock, or turn the screen off.
+- **Night mode** — between *From* and *To*, brightness is capped at the night level and the idle screen can go dark. It follows the **DeckBridge computer's clock**, time zone and daylight saving.
+- **Pixel shift** — moves DeckBridge's own side-key and strip widgets by 1 px every five minutes. The Elgato app's key images never move.
 
-Your brightness slider keeps the level you chose; dimming only changes what the panel shows,
-and the header of the panel says what is on the deck now. On the [Browser deck](./browser-deck.md)
-dimming and screen off work on the page, the clock choice acts as *Turn the screen off*, and
-pixel shift does not apply.
+Your brightness slider keeps the level you chose. On the [Browser deck](./browser-deck.md), dim and screen off work on the page, the clock acts as *Turn the screen off*, and pixel shift does not apply.
 
-Two optional shell commands run when the screen goes off and when it wakes. They are set in
-`settings.json` only (the web UI never shows or edits them), per device:
+<details>
+<summary>Advanced: "app is away" rules and sleep/wake commands</summary>
+
+DeckBridge waits 15 s before it acts, so app reconnects never flash the clock. It acts only for a paired deck (or one paired since DeckBridge started), and not in the first minute after start. The clock moves to a new key every minute. When the app returns, its last images come back at once. Companion does not count as the Elgato app.
+
+Two optional shell commands run when the screen goes off and when it wakes. Set them per device in `settings.json` only (the web UI never shows them):
 
 ```json
 {
@@ -278,48 +197,44 @@ Two optional shell commands run when the screen goes off and when it wakes. They
 }
 ```
 
-Like [command widgets](./side-keys.md#security), these run on your host with your rights, so
-keep the Web UI off untrusted networks. A command has 10 s, its output is dropped, and only
-one of each kind runs at a time. `./deckbridge diagnose --redact-commands` hides them in the
-report.
+Like [command widgets](./side-keys.md#security), they run on your host with your rights, so keep the Web UI off untrusted networks. A command gets 10 s, its output is dropped, and only one of each kind runs at a time. `./deckbridge diagnose --redact-commands` hides them in the report.
+
+</details>
 
 ## Click to press
 
-**Off by default.** *Settings → Click to press* lets you double-click a key in the web UI
-preview to press it on the Elgato app (Enter or Space on a focused key does the same). The
-dock must be paired. Anyone who can open the web UI can then press your keys, so keep the UI
-on `127.0.0.1` (the default) unless you trust the network. It is stored as
-`"webuiKeyPress": true` in settings.json and is never taken from an imported settings file.
-A virtual press is not a hardware press: key-map learn mode ignores it.
+**Off by default.** *Settings → Click to press* lets you double-click a key in the web UI preview to press it in the Elgato app (Enter or Space on a focused key works too). The dock must be paired. Anyone who can open the web UI can then press your keys, so keep it on `127.0.0.1` (the default) unless you trust the network. It is stored as `"webuiKeyPress": true` and is never taken from an imported settings file. Key-map learn mode ignores virtual presses.
 
 ## Last icons
 
-This is off by default. After a restart the Elgato app takes a few seconds to send its icons again. When on, until then
-DeckBridge shows the icons from the last run, each with a small red "!" in its top-right
-corner. The "!" of a key goes away when the app sends a fresh icon for that key. About 30
-seconds after the first fresh icon, keys the app did not repaint (for example after a
-profile change) go blank and their saved icon is deleted. If the app never reconnects, the
-saved icons and their "!" stay for up to 24 hours, then they are dropped.
+**Off by default.** After a restart, the Elgato app needs a few seconds to resend its icons. When this is on, DeckBridge shows the icons from the last run meanwhile, each with a small red "!" in its top-right corner. The "!" goes away when the app sends a fresh icon.
 
-The icons are saved in `<cache-root>/last-frames/` and can show private text such as titles
-or calendar entries. *Settings → Last icons* turns this on; turning it off deletes the files. It is
-stored as `"keepLastIcons": true` in settings.json. Not saved: widget, side-key and touch-strip
-images. Models that take the app's image unchanged (Elgato Stream Deck MK.2 and Mini over
-USB) replay without the "!". The Web UI preview shows no "!".
-`./deckbridge diagnose` lists the number, size and age of the saved files, never their content.
+Icons are saved in `<cache-root>/last-frames/` and can show private text such as titles or calendar entries. *Settings → Last icons* turns this on (`"keepLastIcons": true`). Turning it off deletes the files.
+
+<details>
+<summary>Advanced: timing and limits</summary>
+
+- About 30 s after the first fresh icon, keys the app did not repaint (for example after a profile change) go blank and their saved icon is deleted.
+- If the app never reconnects, saved icons and their "!" stay up to 24 hours, then are dropped.
+- Not saved: widget, side-key and touch-strip images.
+- Models that take the app's image unchanged (Elgato MK.2 and Mini over USB) replay without the "!". The web UI preview shows no "!".
+- `./deckbridge diagnose` lists the number, size and age of saved files, never their content.
+
+</details>
 
 ## Permissions
 
-Each permission is requested on first use; no admin / root rights are required.
+Each permission is requested on first use. No admin / root rights are needed.
 
 | Permission | Platform | Why |
 |---|---|---|
-| **Input Monitoring** | macOS | Reading HID reports (key presses) from the deck. Grant it to the app or terminal running DeckBridge, then restart it. |
-| **Local Network** | macOS 15+ | Advertising over Bonjour / mDNS and serving the CORA ports on the LAN. macOS may prompt on first run. |
-| **Firewall allow** | macOS / Windows | Inbound TCP on 5343 / 5344 so the Elgato app can connect. Allow it if your firewall prompts. |
-| **udev rule** | Linux | Opening the deck's `hidraw` device as a non-root user needs a udev rule; without it, DeckBridge fails with `Permission denied`. |
+| **Input Monitoring** | macOS | Read key presses from the deck. Grant it to the app or terminal running DeckBridge, then restart it. |
+| **Local Network** | macOS 15+ | Bonjour / mDNS and serving the CORA ports on the LAN. macOS may prompt on first run. |
+| **Firewall allow** | macOS / Windows | Inbound TCP on 5343 / 5344 so the Elgato app can connect. Allow it if prompted. |
+| **udev rule** | Linux | Without it, opening the `hidraw` device as non-root fails with `Permission denied`. Add the rule below once, then replug the deck. |
 
-On Linux, add a udev rule (once), then unplug/replug the device:
+<details>
+<summary>Linux udev rule and vendor IDs</summary>
 
 ```bash
 sudo tee /etc/udev/rules.d/99-mirabox.rules <<'EOF'
@@ -340,18 +255,15 @@ EOF
 sudo udevadm control --reload-rules && sudo udevadm trigger
 ```
 
-(`0fd9` = Elgato Stream Deck MK.2 / Mini, `6603` = Mirabox 293V3 / HSV293SV3 / K1 Pro / N4E, `6602` = Mirabox N4, `5548` = Mirabox 293S / N4 Pro family / Ajazz AKP153,
-`0300` = Ajazz AKP153E/R (rev. 1 and rev. 2) and the AKP05 family, `0200` = Redragon SS552, `1500` = Soomfon CN003 / Streonor S10 Pro, `0b00` = Mars Gaming MSD-ONE / MSD-PRO, `0c00` = Mad
-Dog GK150K, `0a00` = Risemode Vision 01, `0500` = TMICE Stream Controller, `3142` =
-Fifine AmpliGame D6 (rev. 1 and rev. 2), `2207` = Ulanzi Stream Controller D200.)
+Vendor IDs: `0fd9` Elgato MK.2 / Mini; `6603` Mirabox 293V3 / HSV293SV3 / K1 Pro / N4E; `6602` Mirabox N4; `5548` Mirabox 293S / N4 Pro family / Ajazz AKP153; `0300` Ajazz AKP153E/R (rev. 1 and 2) and the AKP05 family; `0200` Redragon SS552; `1500` Soomfon CN003 / Streonor S10 Pro; `0b00` Mars Gaming MSD-ONE / MSD-PRO; `0c00` Mad Dog GK150K; `0a00` Risemode Vision 01; `0500` TMICE Stream Controller; `3142` Fifine AmpliGame D6 (rev. 1 and 2); `2207` Ulanzi Stream Controller D200.
 
-If a Ulanzi D200 does not enumerate when plugged in directly (`can't read configurations,
-error -22` in `dmesg`), connect it through a USB 2.0 hub. This is a known kernel/device
-interaction, not a DeckBridge bug.
+If a Ulanzi D200 does not enumerate when plugged in directly (`can't read configurations, error -22` in `dmesg`), use a USB 2.0 hub. This is a known kernel/device issue, not a DeckBridge bug.
+
+</details>
 
 ## Requirements
 
-The `/requirements` page (tray → **Check Requirements**) verifies each of these at runtime:
+The `/requirements` page (tray → **Check Requirements**) checks these at runtime:
 
 | Requirement | macOS | Linux | Windows |
 |---|---|---|---|
@@ -361,8 +273,7 @@ The `/requirements` page (tray → **Check Requirements**) verifies each of thes
 | **Tray helper** | bundled (installer builds) | — | bundled |
 | **Free TCP ports** | 5343 / 5344 must be free | same | same |
 
-Packaged releases embed libhidapi and the native library, so a **source build** is the
-only case that needs a system libhidapi installed.
+Packaged releases embed libhidapi and the native library. Only a **source build** needs a system libhidapi.
 
 ## Files, ports & data
 
@@ -370,31 +281,25 @@ only case that needs a system libhidapi installed.
 
 ### Reads
 
-- Its **own embedded libraries** (libhidapi, deckbridge-native) from inside the binary.
-- The system **libhidapi** (source builds, or when overridden via `HIDAPI_LIB`).
-- A handful of **environment variables** (below). There is no config file.
+- Its embedded libraries (libhidapi, deckbridge-native), from inside the binary.
+- The system **libhidapi** (source builds, or set with `HIDAPI_LIB`).
+- A few **environment variables** (below). There is no config file.
 
 ### Writes
 
-- **Native library cache** — extracts the embedded libs once per version to:
-  - macOS: `~/Library/Caches/deckbridge/native-<build-hash>/`
-  - Linux: `$XDG_CACHE_HOME/deckbridge/` (or `~/.cache/deckbridge/`)
-  - fallback: a temp directory if the cache root isn't writable
+- **Settings** — `settings.json` in the cache root: brightness, widgets, log level, device tuning (`modelOverrides`), opt-ins, enabled extensions, and hashed push-API / browser-deck tokens (never exported).
+- **Log file** — `<cache-root>/logs/deckbridge.log`, rotated at 2 MB, three files kept. See [Troubleshooting](./troubleshooting.md#where-the-logs-live).
+- **Saved icons** — `<cache-root>/last-frames/`, up to 24 hours. See [Last icons](#last-icons).
 
-  Old `native-<hash>` folders from previous versions are cleaned up automatically.
-- **Settings** — `settings.json` in the cache root: per-device brightness/identity,
-  side-key widgets, log level, device tuning (`modelOverrides`), the browser-deck and
-  click-to-press opt-ins, the extensions you switched on, and push-API / browser-deck
-  tokens (hashed; never exported).
-- **Extensions** — only what you put in `<cache-root>/extensions/` yourself; DeckBridge
-  reads it and never writes there. See [Extensions](./extensions.md).
-- **Log file** — `<cache-root>/logs/deckbridge.log`, rotated at 2 MB with three files
-  kept. See [Troubleshooting](./troubleshooting.md#where-the-logs-live).
-- **Saved icons** — `<cache-root>/last-frames/`, one file per deck, for up to 24 hours.
-  See [Last icons](#last-icons).
-- **Diagnostics reports** — `<cache-root>/diagnostics/`, only when you ask for one.
-- **Debug image dumps** — only when `DECKBRIDGE_DUMP_DIR` / `DECKBRIDGE_RAW_DUMP_DIR` are
-  set. Off by default.
+<details>
+<summary>Advanced: other files DeckBridge writes</summary>
+
+- **Native library cache** — embedded libs are extracted once per version to `~/Library/Caches/deckbridge/native-<build-hash>/` (macOS) or `$XDG_CACHE_HOME/deckbridge/` / `~/.cache/deckbridge/` (Linux). If the cache root is not writable, a temp directory is used. Old `native-<hash>` folders are cleaned up.
+- **Extensions** — only what you put in `<cache-root>/extensions/`. DeckBridge never writes there. See [Extensions](./extensions.md).
+- **Diagnostics reports** — `<cache-root>/diagnostics/`, only when you ask.
+- **Debug image dumps** — only when `DECKBRIDGE_DUMP_DIR` / `DECKBRIDGE_RAW_DUMP_DIR` are set.
+
+</details>
 
 ### Network ports
 
@@ -403,62 +308,54 @@ only case that needs a system libhidapi installed.
 | **5343** | `0.0.0.0` (LAN) | CORA main server — the Elgato app connects here |
 | **5344** | `0.0.0.0` (LAN) | CORA child server — image / data channel |
 | **5345–5346** | `0.0.0.0` (LAN) | Second deck — its own CORA pair at +2 (only with *Use two decks at once*) |
-| **5349–5350** | `0.0.0.0` (LAN) | The [browser deck](./browser-deck.md)'s dock (only when it is turned on) |
-| **44660** | `0.0.0.0` (LAN) | Browser deck page, pairing and WebSocket (only when it is turned on; `DECKBRIDGE_DECK_PORT`) |
+| **5349–5350** | `0.0.0.0` (LAN) | The [browser deck](./browser-deck.md)'s dock (only when it is on) |
+| **44660** | `0.0.0.0` (LAN) | Browser deck page, pairing and WebSocket (only when it is on; `DECKBRIDGE_DECK_PORT`) |
 | **3000** | `127.0.0.1` (LAN with `--bind`) | Web UI and [Push API](./push-api.md) |
 | mDNS `_elg._tcp` | LAN | Service discovery ("Network Stream Deck") |
 
-Set `DECKBRIDGE_BIND` (or `--bind`) to change the listen address; it moves both the CORA
-ports and the Web UI. The Web UI binds `127.0.0.1` unless you pass `--bind`.
+`DECKBRIDGE_BIND` (or `--bind`) changes the listen address for both the CORA ports and the Web UI. The Web UI binds `127.0.0.1` unless you pass `--bind`.
 
 ## Limitations
 
-- **Multiple decks: two USB decks** — *Use two decks at once* docks one extra USB deck
-  (same model is fine), each its own network dock (own mDNS name and port pair — see
-  [Network ports](#network-ports)). A phone or tablet [browser deck](./browser-deck.md) is
-  one more dock on top. The web UI shows a live preview for **one selected deck at a time**
-  (click its card); the others stay static.
-- **Keys and dials only** — DeckBridge drives keys plus the AJAZZ AKP05E's four rotary
-  encoders and its touch strip (as widget displays, or a Stream Deck + window image).
-  The AKP05E and AKP05 pair as a Stream Deck + by default, so dials and strip swipes and taps
-  reach the Elgato app; pick another pairing under Device tuning → Emulation profile. A strip tap lands on the centre
-  of its zone (the strip reports four zones, not coordinates), and other Stream Deck +/Plus/Neo-style LCD strips remain out of scope.
-- **Fixed ports** — CORA is hard-wired to **5343 / 5344** (extra decks add a fixed +2
-  offset per device); conflicts with a real Elgato Network Dock or a second DeckBridge
-  instance on the same machine.
-- **No auth or encryption** — the CORA ports trust the LAN; see
-  [Network ports](#network-ports).
-- **Elgato desktop app: one network dock per IP address** — the Elgato app itself, not
-  DeckBridge, pairs only **one** network dock per IP address of the computer, whatever the
-  port. Use `127.0.0.1` for the first deck and the computer's LAN IP (e.g. `192.168.1.42`)
-  for the second. A third needs another local address, for example the loopback alias
-  `127.0.0.2` (on macOS: `sudo ifconfig lo0 alias 127.0.0.2 up`); the web UI's
-  **Need another address?** guide shows the steps and tests the address. Verified on macOS.
+- **Two USB decks at most** — each is its own network dock (own mDNS name and port pair, see [Network ports](#network-ports)). A [browser deck](./browser-deck.md) is one more. The web UI previews **one selected deck at a time**.
+- **Keys and dials only** — DeckBridge drives keys, plus the AKP05E's four encoders and touch strip (as widget displays or a Stream Deck + window image). Other Stream Deck +/Plus/Neo-style LCD strips are out of scope.
+- **Fixed ports** — CORA uses **5343 / 5344** (+2 per extra deck). It conflicts with a real Elgato Network Dock or a second DeckBridge on the same machine.
+- **No auth or encryption** — the CORA ports trust the LAN. See [Network ports](#network-ports).
+- **One network dock per IP address** — the Elgato app itself allows only **one** per IP address of the computer, whatever the port. Use `127.0.0.1` for the first deck and the LAN IP (for example `192.168.1.42`) for the second. A third needs another local address, such as the loopback alias `127.0.0.2` (macOS: `sudo ifconfig lo0 alias 127.0.0.2 up`). The web UI's **Need another address?** guide shows the steps and tests the address. Verified on macOS.
+
+<details>
+<summary>Advanced: AKP05 / AKP05E pairing</summary>
+
+They pair as a Stream Deck + by default, so dials and strip swipes and taps reach the Elgato app. Pick another pairing under Device tuning → Emulation profile. A strip tap lands on the centre of its zone, because the strip reports four zones, not coordinates.
+
+</details>
 
 ### Environment variables
 
+<details>
+<summary>All environment variables</summary>
+
 | Variable | Effect |
 |---|---|
-| `DECKBRIDGE_BIND` | Bind address for the CORA servers and the browser deck (default `0.0.0.0`) |
+| `DECKBRIDGE_BIND` | Bind address for CORA servers and browser deck (default `0.0.0.0`) |
 | `DECKBRIDGE_DECK_PORT` | Browser deck page port (default `44660`, no fallback) |
-| `DECKBRIDGE_EXTENSIONS_DIR` | Folder to load extensions from (default `<cache-root>/extensions`) |
+| `DECKBRIDGE_EXTENSIONS_DIR` | Extensions folder (default `<cache-root>/extensions`) |
 | `HIDAPI_LIB` | Path to a specific libhidapi |
 | `DECKBRIDGE_NATIVE_LIB` | Path to the deckbridge-native cdylib |
 | `DECKBRIDGE_TRAY_BIN` | Path to the tray helper binary |
-| `DECKBRIDGE_OPEN` | Auto-open the web UI in a browser on start |
-| `DECKBRIDGE_MOCK` | Run with a mock device in a `DECKBRIDGE_BUILD_MOCK=1` development build only |
+| `DECKBRIDGE_OPEN` | Open the web UI in a browser on start |
+| `DECKBRIDGE_MOCK` | Mock device; only in a `DECKBRIDGE_BUILD_MOCK=1` development build |
 | `DECKBRIDGE_DUMP_DIR` | Write each transformed device image here (debug) |
-| `DECKBRIDGE_RAW_DUMP_DIR` | Write paired raw + transformed images here (debug) |
-| `DECKBRIDGE_LOG_LEVEL` | Log verbosity: `debug`/`info`/`warn`/`error`/`silent` |
+| `DECKBRIDGE_RAW_DUMP_DIR` | Write raw + transformed image pairs here (debug) |
+| `DECKBRIDGE_LOG_LEVEL` | `debug`/`info`/`warn`/`error`/`silent` |
 | `DECKBRIDGE_CACHE_DIR` | Cache root (settings, logs, extracted native libs) |
-| `DECKBRIDGE_NO_OVERRIDES` | Safe mode: ignore device tuning for this session |
-| `DECKBRIDGE_NO_MDNS` | Don't advertise the dock over mDNS; the Elgato app must add it by IP address |
-| `DECKBRIDGE_WSL_RELAY_ZIP` | Relay zip (local path or URL) the WSL route uses instead of the GitHub release; a local path skips the SHA256 check |
-| `DECKBRIDGE_WSL_RELAY_MOCK` | `happy`/`no-wsl`/`mirrored`/`old-glibc`/`blocked`: scripted WSL runner for reviewing the WSL route without WSL; `DECKBRIDGE_BUILD_MOCK=1` builds only |
-| `DECKBRIDGE_CORA_LOG` | Set `1` with debug logging to log every primary-port CORA frame as hex (pairing diagnosis) |
+| `DECKBRIDGE_NO_OVERRIDES` | Safe mode: ignore device tuning this session |
+| `DECKBRIDGE_NO_MDNS` | No mDNS advertising; add the dock in the Elgato app by IP address |
+| `DECKBRIDGE_WSL_RELAY_ZIP` | Relay zip (local path or URL) for the WSL route instead of the GitHub release; a local path skips the SHA256 check |
+| `DECKBRIDGE_WSL_RELAY_MOCK` | `happy`/`no-wsl`/`mirrored`/`old-glibc`/`blocked`: scripted WSL runner to test the WSL route without WSL; `DECKBRIDGE_BUILD_MOCK=1` builds only |
+| `DECKBRIDGE_CORA_LOG` | `1` with debug logging: log every primary-port CORA frame as hex (pairing diagnosis) |
 | `DECKBRIDGE_PUSH_TOKEN` | Token used by `deckbridge push` (see [Push API](./push-api.md)) |
 
-Log verbosity resolves as `--log-level` > `$DECKBRIDGE_LOG_LEVEL` > `"logLevel"` in
-`settings.json` (what the web UI's **Debug logging** toggle writes) > the level compiled
-into the build (`info` for releases). See
-[Turning on debug logging](./troubleshooting.md#turning-on-debug-logging).
+</details>
+
+Log level order: `--log-level`, then `$DECKBRIDGE_LOG_LEVEL`, then `"logLevel"` in `settings.json` (the web UI's **Debug logging** toggle), then the build default (`info` for releases). See [Turning on debug logging](./troubleshooting.md#turning-on-debug-logging).
