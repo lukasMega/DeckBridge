@@ -1,0 +1,18 @@
+name: win-repro-252
+on:
+  push:
+    branches: [ci/win-repro-252]
+  workflow_dispatch:
+permissions:
+  contents: read
+env:
+  DECKBRIDGE_NO_TELEMETRY: '1'
+jobs:
+  repro:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: jdx/mise-action@v5
+      - run: mise run tjs-setup
+      - name: Run repro
+        run: mise exec -- pwsh -NoProfile -Command '& $env:TJS run scripts/win-repro-252.js'
