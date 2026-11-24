@@ -196,12 +196,12 @@ jobs:
       # Retry intermittent hdiutil "Resource busy" failures.
       # Updater artifacts (.app.tar.gz + .sig) are signed with the minisign key whose
       # public half is in tauri.conf.json; see docs/upgrading.md.
+      # The key has no password: do not pass TAURI_SIGNING_PRIVATE_KEY_PASSWORD (any non-empty value fails decryption).
       - name: Build Tauri dmg + updater bundle
         if: matrix.tauri == '1'
         working-directory: src-tauri
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: |
           if [ -z "$TAURI_SIGNING_PRIVATE_KEY" ]; then
             echo "::error::TAURI_SIGNING_PRIVATE_KEY secret is not set (needed for auto-update)"
@@ -333,7 +333,6 @@ jobs:
         working-directory: src-tauri
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: |
           if (-not $env:TAURI_SIGNING_PRIVATE_KEY) {
             Write-Error "TAURI_SIGNING_PRIVATE_KEY secret is not set (needed for auto-update)"; exit 1

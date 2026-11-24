@@ -40,7 +40,7 @@ never show.
 
 The installer builds verify updates with a minisign key. The public half is
 `plugins.updater.pubkey` in `src-tauri/tauri.conf.json`. The private half lives only in the
-GitHub secrets `TAURI_SIGNING_PRIVATE_KEY` and `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`.
+GitHub secret `TAURI_SIGNING_PRIVATE_KEY` (no password).
 `release.yml` fails without the secret, so a release never ships without `latest.json`.
 If the private key is lost, installed apps can no longer update themselves, and users have
 to reinstall by hand.
