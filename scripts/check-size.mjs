@@ -15,7 +15,8 @@ const BUDGETS = {
   // 206,749 + 1%. Info window Elgato images (2026-11-19): measured 209,280 + 1%.
   // Relay details in Settings pairing row (2026-11-20): measured 213,796 + 1%.
   // Apple container route + Logs chip (2026-11-22): measured 215,983, +17 B.
-  'ui.js': 216_000,
+  // One-click upgrade banner + Install button (2026-11-24): measured 217,110 + 1%.
+  'ui.js': 219_300,
   'deck.js': 30_106,
   // Device verify wizard (2026-10-22); D200 info window card (2026-11-18): measured 37,448 + 1%.
   'css total': 37_830,
