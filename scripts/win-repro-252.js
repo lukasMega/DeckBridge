@@ -1,5 +1,5 @@
 // Repro for issue #252: cmd /c `if exist "<path>"` via tjs.spawn vs tjs.stat on Windows.
-const isWin = tjs.system.platform === 'windows';
+const isWin = tjs.env.OS === 'Windows_NT';
 const sep = isWin ? '\\' : '/';
 
 async function run(argv, pipe) {
@@ -53,7 +53,7 @@ const cases = [
   ['missing mixed', `${root}/deckbridge/nope.dll`],
 ];
 
-console.log('platform:', tjs.system.platform, 'tjs', tjs.version);
+console.log('isWin:', isWin, 'tjs', tjs.version);
 let bad = 0;
 for (const [name, path] of cases) {
   const missing = name.startsWith('missing');
