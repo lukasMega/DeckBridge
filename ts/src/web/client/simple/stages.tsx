@@ -145,6 +145,7 @@ export function StageDeviceNoElgato({
         modelId={modelId}
         coraProfile={coraProfile}
         touchStrip={touchStrip}
+        footer={<Brightness compact />}
       />
     </>
   );
