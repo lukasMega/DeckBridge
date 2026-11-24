@@ -29,7 +29,7 @@ import { PersistedSettings } from '../infra/settings.js';
 import { wireSurvey } from './survey-wiring.js';
 import { wireVerify } from './verify-wiring.js';
 import { createDailyPing, sendBeacon } from '../infra/daily-ping.js';
-import { STARTUP_DELAY_MS, CHECK_INTERVAL_MS } from '../infra/update-check.js';
+import { STARTUP_DELAY_MS, CHECK_INTERVAL_MS, UPDATE_EXIT_CODE } from '../infra/update-check.js';
 import { stopCommands } from '../infra/command-runner.js';
 import { stopSpawns } from '../infra/owned-spawn.js';
 import { shutdownPluginHost } from '../plugin/plugin-host.js';
@@ -150,7 +150,24 @@ function pushTrayState(): void {
   tray.push(state);
 }
 
-webui.updates.setOnChange(pushTrayState);
+webui.updates.setOnChange(function onUpdateInfo() {
+  pushTrayState();
+  const version = tray ? webui.updates.takeNotification() : null;
+  if (tray && version)
+    tray.notify({
+      title: 'DeckBridge update',
+      body: `Version ${version} is available.`,
+      url: `http://localhost:${webui.port}/`,
+    });
+});
+
+// Tauri shell (src-tauri/src/lib.rs) runs its updater when the relay exits with this code.
+let installRequested = false;
+webui.updates.setOnInstall(() => {
+  installRequested = true;
+  // Let the HTTP reply leave before the WebUI server closes.
+  setTimeout(() => void shutdown().catch(() => tjs.exit(UPDATE_EXIT_CODE)), 200);
+});
 
 // Scanned-dock CORA server pair builder (multi-device). Mirrors the primary wiring
 // above: the childServer shares the SAME server.deviceConfig reference, and each
@@ -255,7 +272,7 @@ const shutdown = createShutdown({
   persist: () => settings.close(),
   // Last: the shutdown path itself reaches the disk (tray "Quit" routes through here too).
   drainLogs: stopLogFile,
-  exit: (code) => tjs.exit(code),
+  exit: (code) => tjs.exit(installRequested ? UPDATE_EXIT_CODE : code),
 });
 
 function onSignal(sig?: string): void {

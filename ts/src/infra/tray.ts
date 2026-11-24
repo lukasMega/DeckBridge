@@ -118,7 +118,7 @@ class TrayProcess implements TrayHandle {
     if (ev.event === 'ready' && ev.port) void this._connect(ev.port);
     if (ev.event === 'quit') handlers.onQuit();
     if (ev.event === 'restart_elgato_app') handlers.onRestartElgatoApp();
-    if (ev.event === 'open_webui') handlers.onOpenWebUI('/');
+    if (ev.event === 'open_webui' || ev.event === 'open_update') handlers.onOpenWebUI('/');
     if (ev.event === 'check_requirements') handlers.onOpenWebUI('/requirements');
   }
 

@@ -294,7 +294,7 @@ A virtual press is not a hardware press: key-map learn mode ignores it.
 
 ## Last icons
 
-After a restart the Elgato app takes a few seconds to send its icons again. Until then
+This is off by default. After a restart the Elgato app takes a few seconds to send its icons again. When on, until then
 DeckBridge shows the icons from the last run, each with a small red "!" in its top-right
 corner. The "!" of a key goes away when the app sends a fresh icon for that key. About 30
 seconds after the first fresh icon, keys the app did not repaint (for example after a
@@ -302,8 +302,8 @@ profile change) go blank and their saved icon is deleted. If the app never recon
 saved icons and their "!" stay for up to 24 hours, then they are dropped.
 
 The icons are saved in `<cache-root>/last-frames/` and can show private text such as titles
-or calendar entries. *Settings → Last icons* turns this off and deletes the files. It is
-stored as `"keepLastIcons": false` in settings.json. Not saved: widget, side-key and touch-strip
+or calendar entries. *Settings → Last icons* turns this on; turning it off deletes the files. It is
+stored as `"keepLastIcons": true` in settings.json. Not saved: widget, side-key and touch-strip
 images. Models that take the app's image unchanged (Elgato Stream Deck MK.2 and Mini over
 USB) replay without the "!". The Web UI preview shows no "!".
 `./deckbridge diagnose` lists the number, size and age of the saved files, never their content.
@@ -366,7 +366,7 @@ only case that needs a system libhidapi installed.
 
 ## Files, ports & data
 
-**DeckBridge sends no telemetry.** The only personal data it can store is the last key icons (see [Last icons](#last-icons)), and you can turn that off.
+**DeckBridge sends no telemetry.** The only personal data it can store is the last key icons (see [Last icons](#last-icons)), and only if you turn that on.
 
 ### Reads
 

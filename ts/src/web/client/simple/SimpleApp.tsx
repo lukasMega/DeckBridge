@@ -15,6 +15,7 @@ import { ExtensionPage } from './extension-page.js';
 import { ICON, Icon } from '../components/Icon.js';
 import { AppFooter, Topbar } from './app-shell.js';
 import { useSurveyFlow } from './survey-flow.js';
+import { UpdateBanner } from './update-banner.js';
 import { VerifyHost } from './verify-wizard/verify-entry.js';
 import { ElgatoVersionBanner, PairingWizardHost } from './pairing-wizard/entry.js';
 import {
@@ -152,6 +153,7 @@ export function SimpleApp(): preact.JSX.Element {
         />
         <StaleBanner />
         <ElgatoVersionBanner />
+        {!__DEMO__ && <UpdateBanner />}
         {flow.banner}
         {/* inert: the shown status is cached, so its controls must not act on it. */}
         {/* Extension pages may repaint on every poll; announcing that would be noise. */}

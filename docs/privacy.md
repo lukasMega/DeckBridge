@@ -65,7 +65,8 @@ unauthenticated `GET` to `api.github.com/repos/lukasMega/DeckBridge/releases/lat
 carrying only a `User-Agent: DeckBridge/<version>` header. The result (a version
 string + release URL) is cached in `settings.json` so a restart doesn't repeat the
 request. Turn it off with the **Check for updates** toggle in Settings, or by setting
-`"updateCheck": false` in `settings.json`.
+`"updateCheck": false` in `settings.json`. Only when you click **Install** (installer
+builds) does the app fetch `latest.json` and the signed update from GitHub Releases.
 
 A **daily usage ping**, on its own timer (first one 5 minutes after startup — see
 below for why). One request per UTC day, carrying eight things:

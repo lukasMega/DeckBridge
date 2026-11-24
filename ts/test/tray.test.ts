@@ -152,7 +152,13 @@ await asyncTest('returns "" when the env var is unset and no sidecar exists', as
 
 console.log('\nbuildTrayState');
 
-const LATEST = { enabled: true, current: '1.0.0', updateAvailable: false, lastCheckedAt: 1 };
+const LATEST = {
+  enabled: true,
+  current: '1.0.0',
+  updateAvailable: false,
+  lastCheckedAt: 1,
+  canInstall: false,
+};
 const trayInput = {
   deviceName: 'Mirabox 293S',
   driverConnected: true,

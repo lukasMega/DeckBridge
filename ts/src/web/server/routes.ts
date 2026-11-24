@@ -154,6 +154,9 @@ export const routes: Route[] = [
   get('/api/update', ({ updates }) => json(updates.info())),
   post('/api/update/check', async ({ updates }) => json(await updates.check(true))),
   postJson('/api/update/dismiss', dismissUpdate),
+  post('/api/update/install', ({ updates }) =>
+    updates.install() ? json({ ok: true }) : json({ error: 'no installable update' }, 409),
+  ),
   postJson('/api/update-check-enabled', setUpdateCheckEnabled),
 
   postJson('/api/elgato-auto-restart', setElgatoAutoRestart),

@@ -6,6 +6,7 @@ import {
   createUpdateChecker,
   UpdateCheckError,
   RATE_LIMIT_MS,
+  zipDownloadUrl,
 } from '../src/infra/update-check.js';
 import type { UpdateState, UpdateCheckerDeps } from '../src/infra/update-check.js';
 import { testAsync as test, summary } from './helpers/harness.js';
@@ -106,6 +107,8 @@ function makeDeps(overrides: Partial<UpdateCheckerDeps> = {}): {
         JSON.stringify({ tag_name: 'deckbridge-v0.15.0', html_url: 'https://example.com/rel' }),
       );
     },
+    canInstall: false,
+    zipPlatform: 'macos-arm64',
     now: () => 1_000_000,
     ...overrides,
   };
@@ -207,6 +210,49 @@ await test('a malformed release body reports error:parse and still updates lastC
   const checker = createUpdateChecker(deps);
   const info = await checker.check(true);
   assert.equal(info.error, 'parse');
+});
+
+await test('portable build: downloadUrl names the zip for this platform', async () => {
+  const { deps } = makeDeps();
+  const info = await createUpdateChecker(deps).check(true);
+  assert.equal(info.canInstall, false);
+  assert.equal(
+    info.downloadUrl,
+    'https://github.com/lukasMega/DeckBridge/releases/download/deckbridge-v0.15.0/deckbridge-0.15.0-macos-arm64.zip',
+  );
+  assert.equal(info.downloadUrl, zipDownloadUrl('0.15.0', 'macos-arm64'));
+});
+
+await test('Tauri build: canInstall, no downloadUrl', async () => {
+  const { deps } = makeDeps({ canInstall: true });
+  const info = await createUpdateChecker(deps).check(true);
+  assert.ok(info.canInstall);
+  assert.equal(info.downloadUrl, undefined);
+});
+
+await test('no update: no downloadUrl', async () => {
+  const { deps } = makeDeps({ currentVersion: '0.15.0' });
+  const info = await createUpdateChecker(deps).check(true);
+  assert.equal(info.downloadUrl, undefined);
+});
+
+await test('takeNotification announces a version once, survives a re-check', async () => {
+  const { deps } = makeDeps();
+  const checker = createUpdateChecker(deps);
+  assert.equal(checker.takeNotification(), null, 'nothing known yet');
+  await checker.check(true);
+  assert.equal(checker.takeNotification(), '0.15.0');
+  assert.equal(checker.takeNotification(), null, 'already announced');
+  await checker.check(true);
+  assert.equal(checker.takeNotification(), null, 'check keeps notifiedVersion');
+});
+
+await test('takeNotification skips a dismissed version', async () => {
+  const { deps } = makeDeps();
+  const checker = createUpdateChecker(deps);
+  await checker.check(true);
+  checker.dismiss('0.15.0');
+  assert.equal(checker.takeNotification(), null);
 });
 
 // Summary
