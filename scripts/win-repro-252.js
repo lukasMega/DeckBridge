@@ -6,8 +6,9 @@ async function run(argv, pipe) {
   const p = tjs.spawn(argv, { stdout: pipe ? 'pipe' : 'ignore', stderr: pipe ? 'pipe' : 'ignore' });
   let out = '';
   if (pipe) {
-    const buf = new Uint8Array(4096);
-    for (let n; (n = await p.stdout.read(buf)) > 0; ) out += new TextDecoder().decode(buf.subarray(0, n));
+    const rd = p.stdout.getReader();
+    const dec = new TextDecoder();
+    for (let r; !(r = await rd.read()).done; ) out += dec.decode(r.value, { stream: true });
   }
   const { exit_status } = await p.wait();
   return { exit_status, out };
