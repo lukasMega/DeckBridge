@@ -2,7 +2,7 @@ import { spawn, type ChildProcess } from 'node:child_process';
 import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
-import { freePort, freePortBlock, waitFor } from './ports.js';
+import { freePort, freePortBlock, waitFor } from './ports.ts';
 
 const REPO = resolve(import.meta.dirname, '..', '..');
 
