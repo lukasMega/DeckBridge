@@ -575,6 +575,13 @@ depends = ["build-mock", "e2e-install"]
 run = "pnpm run screenshots:docs"
 timeout = "120s"
 
+[tasks.banner]
+description = "Regenerate the social banner (docs-site/static/img/social-banner.png) with a fresh WebUI capture; key icons from a running DeckBridge (`-- --icons-from=<url>`, default :3000), else built-in ones"
+dir = "e2e"
+depends = ["build-mock", "e2e-install"]
+run = "node scripts/banner.ts"
+timeout = "120s"
+
 [tasks.ui-screens]
 description = "Visual baseline of the WebUI + browser deck in real Chrome (mock mode): `-- --baseline` captures, no flag captures and pixel-compares (e2e/scripts/ui-screens.mjs)"
 dir = "e2e"
