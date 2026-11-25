@@ -33,6 +33,7 @@ async function load(msg: Extract<MainToExtensionWorker, { type: 'load' }>): Prom
     }
     server = (mod.default as ExtensionServerFactory)({
       id: msg.id,
+      ...(msg.dataDir ? { dataDir: msg.dataDir } : {}),
       appStartedAt: msg.appStartedAt,
       // Untyped extension JS may log anything.
       log: (message: unknown) => post({ type: 'log', level: 'info', message: String(message) }),
@@ -71,6 +72,15 @@ async function answer(msg: Extract<MainToExtensionWorker, { type: 'request' }>):
   }
 }
 
+async function background(msg: Extract<MainToExtensionWorker, { type: 'background' }>) {
+  try {
+    const frame = await server?.keyBackground?.(msg.deviceKey);
+    post({ type: 'background', seq: msg.seq, frame: frame ?? null });
+  } catch {
+    post({ type: 'background', seq: msg.seq, frame: null });
+  }
+}
+
 scope.addEventListener('message', (ev: MessageEvent) => {
   const msg = ev.data as MainToExtensionWorker;
   switch (msg.type) {
@@ -82,6 +92,9 @@ scope.addEventListener('message', (ev: MessageEvent) => {
       break;
     case 'request':
       void answer(msg);
+      break;
+    case 'background':
+      void background(msg);
       break;
     case 'ping':
       post({ type: 'pong', seq: msg.seq });

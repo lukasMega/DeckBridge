@@ -28,6 +28,7 @@ import { ExtraKeyActions } from './command-actions.js';
 import type { CoraDock } from './cora-dock.js';
 import { begin, settleAll } from './settle.js';
 import { LastFrames, wireDockImages } from './dock-frames.js';
+import { playKeyBackground } from './key-background.js';
 import { DockPages } from './dock-pages.js';
 import { createDockStandby, dialInput } from './dock-standby.js';
 import { paintedConfig, pushWideKey, WideKeyElgato, WideKeyInput } from './dock-wide-key.js';
@@ -63,6 +64,7 @@ export class Dock {
   identity: DockIdentity | undefined;
   brightness = DEFAULT_BRIGHTNESS;
   driver: DockDriver | null = null;
+  private keyBackgroundActive = false;
 
   /** The Elgato app's last CORA frames: replayed on replug, re-rendered on live tuning. */
   readonly frames = new LastFrames({
@@ -226,6 +228,17 @@ export class Dock {
     this.startWidgets(driver);
     // Last: it restarts the standby clock over the splash/replayed frames.
     this.standby.onDriverAttached(this.brightness);
+    const pull = this.hooks.pullKeyBackground;
+    const key = this.identity?.deviceKey;
+    if (real && pull && key && driver.model.id === 'ajazz-akp05e') {
+      void playKeyBackground(driver, this.frames, () => pull(key),
+        () => this.driver === driver,
+        () => !this.frames.held && this.standby.display.effectiveBrightness > 0 &&
+          (this.standby.state === 'active' || this.standby.state === 'dimmed'),
+        (active) => {
+          if (this.driver === driver) this.keyBackgroundActive = active;
+        });
+    }
     this.changed();
   }
 
@@ -233,6 +246,7 @@ export class Dock {
   detach(): DockDriver | null {
     const driver = this.driver;
     if (!driver) return null;
+    this.keyBackgroundActive = false;
     this.widgets?.stop();
     this.widgets = null;
     this.frames.pause();
@@ -438,6 +452,7 @@ export class Dock {
     wireDockImages(child, {
       driver: () => this.driver,
       frames: this.frames,
+      backgroundOwnsKey: () => this.keyBackgroundActive,
       onImage: (key, data, format) => {
         this.wideElgato.noteFrame(key, Date.now());
         this.hooks.image?.(key, data, format);
@@ -589,7 +604,9 @@ export class Dock {
       {
         tapFeedback: () => prefs.tapFeedback(),
         pixelShift: () => prefs.standby().pixelShift,
-        yields: (wireId, nowMs) => this.wideElgato.yields(wireId, nowMs),
+        yields: (wireId, nowMs) => (
+          this.keyBackgroundActive && (driver.model.keyMap.extraKeys?.includes(wireId) ?? false)
+        ) || this.wideElgato.yields(wireId, nowMs),
       },
     );
     this.widgets.start();

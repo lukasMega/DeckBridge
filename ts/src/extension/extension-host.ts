@@ -6,7 +6,7 @@ import extensionWorkerSource from 'virtual:extension-worker';
 import { revokeBlobUrl, spawnWorker, terminateDeferred } from '../shared/worker-lifecycle.js';
 import { log } from '../shared/logger.js';
 import type { LogLevel } from '../shared/logger.js';
-import type { ExtensionEvent, ExtensionEventType, ExtensionRequest } from './api.js';
+import type { ExtensionEvent, ExtensionEventType, ExtensionRequest, KeyBackgroundFrame } from './api.js';
 import { MAX_REPLY_CHARS } from './extension-worker-protocol.js';
 import type { ExtensionWorkerToMain, MainToExtensionWorker } from './extension-worker-protocol.js';
 
@@ -71,6 +71,8 @@ export interface ExtensionHostOptions {
   /** The types the extension's grant covers; any other type is dropped here, before queuing. */
   events: readonly ExtensionEventType[];
   workerFactory?: WorkerFactory;
+  keyBackground?: boolean;
+  dataDir?: string;
 }
 
 const reply = (status: number, error: string): ExtensionReply => ({
@@ -96,6 +98,31 @@ export class ExtensionHost {
   private logWindowLines = 0;
   private logSuppressed = 0;
   private reqSeq = 0;
+  private backgroundPending: {
+    seq: number;
+    resolve: (frame: KeyBackgroundFrame | null) => void;
+    timer: ReturnType<typeof setTimeout>;
+  } | undefined;
+
+  pullBackground(deviceKey: string): Promise<KeyBackgroundFrame | null> {
+    if (!this.opts.keyBackground || this.state !== 'running' || this.backgroundPending) {
+      return Promise.resolve(null);
+    }
+    const seq = ++this.reqSeq;
+    return new Promise((resolve) => {
+      const timer = setTimeout(() => this.finishBackground(seq, null), 150);
+      this.backgroundPending = { seq, resolve, timer };
+      this.post({ type: 'background', seq, deviceKey });
+    });
+  }
+
+  private finishBackground(seq: number, frame: KeyBackgroundFrame | null): void {
+    const pending = this.backgroundPending;
+    if (pending?.seq !== seq) return;
+    this.backgroundPending = undefined;
+    clearTimeout(pending.timer);
+    pending.resolve(frame);
+  }
   private readonly pending = new Map<
     number,
     { resolve: (r: ExtensionReply) => void; timer: ReturnType<typeof setTimeout> }
@@ -172,12 +199,15 @@ export class ExtensionHost {
     const initial = (this.opts.initialEvents?.() ?? []).filter((e) => this.events.has(e.type));
     this.queue = [...initial, ...this.queue];
     this.setState('loading');
-    const { id, serverPath, appStartedAt } = this.opts;
-    this.post({ type: 'load', id, path: serverPath, appStartedAt });
+    const { id, serverPath, appStartedAt, dataDir } = this.opts;
+    this.post({ type: 'load', id, path: serverPath, appStartedAt, ...(dataDir ? { dataDir } : {}) });
   }
 
   private onMessage(msg: ExtensionWorkerToMain): void {
     switch (msg.type) {
+      case 'background':
+        this.finishBackground(msg.seq, msg.frame);
+        break;
       case 'loaded':
         this.setState('running');
         this.flush(); // what queued while it loaded
@@ -273,6 +303,7 @@ export class ExtensionHost {
   }
 
   private teardownWorker(why: string): void {
+    if (this.backgroundPending) this.finishBackground(this.backgroundPending.seq, null);
     const w = this.worker;
     this.worker = null;
     this.awaitingPong = false;

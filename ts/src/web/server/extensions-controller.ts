@@ -7,8 +7,9 @@ import type {
   ExtensionRunState,
 } from '../../extension/extension-host.js';
 import { EXTENSION_EVENT_TYPES } from '../../extension/api.js';
-import type { ExtensionEvent, ExtensionEventType, ExtensionRequest } from '../../extension/api.js';
+import type { ExtensionEvent, ExtensionEventType, ExtensionRequest, KeyBackgroundFrame } from '../../extension/api.js';
 import { extensionsDir } from '../../infra/settings-store.js';
+import { defaultCacheRoot } from '../../infra/native-libs.js';
 import type { ExtensionGrant } from '../../infra/settings-store.js';
 import { extensionsDisabled } from '../../shared/cli.js';
 import { log } from '../../shared/logger.js';
@@ -23,6 +24,7 @@ export interface ExtensionHostLike {
   start(): void;
   stop(): void;
   emit(event: ExtensionEvent): void;
+  pullBackground?(deviceKey: string): Promise<KeyBackgroundFrame | null>;
   request(req: ExtensionRequest): Promise<ExtensionReply>;
 }
 
@@ -183,6 +185,15 @@ export class ExtensionsController {
     return h.request(req);
   }
 
+  pullKeyBackground(deviceKey: string): Promise<KeyBackgroundFrame | null> {
+    for (const [id, host] of this.hosts) {
+      if (host.state === 'running' && this.found.get(id)?.manifest?.permissions.keyBackground) {
+        return host.pullBackground?.(deviceKey) ?? Promise.resolve(null);
+      }
+    }
+    return Promise.resolve(null);
+  }
+
   /** ui.js of a running extension that declares a page; null = 404. */
   uiScript(id: string): string | null {
     const found = this.found.get(id);
@@ -232,6 +243,9 @@ export class ExtensionsController {
       onState: () => this.publish(),
       initialEvents: () => this.deckSource(),
       events: grant ? knownEvents(grant.events) : [],
+      keyBackground: found.manifest?.permissions.keyBackground === true,
+      ...(found.manifest?.permissions.keyBackground
+        ? { dataDir: `${this.host.settings.cacheRoot ?? defaultCacheRoot()}/extension-data/${id}` } : {}),
     });
     this.hosts.set(id, h);
     h.start();

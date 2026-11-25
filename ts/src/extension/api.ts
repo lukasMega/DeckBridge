@@ -16,7 +16,7 @@ export interface ExtensionManifest {
   apiVersion: number;
   description?: string;
   /** The event types the extension receives; the host drops every other type. */
-  permissions: { events: ExtensionEventType[] };
+  permissions: { events: ExtensionEventType[]; keyBackground?: boolean };
   /** A WebUI page: a topbar button opens it and ui.js mounts into its body. */
   page?: { title: string; /** Inline SVG markup for the button. */ icon?: string };
 }
@@ -76,13 +76,27 @@ export interface ExtensionResponse {
 
 export interface ExtensionContext {
   readonly id: string;
+  readonly dataDir?: string;
   /** DeckBridge process start, epoch ms; the extension may have started later. */
   readonly appStartedAt: number;
   log(message: string): void;
 }
 
 /** What server.js's default export returns. Both members are optional. */
+/** RGB24 panorama for the AKP05E key area, excluding the touch strip. */
+export interface KeyBackgroundFrame {
+  /** Stable for the same pixels over one animation loop. */
+  id: string;
+  width: number;
+  height: number;
+  rgb: Uint8Array;
+  fps: number;
+  quality: number;
+  black: number;
+}
+
 export interface ExtensionServer {
+  keyBackground?(deviceKey: string): KeyBackgroundFrame | null | Promise<KeyBackgroundFrame | null>;
   /** Events in order, delivered in batches (about every 250 ms). */
   onEvents?(events: readonly ExtensionEvent[]): void;
   handle?(req: ExtensionRequest): ExtensionResponse | Promise<ExtensionResponse>;
