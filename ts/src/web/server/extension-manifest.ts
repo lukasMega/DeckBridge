@@ -54,8 +54,12 @@ function checkPermissions(raw: unknown): Checked<ExtensionManifest['permissions'
   if (p.keyBackground !== undefined && typeof p.keyBackground !== 'boolean') {
     return { problem: 'permissions.keyBackground must be a boolean' };
   }
-  return { value: { events: [...(events as ExtensionManifest['permissions']['events'])],
-    ...(p.keyBackground === true ? { keyBackground: true } : {}) } };
+  return {
+    value: {
+      events: [...(events as ExtensionManifest['permissions']['events'])],
+      ...(p.keyBackground === true ? { keyBackground: true } : {}),
+    },
+  };
 }
 
 /** The manifest, or why it is rejected. */

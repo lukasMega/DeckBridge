@@ -15,7 +15,9 @@ import type { StandbyClock, StandbyTiming } from './standby-policy.js';
 
 /** Where a dock reports out. All optional: a dock without a WebUI mirror just runs. */
 export interface DockHooks {
-  pullKeyBackground?: (deviceKey: string) => Promise<import('../extension/api.js').KeyBackgroundFrame | null>;
+  pullKeyBackground?: (
+    deviceKey: string,
+  ) => Promise<import('../extension/api.js').KeyBackgroundFrame | null>;
   /** Status may have changed (brightness, identity, pairing, start/stop). */
   changed?: () => void;
   /** The attached USB driver reported an unplug. */

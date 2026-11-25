@@ -7,7 +7,12 @@ import type {
   ExtensionRunState,
 } from '../../extension/extension-host.js';
 import { EXTENSION_EVENT_TYPES } from '../../extension/api.js';
-import type { ExtensionEvent, ExtensionEventType, ExtensionRequest, KeyBackgroundFrame } from '../../extension/api.js';
+import type {
+  ExtensionEvent,
+  ExtensionEventType,
+  ExtensionRequest,
+  KeyBackgroundFrame,
+} from '../../extension/api.js';
 import { extensionsDir } from '../../infra/settings-store.js';
 import { defaultCacheRoot } from '../../infra/native-libs.js';
 import type { ExtensionGrant } from '../../infra/settings-store.js';
@@ -245,7 +250,8 @@ export class ExtensionsController {
       events: grant ? knownEvents(grant.events) : [],
       keyBackground: found.manifest?.permissions.keyBackground === true,
       ...(found.manifest?.permissions.keyBackground
-        ? { dataDir: `${this.host.settings.cacheRoot ?? defaultCacheRoot()}/extension-data/${id}` } : {}),
+        ? { dataDir: `${this.host.settings.cacheRoot ?? defaultCacheRoot()}/extension-data/${id}` }
+        : {}),
     });
     this.hosts.set(id, h);
     h.start();

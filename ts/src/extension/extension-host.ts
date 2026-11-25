@@ -6,7 +6,12 @@ import extensionWorkerSource from 'virtual:extension-worker';
 import { revokeBlobUrl, spawnWorker, terminateDeferred } from '../shared/worker-lifecycle.js';
 import { log } from '../shared/logger.js';
 import type { LogLevel } from '../shared/logger.js';
-import type { ExtensionEvent, ExtensionEventType, ExtensionRequest, KeyBackgroundFrame } from './api.js';
+import type {
+  ExtensionEvent,
+  ExtensionEventType,
+  ExtensionRequest,
+  KeyBackgroundFrame,
+} from './api.js';
 import { MAX_REPLY_CHARS } from './extension-worker-protocol.js';
 import type { ExtensionWorkerToMain, MainToExtensionWorker } from './extension-worker-protocol.js';
 
@@ -98,11 +103,13 @@ export class ExtensionHost {
   private logWindowLines = 0;
   private logSuppressed = 0;
   private reqSeq = 0;
-  private backgroundPending: {
-    seq: number;
-    resolve: (frame: KeyBackgroundFrame | null) => void;
-    timer: ReturnType<typeof setTimeout>;
-  } | undefined;
+  private backgroundPending:
+    | {
+        seq: number;
+        resolve: (frame: KeyBackgroundFrame | null) => void;
+        timer: ReturnType<typeof setTimeout>;
+      }
+    | undefined;
 
   pullBackground(deviceKey: string): Promise<KeyBackgroundFrame | null> {
     if (!this.opts.keyBackground || this.state !== 'running' || this.backgroundPending) {
@@ -200,7 +207,13 @@ export class ExtensionHost {
     this.queue = [...initial, ...this.queue];
     this.setState('loading');
     const { id, serverPath, appStartedAt, dataDir } = this.opts;
-    this.post({ type: 'load', id, path: serverPath, appStartedAt, ...(dataDir ? { dataDir } : {}) });
+    this.post({
+      type: 'load',
+      id,
+      path: serverPath,
+      appStartedAt,
+      ...(dataDir ? { dataDir } : {}),
+    });
   }
 
   private onMessage(msg: ExtensionWorkerToMain): void {
