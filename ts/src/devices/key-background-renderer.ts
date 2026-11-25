@@ -41,6 +41,20 @@ export function createKeyBackgroundRenderer(driver: DockDriver) {
     return cached;
   }
 
+  function collectPaint(tile: Tile, black: number): void {
+    for (let y = 0, i = 0; y < spec.height; y++) {
+      const row = 54 + (spec.height - 1 - y) * rowBytes;
+      for (let x = 0; x < spec.width; x++, i += 3) {
+        const r = tile.icon[i]!,
+          g = tile.icon[i + 1]!,
+          b = tile.icon[i + 2]!;
+        if (Math.max(r, g, b) > black) {
+          tile.paint.push(row + x * 3, b, g, r);
+        }
+      }
+    }
+  }
+
   function updateIcon(tile: Tile, image: Uint8Array | undefined, black: number): boolean {
     const changed = image !== tile.last || black !== tile.black;
     if (image !== tile.last) {
@@ -63,17 +77,7 @@ export function createKeyBackgroundRenderer(driver: DockDriver) {
       tile.black = black;
       tile.paint.length = 0;
       if (image) {
-        for (let y = 0, i = 0; y < spec.height; y++) {
-          const row = 54 + (spec.height - 1 - y) * rowBytes;
-          for (let x = 0; x < spec.width; x++, i += 3) {
-            const r = tile.icon[i]!,
-              g = tile.icon[i + 1]!,
-              b = tile.icon[i + 2]!;
-            if (Math.max(r, g, b) > black) {
-              tile.paint.push(row + x * 3, b, g, r);
-            }
-          }
-        }
+        collectPaint(tile, black);
       }
     }
     return changed;

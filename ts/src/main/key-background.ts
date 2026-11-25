@@ -62,30 +62,33 @@ async function playKeyBackground(
     log('info', 'extensions', 'AKP05E key background released');
     if (attached() && canPaint()) frames.repaint(driver);
   };
+  function render(candidate: KeyBackgroundFrame | null): number {
+    if (!canPaint() || !valid(candidate)) {
+      release();
+      return 250;
+    }
+    try {
+      renderer.render(candidate, (key) => frames.freshImage(key));
+      if (!owned) {
+        owned = true;
+        ownership(true);
+        log('info', 'extensions', 'AKP05E key background active (10 keys)');
+      }
+      return 1000 / candidate.fps;
+    } catch (error) {
+      log('warn', 'extensions', `AKP05E key background: ${String(error)}`);
+      if (owned) release();
+      else frames.repaint(driver);
+      return 250;
+    }
+  }
+
   try {
     while (attached()) {
       const start = Date.now();
       const candidate = canPaint() ? await pull().catch(() => null) : null;
       if (!attached()) break;
-      let delay = 250;
-      if (canPaint() && valid(candidate)) {
-        delay = 1000 / candidate.fps;
-        try {
-          renderer.render(candidate, (key) => frames.freshImage(key));
-          if (!owned) {
-            owned = true;
-            ownership(true);
-            log('info', 'extensions', 'AKP05E key background active (10 keys)');
-          }
-        } catch (error) {
-          log('warn', 'extensions', `AKP05E key background: ${String(error)}`);
-          if (owned) release();
-          else frames.repaint(driver);
-          delay = 250;
-        }
-      } else {
-        release();
-      }
+      const delay = render(candidate);
       const deadline = start + delay;
       do {
         await new Promise<void>((resolve) =>
