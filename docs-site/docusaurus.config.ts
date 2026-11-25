@@ -98,6 +98,7 @@ const config: Config = {
         blog: {
           path: './blog',
           routeBasePath: 'blog',
+          beforeDefaultRemarkPlugins: [remarkMermaidPrerender],
           blogTitle: 'deckbridge blog',
           blogDescription: 'Release notes and news from the deckbridge project',
           blogSidebarTitle: 'Recent posts',

@@ -33,7 +33,7 @@ const DEFAULT_CHROME =
   '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 
 /** Replace every ```mermaid fence with the pre-rendered SVG (in place). */
-function replaceMermaid(node, chromePath) {
+function replaceMermaid(node, chromePath, isMdx) {
   const source = node.value;
   const hash = createHash('sha256')
     .update(RENDER_KEY)
@@ -68,27 +68,72 @@ function replaceMermaid(node, chromePath) {
   // Mutate the mdast `code` node into a raw-HTML node carrying the diagram.
   // Reuse the class the old runtime theme-mermaid emitted, so the existing
   // custom.css sizing + Root.tsx lightbox keep working unchanged.
-  node.type = 'html';
-  node.value = `<div class="docusaurus-mermaid-container">${svg}</div>`;
   delete node.lang;
   delete node.meta;
+  if (!isMdx) {
+    node.type = 'html';
+    node.value = `<div class="docusaurus-mermaid-container">${svg}</div>`;
+    return;
+  }
+  // MDX has no raw-HTML node ("Cannot handle unknown node `raw`"), so emit
+  // <div className=… dangerouslySetInnerHTML={{__html: svg}} /> as JSX instead.
+  delete node.value;
+  node.type = 'mdxJsxFlowElement';
+  node.name = 'div';
+  node.children = [];
+  node.attributes = [
+    { type: 'mdxJsxAttribute', name: 'className', value: 'docusaurus-mermaid-container' },
+    {
+      type: 'mdxJsxAttribute',
+      name: 'dangerouslySetInnerHTML',
+      value: {
+        type: 'mdxJsxAttributeValueExpression',
+        value: '',
+        data: {
+          estree: {
+            type: 'Program',
+            sourceType: 'module',
+            body: [
+              {
+                type: 'ExpressionStatement',
+                expression: {
+                  type: 'ObjectExpression',
+                  properties: [
+                    {
+                      type: 'Property',
+                      kind: 'init',
+                      method: false,
+                      shorthand: false,
+                      computed: false,
+                      key: { type: 'Identifier', name: '__html' },
+                      value: { type: 'Literal', value: svg },
+                    },
+                  ],
+                },
+              },
+            ],
+          },
+        },
+      },
+    },
+  ];
 }
 
 /** Walk the mdast tree, transforming mermaid code fences. */
-function walk(node, chromePath) {
+function walk(node, chromePath, isMdx) {
   if (node.type === 'code' && node.lang === 'mermaid') {
-    replaceMermaid(node, chromePath);
+    replaceMermaid(node, chromePath, isMdx);
     return;
   }
   if (Array.isArray(node.children)) {
-    for (const child of node.children) walk(child, chromePath);
+    for (const child of node.children) walk(child, chromePath, isMdx);
   }
 }
 
 /** remark plugin factory. */
 export default function remarkMermaidPrerender(options = {}) {
   const chromePath = options.chromePath ?? DEFAULT_CHROME;
-  return (tree) => {
-    walk(tree, chromePath);
+  return (tree, file) => {
+    walk(tree, chromePath, String(file.path ?? '').endsWith('.mdx'));
   };
 }
