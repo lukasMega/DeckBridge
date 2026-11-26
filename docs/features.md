@@ -353,6 +353,7 @@ They pair as a Stream Deck + by default, so dials and strip swipes and taps reac
 | `DECKBRIDGE_NO_MDNS` | No mDNS advertising; add the dock in the Elgato app by IP address |
 | `DECKBRIDGE_WSL_RELAY_ZIP` | Relay zip (local path or URL) for the WSL route instead of the GitHub release; a local path skips the SHA256 check |
 | `DECKBRIDGE_WSL_RELAY_MOCK` | `happy`/`no-wsl`/`mirrored`/`old-glibc`/`blocked`: scripted WSL runner to test the WSL route without WSL; `DECKBRIDGE_BUILD_MOCK=1` builds only |
+| `DECKBRIDGE_DRAIN_INPUT` | `1`: experimental fix for key presses delayed or lost during key animations; read queued key reports between image chunks ([#292](https://github.com/lukasMega/DeckBridge/issues/292)) |
 | `DECKBRIDGE_CORA_LOG` | `1` with debug logging: log every primary-port CORA frame as hex (pairing diagnosis) |
 | `DECKBRIDGE_PUSH_TOKEN` | Token used by `deckbridge push` (see [Push API](./push-api.md)) |
 

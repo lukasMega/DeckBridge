@@ -150,6 +150,7 @@ export class MiraboxDriver extends HidDeviceBase {
     // An explicit argument (k1pro-probe) wins; otherwise the model supplies the
     // pacing — see DeviceWireSpec.chunkDelayMs.
     const delayMs = chunkDelayMs ?? this.model.wire.chunkDelayMs ?? 0;
+    const t0 = Date.now();
     try {
       const wire = this.model.wire.chunkPadByte ? padChunkBoundaries(jpeg, this.pktSize) : jpeg;
       this.write(this._buildBat(wire.length, imageKeyId));
@@ -161,6 +162,8 @@ export class MiraboxDriver extends HidDeviceBase {
         chunk.set(wire.subarray(offset, offset + len));
         this.write(chunk);
         offset += this.pktSize;
+        // A key press during an animation would otherwise wait for the whole frame (#292).
+        this._drainInput();
         // Pace chunks: diagnostic for the k1pro-probe (does the byte-1024 seam
         // corruption come from a device receive-timing overrun?), and a per-model
         // knob for boards that drop back-to-back chunks.
@@ -171,6 +174,37 @@ export class MiraboxDriver extends HidDeviceBase {
     } catch (err) {
       this.emit('error', err instanceof Error ? err : new Error(String(err)));
     }
+    this.noteStream(Date.now() - t0);
+  }
+
+  // Animation load summary (#292): one info line per 5 s of streaming, so the diag log
+  // tail shows whether the worker was saturated (high gap) or the deck sent no input.
+  private streamFrames = 0;
+  private streamWriteMs = 0;
+  private streamSince = 0;
+
+  private noteStream(frameMs: number): void {
+    const now = Date.now();
+    if (this.streamFrames === 0) {
+      this.streamSince = now;
+      // Drop idle-time stats (system sleep, a page-switch burst) so they don't count as stream load.
+      this._takeReadStats();
+    }
+    this.streamFrames++;
+    this.streamWriteMs += frameMs;
+    const span = now - this.streamSince;
+    if (span < 5000) return;
+    const { gapMax, reports } = this._takeReadStats();
+    const line =
+      `stream ${((this.streamFrames * 1000) / span).toFixed(1)} fps, ` +
+      `write avg ${Math.round(this.streamWriteMs / this.streamFrames)}ms/frame, ` +
+      `read-gap max ${gapMax}ms, input reports ${reports}`;
+    if (this.streamFrames * 1000 >= span * 3) {
+      if (gapMax > 250) warn('hid', `${line} — key presses may be delayed`);
+      else info('hid', line);
+    }
+    this.streamFrames = 0;
+    this.streamWriteMs = 0;
   }
 
   /** One STP for every upload in `run`; the worker only calls this when

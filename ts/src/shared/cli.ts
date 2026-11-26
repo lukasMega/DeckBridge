@@ -112,6 +112,12 @@ export function coraLogEnabled(): boolean {
   return typeof tjs !== 'undefined' && tjs.env.DECKBRIDGE_CORA_LOG === '1';
 }
 
+/** True when DECKBRIDGE_DRAIN_INPUT=1: HID drivers read queued input between image chunks
+ *  and drain every report per tick (#292, key presses lost under animation). Experimental. */
+export function drainInputEnabled(): boolean {
+  return typeof tjs !== 'undefined' && tjs.env.DECKBRIDGE_DRAIN_INPUT === '1';
+}
+
 export function versionText(): string {
   return `deckbridge ${__VERSION__} (built ${__BUILD_TIME__})`;
 }

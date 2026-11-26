@@ -11,6 +11,7 @@ import { EventEmitter } from 'node:events';
 import { IS_MACOS, isNullPtr, loadHidapi } from '../ffi/hidapi.js';
 import { hidErrorString } from '../ffi/wide-string.js';
 import type { HidapiSymbols } from '../ffi/hidapi.js';
+import { drainInputEnabled } from '../shared/cli.js';
 import { error } from '../shared/logger.js';
 
 // Module-level singleton — loaded once per worker thread, shared by every
@@ -74,9 +75,10 @@ export abstract class HidDeviceBase extends EventEmitter {
     parseInput: (data: Uint8Array, n: number) => void,
   ): void {
     const readBuf = new Uint8Array(bufSize);
-    this.readTimer = setInterval(() => {
-      if (!this.device || !this.hidLib) return;
-      const n = hid.hid_read_timeout(this.device, readBuf, bufSize, pollMs);
+    // Returns false once the handle is gone.
+    const readOnce = (timeoutMs: number): boolean => {
+      if (!this.device || !this.hidLib) return false;
+      const n = hid.hid_read_timeout(this.device, readBuf, bufSize, timeoutMs);
       if (n < 0) {
         // A negative read means the handle is gone (device unplugged). hid_error()
         // is read BEFORE cleanup — hid_close() invalidates it — and is only ever a
@@ -85,13 +87,45 @@ export abstract class HidDeviceBase extends EventEmitter {
         this._cleanup();
         this.emit('error', new Error(`device read failed — disconnected (${detail})`));
         this.emit('disconnect');
-        return;
+        return false;
       }
       if (n > 0) {
+        this.readStats.reports++;
         parseInput(readBuf, n);
       }
+      return n > 0;
+    };
+    // Non-blocking drain of every queued report (capped so a chatty device cannot pin the loop).
+    // Behind DECKBRIDGE_DRAIN_INPUT: stays the no-op default otherwise.
+    if (drainInputEnabled()) {
+      this._drainInput = (): void => {
+        let i = 0;
+        while (i++ < 16 && readOnce(0)) {
+          /* each iteration parses one report */
+        }
+      };
+    }
+    let lastTickAt = Date.now();
+    this.readTimer = setInterval(() => {
+      const now = Date.now();
+      this.readStats.gapMax = Math.max(this.readStats.gapMax, now - lastTickAt);
+      lastTickAt = now;
+      if (readOnce(pollMs)) this._drainInput();
     }, pollMs);
   }
+
+  /** Read-loop health since the last call: worst gap between timer ticks (a tick that
+   *  waits behind a blocking write shows here) and how many input reports arrived. */
+  protected _takeReadStats(): { gapMax: number; reports: number } {
+    const s = this.readStats;
+    this.readStats = { gapMax: 0, reports: 0 };
+    return s;
+  }
+
+  /** Read pending input without blocking. Call inside long synchronous write loops so a
+   *  key report is not held until the whole frame is sent. No-op before the read loop starts. */
+  protected _drainInput: () => void = () => undefined;
+  private readStats = { gapMax: 0, reports: 0 };
 
   /** Synchronous hid_write with shared error logging. On a negative return the
    *  hidapi error string is extracted (falling back to 'unknown') and logged
