@@ -13,7 +13,9 @@ import shutil
 import struct
 import subprocess
 import sys
+import time
 import tomllib
+import urllib.error
 import urllib.request
 import zipfile
 import zlib
@@ -73,7 +75,16 @@ def runtime(path, txiki_tag):
     url = ("https://github.com/lukasMega/txiki.js-with-slim-builds/releases/"
            f"download/{txiki_tag}/{archive.name}")
     print("Downloading", url, flush=True)
-    urllib.request.urlretrieve(url, archive)
+    # GitHub release downloads sometimes return a transient 5xx; one failure must not block a release.
+    for attempt in range(1, 6):
+        try:
+            urllib.request.urlretrieve(url, archive)
+            break
+        except (urllib.error.URLError, TimeoutError) as err:
+            if attempt == 5 or (isinstance(err, urllib.error.HTTPError) and err.code < 500):
+                raise
+            print(f"Download failed ({err}), retry {attempt}/4", flush=True)
+            time.sleep(10 * attempt)
     with zipfile.ZipFile(archive) as zipped:
         name = "tjs.exe" if os.name == "nt" else "tjs"
         matches = [item for item in zipped.namelist() if Path(item).name == name]

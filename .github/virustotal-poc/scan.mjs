@@ -10,8 +10,9 @@ const EXPECTED = {
   'windows-x64': ['hello-c.exe', 'hello-native.dll', 'hello-tauri-setup.exe', 'hello-tauri.exe', 'hello-tray.exe', 'hello-txiki-library.exe', 'hello-txiki.exe', 'tjs.exe'],
   'macos-arm64': ['hello-c', 'hello-tauri', 'hello-tauri.dmg', 'hello-txiki', 'hello-txiki-library', 'libhello-native.dylib', 'tjs'],
 };
-// Matches the old 30 polls x 16 s budget, counted from each file's submission.
-const SCAN_DEADLINE_MS = 8 * 60_000;
+// Counted from each file's submission. 15 files share one 16 s limiter, so each is polled
+// only every few minutes; 8 min timed out on a slow VirusTotal queue (v0.26.4 release).
+const SCAN_DEADLINE_MS = 20 * 60_000;
 
 const apiKey = process.env.VT_API_KEY;
 if (!apiKey) throw new Error('Set VT_API_KEY before scanning');
@@ -106,6 +107,9 @@ while (pending.length) {
   }
   if (job.attrs) continue;
   if (Date.now() - job.submittedAt > SCAN_DEADLINE_MS) {
+    // Same bytes as an earlier release (tjs, unchanged samples): its last report is still valid.
+    job.attrs = await fileReport(job.sha256);
+    if (job.attrs) continue;
     throw new Error(`Scan timeout: ${job.platform}/${job.name}`);
   }
   pending.push(job);
