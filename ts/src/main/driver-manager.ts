@@ -195,6 +195,7 @@ export class DriverManager extends EventEmitter {
     const { webui } = this.deps;
     const extension = this.extensionEvents.hooks(index);
     return {
+      pullKeyBackground: (key) => webui.extensions.pullKeyBackground(key),
       changed: () => this.changed(),
       action: (message) => webui.notifyDeviceAction(index, message),
       // No copy: `data` is immutable-by-convention (see dock-frames.ts).

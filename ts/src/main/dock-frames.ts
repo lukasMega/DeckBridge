@@ -120,6 +120,10 @@ export class LastFrames {
     return this.stale.has(key) ? STALE : undefined;
   }
 
+  freshImage(key: number): Uint8Array | undefined {
+    return this.stale.has(key) ? undefined : this.frames.get(key)?.data;
+  }
+
   has(key: number): boolean {
     return this.frames.has(key);
   }
@@ -214,6 +218,7 @@ export interface DockImageSink {
   onTouchImage?: (data: Uint8Array, region?: TouchWindowRegion) => void;
   /** Any app frame landed: proof the app is alive (standby exit). Must stay O(1). */
   onAppFrame?: () => void;
+  backgroundOwnsKey?: (key: number) => boolean;
 }
 
 /** CORA image → device, then → frame store + WebUI mirror. */
@@ -227,7 +232,9 @@ export function wireDockImages(
     // USB latency first: the worker transforms, caches and writes off the main
     // thread, so the FFI transform never stalls this CORA ACK loop. A verify hold
     // keeps the wizard's pattern on the panel; the frame is still recorded below.
-    if (!sink.frames.held) driver?.renderCoraImage(keyIndex, data, format);
+    if (!sink.frames.held && !sink.backgroundOwnsKey?.(keyIndex)) {
+      driver?.renderCoraImage(keyIndex, data, format);
+    }
     // Only frames painted on a device are replayable onto it.
     if (driver) sink.frames.record(keyIndex, data, format);
     sink.onImage?.(keyIndex, data, format);

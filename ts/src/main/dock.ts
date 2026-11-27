@@ -1,8 +1,4 @@
-// One emulated Network Dock: its CORA server pair (CoraDock), whichever USB
-// driver is attached, per-device prefs/widgets/knob/side-key actions, and the
-// app's last frames. Dock 0's servers live for the process and DriverManager
-// re-attaches drivers across replugs; docks 1.. start and stop with their USB
-// unit (dock-scanner.ts).
+// Owns one emulated Network Dock, its attached USB driver, widgets and last frames.
 import { log } from '../shared/logger.js';
 import {
   clearTimer,
@@ -22,15 +18,17 @@ import { applyModelOverrides } from '../devices/model-overrides.js';
 import type { DockDriver, DeviceModel, DeviceModelOverride } from '../devices/driver.js';
 import type { DockPrefs } from '../infra/dock-prefs.js';
 import { touchStripOptionsOf } from '../infra/settings-store.js';
-import { ExtraKeyWidgets } from './extra-keys.js';
+import type { ExtraKeyWidgets } from './extra-keys.js';
+import { startDockWidgets } from './dock-widgets.js';
 import { EncoderActions } from './encoders.js';
 import { ExtraKeyActions } from './command-actions.js';
 import type { CoraDock } from './cora-dock.js';
 import { begin, settleAll } from './settle.js';
 import { LastFrames, wireDockImages } from './dock-frames.js';
+import { startKeyBackground } from './key-background.js';
 import { DockPages } from './dock-pages.js';
 import { createDockStandby, dialInput } from './dock-standby.js';
-import { paintedConfig, pushWideKey, WideKeyElgato, WideKeyInput } from './dock-wide-key.js';
+import { pushWideKey, WideKeyElgato, WideKeyInput } from './dock-wide-key.js';
 import { WideKeyStats } from './wide-key-stats.js';
 import type { DockStandby, StandbyInput } from './dock-standby.js';
 import {
@@ -63,6 +61,7 @@ export class Dock {
   identity: DockIdentity | undefined;
   brightness = DEFAULT_BRIGHTNESS;
   driver: DockDriver | null = null;
+  private keyBackgroundActive = false;
 
   /** The Elgato app's last CORA frames: replayed on replug, re-rendered on live tuning. */
   readonly frames = new LastFrames({
@@ -111,7 +110,6 @@ export class Dock {
       model: () => this.model,
       sampler: opts.hostStats,
     });
-    // Both resolve the dock's current identity per event.
     this.encoders = new EncoderActions(
       () => {
         const prefs = this.identityPrefs();
@@ -223,9 +221,30 @@ export class Dock {
     } else {
       this.frames.clear();
     }
-    this.startWidgets(driver);
-    // Last: it restarts the standby clock over the splash/replayed frames.
+    this.widgets = startDockWidgets(
+      driver,
+      this.identityPrefs(),
+      () => this.model,
+      this.pages,
+      this.hooks.widgetPaint,
+      (wire, at) =>
+        this.wideElgato.yields(wire, at) ||
+        (this.keyBackgroundActive && (driver.model.keyMap.extraKeys?.includes(wire) ?? false)),
+    );
+    // Restart standby after painting the splash and replaying the app's frames.
     this.standby.onDriverAttached(this.brightness);
+    if (real)
+      startKeyBackground(
+        driver,
+        this.frames,
+        this.standby,
+        this.identity?.deviceKey,
+        this.hooks.pullKeyBackground,
+        () => this.driver === driver,
+        (active) => {
+          if (this.driver === driver) this.keyBackgroundActive = active;
+        },
+      );
     this.changed();
   }
 
@@ -233,6 +252,7 @@ export class Dock {
   detach(): DockDriver | null {
     const driver = this.driver;
     if (!driver) return null;
+    this.keyBackgroundActive = false;
     this.widgets?.stop();
     this.widgets = null;
     this.frames.pause();
@@ -438,6 +458,7 @@ export class Dock {
     wireDockImages(child, {
       driver: () => this.driver,
       frames: this.frames,
+      backgroundOwnsKey: () => this.keyBackgroundActive,
       onImage: (key, data, format) => {
         this.wideElgato.noteFrame(key, Date.now());
         this.hooks.image?.(key, data, format);
@@ -566,7 +587,6 @@ export class Dock {
     if (level !== undefined) {
       this.brightness = level;
       this.standby.setRequested(level);
-      // Before the splash, as ever; standby re-applies any cap once attached.
       driver.setBrightness(level);
     }
     const entry = prefs.entry();
@@ -574,24 +594,5 @@ export class Dock {
     if (stripOptions) driver.setTouchStripOptions(stripOptions);
     pushWideKey(driver, this.model, prefs, true, this.deviceInfo?.deviceType);
     this.wideStats.sync();
-  }
-
-  /** No-op before identity or for models without extra keys / strip zones. */
-  private startWidgets(driver: DockDriver): void {
-    const prefs = this.identityPrefs();
-    if (!prefs) return;
-    this.widgets = new ExtraKeyWidgets(
-      driver,
-      (wireId) => paintedConfig(this.model, prefs, wireId, this.pages.layoutConfig(wireId)),
-      prefs.stripMode(),
-      () => prefs.repaintMs(),
-      this.hooks.widgetPaint,
-      {
-        tapFeedback: () => prefs.tapFeedback(),
-        pixelShift: () => prefs.standby().pixelShift,
-        yields: (wireId, nowMs) => this.wideElgato.yields(wireId, nowMs),
-      },
-    );
-    this.widgets.start();
   }
 }

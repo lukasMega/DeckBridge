@@ -60,6 +60,25 @@ runs, and it does not stop a program running as your user, which can also edit `
 A worker that stops answering for about 4 seconds is restarted. The third failure stops the
 extension until you switch it on again. Counters of a restarted extension start from zero.
 
+## AKP05E key backgrounds
+
+An extension that sets `permissions.keyBackground` to `true` may implement
+`keyBackground(deviceKey)` in its server worker. Return `null` to yield to the
+normal Elgato key renderer. A frame contains a stable `id`, `width`, `height`,
+tightly packed RGB24 `rgb`, `fps` (1–31), JPEG `quality` (1–100), and black
+threshold `black` (0–255). The canvas is limited to 840 × 472 pixels. IDs may
+be reused for identical pixels at the same dimensions.
+
+DeckBridge pulls one frame at a time and releases the key renderer on a missing,
+invalid or timed-out frame. It merges the latest Elgato key images with the
+panorama. An Elgato pixel reveals the panorama when all three RGB channels are at
+or below the threshold. The two right-hand keys display the panorama and retain
+their actions. The touch strip follows its existing configuration.
+
+The worker receives an optional `dataDir` for extension state outside the
+digest-checked package directory. The background interface has no host-file-path
+input. GIF decoding, file selection and settings belong to a separate extension.
+
 ## Writing an extension
 
 The Statistics source in `ts/src/extensions/statistics/` is a complete example. An
