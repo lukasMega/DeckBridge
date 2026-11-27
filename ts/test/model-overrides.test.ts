@@ -44,6 +44,17 @@ test('image batching is tunable only on 293S-family boards', () => {
   assert.equal(model.wire.batchImageTransfers, true, 'override never mutates registry default');
 });
 
+test('image rate cap is tunable only on Mirabox boards, seeded as 0 = no cap', () => {
+  for (const model of DEVICE_MODELS) {
+    const supported = model.protocol.startsWith('mirabox-cora');
+    assert.equal(validateModelOverride({ wire: { maxImagesPerSec: 5 } }, model).ok, supported);
+    assert.equal(tunableDefaults(model).wire!.maxImagesPerSec, supported ? 0 : undefined);
+  }
+  assertRejects({ wire: { maxImagesPerSec: -1 } }, 'maxImagesPerSec');
+  assertRejects({ wire: { maxImagesPerSec: 2.5 } }, 'maxImagesPerSec');
+  assert.equal(validateModelOverride(tunableDefaults(MODEL), MODEL).ok, true);
+});
+
 /** The error list for a rejected override, or [] when it validated. */
 function errorsFor(raw: unknown, model: DeviceModel = MODEL): string[] {
   const r = validateModelOverride(raw, model);

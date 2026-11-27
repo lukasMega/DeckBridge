@@ -58,9 +58,26 @@ export interface WorkQueueStats {
   coalesced: number;
 }
 
+/** Image-rate pacing (DeviceWireSpec.maxImagesPerSec). The host injects the clock and the
+ *  timer so this file stays pure. */
+export interface ImagePacing {
+  /** Images per second; 0 = no cap. Read on every check, so a model swap applies at once. */
+  rate: () => number;
+  now: () => number;
+  /** Run `fn` once after `ms`. */
+  schedule: (ms: number, fn: () => void) => void;
+}
+
+/** A full 15-key page passes at once; the cap only bites on sustained streams. */
+export const IMAGE_BURST = 15;
+
 export class HidWorkQueue {
   private readonly send: (msg: MainToWorker & { id: number }) => void;
   private readonly budgets: WorkBudgets;
+  private readonly pacing: ImagePacing | undefined;
+  private tokens = IMAGE_BURST;
+  private tokensAt = 0;
+  private wakePending = false;
   /** Never reused, so a completion from an older generation can't match a new id. */
   private nextId = 1;
   private readonly posted = new Map<number, number>();
@@ -72,9 +89,11 @@ export class HidWorkQueue {
   constructor(
     send: (msg: MainToWorker & { id: number }) => void,
     budgets: WorkBudgets = DEFAULT_WORK_BUDGETS,
+    pacing?: ImagePacing,
   ) {
     this.send = send;
     this.budgets = budgets;
+    this.pacing = pacing;
   }
 
   get postedCount(): number {
@@ -107,7 +126,7 @@ export class HidWorkQueue {
     // Must fit the posted budget on its own, or it could never be posted.
     if (opts.bytes > this.budgets.postedBytes) return 'rejected';
     // Nothing waits ahead of it: post now (FIFO is trivially kept).
-    if (this.waiting.length === 0 && this.fitsPosted(opts.bytes)) {
+    if (this.canPostNow(opts)) {
       return this.post(msg, opts.bytes) ? 'posted' : 'failed';
     }
     const superseded = opts.coalesceKey ? this.supersededIndex(opts.coalesceKey) : -1;
@@ -158,14 +177,48 @@ export class HidWorkQueue {
     this.postedBytes = 0;
     this.waiting = [];
     this.waitingBytes = 0;
+    this.tokens = IMAGE_BURST;
   }
 
   private drain(): void {
-    while (this.waiting.length > 0 && this.fitsPosted(this.waiting[0]!.bytes)) {
-      const next = this.waiting.shift()!;
-      this.waitingBytes -= next.bytes;
-      this.post(next.msg, next.bytes);
+    while (this.waiting.length > 0) {
+      const head = this.waiting[0]!;
+      if (!this.fitsPosted(head.bytes)) return;
+      if (head.kind === 'image' && !this.takeImageToken()) return;
+      this.waiting.shift();
+      this.waitingBytes -= head.bytes;
+      this.post(head.msg, head.bytes);
     }
+  }
+
+  private canPostNow(opts: WorkOptions): boolean {
+    return (
+      this.waiting.length === 0 &&
+      this.fitsPosted(opts.bytes) &&
+      (opts.kind !== 'image' || this.takeImageToken())
+    );
+  }
+
+  /** Token bucket: refill at `rate`/s up to IMAGE_BURST. Out of tokens, it schedules one
+   *  drain for when the next token is due; the waiting frames coalesce meanwhile. */
+  private takeImageToken(): boolean {
+    const rate = this.pacing?.rate() ?? 0;
+    if (!this.pacing || rate <= 0) return true;
+    const now = this.pacing.now();
+    this.tokens = Math.min(IMAGE_BURST, this.tokens + ((now - this.tokensAt) * rate) / 1000);
+    this.tokensAt = now;
+    if (this.tokens >= 1) {
+      this.tokens--;
+      return true;
+    }
+    if (!this.wakePending) {
+      this.wakePending = true;
+      this.pacing.schedule(Math.ceil(((1 - this.tokens) * 1000) / rate), () => {
+        this.wakePending = false;
+        this.drain();
+      });
+    }
+    return false;
   }
 
   /** Only inside the trailing run of complete images: a touch frame or control

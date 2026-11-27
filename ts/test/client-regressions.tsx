@@ -771,6 +771,48 @@ async function checkBatchImageTransferTuning(): Promise<void> {
   }
 }
 
+// Blank must drop the key: a posted 0 would mark the override Custom and reopen on every Apply.
+async function checkMaxImagesPerSecTuning(): Promise<void> {
+  const view: DeviceOverridesView = {
+    ...SECOND_OVERRIDES_VIEW,
+    modelId: 'mirabox-293',
+    tunable: { ...SECOND_OVERRIDES_VIEW.tunable, wire: { maxImagesPerSec: 0 } },
+    overrides: { wire: { chunkDelayMs: 2, maxImagesPerSec: 4 } },
+  };
+  const stub = stubFetch((_url, init) => ({
+    payload: init?.method === 'POST' ? { reconnecting: true } : view,
+  }));
+  const apply = async (value: string): Promise<Record<string, unknown>> => {
+    const input = [...root.querySelectorAll<HTMLLabelElement>('label.tuning-field')]
+      .find((l) => l.textContent.startsWith('Max images/s'))
+      ?.querySelector('input');
+    await act(() => {
+      input!.value = value;
+      input!.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    await click('#tuning-apply');
+    await settle();
+    const posts = stub.calls.filter((call) => call.method === 'POST');
+    return (posts.at(-1)!.body as { overrides: { wire: Record<string, unknown> } }).overrides.wire;
+  };
+  try {
+    await act(() => patch({ status: { ...baseStatus, modelId: 'mirabox-293' } }));
+    await act(() => render(<DeviceTuningPanel />, root));
+    await settle();
+    const set = await apply('5');
+    check(set.maxImagesPerSec === 5 && set.chunkDelayMs === 2, 'Max images/s posts the value');
+    const cleared = await apply('');
+    check(
+      !('maxImagesPerSec' in cleared) && cleared.chunkDelayMs === 2,
+      'Blank Max images/s drops the key, keeps other wire overrides',
+    );
+  } finally {
+    stub.restore();
+    await act(() => render(null, root));
+    await act(() => patch({ status: baseStatus }));
+  }
+}
+
 // "Copy for bug report" puts a JSON report on the clipboard: model, app version, the saved
 // overrides and recent raw wire ids. The pure shape is covered by bug-report-export.test.ts.
 async function checkBugReportCopy(): Promise<void> {
@@ -1022,6 +1064,7 @@ async function runSettingsPanels(): Promise<void> {
   }
 
   await checkBatchImageTransferTuning();
+  await checkMaxImagesPerSecTuning();
   await checkBugReportCopy();
   await checkEmulationProfileSwitch();
   await checkImageFitApplicability();
