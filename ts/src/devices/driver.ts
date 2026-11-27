@@ -95,6 +95,10 @@ export interface DeviceWireSpec {
    *  already writes sequentially, so no shipped model sets this. Costs
    *  chunkCount × ms of worker time per image; leave unset unless hardware needs it. */
   chunkDelayMs?: number;
+  /** Cap on key images sent to the deck per second (0/unset = no cap), with a burst of
+   *  one full page. Frames over the cap wait on the main thread and coalesce per key, so
+   *  an animation drops frames instead of starving key input on slow firmware (#292). */
+  maxImagesPerSec?: number;
   /** When set, open() reads the real output-report size from the HID report descriptor
    *  and uses it instead of `packetSize`, but only if it is one of these. For boards
    *  whose packet size we inferred: a wrong one is otherwise invisible (the firmware

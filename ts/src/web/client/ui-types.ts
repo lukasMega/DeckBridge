@@ -57,4 +57,5 @@ export type {
   DeviceOverridesView,
   TuningCropRect as DeviceCropRect,
   TuningImage as DeviceImageOverride,
+  TuningWire,
 } from '../contract-tuning.js';

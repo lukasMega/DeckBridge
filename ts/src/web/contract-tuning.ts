@@ -53,8 +53,12 @@ export interface TuningCora {
   childFirmwareVersion?: string;
 }
 
-/** Every wire field is sent; the WebUI only reads and sets this one. */
-export type TuningWire = { batchImageTransfers?: boolean; [key: string]: unknown };
+/** Every wire field is sent; the WebUI only reads and sets these. */
+export type TuningWire = {
+  batchImageTransfers?: boolean;
+  maxImagesPerSec?: number;
+  [key: string]: unknown;
+};
 
 export interface TuningOverride {
   image?: TuningImage;

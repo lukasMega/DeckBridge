@@ -118,6 +118,7 @@ Some boards are supported from documents, not hardware we own. **Settings → De
 - **Check images step by step** — sets orientation, key order, size and JPEG limits for you. See [Device check](./verify-device.md).
 - Rotation, flip H/V, image fit, JPEG quality and size.
 - **Crop…** (next to Image fit) picks which part of the Elgato app's key image lands on the key. Drag the region over a real key frame, then **Try on device**, **Save** or **Cancel**. Same region under Advanced as X/Y/Width/Height; leave all four blank for the whole image.
+- **Max images/s** (Mirabox decks) — caps how many key images go to the deck per second. A full page still goes at once. Over the cap, an animation skips frames. Try `5` if key presses get lost while animated icons play ([#292](https://github.com/lukasMega/DeckBridge/issues/292)). Blank = no limit.
 - **Key-map learn mode** — records which raw code each physical key sends.
 - **Elgato identity** — overrides the dock and panel serial numbers, MAC address, and firmware versions sent to the Elgato app. Blank serial/MAC use the generated or physical identity. Blank firmware uses the model default (or the physical firmware, if that model forwards it).
 - **Copy overrides as JSON** — please send working values back, see [Adding a device](./adding-a-device.md).

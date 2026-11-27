@@ -13,6 +13,7 @@ export const WIRE_OVERRIDE_KEYS = [
   'synthesizeKeyUp',
   'sendStpAfterImage',
   'batchImageTransfers',
+  'maxImagesPerSec',
 ] as const;
 
 export type WireOverrideKey = (typeof WIRE_OVERRIDE_KEYS)[number];
@@ -41,6 +42,7 @@ const MIRABOX_WIRE_KEYS = [
   'chunkPadByte',
   'synthesizeKeyUp',
   'sendStpAfterImage',
+  'maxImagesPerSec',
 ] as const satisfies readonly WireOverrideKey[];
 
 /** Wire protocol — closed; adding a new model almost always reuses an existing one. */

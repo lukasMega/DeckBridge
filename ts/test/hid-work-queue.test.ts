@@ -2,6 +2,7 @@ import assert from 'tjs:assert';
 import {
   DEFAULT_WORK_BUDGETS,
   HidWorkQueue,
+  IMAGE_BURST,
   type WorkBudgets,
 } from '../src/worker/hid-work-queue-host.js';
 import type { MainToWorker } from '../src/worker/hid-worker-protocol.js';
@@ -168,6 +169,48 @@ test('multiple keys do not starve once the writer resumes', () => {
     [...keys].toSorted((a, b) => a - b),
     [0, 1, 2, 3],
   );
+});
+
+test('maxImagesPerSec: a page bursts, an animation is paced and coalesced', () => {
+  let now = 1000;
+  let rate = 5;
+  const timers: Array<{ at: number; fn: () => void }> = [];
+  const sent: Sent[] = [];
+  const q = new HidWorkQueue((m) => sent.push(m), DEFAULT_WORK_BUDGETS, {
+    rate: () => rate,
+    now: () => now,
+    schedule: (ms, fn) => timers.push({ at: now + ms, fn }),
+  });
+  const ackAll = (): void => void q.complete(sent.map((m) => m.id));
+  const tick = (ms: number): void => {
+    now += ms;
+    for (const t of timers.splice(0)) {
+      if (t.at <= now) t.fn();
+      else timers.push(t);
+    }
+  };
+  for (let k = 0; k < IMAGE_BURST; k++) submitImage(q, k);
+  assert.equal(sent.length, IMAGE_BURST, 'a full page passes at once');
+  ackAll();
+  for (let i = 0; i < 30; i++) submitImage(q, i % 3, 10, i);
+  assert.equal(sent.length, IMAGE_BURST, 'no token left: frames wait');
+  assert.equal(q.pendingCount, 3, 'one waiting frame per key');
+  assert.equal(timers.length, 1, 'one wake scheduled');
+  q.submit({ type: 'setBrightness', level: 50 }, { kind: 'control', bytes: 0 });
+  tick(199);
+  assert.equal(sent.length, IMAGE_BURST);
+  tick(1);
+  assert.equal(sent.length, IMAGE_BURST + 1, 'one token per 1/rate s');
+  tick(400);
+  assert.deepEqual(
+    sent.slice(IMAGE_BURST).map((m) => (m.type === 'image' ? m.bytes[0] : m.type)),
+    [27, 28, 29, 'setBrightness'],
+    'newest frame per key; the control keeps its place behind them',
+  );
+  rate = 0;
+  ackAll();
+  for (let i = 0; i < 20; i++) submitImage(q, i % 3, 10, i);
+  assert.equal(sent.length, IMAGE_BURST + 4 + 15, 'rate 0 = no cap (only the posted budget)');
 });
 
 summary();

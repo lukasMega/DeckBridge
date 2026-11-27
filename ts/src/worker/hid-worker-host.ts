@@ -5,7 +5,12 @@ import { EventEmitter } from 'node:events';
 import workerSource from 'virtual:hid-worker';
 import { revokeBlobUrl, spawnWorker, terminateDeferred } from '../shared/worker-lifecycle.js';
 import type { MainToWorker, WorkerToMain } from './hid-worker-protocol.js';
-import { HidWorkQueue, type WorkKind, type WorkOptions } from './hid-work-queue-host.js';
+import {
+  DEFAULT_WORK_BUDGETS,
+  HidWorkQueue,
+  type WorkKind,
+  type WorkOptions,
+} from './hid-work-queue-host.js';
 import type {
   DockDriver,
   DeviceImageSpec,
@@ -64,7 +69,15 @@ export class WorkerHidDriver extends EventEmitter implements DockDriver {
     reject: (err: Error) => void;
     timer: ReturnType<typeof setTimeout>;
   } | null = null;
-  private readonly queue = new HidWorkQueue((msg) => this.worker?.postMessage(msg));
+  private readonly queue = new HidWorkQueue(
+    (msg) => this.worker?.postMessage(msg),
+    DEFAULT_WORK_BUDGETS,
+    {
+      rate: () => this.model.wire.maxImagesPerSec ?? 0,
+      now: Date.now,
+      schedule: (ms, fn) => void setTimeout(fn, ms),
+    },
+  );
   /** CORA frames stay refused after an overload until the Dock's next CORA child
    *  session (resumeImages): stale ones would paint over a resynced app. */
   private coraSuspended = false;

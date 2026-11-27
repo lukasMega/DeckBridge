@@ -21,7 +21,12 @@ import { ImageFitHelp, fitApplicability, padFillApplies } from './image-fit-help
 import type { FitApplicability, Size } from './image-fit-help.js';
 import { buildCoraOverride, ElgatoIdentityFields } from './device-tuning-identity.js';
 import type { CoraIdentityDraft } from './device-tuning-identity.js';
-import type { DeviceCropRect, DeviceImageOverride, DeviceOverridesView } from '../ui-types.js';
+import type {
+  DeviceCropRect,
+  DeviceImageOverride,
+  DeviceOverridesView,
+  TuningWire,
+} from '../ui-types.js';
 
 const ROTATIONS = [0, 90, 180, 270] as const;
 const RESIZE_FILTERS = ['triangle', 'nearest', 'lanczos3'] as const;
@@ -167,6 +172,62 @@ function advancedTuningStatus(image: DeviceImageOverride | undefined): 'Custom' 
     : 'Defaults';
 }
 
+/** The saved wire section plus the fields this form manages. A blank or 0 image cap drops
+ *  the key, so an untouched form stays at the defaults. */
+function wireOverride(
+  view: DeviceOverridesView,
+  batchImageTransfers: boolean,
+  maxImagesPerSec: number | undefined,
+): TuningWire | undefined {
+  const tunable = view.tunable.wire;
+  const wire: TuningWire = { ...view.overrides.wire };
+  if (typeof tunable?.batchImageTransfers === 'boolean') {
+    wire.batchImageTransfers = batchImageTransfers;
+  }
+  if (typeof tunable?.maxImagesPerSec === 'number') {
+    delete wire.maxImagesPerSec;
+    if (maxImagesPerSec) wire.maxImagesPerSec = maxImagesPerSec;
+  }
+  return Object.keys(wire).length > 0 ? wire : undefined;
+}
+
+function WireFields({
+  view,
+  batchImageTransfers,
+  onBatchImageTransfers,
+  maxImagesPerSec,
+  onMaxImagesPerSec,
+}: {
+  readonly view: DeviceOverridesView;
+  readonly batchImageTransfers: boolean;
+  readonly onBatchImageTransfers: (value: boolean) => void;
+  readonly maxImagesPerSec: number | undefined;
+  readonly onMaxImagesPerSec: (value: number | undefined) => void;
+}): preact.JSX.Element {
+  const tunable = view.tunable.wire;
+  return (
+    <>
+      {typeof tunable?.batchImageTransfers === 'boolean' && (
+        <CheckField
+          id="tuning-batch-image-transfers"
+          label="Batch transfers"
+          checked={batchImageTransfers}
+          onChange={onBatchImageTransfers}
+        />
+      )}
+      {typeof tunable?.maxImagesPerSec === 'number' && (
+        <NumberField
+          label="Max images/s (blank = no limit)"
+          value={maxImagesPerSec}
+          min={0}
+          max={1000}
+          onChange={onMaxImagesPerSec}
+        />
+      )}
+    </>
+  );
+}
+
 function EmptyDeviceTuningPanel(): preact.JSX.Element {
   return (
     <Collapsible
@@ -217,6 +278,7 @@ export function DeviceTuningPanel(): preact.JSX.Element {
   const [view, setView] = useState<DeviceOverridesView | null>(null);
   const [image, setImage] = useState<DeviceImageOverride>({});
   const [batchImageTransfers, setBatchImageTransfers] = useState(false);
+  const [maxImagesPerSec, setMaxImagesPerSec] = useState<number | undefined>(undefined);
   const [coraProfile, setCoraProfile] = useState('');
   const [coraIdentity, setCoraIdentity] = useState<CoraIdentityDraft>({
     dockSerialNumber: '',
@@ -248,6 +310,7 @@ export function DeviceTuningPanel(): preact.JSX.Element {
       // Reloading intentionally discards drafts so edits never follow another dock.
       setImage({ ...data.tunable.image });
       setBatchImageTransfers(data.tunable.wire?.batchImageTransfers === true);
+      setMaxImagesPerSec(data.tunable.wire?.maxImagesPerSec || undefined);
       setCoraProfile(data.tunable.cora?.advertiseAs ?? '');
       const cora = data.overrides.cora;
       setCoraIdentity({
@@ -288,9 +351,9 @@ export function DeviceTuningPanel(): preact.JSX.Element {
       if (!activeView) return;
       const overrides: Record<string, unknown> = { ...activeView.overrides, image };
       const cora = buildCoraOverride(activeView, coraIdentity, coraProfile);
-      if (typeof activeView.tunable.wire?.batchImageTransfers === 'boolean') {
-        overrides.wire = { ...activeView.overrides.wire, batchImageTransfers };
-      }
+      const wire = wireOverride(activeView, batchImageTransfers, maxImagesPerSec);
+      if (wire) overrides.wire = wire;
+      else delete overrides.wire;
       if (activeView.profiles.length) {
         // Image + key map are per grid: the draft was seeded from the old target and
         // would override the new target's transform (e.g. undo the Plus 180°).
@@ -432,14 +495,13 @@ export function DeviceTuningPanel(): preact.JSX.Element {
           </div>
         </TuningGroup>
       </div>
-      {typeof activeView.tunable.wire?.batchImageTransfers === 'boolean' && (
-        <CheckField
-          id="tuning-batch-image-transfers"
-          label="Batch transfers"
-          checked={batchImageTransfers}
-          onChange={setBatchImageTransfers}
-        />
-      )}
+      <WireFields
+        view={activeView}
+        batchImageTransfers={batchImageTransfers}
+        onBatchImageTransfers={setBatchImageTransfers}
+        maxImagesPerSec={maxImagesPerSec}
+        onMaxImagesPerSec={setMaxImagesPerSec}
+      />
 
       <ProfileField view={activeView} coraProfile={coraProfile} onChange={setCoraProfile} />
 

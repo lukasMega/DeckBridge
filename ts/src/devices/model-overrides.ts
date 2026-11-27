@@ -129,6 +129,7 @@ const WIRE_FIELDS: Record<WireOverrideKey, FieldSpec> = {
   synthesizeKeyUp: { kind: 'boolean' },
   sendStpAfterImage: { kind: 'boolean' },
   batchImageTransfers: { kind: 'boolean' },
+  maxImagesPerSec: { kind: 'number', min: 0, max: 1000, integer: true },
 };
 
 const TRANSFORM_OVERRIDE_FIELDS: SectionFields = {
@@ -478,10 +479,15 @@ function project<T extends object, K extends keyof T>(
  *  form so every control starts at what the device actually uses. */
 export function tunableDefaults(model: DeviceModel): DeviceModelOverride {
   const { image, keyMap, wire, splash, cora } = model;
+  const wireKeys = tunableWireKeys(model.protocol);
   return {
     image: project(image, IMAGE_OVERRIDE_KEYS),
     keyMap: project(keyMap, KEYMAP_KEYS),
-    wire: project(wire, tunableWireKeys(model.protocol)),
+    // No model sets the image cap, so seed its "no cap" value for the form to show it.
+    wire: {
+      ...(wireKeys.includes('maxImagesPerSec') ? { maxImagesPerSec: 0 } : {}),
+      ...project(wire, wireKeys),
+    },
     ...(splash ? { splash } : {}),
     cora: project(cora, CORA_OVERRIDE_KEYS),
   };
